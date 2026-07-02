@@ -118,6 +118,22 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.OCC_PARKING_RATE, "leasing", "rate", true,
                     "parking occupancy is platform-scope only (not emitted when parking area is zero)"),
             new MetricCatalogEntry(DashboardAggregationJob.CONTRACT_EXPIRING_90D, "leasing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
+            // S4 工单时效(平台口径,facility 窗):
+            new MetricCatalogEntry(DashboardAggregationJob.WO_RESPONSE_HOURS_P50, "facility", "hours", true,
+                    "response P50 is platform-scope only (not emitted when no responded orders in window)"),
+            new MetricCatalogEntry(DashboardAggregationJob.WO_HANDLE_HOURS_P50, "facility", "hours", true,
+                    "handle P50 is platform-scope only (not emitted when no completed orders in window)"),
+            new MetricCatalogEntry(DashboardAggregationJob.WO_OVERDUE_RATE, "facility", "rate", true,
+                    "overdue rate is platform-scope only (not emitted when no orders due in window)"),
+            new MetricCatalogEntry(DashboardAggregationJob.WO_BACKLOG, "facility", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
+            // S5 能耗(平台口径,energy 窗;按表计类型分列,单位不同不跨类合计):
+            new MetricCatalogEntry("energy.total_electricity", "energy", "kwh", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry("energy.total_water", "energy", "ton", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry("energy.total_gas", "energy", "m3", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry("energy.total_heat_cold", "energy", "unit", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.ENERGY_ELECTRICITY_PER_SQM, "energy", "kwh_per_sqm", true,
+                    "per-sqm uses rentable area as denominator (not emitted when rentable area is zero)"),
+            new MetricCatalogEntry(DashboardAggregationJob.ENERGY_ABNORMAL_COUNT, "energy", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
             // 数据源未就绪（不伪造）：
             new MetricCatalogEntry("revenue.thirdparty", "finance", "cent", false,
                     "third-party reflow depends on integration capability switch wiring (not yet aggregated)"),
@@ -149,6 +165,10 @@ public class AnalyticsService {
     );
 
     private final AnalyticsRepository repository;
+
+    // S4/S5 明细窗:与 ETL 同源的经营日窗(未配置域回落 4 点基准)。setter 注入保持既有构造器族不变(单测用默认)。
+    private com.complex.platform.common.BusinessDayResolver businessDayResolver =
+            new com.complex.platform.common.BusinessDayResolver(4);
     private final AuditedOperationExecutor operations;
     private final Clock clock;
     private final LocalLlmClient localLlmClient;
@@ -156,6 +176,11 @@ public class AnalyticsService {
     // 再双写统一 risk_alerts（source_domain='analytics'），复刻 Wave 1 Wecom 先例（fail-safe、孤岛表仍权威、统一表汇聚镜像）。
     // 可为 null（向后兼容/现有单测用旧构造器）；接入为 fail-safe，不阻塞创建主链。
     private final RiskAlertService riskAlertService;
+
+    @Autowired(required = false)
+    void setBusinessDayResolver(com.complex.platform.common.BusinessDayResolver businessDayResolver) {
+        this.businessDayResolver = businessDayResolver;
+    }
 
     @Autowired
     public AnalyticsService(
@@ -322,6 +347,40 @@ public class AnalyticsService {
                 "contracts",
                 () -> repository.listExpiringContracts(
                         LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), days, limit, offset)
+        );
+    }
+
+    /** S4 钻取:超时工单明细(实时,与 wo.overdue_rate 分子同过滤:处理时限落当日 facility 窗且超时)。 */
+    public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(int limit, int offset) {
+        return readSingle(
+                "analytics.overdue_work_orders.viewed",
+                "analytics.overdue_work_orders.view_failed",
+                "facility.work_order.manage",
+                "facility_work_orders",
+                () -> {
+                    Instant now = Instant.now(clock);
+                    LocalDate businessDate = businessDayResolver.businessDate("facility", now);
+                    return repository.listOverdueWorkOrders(
+                            businessDayResolver.startInstant("facility", businessDate),
+                            businessDayResolver.endInstant("facility", businessDate), now, limit, offset);
+                }
+        );
+    }
+
+    /** S5 钻取:异常读数明细(实时,与 energy.abnormal_count 同过滤:读数落当日 energy 窗)。 */
+    public java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(int limit, int offset) {
+        return readSingle(
+                "analytics.abnormal_readings.viewed",
+                "analytics.abnormal_readings.view_failed",
+                "energy.reading.manage",
+                "energy_meter_readings",
+                () -> {
+                    Instant now = Instant.now(clock);
+                    LocalDate businessDate = businessDayResolver.businessDate("energy", now);
+                    return repository.listAbnormalReadings(
+                            businessDayResolver.startInstant("energy", businessDate),
+                            businessDayResolver.endInstant("energy", businessDate), limit, offset);
+                }
         );
     }
 

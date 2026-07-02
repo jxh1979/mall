@@ -134,6 +134,24 @@ public interface AnalyticsRepository {
     /** S3 钻取:未出租的铺位明细(shop/booth,含推导租赁态,实时与快照同过滤)。 */
     java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset);
 
+    /** S4 工单时效:响应P50=responded_at 落窗、处理P50=completed_at 落窗且有 assigned_at、
+     * 超时分母=handle_due_at 落窗、分子=其中完成晚于时限或未完成且时限已过、积压=asOf 时点未完成存量。 */
+    AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf);
+
+    /** S4 钻取:超时工单明细(与 wo.overdue_rate 分子同过滤同口径)。 */
+    java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
+            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset);
+
+    /** S5 能耗:窗内按表计类型合计 consumption(电/水/气/冷热单位不同,不跨类合计)。 */
+    Map<String, BigDecimal> energyConsumptionByType(java.time.Instant start, java.time.Instant end);
+
+    /** S5:窗内异常读数计数(abnormal_reason 非空)。 */
+    long countAbnormalReadings(java.time.Instant start, java.time.Instant end);
+
+    /** S5 钻取:异常读数明细(与 energy.abnormal_count 同过滤同口径)。 */
+    java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(
+            java.time.Instant start, java.time.Instant end, int limit, int offset);
+
     /** S3 钻取:到期预警合同明细(生效合同按到期日升序,含绑定面积)。 */
     java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset);
 

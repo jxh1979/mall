@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 548 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 550 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 292 | 人工权限矩阵正文未覆盖 189 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1096 | 人工事件矩阵正文未覆盖 1054 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 548 | 人工任务映射正文未逐项覆盖 542 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1100 | 人工事件矩阵正文未覆盖 1058 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 550 | 人工任务映射正文未逐项覆盖 544 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 336 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -151,7 +151,7 @@
 | `customer.stored_value.topup` | customer-token | customer | 2 | customerStoredValueTopup, customerStoredValueSettle | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.view` | customer-token | customer | 1 | customerStoredValueAccount | OpenAPI 补充，以本附录为准 |
 | `energy.meter.manage` | staff-token | platform | 3 | listEnergyMeters, createEnergyMeter, updateEnergyMeter | OpenAPI 补充，以本附录为准 |
-| `energy.reading.manage` | staff-token | platform | 6 | listEnergyReadings, recordEnergyReading, reviewEnergyReading, getEnergyMeterDifference, settleEnergyFee, settleEnergyFeeShortcut | OpenAPI 补充，以本附录为准 |
+| `energy.reading.manage` | staff-token | platform | 7 | listEnergyReadings, recordEnergyReading, reviewEnergyReading, getEnergyMeterDifference, settleEnergyFee, settleEnergyFeeShortcut, listAbnormalReadings | OpenAPI 补充，以本附录为准 |
 | `entity.binding.manage` | staff-token | project-merchant | 3 | createBusinessEntity, createBusinessEntityBinding, changeBusinessEntityBinding | 已在权限矩阵正文出现 |
 | `entity.binding.view` | staff-token | project-merchant | 2 | listBusinessEntities, listBusinessEntityBindings | 已在权限矩阵正文出现 |
 | `evidence.attachment.create` | staff-token | project-object | 3 | createEvidenceAttachmentUploadIntent, bindEvidenceAttachment, completeEvidenceAttachmentUpload | 已在权限矩阵正文出现 |
@@ -168,7 +168,7 @@
 | `facility.site_entry.submit_assigned` | staff-token | self | 1 | submitSiteEntryReport | OpenAPI 补充，以本附录为准 |
 | `facility.site_entry.upload_completion_assigned` | staff-token | self | 1 | uploadSiteEntryCompletion | OpenAPI 补充，以本附录为准 |
 | `facility.site_entry.view_assigned` | staff-token | self | 2 | listSiteEntryReports, getSiteEntryReport | OpenAPI 补充，以本附录为准 |
-| `facility.work_order.manage` | staff-token | platform | 13 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, suspendFacilityWorkOrder, resumeFacilityWorkOrder, markFacilityWorkOrdersOverdue ... | OpenAPI 补充，以本附录为准 |
+| `facility.work_order.manage` | staff-token | platform | 14 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, suspendFacilityWorkOrder, resumeFacilityWorkOrder, markFacilityWorkOrdersOverdue ... | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project-entity | 3 | createArApItem, generateContractRentBill, generateContractPeriodBills | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | platform, project-entity | 2 | listArApItems, listArOverdueDebtors | 已在权限矩阵正文出现 |
@@ -477,6 +477,8 @@
 | `amusement.waiver.acknowledge_failed` | failure | `acknowledgeAmusementSafetyNotice` | `POST` | `/api/v1/amusement/safety-notices/{noticeId}/acknowledgements` | AMU-游乐安全 | `amusement.waiver.acknowledge` | 接口级事件，以本附录为准 |
 | `analytics_business_metric_snapshot.viewed.failure` | failure | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics_business_metric_snapshot.viewed.success` | success | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.abnormal_readings.view_failed` | failure | `listAbnormalReadings` | `GET` | `/api/v1/analytics/energy/abnormal-readings` | ANA-风控分析 | `energy.reading.manage` | 接口级事件，以本附录为准 |
+| `analytics.abnormal_readings.viewed` | success | `listAbnormalReadings` | `GET` | `/api/v1/analytics/energy/abnormal-readings` | ANA-风控分析 | `energy.reading.manage` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality_result.viewed` | success | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality_result.viewed_failed` | failure | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality_task.viewed` | success | `listAiQualityTasks` | `GET` | `/api/v1/analytics/ai-quality/tasks` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
@@ -509,6 +511,8 @@
 | `analytics.metric_definition.viewed_failed` | failure | `listMetricDefinitions` | `GET` | `/api/v1/analytics/metric-definitions` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.operating_params.view_failed` | failure | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.operating_params.viewed` | success | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.overdue_work_orders.view_failed` | failure | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | ANA-风控分析 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `analytics.overdue_work_orders.viewed` | success | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | ANA-风控分析 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `analytics.risk_alert.resolved` | success | `resolveRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `analytics.risk_alert.resolved_failed` | failure | `resolveRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `analytics.risk_rule.viewed` | success | `listRiskRules` | `GET` | `/api/v1/analytics/risk-rules` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
@@ -1493,6 +1497,7 @@
 | ANA-风控分析 | `getGroupOverview` | `GET` | `/api/v1/analytics/group-overview` | 集团总览视图 | `analytics.group.view` | `analytics.group_overview.viewed` / `analytics.group_overview.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | P0 经营总览 | `analytics.dashboard.view` | `analytics.dashboard_viewed` / `analytics.dashboard_view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getRobotAnalytics` | `GET` | `/api/v1/analytics/robot` | 获取机器人经营分析 | `analytics.dashboard.view` | `analytics.robot.viewed` / `analytics.robot.viewed_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listAbnormalReadings` | `GET` | `/api/v1/analytics/energy/abnormal-readings` | 异常读数明细(能耗钻取) | `energy.reading.manage` | `analytics.abnormal_readings.viewed` / `analytics.abnormal_readings.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | 查询ai质检结果 | `analytics.risk_alert.view` | `analytics.ai_quality_result.viewed` / `analytics.ai_quality_result.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAiQualityTasks` | `GET` | `/api/v1/analytics/ai-quality/tasks` | 查询ai质检任务 | `analytics.risk_alert.view` | `analytics.ai_quality_task.viewed` / `analytics.ai_quality_task.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAnalyticsMerchants` | `GET` | `/api/v1/analytics/merchants` | 查询经营分析商户 | `analytics.dashboard.view` | `analytics.merchant_summary.viewed` / `analytics.merchant_summary.viewed_failed` | web | operation 级补充 |
@@ -1505,6 +1510,7 @@
 | ANA-风控分析 | `listMetricAnomalies` | `GET` | `/api/v1/analytics/metric-anomalies` | 查询指标异常 | `analytics.risk_alert.view` | `analytics.metric_anomaly.viewed` / `analytics.metric_anomaly.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listMetricDefinitions` | `GET` | `/api/v1/analytics/metric-definitions` | 查询指标定义 | `analytics.dashboard.view` | `analytics.metric_definition.viewed` / `analytics.metric_definition.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | 查询综合体经营参数（坪效面积） | `analytics.dashboard.view` | `analytics.operating_params.viewed` / `analytics.operating_params.view_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | 超时工单明细(时效钻取) | `facility.work_order.manage` | `analytics.overdue_work_orders.viewed` / `analytics.overdue_work_orders.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listRiskAlerts` | `GET` | `/api/v1/analytics/risk-alerts` | 风险预警 | `analytics.risk_alert.view` | `risk_alert.viewed` / `risk_alert.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listRiskRules` | `GET` | `/api/v1/analytics/risk-rules` | 查询风险规则 | `analytics.risk_alert.view` | `analytics.risk_rule.viewed` / `analytics.risk_rule.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listStaffServiceScores` | `GET` | `/api/v1/analytics/staff-service-score` | 查询员工服务scores | `analytics.risk_alert.view` | `analytics.staff_service_score.viewed` / `analytics.staff_service_score.viewed_failed` | web | operation 级补充 |

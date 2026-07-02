@@ -291,6 +291,43 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** S4 工单时效聚合(P50 小时/超时分子分母/时点积压)。 */
+    public record WorkOrderSla(
+            BigDecimal responseP50Hours,
+            BigDecimal handleP50Hours,
+            long dueCount,
+            long overdueCount,
+            long backlog
+    ) {
+    }
+
+    /** S4 钻取:超时工单明细行(与 wo.overdue_rate 分子同过滤)。 */
+    public record OverdueWorkOrderRow(
+            String workOrderId,
+            String code,
+            String title,
+            String status,
+            String priority,
+            String assigneeId,
+            Instant handleDueAt,
+            Instant completedAt,
+            BigDecimal overdueHours
+    ) {
+    }
+
+    /** S5 钻取:异常读数明细行(与 energy.abnormal_count 同过滤)。 */
+    public record AbnormalReadingRow(
+            String readingId,
+            String meterId,
+            String meterName,
+            String meterType,
+            String period,
+            BigDecimal consumption,
+            String abnormalReason,
+            Instant readAt
+    ) {
+    }
+
     public record CustomerIntentRecord(
             String intentId,
             String sourceType,

@@ -56,6 +56,8 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-003", label: "经营参数", route: "/admin/analytics/operating-params" },
   { pageId: "ADM-ANA-004", label: "欠费与回款", route: "/admin/analytics/receivables" },
   { pageId: "ADM-ANA-005", label: "出租与到期", route: "/admin/analytics/occupancy" },
+  { pageId: "ADM-ANA-006", label: "工单时效", route: "/admin/analytics/work-order-sla" },
+  { pageId: "ADM-ANA-007", label: "能耗分析", route: "/admin/analytics/energy" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -151,9 +153,20 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("business-analytics-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-002") {
     await expect(page.getByTestId("admin-group-overview")).toBeVisible();
+  } else if (spec.pageId === "ADM-ANA-006") {
+    await expect(page.getByTestId("wo-sla-page")).toBeVisible();
+    await expect(page.getByTestId("wo-response-p50")).toContainText("2.5 小时");
+    await expect(page.getByTestId("wo-overdue-rate")).toContainText("25.00%");
+    await expect(page.getByTestId("wo-overdue-table")).toContainText("示例超时工单");
+  } else if (spec.pageId === "ADM-ANA-007") {
+    await expect(page.getByTestId("energy-analytics-page")).toBeVisible();
+    await expect(page.getByTestId("energy-total-electricity")).toContainText("1,200.5 kWh");
+    await expect(page.getByTestId("energy-per-sqm")).toContainText("2.4 kWh/㎡");
+    await expect(page.getByTestId("energy-abnormal-table")).toContainText("示例电表");
   } else if (spec.pageId === "ADM-ANA-005") {
     await expect(page.getByTestId("occupancy-analytics-page")).toBeVisible();
     await expect(page.getByTestId("occupancy-rate")).toContainText("80.00%");
+    await expect(page.getByTestId("occupancy-summary")).toContainText("1,000 ㎡");
     await expect(page.getByTestId("occupancy-vacant-table")).toContainText("示例空铺");
     await expect(page.getByTestId("occupancy-expiring-table")).toContainText("contract-exp-1");
   } else if (spec.pageId === "ADM-ANA-004") {

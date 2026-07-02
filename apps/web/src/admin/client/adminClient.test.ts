@@ -28,6 +28,21 @@ describe("AdminApi", () => {
     expect((init?.headers as Headers).get("authorization")).toBe("Bearer token");
   });
 
+  it("keeps dotted dictionary keys verbatim (metric maps stay addressable)", async () => {
+    // BI S2-S5:dashboards/{domain} 的 metrics 是字典(key="ar.aging_31_60"),
+    // 字段名转换不得吞掉字典 key 里的下划线,否则真后端下页面读不到指标。
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      business_date: "2026-07-01",
+      metrics: { "ar.aging_31_60": { value: 900, unit: "cent" } },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new AdminApi("token").get("/api/v1/analytics/dashboards/finance")).resolves.toEqual({
+      businessDate: "2026-07-01",
+      metrics: { "ar.aging_31_60": { value: 900, unit: "cent" } },
+    });
+  });
+
   it("normalizes request keys and appends an idempotency key", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);

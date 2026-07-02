@@ -144,6 +144,26 @@ public class AnalyticsController {
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
     }
 
+    @GetMapping("/work-order-sla/overdue-orders")
+    public ApiResponse<PageResponse<AnalyticsRecords.OverdueWorkOrderRow>> listOverdueWorkOrders(
+            @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
+            @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
+        authorizationService.requirePermission("facility.work_order.manage");
+        authorizationService.requirePlatformScope();
+        java.util.List<AnalyticsRecords.OverdueWorkOrderRow> items = service.listOverdueWorkOrders(limit, offset);
+        return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
+    }
+
+    @GetMapping("/energy/abnormal-readings")
+    public ApiResponse<PageResponse<AnalyticsRecords.AbnormalReadingRow>> listAbnormalReadings(
+            @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
+            @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
+        authorizationService.requirePermission("energy.reading.manage");
+        authorizationService.requirePlatformScope();
+        java.util.List<AnalyticsRecords.AbnormalReadingRow> items = service.listAbnormalReadings(limit, offset);
+        return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
+    }
+
     @GetMapping("/finance-receivables/debtors")
     public ApiResponse<PageResponse<AnalyticsRecords.ArDebtorRow>> listOverdueDebtors(
             @org.springframework.web.bind.annotation.RequestParam(value = "bucket", required = false) String bucket,

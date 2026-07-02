@@ -15214,6 +15214,76 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/analytics/work-order-sla/overdue-orders:
+    get:
+      tags:
+        - analytics
+      operationId: listOverdueWorkOrders
+      summary: 超时工单明细(时效钻取)
+      description: BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细,
+        与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.overdue_work_orders.viewed
+      x-audit-event-failure: analytics.overdue_work_orders.view_failed
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/energy/abnormal-readings:
+    get:
+      tags:
+        - analytics
+      operationId: listAbnormalReadings
+      summary: 异常读数明细(能耗钻取)
+      description: BI S5:当日经营窗内异常读数(突增/突降/零读数/倒走)实时明细,
+        与 energy.abnormal_count 同过滤同口径,含表计名称与类型。
+      x-permission: energy.reading.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.abnormal_readings.viewed
+      x-audit-event-failure: analytics.abnormal_readings.view_failed
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/analytics/occupancy/vacant-spaces:
     get:
       tags:

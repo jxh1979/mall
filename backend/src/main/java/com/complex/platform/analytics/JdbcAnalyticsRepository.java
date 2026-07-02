@@ -987,6 +987,108 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end))
+                .addValue("as_of", timestampWithTimeZone(asOf));
+        return jdbcTemplate.queryForObject("""
+                SELECT
+                  (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (responded_at - created_at)) / 3600.0)
+                     FROM facility_work_orders WHERE responded_at >= :start AND responded_at < :end) AS response_p50,
+                  (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (completed_at - assigned_at)) / 3600.0)
+                     FROM facility_work_orders WHERE completed_at >= :start AND completed_at < :end AND assigned_at IS NOT NULL) AS handle_p50,
+                  (SELECT COUNT(*) FROM facility_work_orders WHERE handle_due_at >= :start AND handle_due_at < :end) AS due_count,
+                  (SELECT COUNT(*) FROM facility_work_orders WHERE handle_due_at >= :start AND handle_due_at < :end
+                      AND (completed_at > handle_due_at OR (completed_at IS NULL AND handle_due_at < :as_of))) AS overdue_count,
+                  (SELECT COUNT(*) FROM facility_work_orders WHERE created_at <= :as_of
+                      AND completed_at IS NULL AND status <> 'closed') AS backlog
+                """, params, (rs, n) -> new AnalyticsRecords.WorkOrderSla(
+                rs.getBigDecimal("response_p50"), rs.getBigDecimal("handle_p50"),
+                rs.getLong("due_count"), rs.getLong("overdue_count"), rs.getLong("backlog")));
+    }
+
+    @Override
+    public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
+            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end))
+                .addValue("as_of", timestampWithTimeZone(asOf))
+                .addValue("limit", Math.min(Math.max(limit, 1), 200))
+                .addValue("offset", Math.max(offset, 0));
+        return jdbcTemplate.query("""
+                SELECT id, code, title, status, priority, assignee_id, handle_due_at, completed_at,
+                       ROUND((EXTRACT(EPOCH FROM (COALESCE(completed_at, :as_of) - handle_due_at)) / 3600.0)::numeric, 1) AS overdue_hours
+                  FROM facility_work_orders
+                 WHERE handle_due_at >= :start AND handle_due_at < :end
+                   AND (completed_at > handle_due_at OR (completed_at IS NULL AND handle_due_at < :as_of))
+                 ORDER BY overdue_hours DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> {
+            java.sql.Timestamp due = rs.getTimestamp("handle_due_at");
+            java.sql.Timestamp completed = rs.getTimestamp("completed_at");
+            return new AnalyticsRecords.OverdueWorkOrderRow(
+                    rs.getString("id"), rs.getString("code"), rs.getString("title"), rs.getString("status"),
+                    rs.getString("priority"), rs.getString("assignee_id"),
+                    due == null ? null : due.toInstant(), completed == null ? null : completed.toInstant(),
+                    rs.getBigDecimal("overdue_hours"));
+        });
+    }
+
+    @Override
+    public Map<String, BigDecimal> energyConsumptionByType(java.time.Instant start, java.time.Instant end) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end));
+        Map<String, BigDecimal> out = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT m.meter_type, SUM(r.consumption) AS total
+                  FROM energy_meter_readings r
+                  JOIN energy_meters m ON m.id = r.meter_id
+                 WHERE r.read_at >= :start AND r.read_at < :end
+                 GROUP BY m.meter_type
+                 ORDER BY m.meter_type
+                """, params, rs -> {
+            out.put(rs.getString("meter_type"), rs.getBigDecimal("total"));
+        });
+        return out;
+    }
+
+    @Override
+    public long countAbnormalReadings(java.time.Instant start, java.time.Instant end) {
+        Long value = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM energy_meter_readings
+                 WHERE abnormal_reason IS NOT NULL AND read_at >= :start AND read_at < :end
+                """, new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end)), Long.class);
+        return value == null ? 0L : value;
+    }
+
+    @Override
+    public java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(
+            java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end))
+                .addValue("limit", Math.min(Math.max(limit, 1), 200))
+                .addValue("offset", Math.max(offset, 0));
+        return jdbcTemplate.query("""
+                SELECT r.id, r.meter_id, m.name AS meter_name, m.meter_type, r.period,
+                       r.consumption, r.abnormal_reason, r.read_at
+                  FROM energy_meter_readings r
+                  JOIN energy_meters m ON m.id = r.meter_id
+                 WHERE r.abnormal_reason IS NOT NULL AND r.read_at >= :start AND r.read_at < :end
+                 ORDER BY r.read_at DESC, r.id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> new AnalyticsRecords.AbnormalReadingRow(
+                rs.getString("id"), rs.getString("meter_id"), rs.getString("meter_name"),
+                rs.getString("meter_type"), rs.getString("period"), rs.getBigDecimal("consumption"),
+                rs.getString("abnormal_reason"), rs.getTimestamp("read_at").toInstant()));
+    }
+
+    @Override
     public Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchant(LocalDate asOf) {
         Map<String, Map<String, BigDecimal>> result = new LinkedHashMap<>();
         jdbcTemplate.query("""

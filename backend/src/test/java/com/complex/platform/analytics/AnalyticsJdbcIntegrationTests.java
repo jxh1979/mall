@@ -36,6 +36,7 @@ class AnalyticsJdbcIntegrationTests {
         // S3 分母口径(拍板):shop+booth 且非 unavailable;车位单列;容器/公共区域不进;
         // pending_effective 算「已签待交」不算已租。
         java.time.LocalDate asOf = java.time.LocalDate.parse("2026-06-20");
+        AnalyticsRecords.OccupancyAreas baseline = repository.occupancyAreas(asOf);
         insertSpace("sp_s3_shop_let", "shop", "100");
         insertSpace("sp_s3_shop_vacant", "shop", "60");
         insertSpace("sp_s3_booth", "booth", "40");
@@ -48,11 +49,12 @@ class AnalyticsJdbcIntegrationTests {
         insertContractWithSpace("ct_s3_parking", "sp_s3_parking", "effective", asOf.minusDays(5), asOf.plusDays(30));
 
         AnalyticsRecords.OccupancyAreas areas = repository.occupancyAreas(asOf);
-        assertThat(areas.rentableArea()).isEqualByComparingTo("200");
-        assertThat(areas.leasedArea()).isEqualByComparingTo("100");
-        assertThat(areas.signedPendingArea()).isEqualByComparingTo("40");
-        assertThat(areas.parkingRentableArea()).isEqualByComparingTo("20");
-        assertThat(areas.parkingLeasedArea()).isEqualByComparingTo("20");
+        // 共享 dev 库有真实铺位(活证据数据保留至首次打包),断言用基线差值口径。
+        assertThat(areas.rentableArea().subtract(baseline.rentableArea())).isEqualByComparingTo("200");
+        assertThat(areas.leasedArea().subtract(baseline.leasedArea())).isEqualByComparingTo("100");
+        assertThat(areas.signedPendingArea().subtract(baseline.signedPendingArea())).isEqualByComparingTo("40");
+        assertThat(areas.parkingRentableArea().subtract(baseline.parkingRentableArea())).isEqualByComparingTo("20");
+        assertThat(areas.parkingLeasedArea().subtract(baseline.parkingLeasedArea())).isEqualByComparingTo("20");
 
         java.util.List<AnalyticsRecords.VacantSpaceRow> vacant = repository.listVacantSpaces(asOf, 200, 0).stream()
                 .filter(row -> row.spaceId().startsWith("sp_s3_")).toList();
@@ -134,6 +136,102 @@ class AnalyticsJdbcIntegrationTests {
                 .addValue("id", id).addValue("mid", merchantId)
                 .addValue("amount", amountCent).addValue("paid", amountCent - unpaidCent)
                 .addValue("unpaid", unpaidCent).addValue("due", dueDate));
+    }
+
+    @Test
+    void workOrderSlaHonorsWindowAndOverdueDrilldownMatches() {
+        // S4(真库):P50 只算落窗、超时含"完成晚于时限"与"未完成且时限已过"、明细与分子同过滤。2099 窗隔离共享库。
+        java.time.Instant start = java.time.Instant.parse("2099-01-01T04:00:00Z");
+        java.time.Instant end = java.time.Instant.parse("2099-01-02T04:00:00Z");
+        java.time.Instant asOf = java.time.Instant.parse("2099-01-02T00:00:00Z");
+        // A 按时:响应1h、处理2h、时限内完成。
+        insertWorkOrder("wo_s4_a", "2099-01-01T05:00:00Z", "2099-01-01T05:30:00Z", "2099-01-01T06:00:00Z",
+                "2099-01-01T10:00:00Z", "2099-01-01T07:30:00Z", "accepted");
+        // B 超时完成:响应4h、处理7h、完成晚于时限6h。
+        insertWorkOrder("wo_s4_b", "2099-01-01T05:00:00Z", "2099-01-01T05:00:00Z", "2099-01-01T09:00:00Z",
+                "2099-01-01T06:00:00Z", "2099-01-01T12:00:00Z", "closed");
+        // C 超时未完成:时限已过 17h 仍未完成(积压)。
+        insertWorkOrder("wo_s4_c", "2099-01-01T05:00:00Z", null, null,
+                "2099-01-01T07:00:00Z", null, "processing");
+
+        AnalyticsRecords.WorkOrderSla sla = repository.workOrderSla(start, end, asOf);
+        assertThat(sla.responseP50Hours()).isEqualByComparingTo("2.5");   // (1h+4h)/2
+        assertThat(sla.handleP50Hours()).isEqualByComparingTo("4.5");     // (2h+7h)/2
+        assertThat(sla.dueCount()).isEqualTo(3);
+        assertThat(sla.overdueCount()).isEqualTo(2);
+        assertThat(sla.backlog()).isGreaterThanOrEqualTo(1);              // 共享库允许其它存量
+
+        java.util.List<AnalyticsRecords.OverdueWorkOrderRow> rows =
+                repository.listOverdueWorkOrders(start, end, asOf, 200, 0);
+        java.util.List<String> ids = rows.stream().map(AnalyticsRecords.OverdueWorkOrderRow::workOrderId).toList();
+        assertThat(ids).contains("wo_s4_b", "wo_s4_c").doesNotContain("wo_s4_a");
+        AnalyticsRecords.OverdueWorkOrderRow b = rows.stream()
+                .filter(r -> r.workOrderId().equals("wo_s4_b")).findFirst().orElseThrow();
+        assertThat(b.overdueHours()).isEqualByComparingTo("6.0");
+        AnalyticsRecords.OverdueWorkOrderRow c = rows.stream()
+                .filter(r -> r.workOrderId().equals("wo_s4_c")).findFirst().orElseThrow();
+        assertThat(c.overdueHours()).isEqualByComparingTo("17.0");        // asOf-时限,未完成按当下计
+    }
+
+    @Test
+    void energyConsumptionByTypeHonorsWindowAndAbnormalDrilldownMatches() {
+        // S5(真库):按表计类型分列合计、窗外读数不进、异常明细与计数同过滤。
+        insertMeter("mt_s5_e", "S5电表", "electricity");
+        insertMeter("mt_s5_w", "S5水表", "water");
+        insertReading("rd_s5_e1", "mt_s5_e", "2099-01-01T08:00:00Z", "60.5", null, "2099-01");
+        insertReading("rd_s5_e2", "mt_s5_e", "2099-01-01T20:00:00Z", "40", "surge", "2099-02");
+        insertReading("rd_s5_w1", "mt_s5_w", "2099-01-01T09:00:00Z", "8", null, "2099-01");
+        insertReading("rd_s5_out", "mt_s5_e", "2098-12-31T08:00:00Z", "999", null, "2098-12");
+
+        java.time.Instant start = java.time.Instant.parse("2099-01-01T04:00:00Z");
+        java.time.Instant end = java.time.Instant.parse("2099-01-02T04:00:00Z");
+        java.util.Map<String, java.math.BigDecimal> byType = repository.energyConsumptionByType(start, end);
+        assertThat(byType.get("electricity")).isEqualByComparingTo("100.5");
+        assertThat(byType.get("water")).isEqualByComparingTo("8");
+        assertThat(byType).doesNotContainKey("gas");
+
+        assertThat(repository.countAbnormalReadings(start, end)).isEqualTo(1);
+        java.util.List<AnalyticsRecords.AbnormalReadingRow> rows =
+                repository.listAbnormalReadings(start, end, 200, 0);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).readingId()).isEqualTo("rd_s5_e2");
+        assertThat(rows.get(0).meterType()).isEqualTo("electricity");
+        assertThat(rows.get(0).abnormalReason()).isEqualTo("surge");
+    }
+
+    private void insertWorkOrder(String id, String createdAt, String assignedAt, String respondedAt,
+            String handleDueAt, String completedAt, String status) {
+        jdbcTemplate.update("""
+                INSERT INTO facility_work_orders (id, code, work_order_type, priority, status, title, source,
+                        created_at, updated_at, assigned_at, responded_at, handle_due_at, completed_at)
+                VALUES (:id, :id, 'repair', 'normal', :status, :id, 'platform',
+                        :created_at::timestamptz, :created_at::timestamptz, :assigned_at::timestamptz,
+                        :responded_at::timestamptz, :handle_due_at::timestamptz, :completed_at::timestamptz)
+                """, new java.util.HashMap<String, Object>() {{
+                    put("id", id); put("status", status); put("created_at", createdAt);
+                    put("assigned_at", assignedAt); put("responded_at", respondedAt);
+                    put("handle_due_at", handleDueAt); put("completed_at", completedAt);
+                }});
+    }
+
+    private void insertMeter(String id, String name, String meterType) {
+        jdbcTemplate.update("""
+                INSERT INTO energy_meters (id, name, meter_type, gather_object, read_mode)
+                VALUES (:id, :name, :meter_type, 'public_area', 'manual')
+                """, java.util.Map.of("id", id, "name", name, "meter_type", meterType));
+    }
+
+    private void insertReading(String id, String meterId, String readAt, String consumption, String abnormalReason, String period) {
+        jdbcTemplate.update("""
+                INSERT INTO energy_meter_readings (id, meter_id, period, reading_value, prev_reading_value,
+                        consumption, status, abnormal_reason, read_mode, read_at)
+                VALUES (:id, :meter_id, :period, :consumption::numeric, 0, :consumption::numeric,
+                        'recorded', :abnormal_reason, 'manual', :read_at::timestamptz)
+                """, new java.util.HashMap<String, Object>() {{
+                    put("id", id); put("meter_id", meterId); put("consumption", consumption);
+                    put("abnormal_reason", abnormalReason); put("read_at", readAt);
+                    put("period", period);
+                }});
     }
 
     @Test

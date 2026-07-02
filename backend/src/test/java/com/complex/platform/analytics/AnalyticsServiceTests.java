@@ -932,6 +932,28 @@ class AnalyticsServiceTests {
             return java.util.List.of();
         }
 
+        public AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {
+            return new AnalyticsRecords.WorkOrderSla(null, null, 0, 0, 0);
+        }
+
+        public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
+                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+            return java.util.List.of();
+        }
+
+        public java.util.Map<String, java.math.BigDecimal> energyConsumptionByType(java.time.Instant start, java.time.Instant end) {
+            return java.util.Map.of();
+        }
+
+        public long countAbnormalReadings(java.time.Instant start, java.time.Instant end) {
+            return 0;
+        }
+
+        public java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(
+                java.time.Instant start, java.time.Instant end, int limit, int offset) {
+            return java.util.List.of();
+        }
+
         public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
             return java.util.List.of();
         }

@@ -286,6 +286,24 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/customer-intents": empty,
     "/api/v1/analytics/staff-service-score": empty,
     "/api/v1/analytics/merchant-health": empty,
+    "/api/v1/analytics/dashboards/facility": { business_date: "2026-07-01", metrics: {
+      "wo.response_hours_p50": { value: 2.5, unit: "hours" },
+      "wo.handle_hours_p50": { value: 6, unit: "hours" },
+      "wo.overdue_rate": { value: 0.25, unit: "rate" },
+      "wo.backlog": { value: 7, unit: "count" },
+    } },
+    "/api/v1/analytics/work-order-sla/overdue-orders": [
+      { work_order_id: "wo-e2e-1", code: "WO-2026-001", title: "示例超时工单", status: "processing", priority: "high", handle_due_at: "2026-07-01T02:00:00Z", overdue_hours: 6.5 },
+    ],
+    "/api/v1/analytics/dashboards/energy": { business_date: "2026-07-01", metrics: {
+      "energy.total_electricity": { value: 1200.5, unit: "kwh" },
+      "energy.total_water": { value: 88, unit: "ton" },
+      "energy.electricity_per_sqm": { value: 2.4, unit: "kwh_per_sqm" },
+      "energy.abnormal_count": { value: 3, unit: "count" },
+    } },
+    "/api/v1/analytics/energy/abnormal-readings": [
+      { reading_id: "rd-e2e-1", meter_id: "meter-1", meter_name: "示例电表", meter_type: "electricity", period: "2026-07", consumption: 40, abnormal_reason: "surge", read_at: "2026-07-01T12:00:00Z" },
+    ],
     "/api/v1/analytics/dashboards/leasing": { businessDate: "2026-07-01", metrics: {
       "occupancy.rate": { value: 0.8, unit: "rate" },
       "occupancy.rentable_area": { value: 1000, unit: "sqm" },

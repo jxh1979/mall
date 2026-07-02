@@ -18,6 +18,8 @@ function toSnakeCaseKey(key: string): string {
 }
 
 function toCamelCaseKey(key: string): string {
+  // 含 "." 的是字典 key(如 metrics 的 "ar.aging_31_60"),不是字段名,原样保留。
+  if (key.includes(".")) return key;
   return key.replace(/_([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
 }
 

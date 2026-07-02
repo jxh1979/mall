@@ -59,6 +59,36 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void workOrderSlaAndEnergyMetricsFollowRulings() {
+        // S4:超时率=超时/处理时限落窗单数(分母0不产出);积压=时点存量。
+        // S5:能耗按表计类型分列(单位不同不跨类合计);电耗/㎡分母=可租面积(与出租率同分母,分母0不产出)。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.workOrderSla = new AnalyticsRecords.WorkOrderSla(
+                new BigDecimal("2.5"), new BigDecimal("6"), 4, 1, 7);
+        repository.energyByType = Map.of("electricity", new BigDecimal("100.5"), "water", new BigDecimal("8"));
+        repository.abnormalReadings = 3;
+        repository.occupancy = new AnalyticsRecords.OccupancyAreas(
+                new BigDecimal("201"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.upserts.get("wo.response_hours_p50|platform")).isEqualByComparingTo("2.5");
+        assertThat(repository.upserts.get("wo.handle_hours_p50|platform")).isEqualByComparingTo("6");
+        assertThat(repository.upserts.get("wo.overdue_rate|platform")).isEqualByComparingTo("0.2500");
+        assertThat(repository.upserts.get("wo.backlog|platform")).isEqualByComparingTo("7");
+        assertThat(repository.upserts.get("energy.total_electricity|platform")).isEqualByComparingTo("100.5");
+        assertThat(repository.upserts.get("energy.total_water|platform")).isEqualByComparingTo("8");
+        assertThat(repository.upserts.get("energy.electricity_per_sqm|platform")).isEqualByComparingTo("0.5000");
+        assertThat(repository.upserts.get("energy.abnormal_count|platform")).isEqualByComparingTo("3");
+
+        CapturingAnalyticsRepository zero = new CapturingAnalyticsRepository();
+        new DashboardAggregationJob(zero).refreshSnapshots(BUSINESS_DATE);
+        assertThat(zero.upserts).doesNotContainKey("wo.overdue_rate|platform");
+        assertThat(zero.upserts).doesNotContainKey("wo.response_hours_p50|platform");
+        assertThat(zero.upserts).doesNotContainKey("energy.electricity_per_sqm|platform");
+    }
+
+    @Test
     void arAgingBucketsSumToBalanceAndCollectionRateDerives() {
         // S2 口径断言:Σ四桶 == 欠费总额(平台+商户);回款率=月实收/月应收;分母0不产出。
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
@@ -378,6 +408,32 @@ class DashboardAggregationJobNetRevenueTests {
         }
 
         public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
+            return java.util.List.of();
+        }
+
+        AnalyticsRecords.WorkOrderSla workOrderSla = new AnalyticsRecords.WorkOrderSla(null, null, 0, 0, 0);
+        Map<String, BigDecimal> energyByType = Map.of();
+        long abnormalReadings = 0;
+
+        public AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {
+            return workOrderSla;
+        }
+
+        public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
+                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+            return java.util.List.of();
+        }
+
+        public Map<String, BigDecimal> energyConsumptionByType(java.time.Instant start, java.time.Instant end) {
+            return energyByType;
+        }
+
+        public long countAbnormalReadings(java.time.Instant start, java.time.Instant end) {
+            return abnormalReadings;
+        }
+
+        public java.util.List<AnalyticsRecords.AbnormalReadingRow> listAbnormalReadings(
+                java.time.Instant start, java.time.Instant end, int limit, int offset) {
             return java.util.List.of();
         }
 

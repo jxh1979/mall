@@ -64,6 +64,16 @@ public class DashboardAggregationJob {
     static final String OCC_PARKING_RATE = "occupancy.parking_rate";
     static final String CONTRACT_EXPIRING_90D = "contract.expiring_90d";
 
+    // S4 工单时效(facility 窗,未配置域回落 4 点基准):
+    static final String WO_RESPONSE_HOURS_P50 = "wo.response_hours_p50";  // 响应 P50(小时,窗内无响应单不产出)
+    static final String WO_HANDLE_HOURS_P50 = "wo.handle_hours_p50";      // 处理 P50(小时,窗内无完成单不产出)
+    static final String WO_OVERDUE_RATE = "wo.overdue_rate";              // 超时率(分母=处理时限落窗单数,0不产出)
+    static final String WO_BACKLOG = "wo.backlog";                        // 时点积压(未完成存量)
+    // S5 能耗(energy 窗):按表计类型分列(电/水/气/冷热单位不同,不跨类合计)。
+    static final String ENERGY_TOTAL_PREFIX = "energy.total_";
+    static final String ENERGY_ELECTRICITY_PER_SQM = "energy.electricity_per_sqm"; // 分母=可租面积(与出租率同分母,0不产出)
+    static final String ENERGY_ABNORMAL_COUNT = "energy.abnormal_count";
+
     static final String SEGMENT_PLATFORM = "platform";
     static final String SEGMENT_MERCHANT = "merchant";
     static final String SEGMENT_PROJECT = "project";
@@ -238,6 +248,39 @@ public class DashboardAggregationJob {
         }
         upsertPlatform(CONTRACT_EXPIRING_90D, "leasing", businessDate,
                 BigDecimal.valueOf(repository.countExpiringContracts(businessDate, 90)), now, platformTotals);
+
+        // S4 工单时效:P50 落窗;超时率分母=处理时限落窗的单(分母0不产出);积压=时点存量。
+        AnalyticsRecords.WorkOrderSla workOrderSla = repository.workOrderSla(
+                businessDayResolver.startInstant("facility", businessDate),
+                businessDayResolver.endInstant("facility", businessDate), now);
+        if (workOrderSla.responseP50Hours() != null) {
+            upsertPlatform(WO_RESPONSE_HOURS_P50, "facility", businessDate, workOrderSla.responseP50Hours(), now, platformTotals);
+        }
+        if (workOrderSla.handleP50Hours() != null) {
+            upsertPlatform(WO_HANDLE_HOURS_P50, "facility", businessDate, workOrderSla.handleP50Hours(), now, platformTotals);
+        }
+        if (workOrderSla.dueCount() > 0) {
+            upsertPlatform(WO_OVERDUE_RATE, "facility", businessDate,
+                    BigDecimal.valueOf(workOrderSla.overdueCount())
+                            .divide(BigDecimal.valueOf(workOrderSla.dueCount()), 4, java.math.RoundingMode.HALF_UP),
+                    now, platformTotals);
+        }
+        upsertPlatform(WO_BACKLOG, "facility", businessDate, BigDecimal.valueOf(workOrderSla.backlog()), now, platformTotals);
+
+        // S5 能耗:按表计类型分列合计(不跨类合计);电耗/㎡分母=可租面积(与出租率同分母,0不产出);异常读数计数。
+        java.time.Instant energyStart = businessDayResolver.startInstant("energy", businessDate);
+        java.time.Instant energyEnd = businessDayResolver.endInstant("energy", businessDate);
+        Map<String, BigDecimal> energyByType = repository.energyConsumptionByType(energyStart, energyEnd);
+        for (Map.Entry<String, BigDecimal> entry : energyByType.entrySet()) {
+            upsertPlatform(ENERGY_TOTAL_PREFIX + entry.getKey(), "energy", businessDate, entry.getValue(), now, platformTotals);
+        }
+        BigDecimal electricity = energyByType.get("electricity");
+        if (electricity != null && areas.rentableArea() != null && areas.rentableArea().signum() > 0) {
+            upsertPlatform(ENERGY_ELECTRICITY_PER_SQM, "energy", businessDate,
+                    electricity.divide(areas.rentableArea(), 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
+        }
+        upsertPlatform(ENERGY_ABNORMAL_COUNT, "energy", businessDate,
+                BigDecimal.valueOf(repository.countAbnormalReadings(energyStart, energyEnd)), now, platformTotals);
 
         // ⑤ 集团多项目 ETL：按 project_id 维度 upsert segment_type='project' 行。
         upsertByProject(businessDate, platformTotals, now);
