@@ -126,7 +126,7 @@ npm run verify:production-evidence-crosslinks` |
 
 ### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
 
-本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线（后端 surefire 现有报告 1712 tests / OpenAPI 548 operations / Flyway 最新 V203 / P0 契约与安全基线以 `npm run verify:*` 输出为准，2026-07-02 刷新）以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。<!-- 文档goal(2026-06-30)：事实基线刷新为现有 surefire 报告 1606 tests、OpenAPI 516 ops、Flyway V182（179 个迁移）；不声明刚完成全量验证 -->
+本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线（后端 surefire 现有报告 1714 tests / OpenAPI 548 operations / Flyway 最新 V205 / P0 契约与安全基线以 `npm run verify:*` 输出为准，2026-07-02 刷新）以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。<!-- 文档goal(2026-06-30)：事实基线刷新为现有 surefire 报告 1606 tests、OpenAPI 516 ops、Flyway V182（179 个迁移）；不声明刚完成全量验证 -->
 
 | 交付物 | 入口 |
 |---|---|
@@ -160,7 +160,7 @@ npm run verify:production-evidence-crosslinks` |
 <!-- 文档goal(2026-06-20)：新增 §2.3，登记 R6/R7 决策批次与本会话新功能落地，刷新事实基线 -->
 ## 2.3 R6/R7 决策批次与本会话新功能落地登记（2026-06-20）`文档goal(2026-06-20)`
 
-本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。事实基线刷新为：**本轮 2026-07-02 取证 Flyway 最新 V203、OpenAPI 548 operations、后端 surefire 现有报告 1712 tests**；各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
+本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。事实基线刷新为：**本轮 2026-07-02 取证 Flyway 最新 V205、OpenAPI 548 operations、后端 surefire 现有报告 1714 tests**；各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
 
 ### 决策批次登记
 

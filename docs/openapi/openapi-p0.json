@@ -30164,6 +30164,7 @@
               "booth",
               "bar_table",
               "facility",
+              "parking",
               "other"
             ],
             "maxLength": 64

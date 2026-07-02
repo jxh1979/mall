@@ -21479,6 +21479,7 @@ components:
             - booth
             - bar_table
             - facility
+            - parking
             - other
           maxLength: 64
         parent_space_id:
