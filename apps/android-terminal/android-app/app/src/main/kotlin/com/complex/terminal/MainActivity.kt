@@ -15,6 +15,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.concurrent.thread
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * 综合体 Android 终端：现场操作 UI。
@@ -79,6 +81,27 @@ class MainActivity : Activity() {
     showLogin()
   }
 
+  // ── 返回键：非首页屏回首页（与各屏「返回首页」按钮一致，无路由栈）；
+  //    首页/登录页两秒内双击才退出，避免误触闪退感。 ──
+  private var onRootScreen = true
+  private var lastBackPressAt = 0L
+
+  @Deprecated("Deprecated in Java")
+  override fun onBackPressed() {
+    if (onRootScreen) {
+      val now = System.currentTimeMillis()
+      if (now - lastBackPressAt < 2000) {
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+      } else {
+        lastBackPressAt = now
+        android.widget.Toast.makeText(this, "再按一次退出", android.widget.Toast.LENGTH_SHORT).show()
+      }
+    } else {
+      showHome()
+    }
+  }
+
   override fun onResume() {
     super.onResume()
     val adapter = nfcAdapter ?: return
@@ -141,6 +164,7 @@ class MainActivity : Activity() {
       screen(
         title = "综合体终端 · 登录",
         children = listOf(status, username, password, loginButton),
+        root = true,
       ),
     )
   }
@@ -222,7 +246,7 @@ class MainActivity : Activity() {
       secondaryButton("重新登录") { logoutAndRestart() },
     )
 
-    setContentView(screen(title = "现场操作首页", children = children))
+    setContentView(screen(title = "现场操作首页", children = children, root = true))
   }
 
   private fun homeSummary(): String {
@@ -364,20 +388,27 @@ class MainActivity : Activity() {
   // 酒吧支付引导：创建支付意图（生成支付二维码由后端返回 channel/status，UI 展示引导）+ 结算。
   private fun showBarPayment(order: BarOrderRecord) {
     val billId = editText("账单 bill_id（下单后生成）")
-    val amount = editText("金额（元）").apply {
-      inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-      setText("%.2f".format(order.totalAmountCent / 100.0))
+    // 金额防误：结算金额=订单金额，只读展示，杜绝手滑改小。
+    val cents = order.totalAmountCent
+    val amount = statusText("应收金额：¥${"%.2f".format(cents / 100.0)}（按订单金额结算，不可修改）")
+    // 渠道防误：自由文本改为 wechat/alipay 单选，默认微信。
+    val wechatRadio = android.widget.RadioButton(this).apply { text = "微信 wechat"; id = View.generateViewId() }
+    val alipayRadio = android.widget.RadioButton(this).apply { text = "支付宝 alipay"; id = View.generateViewId() }
+    val channel = android.widget.RadioGroup(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      addView(wechatRadio)
+      addView(alipayRadio)
+      check(wechatRadio.id)
     }
-    val channel = editText("支付渠道 channel（如 wechat / alipay）").apply { setText("wechat") }
+    fun selectedChannel(): String = if (alipayRadio.isChecked) "alipay" else "wechat"
     val status = statusText("订单 ${order.id}\n创建支付意图后引导顾客扫码支付，再结算账单。")
 
     val intentButton = secondaryButton("创建支付意图（引导扫码）") {
       val bill = billId.text.toString().trim()
       if (bill.isEmpty()) { status.text = "请输入账单 bill_id"; return@secondaryButton }
-      val cents = parseAmountCent(amount.text.toString()) ?: run { status.text = "金额格式不正确"; return@secondaryButton }
       status.text = "正在创建支付意图…"
       runBackground(
-        action = { workflow.createBarPaymentIntent(bill, cents, channel.text.toString().trim().ifEmpty { "wechat" }) },
+        action = { workflow.createBarPaymentIntent(bill, cents, selectedChannel()) },
         onSuccess = { intent ->
           status.text = buildString {
             append("支付意图：").append(intent.id).append("（").append(intent.status).append("）\n")
@@ -392,15 +423,20 @@ class MainActivity : Activity() {
     val settleButton = primaryButton("结算账单 settle") {
       val bill = billId.text.toString().trim()
       if (bill.isEmpty()) { status.text = "请输入账单 bill_id"; return@primaryButton }
-      val cents = parseAmountCent(amount.text.toString()) ?: run { status.text = "金额格式不正确"; return@primaryButton }
-      status.text = "正在结算…"
-      runBackground(
-        action = { workflow.settleBarBill(bill, cents, channel.text.toString().trim().ifEmpty { "wechat" }) },
-        onSuccess = { b ->
-          status.text = "结算完成：账单 ${b.id}\n支付状态：${b.paymentStatus ?: "-"}，结算状态：${b.settlementStatus ?: "-"}"
-        },
-        onError = { status.text = "结算失败：${friendly(it)}" },
-      )
+      val ch = selectedChannel()
+      confirmThen(
+        title = "结算账单",
+        message = "将按 ¥${"%.2f".format(cents / 100.0)}（渠道 $ch）结算账单 $bill。\n结算即确认收款完成、账单关闭，不可撤销。\n请确认客人已完成支付。",
+      ) {
+        status.text = "正在结算…"
+        runBackground(
+          action = { workflow.settleBarBill(bill, cents, ch) },
+          onSuccess = { b ->
+            status.text = "结算完成：账单 ${b.id}\n支付状态：${b.paymentStatus ?: "-"}，结算状态：${b.settlementStatus ?: "-"}"
+          },
+          onError = { status.text = "结算失败：${friendly(it)}" },
+        )
+      }
     }
 
     setContentView(
@@ -448,12 +484,17 @@ class MainActivity : Activity() {
     val confirmButton = secondaryButton("主管确认恢复运营") {
       val rid = recordId.text.toString().trim()
       if (rid.isEmpty()) { status.text = "请输入检修记录 record_id"; return@secondaryButton }
-      status.text = "正在确认…"
-      runBackground(
-        action = { workflow.confirmAmusementMaintenanceResume(rid) },
-        onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${rec.status}）" },
-        onError = { status.text = "确认失败：${friendly(it)}" },
-      )
+      confirmThen(
+        title = "主管确认恢复运营",
+        message = "将对检修记录 $rid 确认恢复运营。\n确认后设备立即对客开放，责任落在确认主管，不可撤销。\n请确认检修已完成且设备安全。",
+      ) {
+        status.text = "正在确认…"
+        runBackground(
+          action = { workflow.confirmAmusementMaintenanceResume(rid) },
+          onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${rec.status}）" },
+          onError = { status.text = "确认失败：${friendly(it)}" },
+        )
+      }
     }
 
     setContentView(
@@ -506,12 +547,17 @@ class MainActivity : Activity() {
       val vid = verificationId.text.toString().trim()
       val r = reason.text.toString().trim()
       if (vid.isEmpty() || r.isEmpty()) { status.text = "请填写记录与原因"; return@primaryButton }
-      status.text = "正在冲正…"
-      runBackground(
-        action = { workflow.reverseVerification(vid, r) },
-        onSuccess = { res -> status.text = "冲正完成：${res.id}（状态 ${res.status}）" },
-        onError = { status.text = "冲正失败：${friendly(it)}" },
-      )
+      confirmThen(
+        title = "核销冲正",
+        message = "将冲正核销记录 $vid（原因：$r）。\n冲正即撤销原核销结果，不可恢复。",
+      ) {
+        status.text = "正在冲正…"
+        runBackground(
+          action = { workflow.reverseVerification(vid, r) },
+          onSuccess = { res -> status.text = "冲正完成：${res.id}（状态 ${res.status}）" },
+          onError = { status.text = "冲正失败：${friendly(it)}" },
+        )
+      }
     }
 
     setContentView(
@@ -553,6 +599,16 @@ class MainActivity : Activity() {
     }
   }
 
+  /** 高危操作二次确认（照后台 HighRiskConfirm 语义）：标题=动作，内容=影响+不可逆说明+关键参数回显。 */
+  private fun confirmThen(title: String, message: String, onConfirm: () -> Unit) {
+    android.app.AlertDialog.Builder(this)
+      .setTitle(title)
+      .setMessage(message)
+      .setPositiveButton("确定") { _, _ -> onConfirm() }
+      .setNegativeButton("取消", null)
+      .show()
+  }
+
   private fun requireBindingOr(status: TextView, block: () -> Unit) {
     if (store.session == null) { status.text = "请先登录"; return }
     if (store.binding == null) { status.text = "请先绑定设备"; return }
@@ -561,7 +617,7 @@ class MainActivity : Activity() {
 
   /** 错误信息转中文友好提示，区分离线/网络/接口错误。 */
   private fun friendly(error: Throwable): String = when (error) {
-    is ApiException -> "接口 ${error.statusCode}（${error.path}）"
+    is ApiException -> apiErrorText(error)
     is IllegalStateException -> error.message?.let {
       when {
         it.contains("offline") -> "网络离线，请检查连接后重试"
@@ -573,8 +629,25 @@ class MainActivity : Activity() {
     else -> error.message ?: error.javaClass.simpleName
   }
 
-  private fun parseAmountCent(input: String): Long? =
-    input.trim().toDoubleOrNull()?.let { Math.round(it * 100) }
+  /** 接口错误转业务话术：解析响应体 {code, detail_code, message}；状态码+路径保留在末尾括号里供报障。 */
+  private fun apiErrorText(error: ApiException): String {
+    val body = runCatching {
+      api.json.parseToJsonElement(error.responseBody) as? JsonObject
+    }.getOrNull()
+    fun field(key: String): String? = (body?.get(key) as? JsonPrimitive)?.content
+    val code = field("detail_code") ?: field("code")
+    val message = field("message")
+    val text = when {
+      error.statusCode == 401 || code == "UNAUTHORIZED" -> "请重新登录"
+      error.statusCode == 403 || code == "FORBIDDEN" -> "当前账号或设备无权操作"
+      code == "VALIDATION_FAILED" || error.statusCode == 400 || error.statusCode == 422 ->
+        "提交内容有误" + (message?.let { "：$it" } ?: "")
+      error.statusCode == 404 || code == "NOT_FOUND" -> "数据不存在"
+      error.statusCode >= 500 -> "服务暂时不可用，请稍后重试"
+      else -> message ?: "操作失败"
+    }
+    return "$text（${error.statusCode} ${error.path}）"
+  }
 
   // ---------- 视图工厂（纯 Android Views，无 AndroidX/Compose） ----------
 
@@ -586,16 +659,23 @@ class MainActivity : Activity() {
   // ---------------------------------------------------------------------------
   private fun showStaffNotices() {
     val status = statusText("正在拉取公司公告…")
-    val list = statusText("")
-    val ackId = editText("要确认已读的公告 id")
+    val list = rowsContainer()
+    val ackId = editText("要确认已读的公告 id（点上方公告自动回填）")
     val refresh = {
       runBackground(
         action = { api.listStaffNotices() },
         onSuccess = { notices ->
-          status.text = "公告 ${notices.size} 条"
-          list.text = if (notices.isEmpty()) "暂无公告" else notices.joinToString("\n\n") { n ->
-            "[${n.consentStatus ?: "-"}] ${n.title ?: n.id}\n${n.body ?: ""}"
-          }
+          status.text = "公告 ${notices.size} 条（点一条自动回填 id）"
+          fillSelectableRows(
+            list,
+            notices.map { n ->
+              "[${n.consentStatus ?: "-"}] ${n.title ?: n.id}\n${n.body ?: ""}" to {
+                ackId.setText(n.id ?: "")
+                status.text = "已选公告：${n.title ?: n.id}"
+              }
+            },
+            emptyText = "暂无公告",
+          )
         },
         onError = { status.text = "拉取失败：${friendly(it)}" },
       )
@@ -637,19 +717,27 @@ class MainActivity : Activity() {
 
   private fun showBarAvailability() {
     val status = statusText("正在拉取酒吧桌位…")
-    val list = statusText("")
-    val barId = editText("酒吧 bar_id")
-    val tableId = editText("桌位 table_id(从上表选空位)")
+    val list = rowsContainer()
+    val barId = editText("酒吧 bar_id(点上方桌位自动回填)")
+    val tableId = editText("桌位 table_id(点上方空位自动回填)")
     val time = editText("到店时间(如 2026-07-02T20:00:00Z)")
     val guests = editText("人数").apply { inputType = InputType.TYPE_CLASS_NUMBER }
     runBackground(
       action = { api.listBarTableAvailability() },
       onSuccess = { rows ->
-        status.text = "桌位 ${rows.size} 个(员工代订免定金,收款在公司设备/前台)"
-        list.text = if (rows.isEmpty()) "暂无桌位" else rows.joinToString("\n") { r ->
-          "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
-            "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ${(r.minConsumptionCent ?: 0) / 100}元"
-        }
+        status.text = "桌位 ${rows.size} 个(员工代订免定金,收款在公司设备/前台;点一条自动回填)"
+        fillSelectableRows(
+          list,
+          rows.map { r ->
+            "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
+              "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
+              tableId.setText(r.id ?: "")
+              r.barId?.let { barId.setText(it) }
+              status.text = "已选桌位：${r.tableCode ?: r.id}"
+            }
+          },
+          emptyText = "暂无桌位",
+        )
       },
       onError = { status.text = "拉取失败：${friendly(it)}" },
     )
@@ -808,11 +896,11 @@ class MainActivity : Activity() {
             val r = rows.first()
             status.text = "$m 薪资单(已定格)"
             detail.text = buildString {
-              append("固定工资: ¥").append((r.baseCent ?: 0) / 100.0).append('\n')
-              append("提成: ¥").append((r.commissionCent ?: 0) / 100.0).append('\n')
-              append("激励奖金: ¥").append((r.bonusCent ?: 0) / 100.0).append('\n')
-              append("处罚扣款: -¥").append((r.penaltyCent ?: 0) / 100.0).append('\n')
-              append("实发合计: ¥").append((r.totalCent ?: 0) / 100.0)
+              append("固定工资: ¥").append("%.2f".format((r.baseCent ?: 0) / 100.0)).append('\n')
+              append("提成: ¥").append("%.2f".format((r.commissionCent ?: 0) / 100.0)).append('\n')
+              append("激励奖金: ¥").append("%.2f".format((r.bonusCent ?: 0) / 100.0)).append('\n')
+              append("处罚扣款: -¥").append("%.2f".format((r.penaltyCent ?: 0) / 100.0)).append('\n')
+              append("实发合计: ¥").append("%.2f".format((r.totalCent ?: 0) / 100.0))
             }
           }
         },
@@ -904,7 +992,8 @@ class MainActivity : Activity() {
   // ── G批(2026-07-02 六口径):代客点服务(直付QR) / 我的服务任务 / 我的收款码 ──
   private fun showServiceOrderCreate() {
     val catalog = statusText("正在拉取服务目录…")
-    val itemId = editText("服务项 id(从上表选)")
+    val catalogList = rowsContainer()
+    val itemId = editText("服务项 id(点上方目录自动回填)")
     val performer = editText("履约员工 user_id(客人指定谁填谁)")
     val tableId = editText("桌台 table_id(可空)")
     val note = editText("备注(可空)")
@@ -913,10 +1002,18 @@ class MainActivity : Activity() {
     runBackground(
       action = { api.listServiceCatalog() },
       onSuccess = { rows ->
-        catalog.text = if (rows.isEmpty()) "目录为空(请后台维护)" else rows.joinToString("\n") { r ->
-          "${r.id}  ${r.name}  参考价 ¥${(r.priceCent ?: 0) / 100.0}" +
-            (r.durationMinutes?.let { "  约${it}分钟" } ?: "")
-        }
+        catalog.text = "服务目录 ${rows.size} 项(点一项自动回填 id)"
+        fillSelectableRows(
+          catalogList,
+          rows.map { r ->
+            "${r.name}  参考价 ¥${"%.2f".format((r.priceCent ?: 0) / 100.0)}" +
+              (r.durationMinutes?.let { "  约${it}分钟" } ?: "") to {
+              itemId.setText(r.id ?: "")
+              catalog.text = "已选服务项：${r.name}"
+            }
+          },
+          emptyText = "目录为空(请后台维护)",
+        )
       },
       onError = { catalog.text = "目录拉取失败：${friendly(it)}" },
     )
@@ -924,11 +1021,16 @@ class MainActivity : Activity() {
     val paidButton = primaryButton("已收款到公司账户(目视支付成功)") {
       val id = lastOrderId.text.toString().trim()
       if (id.isEmpty()) { status.text = "请先下单"; return@primaryButton }
-      runBackground(
-        action = { api.markServiceOrderPaid(id, ServiceMarkPaidReq("mp_${System.currentTimeMillis()}")) },
-        onSuccess = { status.text = "已确认收款(公司账户):${it.id};舞者可上台" },
-        onError = { status.text = "确认收款失败：${friendly(it)}" },
-      )
+      confirmThen(
+        title = "确认收款到公司账户",
+        message = "将把服务单 $id 标记为已收款（公司统一账户）。\n标记后服务进入履约与分账流程，不可撤回。\n请先目视确认客人支付成功。",
+      ) {
+        runBackground(
+          action = { api.markServiceOrderPaid(id, ServiceMarkPaidReq("mp_${System.currentTimeMillis()}")) },
+          onSuccess = { status.text = "已确认收款(公司账户):${it.id};舞者可上台" },
+          onError = { status.text = "确认收款失败：${friendly(it)}" },
+        )
+      }
     }
     val completeButton = primaryButton("完成履约(跳完点这里)") {
       val id = lastOrderId.text.toString().trim()
@@ -936,8 +1038,8 @@ class MainActivity : Activity() {
       runBackground(
         action = { api.completeServiceOrder(id, ServiceActionReq("cp_${System.currentTimeMillis()}")) },
         onSuccess = { o ->
-          status.text = "已完成:管理费 ¥${(o.mgmtFeeCent ?: 0) / 100.0} 归公司," +
-            "舞者应得 ¥${(o.dancerShareCent ?: 0) / 100.0}(月结进工资,代扣个税)"
+          status.text = "已完成:管理费 ¥${"%.2f".format((o.mgmtFeeCent ?: 0) / 100.0)} 归公司," +
+            "舞者应得 ¥${"%.2f".format((o.dancerShareCent ?: 0) / 100.0)}(月结进工资,代扣个税)"
         },
         onError = { status.text = "完成失败：${friendly(it)}" },
       )
@@ -959,7 +1061,7 @@ class MainActivity : Activity() {
         },
         onSuccess = { (order, qr) ->
           lastOrderId.setText(order.id ?: "")
-          status.text = "已下单 ${order.itemName}(${order.id});请客人扫码支付到公司账户 ¥${(order.priceCent ?: 0) / 100.0}"
+          status.text = "已下单 ${order.itemName}(${order.id});请客人扫码支付到公司账户 ¥${"%.2f".format((order.priceCent ?: 0) / 100.0)}"
           if (qr.isNotEmpty()) {
             runCatching {
               val bitmap = com.journeyapps.barcodescanner.BarcodeEncoder()
@@ -973,7 +1075,7 @@ class MainActivity : Activity() {
     }
     setContentView(screen(
       title = "代客点服务(直付)",
-      children = listOf(catalog, itemId, performer, tableId, note, orderButton, status, qrImage,
+      children = listOf(catalog, catalogList, itemId, performer, tableId, note, orderButton, status, qrImage,
         lastOrderId, paidButton, completeButton,
         secondaryButton("返回首页") { showHome() }),
     ))
@@ -981,8 +1083,8 @@ class MainActivity : Activity() {
 
   private fun showMyServiceOrders() {
     val status = statusText("正在拉取我的服务任务…")
-    val list = statusText("")
-    val orderId = editText("要操作的服务单 id")
+    val list = rowsContainer()
+    val orderId = editText("要操作的服务单 id(点上方任务自动回填)")
     val labels = mapOf("pending_accept" to "待接单", "accepted" to "已接单", "completed" to "已完成", "cancelled" to "已取消")
     val refresh = {
       runBackground(
@@ -995,12 +1097,18 @@ class MainActivity : Activity() {
         },
         onSuccess = { (orders, stats) ->
           val count = stats["completed_count"]?.toString()?.trim('"') ?: "0"
-          val income = (stats["reference_income_cent"]?.toString()?.trim('"')?.toLongOrNull() ?: 0) / 100.0
+          val income = "%.2f".format((stats["reference_income_cent"]?.toString()?.trim('"')?.toLongOrNull() ?: 0) / 100.0)
           status.text = "本月完成 $count 单,应得 ¥$income(公司代收,月结进工资并代扣个税)"
-          list.text = if (orders.isEmpty()) "暂无服务任务" else orders.joinToString("\n\n") { o ->
-            "${o.id}\n${o.itemName} ¥${(o.priceCent ?: 0) / 100.0} 桌台 ${o.tableId ?: "-"} " +
-              "[${labels[o.status] ?: o.status}]" + (o.customerNote?.let { "\n备注: $it" } ?: "")
-          }
+          fillSelectableRows(
+            list,
+            orders.map { o ->
+              "${o.itemName} ¥${"%.2f".format((o.priceCent ?: 0) / 100.0)} 桌台 ${o.tableId ?: "-"} " +
+                "[${labels[o.status] ?: o.status}]" + (o.customerNote?.let { "\n备注: $it" } ?: "") to {
+                orderId.setText(o.id ?: "")
+              }
+            },
+            emptyText = "暂无服务任务",
+          )
         },
         onError = { status.text = "拉取失败：${friendly(it)}" },
       )
@@ -1056,7 +1164,7 @@ class MainActivity : Activity() {
       runBackground(
         action = { api.setMyPaymentCode(PaymentCodeReq("pc_${System.currentTimeMillis()}", qr)) },
         onSuccess = {
-          status.text = "已保存;下单页会向客人出示此码"
+          status.text = "已保存(仅历史保留,不再向客人出示;收款走公司统一账户)"
           runCatching {
             qrImage.setImageBitmap(com.journeyapps.barcodescanner.BarcodeEncoder()
               .encodeBitmap(qr, com.google.zxing.BarcodeFormat.QR_CODE, 500, 500))
@@ -1096,7 +1204,8 @@ class MainActivity : Activity() {
     ))
   }
 
-  private fun screen(title: String, children: List<View>): View {
+  private fun screen(title: String, children: List<View>, root: Boolean = false): View {
+    onRootScreen = root
     val titleView = TextView(this).apply {
       text = title
       textSize = 22f
@@ -1119,6 +1228,40 @@ class MainActivity : Activity() {
     return ScrollView(this).apply {
       setBackgroundColor(Color.WHITE)
       addView(container)
+    }
+  }
+
+  /** 可点选列表容器：配合 [fillSelectableRows] 使用。 */
+  private fun rowsContainer(): LinearLayout = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+  }
+
+  /** 可点选列表：每条记录一个独立 TextView，点中高亮并执行回填，免去肉眼抄 id。 */
+  private fun fillSelectableRows(
+    container: LinearLayout,
+    rows: List<Pair<String, () -> Unit>>,
+    emptyText: String,
+  ) {
+    container.removeAllViews()
+    fun params() = LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { topMargin = dp(4) }
+    if (rows.isEmpty()) {
+      container.addView(statusText(emptyText), params())
+      return
+    }
+    rows.forEach { (text, onPick) ->
+      val row = statusText(text)
+      row.isClickable = true
+      row.setOnClickListener {
+        for (i in 0 until container.childCount) {
+          container.getChildAt(i).setBackgroundColor(Color.parseColor("#f2f4f7"))
+        }
+        row.setBackgroundColor(Color.parseColor("#d9e7ff"))
+        onPick()
+      }
+      container.addView(row, params())
     }
   }
 
