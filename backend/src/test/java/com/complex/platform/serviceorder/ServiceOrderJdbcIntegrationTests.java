@@ -40,6 +40,9 @@ class ServiceOrderJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.access.staff.StaffRepository staffRepository;
+
     @BeforeEach
     void setUp() {
         authenticateAs("usr_admin");
@@ -128,6 +131,28 @@ class ServiceOrderJdbcIntegrationTests {
                 + "VALUES ('cml_htax', 'usr_admin', '2099-09', 'service_order', 'svo_htax', 3000000, now())");
         // 触发月结(经 staff 域端点在 StaffJdbc 测试域;此处直查 SQL 生成——用 staff service 更贴切,但域隔离,直接断言 SQL 结果)。
         jdbcTemplate.update("DELETE FROM staff_payroll_statements WHERE user_id='usr_admin' AND month='2099-09'");
+    }
+
+    @Test
+    void serviceOrderCommissionIsIdempotentAtMostOncePerOrder() {
+        // 清单 P1-2:同一服务单的提成至多一条(部分唯一索引 + ON CONFLICT DO NOTHING),
+        // 防并发双 key 完成/重放放大到薪资月结代扣个税;manual 等其他来源不受影响(可重)。
+        String oid = "svo_idem_" + key();
+        java.time.Instant now = java.time.Instant.now();
+        staffRepository.insertCommission("cml_a_" + oid, "usr_p1b", "2099-01", "service_order", oid, 27000L, "dup", now);
+        staffRepository.insertCommission("cml_b_" + oid, "usr_p1b", "2099-01", "service_order", oid, 27000L, "dup", now);
+        Long svc = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_commission_ledger WHERE source_type='service_order' AND source_id=?",
+                Long.class, oid);
+        assertThat(svc).isEqualTo(1L);
+        // manual 来源不进部分索引,同 source_id 仍可多条(手工双录是用户动作,不静默吞)。
+        String mid = "man_" + key();
+        staffRepository.insertCommission("cml_m1_" + mid, "usr_p1b", "2099-01", "manual", mid, 100L, "m", now);
+        staffRepository.insertCommission("cml_m2_" + mid, "usr_p1b", "2099-01", "manual", mid, 100L, "m", now);
+        Long man = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_commission_ledger WHERE source_type='manual' AND source_id=?",
+                Long.class, mid);
+        assertThat(man).isEqualTo(2L);
     }
 
     @Test

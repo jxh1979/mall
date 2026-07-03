@@ -220,6 +220,9 @@ public class StoredValueService {
         // 「只扣指定的那一张」：按 (customer, project, merchant) 精确解析卡。商户卡=该商户的卡，
         // 故商户卡消费天然限定在该发卡商户（用 merchant Y 的范围取不到 merchant X 的卡）。
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
+        // 清单 P1-1:与 refund/freeze/unfreeze 一致,消费须先过卡范围校验(他商户/通用卡越权即拒,
+        // 且在状态检查之前——不向越权者泄露卡状态)。此前缺此行 → merchantId 请求体可控可跨商户扣款。
+        requireMerchantScopeForCard(account);
         requireActive(account);
         if (account.balanceCent() < amountCent) {
             throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "stored-value balance is insufficient");

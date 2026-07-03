@@ -201,6 +201,12 @@ class MemberWalletServiceTests {
         // 他商户卡 → 拒。
         assertThatThrownBy(() -> m1Staff.freeze("c1", null, "m2", "x"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        // 清单 P1-1:consume 也须受卡范围约束——商户 m1 员工不得扣他商户(m2)卡或通用卡(越权扣款);
+        // scope 校验在状态检查之前,越权即拒不泄露卡状态。
+        assertThatThrownBy(() -> m1Staff.consume("c1", null, "m2", 100L, "x", "sv-c-m2"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        assertThatThrownBy(() -> m1Staff.consume("c1", null, null, 100L, "x", "sv-c-prj"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
         // 综合体通用卡 → 拒（商户员工不得操作平台级卡）。
         assertThatThrownBy(() -> m1Staff.freeze("c1", null, null, "x"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));

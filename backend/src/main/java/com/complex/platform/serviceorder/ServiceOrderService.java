@@ -236,15 +236,18 @@ public class ServiceOrderService {
                 }).orElse(0L);
         long dancerShare = current.priceCent() - mgmtFee;
         Instant now = Instant.now();
+        // 清单 P1-2:提成先入台账(幂等唯一键 + ON CONFLICT DO NOTHING),再落完成态。
+        // ponytail: 无 @Transactional 下靠"提成幂等 + 提成先于完成态"保证资金正确——并发双 key 完成→提成至多一条;
+        // 崩在两写之间可重放自愈(status 守卫仍为 paid → 再入账幂等 → 落完成态);提成绝不双记进薪资月结代扣个税。
+        String month = java.time.YearMonth.from(java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)).toString();
+        staffRepository.insertCommission("cml_" + UUID.randomUUID(), current.performerUserId(), month,
+                "service_order", current.id(), dancerShare, current.itemName(), now);
         ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
                 current.id(), current.catalogItemId(), current.itemName(), current.priceCent(),
                 current.barId(), current.tableId(), current.performerUserId(), current.orderedBy(),
                 current.customerNote(), "completed", current.cancelReason(),
                 current.paidAt(), current.paidBy(), current.payMethod(), current.refundNote(),
                 mgmtFee, dancerShare, current.createdAt(), now, now));
-        String month = java.time.YearMonth.from(java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)).toString();
-        staffRepository.insertCommission("cml_" + UUID.randomUUID(), saved.performerUserId(), month,
-                "service_order", saved.id(), dancerShare, saved.itemName(), now);
         auditEventService.recordSuccess("service.order.completed", "service.order.create",
                 "service_order", saved.id(), null,
                 request == null ? null : request.idempotencyKey(),

@@ -256,29 +256,37 @@ class ContractServiceTests {
     }
 
     @Test
-    void activateBooksRentPropertyEnergyForEachPeriodAndSkipsZero() {
+    void activateBooksRentPropertyForEachPeriodAndLeavesEnergyToEnergyDomain() {
+        // 清单 P1-3 方案B:即便 by_contract 包干固定能源费,合同域生效也只排 rent+property(12 期 × 2 = 24 条);
+        // 能源费统一由能耗抄表域 settleEnergyFee 出账,消除合同域×能耗域对同一户同期双挂账。
         ContractRecord d = service.createDraft(new ContractDraftRequest("k_pf", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of("baseRentCent", 100000, "propertyFeeCent", 20000, "energyFeeCent", 5000),
-                "fixed_ratio", "by_area", 500000L, Map.of(), List.of(), List.of(), null, null));
+                "fixed_ratio", "by_contract", 500000L, Map.of(), List.of(), List.of(), null, null));
         service.submit(d.id(), "k_sub");
         approve(d, "contract.approve.business");
         approve(d, "contract.approve.finance");
         approve(d, "contract.approve.legal");
         approve(d, "contract.approve.gm");
         service.activate(d.id(), new ContractActivateRequest("k_act", List.of("sp_pf")));
-        // P1-A：生效自动按整租期排 rent+property+energy 三费目（12 期 × 3 = 36 条）。
         List<ContractRentBillRecord> all = repo.rentBills.stream()
                 .filter(b -> b.contractId().equals(d.id())).toList();
-        assertThat(all).hasSize(36);
-        // 单期(2026-08)三费目金额。
+        assertThat(all).hasSize(24);
         List<ContractRentBillRecord> aug = all.stream().filter(b -> b.period().equals("2026-08")).toList();
         assertThat(aug).extracting(ContractRentBillRecord::feeType)
-                .containsExactlyInAnyOrder("rent", "property_fee", "energy_fee");
-        assertThat(aug).extracting(ContractRentBillRecord::amountCent)
-                .containsExactlyInAnyOrder(100000L, 20000L, 5000L);
-        // 整租期已排 → 手工再排同期幂等返回空（全已挂账跳过）。
+                .containsExactlyInAnyOrder("rent", "property_fee");
+        assertThat(aug).extracting(ContractRentBillRecord::feeType).doesNotContain("energy_fee");
         assertThat(service.generatePeriodBills(d.id(), new ContractRentBillRequest("k_pb", "2026-08"))).isEmpty();
+    }
+
+    @Test
+    void contractRejectsFixedEnergyFeeWhenBasisIsMetered() {
+        // 清单 P1-3 固定额校验:按面积/按用量的合同不许再填固定能源费金额(下单时拦住,防脏数据)。
+        assertThatThrownBy(() -> service.createDraft(new ContractDraftRequest("k_bad", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
+                Map.of("baseRentCent", 100000, "energyFeeCent", 5000),
+                "fixed_ratio", "by_usage", 500000L, Map.of(), List.of(), List.of(), null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
     }
 
     @Test

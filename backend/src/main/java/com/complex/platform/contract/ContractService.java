@@ -114,6 +114,12 @@ public class ContractService {
         if (!ENERGY_BASES.contains(energyBasis)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "energy_fee_basis is invalid");
         }
+        // 清单 P1-3:固定能源费金额仅 by_contract 包干允许;按面积/按用量(需抄表)或无能源费的合同填固定额=脏数据,下单即拒。
+        if (numLong((actual.rentTerms() == null ? Map.of() : actual.rentTerms()).get("energyFeeCent")) > 0
+                && !"by_contract".equals(energyBasis)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "energyFeeCent is only allowed when energy_fee_basis is by_contract");
+        }
         Instant now = Instant.now();
         Map<String, Object> rentTerms = new HashMap<>(actual.rentTerms() == null ? Map.of() : actual.rentTerms());
         if (trimToNull(actual.businessScope()) != null) {
@@ -738,7 +744,6 @@ public class ContractService {
         LocalDate dueDate = dueDateOf(period);
         long rent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
         long property = numLong(rt.get("propertyFeeCent"));
-        long energy = "none".equals(c.energyFeeBasis()) ? 0L : numLong(rt.get("energyFeeCent"));
         List<ContractRentBillRecord> out = new ArrayList<>();
         ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent, dueDate, idemKey);
         if (rb != null) {
@@ -748,10 +753,8 @@ public class ContractService {
         if (pb != null) {
             out.add(pb);
         }
-        ContractRentBillRecord eb = genFeeBill(c, period, "energy_fee", energy, dueDate, idemKey);
-        if (eb != null) {
-            out.add(eb);
-        }
+        // 清单 P1-3 方案B:能源费(含 by_contract 包干固定额)统一由能耗抄表域 EnergyService.settleEnergyFee 出账,
+        // 合同域不再挂能源费,消除合同域(contract_energy_fee)×能耗域(energy_fee)对同一户同期双挂账。
         return out;
     }
 

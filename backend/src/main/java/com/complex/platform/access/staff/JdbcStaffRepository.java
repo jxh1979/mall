@@ -64,6 +64,7 @@ class JdbcStaffRepository implements StaffRepository {
                 VALUES (:id, :user_id, :month, :source_type, :source_id, :amount, :note, :now, """
                 + STAFF_PROJECT_SUBSELECT + """
                 )
+                ON CONFLICT (source_type, source_id) WHERE source_type = 'service_order' DO NOTHING
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", id).addValue("user_id", userId).addValue("month", month)
                 .addValue("source_type", sourceType).addValue("source_id", sourceId)
