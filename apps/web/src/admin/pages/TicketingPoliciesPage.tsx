@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -216,7 +217,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                   <td>{yuan(row.weekendPriceCent)}</td>
                   <td>{yuan(row.holidayPriceCent)}</td>
                   <td>{row.stockQuantity ?? "不限"}</td>
-                  <td>{row.status}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                 </tr>
               ))}
             </tbody>
@@ -253,7 +254,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
               <tr key={row.id}>
                 <td>{row.name}</td>
                 <td>{row.entitlementType}</td>
-                <td>{row.status}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
               </tr>
             ))}
           </tbody>
@@ -314,7 +315,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <td>{VARIANT_LABELS[row.variantType] ?? row.variantType}</td>
                 <td>{row.priceMode === "fixed_price" ? "固定价" : "按基础价折扣"}</td>
                 <td>{row.priceMode === "fixed_price" ? `¥${yuan(row.weekdayPriceCent)}` : row.discountRate != null ? `${Math.round(Number(row.discountRate) * 100)}%` : "—"}</td>
-                <td>{row.status}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
               </tr>
             ))}
           </tbody>

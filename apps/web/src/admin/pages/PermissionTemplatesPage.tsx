@@ -5,6 +5,7 @@ import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { PermissionButton } from "../security/Can";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AccessUserRow, AdminPageProps, PermissionDefinitionRow, PermissionTemplateRow } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const TEMPLATE_MANAGE_PERMISSION = "access.permission_template.manage";
 const TEMPLATE_APPLY_PERMISSION = "access.permission_template.apply";
@@ -335,7 +336,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
                 <td><input type="radio" data-testid={`permission-template-select-${row.id}`} checked={mode === "existing" && selectedId === row.id} onChange={() => { setMode("existing"); setSelectedId(row.id); }} /></td>
                 <td>{displayTemplateName(row)}</td>
                 <td>{row.templateType ?? "base"}</td>
-                <td>{row.status}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
                 <td>{row.singleUse ? "单次" : row.validUntil ? "限时" : "长期"}</td>
                 <td>{templatePermissionCodes(row).length || "-"}</td>
               </tr>

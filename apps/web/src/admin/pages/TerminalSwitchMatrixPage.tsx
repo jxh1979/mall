@@ -79,7 +79,8 @@ export function TerminalSwitchMatrixPage({ api, setActionResult, setGlobalError,
         description="十类终端的总开关与各能力开关一页统管：全局>综合体>商户>模块>设备逐级压制，高层级关闭压倒低层级打开；开关关闭后端或模块不能用，打开后仍要看员工权限、商户范围和设备状态。"
       />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
-        <h3>十端总开关</h3>
+        {/* 标题层级：页 h1 之下用 h2，杜绝 h1→h3 跳级。 */}
+        <h2>十端总开关</h2>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="terminal-master-switch-table">
             <thead>
@@ -112,10 +113,10 @@ export function TerminalSwitchMatrixPage({ api, setActionResult, setGlobalError,
           </table>
         </div>
 
-        <h3>各端能力开关</h3>
+        <h2>各端能力开关</h2>
         {[...grouped.entries()].map(([terminalType, list]) => (
           <div key={terminalType} data-testid={`terminal-capability-group-${terminalType}`}>
-            <h4>{TERMINAL_LABELS[terminalType] ?? terminalType}</h4>
+            <h3>{TERMINAL_LABELS[terminalType] ?? terminalType}</h3>
             <div className="admin-table-scroll">
               <table className="admin-table">
                 <thead>

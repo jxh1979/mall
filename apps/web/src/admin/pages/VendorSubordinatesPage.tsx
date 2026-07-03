@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 type SubordinateRow = { id: string; username: string; partnerOrgId: string; accountType: string; status: string };
 type CompletionRow = { subordinateId: string; username: string; status: string; workOrderTotal: number; workOrderCompleted: number; inspectionTotal: number; inspectionCompleted: number };
@@ -59,7 +60,7 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
                 <tr><td colSpan={4} className="admin-empty" data-testid="vendor-subordinates-empty">暂无下属账号</td></tr>
               ) : rows.map((row) => (
                 <tr key={row.id} data-testid={`vendor-subordinate-${row.id}`}>
-                  <td>{row.id}</td><td>{row.username}</td><td>{row.status}</td>
+                  <td>{row.id}</td><td>{row.username}</td><td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.status === "active" && (
                     <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
                       data-testid={`vendor-subordinate-disable-${row.id}`} onClick={() => void disableSubordinate(row.id)}>停用</PermissionButton>
@@ -84,7 +85,7 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
                 <tr><td colSpan={4} className="admin-empty" data-testid="vendor-subordinate-completion-empty">暂无数据</td></tr>
               ) : completion.map((row) => (
                 <tr key={row.subordinateId} data-testid={`vendor-subordinate-completion-${row.subordinateId}`}>
-                  <td>{row.username}</td><td>{row.status}</td>
+                  <td>{row.username}</td><td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.workOrderCompleted}/{row.workOrderTotal}</td>
                   <td>{row.inspectionCompleted}/{row.inspectionTotal}</td>
                 </tr>

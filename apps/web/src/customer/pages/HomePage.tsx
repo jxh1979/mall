@@ -54,7 +54,7 @@ export function HomePage({ service }: { service: CustomerService }): React.React
                 <List.Item.Meta
                   title={
                     <span>
-                      {item.ticketName} <Tag color={item.status === "active" ? "green" : "default"}>{formatBusinessStatus(item.status)}</Tag>
+                      {item.ticketName} <Tag color={item.status === "active" || item.status === "published" ? "green" : "default"}>{formatBusinessStatus(item.status)}</Tag>
                     </span>
                   }
                   description={

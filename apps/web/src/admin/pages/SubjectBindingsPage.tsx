@@ -7,6 +7,7 @@ import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, SubjectBindingRow } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 // 后端写权限码（PlatformController：/business-entity-bindings/{id}/change）
 const BINDING_MANAGE_PERMISSION = "entity.binding.manage";
@@ -131,7 +132,7 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
                     <td>{display(row.contractSubjectId)}</td>
                     <td>{display(row.settlementSubject)}</td>
                     <td>{display(row.settlementSubjectId)}</td>
-                    <td>{display(row.status)}</td>
+                    <td>{formatBusinessStatus(row.status)}</td>
                     <td>{display(row.auditEvidenceRef)}</td>
                   </tr>
                 ))}</tbody>

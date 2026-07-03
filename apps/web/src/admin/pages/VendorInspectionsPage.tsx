@@ -1,4 +1,5 @@
 import React from "react";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -188,7 +189,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
                   <td><input type="radio" data-testid={`vendor-inspection-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.title ?? row.id}</td>
                   <td>{row.inspectionType ?? "-"}</td>
-                  <td>{row.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.scheduleMode ?? "-"}</td>
                   <td>{row.spaceId ?? "-"}</td>
                   <td>{row.assigneeId ?? "-"}</td>

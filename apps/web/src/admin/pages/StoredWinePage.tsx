@@ -1,4 +1,5 @@
 import React from "react";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -194,7 +195,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
                   <td>{row.customerName ?? row.customerId ?? "-"}</td>
                   <td>{row.itemName ?? row.itemId ?? "-"}</td>
                   <td>{row.quantity ?? "-"}</td>
-                  <td>{row.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.createdAt ?? "-"}</td>
                 </tr>
               ))}

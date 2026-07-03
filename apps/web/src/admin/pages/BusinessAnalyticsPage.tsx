@@ -6,6 +6,8 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { Sparkline, MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessMetricSnapshotRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
+import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const TEXT = {
   title: "经营分析",
@@ -54,7 +56,8 @@ function trendLabel(value?: string) {
   if (value === "up") return "上升";
   if (value === "down") return "下降";
   if (value === "flat") return "持平";
-  return value ?? "-";
+  // unknown / 缺数据统一显示「—」，不把技术码直出给管理层。
+  return "—";
 }
 
 function rowDomain(row: BusinessMetricSnapshotRow | MetricDefinitionRow | MetricAnomalyRow) {
@@ -161,14 +164,14 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
         {snapshots.length === 0 ? <div className="admin-state admin-empty" data-testid="business-analytics-empty">{TEXT.empty}</div> : (
           <>
             <div className="admin-kpi-grid" data-testid="business-analytics-summary">
-              <div className="admin-kpi-card"><span>{TEXT.totalMetrics}</span><strong>{filteredSnapshots.length}</strong><small>{domainFilter}</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.totalMetrics}</span><strong>{filteredSnapshots.length}</strong><small>{domainFilter === "all" ? TEXT.allDomains : formatMetricDomain(domainFilter)}</small></div>
               <div className="admin-kpi-card"><span>{TEXT.upward}</span><strong>{upwardCount}</strong><small>上升</small></div>
               <div className="admin-kpi-card"><span>{TEXT.anomalies}</span><strong data-testid="business-analytics-anomaly-count">{anomalies.filter((row) => row.status === "open").length}</strong><small>待处置</small></div>
               <div className="admin-kpi-card"><span>{TEXT.avgVariance}</span><strong>{formatPercent(averageVariance)}</strong><small>{TEXT.varianceRate}</small></div>
             </div>
 
             <div className="admin-form-grid" data-testid="business-analytics-controls">
-              <label>{TEXT.domain}<select data-testid="business-analytics-domain-filter" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}><option value="all">{TEXT.allDomains}</option>{domains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}</select></label>
+              <label>{TEXT.domain}<select data-testid="business-analytics-domain-filter" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}><option value="all">{TEXT.allDomains}</option>{domains.map((domain) => <option key={domain} value={domain}>{formatMetricDomain(domain)}</option>)}</select></label>
               <label>{TEXT.lockNote}<input data-testid="business-analytics-lock-note" value={lockNote} onChange={(event) => setLockNote(event.target.value)} /></label>
             </div>
             <div className="admin-form-row">
@@ -181,9 +184,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
               <div className="admin-chart-panel" data-testid="business-analytics-charts">
                 {series.map((item) => (
                   <div className="admin-chart-block" key={item.metricKey} data-testid={`business-analytics-chart-${item.metricKey}`}>
-                    <span>{item.metricKey}（实际值趋势 / 实际 vs 基准）</span>
-                    <Sparkline values={item.actual} width={140} height={36} testid={`business-analytics-sparkline-${item.metricKey}`} ariaLabel={`${item.metricKey} 实际值趋势`} />
-                    <MiniBars values={[numberValue(item.latest?.actualValue), numberValue(item.latest?.baselineValue)]} width={80} height={36} testid={`business-analytics-bars-${item.metricKey}`} ariaLabel={`${item.metricKey} 实际值与基准值`} />
+                    <span>{formatMetricName(item.metricKey)}（实际值趋势 / 实际 vs 基准）</span>
+                    <Sparkline values={item.actual} width={140} height={36} testid={`business-analytics-sparkline-${item.metricKey}`} ariaLabel={`${formatMetricName(item.metricKey)} 实际值趋势`} />
+                    <MiniBars values={[numberValue(item.latest?.actualValue), numberValue(item.latest?.baselineValue)]} width={80} height={36} testid={`business-analytics-bars-${item.metricKey}`} ariaLabel={`${formatMetricName(item.metricKey)} 实际值与基准值`} />
                     <small className="admin-muted-action">趋势 {trendLabel(item.latest?.trendDirection)} · 实际 {formatNumber(item.latest?.actualValue)} · 基准 {formatNumber(item.latest?.baselineValue)}</small>
                   </div>
                 ))}
@@ -219,7 +222,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-table">
                 <thead><tr><th>{TEXT.businessDate}</th><th>{TEXT.metricKey}</th><th>{TEXT.domain}</th><th>{TEXT.actualValue}</th><th>{TEXT.baselineValue}</th><th>{TEXT.varianceRate}</th><th>{TEXT.trend}</th><th>{TEXT.segment}</th></tr></thead>
-                <tbody>{filteredSnapshots.map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`}><td>{row.businessDate ?? "-"}</td><td>{row.metricKey ?? "-"}</td><td>{row.domain ?? "-"}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{row.segmentType ?? "-"}:{row.segmentId ?? "-"}</td></tr>)}</tbody>
+                <tbody>{filteredSnapshots.map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{row.segmentType === "platform" || !row.segmentType ? "平台" : `${row.segmentType}:${row.segmentId ?? "-"}`}</td></tr>)}</tbody>
               </table>
             </div>
 
@@ -229,8 +232,8 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
                 <thead><tr><th>指标</th><th>业务域</th><th>单位</th><th>口径说明</th><th>状态</th></tr></thead>
                 <tbody>{definitions.map((row) => (
                   <tr key={row.metricKey}>
-                    <td>{row.metricKey}</td>
-                    <td>{row.domain ?? "—"}</td>
+                    <td title={row.metricKey}>{formatMetricName(row.metricKey)}</td>
+                    <td>{formatMetricDomain(row.domain)}</td>
                     <td>{row.unit ?? "—"}</td>
                     <td>{row.calculationNote ?? "—"}</td>
                     <td>{row.status === "active" ? "启用" : "停用(数据源未就绪)"}</td>
@@ -245,12 +248,12 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
                 <thead><tr><th>指标</th><th>风险</th><th>观测值</th><th>基准值</th><th>说明</th><th>状态</th><th>发现时间</th></tr></thead>
                 <tbody>{anomalies.map((row) => (
                   <tr key={row.id}>
-                    <td>{row.metricKey}</td>
-                    <td>{row.riskLevel === "high" ? "高" : row.riskLevel === "suspicious" ? "可疑" : row.riskLevel}</td>
+                    <td title={row.metricKey}>{formatMetricName(row.metricKey)}</td>
+                    <td>{row.riskLevel === "high" ? "高" : row.riskLevel === "suspicious" ? "可疑" : formatBusinessStatus(row.riskLevel)}</td>
                     <td>{formatNumber(row.observedValue)}</td>
                     <td>{formatNumber(row.expectedValue)}</td>
                     <td>{row.summary ?? "—"}</td>
-                    <td>{row.status === "open" ? "待处置" : row.status}</td>
+                    <td>{row.status === "open" ? "待处置" : formatBusinessStatus(row.status)}</td>
                     <td>{row.detectedAt ? new Date(row.detectedAt).toLocaleString("zh-CN", { hour12: false }) : "—"}</td>
                   </tr>
                 ))}</tbody>

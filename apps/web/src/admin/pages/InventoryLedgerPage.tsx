@@ -177,7 +177,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="inventory-ledger-balances-table">
             <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.location}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th></tr></thead>
-            <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{row.status ?? "normal"}</td></tr>)}</tbody>
+            <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td></tr>)}</tbody>
           </table>
             <TablePager testid="inventory-balances-pager" page={pagedBalances.page} pageCount={pagedBalances.pageCount} total={pagedBalances.total} onPrev={pagedBalances.prev} onNext={pagedBalances.next} />
         </div>

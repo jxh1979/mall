@@ -1,4 +1,5 @@
 import React from "react";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -321,7 +322,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: A
                   <td>{row.contactPhone ?? "-"}</td>
                   <td>{row.source ?? "-"}</td>
                   <td>{row.intendedBusinessType ?? "-"}</td>
-                  <td>{row.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.ownerUserId ?? "-"}</td>
                 </tr>
               ))}

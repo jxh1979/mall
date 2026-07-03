@@ -1,4 +1,5 @@
 import React from "react";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -195,7 +196,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
                 <td>{displayValue(row.requiredLevel)}</td>
                 <td>{displayValue(row.blocksByDefault)}</td>
                 <td>{displayValue(row.requiredEvidenceTypes)}</td>
-                <td>{row.status ?? "-"}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
               </tr>
             ))}</tbody>
           </table>

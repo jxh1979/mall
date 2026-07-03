@@ -26,8 +26,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const { setSelectedId, selected: selectedReservation } = useSelectedRow(reservations);
   const [selectedSessionId, setSelectedSessionId] = React.useState("");
   const [guestCount, setGuestCount] = React.useState("1");
-  const [targetTableId, setTargetTableId] = React.useState("table-2");
-  const [mergedSessionId, setMergedSessionId] = React.useState("session-2");
+  // dev 假值预填已去掉：目标卡座/目标会话必须由操作人显式填写，防误转误合。
+  const [targetTableId, setTargetTableId] = React.useState("");
+  const [mergedSessionId, setMergedSessionId] = React.useState("");
   const [renewMinutes, setRenewMinutes] = React.useState("60");
   const [actionReason, setActionReason] = React.useState("主管审批通过");
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
@@ -182,7 +183,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       <AdminPageHeader title="卡座与订台" description="卡座只免预定卡座所在酒吧、限定人数入场；转卡、合并、续卡必须受结账与审批约束。" />
       <AdminDataState loading={loading} error={error} empty={tables.length === 0 && reservations.length === 0 && sessions.length === 0} onRetry={reload}>
         <div className="admin-form-row">
-          <input data-testid="bar-checkin-count" type="number" min={1} value={guestCount} onChange={(event) => setGuestCount(event.target.value)} placeholder="入场人数" />
+          <label>入场人数（人）<input data-testid="bar-checkin-count" type="number" min={1} value={guestCount} onChange={(event) => setGuestCount(event.target.value)} placeholder="入场人数" /></label>
           <HighRiskConfirm
             label="登记入场"
             impact="将对选中订台登记客人入场并落库，受卡座人数上限约束。"
@@ -194,12 +195,12 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
             irreversible={false}
             data-testid="bar-checkin-submit"
           />
-          <input data-testid="bar-session-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} placeholder="转/合/续原因" />
-          <input data-testid="bar-transfer-target-table" value={targetTableId} onChange={(event) => setTargetTableId(event.target.value)} placeholder="目标卡座 ID" />
+          <label>转/合/续原因<input data-testid="bar-session-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} placeholder="必填，留痕用" /></label>
+          <label>目标卡座<input data-testid="bar-transfer-target-table" value={targetTableId} onChange={(event) => setTargetTableId(event.target.value)} placeholder="转入的卡座 ID" /></label>
           <HighRiskConfirm label="转卡" impact="将把选中开台会话转移到目标卡座，必须确认未结账约束和主管审批。" disabled={submitting} precheck={() => validateSessionAction("transfer")} onConfirm={() => void runSessionAction("transfer")} permissionsState={effectivePermissions} permissions={[BAR_TRANSFER_PERMISSION]} data-testid="bar-transfer-submit" />
-          <input data-testid="bar-merge-target-session" value={mergedSessionId} onChange={(event) => setMergedSessionId(event.target.value)} placeholder="合并目标会话 ID" />
+          <label>合并目标会话<input data-testid="bar-merge-target-session" value={mergedSessionId} onChange={(event) => setMergedSessionId(event.target.value)} placeholder="被并入的会话 ID" /></label>
           <HighRiskConfirm label="合并" impact="将把选中会话与目标会话合并，账单和责任链必须留痕。" disabled={submitting} precheck={() => validateSessionAction("merge")} onConfirm={() => void runSessionAction("merge")} permissionsState={effectivePermissions} permissions={[BAR_MERGE_PERMISSION]} data-testid="bar-merge-submit" />
-          <input data-testid="bar-renew-minutes" type="number" min={1} value={renewMinutes} onChange={(event) => setRenewMinutes(event.target.value)} placeholder="续卡分钟" />
+          <label>续卡时长（分钟）<input data-testid="bar-renew-minutes" type="number" min={1} value={renewMinutes} onChange={(event) => setRenewMinutes(event.target.value)} placeholder="续卡分钟" /></label>
           <HighRiskConfirm label="续卡" impact="将延长选中会话并记录追加低消/服务费快照。" disabled={submitting} precheck={() => validateSessionAction("renew")} onConfirm={() => void runSessionAction("renew")} permissionsState={effectivePermissions} permissions={[BAR_RENEW_PERMISSION]} data-testid="bar-renew-submit" />
         </div>
         {barError ? <div data-testid="bar-checkin-error" className="admin-inline-error">{barError}</div> : null}
@@ -221,7 +222,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
               <tr><td colSpan={6} className="admin-muted-action">暂无开台会话</td></tr>
             ) : pagedSessions.pageRows.map((row) => (
               <tr key={row.id}>
-                <td><input type="radio" data-testid={`bar-session-select-${row.id}`} checked={(selectedSession?.id ?? "") === row.id} onChange={() => setSelectedSessionId(row.id)} /></td>
+                <td><input type="radio" aria-label={`选择会话 ${row.id}`} data-testid={`bar-session-select-${row.id}`} checked={(selectedSession?.id ?? "") === row.id} onChange={() => setSelectedSessionId(row.id)} /></td>
                 <td>{row.id}</td>
                 <td>{row.tableId ?? "-"}</td>
                 <td>{row.guestCount ?? "-"}</td>
@@ -241,11 +242,11 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
               <tr><td colSpan={6} className="admin-muted-action">暂无订台预定</td></tr>
             ) : pagedReservations.pageRows.map((row) => (
               <tr key={row.id}>
-                <td><input type="radio" data-testid={`bar-reservation-select-${row.id}`} checked={(selectedReservation?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                <td><input type="radio" aria-label={`选择预定 ${row.id}`} data-testid={`bar-reservation-select-${row.id}`} checked={(selectedReservation?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                 <td>{row.id}</td>
                 <td>{row.tableId ?? "-"}</td>
                 <td>{row.guestCount ?? "-"}</td>
-                <td>{row.depositStatus ?? "-"}</td>
+                <td>{formatBusinessStatus(row.depositStatus)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
               </tr>
             ))}</tbody>
@@ -257,7 +258,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-tables-table">
             <thead><tr><th>卡座</th><th>容量</th><th>状态</th></tr></thead>
-            <tbody>{tables.map((row) => <tr key={row.id}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{row.status}</td></tr>)}</tbody>
+            <tbody>{tables.map((row) => <tr key={row.id}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
           </table>
         </div>
       </AdminDataState>

@@ -1,4 +1,5 @@
 import React from "react";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -249,7 +250,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                   <td>{row.title ?? row.id}<br /><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></td>
                   <td>{row.workOrderType ?? "-"}</td>
                   <td>{row.priority ?? "-"}</td>
-                  <td>{row.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.ownerDepartment || "-"}</td>
                   <td>{row.ownerUserId || "-"}</td>
                   <td>{row.dueAt ?? "-"}</td>

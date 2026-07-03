@@ -2127,3 +2127,19 @@ body {
 .admin-trace-link { background: none; border: none; padding: 0; margin: 0; color: #2563eb; text-decoration: underline; cursor: pointer; font: inherit; }
 .admin-trace-link:hover { color: #1d4ed8; }
 .admin-row-focus { background: #fef3c7; outline: 2px solid #f59e0b; }
+
+/* === fix/ui-pages 追加区 ===（只在文件末尾追加，勿并入上方规则） */
+/* 金额类列等宽数字（台账/合同/账单统一） */
+.admin-num { font-variant-numeric: tabular-nums; }
+/* ID 类值：等宽字体，配合尾 8 位截断 + title 悬浮全量 */
+.admin-id-cell { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+/* 表格操作列：白名单不换行 + 最小宽度，杜绝按钮文字被挤成竖排（一字一行） */
+.admin-table th.admin-op-col, .admin-table td.admin-op-col { white-space: nowrap; min-width: 220px; }
+.admin-table td.admin-op-col button { white-space: nowrap; margin: 2px 4px 2px 0; }
+/* 总控驾驶舱直读横向条形：每行 名称 + 条 + 数值，0 值也可读 */
+.admin-hbars { display: grid; gap: 6px; width: 100%; max-width: 380px; margin: 6px 0; }
+.admin-hbar-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--adm-text-2); }
+.admin-hbar-label { flex: 0 0 72px; text-align: right; }
+.admin-hbar-track { flex: 1 1 auto; height: 12px; background: var(--adm-border); border-radius: 6px; overflow: hidden; }
+.admin-hbar-fill { display: block; height: 100%; background: #2563eb; border-radius: 6px; }
+.admin-hbar-value { flex: 0 0 56px; color: var(--adm-text); }

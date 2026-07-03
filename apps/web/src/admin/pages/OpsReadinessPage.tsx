@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, ReadinessItemRow } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 // 后端写权限码（ProductionReadinessController：PUT /api/v1/ops/production-readiness/items/{id} requirePermission）。
 const READINESS_MANAGE_PERMISSION = "ops.production_readiness.manage";
@@ -73,7 +74,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
                 <td><input type="radio" data-testid={`ops-readiness-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                 <td>{row.blockerCode ?? row.title}</td>
                 <td>{row.owner}</td>
-                <td>{row.status}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
               </tr>
             ))}</tbody>
           </table>

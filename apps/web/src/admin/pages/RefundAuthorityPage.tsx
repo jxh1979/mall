@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 // 退款分级授权配置行（后端 RefundAuthorityLimitRecord / RefundAutoRuleRecord，客户端 unwrap 已 camel 化）。
 type RefundLimitRow = {
@@ -107,7 +108,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
                   <td>{row.subjectId}</td>
                   <td>{row.refundDomain}</td>
                   <td>{(row.limitAmountCent / 100).toFixed(2)}</td>
-                  <td>{row.status}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                 </tr>
               ))}
             </tbody>
@@ -167,7 +168,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
                   <td>{row.refundDomain}</td>
                   <td>{row.ruleType}</td>
                   <td>{row.enabled ? "是" : "否"}</td>
-                  <td>{row.status}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                   <td>
                     <PermissionButton
                       permissionsState={effectivePermissions}

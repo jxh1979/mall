@@ -1,4 +1,5 @@
 import React from "react";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -193,7 +194,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
                 <td>{row.objectId ?? "-"}</td>
                 <td>{row.summary ?? "-"}</td>
                 <td>{row.ownerUserId ?? "-"}</td>
-                <td>{row.status ?? "-"}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
                 <td>{evidenceList(row)}</td>
                 <td>{row.createdAt ?? "-"}</td>
               </tr>
