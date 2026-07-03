@@ -48,6 +48,32 @@ function unwrap(value: unknown): JsonValue {
   return normalized;
 }
 
+export interface PagedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+/**
+ * 服务端分页读取:保留信封的 {items,total,page,size}(既有 unwrap 把 data 拍平成裸数组会丢 total)。
+ * 不改 get 的任何调用点——需要真分页的页面显式改用 getPaged。
+ */
+function unwrapPaged(value: unknown): PagedResult<unknown> {
+  const normalized = mapKeys(value, toCamelCaseKey);
+  const data = isPlainObject(normalized) && "data" in normalized ? normalized.data : normalized;
+  if (isPlainObject(data) && Array.isArray(data.items)) {
+    return {
+      items: data.items as unknown[],
+      total: typeof data.total === "number" ? data.total : (data.items as unknown[]).length,
+      page: typeof data.page === "number" ? data.page : 1,
+      size: typeof data.pageSize === "number" ? data.pageSize : (data.items as unknown[]).length,
+    };
+  }
+  const items = Array.isArray(data) ? (data as unknown[]) : [];
+  return { items, total: items.length, page: 1, size: items.length };
+}
+
 function nextIdempotencyKey(): string {
   return `admin-web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -87,6 +113,12 @@ export class AdminApi {
     return this.request<T>(path);
   }
 
+  /** 服务端分页读取:返回 {items,total,page,size}。分页参数由调用方拼进 path 的 query。 */
+  async getPaged<T>(path: string): Promise<PagedResult<T>> {
+    const raw = await this.requestRaw(path);
+    return unwrapPaged(raw) as PagedResult<T>;
+  }
+
   post<T>(path: string, body: JsonBody = {}): Promise<T> {
     return this.request<T>(path, "POST", body);
   }
@@ -115,6 +147,22 @@ export class AdminApi {
       init.body = JSON.stringify(normalizeRequestBody(body));
     }
     return init;
+  }
+
+  /** 与 request 同管线(401 刷新重放),但返回 unwrap 前的原始 JSON,供 getPaged 保留分页字段。 */
+  private async requestRaw(path: string): Promise<unknown> {
+    const isAuthEndpoint = path.includes("/auth/");
+    let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
+    if (response.status === 401 && this.refreshToken && !isAuthEndpoint) {
+      if (await this.tryRefresh()) {
+        response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
+      } else {
+        this.onSessionExpired?.();
+      }
+    }
+    const text = await response.text();
+    if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
+    return text ? JSON.parse(text) : null;
   }
 
   private async request<T>(path: string, method = "GET", body?: JsonBody): Promise<T> {
