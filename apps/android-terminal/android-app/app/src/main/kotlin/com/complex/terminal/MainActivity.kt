@@ -15,6 +15,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.concurrent.thread
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * 综合体 Android 终端：现场操作 UI。
@@ -561,7 +563,7 @@ class MainActivity : Activity() {
 
   /** 错误信息转中文友好提示，区分离线/网络/接口错误。 */
   private fun friendly(error: Throwable): String = when (error) {
-    is ApiException -> "接口 ${error.statusCode}（${error.path}）"
+    is ApiException -> apiErrorText(error)
     is IllegalStateException -> error.message?.let {
       when {
         it.contains("offline") -> "网络离线，请检查连接后重试"
@@ -571,6 +573,26 @@ class MainActivity : Activity() {
       }
     } ?: "操作失败"
     else -> error.message ?: error.javaClass.simpleName
+  }
+
+  /** 接口错误转业务话术：解析响应体 {code, detail_code, message}；状态码+路径保留在末尾括号里供报障。 */
+  private fun apiErrorText(error: ApiException): String {
+    val body = runCatching {
+      api.json.parseToJsonElement(error.responseBody) as? JsonObject
+    }.getOrNull()
+    fun field(key: String): String? = (body?.get(key) as? JsonPrimitive)?.content
+    val code = field("detail_code") ?: field("code")
+    val message = field("message")
+    val text = when {
+      error.statusCode == 401 || code == "UNAUTHORIZED" -> "请重新登录"
+      error.statusCode == 403 || code == "FORBIDDEN" -> "当前账号或设备无权操作"
+      code == "VALIDATION_FAILED" || error.statusCode == 400 || error.statusCode == 422 ->
+        "提交内容有误" + (message?.let { "：$it" } ?: "")
+      error.statusCode == 404 || code == "NOT_FOUND" -> "数据不存在"
+      error.statusCode >= 500 -> "服务暂时不可用，请稍后重试"
+      else -> message ?: "操作失败"
+    }
+    return "$text（${error.statusCode} ${error.path}）"
   }
 
   private fun parseAmountCent(input: String): Long? =
