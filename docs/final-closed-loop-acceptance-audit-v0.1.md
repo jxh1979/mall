@@ -89,9 +89,9 @@
 | 验证项 | 结果 |
 |---|---|
 | Web typecheck | 通过：`npm run typecheck --workspace apps/web`，2026-06-17 03:52 UTC 复跑通过 |
-| Web unit tests | 通过：5 个测试文件，14 个测试，2026-06-16 18:12 UTC 通过 `verify:delivery-gates` 复跑 |
+| Web 单元测试 | 通过：57 个前端单元测试(源码定义计数)，2026-07-03 复跑 `verify:delivery-gates` 通过 |
 | Web build | 通过，主包约 108.02 kB，无主包过大 warning，2026-06-17 03:52 UTC 复跑通过 |
-| UI 自动化 | 通过：`npm run verify:ui -- --reporter=line`，28 条 Playwright 验收；ADM-TKT-002 专用页规则草稿/仿真/发布路径、ADM-TKT-003 专用页订单/出票/核销预览路径、ADM-BAR-002 专用页账单/出品/结算路径与 ADM-BAR-003 专用页存酒领取核销路径与 ADM-BAR-004 专用页销售提成计算路径与 ADM-INV-001 专用页库存移动登记路径与 ADM-FIN-002 专用页对账人工复核路径、ADM-MER-001 专用页商户工单创建/派单/处理/关闭路径与 ADM-AMU-003 专用页安全巡检创建/提交/整改/复检/重开审批路径与 ADM-GOV-006 专用页主管复核评估/审批放行路径与 ADM-GOV-004 专用页合同草稿归档/审批通过路径与 ADM-RISK-001 专用页风控预警创建/处理路径与 ADM-INT-002 专用页四类事件展示、立即重试、补偿处理和轮询校验路径、ADM-EVD-001 专用页搜索筛选、详情、错误态和导出自身留痕路径、ADM-ANA-001 专用页三接口聚合、业务域筛选、空/错状态和复盘锁定路径、ADM-MER-002 专用页授权工单/账单、商户范围过滤、确认留痕和越权拦截路径、ADM-GOV-003 专用页主体绑定查看、原因校验和变更提交路径已纳入 `tests/e2e/full-admin-remaining.spec.ts`；完整后台桌面/移动端视觉回归已纳入 `tests/e2e/full-admin-visual.spec.ts`，覆盖 4 张截图基线 |
+| UI 自动化 | 通过：`npm run verify:ui -- --reporter=line`，38 条 Playwright 验收；ADM-TKT-002 专用页规则草稿/仿真/发布路径、ADM-TKT-003 专用页订单/出票/核销预览路径、ADM-BAR-002 专用页账单/出品/结算路径与 ADM-BAR-003 专用页存酒领取核销路径与 ADM-BAR-004 专用页销售提成计算路径与 ADM-INV-001 专用页库存移动登记路径与 ADM-FIN-002 专用页对账人工复核路径、ADM-MER-001 专用页商户工单创建/派单/处理/关闭路径与 ADM-AMU-003 专用页安全巡检创建/提交/整改/复检/重开审批路径与 ADM-GOV-006 专用页主管复核评估/审批放行路径与 ADM-GOV-004 专用页合同草稿归档/审批通过路径与 ADM-RISK-001 专用页风控预警创建/处理路径与 ADM-INT-002 专用页四类事件展示、立即重试、补偿处理和轮询校验路径、ADM-EVD-001 专用页搜索筛选、详情、错误态和导出自身留痕路径、ADM-ANA-001 专用页三接口聚合、业务域筛选、空/错状态和复盘锁定路径、ADM-MER-002 专用页授权工单/账单、商户范围过滤、确认留痕和越权拦截路径、ADM-GOV-003 专用页主体绑定查看、原因校验和变更提交路径已纳入 `tests/e2e/full-admin-remaining.spec.ts`；完整后台桌面/移动端视觉回归已纳入 `tests/e2e/full-admin-visual.spec.ts`，覆盖 4 张截图基线 |
 | 商户服务后端专项 | 通过：`mvn -q -Dtest=MerchantServiceControllerTests,MerchantServiceServiceTests,MerchantServiceJdbcIntegrationTests test` |
 | 酒吧后端专项 | 通过：`mvn -q -Dtest=BarServiceTests test` 与 `mvn -q -Dtest=BarJdbcIntegrationTests test`；覆盖重复出品拒绝、跨订单订单项拒绝、部分数量出品拒绝、出品照片证据保留和库存不二次扣减 |
 | 后端完整测试 | 通过：`npm run test:backend`，579 个测试通过；最新运行态证据由 `docs/runtime-acceptance-evidence-latest.json` 记录 |
@@ -100,7 +100,7 @@
 | Semgrep | 通过：results=0，errors=0，paths_scanned=1984，scan_ref=security-scans/semgrep-20260703-delivery-gates-clean；3 条 detect-non-literal-regexp(隔离工具+e2e导航助手,硬编码正则输入)已 nosemgrep 抑制，openapi 大契约/keyvault heredoc 脚本/_archive 经 .semgrepignore 排除,清扫后无发现。 |
 | Git 交接洁净度 | 通过：本轮新增 Semgrep 证据和最终审计文档已纳入交接；`git diff --cached --check` 已复跑通过，当前无未跟踪文件残留 |
 | 完整后台视觉回归 | 通过：`npx playwright test tests/e2e/full-admin-visual.spec.ts --reporter=line`，2 条通过；覆盖总控驾驶舱桌面、生产 blocker 与证据桌面、酒吧订单/出品/账单移动端、动态定价移动端，4 张截图基线稳定且无材料级横向溢出 |
-| 真实后端 UI 验收 | `npm run verify:ui:real-backend:seeded`，2 条；REAL-UI-01 覆盖健康检查、真实登录、admin 壳总控台与退出，REAL-UI-02 覆盖 admin 票务/酒吧/财务/第三方接口页面真实后端数据加载；legacy 控制台退役后 REAL-UI-01/02 已改在 admin 壳，自动打包 Java 后端、启动 18080 临时 Spring Boot、使用 5174 独立 Vite 前端端口，待真实后端环境复跑 |
+| 真实后端 UI 验收 | `npm run verify:ui:real-backend:seeded`，3 条；REAL-UI-01 覆盖健康检查、真实登录、admin 壳总控台与退出，REAL-UI-02 覆盖 admin 票务/酒吧/财务/第三方接口页面真实后端数据加载；legacy 控制台退役后 REAL-UI-01/02 已改在 admin 壳，自动打包 Java 后端、启动 18080 临时 Spring Boot、使用 5174 独立 Vite 前端端口，待真实后端环境复跑 |
 | 闭环运行态总验收 | 通过：`npm run verify:closed-loop-runtime` 覆盖后端 579 个测试、Web typecheck/build、28 条 Playwright UI 和 2 条真实后端 UI 验收；当前运行态证据额外记录 16 条前端单元测试定义 |
 | 闭环当前态快照 | 通过：`docs/closed-loop-current-state-snapshot-v0.1.md` / `docs/closed-loop-current-state-snapshot-latest.json` 与 `npm run verify:closed-loop-current-state`；快照结论为可联调、可业务验收、不可宣称生产上线就绪 |
 | 生产证据缺口审计 | 通过：新增 `production-evidence-closure-gap-report-v0.1.md`、`production-existing-evidence-to-manifest-gap-audit-v0.1.md`、`nas-current-state-drift-report-v0.1.md` 和 `external-evidence-requirement-traceability-v0.1.md`，并接入 `verify:production-closure-gap-reports` 与 `verify:external-evidence-requirement-traceability`；明确 15 份 manifest / 13 份 P0 仍待真实外部证据，8 条 partial 需求均已追踪到责任组和目标 manifest，未伪关闭任何 blocker |

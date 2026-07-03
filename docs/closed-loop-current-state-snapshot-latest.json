@@ -128,12 +128,12 @@
       "reason": "current live mount check failed, and historical passed evidence cannot prove current automount or production recovery readiness"
     },
     "runtime_acceptance": {
-      "backend_tests": 579,
+      "backend_tests": 1757,
       "backend_failures": 0,
       "backend_errors": 0,
-      "web_unit_tests": 16,
-      "ui_tests": 28,
-      "real_backend_ui_tests": 2,
+      "web_unit_tests": 57,
+      "ui_tests": 38,
+      "real_backend_ui_tests": 3,
       "last_run_passed": true,
       "web_main_bundle_ok": true,
       "ready_for_integration_and_business_acceptance": true
@@ -154,7 +154,7 @@
       "partial_requirements": 8,
       "mock_acceptance_ready": 8,
       "production_blocking_requirements": 0,
-      "unique_mock_files": 20,
+      "unique_mock_files": 21,
       "status": "mock_or_sandbox_acceptance_ready_but_production_evidence_pending"
     },
     "owner_action_manifest_links": {

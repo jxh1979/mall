@@ -1,6 +1,6 @@
 {
   "diagnostic_version": "v0.1",
-  "generated_at": "2026-07-03T12:50:11.508Z",
+  "generated_at": "2026-07-03T13:35:32.308Z",
   "policy": {
     "diagnostic_only": true,
     "does_not_close_manifest": true,
@@ -54,14 +54,14 @@
     "ping": {
       "status": "passed",
       "exit_code": 0,
-      "stdout": "PING 192.168.88.113 (192.168.88.113) 56(84) bytes of data.\n64 bytes from 192.168.88.113: icmp_seq=1 ttl=64 time=4.61 ms\n64 bytes from 192.168.88.113: icmp_seq=2 ttl=64 time=4.22 ms\n\n--- 192.168.88.113 ping statistics ---\n2 packets transmitted, 2 received, 0% packet loss, time 1001ms\nrtt min/avg/max/mdev = 4.219/4.416/4.613/0.197 ms",
+      "stdout": "PING 192.168.88.113 (192.168.88.113) 56(84) bytes of data.\n64 bytes from 192.168.88.113: icmp_seq=1 ttl=64 time=4.79 ms\n64 bytes from 192.168.88.113: icmp_seq=2 ttl=64 time=5.43 ms\n\n--- 192.168.88.113 ping statistics ---\n2 packets transmitted, 2 received, 0% packet loss, time 1000ms\nrtt min/avg/max/mdev = 4.786/5.106/5.427/0.320 ms",
       "stderr": ""
     },
     "tcp_445": {
       "status": "passed",
       "host": "192.168.88.113",
       "port": 445,
-      "elapsed_ms": 9,
+      "elapsed_ms": 17,
       "error": ""
     },
     "findmnt": {

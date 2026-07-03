@@ -20,7 +20,7 @@
 | 待提交 production evidence | 15/15 |
 | P0 待提交 production evidence | 13 |
 | open blocker | 12（readiness=6，credential=4，security=2） |
-| partial 外部/供应商需求 | 9 |
+| partial 外部/供应商需求 | 8 |
 | owner action 无 manifest 链接 | 0 |
 | NAS live status | failed |
 
@@ -88,7 +88,6 @@ IT 执行后，把 `/tmp/complex-nas-mount-evidence/*.json` 中的脱敏证据�
 
 | 需求 | 模块 | 证据 item | 责任组 | 待证据行 | manifest 数 | 关闭动作 |
 | --- | --- | --- | --- | --- | --- | --- |
-| # 总体标注(2026-06-22) | 全部模块 |  |  | 0 | 0 | Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement. |
 | REQ-17 | 酒吧 |  |  | 0 | 0 | Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement. |
 | REQ-21 | 酒吧 |  |  | 0 | 0 | Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement. |
 | REQ-23b | 酒吧 |  |  | 0 | 0 | Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement. |

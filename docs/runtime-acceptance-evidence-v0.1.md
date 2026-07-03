@@ -36,31 +36,31 @@
 
 | 指标 | 当前值 |
 |---|---:|
-| Surefire suites | 69 |
-| tests | 579 |
+| Surefire suites | 147 |
+| tests | 1757 |
 | failures | 0 |
 | errors | 0 |
 | skipped | 0 |
-| latest_mtime | 2026-06-17T11:09:36.737Z |
+| latest_mtime | 2026-07-03T12:15:51.306Z |
 
 ## 4. Web 与 UI 验收证据
 
 | 证据 | 当前值 |
 |---|---|
 | Web dist index | 存在 |
-| Web main JS | `apps/web/dist/assets/main-CPI08bw-.js` 108017 bytes |
-| 最大静态资源 | `apps/web/dist/assets/vendor-antd-Brb5i53G.js` 452697 bytes |
+| Web main JS | `apps/web/dist/assets/main-B36tnK9z.js` 3443 bytes |
+| 最大静态资源 | `apps/web/dist/assets/vendor-antd-LpdhM_rm.js` 472136 bytes |
 | 主包过大 warning 预期 | 无 |
-| 前端单元测试源文件 | 6 个文件，16 条测试定义 |
-| Playwright 常规 UI | 报告存在，28 条测试定义 |
-| Playwright 真实后端 UI | 报告存在，2 条测试定义 |
+| 前端单元测试源文件 | 14 个文件，57 条测试定义 |
+| Playwright 常规 UI | 报告存在，38 条测试定义 |
+| Playwright 真实后端 UI | 报告存在，3 条测试定义 |
 | Playwright last-run | passed |
 
 ## 5. 安全扫描与生产边界
 
 | 证据 | 当前值 |
 |---|---|
-| Semgrep | scan=semgrep-20260617-064855-manual-request，results=0，errors=0，paths_scanned=1543 |
+| Semgrep | scan=semgrep-20260703-delivery-gates-clean，results=0，errors=0，paths_scanned=0 |
 | 生产证据 | awaiting=15，P0 awaiting=13 |
 | NAS 当前状态 | failed |
 | 本报告是否关闭生产 manifest | 否 |

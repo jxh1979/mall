@@ -31,7 +31,7 @@
 | 检查项 | 状态 | 关键输出 |
 |---|---|---|
 | ping NAS | `passed` | `PING 192.168.88.113 (192.168.88.113) 56(84) bytes of data.` |
-| TCP 445 | `passed` | `9ms` |
+| TCP 445 | `passed` | `17ms` |
 | findmnt exact path | `failed` | `empty` |
 | expected CIFS mount active | `false` | source=`missing`, fstype=`missing` |
 | 160 本地挂载点存在 | `true` | mode=`755`, uid=`0`, gid=`0` |

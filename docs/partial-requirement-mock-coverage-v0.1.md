@@ -23,7 +23,7 @@
 | partial 需求 | 8 |
 | mock/沙箱验收可执行 | 8 |
 | 仍阻塞生产声明 | 0 |
-| 去重 mock/测试/页面文件 | 20 |
+| 去重 mock/测试/页面文件 | 21 |
 | 去重生产 manifest 路径 | 0 |
 
 ## 4. 需求到 mock 验收矩阵
@@ -32,7 +32,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | REQ-17 | 酒吧 | 部分实现 | mock_or_sandbox_acceptance_ready | covered_by_disabled_integration_switches | apps/web/src/admin/pages/BarOrdersPage.tsx<br>apps/web/src/admin/pages/StoredWinePage.tsx<br>apps/web/src/admin/pages/BarCommissionsPage.tsx<br>tests/e2e/full-admin-remaining.spec.ts<br>backend/src/test/java/com/complex/platform/bar/BarServiceTests.java<br>docs/t3b-supplier-sdk-mock-kit-v0.1.md | 0 |
 | REQ-21 | 酒吧 | 部分实现 | mock_or_sandbox_acceptance_ready | covered_by_disabled_integration_switches | apps/web/src/admin/pages/BarOrdersPage.tsx<br>apps/web/src/admin/pages/ReconciliationPage.tsx<br>backend/src/test/java/com/complex/platform/bar/BarServiceTests.java<br>docs/supplier-mock/t3b-webhook-envelope.example.json<br>docs/p0-openapi-operation-acceptance-matrix-v0.1.md | 0 |
-| REQ-23b | 酒吧 | 部分实现 | mock_or_sandbox_acceptance_ready | covered_by_disabled_integration_switches | backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java<br>backend/src/test/java/com/complex/platform/bar/BarServiceTests.java<br>tests/e2e/support/mock-api.ts<br>docs/p0-openapi-operation-acceptance-matrix-v0.1.md<br>docs/third-party-supplier-integration-kit-v0.1.md | 0 |
+| REQ-23b | 酒吧 | 部分实现 | mock_or_sandbox_acceptance_ready | covered_by_disabled_integration_switches | backend/src/main/java/com/complex/platform/entry/FaceVerificationRouter.java<br>backend/src/test/java/com/complex/platform/entry/FaceVerificationGateTests.java<br>backend/src/test/java/com/complex/platform/bar/BarServiceTests.java<br>docs/third-party-supplier-integration-kit-v0.1.md | 0 |
 | REQ-25 | 酒吧 | 部分实现 | mock_or_sandbox_acceptance_ready | covered_by_disabled_integration_switches | apps/web/src/admin/pages/BarTableSessionsPage.tsx<br>backend/src/test/java/com/complex/platform/bar/BarServiceTests.java<br>tests/e2e/support/mock-api.ts<br>docs/p0-openapi-operation-acceptance-matrix-v0.1.md | 0 |
 | REQ-32 | 酒吧 | 部分实现 | mock_or_sandbox_acceptance_ready | covered_by_disabled_integration_switches | apps/web/src/admin/pages/InventoryLedgerPage.tsx<br>apps/web/src/admin/pages/StoredWinePage.tsx<br>backend/src/test/java/com/complex/platform/bar/BarServiceTests.java<br>tests/e2e/full-admin-remaining.spec.ts<br>tests/e2e/support/mock-api.ts | 0 |
 | REQ-40 | 第三方 | 部分实现 | mock_or_sandbox_acceptance_ready | covered_by_disabled_integration_switches | apps/web/src/admin/pages/IntegrationEventsPage.tsx<br>backend/src/test/java/com/complex/platform/integration/IntegrationServiceTests.java<br>docs/t3b-supplier-sdk-mock-kit-v0.1.md<br>docs/supplier-mock/t3b-provider-adapter-test.example.json<br>docs/p0-openapi-operation-acceptance-matrix-v0.1.md | 0 |
@@ -52,7 +52,7 @@
   - admin_ui: `apps/web/src/admin/pages/StoredWinePage.tsx`，markers=`stored-wine-page`, `claim_items`
   - admin_ui: `apps/web/src/admin/pages/BarCommissionsPage.tsx`，markers=`bar-commissions-page`, `15%`, `10%`
   - ui_e2e: `tests/e2e/full-admin-remaining.spec.ts`，markers=`ADM-BAR-002`, `ADM-BAR-003`, `ADM-BAR-004`
-  - backend_unit: `backend/src/test/java/com/complex/platform/bar/BarServiceTests.java`，markers=`billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset`, `deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement`, `ageVerificationStoresAdapterBoundaryResultAndEvidence`
+  - backend_unit: `backend/src/test/java/com/complex/platform/bar/BarServiceTests.java`，markers=`billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset`, `deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement`
   - supplier_mock: `docs/t3b-supplier-sdk-mock-kit-v0.1.md`，markers=`T3B_SUPPLIER_MOCK_KIT_READY`, `NO_PRODUCTION_VENDOR_CONTROL`
 
 ### REQ-21 酒吧
@@ -71,14 +71,13 @@
 ### REQ-23b 酒吧
 
 - 验收口径：酒吧入场/售酒年龄核验强制人脸或等效设备；供应商未定时只能 mock，生产不得正式通过
-- mock/沙箱覆盖：酒吧年龄/人脸核验以 adapter 结果和证据附件 mock 验收；生产必须等真实 SDK/API、合规材料和 credential_ref。
+- mock/沙箱覆盖：年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由人脸入场闸统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。
 - 生产边界：covered_by_disabled_integration_switches；仍阻塞生产声明=否
 - 生产证据 item：
 - mock/测试/页面文件：
-  - service: `backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java`，markers=`BarAgeVerificationService`, `bar.age_verification.passed`
-  - backend_unit: `backend/src/test/java/com/complex/platform/bar/BarServiceTests.java`，markers=`ageVerificationStoresAdapterBoundaryResultAndEvidence`, `bar.age_verification.rejected`
-  - mock_api: `tests/e2e/support/mock-api.ts`，markers=`source: "mock"`, `verification`
-  - openapi_contract: `docs/p0-openapi-operation-acceptance-matrix-v0.1.md`，markers=`/api/v1/bar/age-verifications`, `age-verification-device`
+  - service: `backend/src/main/java/com/complex/platform/entry/FaceVerificationRouter.java`，markers=`FaceVerificationRouter`, `face.verification.enabled`
+  - backend_unit: `backend/src/test/java/com/complex/platform/entry/FaceVerificationGateTests.java`，markers=`alwaysDisabledRouterReturnsReservedNonBlocking`, `switchReadFailureFailsSafeToDisabled`
+  - backend_unit: `backend/src/test/java/com/complex/platform/bar/BarServiceTests.java`，markers=`scanOrderBindsOpenSessionInheritsEntryGateAndSourcesApp`
   - supplier_boundary: `docs/third-party-supplier-integration-kit-v0.1.md`，markers=`人脸/年龄核验`, `供应商未配置不得生产通过`
 
 ### REQ-25 酒吧

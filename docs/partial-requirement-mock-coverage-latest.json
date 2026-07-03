@@ -16,7 +16,7 @@
     "partial_requirements": 8,
     "mock_acceptance_ready": 8,
     "production_blocking_requirements": 0,
-    "unique_mock_files": 20,
+    "unique_mock_files": 21,
     "unique_production_manifest_paths": 0
   },
   "requirement_mock_coverage": [
@@ -72,8 +72,7 @@
           "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
           "markers": [
             "billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset",
-            "deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement",
-            "ageVerificationStoresAdapterBoundaryResultAndEvidence"
+            "deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement"
           ]
         },
         {
@@ -163,7 +162,7 @@
       "acceptance": "酒吧入场/售酒年龄核验强制人脸或等效设备；供应商未定时只能 mock，生产不得正式通过",
       "current_status": "部分实现",
       "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
-      "mock_acceptance_scope": "酒吧年龄/人脸核验以 adapter 结果和证据附件 mock 验收；生产必须等真实 SDK/API、合规材料和 credential_ref。",
+      "mock_acceptance_scope": "年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由人脸入场闸统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。",
       "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
       "production_trace_status": "covered_by_disabled_integration_switches",
       "production_blocking": false,
@@ -172,34 +171,25 @@
       "mock_coverage": [
         {
           "kind": "service",
-          "path": "backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java",
+          "path": "backend/src/main/java/com/complex/platform/entry/FaceVerificationRouter.java",
           "markers": [
-            "BarAgeVerificationService",
-            "bar.age_verification.passed"
+            "FaceVerificationRouter",
+            "face.verification.enabled"
+          ]
+        },
+        {
+          "kind": "backend_unit",
+          "path": "backend/src/test/java/com/complex/platform/entry/FaceVerificationGateTests.java",
+          "markers": [
+            "alwaysDisabledRouterReturnsReservedNonBlocking",
+            "switchReadFailureFailsSafeToDisabled"
           ]
         },
         {
           "kind": "backend_unit",
           "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
           "markers": [
-            "ageVerificationStoresAdapterBoundaryResultAndEvidence",
-            "bar.age_verification.rejected"
-          ]
-        },
-        {
-          "kind": "mock_api",
-          "path": "tests/e2e/support/mock-api.ts",
-          "markers": [
-            "source: \"mock\"",
-            "verification"
-          ]
-        },
-        {
-          "kind": "openapi_contract",
-          "path": "docs/p0-openapi-operation-acceptance-matrix-v0.1.md",
-          "markers": [
-            "/api/v1/bar/age-verifications",
-            "age-verification-device"
+            "scanOrderBindsOpenSessionInheritsEntryGateAndSourcesApp"
           ]
         },
         {
@@ -212,10 +202,9 @@
         }
       ],
       "mock_coverage_files": [
-        "backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java",
+        "backend/src/main/java/com/complex/platform/entry/FaceVerificationRouter.java",
+        "backend/src/test/java/com/complex/platform/entry/FaceVerificationGateTests.java",
         "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
-        "tests/e2e/support/mock-api.ts",
-        "docs/p0-openapi-operation-acceptance-matrix-v0.1.md",
         "docs/third-party-supplier-integration-kit-v0.1.md"
       ]
     },

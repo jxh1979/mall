@@ -7,7 +7,7 @@
     "RUNTIME_EVIDENCE_FROM_SEMGREP_LATEST_SUMMARY",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-06-17T11:11:41.161Z",
+  "generated_at": "2026-07-03T13:35:30.540Z",
   "captured_command": "npm run verify:closed-loop-runtime",
   "required_refresh_rule": "After backend, web, Playwright, OpenAPI, or runtime script changes, rerun npm run verify:closed-loop-runtime, then npm run docs:runtime-acceptance-evidence.",
   "scripts": {
@@ -23,25 +23,33 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 69,
-    "tests": 579,
+    "suites": 147,
+    "tests": 1757,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-06-17T11:09:36.737Z",
+    "latest_mtime": "2026-07-03T12:15:51.306Z",
     "passed": true
   },
   "web_unit_source": {
     "files": [
+      "apps/web/src/admin/adminRoutes.test.ts",
       "apps/web/src/admin/client/adminClient.test.ts",
       "apps/web/src/admin/components/AdminDataState.test.tsx",
+      "apps/web/src/admin/components/TraceLink.test.tsx",
+      "apps/web/src/admin/pages/AuditEventsPage.test.tsx",
+      "apps/web/src/admin/pages/CustomerAccountsPage.test.tsx",
+      "apps/web/src/admin/pages/FinanceArApLedgerPage.test.tsx",
+      "apps/web/src/admin/pages/OpsReadinessPage.test.tsx",
       "apps/web/src/admin/security/PermissionGate.test.ts",
-      "apps/web/src/legacy-console/apiClient.test.ts",
-      "apps/web/src/legacy-console/formatters.test.ts",
-      "apps/web/src/legacy-console/stockMovementRequest.test.ts"
+      "apps/web/src/admin/security/terminalGate.test.ts",
+      "apps/web/src/customer/client/customerClient.test.ts",
+      "apps/web/src/customer/components/TicketQrView.test.tsx",
+      "apps/web/src/customer/pages/HomePage.test.tsx",
+      "apps/web/src/customer/pages/PointsPage.test.tsx"
     ],
-    "file_count": 6,
-    "test_count_from_source": 16
+    "file_count": 14,
+    "test_count_from_source": 57
   },
   "web_build": {
     "dist_index_exists": true,
@@ -59,18 +67,18 @@
         "exists": true
       }
     ],
-    "asset_count": 9,
+    "asset_count": 86,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-CPI08bw-.js",
-        "size_bytes": 108017,
-        "mtime": "2026-06-17T11:09:41.721Z"
+        "path": "apps/web/dist/assets/main-B36tnK9z.js",
+        "size_bytes": 3443,
+        "mtime": "2026-07-03T01:25:36.151Z"
       }
     ],
     "largest_asset": {
-      "path": "apps/web/dist/assets/vendor-antd-Brb5i53G.js",
-      "size_bytes": 452697,
-      "mtime": "2026-06-17T11:09:41.721Z"
+      "path": "apps/web/dist/assets/vendor-antd-LpdhM_rm.js",
+      "size_bytes": 472136,
+      "mtime": "2026-07-03T01:25:36.152Z"
     },
     "no_main_bundle_warning_expected": true
   },
@@ -79,12 +87,16 @@
       "report_path": "playwright-report/index.html",
       "report_exists": true,
       "spec_files": [
+        "tests/e2e/customer-account-lifecycle-live-evidence.spec.ts",
+        "tests/e2e/customer-journey.spec.ts",
         "tests/e2e/full-admin-mvp.spec.ts",
         "tests/e2e/full-admin-remaining.spec.ts",
+        "tests/e2e/full-admin-ui-hardening.spec.ts",
         "tests/e2e/full-admin-visual.spec.ts",
-        "tests/e2e/web-ui-acceptance.spec.ts"
+        "tests/e2e/leasing-contract-live-evidence.spec.ts",
+        "tests/e2e/order-tickets-live-evidence.spec.ts"
       ],
-      "test_count_from_source": 28
+      "test_count_from_source": 38
     },
     "real_backend": {
       "report_path": "playwright-report-real-backend/index.html",
@@ -92,7 +104,7 @@
       "spec_files": [
         "tests/e2e/web-ui-real-backend.spec.ts"
       ],
-      "test_count_from_source": 2
+      "test_count_from_source": 3
     },
     "last_run": {
       "status": "passed",
@@ -101,11 +113,11 @@
     "last_run_passed": true
   },
   "semgrep": {
-    "scan_id": "semgrep-20260617-064855-manual-request",
+    "scan_id": "semgrep-20260703-delivery-gates-clean",
     "exit_code": 0,
     "results": 0,
     "errors": 0,
-    "paths_scanned": 1543,
+    "paths_scanned": 0,
     "clean": true
   },
   "production_boundaries": {

@@ -11,7 +11,7 @@
 - VISUAL_REGRESSION_BASELINES_TRACKED
 - NO_STALE_UI_ACCEPTANCE_COUNTS
 
-更新时间：2026-06-17T11:11:41.161Z
+更新时间：2026-07-03T13:35:30.540Z
 执行位置：192.168.88.160，`/home/james/complex-management`
 
 ## 1. 本轮闭环结论
@@ -20,15 +20,15 @@
 
 | 项目 | 当前值 | 证据 |
 |---|---:|---|
-| 需求矩阵完整实现 | 88/96 | `docs/closed-loop-current-state-snapshot-latest.json` |
+| 需求矩阵完整实现 | 88/97 | `docs/closed-loop-current-state-snapshot-latest.json` |
 | 完整后台 MVP | 9/9 | `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv` |
 | 完整后台非首批 | 22/22 | `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv` |
-| 后端测试 | 579 | `backend/target/surefire-reports` |
-| Web 单元测试定义 | 16 | `apps/web/src/**/*.test.*` |
-| Playwright 常规 UI | 28 | `playwright-report/index.html` |
-| Playwright 真实后端 UI | 2 | `playwright-report-real-backend/index.html` |
-| 视觉回归截图基线 | 6 | `tests/e2e/**/*-snapshots/*.png` |
-| Semgrep | results=0, errors=0, paths_scanned=1543 | `semgrep-20260617-064855-manual-request` |
+| 后端测试 | 1757 | `backend/target/surefire-reports` |
+| Web 单元测试定义 | 57 | `apps/web/src/**/*.test.*` |
+| Playwright 常规 UI | 38 | `playwright-report/index.html` |
+| Playwright 真实后端 UI | 3 | `playwright-report-real-backend/index.html` |
+| 视觉回归截图基线 | 4 | `tests/e2e/**/*-snapshots/*.png` |
+| Semgrep | results=0, errors=0, paths_scanned=1984 | `semgrep-20260703-delivery-gates-clean` |
 | 可进入联调 | 是 | `closed-loop-current-state-snapshot-latest.json` |
 | 可进入业务验收 | 是 | `closed-loop-current-state-snapshot-latest.json` |
 | 可宣称生产上线就绪 | 否 | 生产证据与 NAS 当前状态 |
@@ -37,8 +37,8 @@
 
 | 项目 | 当前值 |
 |---|---:|
-| main JS | apps/web/dist/assets/main-CPI08bw-.js，108017 bytes |
-| largest asset | apps/web/dist/assets/vendor-antd-Brb5i53G.js，452697 bytes |
+| main JS | apps/web/dist/assets/main-B36tnK9z.js，3443 bytes |
+| largest asset | apps/web/dist/assets/vendor-antd-LpdhM_rm.js，472136 bytes |
 | main bundle warning | 不预期出现 |
 | dist index | 存在 |
 | route indexes | 3/3 |
@@ -47,6 +47,15 @@
 
 | 类型 | 测试路径 | 证据文件 |
 | --- | --- | --- |
+| 常规 UI | CUS-LIFE-01 封禁→拒动作拒登录→恢复→拉黑永久拒→自助注销后数据保留 | tests/e2e/customer-account-lifecycle-live-evidence.spec.ts |
+| 常规 UI | CUS-LIFE-02 ADM-CUS-001 客人账号管理页在真实后端查询并截图 | tests/e2e/customer-account-lifecycle-live-evidence.spec.ts |
+| 常规 UI | CUST-01 phone login then logout returns to login view | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-02 buy ticket creates order and aggregate payment intent | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-03 bar reservation creates reservation and deposit intent | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-04 points page shows balance/level and check-in accrues streak | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-05 wallet shows stored value balance and membership | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-06 my orders reflect a freshly created ticket order | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-07 buy ticket surfaces backend rejection as a visible error | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | ADM-MVP-01 login, overview route and eight MVP navigation entries | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-02 account and permission template workflows are actionable | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-03 ticketing policy validates weekday/weekend/holiday base price before publish | tests/e2e/full-admin-mvp.spec.ts |
@@ -55,16 +64,30 @@
 | 常规 UI | ADM-MVP-06 integration adapter rejects plaintext secret and supports mock test | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-07 ops readiness cannot verify blocker without evidence ref | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-08 role permission and mobile layout are enforceable | tests/e2e/full-admin-mvp.spec.ts |
-| 常规 UI | ADM-MVP-09 failed login surfaces backend 401 and stays on auth screen | tests/e2e/full-admin-mvp.spec.ts |
-| 常规 UI | ADM-MVP-10 forbidden backend access surfaces 403 without hiding the audit trail | tests/e2e/full-admin-mvp.spec.ts |
+| 常规 UI | ADM-MVP-09 failed login surfaces business wording and stays on auth screen | tests/e2e/full-admin-mvp.spec.ts |
+| 常规 UI | ADM-MVP-10 forbidden backend access surfaces business wording without hiding the audit trail | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-REM-01 exposes all non-first admin pages with route, evidence and readable content | tests/e2e/full-admin-remaining.spec.ts |
 | 常规 UI | ADM-REM-02 governance, contract, ticketing, bar and amusement actions are auditable | tests/e2e/full-admin-remaining.spec.ts |
 | 常规 UI | ADM-REM-03 risk, audit, analytics and integration pages cover empty/error/mobile states | tests/e2e/full-admin-remaining.spec.ts |
 | 常规 UI | ADM-REM-04 merchant scoped role can use authorized merchant workspace but is denied platform pages | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | ADM-REM-05 outsourced vendor can use assigned workbench pages only | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | ADM-UI-HARDEN-01 restructured pages expose root + headered scrollable tables | tests/e2e/full-admin-ui-hardening.spec.ts |
+| 常规 UI | ADM-UI-HARDEN-02 shared empty and error states expose stable testids | tests/e2e/full-admin-ui-hardening.spec.ts |
+| 常规 UI | ADM-UI-HARDEN-03 overview date-range filter is operable and KPIs are addressable | tests/e2e/full-admin-ui-hardening.spec.ts |
+| 常规 UI | ADM-UI-HARDEN-04 money inputs reject non-positive values before any write | tests/e2e/full-admin-ui-hardening.spec.ts |
+| 常规 UI | ADM-UI-HARDEN-05 high-volume log pages support client-side search filter | tests/e2e/full-admin-ui-hardening.spec.ts |
+| 常规 UI | ADM-UI-HARDEN-06 log pages paginate filtered rows and reset on search | tests/e2e/full-admin-ui-hardening.spec.ts |
+| 常规 UI | ADM-UI-HARDEN-07 organization merchant create exposes editable fields with phone validation | tests/e2e/full-admin-ui-hardening.spec.ts |
 | 常规 UI | ADM-VIS-01 desktop overview and production evidence pages keep a stable visual baseline | tests/e2e/full-admin-visual.spec.ts |
 | 常规 UI | ADM-VIS-02 mobile admin routes keep nav, tables and primary actions usable | tests/e2e/full-admin-visual.spec.ts |
+| 常规 UI | LEASE-CONTRACT 前端来源 source=${source} 被真实后端接受（2xx） | tests/e2e/leasing-contract-live-evidence.spec.ts |
+| 常规 UI | LEASE-CONTRACT 已移除来源 source=${source} 仍被真实后端 400 拒 | tests/e2e/leasing-contract-live-evidence.spec.ts |
+| 常规 UI | LEASE-CONTRACT 前端推进阶段 stage=${stage} 通过真实后端枚举校验 | tests/e2e/leasing-contract-live-evidence.spec.ts |
+| 常规 UI | LEASE-CONTRACT 已移除阶段 stage=${stage} 仍被真实后端 400 拒 | tests/e2e/leasing-contract-live-evidence.spec.ts |
+| 常规 UI | TICKETS-LIVE-01 本人订单可列票实例，他人 403，不存在 404，无 token 401 | tests/e2e/order-tickets-live-evidence.spec.ts |
 | 真实后端 UI | REAL-UI-01 health, login, admin overview and logout use the real backend | tests/e2e/web-ui-real-backend.spec.ts |
 | 真实后端 UI | REAL-UI-02 admin core business pages load real backend data without global errors | tests/e2e/web-ui-real-backend.spec.ts |
+| 真实后端 UI | REAL-UI-03 protected business endpoints reject unauthenticated access (server-side denial, not just frontend hiding) | tests/e2e/web-ui-real-backend.spec.ts |
 
 ## 4. 视觉回归基线
 
@@ -79,12 +102,12 @@
 
 | 文件 | 当前行数 |
 | --- | ---: |
-| apps/web/src/main.tsx | 49 |
-| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 379 |
-| backend/src/main/java/com/complex/platform/bar/BarService.java | 579 |
-| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 976 |
-| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 521 |
-| backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 439 |
+| apps/web/src/main.tsx | 55 |
+| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 502 |
+| backend/src/main/java/com/complex/platform/bar/BarService.java | 649 |
+| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1108 |
+| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 600 |
+| backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 453 |
 
 ## 6. 可复跑命令
 
@@ -99,9 +122,9 @@
 ## 7. 仍不能宣称生产就绪的原因
 
 - 15 production evidence submissions awaiting, including 13 P0
-- NAS current state is passed; SEC-P0-OPS-RECOVERY-001 cannot close
+- NAS current state is failed; SEC-P0-OPS-RECOVERY-001 cannot close
 - 12 production blocker register items remain open (6 readiness, 4 credential, 2 security findings)
-- 8 external evidence or supplier-backed requirements remain partial
+- 9 external evidence or supplier-backed requirements remain partial
 
 ## 8. 验收判断
 

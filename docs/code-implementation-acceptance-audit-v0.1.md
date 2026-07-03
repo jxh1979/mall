@@ -48,7 +48,7 @@
 
 - `npm run verify:p0`：通过。
 - `npm run verify:delivery-gates`：通过。
-- `npm run verify:ui`：28 条 Playwright UI 验收通过，覆盖完整后台 MVP、非首批页面、视觉回归、移动端、错误态和角色权限路径。
+- `npm run verify:ui`：38 条 Playwright UI 验收通过，覆盖完整后台 MVP、非首批页面、视觉回归、移动端、错误态和角色权限路径。
 - `npm run verify:ui:real-backend:seeded`：2 条真实后端 UI 验收通过，覆盖真实登录/退出和核心业务页面真实快照读取。
 - `security-scans/semgrep-latest-summary.json`：scan_ref=`security-scans/semgrep-20260617-044736-p-default.json`，results=0，errors=0，paths_scanned=1033。
 - 新增 smoke runner/wrapper 单独 Semgrep：0 findings。

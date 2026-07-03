@@ -14,7 +14,7 @@ const map = {
     ["admin_ui", "apps/web/src/admin/pages/StoredWinePage.tsx", ["stored-wine-page", "claim_items"]],
     ["admin_ui", "apps/web/src/admin/pages/BarCommissionsPage.tsx", ["bar-commissions-page", "15%", "10%"]],
     ["ui_e2e", "tests/e2e/full-admin-remaining.spec.ts", ["ADM-BAR-002", "ADM-BAR-003", "ADM-BAR-004"]],
-    ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset", "deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement", "ageVerificationStoresAdapterBoundaryResultAndEvidence"]],
+    ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset", "deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement"]],
     ["supplier_mock", "docs/t3b-supplier-sdk-mock-kit-v0.1.md", ["T3B_SUPPLIER_MOCK_KIT_READY", "NO_PRODUCTION_VENDOR_CONTROL"]],
   ]],
   "REQ-21": ["吧台买酒支付意图、现金/POS 账单口径和对账差异可 mock 验收；真实聚合支付商户、回调、退款和日结文件仍需生产证据。", [
@@ -24,11 +24,10 @@ const map = {
     ["supplier_mock", "docs/supplier-mock/t3b-webhook-envelope.example.json", ["payment.paid", "idempotency_key"]],
     ["openapi_contract", "docs/p0-openapi-operation-acceptance-matrix-v0.1.md", ["/api/v1/bar/bills/{bill_id}/pay-intents", "/api/v1/bar/bills/{bill_id}/settle"]],
   ]],
-  "REQ-23b": ["酒吧年龄/人脸核验以 adapter 结果和证据附件 mock 验收；生产必须等真实 SDK/API、合规材料和 credential_ref。", [
-    ["service", "backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java", ["BarAgeVerificationService", "bar.age_verification.passed"]],
-    ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["ageVerificationStoresAdapterBoundaryResultAndEvidence", "bar.age_verification.rejected"]],
-    ["mock_api", "tests/e2e/support/mock-api.ts", ["source: \"mock\"", "verification"]],
-    ["openapi_contract", "docs/p0-openapi-operation-acceptance-matrix-v0.1.md", ["/api/v1/bar/age-verifications", "age-verification-device"]],
+  "REQ-23b": ["年龄/人脸核验(2026 售酒豁免后,commit 3ed5f07 移除酒吧售酒验龄)由人脸入场闸统一把关(全场 18+);能力开关默认关、供应商未配置时 fail-safe 非阻断,生产须等真实人脸 SDK/API、合规材料和 credential_ref。", [
+    ["service", "backend/src/main/java/com/complex/platform/entry/FaceVerificationRouter.java", ["FaceVerificationRouter", "face.verification.enabled"]],
+    ["backend_unit", "backend/src/test/java/com/complex/platform/entry/FaceVerificationGateTests.java", ["alwaysDisabledRouterReturnsReservedNonBlocking", "switchReadFailureFailsSafeToDisabled"]],
+    ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["scanOrderBindsOpenSessionInheritsEntryGateAndSourcesApp"]],
     ["supplier_boundary", "docs/third-party-supplier-integration-kit-v0.1.md", ["人脸/年龄核验", "供应商未配置不得生产通过"]],
   ]],
   "REQ-25": ["订台定金在账单生成、定金抵扣、支付意图和卡座会话中可 mock 验收；真实押金收款、退款和财务日结仍由支付证据关闭。", [
@@ -92,7 +91,7 @@ function mdTable(rows, columns) {
   return [`| ${columns.map((c) => c.label).join(" | ")} |`, `| ${columns.map(() => "---").join(" | ")} |`, ...rows.map((r) => `| ${columns.map((c) => escapeCell(r[c.key])).join(" | ")} |`)].join("\n") + "\n";
 }
 
-const requirementRows = parseCsv(readText(matrixPath));
+const requirementRows = parseCsv(readText(matrixPath)).filter((row) => !String(row["需求编号"] ?? "").trim().startsWith("#"));
 const externalTrace = readJson(externalTracePath);
 const externalByRequirement = new Map((externalTrace.requirement_traceability ?? []).map((row) => [row.requirement_id, row]));
 const partialRequirements = requirementRows.filter((row) => row["当前实现状态"] !== "已完整实现");

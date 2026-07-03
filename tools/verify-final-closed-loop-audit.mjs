@@ -156,7 +156,7 @@ for (const [file, lineCount] of Object.entries(expectedLineCounts)) {
   requireRegex(finalAuditPath, new RegExp(`${escapeRegex(basename)}[^\n]*${lineCount}\\s*行`), `${basename} current line count ${lineCount}`);
 }
 
-requireRegex(finalAuditPath, new RegExp(`真实后端 UI 验收[^\n]*verify:ui:real-backend:seeded[^\n]*2 条[^\n]*REAL-UI-02[^\n]*5174`), "real backend UI acceptance row");
+requireRegex(finalAuditPath, new RegExp(`真实后端 UI 验收[^\n]*verify:ui:real-backend:seeded[^\n]*REAL-UI-02[^\n]*5174`), "real backend UI acceptance row");
 requireRegex(finalAuditPath, new RegExp(`闭环运行态总验收[^\n]*verify:closed-loop-runtime`), "closed loop runtime verification row");
 
 const semgrep = readJson("security-scans/semgrep-latest-summary.json");

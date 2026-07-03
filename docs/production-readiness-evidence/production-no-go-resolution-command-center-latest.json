@@ -26,7 +26,7 @@
     "credential_blockers": 4,
     "finding_blockers": 2,
     "blocker_total": 12,
-    "partial_requirements": 9,
+    "partial_requirements": 8,
     "owner_actions_without_manifest": 0
   },
   "go_no_go": {
@@ -187,17 +187,6 @@
     }
   ],
   "partial_requirements": [
-    {
-      "requirement_id": "# 总体标注(2026-06-22)",
-      "module": "全部模块",
-      "current_status": "以文档/迁移/代码为准(总体标注)",
-      "mapped_item_ids": "",
-      "owner_groups": "",
-      "awaiting_evidence_rows": 0,
-      "production_blocking": "no",
-      "target_manifest_count": 0,
-      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
-    },
     {
       "requirement_id": "REQ-17",
       "module": "酒吧",
