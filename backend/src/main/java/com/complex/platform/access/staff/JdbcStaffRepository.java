@@ -20,13 +20,19 @@ class JdbcStaffRepository implements StaffRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    // P0 租户隔离(V214):员工行数据按 project 归属——写入时由该员工最新档案推导,与迁移回填同口径。
+    private static final String STAFF_PROJECT_SUBSELECT =
+            "(SELECT p.project_id FROM staff_profiles p WHERE p.user_id = :user_id"
+                    + " ORDER BY p.created_at DESC LIMIT 1)";
+
     // ---------------------------------------------------------------- F批 薪资/请假
 
     @Override
     public void upsertBaseSalary(String userId, long monthlySalaryCent, String updatedBy, java.time.Instant now) {
         jdbcTemplate.update("""
-                INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_by, updated_at)
-                VALUES (:user_id, :salary, :updated_by, :now)
+                INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_by, updated_at, project_id)
+                VALUES (:user_id, :salary, :updated_by, :now, """ + STAFF_PROJECT_SUBSELECT + """
+                )
                 ON CONFLICT (user_id) DO UPDATE SET
                     monthly_salary_cent = EXCLUDED.monthly_salary_cent,
                     updated_by = EXCLUDED.updated_by,
@@ -40,8 +46,10 @@ class JdbcStaffRepository implements StaffRepository {
     public void insertPayrollAdjustment(String id, String userId, String month, String adjType,
             long amountCent, String reason, String createdBy, java.time.Instant now) {
         jdbcTemplate.update("""
-                INSERT INTO staff_payroll_adjustments (id, user_id, month, adj_type, amount_cent, reason, created_by, created_at)
-                VALUES (:id, :user_id, :month, :adj_type, :amount, :reason, :created_by, :now)
+                INSERT INTO staff_payroll_adjustments (id, user_id, month, adj_type, amount_cent, reason, created_by, created_at, project_id)
+                VALUES (:id, :user_id, :month, :adj_type, :amount, :reason, :created_by, :now, """
+                + STAFF_PROJECT_SUBSELECT + """
+                )
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", id).addValue("user_id", userId).addValue("month", month)
                 .addValue("adj_type", adjType).addValue("amount", amountCent).addValue("reason", reason)
@@ -52,8 +60,10 @@ class JdbcStaffRepository implements StaffRepository {
     public void insertCommission(String id, String userId, String month, String sourceType,
             String sourceId, long amountCent, String note, java.time.Instant now) {
         jdbcTemplate.update("""
-                INSERT INTO staff_commission_ledger (id, user_id, month, source_type, source_id, amount_cent, note, created_at)
-                VALUES (:id, :user_id, :month, :source_type, :source_id, :amount, :note, :now)
+                INSERT INTO staff_commission_ledger (id, user_id, month, source_type, source_id, amount_cent, note, created_at, project_id)
+                VALUES (:id, :user_id, :month, :source_type, :source_id, :amount, :note, :now, """
+                + STAFF_PROJECT_SUBSELECT + """
+                )
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", id).addValue("user_id", userId).addValue("month", month)
                 .addValue("source_type", sourceType).addValue("source_id", sourceId)
@@ -67,7 +77,7 @@ class JdbcStaffRepository implements StaffRepository {
         // 有任一薪资要素的员工都出单;幂等覆盖(uq user+month)。
         return jdbcTemplate.update("""
                 INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, commission_cent,
-                        bonus_cent, penalty_cent, tax_cent, total_cent, closed_by, closed_at)
+                        bonus_cent, penalty_cent, tax_cent, total_cent, closed_by, closed_at, project_id)
                 SELECT 'pay_' || gen_random_uuid(), u.user_id, :month,
                        COALESCE(b.monthly_salary_cent, 0),
                        COALESCE(c.total, 0) + COALESCE(bc.total, 0),
@@ -77,7 +87,7 @@ class JdbcStaffRepository implements StaffRepository {
                        COALESCE(tax.tax_cent, 0),
                        COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
                            + COALESCE(adj.bonus, 0) - COALESCE(adj.penalty, 0) - COALESCE(tax.tax_cent, 0),
-                       :closed_by, :now
+                       :closed_by, :now, sp.project_id
                   FROM (SELECT user_id FROM staff_base_salaries
                         UNION SELECT user_id FROM staff_commission_ledger WHERE month = :month
                         UNION SELECT user_id FROM staff_payroll_adjustments WHERE month = :month
@@ -110,7 +120,11 @@ class JdbcStaffRepository implements StaffRepository {
                                       WHERE month = :month AND source_type = 'service_order'
                                       GROUP BY user_id) svc_base) tax
                          ON tax.user_id = u.user_id
+                  LEFT JOIN (SELECT DISTINCT ON (user_id) user_id, project_id FROM staff_profiles
+                              ORDER BY user_id, created_at DESC) sp
+                         ON sp.user_id = u.user_id
                 ON CONFLICT (user_id, month) DO UPDATE SET
+                    project_id = EXCLUDED.project_id,
                     base_cent = EXCLUDED.base_cent,
                     commission_cent = EXCLUDED.commission_cent,
                     bonus_cent = EXCLUDED.bonus_cent,
@@ -125,16 +139,18 @@ class JdbcStaffRepository implements StaffRepository {
     }
 
     @Override
-    public java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId) {
+    public java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId,
+            String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent,
                        tax_cent, total_cent, closed_by, closed_at
                   FROM staff_payroll_statements
                  WHERE month = :month AND (:user_id::text IS NULL OR user_id = :user_id)
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY user_id
                  LIMIT 1000
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("month", month).addValue("user_id", userId),
+                .addValue("month", month).addValue("user_id", userId).addValue("project_scope", projectScope),
                 (rs, n) -> new StaffPayrollStatementRecord(
                         rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
                         rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
@@ -146,9 +162,11 @@ class JdbcStaffRepository implements StaffRepository {
     public StaffLeaveRequestRecord saveLeaveRequest(StaffLeaveRequestRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO staff_leave_requests (id, user_id, leave_type, start_date, end_date, reason,
-                        status, reviewed_by, review_note, created_at, updated_at)
+                        status, reviewed_by, review_note, created_at, updated_at, project_id)
                 VALUES (:id, :user_id, :leave_type, :start_date, :end_date, :reason,
-                        :status, :reviewed_by, :review_note, :created_at, :updated_at)
+                        :status, :reviewed_by, :review_note, :created_at, :updated_at, """
+                + STAFF_PROJECT_SUBSELECT + """
+                )
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     reviewed_by = EXCLUDED.reviewed_by,
@@ -176,17 +194,19 @@ class JdbcStaffRepository implements StaffRepository {
     }
 
     @Override
-    public java.util.List<StaffLeaveRequestRecord> listLeaves(String status, String userId) {
+    public java.util.List<StaffLeaveRequestRecord> listLeaves(String status, String userId, String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, leave_type, start_date, end_date, reason, status,
                        reviewed_by, review_note, created_at, updated_at
                   FROM staff_leave_requests
                  WHERE (:status::text IS NULL OR status = :status)
                    AND (:user_id::text IS NULL OR user_id = :user_id)
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY created_at DESC
                  LIMIT 500
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("status", status).addValue("user_id", userId), this::mapLeave);
+                .addValue("status", status).addValue("user_id", userId)
+                .addValue("project_scope", projectScope), this::mapLeave);
     }
 
     private StaffLeaveRequestRecord mapLeave(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
@@ -240,8 +260,10 @@ class JdbcStaffRepository implements StaffRepository {
     public StaffShiftRecord upsertShift(StaffShiftRecord shift) {
         jdbcTemplate.update("""
                 INSERT INTO staff_shift_schedules (id, user_id, work_date, start_at, end_at,
-                        point_space_ids, note, created_by, created_at, updated_at)
-                VALUES (:id, :user_id, :work_date, :start_at, :end_at, :points::jsonb, :note, :created_by, :now, :now)
+                        point_space_ids, note, created_by, created_at, updated_at, project_id)
+                VALUES (:id, :user_id, :work_date, :start_at, :end_at, :points::jsonb, :note, :created_by, :now, :now, """
+                + STAFF_PROJECT_SUBSELECT + """
+                )
                 ON CONFLICT (user_id, start_at) DO UPDATE SET
                     work_date = EXCLUDED.work_date,
                     end_at = EXCLUDED.end_at,
@@ -264,16 +286,19 @@ class JdbcStaffRepository implements StaffRepository {
     }
 
     @Override
-    public java.util.List<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId) {
+    public java.util.List<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId,
+            String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, work_date, start_at, end_at, point_space_ids, note, created_by, created_at, updated_at
                   FROM staff_shift_schedules
                  WHERE (:work_date::date IS NULL OR work_date = :work_date)
                    AND (:user_id::text IS NULL OR user_id = :user_id)
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY work_date DESC, start_at, user_id
                  LIMIT 500
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("work_date", workDate).addValue("user_id", userId), this::mapShift);
+                .addValue("work_date", workDate).addValue("user_id", userId)
+                .addValue("project_scope", projectScope), this::mapShift);
     }
 
     @Override
@@ -324,9 +349,11 @@ class JdbcStaffRepository implements StaffRepository {
     public StaffAttendanceRecord saveAttendance(StaffAttendanceRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO staff_attendance_records (id, user_id, punch_type, punched_at, method,
-                        tag_ref, space_id, device_fingerprint, shift_id, judgement, created_at)
+                        tag_ref, space_id, device_fingerprint, shift_id, judgement, created_at, project_id)
                 VALUES (:id, :user_id, :punch_type, :punched_at, :method,
-                        :tag_ref, :space_id, :device_fingerprint, :shift_id, :judgement, :created_at)
+                        :tag_ref, :space_id, :device_fingerprint, :shift_id, :judgement, :created_at, """
+                + STAFF_PROJECT_SUBSELECT + """
+                )
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", record.id())
                 .addValue("user_id", record.userId())
@@ -356,17 +383,19 @@ class JdbcStaffRepository implements StaffRepository {
     }
 
     @Override
-    public java.util.List<StaffAttendanceRecord> listAttendanceOn(java.time.LocalDate date) {
+    public java.util.List<StaffAttendanceRecord> listAttendanceOn(java.time.LocalDate date, String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, punch_type, punched_at, method, tag_ref, space_id,
                        device_fingerprint, shift_id, judgement, created_at
                   FROM staff_attendance_records
                  WHERE punched_at >= :day_start AND punched_at < :day_end
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY punched_at DESC
                  LIMIT 1000
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
-                .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC))),
+                .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
+                .addValue("project_scope", projectScope),
                 this::mapAttendance);
     }
 

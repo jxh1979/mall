@@ -272,7 +272,9 @@ public class ServiceOrderService {
 
     public PageResponse<ServiceOrderRecord> listOrders(java.time.LocalDate date, String status) {
         authorizationService.requirePermission("service.catalog.manage");
-        return page(repository.listOrders(date, status));
+        // P0 租户隔离(V214):项目员工只见本综合体服务单;平台管理员全量。
+        return page(repository.listOrders(date, status,
+                authorizationService.currentProjectScopeQuietly().orElse(null)));
     }
 
     /** H批:履约人当月完成次数+分账应得(公司代收,月结进薪资提成并代扣个税)。 */

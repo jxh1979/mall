@@ -89,11 +89,13 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 INSERT INTO service_orders (id, catalog_item_id, item_name, price_cent, bar_id, table_id,
                         performer_user_id, ordered_by, customer_note, status, cancel_reason,
                         paid_at, paid_by, pay_method, refund_note, mgmt_fee_cent, dancer_share_cent,
-                        created_at, updated_at, completed_at)
+                        created_at, updated_at, completed_at, project_id)
                 VALUES (:id, :catalog_item_id, :item_name, :price, :bar_id, :table_id,
                         :performer, :ordered_by, :note, :status, :cancel_reason,
                         :paid_at, :paid_by, :pay_method, :refund_note, :mgmt_fee, :dancer_share,
-                        :created_at, :updated_at, :completed_at)
+                        :created_at, :updated_at, :completed_at,
+                        (SELECT p.project_id FROM staff_profiles p WHERE p.user_id = :performer
+                          ORDER BY p.created_at DESC LIMIT 1))
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     cancel_reason = EXCLUDED.cancel_reason,
@@ -144,13 +146,16 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
     }
 
     @Override
-    public List<ServiceOrderRecord> listOrders(LocalDate date, String status) {
+    public List<ServiceOrderRecord> listOrders(LocalDate date, String status, String projectScope) {
+        // P0 租户隔离(V214):后台服务单列表按调用方项目 scope 过滤;null=平台全量。
         return jdbcTemplate.query(SELECT_ORDER + """
                  WHERE (:date::date IS NULL OR created_at::date = :date)
                    AND (:status::text IS NULL OR status = :status)
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY created_at DESC
                  LIMIT 500
-                """, new MapSqlParameterSource().addValue("date", date).addValue("status", status), this::mapOrder);
+                """, new MapSqlParameterSource().addValue("date", date).addValue("status", status)
+                .addValue("project_scope", projectScope), this::mapOrder);
     }
 
     @Override

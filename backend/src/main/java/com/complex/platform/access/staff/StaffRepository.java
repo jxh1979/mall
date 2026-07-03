@@ -29,13 +29,15 @@ public interface StaffRepository {
     /** 月结:对有薪资要素的员工重算定格(base+Σledger提成+Σ酒吧提成+Σbonus-Σpenalty);幂等覆盖。返回生成单数。 */
     int closePayrollMonth(String month, String closedBy, java.time.Instant now);
 
-    java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId);
+    /** P0 租户隔离(V214):projectScope=null 见全量;非空仅见 project_id=该值的行(下同)。 */
+    java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId,
+            String projectScope);
 
     StaffLeaveRequestRecord saveLeaveRequest(StaffLeaveRequestRecord record);
 
     java.util.Optional<StaffLeaveRequestRecord> findLeaveById(String id);
 
-    java.util.List<StaffLeaveRequestRecord> listLeaves(String status, String userId);
+    java.util.List<StaffLeaveRequestRecord> listLeaves(String status, String userId, String projectScope);
 
     /** 某用户某区间内 approved 请假覆盖的日期集。 */
     java.util.Set<java.time.LocalDate> approvedLeaveDates(String userId,
@@ -47,7 +49,7 @@ public interface StaffRepository {
     // --- E1/E2 排班与考勤(2026-07-02 拍板) ---
     StaffShiftRecord upsertShift(StaffShiftRecord shift);
 
-    java.util.List<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId);
+    java.util.List<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId, String projectScope);
 
     java.util.List<StaffShiftRecord> listShiftsForUserBetween(String userId,
             java.time.LocalDate from, java.time.LocalDate to);
@@ -56,7 +58,7 @@ public interface StaffRepository {
 
     java.util.List<StaffAttendanceRecord> listAttendanceForUser(String userId, java.time.Instant since);
 
-    java.util.List<StaffAttendanceRecord> listAttendanceOn(java.time.LocalDate date);
+    java.util.List<StaffAttendanceRecord> listAttendanceOn(java.time.LocalDate date, String projectScope);
 
     // --- staff_device_credentials ---
     StaffDeviceCredentialRecord saveCredential(StaffDeviceCredentialRecord credential);

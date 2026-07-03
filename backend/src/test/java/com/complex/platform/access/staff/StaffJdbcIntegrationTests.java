@@ -421,6 +421,64 @@ class StaffJdbcIntegrationTests {
         assertThat(byDay.get("2099-08-20")).containsExactly("rest");
     }
 
+    @org.junit.jupiter.api.Test
+    void v214StaffRowsDeriveProjectAndScopedListsExcludeOtherProjects() {
+        // P0 租户隔离(V214):员工行数据写入时按员工档案推导 project_id;
+        // 主管/后台列表 scoped 查询只见本项目行(null 项目行照 3.2 口径同样不可见)。
+        authenticateAsPlatformAdmin();
+        StaffProfileRecord staff = approvedProfile(null); // 档案 project_main
+        String userId = staff.userId();
+        java.time.LocalDate day = java.time.LocalDate.parse("2099-07-01");
+        Instant start = Instant.parse("2099-07-01T02:00:00Z");
+
+        // 排班:写入即带员工项目。
+        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                key(), userId, day, start, start.plusSeconds(8 * 3600), List.of("sp_p1"), null));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT project_id FROM staff_shift_schedules WHERE user_id = ?", String.class, userId))
+                .isEqualTo("project_main");
+        assertThat(repository.listShifts(day, null, "project_main"))
+                .extracting(StaffShiftRecord::userId).contains(userId);
+        assertThat(repository.listShifts(day, null, "prj_other"))
+                .extracting(StaffShiftRecord::userId).doesNotContain(userId);
+
+        // 奖惩:写入即带员工项目;usr_admin(无档案)行 project 为 NULL → scoped 不可见。
+        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
+                key(), userId, "2099-07", "bonus", 1000L, "隔离测试"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT project_id FROM staff_payroll_adjustments WHERE user_id = ?", String.class, userId))
+                .isEqualTo("project_main");
+
+        // 请假(usr_admin 提交,无档案 → project NULL):平台全量可见,任一项目 scoped 均不可见。
+        com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "annual", day, day, "隔离测试"));
+        assertThat(repository.listLeaves(null, null, null))
+                .extracting(StaffLeaveRequestRecord::id).contains(leave.id());
+        assertThat(repository.listLeaves(null, null, "project_main"))
+                .extracting(StaffLeaveRequestRecord::id).doesNotContain(leave.id());
+
+        // 薪资单:月结按档案推导 project;scoped 只见本项目员工。
+        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(
+                key(), userId, 500000L));
+        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), "2099-07"));
+        assertThat(repository.listPayrollStatements("2099-07", null, "project_main"))
+                .extracting(StaffPayrollStatementRecord::userId).contains(userId);
+        assertThat(repository.listPayrollStatements("2099-07", null, "prj_other"))
+                .extracting(StaffPayrollStatementRecord::userId).doesNotContain(userId);
+
+        // 考勤日列表:直插他项目行,scoped 只见本项目。
+        jdbcTemplate.update("""
+                INSERT INTO staff_attendance_records (id, user_id, punch_type, punched_at, method,
+                        judgement, created_at, project_id)
+                VALUES (?, ?, 'check_in', '2099-07-01T03:00:00Z', 'manual', 'normal', now(), 'prj_other')
+                """, "att_" + key(), userId);
+        assertThat(repository.listAttendanceOn(day, "project_main"))
+                .extracting(StaffAttendanceRecord::userId).doesNotContain(userId);
+        assertThat(repository.listAttendanceOn(day, "prj_other"))
+                .extracting(StaffAttendanceRecord::userId).contains(userId);
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }

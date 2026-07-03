@@ -423,7 +423,7 @@ public class StaffService {
     /** E1:后台/主管按日(可选按人)查排班。 */
     public PageResponse<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId) {
         authorizationService.requirePermission("staff.shift.manage");
-        return page(repository.listShifts(workDate, userId));
+        return page(repository.listShifts(workDate, userId, projectScope()));
     }
 
     /** E1:员工自有手机看自己的班次与点位(今天起 7 天)。 */
@@ -486,7 +486,7 @@ public class StaffService {
     /** E2:后台/主管按日查考勤(判定列:正常/迟到/早退/无班次)。 */
     public PageResponse<StaffAttendanceRecord> listAttendance(java.time.LocalDate date) {
         authorizationService.requirePermission("staff.attendance.view");
-        return page(repository.listAttendanceOn(date));
+        return page(repository.listAttendanceOn(date, projectScope()));
     }
 
     public PageResponse<EmployeeNoticeRecord> listNotices() {
@@ -603,6 +603,11 @@ public class StaffService {
         return actor == null || actor.id() == null ? "system" : actor.id();
     }
 
+    /** P0 租户隔离(V214):主管/后台列表按调用方项目 scope 过滤;平台管理员/无组织全局员工=null 见全量。 */
+    private String projectScope() {
+        return authorizationService.currentProjectScopeQuietly().orElse(null);
+    }
+
     /** F批(2026-07-02 拍板):固定工资=员工档案月薪,人事维护。 */
     public void setBaseSalary(com.complex.platform.access.staff.dto.StaffPayrollBaseRequest request) {
         authorizationService.requirePermission("staff.payroll.manage");
@@ -677,14 +682,15 @@ public class StaffService {
     /** F批:后台按月查全员薪资单。 */
     public PageResponse<StaffPayrollStatementRecord> listPayroll(String month) {
         authorizationService.requirePermission("staff.payroll.manage");
-        return page(repository.listPayrollStatements(month, null));
+        return page(repository.listPayrollStatements(month, null, projectScope()));
     }
 
     /** F批(拍板:月结后才可见):员工查自己薪资——只返回已定格薪资单,未结月自然为空。 */
     public PageResponse<StaffPayrollStatementRecord> listMyPayroll(String month) {
         authorizationService.requirePermission("staff.payroll.view_mine");
         var actor = authorizationService.currentActor();
-        return page(repository.listPayrollStatements(month, actor.id()));
+        // 员工看自己:按 user 自限定,不再叠 project 谓词(员工无档案项目时也能看自己的单)。
+        return page(repository.listPayrollStatements(month, actor.id(), null));
     }
 
     /** F批:员工提交请假(四类:事假/病假/调休/年假;主管审)。 */
@@ -714,7 +720,7 @@ public class StaffService {
     public PageResponse<StaffLeaveRequestRecord> listMyLeaves() {
         authorizationService.requirePermission("staff.leave.submit");
         var actor = authorizationService.currentActor();
-        return page(repository.listLeaves(null, actor.id()));
+        return page(repository.listLeaves(null, actor.id(), null));
     }
 
     /** F批:主管审请假(复用排班主管权限);通过区间考勤月视图记「请假」。 */
@@ -744,7 +750,7 @@ public class StaffService {
     /** F批:主管/后台查请假(按状态)。 */
     public PageResponse<StaffLeaveRequestRecord> listLeaves(String status) {
         authorizationService.requirePermission("staff.shift.manage");
-        return page(repository.listLeaves(status, null));
+        return page(repository.listLeaves(status, null, projectScope()));
     }
 
     /** F批(2026-07-02 拍板六态口径):考勤月视图——出勤/缺勤(有排班无上班卡)/迟到/早退/

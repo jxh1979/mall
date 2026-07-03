@@ -130,6 +130,34 @@ class ServiceOrderJdbcIntegrationTests {
         jdbcTemplate.update("DELETE FROM staff_payroll_statements WHERE user_id='usr_admin' AND month='2099-09'");
     }
 
+    @Test
+    void v214ServiceOrderDerivesPerformerProjectAndScopedListExcludesOthers() {
+        // P0 租户隔离(V214):服务单按履约人档案归属综合体;后台列表 scoped 只见本综合体单。
+        String performer = "usr_perf_" + key();
+        jdbcTemplate.update("""
+                INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name,
+                        registration_status, status, created_at, updated_at)
+                VALUES (?, 'prj_a', NULL, ?, '履约人A', 'approved', 'active', now(), now())
+                """, "sprof_" + key(), performer);
+        ServiceCatalogItemRecord item = service.upsertCatalogItem(
+                new com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest(
+                        key(), null, "隔离测试舞", 10000L, 10, true, "none", 0L));
+        ServiceOrderRecord order = service.createOrder(
+                new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                        key(), item.id(), performer, null, null, null));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT project_id FROM service_orders WHERE id = ?", String.class, order.id()))
+                .isEqualTo("prj_a");
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        assertThat(repository.listOrders(today, null, "prj_a"))
+                .extracting(ServiceOrderRecord::id).contains(order.id());
+        assertThat(repository.listOrders(today, null, "prj_b"))
+                .extracting(ServiceOrderRecord::id).doesNotContain(order.id());
+        // 平台(null scope)全量可见。
+        assertThat(repository.listOrders(today, null, null))
+                .extracting(ServiceOrderRecord::id).contains(order.id());
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }

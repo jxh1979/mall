@@ -23,7 +23,8 @@ public interface ServiceOrderRepository {
 
     List<ServiceOrderRecord> listOrdersForPerformer(String performerUserId);
 
-    List<ServiceOrderRecord> listOrders(LocalDate date, String status);
+    /** P0 租户隔离(V214):projectScope=null 见全量;非空仅见 project_id=该值的行。 */
+    List<ServiceOrderRecord> listOrders(LocalDate date, String status, String projectScope);
 
     void upsertPayConfig(String qrContent, String updatedBy, Instant now);
 
