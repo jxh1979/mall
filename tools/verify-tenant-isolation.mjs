@@ -167,11 +167,11 @@ function extractReferencedTables(sql, cteNames) {
 // 近似：只要源码中同时出现「FROM <table>」与「<scope_col> = :」即视为存在 scoped 读通道。
 // 该近似的盲区已在文件头 B3 登记。
 function hasScopedRead(src, table, scopeCol) {
-  const reads = new RegExp(`\\bFROM\\s+${table}\\b`, "i").test(src);
+  const reads = new RegExp(`\\bFROM\\s+${table}\\b`, "i").test(src); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- 正则输入为硬编码表名/列名(非用户输入),无注入面
   if (!reads) return null; // 该源码根本不读这张表
   const col = scopeCol.replace(/[^\w]/g, "");
   if (!col) return true; // scope 列未知，无法判定，保守放行
-  const scopedPredicate = new RegExp(`\\b${col}\\s*(=\\s*:|IN\\s*\\()`, "i").test(src);
+  const scopedPredicate = new RegExp(`\\b${col}\\s*(=\\s*:|IN\\s*\\()`, "i").test(src); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- 正则输入为硬编码表名/列名(非用户输入),无注入面
   return scopedPredicate;
 }
 

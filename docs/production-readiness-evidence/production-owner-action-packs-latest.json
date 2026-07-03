@@ -962,7 +962,7 @@
           "blocking_scope": "不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产",
           "source": "security-scans/findings-register-v1.md",
           "source_table": "findings_register",
-          "next_action": "正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核",
+          "next_action": "员工后台仍为 Bearer 头 token（无 cookie 环境凭证）；若后台改用 Cookie 会话再按 SameSite/双提交复核",
           "required_evidence": [
             "认证方案分支说明",
             "CSRF 或 Bearer Token 安全复核记录",
@@ -1258,7 +1258,7 @@
           "blocking_scope": "不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产",
           "source": "security-scans/findings-register-v1.md",
           "source_table": "findings_register",
-          "next_action": "正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核",
+          "next_action": "员工后台仍为 Bearer 头 token（无 cookie 环境凭证）；若后台改用 Cookie 会话再按 SameSite/双提交复核",
           "required_evidence": [
             "认证方案分支说明",
             "CSRF 或 Bearer Token 安全复核记录",

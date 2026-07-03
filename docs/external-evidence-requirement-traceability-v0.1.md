@@ -20,7 +20,7 @@
 
 | 指标 | 数量 |
 |---|---:|
-| partial 需求 | 9 |
+| partial 需求 | 8 |
 | 已挂证据台账的 partial 需求 | 8 |
 | 去重证据 item_id | 0 |
 | 证据台账行 | 0 |
@@ -33,7 +33,6 @@
 
 | 需求 | 模块 | 矩阵状态 | 生产证据追踪状态 | 证据 item_id | 责任组 | P0 行 | 待提交行 | 目标 manifest |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| # 总体标注(2026-06-22) | 全部模块 | 以文档/迁移/代码为准(总体标注) | covered_by_disabled_integration_switches |  |  | 0 | 0 |  |
 | REQ-17 | 酒吧 | 部分实现 | covered_by_disabled_integration_switches |  |  | 0 | 0 |  |
 | REQ-21 | 酒吧 | 部分实现 | covered_by_disabled_integration_switches |  |  | 0 | 0 |  |
 | REQ-23b | 酒吧 | 部分实现 | covered_by_disabled_integration_switches |  |  | 0 | 0 |  |

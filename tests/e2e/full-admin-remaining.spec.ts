@@ -81,7 +81,7 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await navToggle.click();
   }
   await page.getByTestId(`admin-nav-${spec.pageId}`).click();
-  await expect(page).toHaveURL(new RegExp(`${spec.route}$`));
+  await expect(page).toHaveURL(new RegExp(`${spec.route}$`)); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- spec.route 为硬编码测试路由(非用户输入)
   await expect(page.getByTestId("admin-page-title")).toContainText(spec.label);
   if (spec.pageId === "ADM-GOV-001") {
     await expect(page.getByTestId("governance-topology-page")).toBeVisible();

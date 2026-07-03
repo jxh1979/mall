@@ -152,7 +152,7 @@ function forbidPlaintextSecrets(relativePath, text) {
   }
 }
 
-const requirementRows = parseCsv(readText(matrixPath));
+const requirementRows = parseCsv(readText(matrixPath)).filter((row) => !String(row["需求编号"] ?? "").trim().startsWith("#"));
 const ledger = readJson(ledgerPath);
 const status = readJson(statusPath);
 const ledgerRows = Array.isArray(ledger.rows) ? ledger.rows : [];

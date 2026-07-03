@@ -20,8 +20,8 @@
 
 | 判断项 | 当前值 |
 |---|---|
-| 可以进入联调 | 否 |
-| 可以进入业务验收 | 否 |
+| 可以进入联调 | 是 |
+| 可以进入业务验收 | 是 |
 | 可以宣称生产上线就绪 | 否 |
 
 ## 2. 需求矩阵当前态
@@ -47,21 +47,21 @@
 
 | 闸口 | 当前态 |
 |---|---|
-| Semgrep | results=2，errors=1，paths_scanned=1896，scan_dir=`security-scans/semgrep-20260623-180915-manual-request` |
+| Semgrep | results=0，errors=0，paths_scanned=1984，scan_dir=`security-scans/semgrep-20260703-delivery-gates-clean` |
 | 运行时验收证据 | backend=579 tests / failures=0 / errors=0，web_unit=16，ui=28，real_backend_ui=2，ready=true |
 | 生产证据提交 | expected=15，awaiting=15，valid=0，invalid=0 |
 | Production blocker register | readiness=6, credential=4, findings=2, blocking_total=12, complete=false |
 | P0 生产证据 | expected=13，awaiting=13，valid=0，invalid=0 |
-| NAS 当前状态 | live_status=passed，can_close_sec_p0_ops_recovery=false |
-| NAS 只读诊断 | ping=reachable，tcp445=reachable，cifs_mount=active，preflight=passed |
-| NAS 诊断根因 | expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence |
+| NAS 当前状态 | live_status=failed，can_close_sec_p0_ops_recovery=false |
+| NAS 只读诊断 | ping=reachable，tcp445=reachable，cifs_mount=inactive，preflight=failed |
+| NAS 诊断根因 | NAS host and SMB port are reachable, mount.cifs exists, but the expected CIFS mount is inactive and the current user has no passwordless sudo; IT must execute the controlled mount handoff |
 | 外部证据 | partial=9，complete=false |
 | Owner action manifest links | blockers=12, actions=15, related_submissions=15, items_without_manifest=0, complete=true |
 
 ## 5. 不可宣称生产上线就绪的原因
 
 - 15 production evidence submissions awaiting, including 13 P0
-- NAS current state is passed; SEC-P0-OPS-RECOVERY-001 cannot close
+- NAS current state is failed; SEC-P0-OPS-RECOVERY-001 cannot close
 - 12 production blocker register items remain open (6 readiness, 4 credential, 2 security findings)
 - 9 external evidence or supplier-backed requirements remain partial
 
@@ -118,8 +118,8 @@
 
 ### 6.5 NAS 当前态下一步
 
-- root_cause：expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence
-- next_action：IT must backfill approved production manifests for automount, schedule, alert and drill evidence
+- root_cause：NAS host and SMB port are reachable, mount.cifs exists, but the expected CIFS mount is inactive and the current user has no passwordless sudo; IT must execute the controlled mount handoff
+- next_action：IT must use an approved sudo/root maintenance window to run the controlled mount handoff, then regenerate NAS drift and diagnostic reports
 
 ## 7. 仍需外部证据或供应商资料的需求
 

@@ -1,6 +1,6 @@
 {
   "traceability_version": "v0.1",
-  "status": "traceability_gap",
+  "status": "all_mapped_external_evidence_valid",
   "generated_from": [
     "docs/requirements-code-implementation-matrix-v0.1.csv",
     "docs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.json",
@@ -25,7 +25,7 @@
     "p0_invalid_submission": 0
   },
   "counts": {
-    "partial_requirements": 9,
+    "partial_requirements": 8,
     "traceable_partial_requirements": 8,
     "mapped_evidence_items": 0,
     "mapped_ledger_rows": 0,
@@ -36,28 +36,6 @@
     "production_blocking_requirements": 0
   },
   "requirement_traceability": [
-    {
-      "requirement_id": "# 总体标注(2026-06-22)",
-      "module": "全部模块",
-      "acceptance": "实现状态以 md 开发设计文档/迁移脚本/后端代码为准；本表“相关代码文件”列为模块级定位、非 REQ 级精确映射，单元格仅列该模块代表性文件，不代表逐条需求的完整证据链。多数行标“已完整实现”系模块级粗判，存在 md 文档/迁移横幅所述 partial/gap 时以那些文档为准。本轮(裁决#14)仅对已修复 finding 直接相关行做可核实的状态/证据补注，其余行不逐行猜改、仅受本总体标注覆盖。",
-      "current_status": "以文档/迁移/代码为准(总体标注)",
-      "matrix_gap": "见各行md文档/迁移",
-      "evidence_mapping_reason": "",
-      "mapped_item_ids": [],
-      "switch_disabled_item_ids": [],
-      "owner_groups": [],
-      "evidence_rows_total": 0,
-      "p0_evidence_rows": 0,
-      "awaiting_evidence_rows": 0,
-      "invalid_evidence_rows": 0,
-      "valid_evidence_rows": 0,
-      "missing_item_ids": [],
-      "production_blocking": false,
-      "production_trace_status": "covered_by_disabled_integration_switches",
-      "target_manifest_paths": [],
-      "verification_commands": [],
-      "evidence_rows": []
-    },
     {
       "requirement_id": "REQ-17",
       "module": "酒吧",

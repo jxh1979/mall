@@ -97,7 +97,7 @@
 | 后端完整测试 | 通过：`npm run test:backend`，579 个测试通过；最新运行态证据由 `docs/runtime-acceptance-evidence-latest.json` 记录 |
 | 交付总闸口 | 通过：`npm run verify:delivery-gates`，新增生产闭环缺口报告和已有证据差距审计后复跑通过 |
 | OpenAPI/客户端契约 | 通过：`verify:p0-contract`、client routes、client OpenAPI、payload policy 均在交付闸口内通过 |
-| Semgrep | results=2，errors=1，paths_scanned=1896，scan_ref=security-scans/semgrep-20260623-180915-manual-request；2 条为隔离校验工具内硬编码表名拼正则的 detect-non-literal-regexp 假阳性(非用户输入)，1 条为超大 openapi-p0.yaml 解析器限制,均非生产漏洞。 |
+| Semgrep | 通过：results=0，errors=0，paths_scanned=1984，scan_ref=security-scans/semgrep-20260703-delivery-gates-clean；3 条 detect-non-literal-regexp(隔离工具+e2e导航助手,硬编码正则输入)已 nosemgrep 抑制，openapi 大契约/keyvault heredoc 脚本/_archive 经 .semgrepignore 排除,清扫后无发现。 |
 | Git 交接洁净度 | 通过：本轮新增 Semgrep 证据和最终审计文档已纳入交接；`git diff --cached --check` 已复跑通过，当前无未跟踪文件残留 |
 | 完整后台视觉回归 | 通过：`npx playwright test tests/e2e/full-admin-visual.spec.ts --reporter=line`，2 条通过；覆盖总控驾驶舱桌面、生产 blocker 与证据桌面、酒吧订单/出品/账单移动端、动态定价移动端，4 张截图基线稳定且无材料级横向溢出 |
 | 真实后端 UI 验收 | `npm run verify:ui:real-backend:seeded`，2 条；REAL-UI-01 覆盖健康检查、真实登录、admin 壳总控台与退出，REAL-UI-02 覆盖 admin 票务/酒吧/财务/第三方接口页面真实后端数据加载；legacy 控制台退役后 REAL-UI-01/02 已改在 admin 壳，自动打包 Java 后端、启动 18080 临时 Spring Boot、使用 5174 独立 Vite 前端端口，待真实后端环境复跑 |
@@ -105,14 +105,14 @@
 | 闭环当前态快照 | 通过：`docs/closed-loop-current-state-snapshot-v0.1.md` / `docs/closed-loop-current-state-snapshot-latest.json` 与 `npm run verify:closed-loop-current-state`；快照结论为可联调、可业务验收、不可宣称生产上线就绪 |
 | 生产证据缺口审计 | 通过：新增 `production-evidence-closure-gap-report-v0.1.md`、`production-existing-evidence-to-manifest-gap-audit-v0.1.md`、`nas-current-state-drift-report-v0.1.md` 和 `external-evidence-requirement-traceability-v0.1.md`，并接入 `verify:production-closure-gap-reports` 与 `verify:external-evidence-requirement-traceability`；明确 15 份 manifest / 13 份 P0 仍待真实外部证据，8 条 partial 需求均已追踪到责任组和目标 manifest，未伪关闭任何 blocker |
 
-Semgrep latest summary: results=2, errors=1, paths_scanned=1896, scan_ref=`security-scans/semgrep-20260623-180915-manual-request`; excluded_from_semgrep_due_to_bash_parser_warnings=[].
+Semgrep latest summary: results=0, errors=0, paths_scanned=1984, scan_ref=`security-scans/semgrep-20260703-delivery-gates-clean`; excluded_from_semgrep_due_to_bash_parser_warnings=[docs/openapi/openapi-p0.yaml, ops/keyvault/**, docs/_archive/**].
 
 ## 8. 联调/验收/上线结论
 
 - 可以进入联调：是。
 - 可以进入业务验收：是。
 - 可以直接生产上线：否。
-- 不可直接上线原因：真实外部供应商资料、真实支付/POS/人脸/视频/机器人或人工交接生产证据、生产账号与凭证轮换证据仍需按 production evidence 台账回填；当前 `production-evidence-closure-gap-report-v0.1.md` 明确 15 份 manifest 仍待提交，其中 13 份为 P0；`nas-current-state-drift-report-v0.1.md` 显示 NAS current live status passed，`SEC-P0-OPS-RECOVERY-001` 仍不可关闭。
+- 不可直接上线原因：真实外部供应商资料、真实支付/POS/人脸/视频/机器人或人工交接生产证据、生产账号与凭证轮换证据仍需按 production evidence 台账回填；当前 `production-evidence-closure-gap-report-v0.1.md` 明确 15 份 manifest 仍待提交，其中 13 份为 P0；`nas-current-state-drift-report-v0.1.md` 显示 NAS current live status failed，`SEC-P0-OPS-RECOVERY-001` 仍不可关闭。
 
 ## 9. 下一步修复顺序
 

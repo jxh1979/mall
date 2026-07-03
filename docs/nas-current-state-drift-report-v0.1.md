@@ -4,13 +4,13 @@
 
 - NAS_CURRENT_STATE_DRIFT_REPORT_READY
 - HISTORICAL_NAS_EVIDENCE_NOT_CURRENT_CLOSURE
-- CURRENT_LIVE_NAS_CHECK_PASSED
+- CURRENT_LIVE_NAS_CHECK_FAILED
 - NO_FAKE_NAS_PRODUCTION_MANIFEST
 - NAS_MANIFEST_REMAINS_AWAITING_IT_EVIDENCE
 
 ## 2. 结论
 
-当前 NAS live check 状态为 `passed`。历史文件 `docs/production-readiness-evidence/nas-smb-mount-latest.json` 记录的是一次性挂载读写验证，不能替代当前生产自动挂载、定时备份、容量/失败告警、周期恢复演练和真实 manifest 审批证据。
+当前 NAS live check 状态为 `failed`。历史文件 `docs/production-readiness-evidence/nas-smb-mount-latest.json` 记录的是一次性挂载读写验证，不能替代当前生产自动挂载、定时备份、容量/失败告警、周期恢复演练和真实 manifest 审批证据。
 
 因此，本报告不关闭任何 NAS 或 SEC-P0-OPS-RECOVERY manifest；它只用于防止把历史 `passed` evidence 误读为当前生产闭环完成。
 
@@ -29,12 +29,12 @@
 
 | 检查项 | 当前结果 |
 |---|---|
-| findmnt exit_code | `0` |
-| findmnt stdout | `/mnt/complex-nas-backup //192.168.88.113/bn cifs   rw,relatime,vers=3.0,sec=ntlmssp,cache=strict,upcall_target=app,username=jxh1,uid=1000,forceuid,gid=1000,forcegid,addr=192.168.88.113,file_mode=0600,dir_mode=0700,iocharset=utf8,soft,nounix,serverino,mapposix,noperm,rsize=4194304,wsize=4194304,bsize=1048576,retrans=1,echo_interval=60,actimeo=1,closetimeo=1` |
+| findmnt exit_code | `1` |
+| findmnt stdout | `empty` |
 | mount_path | `/mnt/complex-nas-backup` |
 | mount_path exists | `true` |
-| write/read/delete | `passed` |
-| write/read/delete error | `` |
+| write/read/delete | `skipped` |
+| write/read/delete error | `expected CIFS NAS mount is not active; write/read/delete check intentionally skipped` |
 | credential_file_readable_by_current_user | `false` |
 
 ## 5. 生产闭环影响

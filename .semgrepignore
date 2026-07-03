@@ -1,0 +1,6 @@
+# semgrep 解析器无法处理的文件(非可扫描源码;各有专门校验)
+docs/openapi/openapi-p0.yaml
+docs/openapi/openapi-p0.json
+docs/_archive/
+# keyvault 运维脚本含 bash heredoc,semgrep bash 解析器报错(非规则命中)
+ops/keyvault/

@@ -1,6 +1,6 @@
 {
   "diagnostic_version": "v0.1",
-  "generated_at": "2026-06-17T11:31:47.739Z",
+  "generated_at": "2026-07-03T12:50:11.508Z",
   "policy": {
     "diagnostic_only": true,
     "does_not_close_manifest": true,
@@ -54,35 +54,30 @@
     "ping": {
       "status": "passed",
       "exit_code": 0,
-      "stdout": "PING 192.168.88.113 (192.168.88.113) 56(84) bytes of data.\n64 bytes from 192.168.88.113: icmp_seq=1 ttl=64 time=5.17 ms\n64 bytes from 192.168.88.113: icmp_seq=2 ttl=64 time=4.83 ms\n\n--- 192.168.88.113 ping statistics ---\n2 packets transmitted, 2 received, 0% packet loss, time 1002ms\nrtt min/avg/max/mdev = 4.827/4.996/5.165/0.169 ms",
+      "stdout": "PING 192.168.88.113 (192.168.88.113) 56(84) bytes of data.\n64 bytes from 192.168.88.113: icmp_seq=1 ttl=64 time=4.61 ms\n64 bytes from 192.168.88.113: icmp_seq=2 ttl=64 time=4.22 ms\n\n--- 192.168.88.113 ping statistics ---\n2 packets transmitted, 2 received, 0% packet loss, time 1001ms\nrtt min/avg/max/mdev = 4.219/4.416/4.613/0.197 ms",
       "stderr": ""
     },
     "tcp_445": {
       "status": "passed",
       "host": "192.168.88.113",
       "port": 445,
-      "elapsed_ms": 10,
+      "elapsed_ms": 9,
       "error": ""
     },
     "findmnt": {
-      "status": "passed",
-      "exit_code": 0,
-      "stdout": "/mnt/complex-nas-backup //192.168.88.113/bn cifs   rw,relatime,vers=3.0,sec=ntlmssp,cache=strict,upcall_target=app,username=jxh1,uid=1000,forceuid,gid=1000,forcegid,addr=192.168.88.113,file_mode=0600,dir_mode=0700,iocharset=utf8,soft,nounix,serverino,mapposix,noperm,rsize=4194304,wsize=4194304,bsize=1048576,retrans=1,echo_interval=60,actimeo=1,closetimeo=1",
+      "status": "failed",
+      "exit_code": 1,
+      "stdout": "",
       "stderr": "",
       "parsed": {
-        "active": true,
-        "target": "/mnt/complex-nas-backup",
-        "source": "//192.168.88.113/bn",
-        "fstype": "cifs",
-        "options": "rw,relatime,vers=3.0,sec=ntlmssp,cache=strict,upcall_target=app,username=jxh1,uid=1000,forceuid,gid=1000,forcegid,addr=192.168.88.113,file_mode=0600,dir_mode=0700,iocharset=utf8,soft,nounix,serverino,mapposix,noperm,rsize=4194304,wsize=4194304,bsize=1048576,retrans=1,echo_interval=60,actimeo=1,closetimeo=1",
-        "exact_expected_cifs": true
+        "active": false
       }
     },
     "mount_path_state": {
       "exists": true,
-      "mode": "700",
-      "uid": 1000,
-      "gid": 1000,
+      "mode": "755",
+      "uid": 0,
+      "gid": 0,
       "is_directory": true,
       "is_file": false
     },
@@ -95,20 +90,20 @@
       "content_collected": false
     },
     "preflight": {
-      "status": "passed",
-      "exit_code": 0,
-      "stdout": "P0A_NAS_PREFLIGHT PASS\nmount_path=/mnt/complex-nas-backup\nnas_backup_target_dir=/mnt/complex-nas-backup\nretention_days=30\ncapacity_limit_bytes=1099511627776\nfree_bytes=31509759680512\nnas_unc=//192.168.88.113/bn\nmount_info=/mnt/complex-nas-backup //192.168.88.113/bn cifs   rw,relatime,vers=3.0,sec=ntlmssp,cache=strict,upcall_target=app,username=jxh1,uid=1000,forceuid,gid=1000,forcegid,addr=192.168.88.113,file_mode=0600,dir_mode=0700,iocharset=utf8,soft,nounix,serverino,mapposix,noperm,rsize=4194304,wsize=4194304,bsize=1048576,retrans=1,echo_interval=60,actimeo=1,closetimeo=1",
-      "stderr": ""
+      "status": "failed",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "P0A_NAS_PREFLIGHT FAIL: mount path is not an active mount point: /mnt/complex-nas-backup"
     }
   },
   "diagnostic_summary": {
     "network_ping_reachable": true,
     "smb_445_reachable": true,
-    "expected_cifs_mount_active": true,
-    "preflight_passed": true,
-    "live_status": "passed",
-    "root_cause": "expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence",
+    "expected_cifs_mount_active": false,
+    "preflight_passed": false,
+    "live_status": "failed",
+    "root_cause": "NAS host and SMB port are reachable, mount.cifs exists, but the expected CIFS mount is inactive and the current user has no passwordless sudo; IT must execute the controlled mount handoff",
     "production_manifest_can_close": false,
-    "next_action": "IT must backfill approved production manifests for automount, schedule, alert and drill evidence"
+    "next_action": "IT must use an approved sudo/root maintenance window to run the controlled mount handoff, then regenerate NAS drift and diagnostic reports"
   }
 }

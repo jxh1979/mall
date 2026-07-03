@@ -98,11 +98,11 @@
   },
   "gates": {
     "semgrep": {
-      "scan_dir": "security-scans/semgrep-20260623-180915-manual-request",
-      "results": 2,
-      "errors": 1,
-      "paths_scanned": 1896,
-      "clean": false
+      "scan_dir": "security-scans/semgrep-20260703-delivery-gates-clean",
+      "results": 0,
+      "errors": 0,
+      "paths_scanned": 1984,
+      "clean": true
     },
     "production_evidence": {
       "expected_submissions": 15,
@@ -123,9 +123,9 @@
       "complete": false
     },
     "nas_current_state": {
-      "live_status": "passed",
+      "live_status": "failed",
       "can_close_sec_p0_ops_recovery": false,
-      "reason": "current live mount is usable, but production manifest still needs IT owner, reviewer, approval, scheduled backup, alert and cadence evidence"
+      "reason": "current live mount check failed, and historical passed evidence cannot prove current automount or production recovery readiness"
     },
     "runtime_acceptance": {
       "backend_tests": 579,
@@ -139,12 +139,12 @@
       "ready_for_integration_and_business_acceptance": true
     },
     "nas_diagnostic": {
-      "live_status": "passed",
+      "live_status": "failed",
       "network_ping_reachable": true,
       "smb_445_reachable": true,
-      "expected_cifs_mount_active": true,
-      "preflight_passed": true,
-      "root_cause": "expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence"
+      "expected_cifs_mount_active": false,
+      "preflight_passed": false,
+      "root_cause": "NAS host and SMB port are reachable, mount.cifs exists, but the expected CIFS mount is inactive and the current user has no passwordless sudo; IT must execute the controlled mount handoff"
     },
     "external_evidence": {
       "partial_requirements": 9,
@@ -391,8 +391,8 @@
         "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
       }
     ],
-    "nas_next_action": "IT must backfill approved production manifests for automount, schedule, alert and drill evidence",
-    "nas_root_cause": "expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence",
+    "nas_next_action": "IT must use an approved sudo/root maintenance window to run the controlled mount handoff, then regenerate NAS drift and diagnostic reports",
+    "nas_root_cause": "NAS host and SMB port are reachable, mount.cifs exists, but the expected CIFS mount is inactive and the current user has no passwordless sudo; IT must execute the controlled mount handoff",
     "source_documents": [
       "docs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.json",
       "docs/production-readiness-evidence/production-blocker-register-latest.json",
@@ -403,12 +403,12 @@
     ]
   },
   "go_no_go": {
-    "can_enter_integration": false,
-    "can_enter_business_acceptance": false,
+    "can_enter_integration": true,
+    "can_enter_business_acceptance": true,
     "can_claim_production_ready": false,
     "production_ready_blockers": [
       "15 production evidence submissions awaiting, including 13 P0",
-      "NAS current state is passed; SEC-P0-OPS-RECOVERY-001 cannot close",
+      "NAS current state is failed; SEC-P0-OPS-RECOVERY-001 cannot close",
       "12 production blocker register items remain open (6 readiness, 4 credential, 2 security findings)",
       "9 external evidence or supplier-backed requirements remain partial"
     ]

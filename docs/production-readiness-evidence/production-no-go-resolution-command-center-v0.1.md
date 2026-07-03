@@ -20,9 +20,9 @@
 | 待提交 production evidence | 15/15 |
 | P0 待提交 production evidence | 13 |
 | open blocker | 12（readiness=6，credential=4，security=2） |
-| partial 外部/供应商需求 | 8 |
+| partial 外部/供应商需求 | 9 |
 | owner action 无 manifest 链接 | 0 |
-| NAS live status | passed |
+| NAS live status | failed |
 
 生产上线仍为 no-go，直到以下条件同时满足：40 份 manifest 均为 valid_submission、NAS 当前态通过、23 个 blocker 归零、8 条 partial 需求的真实外部证据完成回填。
 
@@ -30,7 +30,7 @@
 
 口径说明：`//192.168.88.113/bn` 是 NAS SMB 真实地址；`/mnt/complex-nas-backup` 只是 160 上用于访问该 SMB 共享的本地挂载点，不是 NAS 地址。
 
-当前 NAS 根因：expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence
+当前 NAS 根因：NAS host and SMB port are reachable, mount.cifs exists, but the expected CIFS mount is inactive and the current user has no passwordless sudo; IT must execute the controlled mount handoff
 
 | 字段 | 值 |
 | --- | --- |
@@ -81,13 +81,14 @@ IT 执行后，把 `/tmp/complex-nas-mount-evidence/*.json` 中的脱敏证据�
 | credential | P0 | PRD-CRED-JWT-001 | IT/安全/技术负责人 | pending_info | 设计签名版本、双验窗口、旧 token 失效计划 |
 | credential | P0 | PRD-CRED-NAS-001 | IT/运维/安全 | pending_info | IT 将真实密码写入安全保管位置或 160 受控凭证文件，不得写入文档、聊天或仓库 |
 | security_finding | P0 | SEC-P0-OPS-RECOVERY-001 | IT/安全/运维 | open | P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据 |
-| security_finding | P2 | SEC-P2-CSRF-API-001 | 后端/前端/安全 | open_for_prod_review | 正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核 |
+| security_finding | P2 | SEC-P2-CSRF-API-001 | 后端/前端/安全 | open_for_prod_review | 员工后台仍为 Bearer 头 token（无 cookie 环境凭证）；若后台改用 Cookie 会话再按 SameSite/双提交复核 |
 
 
 ## 6. 8 条 partial 外部/供应商需求
 
 | 需求 | 模块 | 证据 item | 责任组 | 待证据行 | manifest 数 | 关闭动作 |
 | --- | --- | --- | --- | --- | --- | --- |
+| # 总体标注(2026-06-22) | 全部模块 |  |  | 0 | 0 | Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement. |
 | REQ-17 | 酒吧 |  |  | 0 | 0 | Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement. |
 | REQ-21 | 酒吧 |  |  | 0 | 0 | Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement. |
 | REQ-23b | 酒吧 |  |  | 0 | 0 | Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement. |
