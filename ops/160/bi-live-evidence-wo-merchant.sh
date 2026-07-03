@@ -37,7 +37,8 @@ for i in $(seq 1 20); do
   OK=$(curl -s "$API/api/v1/analytics/dashboards/facility" -H "$AH" | python3 -c "
 import sys,json
 m=json.load(sys.stdin)['data'].get('metrics') or {}
-print('yes' if 'mwo.overdue_rate' in m and 'mwo.backlog' in m else 'no')
+def has(k): return (m.get(k) or {}).get('value') is not None
+print('yes' if has('mwo.overdue_rate') and has('mwo.backlog') else 'no')
 ")
   [ "$OK" = "yes" ] && break
   sleep 15
