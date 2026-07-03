@@ -30,4 +30,19 @@ class ServiceOrderControllerTerminalPolicyTests {
         assertThatCode(() -> ServiceOrderController.requireCompanyTerminal("  ", ALLOWED))
                 .doesNotThrowAnyException();
     }
+
+    @Test
+    void createAndPaymentCodeRejectPrivatePhone() {
+        assertThatThrownBy(() -> ServiceOrderController.requireCompanyTerminal(
+                "staff_private_phone", ServiceOrderController.CREATE_AND_CODE_TERMINALS))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("TERMINAL_NOT_ALLOWED"));
+    }
+
+    @Test
+    void createAndPaymentCodeAllowWorkPhone() {
+        assertThatCode(() -> ServiceOrderController.requireCompanyTerminal(
+                "staff_work_phone", ServiceOrderController.CREATE_AND_CODE_TERMINALS))
+                .doesNotThrowAnyException();
+    }
 }

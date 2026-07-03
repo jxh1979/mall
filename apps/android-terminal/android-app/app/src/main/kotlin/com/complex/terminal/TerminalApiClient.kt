@@ -94,7 +94,7 @@ class TerminalApiClient(
   fun submitStaffRegistration(request: StaffRegistrationSubmitRequest): StaffProfileRecord =
     post("/api/v1/staff/registrations", request)
 
-  // ── G批:服务点单(直付口径:收款码原文由服务端返回,App 重绘 QR) ──
+  // ── G批:服务点单(公司代收口径:收款码原文由服务端返回,App 重绘 QR) ──
 
   fun listServiceCatalog(): List<ServiceCatalogRow> = get("/api/v1/services/catalog")
 

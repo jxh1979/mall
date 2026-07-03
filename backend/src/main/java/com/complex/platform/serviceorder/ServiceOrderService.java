@@ -288,7 +288,7 @@ public class ServiceOrderService {
                 .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "service order not found"));
         if (current.status().equals("completed")) {
             throw ApiException.badRequest("ALREADY_COMPLETED",
-                    "completed service cannot be cancelled (direct pay already happened; disputes handled offline)");
+                    "服务单已完成履约并完成分账,不能取消;如需退款走财务退款流程");
         }
         if (current.status().equals("cancelled")) {
             return current;

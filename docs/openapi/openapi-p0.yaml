@@ -8335,7 +8335,7 @@ paths:
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
-        - staff_private_phone
+        - staff_work_phone
         - web
         - tablet
         - app
@@ -8725,7 +8725,7 @@ paths:
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
-        - staff_private_phone
+        - staff_work_phone
         - web
         - tablet
         - app
