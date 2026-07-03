@@ -395,14 +395,20 @@ class MainActivity : Activity() {
       val bill = billId.text.toString().trim()
       if (bill.isEmpty()) { status.text = "请输入账单 bill_id"; return@primaryButton }
       val cents = parseAmountCent(amount.text.toString()) ?: run { status.text = "金额格式不正确"; return@primaryButton }
-      status.text = "正在结算…"
-      runBackground(
-        action = { workflow.settleBarBill(bill, cents, channel.text.toString().trim().ifEmpty { "wechat" }) },
-        onSuccess = { b ->
-          status.text = "结算完成：账单 ${b.id}\n支付状态：${b.paymentStatus ?: "-"}，结算状态：${b.settlementStatus ?: "-"}"
-        },
-        onError = { status.text = "结算失败：${friendly(it)}" },
-      )
+      val ch = channel.text.toString().trim().ifEmpty { "wechat" }
+      confirmThen(
+        title = "结算账单",
+        message = "将按 ¥${"%.2f".format(cents / 100.0)}（渠道 $ch）结算账单 $bill。\n结算即确认收款完成、账单关闭，不可撤销。\n请确认客人已完成支付。",
+      ) {
+        status.text = "正在结算…"
+        runBackground(
+          action = { workflow.settleBarBill(bill, cents, ch) },
+          onSuccess = { b ->
+            status.text = "结算完成：账单 ${b.id}\n支付状态：${b.paymentStatus ?: "-"}，结算状态：${b.settlementStatus ?: "-"}"
+          },
+          onError = { status.text = "结算失败：${friendly(it)}" },
+        )
+      }
     }
 
     setContentView(
@@ -450,12 +456,17 @@ class MainActivity : Activity() {
     val confirmButton = secondaryButton("主管确认恢复运营") {
       val rid = recordId.text.toString().trim()
       if (rid.isEmpty()) { status.text = "请输入检修记录 record_id"; return@secondaryButton }
-      status.text = "正在确认…"
-      runBackground(
-        action = { workflow.confirmAmusementMaintenanceResume(rid) },
-        onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${rec.status}）" },
-        onError = { status.text = "确认失败：${friendly(it)}" },
-      )
+      confirmThen(
+        title = "主管确认恢复运营",
+        message = "将对检修记录 $rid 确认恢复运营。\n确认后设备立即对客开放，责任落在确认主管，不可撤销。\n请确认检修已完成且设备安全。",
+      ) {
+        status.text = "正在确认…"
+        runBackground(
+          action = { workflow.confirmAmusementMaintenanceResume(rid) },
+          onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${rec.status}）" },
+          onError = { status.text = "确认失败：${friendly(it)}" },
+        )
+      }
     }
 
     setContentView(
@@ -508,12 +519,17 @@ class MainActivity : Activity() {
       val vid = verificationId.text.toString().trim()
       val r = reason.text.toString().trim()
       if (vid.isEmpty() || r.isEmpty()) { status.text = "请填写记录与原因"; return@primaryButton }
-      status.text = "正在冲正…"
-      runBackground(
-        action = { workflow.reverseVerification(vid, r) },
-        onSuccess = { res -> status.text = "冲正完成：${res.id}（状态 ${res.status}）" },
-        onError = { status.text = "冲正失败：${friendly(it)}" },
-      )
+      confirmThen(
+        title = "核销冲正",
+        message = "将冲正核销记录 $vid（原因：$r）。\n冲正即撤销原核销结果，不可恢复。",
+      ) {
+        status.text = "正在冲正…"
+        runBackground(
+          action = { workflow.reverseVerification(vid, r) },
+          onSuccess = { res -> status.text = "冲正完成：${res.id}（状态 ${res.status}）" },
+          onError = { status.text = "冲正失败：${friendly(it)}" },
+        )
+      }
     }
 
     setContentView(
@@ -553,6 +569,16 @@ class MainActivity : Activity() {
           .onFailure { onError(it) }
       }
     }
+  }
+
+  /** 高危操作二次确认（照后台 HighRiskConfirm 语义）：标题=动作，内容=影响+不可逆说明+关键参数回显。 */
+  private fun confirmThen(title: String, message: String, onConfirm: () -> Unit) {
+    android.app.AlertDialog.Builder(this)
+      .setTitle(title)
+      .setMessage(message)
+      .setPositiveButton("确定") { _, _ -> onConfirm() }
+      .setNegativeButton("取消", null)
+      .show()
   }
 
   private fun requireBindingOr(status: TextView, block: () -> Unit) {
@@ -946,11 +972,16 @@ class MainActivity : Activity() {
     val paidButton = primaryButton("已收款到公司账户(目视支付成功)") {
       val id = lastOrderId.text.toString().trim()
       if (id.isEmpty()) { status.text = "请先下单"; return@primaryButton }
-      runBackground(
-        action = { api.markServiceOrderPaid(id, ServiceMarkPaidReq("mp_${System.currentTimeMillis()}")) },
-        onSuccess = { status.text = "已确认收款(公司账户):${it.id};舞者可上台" },
-        onError = { status.text = "确认收款失败：${friendly(it)}" },
-      )
+      confirmThen(
+        title = "确认收款到公司账户",
+        message = "将把服务单 $id 标记为已收款（公司统一账户）。\n标记后服务进入履约与分账流程，不可撤回。\n请先目视确认客人支付成功。",
+      ) {
+        runBackground(
+          action = { api.markServiceOrderPaid(id, ServiceMarkPaidReq("mp_${System.currentTimeMillis()}")) },
+          onSuccess = { status.text = "已确认收款(公司账户):${it.id};舞者可上台" },
+          onError = { status.text = "确认收款失败：${friendly(it)}" },
+        )
+      }
     }
     val completeButton = primaryButton("完成履约(跳完点这里)") {
       val id = lastOrderId.text.toString().trim()
