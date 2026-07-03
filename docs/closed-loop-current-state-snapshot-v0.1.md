@@ -36,11 +36,11 @@
 
 | 文件 | 当前行数 |
 |---|---:|
-| `apps/web/src/main.tsx` | 49 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 487 |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 627 |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1008 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 570 |
+| `apps/web/src/main.tsx` | 55 |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 502 |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 649 |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1108 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 600 |
 | `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 453 |
 
 ## 4. 安全与生产证据闸口
@@ -114,7 +114,7 @@
 | finding_id | severity | owner | status | blocking_scope | next_action |
 | --- | --- | --- | --- | --- | --- |
 | SEC-P0-OPS-RECOVERY-001 | P0 | IT/安全/运维 | open | 阻塞公开生产安全准入；不阻塞开发联调 | P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据 |
-| SEC-P2-CSRF-API-001 | P2 | 后端/前端/安全 | open_for_prod_review | 不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产 | 正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核 |
+| SEC-P2-CSRF-API-001 | P2 | 后端/前端/安全 | open_for_prod_review | 不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产 | 员工后台仍为 Bearer 头 token（无 cookie 环境凭证）；若后台改用 Cookie 会话再按 SameSite/双提交复核 |
 
 ### 6.5 NAS 当前态下一步
 
