@@ -727,7 +727,7 @@ public class StaffService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) is required");
             }
             var actor = authorizationService.currentActor();
-            int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now());
+            int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now(), projectScope());
             auditEventService.recordSuccess("staff.payroll.month_closed", "staff.payroll.manage",
                     "staff_payroll_statement", request.month(), null, request.idempotencyKey(),
                     java.util.Map.of("month", request.month(), "statements", count));

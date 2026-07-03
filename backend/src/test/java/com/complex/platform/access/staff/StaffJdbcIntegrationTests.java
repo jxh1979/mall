@@ -562,4 +562,58 @@ class StaffJdbcIntegrationTests {
     private List<String> permissionCodes() {
         return jdbcTemplate.queryForList("SELECT permission_code FROM permissions", String.class);
     }
+    @org.junit.jupiter.api.Test
+    void closePayrollScopedRunOnlyTouchesCallerProjectNeverOtherProjects() {
+        // P0 项目级月结(V214 收口):项目 HR(scope=project_main)月结只重算/覆盖本综合体员工,
+        // 绝不 INSERT/覆盖其他项目(prj_other)的薪资单;平台口径(scope=null)仍全量。
+        authenticateAsPlatformAdmin();
+        String month = "2099-09";
+        String userMain = "usr_scope_main_" + key();
+        String userOther = "usr_scope_other_" + key();
+        seedProfile("project_main", userMain);
+        seedProfile("prj_other", userOther);
+        // 两员工都有薪资要素(固定工资)→ 无 scope 时都会出单。
+        jdbcTemplate.update("INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_at, project_id) "
+                + "VALUES (?, 300000, now(), 'project_main')", userMain);
+        jdbcTemplate.update("INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_at, project_id) "
+                + "VALUES (?, 700000, now(), 'prj_other')", userOther);
+
+        // (1) project_main 口径月结:只生成本项目员工薪资单。
+        int mainCount = repository.closePayrollMonth(month, "usr_admin", Instant.now(), "project_main");
+        assertThat(statementTotal(month, userMain)).isEqualTo(300000L);
+        assertThat(statementExists(month, userOther)).isFalse();
+        assertThat(mainCount).isEqualTo(1);
+
+        // (2) prj_other 已有薪资单(平台口径生成),再跑 project_main 口径不得覆盖它。
+        repository.closePayrollMonth(month, "usr_admin", Instant.now(), "prj_other");
+        assertThat(statementTotal(month, userOther)).isEqualTo(700000L);
+        // 篡改 prj_other 底薪后,只跑 project_main 口径月结 → prj_other 薪资单必须原封不动。
+        jdbcTemplate.update("UPDATE staff_base_salaries SET monthly_salary_cent = 999999 WHERE user_id = ?", userOther);
+        repository.closePayrollMonth(month, "usr_admin", Instant.now(), "project_main");
+        assertThat(statementTotal(month, userOther)).isEqualTo(700000L);   // 未被越权重算/覆盖
+
+        // (3) 平台口径(null)仍能全量重算(覆盖 prj_other 到最新)。
+        repository.closePayrollMonth(month, "usr_admin", Instant.now(), null);
+        assertThat(statementTotal(month, userOther)).isEqualTo(999999L);
+    }
+
+    private void seedProfile(String projectId, String userId) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash,
+                        registration_status, status, created_at, updated_at)
+                VALUES (?, ?, NULL, ?, 'scoped', 'sha256:p', 'sha256:i', 'approved', 'active', now(), now())
+                """, "stf_" + key(), projectId, userId);
+    }
+
+    private boolean statementExists(String month, String userId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_payroll_statements WHERE month = ? AND user_id = ?",
+                Integer.class, month, userId) > 0;
+    }
+
+    private Long statementTotal(String month, String userId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT total_cent FROM staff_payroll_statements WHERE month = ? AND user_id = ?",
+                Long.class, month, userId);
+    }
 }
