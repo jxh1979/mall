@@ -46,6 +46,10 @@ public class ServiceOrderController {
             java.util.Set.of("staff_work_phone", "web", "tablet");
     private static final java.util.Set<String> COMPLETE_TERMINALS =
             java.util.Set.of("staff_work_phone", "web");
+    /** 2026-07-03 补齐:代客下单(create)/出示公司收款码(payment-code)同为卡座现场动作,禁私人手机;
+     * app=客人App自点预留,保留。与 openapi-p0 两 operation 的 x-terminal-allowed 一致。 */
+    static final java.util.Set<String> CREATE_AND_CODE_TERMINALS =
+            java.util.Set.of("staff_work_phone", "web", "tablet", "app");
 
     @GetMapping("/catalog")
     public ApiResponse<PageResponse<ServiceCatalogItemRecord>> listCatalog() {
@@ -79,7 +83,9 @@ public class ServiceOrderController {
 
     @PostMapping("/orders")
     public ApiResponse<ServiceOrderRecord> createOrder(
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
+        requireCompanyTerminal(terminalType, CREATE_AND_CODE_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createOrder(request));
     }
@@ -135,7 +141,9 @@ public class ServiceOrderController {
     }
 
     @GetMapping("/orders/{id}/payment-code")
-    public ApiResponse<Map<String, String>> orderPaymentCode(@PathVariable String id) {
+    public ApiResponse<Map<String, String>> orderPaymentCode(@PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType) {
+        requireCompanyTerminal(terminalType, CREATE_AND_CODE_TERMINALS);
         return ApiResponse.ok(service.orderPaymentCode(id));
     }
 
