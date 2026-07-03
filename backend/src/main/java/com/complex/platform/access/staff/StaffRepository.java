@@ -49,6 +49,9 @@ public interface StaffRepository {
     // --- E1/E2 排班与考勤(2026-07-02 拍板) ---
     StaffShiftRecord upsertShift(StaffShiftRecord shift);
 
+    /** 清单 P1(2026-07-03 审计):解析员工所属项目(staff_profiles,最新一条);跨项目写/审批隔离用。 */
+    java.util.Optional<String> findUserProjectId(String userId);
+
     java.util.List<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId, String projectScope);
 
     java.util.List<StaffShiftRecord> listShiftsForUserBetween(String userId,

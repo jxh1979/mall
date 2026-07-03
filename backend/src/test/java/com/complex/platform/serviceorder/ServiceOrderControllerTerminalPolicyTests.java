@@ -20,15 +20,23 @@ class ServiceOrderControllerTerminalPolicyTests {
     }
 
     @Test
-    void companyDevicesAndAbsentHeaderPass() {
+    void companyDevicesPass() {
         assertThatCode(() -> ServiceOrderController.requireCompanyTerminal("staff_work_phone", ALLOWED))
                 .doesNotThrowAnyException();
         assertThatCode(() -> ServiceOrderController.requireCompanyTerminal("web", ALLOWED))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> ServiceOrderController.requireCompanyTerminal(null, ALLOWED))
-                .doesNotThrowAnyException();
-        assertThatCode(() -> ServiceOrderController.requireCompanyTerminal("  ", ALLOWED))
-                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void absentOrBlankHeaderIsRejected() {
+        // 清单 P1(2026-07-03 审计):现场资金动作 fail-closed——缺省/空白终端头不再放行
+        // (正规客户端 web/staff_work_phone/tablet 均发标识,只挡无标识绕过)。
+        assertThatThrownBy(() -> ServiceOrderController.requireCompanyTerminal(null, ALLOWED))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("TERMINAL_NOT_ALLOWED"));
+        assertThatThrownBy(() -> ServiceOrderController.requireCompanyTerminal("  ", ALLOWED))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("TERMINAL_NOT_ALLOWED"));
     }
 
     @Test

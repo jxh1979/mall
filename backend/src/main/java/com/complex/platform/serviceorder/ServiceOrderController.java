@@ -28,13 +28,14 @@ public class ServiceOrderController {
         }
     }
 
-    /** 2026-07-03 用户裁决:私人手机不允许带入工作现场——确认收款(mark-paid)/完成履约(complete)
-     * 为必须现场完成的资金动作,仅允许公司设备(工作手机 staff_work_phone / 后台 web / 平板)。
-     * 终端头缺省的调用(webhook/测试/历史脚本)不进此闸,与 TerminalMasterSwitchInterceptor 同一口径;
-     * 允许清单与 openapi-p0 两 operation 的 x-terminal-allowed 一致。 */
+    /** 2026-07-03 用户裁决 + 审计 P1 收紧:私人手机不允许带入工作现场——确认收款(mark-paid)/完成履约(complete)/
+     * 下单/出示公司收款码为必须现场完成的资金动作,仅允许公司设备(工作手机 staff_work_phone / 后台 web / 平板)。
+     * fail-closed:缺省/空白 X-Terminal-Type 一律拒绝(正规客户端 web/staff_work_phone/tablet 均发标识,
+     * 只挡无标识绕过);允许清单与 openapi-p0 两 operation 的 x-terminal-allowed 一致。 */
     static void requireCompanyTerminal(String terminalType, java.util.Set<String> allowed) {
         if (terminalType == null || terminalType.isBlank()) {
-            return;
+            throw ApiException.forbidden("TERMINAL_NOT_ALLOWED",
+                    "on-site money operations require a company terminal (missing X-Terminal-Type)");
         }
         if (!allowed.contains(terminalType)) {
             throw ApiException.forbidden("TERMINAL_NOT_ALLOWED",

@@ -130,6 +130,8 @@ public class ServiceOrderService {
                 || request.performerUserId() == null || request.performerUserId().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "catalog_item_id and performer_user_id required");
         }
+        // 清单 P1:项目员工只可为本综合体履约人下单(空 scope=平台放行)。守卫先于目录查找。
+        requirePerformerInScope(request.performerUserId().trim());
         ServiceCatalogItemRecord item = repository.findCatalogItem(request.catalogItemId().trim())
                 .filter(ServiceCatalogItemRecord::active)
                 .orElseThrow(() -> ApiException.notFound("SERVICE_ITEM_NOT_FOUND", "service item not found or inactive"));
@@ -188,6 +190,7 @@ public class ServiceOrderService {
 
     private ServiceOrderRecord doMarkPaid(String id, com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
         ServiceOrderRecord current = require(id);
+        requirePerformerInScope(current.performerUserId());
         if (!current.status().equals("created")) {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "order status is " + current.status() + ", expecting created");
@@ -224,6 +227,7 @@ public class ServiceOrderService {
 
     private ServiceOrderRecord doComplete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
         ServiceOrderRecord current = require(id);
+        requirePerformerInScope(current.performerUserId());
         if (!current.status().equals("paid") && !current.status().equals("accepted")) {
             throw ApiException.badRequest("NOT_PAID_YET",
                     "order must be paid (company account) before completion; status=" + current.status());
@@ -260,6 +264,18 @@ public class ServiceOrderService {
                 .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "service order not found"));
     }
 
+    /** 清单 P1(2026-07-03 审计):按项目 scope 守卫——项目员工只可操作本综合体履约人的服务单;
+     * 平台管理员(空 scope)放行。scope 由 token 派生(currentProjectScopeQuietly),不取请求体。 */
+    private void requirePerformerInScope(String performerUserId) {
+        authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
+            String performerProject = staffRepository.findUserProjectId(performerUserId).orElse(null);
+            if (!scope.equals(performerProject)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
+                        "service order performer is out of the caller's project scope");
+            }
+        });
+    }
+
     private ServiceOrderRecord persistStatus(ServiceOrderRecord current, String toStatus, Instant completedAt,
             String event, String idempotencyKey) {
         Instant now = Instant.now();
@@ -289,6 +305,7 @@ public class ServiceOrderService {
         }
         ServiceOrderRecord current = repository.findOrder(id)
                 .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "service order not found"));
+        requirePerformerInScope(current.performerUserId());
         if (current.status().equals("completed")) {
             throw ApiException.badRequest("ALREADY_COMPLETED",
                     "服务单已完成履约并完成分账,不能取消;如需退款走财务退款流程");
@@ -317,6 +334,7 @@ public class ServiceOrderService {
     public Map<String, String> orderPaymentCode(String id) {
         authorizationService.requirePermission("service.order.create");
         ServiceOrderRecord order = require(id);
+        requirePerformerInScope(order.performerUserId());
         String qr = repository.companyPayQr();
         if (qr.isBlank()) {
             throw ApiException.badRequest("COMPANY_PAY_QR_NOT_CONFIGURED",

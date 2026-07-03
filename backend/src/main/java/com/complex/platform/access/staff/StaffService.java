@@ -407,6 +407,7 @@ public class StaffService {
         if (!request.endAt().isAfter(request.startAt())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "end_at must be after start_at");
         }
+        requireUserInScope(request.userId().trim());
         var actor = authorizationService.currentActor();
         Instant now = Instant.now();
         StaffShiftRecord saved = repository.upsertShift(new StaffShiftRecord(
@@ -608,6 +609,18 @@ public class StaffService {
         return authorizationService.currentProjectScopeQuietly().orElse(null);
     }
 
+    /** 清单 P1(2026-07-03 审计):按项目 scope 守卫写/审批——项目主管只可操作本综合体员工;
+     * 平台管理员(空 scope)放行。scope 由 token 派生,不取请求体。 */
+    private void requireUserInScope(String userId) {
+        authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
+            String userProject = repository.findUserProjectId(userId).orElse(null);
+            if (!scope.equals(userProject)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
+                        "staff member is out of the caller's project scope");
+            }
+        });
+    }
+
     /** F批(2026-07-02 拍板):固定工资=员工档案月薪,人事维护。 */
     public void setBaseSalary(com.complex.platform.access.staff.dto.StaffPayrollBaseRequest request) {
         try {
@@ -616,6 +629,7 @@ public class StaffService {
                     || request.monthlySalaryCent() == null || request.monthlySalaryCent() < 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "user_id and non-negative monthly_salary_cent required");
             }
+            requireUserInScope(request.userId().trim());
             var actor = authorizationService.currentActor();
             repository.upsertBaseSalary(request.userId().trim(), request.monthlySalaryCent(),
                     actor == null ? null : actor.id(), Instant.now());
@@ -656,6 +670,7 @@ public class StaffService {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "user_id/month(YYYY-MM)/adj_type(bonus|penalty)/amount_cent>0/reason are required");
         }
+        requireUserInScope(request.userId().trim());
         var actor = authorizationService.currentActor();
         String id = "adj_" + UUID.randomUUID();
         repository.insertPayrollAdjustment(id, request.userId().trim(), request.month(), request.adjType(),
@@ -690,6 +705,7 @@ public class StaffService {
                 || request.amountCent() == null || request.amountCent() < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "user_id/month/amount_cent>=0 required");
         }
+        requireUserInScope(request.userId().trim());
         var actor = authorizationService.currentActor();
         String id = "cml_" + UUID.randomUUID();
         repository.insertCommission(id, request.userId().trim(), request.month(),
@@ -793,6 +809,7 @@ public class StaffService {
             }
             StaffLeaveRequestRecord current = repository.findLeaveById(id)
                     .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "leave request not found"));
+            requireUserInScope(current.userId());
             if (!current.status().equals("pending")) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "leave request already reviewed");
             }

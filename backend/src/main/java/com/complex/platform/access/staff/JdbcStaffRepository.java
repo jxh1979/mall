@@ -73,6 +73,14 @@ class JdbcStaffRepository implements StaffRepository {
     }
 
     @Override
+    public java.util.Optional<String> findUserProjectId(String userId) {
+        return jdbcTemplate.query(
+                "SELECT project_id FROM staff_profiles WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("user_id", userId),
+                (rs, n) -> rs.getString("project_id")).stream().findFirst();
+    }
+
+    @Override
     public int closePayrollMonth(String month, String closedBy, java.time.Instant now) {
         // 月结重算:固定档案 + 台账提成 + 酒吧提成(bar_commission_calculations 按月/非作废) + 奖 - 罚;
         // 有任一薪资要素的员工都出单;幂等覆盖(uq user+month)。
