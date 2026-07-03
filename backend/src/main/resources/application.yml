@@ -1,6 +1,8 @@
 server:
   port: ${COMPLEX_API_PORT:8080}
   address: ${COMPLEX_API_HOST:127.0.0.1}
+  # TLS 终止反代场景：让 request.isSecure()/scheme 采信 X-Forwarded-* 头，从而正确判定 HTTPS（客人会话 cookie 的 Secure 标记依赖于此）。
+  forward-headers-strategy: framework
 
 spring:
   application:

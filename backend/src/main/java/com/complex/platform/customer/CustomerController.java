@@ -32,9 +32,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class CustomerController {
 
     private final CustomerService service;
+    // 生产环境强制会话 cookie Secure：即便 request.isSecure() 因反代配置误判为 http，
+    // prod 也钉死 secure=true（dev/local 保持依赖 isSecure，便于本地 http 调试）。
+    private final boolean forceSecureCookie;
 
-    public CustomerController(CustomerService service) {
+    public CustomerController(CustomerService service, org.springframework.core.env.Environment environment) {
         this.service = service;
+        this.forceSecureCookie = environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"));
     }
 
     @PostMapping("/auth/phone-login")
@@ -47,7 +51,7 @@ public class CustomerController {
         // body 仍返回 token 供头 token 调用方（小程序/App/Android）使用，两轨并行。
         long maxAge = java.time.Duration.between(java.time.Instant.now(), login.expiresAt()).getSeconds();
         httpResponse.addHeader("Set-Cookie",
-                sessionCookie(login.customerToken(), Math.max(0, maxAge), httpRequest.isSecure()));
+                sessionCookie(login.customerToken(), Math.max(0, maxAge), forceSecureCookie || httpRequest.isSecure()));
         return ApiResponse.ok(login);
     }
 
@@ -55,7 +59,7 @@ public class CustomerController {
     @PostMapping("/auth/logout")
     public ApiResponse<Void> logout(jakarta.servlet.http.HttpServletRequest httpRequest,
             jakarta.servlet.http.HttpServletResponse httpResponse) {
-        httpResponse.addHeader("Set-Cookie", sessionCookie("", 0, httpRequest.isSecure()));
+        httpResponse.addHeader("Set-Cookie", sessionCookie("", 0, forceSecureCookie || httpRequest.isSecure()));
         return ApiResponse.ok(null);
     }
 
