@@ -12,6 +12,17 @@ import type { AdminPageProps, FinanceLedgerRow } from "../types";
 // 后端写权限码（与 FinanceController.requirePermission 对齐）
 const PAYMENT_PERMISSION = "finance.payment.register";
 
+// 凭证号：后端 ar-ap-items 返回 item_no（camel 后 itemNo）；billNo/sourceDoc 仅作旧数据兜底。
+function voucherNo(row: FinanceLedgerRow): string {
+  return row.itemNo ?? row.billNo ?? row.sourceDoc ?? row.id;
+}
+
+// 金额列：分转元两位小数（等宽数字由 tabular-nums 保证），缺失不伪造。
+function centToYuan(cent: number | undefined): string {
+  if (cent === undefined || cent === null || Number.isNaN(Number(cent))) return "—";
+  return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
+}
+
 export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<FinanceLedgerRow[]>([]);
   const { setSelectedId, selected } = useSelectedRow(rows);
@@ -31,8 +42,9 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
 
   const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
   const sort = useSortedRows(filteredRows, {
-    voucher: (row) => row.billNo ?? row.sourceDoc,
+    voucher: (row) => voucherNo(row),
     direction: (row) => row.direction,
+    dueDate: (row) => row.dueDate,
     status: (row) => row.status,
   });
   const paged = usePagedRows(sort.sorted, 10, `${query}:${sort.key}:${sort.direction}`);
@@ -128,12 +140,14 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="finance-ledger-table">
-            <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th></tr></thead>
+            <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sort.indicator("dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th></tr></thead>
             <tbody>{paged.pageRows.map((row) => (
               <tr key={row.id}>
-                <td><input type="radio" data-testid={`finance-ledger-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
-                <td>{row.billNo ?? row.sourceDoc}</td>
+                <td><input type="radio" aria-label={`选择凭证 ${voucherNo(row)}`} data-testid={`finance-ledger-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                <td>{voucherNo(row)}</td>
                 <td>{row.direction ?? "receivable"}</td>
+                <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{centToYuan(row.unpaidAmountCent)} / {centToYuan(row.amountCent)}</td>
+                <td>{row.dueDate ?? "—"}</td>
                 <td>{row.status}</td>
               </tr>
             ))}</tbody>

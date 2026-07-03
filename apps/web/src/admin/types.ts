@@ -35,6 +35,14 @@ export type AdminNavGroup =
   | "audit"
   | "ops";
 
+/**
+ * 账号形态（用户裁决：菜单按形态直接隐藏）：
+ * - platform：平台/员工账号（无 merchantId、非外包）；
+ * - merchant：商户归属账号（user.merchantId 非空）；
+ * - vendor：外包机构账号（accountType=outsourced_vendor）。
+ */
+export type AdminAccountForm = "platform" | "merchant" | "vendor";
+
 export type AdminRoute = {
   pageId: string;
   label: string;
@@ -43,6 +51,8 @@ export type AdminRoute = {
   /** 导航业务域分组键；缺省时回落到 module 文案展示。 */
   group?: AdminNavGroup;
   requiredPermissions: string[];
+  /** 仅这些账号形态可见/可进入；缺省=全部形态。不匹配的账号菜单不渲染，直链显示业务化提示。 */
+  accountForms?: AdminAccountForm[];
 };
 
 export type AdminApiClient = {
@@ -415,10 +425,17 @@ export type StockMovementRow = {
 
 export type FinanceLedgerRow = {
   id: string;
+  /** 后端 ar-ap-items 真实凭证号字段（item_no → itemNo）。 */
+  itemNo?: string;
   billNo?: string;
   sourceDoc?: string;
   counterparty?: string;
   direction?: string;
+  /** 单位：分（amount_cent / paid_amount_cent / unpaid_amount_cent）。 */
+  amountCent?: number;
+  paidAmountCent?: number;
+  unpaidAmountCent?: number;
+  dueDate?: string;
   totalAmount?: number;
   amount?: number;
   paidAmount?: number;
