@@ -37,7 +37,28 @@ public class ServiceOrderService {
         this.idempotencyService = idempotencyService;
     }
 
+    /** openapi-p0 契约:失败路径落 x-audit-event-failure 事件后再抛(审计闭合,2026-07-03 P1)。 */
+    private <T> T withFailureAudit(String failureEvent, String permissionCode, String businessType,
+            String businessId, String idempotencyKey, java.util.function.Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(failureEvent, permissionCode, businessType, businessId,
+                    null, idempotencyKey,
+                    exception instanceof ApiException apiException ? apiException.code()
+                            : exception.getClass().getSimpleName());
+            throw exception;
+        }
+    }
+
     public ServiceCatalogItemRecord upsertCatalogItem(com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest request) {
+        return withFailureAudit("service.catalog.save_failed", "service.catalog.manage",
+                "service_catalog_item", request == null ? null : request.id(),
+                request == null ? null : request.idempotencyKey(),
+                () -> doUpsertCatalogItem(request));
+    }
+
+    private ServiceCatalogItemRecord doUpsertCatalogItem(com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest request) {
         authorizationService.requirePermission("service.catalog.manage");
         if (request == null || request.name() == null || request.name().isBlank()
                 || request.priceCent() == null || request.priceCent() < 0) {
@@ -94,10 +115,13 @@ public class ServiceOrderService {
     /** 口径②③:代客下单+指定履约人;价格与名称取目录快照;履约人须已录收款码(否则客人没法付)。
      * P0 真幂等(2026-07-03):幂等键唯一占位+命中重放首次结果,重复提交不再重复建单。 */
     public ServiceOrderRecord createOrder(com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
-        authorizationService.requirePermission("service.order.create");
-        return idempotencyService.execute("createServiceOrder",
-                request == null ? null : request.idempotencyKey(), request,
-                () -> doCreateOrder(request), ServiceOrderRecord.class);
+        return withFailureAudit("service.order.create_failed", "service.order.create",
+                "service_order", null, request == null ? null : request.idempotencyKey(), () -> {
+            authorizationService.requirePermission("service.order.create");
+            return idempotencyService.execute("createServiceOrder",
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doCreateOrder(request), ServiceOrderRecord.class);
+        });
     }
 
     private ServiceOrderRecord doCreateOrder(com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
@@ -131,10 +155,13 @@ public class ServiceOrderService {
 
     /** 兼容保留(舞者工作时无手机,新流程不经 accept——created→paid 后由服务员直接完成)。 */
     public ServiceOrderRecord accept(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
-        authorizationService.requirePermission("service.order.perform");
-        return idempotencyService.execute("acceptServiceOrder:" + id,
-                request == null ? null : request.idempotencyKey(), request,
-                () -> doAccept(id, request), ServiceOrderRecord.class);
+        return withFailureAudit("service.order.accept_failed", "service.order.perform",
+                "service_order", id, request == null ? null : request.idempotencyKey(), () -> {
+            authorizationService.requirePermission("service.order.perform");
+            return idempotencyService.execute("acceptServiceOrder:" + id,
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doAccept(id, request), ServiceOrderRecord.class);
+        });
     }
 
     private ServiceOrderRecord doAccept(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
@@ -149,10 +176,13 @@ public class ServiceOrderService {
     /** H批:服务员现场目视客人扫公司收款码支付成功 → 确认收款(钱进公司账户,财务可对账)。
      * P0 真幂等:资金确认动作,重复提交重放首次结果。 */
     public ServiceOrderRecord markPaid(String id, com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
-        authorizationService.requirePermission("service.order.create");
-        return idempotencyService.execute("markServiceOrderPaid:" + id,
-                request == null ? null : request.idempotencyKey(), request,
-                () -> doMarkPaid(id, request), ServiceOrderRecord.class);
+        return withFailureAudit("service.order.pay_confirm_failed", "service.order.create",
+                "service_order", id, request == null ? null : request.idempotencyKey(), () -> {
+            authorizationService.requirePermission("service.order.create");
+            return idempotencyService.execute("markServiceOrderPaid:" + id,
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doMarkPaid(id, request), ServiceOrderRecord.class);
+        });
     }
 
     private ServiceOrderRecord doMarkPaid(String id, com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
@@ -182,10 +212,13 @@ public class ServiceOrderService {
      * 完成时分账:管理费(目录比例/固定)归公司,余额写提成台账归舞者(月结进薪资并代扣个税)。
      * P0 真幂等:分账+提成入台账为资金动作,重复提交重放首次结果,提成不重复入账。 */
     public ServiceOrderRecord complete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
-        authorizationService.requirePermission("service.order.create");
-        return idempotencyService.execute("completeServiceOrder:" + id,
-                request == null ? null : request.idempotencyKey(), request,
-                () -> doComplete(id, request), ServiceOrderRecord.class);
+        return withFailureAudit("service.order.complete_failed", "service.order.create",
+                "service_order", id, request == null ? null : request.idempotencyKey(), () -> {
+            authorizationService.requirePermission("service.order.create");
+            return idempotencyService.execute("completeServiceOrder:" + id,
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doComplete(id, request), ServiceOrderRecord.class);
+        });
     }
 
     private ServiceOrderRecord doComplete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
@@ -240,6 +273,12 @@ public class ServiceOrderService {
 
     /** 口径⑤:履约前可取消(下单者或目录管理岗),留原因;完成后不可退。 */
     public ServiceOrderRecord cancel(String id, com.complex.platform.serviceorder.dto.ServiceOrderCancelRequest request) {
+        return withFailureAudit("service.order.cancel_failed", "service.order.create",
+                "service_order", id, request == null ? null : request.idempotencyKey(),
+                () -> doCancel(id, request));
+    }
+
+    private ServiceOrderRecord doCancel(String id, com.complex.platform.serviceorder.dto.ServiceOrderCancelRequest request) {
         authorizationService.requirePermission("service.order.create");
         if (request == null || request.reason() == null || request.reason().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "cancel reason is required");
@@ -285,14 +324,18 @@ public class ServiceOrderService {
 
     /** H批:公司统一收款码配置(经营配置;财务对账基准)。 */
     public void setPayConfig(com.complex.platform.serviceorder.dto.ServicePayConfigRequest request) {
-        authorizationService.requirePermission("service.catalog.manage");
-        if (request == null || request.qrContent() == null || request.qrContent().isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "qr_content is required");
-        }
-        var actor = authorizationService.currentActor();
-        repository.upsertPayConfig(request.qrContent().trim(), actor == null ? null : actor.id(), Instant.now());
-        auditEventService.recordSuccess("service.pay_config.saved", "service.catalog.manage",
-                "service_pay_config", "default", null, request.idempotencyKey(), Map.of());
+        withFailureAudit("service.pay_config.save_failed", "service.catalog.manage",
+                "service_pay_config", "default", request == null ? null : request.idempotencyKey(), () -> {
+            authorizationService.requirePermission("service.catalog.manage");
+            if (request == null || request.qrContent() == null || request.qrContent().isBlank()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "qr_content is required");
+            }
+            var actor = authorizationService.currentActor();
+            repository.upsertPayConfig(request.qrContent().trim(), actor == null ? null : actor.id(), Instant.now());
+            auditEventService.recordSuccess("service.pay_config.saved", "service.catalog.manage",
+                    "service_pay_config", "default", null, request.idempotencyKey(), Map.of());
+            return null;
+        });
     }
 
     public Map<String, String> payConfig() {

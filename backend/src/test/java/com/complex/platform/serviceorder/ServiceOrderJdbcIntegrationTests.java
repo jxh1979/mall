@@ -202,6 +202,32 @@ class ServiceOrderJdbcIntegrationTests {
                         e -> assertThat(e.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
     }
 
+    @Test
+    void failurePathsRecordDeclaredFailureAuditEvents() {
+        // P1 审计闭合:失败路径按 openapi x-audit-event-failure 落审计事件后再抛。
+        assertThatThrownBy(() -> service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                key(), "svc_missing_" + key(), "usr_admin", null, null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("SERVICE_ITEM_NOT_FOUND"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='service.order.create_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+
+        assertThatThrownBy(() -> service.complete("svo_missing_" + key(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderActionRequest(key())))
+                .isInstanceOf(ApiException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='service.order.complete_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+
+        assertThatThrownBy(() -> service.markPaid("svo_missing_" + key(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest(key(), null)))
+                .isInstanceOf(ApiException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='service.order.pay_confirm_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }

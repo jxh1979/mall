@@ -509,6 +509,33 @@ class StaffJdbcIntegrationTests {
                 "SELECT COUNT(*) FROM staff_leave_requests WHERE reason='幂等测试请假'", Integer.class)).isEqualTo(1);
     }
 
+    @org.junit.jupiter.api.Test
+    void failurePathsRecordDeclaredFailureAuditEvents() {
+        // P1 审计闭合:失败路径按 openapi x-audit-event-failure 落审计事件后再抛。
+        authenticateAsPlatformAdmin();
+        assertThatThrownBy(() -> service.addPayrollAdjustment(
+                new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
+                        key(), "usr_admin", "2099-05", "penalty", 100L, " ")))
+                .isInstanceOf(ApiException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='staff.payroll.adjustment_add_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+
+        assertThatThrownBy(() -> service.closePayroll(
+                new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), "not-a-month")))
+                .isInstanceOf(ApiException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='staff.payroll.month_close_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+
+        assertThatThrownBy(() -> service.reviewLeave("lv_missing_" + key(),
+                new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", null)))
+                .isInstanceOf(ApiException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='staff.leave.review_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }
