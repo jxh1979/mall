@@ -1164,7 +1164,7 @@ class MainActivity : Activity() {
       runBackground(
         action = { api.setMyPaymentCode(PaymentCodeReq("pc_${System.currentTimeMillis()}", qr)) },
         onSuccess = {
-          status.text = "已保存;下单页会向客人出示此码"
+          status.text = "已保存(仅历史保留,不再向客人出示;收款走公司统一账户)"
           runCatching {
             qrImage.setImageBitmap(com.journeyapps.barcodescanner.BarcodeEncoder()
               .encodeBitmap(qr, com.google.zxing.BarcodeFormat.QR_CODE, 500, 500))
