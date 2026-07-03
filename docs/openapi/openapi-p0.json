@@ -28559,6 +28559,20 @@
                   "active": {
                     "type": "boolean",
                     "description": "上下架。"
+                  },
+                  "mgmt_fee_mode": {
+                    "type": "string",
+                    "description": "管理费模式(H批拍板:按目录项二选一可配)。",
+                    "enum": [
+                      "none",
+                      "percent",
+                      "fixed"
+                    ]
+                  },
+                  "mgmt_fee_value": {
+                    "type": "integer",
+                    "description": "管理费值(percent=基点bp,如1000=10%;fixed=分)。",
+                    "minimum": 0
                   }
                 }
               }
@@ -29157,6 +29171,170 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/services/orders/{id}/mark-paid": {
+      "post": {
+        "tags": [
+          "service"
+        ],
+        "operationId": "markServiceOrderPaid",
+        "summary": "确认收款到公司账户(服务员现场)",
+        "description": "H批(2026-07-02 最终拍板,公司代收):客人扫公司统一收款码支付,服务员目视支付 成功页确认;钱进公司账户,财务可对账——解决个人收款码无支付回调的确认盲区; 未确认收款不可完成履约。",
+        "x-permission": "service.order.create",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "service.order.paid",
+        "x-audit-event-failure": "service.order.pay_confirm_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "pay_method": {
+                    "type": "string",
+                    "description": "收款方式(默认公司收款码;聚合支付回调二期)。",
+                    "maxLength": 24
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/services/pay-config": {
+      "get": {
+        "tags": [
+          "service"
+        ],
+        "operationId": "getServicePayConfig",
+        "summary": "公司统一收款码(下单出示用)",
+        "x-permission": "service.order.create",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "service.pay_config.viewed",
+        "x-audit-event-failure": "service.pay_config.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "service"
+        ],
+        "operationId": "setServicePayConfig",
+        "summary": "配置公司统一收款码",
+        "description": "H批:公司账户代收的收款码(财务对账基准);改动审计留痕。",
+        "x-permission": "service.catalog.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "service.pay_config.saved",
+        "x-audit-event-failure": "service.pay_config.save_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "qr_content"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "qr_content": {
+                    "type": "string",
+                    "description": "公司收款码内容(链接文本,端上重绘二维码)。",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"

@@ -623,12 +623,21 @@ data class ServiceOrderRow(
   val status: String? = null,
   val customerNote: String? = null,
   val cancelReason: String? = null,
+  val paidAt: String? = null,
+  val mgmtFeeCent: Long? = null,
+  val dancerShareCent: Long? = null,
   val createdAt: String? = null,
 )
 
 @Serializable
 data class ServiceActionReq(
   val idempotencyKey: String,
+)
+
+@Serializable
+data class ServiceMarkPaidReq(
+  val idempotencyKey: String,
+  val payMethod: String? = null,
 )
 
 @Serializable

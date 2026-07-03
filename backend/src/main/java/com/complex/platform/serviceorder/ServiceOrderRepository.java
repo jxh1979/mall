@@ -25,6 +25,10 @@ public interface ServiceOrderRepository {
 
     List<ServiceOrderRecord> listOrders(LocalDate date, String status);
 
-    /** 履约人当月完成次数与参考价合计(直付台账统计,非营收)。 */
+    void upsertPayConfig(String qrContent, String updatedBy, Instant now);
+
+    String companyPayQr();
+
+    /** 履约人当月完成次数与分账应得合计(公司代收,月结进薪资)。 */
     long[] performerMonthlyStats(String performerUserId, String month);
 }

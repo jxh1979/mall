@@ -23,12 +23,15 @@ public class ServiceOrderService {
     private final ServiceOrderRepository repository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final com.complex.platform.access.staff.StaffRepository staffRepository;
 
     public ServiceOrderService(ServiceOrderRepository repository, AuditEventService auditEventService,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            com.complex.platform.access.staff.StaffRepository staffRepository) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.staffRepository = staffRepository;
     }
 
     public ServiceCatalogItemRecord upsertCatalogItem(com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest request) {
@@ -39,9 +42,18 @@ public class ServiceOrderService {
         }
         var actor = authorizationService.currentActor();
         String id = request.id() == null || request.id().isBlank() ? "svc_" + UUID.randomUUID() : request.id().trim();
+        String feeMode = request.mgmtFeeMode() == null ? "none" : request.mgmtFeeMode();
+        if (!java.util.Set.of("none", "percent", "fixed").contains(feeMode)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "mgmt_fee_mode must be none/percent/fixed");
+        }
+        long feeValue = request.mgmtFeeValue() == null ? 0 : request.mgmtFeeValue();
+        if (feeValue < 0 || (feeMode.equals("percent") && feeValue > 10000)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "mgmt_fee_value invalid (percent uses bp <= 10000)");
+        }
         ServiceCatalogItemRecord saved = repository.upsertCatalogItem(new ServiceCatalogItemRecord(
                 id, request.name().trim(), request.priceCent(), request.durationMinutes(),
-                request.active() == null || request.active(), actor == null ? null : actor.id(), Instant.now()));
+                request.active() == null || request.active(), feeMode, feeValue,
+                actor == null ? null : actor.id(), Instant.now()));
         auditEventService.recordSuccess("service.catalog.saved", "service.catalog.manage",
                 "service_catalog_item", saved.id(), null, request.idempotencyKey(),
                 Map.of("name", saved.name(), "price_cent", saved.priceCent()));
@@ -86,21 +98,18 @@ public class ServiceOrderService {
         ServiceCatalogItemRecord item = repository.findCatalogItem(request.catalogItemId().trim())
                 .filter(ServiceCatalogItemRecord::active)
                 .orElseThrow(() -> ApiException.notFound("SERVICE_ITEM_NOT_FOUND", "service item not found or inactive"));
-        if (repository.findPaymentCode(request.performerUserId().trim()).isEmpty()) {
-            throw ApiException.badRequest("PERFORMER_NO_PAYMENT_CODE",
-                    "performer has no payment code yet (direct-pay requires it)");
-        }
         var actor = authorizationService.currentActor();
         Instant now = Instant.now();
+        // H批(2026-07-02 最终拍板):公司统一账户代收——下单即出示公司收款码,服务员现场确认收款。
         ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
                 "svo_" + UUID.randomUUID(), item.id(), item.name(), item.priceCent(),
                 trimToNull(request.barId()), trimToNull(request.tableId()), request.performerUserId().trim(),
                 actor == null ? null : actor.id(), trimToNull(request.customerNote()),
-                "pending_accept", null, now, now, null));
+                "created", null, null, null, null, null, 0, 0, now, now, null));
         auditEventService.recordSuccess("service.order.created", "service.order.create",
                 "service_order", saved.id(), null, request.idempotencyKey(),
                 Map.of("item", saved.itemName(), "performer", saved.performerUserId(),
-                        "price_cent_reference_direct_pay", saved.priceCent()));
+                        "price_cent_company_collect", saved.priceCent()));
         return saved;
     }
 
@@ -110,36 +119,92 @@ public class ServiceOrderService {
         return page(repository.listOrdersForPerformer(actor.id()));
     }
 
+    /** 兼容保留(舞者工作时无手机,新流程不经 accept——created→paid 后由服务员直接完成)。 */
     public ServiceOrderRecord accept(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
-        return transition(id, request, "pending_accept", "accepted", "service.order.accepted", null);
-    }
-
-    /** 完成履约(口径④:完成即结束——直付已在现场发生,系统不经手资金)。 */
-    public ServiceOrderRecord complete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
-        return transition(id, request, "accepted", "completed", "service.order.completed", Instant.now());
-    }
-
-    private ServiceOrderRecord transition(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request,
-            String fromStatus, String toStatus, String event, Instant completedAt) {
         authorizationService.requirePermission("service.order.perform");
-        ServiceOrderRecord current = repository.findOrder(id)
-                .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "service order not found"));
-        var actor = authorizationService.currentActor();
-        if (actor == null || !actor.id().equals(current.performerUserId())) {
-            throw ApiException.forbidden("NOT_PERFORMER", "only assigned performer can act on this order");
+        ServiceOrderRecord current = require(id);
+        if (!current.status().equals("pending_accept")) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "accept only applies to legacy pending_accept orders");
         }
-        if (!current.status().equals(fromStatus)) {
+        return persistStatus(current, "accepted", null, "service.order.accepted",
+                request == null ? null : request.idempotencyKey());
+    }
+
+    /** H批:服务员现场目视客人扫公司收款码支付成功 → 确认收款(钱进公司账户,财务可对账)。 */
+    public ServiceOrderRecord markPaid(String id, com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
+        authorizationService.requirePermission("service.order.create");
+        ServiceOrderRecord current = require(id);
+        if (!current.status().equals("created")) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "order status is " + current.status() + ", expecting " + fromStatus);
+                    "order status is " + current.status() + ", expecting created");
         }
+        var actor = authorizationService.currentActor();
         Instant now = Instant.now();
         ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
                 current.id(), current.catalogItemId(), current.itemName(), current.priceCent(),
                 current.barId(), current.tableId(), current.performerUserId(), current.orderedBy(),
-                current.customerNote(), toStatus, current.cancelReason(), current.createdAt(), now,
+                current.customerNote(), "paid", current.cancelReason(),
+                now, actor == null ? null : actor.id(),
+                request == null || request.payMethod() == null ? "company_qr" : request.payMethod(),
+                current.refundNote(), current.mgmtFeeCent(), current.dancerShareCent(),
+                current.createdAt(), now, current.completedAt()));
+        auditEventService.recordSuccess("service.order.paid", "service.order.create",
+                "service_order", saved.id(), null,
+                request == null ? null : request.idempotencyKey(),
+                Map.of("pay_method", saved.payMethod(), "price_cent", saved.priceCent()));
+        return saved;
+    }
+
+    /** H批:完成履约(服务员现场操作;舞者无手机)。前置=已收款到公司账户;
+     * 完成时分账:管理费(目录比例/固定)归公司,余额写提成台账归舞者(月结进薪资并代扣个税)。 */
+    public ServiceOrderRecord complete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
+        authorizationService.requirePermission("service.order.create");
+        ServiceOrderRecord current = require(id);
+        if (!current.status().equals("paid") && !current.status().equals("accepted")) {
+            throw ApiException.badRequest("NOT_PAID_YET",
+                    "order must be paid (company account) before completion; status=" + current.status());
+        }
+        long mgmtFee = repository.findCatalogItem(current.catalogItemId())
+                .map(item -> switch (item.mgmtFeeMode()) {
+                    case "percent" -> current.priceCent() * item.mgmtFeeValue() / 10000;
+                    case "fixed" -> Math.min(item.mgmtFeeValue(), current.priceCent());
+                    default -> 0L;
+                }).orElse(0L);
+        long dancerShare = current.priceCent() - mgmtFee;
+        Instant now = Instant.now();
+        ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
+                current.id(), current.catalogItemId(), current.itemName(), current.priceCent(),
+                current.barId(), current.tableId(), current.performerUserId(), current.orderedBy(),
+                current.customerNote(), "completed", current.cancelReason(),
+                current.paidAt(), current.paidBy(), current.payMethod(), current.refundNote(),
+                mgmtFee, dancerShare, current.createdAt(), now, now));
+        String month = java.time.YearMonth.from(java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)).toString();
+        staffRepository.insertCommission("cml_" + UUID.randomUUID(), saved.performerUserId(), month,
+                "service_order", saved.id(), dancerShare, saved.itemName(), now);
+        auditEventService.recordSuccess("service.order.completed", "service.order.create",
+                "service_order", saved.id(), null,
+                request == null ? null : request.idempotencyKey(),
+                Map.of("mgmt_fee_cent", mgmtFee, "dancer_share_cent", dancerShare));
+        return saved;
+    }
+
+    private ServiceOrderRecord require(String id) {
+        return repository.findOrder(id)
+                .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "service order not found"));
+    }
+
+    private ServiceOrderRecord persistStatus(ServiceOrderRecord current, String toStatus, Instant completedAt,
+            String event, String idempotencyKey) {
+        Instant now = Instant.now();
+        ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
+                current.id(), current.catalogItemId(), current.itemName(), current.priceCent(),
+                current.barId(), current.tableId(), current.performerUserId(), current.orderedBy(),
+                current.customerNote(), toStatus, current.cancelReason(),
+                current.paidAt(), current.paidBy(), current.payMethod(), current.refundNote(),
+                current.mgmtFeeCent(), current.dancerShareCent(), current.createdAt(), now,
                 completedAt == null ? current.completedAt() : completedAt));
         auditEventService.recordSuccess(event, "service.order.perform", "service_order", saved.id(), null,
-                request == null ? null : request.idempotencyKey(), Map.of("status", toStatus));
+                idempotencyKey, Map.of("status", toStatus));
         return saved;
     }
 
@@ -159,10 +224,15 @@ public class ServiceOrderService {
             return current;
         }
         Instant now = Instant.now();
+        // H批:已收款(公司账户)后取消 → 记退款备注(公司线下退,财务对账留痕)。
+        String refundNote = current.paidAt() == null ? current.refundNote()
+                : "已收款待退:" + request.reason().trim();
         ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
                 current.id(), current.catalogItemId(), current.itemName(), current.priceCent(),
                 current.barId(), current.tableId(), current.performerUserId(), current.orderedBy(),
-                current.customerNote(), "cancelled", request.reason().trim(), current.createdAt(), now,
+                current.customerNote(), "cancelled", request.reason().trim(),
+                current.paidAt(), current.paidBy(), current.payMethod(), refundNote,
+                current.mgmtFeeCent(), current.dancerShareCent(), current.createdAt(), now,
                 current.completedAt()));
         auditEventService.recordSuccess("service.order.cancelled", "service.order.create",
                 "service_order", saved.id(), null, request.idempotencyKey(),
@@ -170,15 +240,34 @@ public class ServiceOrderService {
         return saved;
     }
 
-    /** 口径④:向客人出示履约人收款码(下单者/履约者可取)。 */
+    /** H批:向客人出示**公司统一收款码**(代收;个人码流程已废弃)。 */
     public Map<String, String> orderPaymentCode(String id) {
         authorizationService.requirePermission("service.order.create");
-        ServiceOrderRecord order = repository.findOrder(id)
-                .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "service order not found"));
-        String qr = repository.findPaymentCode(order.performerUserId())
-                .orElseThrow(() -> ApiException.notFound("PERFORMER_NO_PAYMENT_CODE", "performer has no payment code"));
+        ServiceOrderRecord order = require(id);
+        String qr = repository.companyPayQr();
+        if (qr.isBlank()) {
+            throw ApiException.badRequest("COMPANY_PAY_QR_NOT_CONFIGURED",
+                    "company payment QR not configured (services pay-config)");
+        }
         return Map.of("performer_user_id", order.performerUserId(), "qr_content", qr,
                 "price_cent", String.valueOf(order.priceCent()));
+    }
+
+    /** H批:公司统一收款码配置(经营配置;财务对账基准)。 */
+    public void setPayConfig(com.complex.platform.serviceorder.dto.ServicePayConfigRequest request) {
+        authorizationService.requirePermission("service.catalog.manage");
+        if (request == null || request.qrContent() == null || request.qrContent().isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "qr_content is required");
+        }
+        var actor = authorizationService.currentActor();
+        repository.upsertPayConfig(request.qrContent().trim(), actor == null ? null : actor.id(), Instant.now());
+        auditEventService.recordSuccess("service.pay_config.saved", "service.catalog.manage",
+                "service_pay_config", "default", null, request.idempotencyKey(), Map.of());
+    }
+
+    public Map<String, String> payConfig() {
+        authorizationService.requirePermission("service.order.create");
+        return Map.of("qr_content", repository.companyPayQr());
     }
 
     public PageResponse<ServiceOrderRecord> listOrders(java.time.LocalDate date, String status) {
@@ -186,7 +275,7 @@ public class ServiceOrderService {
         return page(repository.listOrders(date, status));
     }
 
-    /** 口径④:履约人当月完成次数+参考收入(直付台账,非营收、非薪资提成)。 */
+    /** H批:履约人当月完成次数+分账应得(公司代收,月结进薪资提成并代扣个税)。 */
     public Map<String, Object> myStats(String month) {
         authorizationService.requirePermission("service.order.perform");
         if (month == null || !month.matches("\\d{4}-\\d{2}")) {

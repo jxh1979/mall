@@ -161,7 +161,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-SVC-001") {
     await expect(page.getByTestId("service-orders-page")).toBeVisible();
     await expect(page.getByTestId("service-catalog-table")).toContainText("点舞");
-    await expect(page.getByTestId("service-orders-table")).toContainText("待接单");
+    await expect(page.getByTestId("service-orders-table")).toContainText("待收款");
+    await expect(page.getByTestId("svc-payconfig-editor")).toBeVisible();
     await expect(page.getByTestId("service-catalog-editor")).toBeVisible();
   } else if (spec.pageId === "ADM-STF-002") {
     await expect(page.getByTestId("staff-payroll-page")).toBeVisible();

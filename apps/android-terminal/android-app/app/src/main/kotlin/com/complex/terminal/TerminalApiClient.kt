@@ -103,6 +103,10 @@ class TerminalApiClient(
 
   fun listMyServiceOrders(): List<ServiceOrderRow> = get("/api/v1/services/orders/assigned-to-me")
 
+  /** H批:服务员现场确认收款到公司账户(公司统一收款码,财务可对账)。 */
+  fun markServiceOrderPaid(id: String, request: ServiceMarkPaidReq): ServiceOrderRow =
+    post("/api/v1/services/orders/$id/mark-paid", request)
+
   fun acceptServiceOrder(id: String, request: ServiceActionReq): ServiceOrderRow =
     post("/api/v1/services/orders/$id/accept", request)
 

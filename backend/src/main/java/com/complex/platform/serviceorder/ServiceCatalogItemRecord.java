@@ -9,6 +9,8 @@ public record ServiceCatalogItemRecord(
         long priceCent,
         Integer durationMinutes,
         boolean active,
+        String mgmtFeeMode,
+        long mgmtFeeValue,
         String updatedBy,
         Instant updatedAt
 ) {

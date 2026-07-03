@@ -215,7 +215,7 @@ class MainActivity : Activity() {
       primaryButton("请假") { showLeave() },
       statusText("—— 服务点单(直付履约人,酒吧不经手) ——"),
       primaryButton("代客点服务") { showServiceOrderCreate() },
-      primaryButton("我的服务任务") { showMyServiceOrders() },
+      primaryButton("我的服务收入") { showMyServiceOrders() },
       secondaryButton("我的收款码") { showMyPaymentCode() },
       secondaryButton("主管排班(需排班权限)") { showShiftManage() },
       secondaryButton("员工注册申请(店长/HR 代提交)") { showStaffRegistration() },
@@ -920,7 +920,29 @@ class MainActivity : Activity() {
       },
       onError = { catalog.text = "目录拉取失败：${friendly(it)}" },
     )
-    val orderButton = primaryButton("下单并出示收款码") {
+    val lastOrderId = editText("服务单 id(下单后自动填)")
+    val paidButton = primaryButton("已收款到公司账户(目视支付成功)") {
+      val id = lastOrderId.text.toString().trim()
+      if (id.isEmpty()) { status.text = "请先下单"; return@primaryButton }
+      runBackground(
+        action = { api.markServiceOrderPaid(id, ServiceMarkPaidReq("mp_${System.currentTimeMillis()}")) },
+        onSuccess = { status.text = "已确认收款(公司账户):${it.id};舞者可上台" },
+        onError = { status.text = "确认收款失败：${friendly(it)}" },
+      )
+    }
+    val completeButton = primaryButton("完成履约(跳完点这里)") {
+      val id = lastOrderId.text.toString().trim()
+      if (id.isEmpty()) { status.text = "请先下单"; return@primaryButton }
+      runBackground(
+        action = { api.completeServiceOrder(id, ServiceActionReq("cp_${System.currentTimeMillis()}")) },
+        onSuccess = { o ->
+          status.text = "已完成:管理费 ¥${(o.mgmtFeeCent ?: 0) / 100.0} 归公司," +
+            "舞者应得 ¥${(o.dancerShareCent ?: 0) / 100.0}(月结进工资,代扣个税)"
+        },
+        onError = { status.text = "完成失败：${friendly(it)}" },
+      )
+    }
+    val orderButton = primaryButton("下单并出示公司收款码") {
       val item = itemId.text.toString().trim()
       val perf = performer.text.toString().trim()
       if (item.isEmpty() || perf.isEmpty()) { status.text = "请填 服务项与履约员工"; return@primaryButton }
@@ -936,7 +958,8 @@ class MainActivity : Activity() {
           Pair(order, pay["qr_content"]?.toString()?.trim('"') ?: "")
         },
         onSuccess = { (order, qr) ->
-          status.text = "已下单 ${order.itemName}(${order.id});请客人扫码直付 ¥${(order.priceCent ?: 0) / 100.0}"
+          lastOrderId.setText(order.id ?: "")
+          status.text = "已下单 ${order.itemName}(${order.id});请客人扫码支付到公司账户 ¥${(order.priceCent ?: 0) / 100.0}"
           if (qr.isNotEmpty()) {
             runCatching {
               val bitmap = com.journeyapps.barcodescanner.BarcodeEncoder()
@@ -951,6 +974,7 @@ class MainActivity : Activity() {
     setContentView(screen(
       title = "代客点服务(直付)",
       children = listOf(catalog, itemId, performer, tableId, note, orderButton, status, qrImage,
+        lastOrderId, paidButton, completeButton,
         secondaryButton("返回首页") { showHome() }),
     ))
   }
@@ -972,7 +996,7 @@ class MainActivity : Activity() {
         onSuccess = { (orders, stats) ->
           val count = stats["completed_count"]?.toString()?.trim('"') ?: "0"
           val income = (stats["reference_income_cent"]?.toString()?.trim('"')?.toLongOrNull() ?: 0) / 100.0
-          status.text = "本月完成 $count 单,参考收入 ¥$income(直付到手,非公司代发)"
+          status.text = "本月完成 $count 单,应得 ¥$income(公司代收,月结进工资并代扣个税)"
           list.text = if (orders.isEmpty()) "暂无服务任务" else orders.joinToString("\n\n") { o ->
             "${o.id}\n${o.itemName} ¥${(o.priceCent ?: 0) / 100.0} 桌台 ${o.tableId ?: "-"} " +
               "[${labels[o.status] ?: o.status}]" + (o.customerNote?.let { "\n备注: $it" } ?: "")
@@ -1009,7 +1033,7 @@ class MainActivity : Activity() {
 
   private fun showMyPaymentCode() {
     val qrInput = editText("收款码内容(扫自己的支付宝/微信收款码自动填入)")
-    val status = statusText("把你的固定收款码录入系统;客人点你的服务后,扫这个码把钱直接付给你。")
+    val status = statusText("流程已切换为公司统一账户代收:客人扫公司收款码付款,你的应得部分月结进工资(代扣个税)。此处个人收款码仅作历史保留,不再出示给客人。")
     val qrImage = android.widget.ImageView(this)
     val scanButton = secondaryButton("扫我的收款码") { launchScan(qrInput) }
     runBackground(

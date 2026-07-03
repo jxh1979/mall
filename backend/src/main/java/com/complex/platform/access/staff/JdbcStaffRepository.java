@@ -67,14 +67,16 @@ class JdbcStaffRepository implements StaffRepository {
         // 有任一薪资要素的员工都出单;幂等覆盖(uq user+month)。
         return jdbcTemplate.update("""
                 INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, commission_cent,
-                        bonus_cent, penalty_cent, total_cent, closed_by, closed_at)
+                        bonus_cent, penalty_cent, tax_cent, total_cent, closed_by, closed_at)
                 SELECT 'pay_' || gen_random_uuid(), u.user_id, :month,
                        COALESCE(b.monthly_salary_cent, 0),
                        COALESCE(c.total, 0) + COALESCE(bc.total, 0),
                        COALESCE(adj.bonus, 0),
                        COALESCE(adj.penalty, 0),
+                       -- H批:对当月服务劳务(service_order 台账)按劳务报酬预扣预缴法定税表代扣个税(单位:分)。
+                       COALESCE(tax.tax_cent, 0),
                        COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
-                           + COALESCE(adj.bonus, 0) - COALESCE(adj.penalty, 0),
+                           + COALESCE(adj.bonus, 0) - COALESCE(adj.penalty, 0) - COALESCE(tax.tax_cent, 0),
                        :closed_by, :now
                   FROM (SELECT user_id FROM staff_base_salaries
                         UNION SELECT user_id FROM staff_commission_ledger WHERE month = :month
@@ -94,11 +96,26 @@ class JdbcStaffRepository implements StaffRepository {
                                     SUM(CASE WHEN adj_type = 'penalty' THEN amount_cent ELSE 0 END) AS penalty
                                FROM staff_payroll_adjustments WHERE month = :month GROUP BY user_id) adj
                          ON adj.user_id = u.user_id
+                  LEFT JOIN (SELECT user_id,
+                                    CASE
+                                      WHEN svc <= 0 THEN 0
+                                      WHEN svc <= 400000 THEN GREATEST(0, (svc - 80000) * 20 / 100)
+                                      ELSE CASE
+                                        WHEN svc * 8 / 10 <= 2000000 THEN svc * 8 / 10 * 20 / 100
+                                        WHEN svc * 8 / 10 <= 5000000 THEN svc * 8 / 10 * 30 / 100 - 200000
+                                        ELSE svc * 8 / 10 * 40 / 100 - 700000
+                                      END
+                                    END AS tax_cent
+                               FROM (SELECT user_id, SUM(amount_cent) AS svc FROM staff_commission_ledger
+                                      WHERE month = :month AND source_type = 'service_order'
+                                      GROUP BY user_id) svc_base) tax
+                         ON tax.user_id = u.user_id
                 ON CONFLICT (user_id, month) DO UPDATE SET
                     base_cent = EXCLUDED.base_cent,
                     commission_cent = EXCLUDED.commission_cent,
                     bonus_cent = EXCLUDED.bonus_cent,
                     penalty_cent = EXCLUDED.penalty_cent,
+                    tax_cent = EXCLUDED.tax_cent,
                     total_cent = EXCLUDED.total_cent,
                     closed_by = EXCLUDED.closed_by,
                     closed_at = EXCLUDED.closed_at
@@ -111,7 +128,7 @@ class JdbcStaffRepository implements StaffRepository {
     public java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent,
-                       total_cent, closed_by, closed_at
+                       tax_cent, total_cent, closed_by, closed_at
                   FROM staff_payroll_statements
                  WHERE month = :month AND (:user_id::text IS NULL OR user_id = :user_id)
                  ORDER BY user_id
@@ -121,8 +138,8 @@ class JdbcStaffRepository implements StaffRepository {
                 (rs, n) -> new StaffPayrollStatementRecord(
                         rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
                         rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
-                        rs.getLong("penalty_cent"), rs.getLong("total_cent"), rs.getString("closed_by"),
-                        rs.getTimestamp("closed_at").toInstant()));
+                        rs.getLong("penalty_cent"), rs.getLong("tax_cent"), rs.getLong("total_cent"),
+                        rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant()));
     }
 
     @Override

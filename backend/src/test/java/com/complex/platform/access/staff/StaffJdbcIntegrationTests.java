@@ -368,6 +368,7 @@ class StaffJdbcIntegrationTests {
         assertThat(statement.commissionCent()).isEqualTo(120000L);
         assertThat(statement.bonusCent()).isEqualTo(50000L);
         assertThat(statement.penaltyCent()).isEqualTo(20000L);
+        assertThat(statement.taxCent()).isEqualTo(0L);   // 无 service_order 劳务 → 无个税
         assertThat(statement.totalCent()).isEqualTo(800000L + 120000L + 50000L - 20000L);
 
         // 补录奖金后重结=覆盖,仍单行。
@@ -379,6 +380,19 @@ class StaffJdbcIntegrationTests {
                         .filter(row -> row.userId().equals("usr_admin")).toList();
         assertThat(after).hasSize(1);
         assertThat(after.get(0).totalCent()).isEqualTo(800000L + 120000L + 60000L - 20000L);
+
+        // H批:加入当月服务劳务 3 万元(service_order 台账)→ 重结代扣个税
+        // 劳务报酬预扣:X=3万>4000 → Y=X*80%=2.4万 > 2万 → tax=Y*30%-2000元=5200元=520000分。
+        jdbcTemplate.update("INSERT INTO staff_commission_ledger (id, user_id, month, source_type, source_id, amount_cent, created_at) "
+                + "VALUES ('cml_tax_" + key() + "', 'usr_admin', '" + month + "', 'service_order', 'svo_tax', 3000000, now())");
+        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        com.complex.platform.access.staff.StaffPayrollStatementRecord taxed =
+                service.listMyPayroll(month).items().stream()
+                        .filter(row -> row.userId().equals("usr_admin")).findFirst().orElseThrow();
+        assertThat(taxed.taxCent()).isEqualTo(520000L);
+        assertThat(taxed.commissionCent()).isEqualTo(120000L + 3000000L);
+        assertThat(taxed.totalCent()).isEqualTo(taxed.baseCent() + taxed.commissionCent()
+                + taxed.bonusCent() - taxed.penaltyCent() - taxed.taxCent());
 
         // 请假:提交→主管通过→月视图该日=leave。
         com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(

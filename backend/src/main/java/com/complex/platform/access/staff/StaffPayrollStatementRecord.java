@@ -11,6 +11,7 @@ public record StaffPayrollStatementRecord(
         long commissionCent,
         long bonusCent,
         long penaltyCent,
+        long taxCent,
         long totalCent,
         String closedBy,
         Instant closedAt

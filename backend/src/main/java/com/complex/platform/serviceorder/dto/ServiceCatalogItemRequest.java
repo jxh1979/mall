@@ -6,6 +6,8 @@ public record ServiceCatalogItemRequest(
         String name,
         Long priceCent,
         Integer durationMinutes,
-        Boolean active
+        Boolean active,
+        String mgmtFeeMode,
+        Long mgmtFeeValue
 ) {
 }

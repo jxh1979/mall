@@ -5,7 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 
-type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; totalCent?: number };
+type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; taxCent?: number; totalCent?: number };
 type LeaveRow = { id: string; userId?: string; leaveType?: string; startDate?: string; endDate?: string; reason?: string; status?: string; reviewNote?: string };
 
 const TEXT = {
@@ -119,7 +119,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
         <h3>当月薪资单(月结后生成;员工端仅见已定格月份)</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="payroll-table">
-            <thead><tr><th>员工</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>实发合计</th></tr></thead>
+            <thead><tr><th>员工</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>代扣个税</th><th>实发合计</th></tr></thead>
             <tbody>
               {payroll.map((row) => (
                 <tr key={row.id}>
@@ -128,6 +128,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
                   <td>{money(row.commissionCent)}</td>
                   <td>{money(row.bonusCent)}</td>
                   <td>{money(row.penaltyCent)}</td>
+                  <td>{money(row.taxCent)}</td>
                   <td>{money(row.totalCent)}</td>
                 </tr>
               ))}

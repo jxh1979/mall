@@ -20,18 +20,22 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
     @Override
     public ServiceCatalogItemRecord upsertCatalogItem(ServiceCatalogItemRecord item) {
         jdbcTemplate.update("""
-                INSERT INTO service_catalog_items (id, name, price_cent, duration_minutes, active, updated_by, updated_at)
-                VALUES (:id, :name, :price, :duration, :active, :updated_by, :now)
+                INSERT INTO service_catalog_items (id, name, price_cent, duration_minutes, active,
+                        mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at)
+                VALUES (:id, :name, :price, :duration, :active, :fee_mode, :fee_value, :updated_by, :now)
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
                     price_cent = EXCLUDED.price_cent,
                     duration_minutes = EXCLUDED.duration_minutes,
                     active = EXCLUDED.active,
+                    mgmt_fee_mode = EXCLUDED.mgmt_fee_mode,
+                    mgmt_fee_value = EXCLUDED.mgmt_fee_value,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("id", item.id()).addValue("name", item.name()).addValue("price", item.priceCent())
                 .addValue("duration", item.durationMinutes()).addValue("active", item.active())
+                .addValue("fee_mode", item.mgmtFeeMode()).addValue("fee_value", item.mgmtFeeValue())
                 .addValue("updated_by", item.updatedBy())
                 .addValue("now", java.sql.Timestamp.from(item.updatedAt())));
         return item;
@@ -40,7 +44,7 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
     @Override
     public List<ServiceCatalogItemRecord> listCatalog(boolean activeOnly) {
         return jdbcTemplate.query("""
-                SELECT id, name, price_cent, duration_minutes, active, updated_by, updated_at
+                SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at
                   FROM service_catalog_items
                  WHERE (:active_only = FALSE OR active = TRUE)
                  ORDER BY name
@@ -50,14 +54,15 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
     @Override
     public Optional<ServiceCatalogItemRecord> findCatalogItem(String id) {
         return jdbcTemplate.query("""
-                SELECT id, name, price_cent, duration_minutes, active, updated_by, updated_at
+                SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at
                   FROM service_catalog_items WHERE id = :id
                 """, new MapSqlParameterSource().addValue("id", id), this::mapItem).stream().findFirst();
     }
 
     private ServiceCatalogItemRecord mapItem(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         return new ServiceCatalogItemRecord(rs.getString("id"), rs.getString("name"), rs.getLong("price_cent"),
-                (Integer) rs.getObject("duration_minutes"), rs.getBoolean("active"), rs.getString("updated_by"),
+                (Integer) rs.getObject("duration_minutes"), rs.getBoolean("active"),
+                rs.getString("mgmt_fee_mode"), rs.getLong("mgmt_fee_value"), rs.getString("updated_by"),
                 rs.getTimestamp("updated_at").toInstant());
     }
 
@@ -83,12 +88,21 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
         jdbcTemplate.update("""
                 INSERT INTO service_orders (id, catalog_item_id, item_name, price_cent, bar_id, table_id,
                         performer_user_id, ordered_by, customer_note, status, cancel_reason,
+                        paid_at, paid_by, pay_method, refund_note, mgmt_fee_cent, dancer_share_cent,
                         created_at, updated_at, completed_at)
                 VALUES (:id, :catalog_item_id, :item_name, :price, :bar_id, :table_id,
-                        :performer, :ordered_by, :note, :status, :cancel_reason, :created_at, :updated_at, :completed_at)
+                        :performer, :ordered_by, :note, :status, :cancel_reason,
+                        :paid_at, :paid_by, :pay_method, :refund_note, :mgmt_fee, :dancer_share,
+                        :created_at, :updated_at, :completed_at)
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     cancel_reason = EXCLUDED.cancel_reason,
+                    paid_at = EXCLUDED.paid_at,
+                    paid_by = EXCLUDED.paid_by,
+                    pay_method = EXCLUDED.pay_method,
+                    refund_note = EXCLUDED.refund_note,
+                    mgmt_fee_cent = EXCLUDED.mgmt_fee_cent,
+                    dancer_share_cent = EXCLUDED.dancer_share_cent,
                     updated_at = EXCLUDED.updated_at,
                     completed_at = EXCLUDED.completed_at
                 """, new MapSqlParameterSource()
@@ -98,6 +112,10 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 .addValue("performer", order.performerUserId()).addValue("ordered_by", order.orderedBy())
                 .addValue("note", order.customerNote()).addValue("status", order.status())
                 .addValue("cancel_reason", order.cancelReason())
+                .addValue("paid_at", order.paidAt() == null ? null : java.sql.Timestamp.from(order.paidAt()))
+                .addValue("paid_by", order.paidBy()).addValue("pay_method", order.payMethod())
+                .addValue("refund_note", order.refundNote())
+                .addValue("mgmt_fee", order.mgmtFeeCent()).addValue("dancer_share", order.dancerShareCent())
                 .addValue("created_at", java.sql.Timestamp.from(order.createdAt()))
                 .addValue("updated_at", java.sql.Timestamp.from(order.updatedAt()))
                 .addValue("completed_at", order.completedAt() == null ? null : java.sql.Timestamp.from(order.completedAt())));
@@ -112,7 +130,8 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
 
     private static final String SELECT_ORDER = """
             SELECT id, catalog_item_id, item_name, price_cent, bar_id, table_id, performer_user_id,
-                   ordered_by, customer_note, status, cancel_reason, created_at, updated_at, completed_at
+                   ordered_by, customer_note, status, cancel_reason, paid_at, paid_by, pay_method,
+                   refund_note, mgmt_fee_cent, dancer_share_cent, created_at, updated_at, completed_at
               FROM service_orders""";
 
     @Override
@@ -137,7 +156,7 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
     @Override
     public long[] performerMonthlyStats(String performerUserId, String month) {
         return jdbcTemplate.queryForObject("""
-                SELECT COUNT(*) AS cnt, COALESCE(SUM(price_cent), 0) AS total
+                SELECT COUNT(*) AS cnt, COALESCE(SUM(dancer_share_cent), 0) AS total
                   FROM service_orders
                  WHERE performer_user_id = :performer AND status = 'completed'
                    AND to_char(completed_at, 'YYYY-MM') = :month
@@ -145,12 +164,30 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 (rs, n) -> new long[] {rs.getLong("cnt"), rs.getLong("total")});
     }
 
+    public void upsertPayConfig(String qrContent, String updatedBy, Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO service_pay_config (id, qr_content, updated_by, updated_at)
+                VALUES ('default', :qr, :updated_by, :now)
+                ON CONFLICT (id) DO UPDATE SET qr_content = EXCLUDED.qr_content,
+                    updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource().addValue("qr", qrContent)
+                .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    public String companyPayQr() {
+        return jdbcTemplate.query("SELECT qr_content FROM service_pay_config WHERE id = 'default'",
+                new MapSqlParameterSource(), (rs, n) -> rs.getString("qr_content")).stream().findFirst().orElse("");
+    }
+
     private ServiceOrderRecord mapOrder(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         java.sql.Timestamp completed = rs.getTimestamp("completed_at");
+        java.sql.Timestamp paid = rs.getTimestamp("paid_at");
         return new ServiceOrderRecord(rs.getString("id"), rs.getString("catalog_item_id"),
                 rs.getString("item_name"), rs.getLong("price_cent"), rs.getString("bar_id"),
                 rs.getString("table_id"), rs.getString("performer_user_id"), rs.getString("ordered_by"),
                 rs.getString("customer_note"), rs.getString("status"), rs.getString("cancel_reason"),
+                paid == null ? null : paid.toInstant(), rs.getString("paid_by"), rs.getString("pay_method"),
+                rs.getString("refund_note"), rs.getLong("mgmt_fee_cent"), rs.getLong("dancer_share_cent"),
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
                 completed == null ? null : completed.toInstant());
     }

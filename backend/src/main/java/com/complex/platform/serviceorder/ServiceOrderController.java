@@ -70,6 +70,26 @@ public class ServiceOrderController {
         return ApiResponse.ok(service.listAssignedToMe());
     }
 
+    @PostMapping("/orders/{id}/mark-paid")
+    public ApiResponse<ServiceOrderRecord> markPaid(@PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markPaid(id, request));
+    }
+
+    @PostMapping("/pay-config")
+    public ApiResponse<Map<String, String>> setPayConfig(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServicePayConfigRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        service.setPayConfig(request);
+        return ApiResponse.ok(Map.of("status", "saved"));
+    }
+
+    @GetMapping("/pay-config")
+    public ApiResponse<Map<String, String>> payConfig() {
+        return ApiResponse.ok(service.payConfig());
+    }
+
     @PostMapping("/orders/{id}/accept")
     public ApiResponse<ServiceOrderRecord> accept(@PathVariable String id,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {

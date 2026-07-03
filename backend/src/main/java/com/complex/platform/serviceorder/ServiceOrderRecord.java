@@ -15,6 +15,12 @@ public record ServiceOrderRecord(
         String customerNote,
         String status,
         String cancelReason,
+        Instant paidAt,
+        String paidBy,
+        String payMethod,
+        String refundNote,
+        long mgmtFeeCent,
+        long dancerShareCent,
         Instant createdAt,
         Instant updatedAt,
         Instant completedAt
