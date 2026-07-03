@@ -191,5 +191,9 @@ export default function CustomerApp(): React.ReactElement {
       </Layout>
     );
 
-  return <ConfigProvider locale={zhCN}>{body}</ConfigProvider>;
+  return (
+    <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: "#0958d9", colorPrimaryHover: "#1c64d4", colorPrimaryActive: "#0a4fb8" } }}>
+      {body}
+    </ConfigProvider>
+  );
 }
