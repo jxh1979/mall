@@ -1,4 +1,5 @@
 import React from "react";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -123,7 +124,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
                 <tr key={row.id}>
                   <td>{row.name ?? row.id}</td>
                   <td>{row.equipmentType ?? "-"}</td>
-                  <td>{row.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.projectId ?? "-"} / {row.spaceId ?? "-"}</td>
                   <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td>
                   <td>{row.nextMaintenanceDue ?? "-"}</td>
@@ -145,7 +146,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
                   <td>{row.title ?? "-"}</td>
                   <td>{row.workOrderType ?? "-"}</td>
                   <td>{row.priority ?? "-"}</td>
-                  <td>{row.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.spaceId ?? "-"} / {row.equipmentId ?? "-"}</td>
                   <td>{row.assigneeId ?? "-"}</td>
                   <td>{row.handleDueAt ?? "-"}</td>

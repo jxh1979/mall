@@ -1,4 +1,5 @@
 import React from "react";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -175,7 +176,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
                   <td>{row.crewCount ?? "-"}</td>
                   <td>{row.contactName ?? "-"} / {row.contactPhone ?? "-"}</td>
                   <td>{row.vendorUserId ?? "-"}</td>
-                  <td>{row.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.reviewComment ?? "-"} / {row.acceptanceComment ?? "-"}</td>
                   <td>{row.completionNote ?? "-"} / {(row.completionAttachmentIds ?? []).join("、") || "-"}</td>
                 </tr>

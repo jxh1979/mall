@@ -5,6 +5,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, GovernanceSpaceRow, MerchantAdmissionRow } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const TEXT = {
   title: "集团/综合体拓扑",
@@ -96,7 +97,7 @@ export function GovernanceTopologyPage({ api, setGlobalError }: AdminPageProps) 
                 <thead><tr><th>空间</th><th>编码</th><th>所属项目</th><th>区域</th><th>空间类型</th><th>点位类型</th><th>状态</th></tr></thead>
                 <tbody>{spaces.map((space) => {
                   const project = projects.find((item) => item.id === space.venueId);
-                  return <tr key={space.id}><td>{display(space.name)}</td><td>{display(space.code)}</td><td>{display(project?.name ?? space.venueId)}</td><td>{display(space.areaId)}</td><td>{display(space.areaType)}</td><td>{display(space.pointType)}</td><td>{display(space.status)}</td></tr>;
+                  return <tr key={space.id}><td>{display(space.name)}</td><td>{display(space.code)}</td><td>{display(project?.name ?? space.venueId)}</td><td>{display(space.areaId)}</td><td>{display(space.areaType)}</td><td>{display(space.pointType)}</td><td>{formatBusinessStatus(space.status)}</td></tr>;
                 })}</tbody>
               </table>
             </div>

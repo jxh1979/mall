@@ -6,6 +6,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const TEXT = {
   title: "组织与商户档案",
@@ -126,7 +127,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="organization-entities-table">
                 <thead><tr><th>主体</th><th>编码</th><th>类型</th><th>状态</th></tr></thead>
-                <tbody>{entities.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.orgType)}</td><td>{display(row.status)}</td></tr>)}</tbody>
+                <tbody>{entities.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.orgType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
               </table>
             </div>
 
@@ -134,7 +135,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="organization-merchants-table">
                 <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
-                <tbody>{merchants.map((row) => <tr key={row.id}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{display(row.riskLevel)}</td><td>{display(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
+                <tbody>{merchants.map((row) => <tr key={row.id}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
               </table>
             </div>
 
@@ -142,7 +143,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="organization-projects-table">
                 <thead><tr><th>项目</th><th>编码</th><th>商户</th><th>业态</th><th>状态</th></tr></thead>
-                <tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{display(row.status)}</td></tr>)}</tbody>
+                <tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
               </table>
             </div>
           </>

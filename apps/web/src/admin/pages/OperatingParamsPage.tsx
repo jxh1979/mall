@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 // 综合体经营参数行（后端 OperatingParamsRecord，客户端 unwrap 已 camel 化）。
 type BusinessDayCutoffRow = {
@@ -157,7 +158,7 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
                 <tr key={row.projectId} data-testid={`operating-params-${row.projectId}`}>
                   <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId}</TraceLink></td>
                   <td>{row.operatingAreaSqm == null ? "未配置" : Number(row.operatingAreaSqm).toFixed(2)}</td>
-                  <td>{row.status}</td>
+                  <td>{formatBusinessStatus(row.status)}</td>
                 </tr>
               ))}
             </tbody>

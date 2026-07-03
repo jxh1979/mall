@@ -75,7 +75,7 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
         ) : summary ? (
           <Space size="large" wrap>
             <Statistic title="积分余额" value={summary.balance} />
-            <Statistic title="会员等级" valueRender={() => <Tag color="gold">{summary.level || "普通"}</Tag>} />
+            <Statistic title="会员等级" valueRender={() => <Tag color="gold">{summary.level ? formatBusinessStatus(summary.level) : "普通"}</Tag>} />
           </Space>
         ) : (
           <Empty description="暂无积分数据" />

@@ -6,6 +6,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, ContractRow, MerchantAdmissionRow, SubjectBindingRow } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const EVIDENCE_CREATE = ["evidence.event.create"];
 
@@ -130,7 +131,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
               <table className="admin-table" data-testid="admission-audits-merchants-table">
                 <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
                 <tbody>{merchants.map((row) => (
-                  <tr key={row.id}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{display(row.riskLevel)}</td><td>{display(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+                  <tr key={row.id}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
                 ))}</tbody>
               </table>
             </div>
@@ -140,7 +141,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
               <table className="admin-table" data-testid="admission-audits-bindings-table">
                 <thead><tr><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>结算主体</th><th>状态</th><th>留痕证据</th></tr></thead>
                 <tbody>{bindings.map((row) => (
-                  <tr key={row.id}><td>{display(row.businessObjectId)}</td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{display(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+                  <tr key={row.id}><td>{display(row.businessObjectId)}</td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
                 ))}</tbody>
               </table>
             </div>

@@ -5,6 +5,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, MerchantScopeBillRow, MerchantScopeWorkOrderRow } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const TEXT = {
   title: "商户授权工作台",
@@ -99,7 +100,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError }
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="merchant-scope-work-orders-table">
                 <thead><tr><th>商户</th><th>类型</th><th>标题</th><th>优先级</th><th>状态</th><th>授权范围</th><th>留痕证据</th></tr></thead>
-                <tbody>{workOrders.map((row) => <tr key={row.id}><td>{display(row.merchantId)}</td><td>{display(row.workOrderType)}</td><td>{display(row.title)}</td><td>{display(row.priority)}</td><td>{display(row.status)}</td><td>{display(row.authorizedScope)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
+                <tbody>{workOrders.map((row) => <tr key={row.id}><td>{display(row.merchantId)}</td><td>{display(row.workOrderType)}</td><td>{display(row.title)}</td><td>{formatBusinessStatus(row.priority)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.authorizedScope)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
               </table>
             </div>
 
@@ -107,7 +108,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError }
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="merchant-scope-bills-table">
                 <thead><tr><th>商户</th><th>账单号</th><th>标题</th><th>金额</th><th>状态</th><th>授权范围</th><th>留痕证据</th></tr></thead>
-                <tbody>{bills.map((row) => <tr key={row.id}><td>{display(row.merchantId)}</td><td>{display(row.billNo)}</td><td>{display(row.title)}</td><td>{display(row.totalAmount)}</td><td>{display(row.status)}</td><td>{display(row.authorizedScope)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
+                <tbody>{bills.map((row) => <tr key={row.id}><td>{display(row.merchantId)}</td><td>{display(row.billNo)}</td><td>{display(row.title)}</td><td>{display(row.totalAmount)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.authorizedScope)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
               </table>
             </div>
           </>

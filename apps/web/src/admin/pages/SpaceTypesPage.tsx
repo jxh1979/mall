@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 // 空间类型字典行（后端 SpaceTypeRecord，客户端 unwrap 已 camel 化）。
 type SpaceTypeRow = {
@@ -66,7 +67,7 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
             <tbody>
               {rows.map((row) => (
                 <tr key={row.typeCode} data-testid={`space-type-${row.typeCode}`}>
-                  <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{row.status}</td>
+                  <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{formatBusinessStatus(row.status)}</td>
                 </tr>
               ))}
             </tbody>
