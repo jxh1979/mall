@@ -28972,10 +28972,10 @@
         ],
         "operationId": "completeServiceOrder",
         "summary": "完成履约(直付已现场发生)",
-        "x-permission": "service.order.perform",
+        "x-permission": "service.order.create",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
+          "staff_work_phone",
           "web"
         ],
         "x-idempotency-required": true,
@@ -29211,7 +29211,7 @@
         "x-permission": "service.order.create",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
+          "staff_work_phone",
           "web",
           "tablet"
         ],

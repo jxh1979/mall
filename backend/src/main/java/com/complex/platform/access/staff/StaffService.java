@@ -423,7 +423,7 @@ public class StaffService {
     /** E1:后台/主管按日(可选按人)查排班。 */
     public PageResponse<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId) {
         authorizationService.requirePermission("staff.shift.manage");
-        return page(repository.listShifts(workDate, userId));
+        return page(repository.listShifts(workDate, userId, projectScope()));
     }
 
     /** E1:员工自有手机看自己的班次与点位(今天起 7 天)。 */
@@ -486,7 +486,7 @@ public class StaffService {
     /** E2:后台/主管按日查考勤(判定列:正常/迟到/早退/无班次)。 */
     public PageResponse<StaffAttendanceRecord> listAttendance(java.time.LocalDate date) {
         authorizationService.requirePermission("staff.attendance.view");
-        return page(repository.listAttendanceOn(date));
+        return page(repository.listAttendanceOn(date, projectScope()));
     }
 
     public PageResponse<EmployeeNoticeRecord> listNotices() {
@@ -603,24 +603,51 @@ public class StaffService {
         return actor == null || actor.id() == null ? "system" : actor.id();
     }
 
-    /** F批(2026-07-02 拍板):固定工资=员工档案月薪,人事维护。 */
-    public void setBaseSalary(com.complex.platform.access.staff.dto.StaffPayrollBaseRequest request) {
-        authorizationService.requirePermission("staff.payroll.manage");
-        if (request == null || request.userId() == null || request.userId().isBlank()
-                || request.monthlySalaryCent() == null || request.monthlySalaryCent() < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "user_id and non-negative monthly_salary_cent required");
-        }
-        var actor = authorizationService.currentActor();
-        repository.upsertBaseSalary(request.userId().trim(), request.monthlySalaryCent(),
-                actor == null ? null : actor.id(), Instant.now());
-        auditEventService.recordSuccess("staff.payroll.base_saved", "staff.payroll.manage",
-                "staff_base_salary", request.userId().trim(), null, request.idempotencyKey(),
-                java.util.Map.of("monthly_salary_cent", request.monthlySalaryCent()));
+    /** P0 租户隔离(V214):主管/后台列表按调用方项目 scope 过滤;平台管理员/无组织全局员工=null 见全量。 */
+    private String projectScope() {
+        return authorizationService.currentProjectScopeQuietly().orElse(null);
     }
 
-    /** F批:奖金/处罚手录——必须带事由,审计留痕。 */
+    /** F批(2026-07-02 拍板):固定工资=员工档案月薪,人事维护。 */
+    public void setBaseSalary(com.complex.platform.access.staff.dto.StaffPayrollBaseRequest request) {
+        try {
+            authorizationService.requirePermission("staff.payroll.manage");
+            if (request == null || request.userId() == null || request.userId().isBlank()
+                    || request.monthlySalaryCent() == null || request.monthlySalaryCent() < 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "user_id and non-negative monthly_salary_cent required");
+            }
+            var actor = authorizationService.currentActor();
+            repository.upsertBaseSalary(request.userId().trim(), request.monthlySalaryCent(),
+                    actor == null ? null : actor.id(), Instant.now());
+            auditEventService.recordSuccess("staff.payroll.base_saved", "staff.payroll.manage",
+                    "staff_base_salary", request.userId().trim(), null, request.idempotencyKey(),
+                    java.util.Map.of("monthly_salary_cent", request.monthlySalaryCent()));
+        } catch (RuntimeException exception) {
+            // openapi-p0 契约:失败路径落 x-audit-event-failure 事件后再抛(审计闭合)。
+            auditEventService.recordFailure("staff.payroll.base_save_failed", "staff.payroll.manage",
+                    "staff_base_salary", request == null ? null : request.userId(), null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /** F批:奖金/处罚手录——必须带事由,审计留痕。
+     * P0 真幂等(2026-07-03):幂等键唯一占位+命中重放,重复提交不再重复入账。 */
     public void addPayrollAdjustment(com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
-        authorizationService.requirePermission("staff.payroll.manage");
+        try {
+            authorizationService.requirePermission("staff.payroll.manage");
+            idempotencyService.execute("addStaffPayrollAdjustment",
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doAddPayrollAdjustment(request), String.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.payroll.adjustment_add_failed", "staff.payroll.manage",
+                    "staff_payroll_adjustment", request == null ? null : request.userId(), null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private String doAddPayrollAdjustment(com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                 || request.adjType() == null || !java.util.Set.of("bonus", "penalty").contains(request.adjType())
@@ -638,11 +665,26 @@ public class StaffService {
                 java.util.Map.of("user_id", request.userId().trim(), "month", request.month(),
                         "adj_type", request.adjType(), "amount_cent", request.amountCent(),
                         "reason", request.reason().trim()));
+        return id;
     }
 
-    /** F批:提成入台账(手录/系统写入口;服务点单等业务后续自动写)。 */
+    /** F批:提成入台账(手录/系统写入口;服务点单等业务后续自动写)。
+     * P0 真幂等:重复提交不再重复入提成台账。 */
     public void addCommission(com.complex.platform.access.staff.dto.StaffCommissionRequest request) {
-        authorizationService.requirePermission("staff.payroll.manage");
+        try {
+            authorizationService.requirePermission("staff.payroll.manage");
+            idempotencyService.execute("addStaffCommission",
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doAddCommission(request), String.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.payroll.commission_add_failed", "staff.payroll.manage",
+                    "staff_commission_ledger", request == null ? null : request.userId(), null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private String doAddCommission(com.complex.platform.access.staff.dto.StaffCommissionRequest request) {
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                 || request.amountCent() == null || request.amountCent() < 0) {
@@ -657,39 +699,62 @@ public class StaffService {
                 "staff_commission_ledger", id, null, request.idempotencyKey(),
                 java.util.Map.of("user_id", request.userId().trim(), "month", request.month(),
                         "amount_cent", request.amountCent()));
+        return id;
     }
 
     /** F批(2026-07-02 拍板):月结——重算定格全员薪资单(可重复执行=覆盖,补录奖惩后重结);
      * total = 固定 + 提成(台账+酒吧提成) + 奖金 - 处罚;员工只看已定格月份。 */
     public java.util.Map<String, Object> closePayroll(com.complex.platform.access.staff.dto.StaffPayrollCloseRequest request) {
-        authorizationService.requirePermission("staff.payroll.manage");
-        if (request == null || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) is required");
+        try {
+            authorizationService.requirePermission("staff.payroll.manage");
+            if (request == null || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) is required");
+            }
+            var actor = authorizationService.currentActor();
+            int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now());
+            auditEventService.recordSuccess("staff.payroll.month_closed", "staff.payroll.manage",
+                    "staff_payroll_statement", request.month(), null, request.idempotencyKey(),
+                    java.util.Map.of("month", request.month(), "statements", count));
+            return java.util.Map.of("month", request.month(), "statements", count);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.payroll.month_close_failed", "staff.payroll.manage",
+                    "staff_payroll_statement", request == null ? null : request.month(), null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
         }
-        var actor = authorizationService.currentActor();
-        int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now());
-        auditEventService.recordSuccess("staff.payroll.month_closed", "staff.payroll.manage",
-                "staff_payroll_statement", request.month(), null, request.idempotencyKey(),
-                java.util.Map.of("month", request.month(), "statements", count));
-        return java.util.Map.of("month", request.month(), "statements", count);
     }
 
     /** F批:后台按月查全员薪资单。 */
     public PageResponse<StaffPayrollStatementRecord> listPayroll(String month) {
         authorizationService.requirePermission("staff.payroll.manage");
-        return page(repository.listPayrollStatements(month, null));
+        return page(repository.listPayrollStatements(month, null, projectScope()));
     }
 
     /** F批(拍板:月结后才可见):员工查自己薪资——只返回已定格薪资单,未结月自然为空。 */
     public PageResponse<StaffPayrollStatementRecord> listMyPayroll(String month) {
         authorizationService.requirePermission("staff.payroll.view_mine");
         var actor = authorizationService.currentActor();
-        return page(repository.listPayrollStatements(month, actor.id()));
+        // 员工看自己:按 user 自限定,不再叠 project 谓词(员工无档案项目时也能看自己的单)。
+        return page(repository.listPayrollStatements(month, actor.id(), null));
     }
 
-    /** F批:员工提交请假(四类:事假/病假/调休/年假;主管审)。 */
+    /** F批:员工提交请假(四类:事假/病假/调休/年假;主管审)。
+     * P0 真幂等:重复提交重放首次结果,不再重复建请假单。 */
     public StaffLeaveRequestRecord submitLeave(com.complex.platform.access.staff.dto.StaffLeaveRequest request) {
-        authorizationService.requirePermission("staff.leave.submit");
+        try {
+            authorizationService.requirePermission("staff.leave.submit");
+            return idempotencyService.execute("submitStaffLeave",
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doSubmitLeave(request), StaffLeaveRequestRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.leave.submit_failed", "staff.leave.submit",
+                    "staff_leave_request", null, null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private StaffLeaveRequestRecord doSubmitLeave(com.complex.platform.access.staff.dto.StaffLeaveRequest request) {
         if (request == null || request.leaveType() == null
                 || !java.util.Set.of("personal", "sick", "comp", "annual").contains(request.leaveType())
                 || request.startDate() == null || request.endDate() == null
@@ -714,37 +779,44 @@ public class StaffService {
     public PageResponse<StaffLeaveRequestRecord> listMyLeaves() {
         authorizationService.requirePermission("staff.leave.submit");
         var actor = authorizationService.currentActor();
-        return page(repository.listLeaves(null, actor.id()));
+        return page(repository.listLeaves(null, actor.id(), null));
     }
 
     /** F批:主管审请假(复用排班主管权限);通过区间考勤月视图记「请假」。 */
     public StaffLeaveRequestRecord reviewLeave(String id,
             com.complex.platform.access.staff.dto.StaffLeaveReviewRequest request) {
-        authorizationService.requirePermission("staff.shift.manage");
-        if (request == null || request.decision() == null
-                || !java.util.Set.of("approve", "reject").contains(request.decision())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approve or reject");
+        try {
+            authorizationService.requirePermission("staff.shift.manage");
+            if (request == null || request.decision() == null
+                    || !java.util.Set.of("approve", "reject").contains(request.decision())) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approve or reject");
+            }
+            StaffLeaveRequestRecord current = repository.findLeaveById(id)
+                    .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "leave request not found"));
+            if (!current.status().equals("pending")) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "leave request already reviewed");
+            }
+            var actor = authorizationService.currentActor();
+            StaffLeaveRequestRecord saved = repository.saveLeaveRequest(new StaffLeaveRequestRecord(
+                    current.id(), current.userId(), current.leaveType(), current.startDate(), current.endDate(),
+                    current.reason(), request.decision().equals("approve") ? "approved" : "rejected",
+                    actor == null ? null : actor.id(), request.reviewNote(), current.createdAt(), Instant.now()));
+            auditEventService.recordSuccess("staff.leave.reviewed", "staff.shift.manage",
+                    "staff_leave_request", saved.id(), null, request.idempotencyKey(),
+                    java.util.Map.of("decision", request.decision(), "user_id", saved.userId()));
+            return saved;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.leave.review_failed", "staff.shift.manage",
+                    "staff_leave_request", id, null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
         }
-        StaffLeaveRequestRecord current = repository.findLeaveById(id)
-                .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "leave request not found"));
-        if (!current.status().equals("pending")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "leave request already reviewed");
-        }
-        var actor = authorizationService.currentActor();
-        StaffLeaveRequestRecord saved = repository.saveLeaveRequest(new StaffLeaveRequestRecord(
-                current.id(), current.userId(), current.leaveType(), current.startDate(), current.endDate(),
-                current.reason(), request.decision().equals("approve") ? "approved" : "rejected",
-                actor == null ? null : actor.id(), request.reviewNote(), current.createdAt(), Instant.now()));
-        auditEventService.recordSuccess("staff.leave.reviewed", "staff.shift.manage",
-                "staff_leave_request", saved.id(), null, request.idempotencyKey(),
-                java.util.Map.of("decision", request.decision(), "user_id", saved.userId()));
-        return saved;
     }
 
     /** F批:主管/后台查请假(按状态)。 */
     public PageResponse<StaffLeaveRequestRecord> listLeaves(String status) {
         authorizationService.requirePermission("staff.shift.manage");
-        return page(repository.listLeaves(status, null));
+        return page(repository.listLeaves(status, null, projectScope()));
     }
 
     /** F批(2026-07-02 拍板六态口径):考勤月视图——出勤/缺勤(有排班无上班卡)/迟到/早退/

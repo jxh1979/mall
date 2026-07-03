@@ -1,0 +1,33 @@
+package com.complex.platform.serviceorder;
+
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.complex.platform.common.api.ApiException;
+import java.util.Set;
+import org.junit.jupiter.api.Test;
+
+/** 2026-07-03 用户裁决:mark-paid/complete 现场资金动作禁止私人手机,仅公司设备。 */
+class ServiceOrderControllerTerminalPolicyTests {
+
+    private static final Set<String> ALLOWED = Set.of("staff_work_phone", "web", "tablet");
+
+    @Test
+    void privatePhoneIsRejected() {
+        assertThatThrownBy(() -> ServiceOrderController.requireCompanyTerminal("staff_private_phone", ALLOWED))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("TERMINAL_NOT_ALLOWED"));
+    }
+
+    @Test
+    void companyDevicesAndAbsentHeaderPass() {
+        assertThatCode(() -> ServiceOrderController.requireCompanyTerminal("staff_work_phone", ALLOWED))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> ServiceOrderController.requireCompanyTerminal("web", ALLOWED))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> ServiceOrderController.requireCompanyTerminal(null, ALLOWED))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> ServiceOrderController.requireCompanyTerminal("  ", ALLOWED))
+                .doesNotThrowAnyException();
+    }
+}

@@ -28,6 +28,25 @@ public class ServiceOrderController {
         }
     }
 
+    /** 2026-07-03 用户裁决:私人手机不允许带入工作现场——确认收款(mark-paid)/完成履约(complete)
+     * 为必须现场完成的资金动作,仅允许公司设备(工作手机 staff_work_phone / 后台 web / 平板)。
+     * 终端头缺省的调用(webhook/测试/历史脚本)不进此闸,与 TerminalMasterSwitchInterceptor 同一口径;
+     * 允许清单与 openapi-p0 两 operation 的 x-terminal-allowed 一致。 */
+    static void requireCompanyTerminal(String terminalType, java.util.Set<String> allowed) {
+        if (terminalType == null || terminalType.isBlank()) {
+            return;
+        }
+        if (!allowed.contains(terminalType)) {
+            throw ApiException.forbidden("TERMINAL_NOT_ALLOWED",
+                    "terminal '" + terminalType + "' is not allowed for on-site money operations");
+        }
+    }
+
+    private static final java.util.Set<String> MARK_PAID_TERMINALS =
+            java.util.Set.of("staff_work_phone", "web", "tablet");
+    private static final java.util.Set<String> COMPLETE_TERMINALS =
+            java.util.Set.of("staff_work_phone", "web");
+
     @GetMapping("/catalog")
     public ApiResponse<PageResponse<ServiceCatalogItemRecord>> listCatalog() {
         return ApiResponse.ok(service.listCatalog());
@@ -72,7 +91,9 @@ public class ServiceOrderController {
 
     @PostMapping("/orders/{id}/mark-paid")
     public ApiResponse<ServiceOrderRecord> markPaid(@PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
+        requireCompanyTerminal(terminalType, MARK_PAID_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.markPaid(id, request));
     }
@@ -99,7 +120,9 @@ public class ServiceOrderController {
 
     @PostMapping("/orders/{id}/complete")
     public ApiResponse<ServiceOrderRecord> complete(@PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
+        requireCompanyTerminal(terminalType, COMPLETE_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.complete(id, request));
     }

@@ -130,6 +130,104 @@ class ServiceOrderJdbcIntegrationTests {
         jdbcTemplate.update("DELETE FROM staff_payroll_statements WHERE user_id='usr_admin' AND month='2099-09'");
     }
 
+    @Test
+    void v214ServiceOrderDerivesPerformerProjectAndScopedListExcludesOthers() {
+        // P0 租户隔离(V214):服务单按履约人档案归属综合体;后台列表 scoped 只见本综合体单。
+        String performer = "usr_perf_" + key();
+        jdbcTemplate.update("""
+                INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name,
+                        registration_status, status, created_at, updated_at)
+                VALUES (?, 'prj_a', NULL, ?, '履约人A', 'approved', 'active', now(), now())
+                """, "sprof_" + key(), performer);
+        ServiceCatalogItemRecord item = service.upsertCatalogItem(
+                new com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest(
+                        key(), null, "隔离测试舞", 10000L, 10, true, "none", 0L));
+        ServiceOrderRecord order = service.createOrder(
+                new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                        key(), item.id(), performer, null, null, null));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT project_id FROM service_orders WHERE id = ?", String.class, order.id()))
+                .isEqualTo("prj_a");
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        assertThat(repository.listOrders(today, null, "prj_a"))
+                .extracting(ServiceOrderRecord::id).contains(order.id());
+        assertThat(repository.listOrders(today, null, "prj_b"))
+                .extracting(ServiceOrderRecord::id).doesNotContain(order.id());
+        // 平台(null scope)全量可见。
+        assertThat(repository.listOrders(today, null, null))
+                .extracting(ServiceOrderRecord::id).contains(order.id());
+    }
+
+    @Test
+    void idempotencyReplaysFirstResultForCreateMarkPaidComplete() {
+        // P0 真幂等(2026-07-03):幂等键唯一占位+命中重放首次结果——重复提交不重复建单/不重复分账入提成。
+        service.setPayConfig(new com.complex.platform.serviceorder.dto.ServicePayConfigRequest(key(), "https://qr/company"));
+        ServiceCatalogItemRecord item = service.upsertCatalogItem(
+                new com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest(
+                        key(), null, "幂等舞", 20000L, 10, true, "percent", 1000L));
+
+        String createKey = key();
+        ServiceOrderRecord first = service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                createKey, item.id(), "usr_admin", null, null, null));
+        ServiceOrderRecord replay = service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                createKey, item.id(), "usr_admin", null, null, null));
+        assertThat(replay.id()).isEqualTo(first.id());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM service_orders WHERE catalog_item_id = ?", Integer.class, item.id()))
+                .isEqualTo(1);
+
+        String payKey = key();
+        ServiceOrderRecord paid = service.markPaid(first.id(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest(payKey, null));
+        ServiceOrderRecord paidReplay = service.markPaid(first.id(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest(payKey, null));
+        assertThat(paidReplay.status()).isEqualTo("paid");
+        assertThat(paidReplay.paidAt()).isEqualTo(paid.paidAt());
+
+        String completeKey = key();
+        ServiceOrderRecord done = service.complete(first.id(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderActionRequest(completeKey));
+        ServiceOrderRecord doneReplay = service.complete(first.id(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderActionRequest(completeKey));
+        assertThat(doneReplay.dancerShareCent()).isEqualTo(done.dancerShareCent());
+        // 关键:提成台账只入一次。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_commission_ledger WHERE source_type='service_order' AND source_id = ?",
+                Integer.class, first.id())).isEqualTo(1);
+
+        // 同键不同请求体 → 冲突拒绝(防误用旧键提交新单)。
+        assertThatThrownBy(() -> service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                createKey, item.id(), "usr_admin", "bar_x", null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+    }
+
+    @Test
+    void failurePathsRecordDeclaredFailureAuditEvents() {
+        // P1 审计闭合:失败路径按 openapi x-audit-event-failure 落审计事件后再抛。
+        assertThatThrownBy(() -> service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                key(), "svc_missing_" + key(), "usr_admin", null, null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("SERVICE_ITEM_NOT_FOUND"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='service.order.create_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+
+        assertThatThrownBy(() -> service.complete("svo_missing_" + key(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderActionRequest(key())))
+                .isInstanceOf(ApiException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='service.order.complete_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+
+        assertThatThrownBy(() -> service.markPaid("svo_missing_" + key(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest(key(), null)))
+                .isInstanceOf(ApiException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='service.order.pay_confirm_failed' AND event_result='failure'",
+                Integer.class)).isGreaterThanOrEqualTo(1);
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }
