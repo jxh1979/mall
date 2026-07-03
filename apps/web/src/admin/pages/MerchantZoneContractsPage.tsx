@@ -23,6 +23,12 @@ const STATUS_LABELS: Record<string, string> = {
   renewed: "已续签",
 };
 
+// ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
+function shortId(id: string | null | undefined): string {
+  if (!id) return "-";
+  return id.length > 8 ? `…${id.slice(-8)}` : id;
+}
+
 function money(cent: number | null | undefined) {
   if (cent === undefined || cent === null) return "-";
   return `${new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cent / 100)} CNY`;
@@ -58,12 +64,12 @@ export function MerchantZoneContractsPage({ api, setGlobalError }: AdminPageProp
             <tbody>
               {paged.pageRows.map((row) => (
                 <tr key={row.id}>
-                  <td>{row.id}</td>
+                  <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td>
                   <td>{row.effectiveDate ?? "-"} ~ {row.expiryDate ?? "-"}</td>
                   <td>{(row.spaceIds ?? []).join(", ") || "-"}</td>
                   <td>{STATUS_LABELS[row.lifecycleStatus ?? ""] ?? row.lifecycleStatus ?? "-"}</td>
-                  <td>{money(row.depositCent)}</td>
-                  <td>{row.renewedFromContractId ?? "-"}</td>
+                  <td className="admin-num">{money(row.depositCent)}</td>
+                  <td className="admin-id-cell" title={row.renewedFromContractId ?? undefined}>{shortId(row.renewedFromContractId)}</td>
                 </tr>
               ))}
             </tbody>

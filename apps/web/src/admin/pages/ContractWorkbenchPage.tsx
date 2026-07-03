@@ -4,6 +4,13 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { formatBusinessStatus } from "../i18n/statusLabels";
+
+// ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
+function shortId(id: string | null | undefined): string {
+  if (!id) return "-";
+  return id.length > 8 ? `…${id.slice(-8)}` : id;
+}
 
 // 后端 ContractRecord / ContractApprovalFlowStepRecord / SpaceExpiryColorRuleRecord（客户端 unwrap 已 camel 化）。
 type ContractRow = {
@@ -43,6 +50,13 @@ const APPROVE_ROLES: { code: string; label: string }[] = [
   { code: "contract.approve.legal", label: "法务过" },
   { code: "contract.approve.gm", label: "总经理过" },
 ];
+// 审批链表格「审批岗位」列显名：权限码 → 岗位业务名。
+const ROLE_LABELS: Record<string, string> = {
+  "contract.approve.business": "业务岗",
+  "contract.approve.finance": "财务岗",
+  "contract.approve.legal": "法务岗",
+  "contract.approve.gm": "总经理",
+};
 
 /**
  * 合同生命周期工作台（ADM-CONT-001，V162 重建）：起草 → 分组并行审批 → 生效固化 → 退租结算 + 审批链/到期着色配置。
@@ -65,6 +79,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [spaceRental, setSpaceRental] = React.useState<SpaceRental[]>([]);
   const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "" });
   const [disputeReason, setDisputeReason] = React.useState("");
+  // 商户显名字典（页面级拉取，失败降级回 ID）。
+  const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -78,6 +94,13 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
       setFlow(steps ?? []);
       setColorRules(rules ?? []);
       setSpaceRental(spaces ?? []);
+      // 显名字典拉取失败不阻断主流程，表格降级显示 ID。
+      try {
+        const merchants = await api.get<Array<{ id: string; displayName?: string; companyName?: string }>>("/api/v1/platform/merchants");
+        setMerchantNames(Object.fromEntries((merchants ?? []).filter((m) => m.displayName || m.companyName).map((m) => [m.id, (m.displayName ?? m.companyName) as string])));
+      } catch {
+        /* 无权限或接口失败 → 保持空字典 */
+      }
     },
     { onError: setGlobalError, fallbackMessage: "合同数据读取失败", onStart: () => setGlobalError(null) },
   );
@@ -220,14 +243,16 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <h3>合同</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contracts-table">
-            <thead><tr><th>id</th><th>商户</th><th>状态</th><th>租期</th><th>抽成</th><th>操作</th></tr></thead>
+            <thead><tr><th>合同号</th><th>商户</th><th>状态</th><th>租期</th><th>抽成</th><th className="admin-op-col">操作</th></tr></thead>
             <tbody>
               {contracts.map((row) => (
                 <tr key={row.id} data-testid={`contract-${row.id}`}>
-                  <td>{row.id}</td><td>{row.merchantId}</td><td>{row.lifecycleStatus}</td>
+                  <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td>
+                  <td title={row.merchantId}>{merchantNames[row.merchantId] ?? <span className="admin-id-cell">{shortId(row.merchantId)}</span>}</td>
+                  <td>{formatBusinessStatus(row.lifecycleStatus)}</td>
                   <td>{(row.effectiveDate ?? "-") + " → " + (row.expiryDate ?? "-")}</td>
-                  <td>{row.commissionMode ?? "-"}</td>
-                  <td>
+                  <td>{formatBusinessStatus(row.commissionMode)}</td>
+                  <td className="admin-op-col">
                     {row.lifecycleStatus === "drafting" && (
                       <PermissionButton permissionsState={effectivePermissions} permissions={DRAFT}
                         data-testid={`contract-submit-${row.id}`} onClick={() => void submit(row)}>提交审批</PermissionButton>
@@ -289,7 +314,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <tbody>
               {flow.map((s, i) => (
                 <tr key={i} data-testid={`contract-flow-step-${i}`}>
-                  <td>{s.stageSeq}</td><td>{s.stageName}</td><td>{s.approverPermissionCode}</td>
+                  <td>{s.stageSeq}</td><td>{s.stageName}</td><td title={s.approverPermissionCode}>{ROLE_LABELS[s.approverPermissionCode] ?? s.approverPermissionCode}</td>
                 </tr>
               ))}
             </tbody>
@@ -323,15 +348,15 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             data-testid="contract-color-add" onClick={() => void addColorRule()}>新增着色分类</PermissionButton>
         </div>
 
-        <h3>合同变更（6 类，走同一审批链）{selectedId ? ` · ${selectedId}` : "（点合同『明细』选）"}</h3>
+        <h3>合同变更（6 类，走同一审批链）{selectedId ? <span className="admin-id-cell" title={selectedId}> · {shortId(selectedId)}</span> : "（点合同『明细』选）"}</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contract-changes-table">
-            <thead><tr><th>id</th><th>类型</th><th>审批</th><th>操作</th></tr></thead>
+            <thead><tr><th>变更号</th><th>类型</th><th>审批</th><th className="admin-op-col">操作</th></tr></thead>
             <tbody>
               {changes.map((ch) => (
                 <tr key={ch.id} data-testid={`contract-change-${ch.id}`}>
-                  <td>{ch.id}</td><td>{ch.changeType}</td><td>{ch.approvalStatus}</td>
-                  <td>{ch.approvalStatus === "pending" && APPROVE_ROLES.map((r) => (
+                  <td className="admin-id-cell" title={ch.id}>{shortId(ch.id)}</td><td>{formatBusinessStatus(ch.changeType)}</td><td>{formatBusinessStatus(ch.approvalStatus)}</td>
+                  <td className="admin-op-col">{ch.approvalStatus === "pending" && APPROVE_ROLES.map((r) => (
                     <PermissionButton key={r.code} permissionsState={effectivePermissions} permissions={[r.code]}
                       data-testid={`change-approve-${r.code}-${ch.id}`} onClick={() => void approveChange(ch.id, r.code)}>{r.label}</PermissionButton>
                   ))}</td>
@@ -355,12 +380,12 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contract-settlements-table">
-            <thead><tr><th>id</th><th>触发</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>结算单号</th><th>触发</th><th>状态</th><th className="admin-op-col">操作</th></tr></thead>
             <tbody>
               {settlements.map((st) => (
                 <tr key={st.id} data-testid={`contract-settlement-${st.id}`}>
-                  <td>{st.id}</td><td>{st.triggerType}</td><td>{st.status}</td>
-                  <td>
+                  <td className="admin-id-cell" title={st.id}>{shortId(st.id)}</td><td>{formatBusinessStatus(st.triggerType)}</td><td>{formatBusinessStatus(st.status)}</td>
+                  <td className="admin-op-col">
                     {st.status === "disputed" && (
                       <PermissionButton permissionsState={effectivePermissions} permissions={DISPUTE_RESOLVE}
                         data-testid={`settlement-resolve-${st.id}`} onClick={() => void settlementAction(st.id, "resolve-dispute")}>裁决→待结算</PermissionButton>

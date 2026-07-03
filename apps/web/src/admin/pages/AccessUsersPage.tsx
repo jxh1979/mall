@@ -4,9 +4,16 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AccessUserRow, AdminPageProps, PermissionTemplateRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 function templateLabel(template: PermissionTemplateRow) {
   return template.templateName ?? template.name ?? template.id;
+}
+
+// ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
+function shortId(id: string | null | undefined): string {
+  if (!id) return "-";
+  return id.length > 8 ? `…${id.slice(-8)}` : id;
 }
 
 export function AccessUsersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
@@ -22,6 +29,9 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   const [merchantId, setMerchantId] = React.useState("merchant-1");
   const [status, setStatus] = React.useState("active");
   const [selectedTemplateId, setSelectedTemplateId] = React.useState("");
+  // 组织 / 商户显名字典（页面级拉取，失败降级回 ID）。
+  const [orgNames, setOrgNames] = React.useState<Record<string, string>>({});
+  const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -35,6 +45,17 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       setRows(users);
       setTemplates(permissionTemplates);
       setSelectedTemplateId((current) => current || permissionTemplates[0]?.id || "");
+      // 显名字典拉取失败不阻断主流程，直接降级显示 ID。
+      try {
+        const [entities, merchants] = await Promise.all([
+          api.get<Array<{ id: string; name?: string; code?: string }>>("/api/v1/platform/business-entities"),
+          api.get<Array<{ id: string; displayName?: string; companyName?: string }>>("/api/v1/platform/merchants"),
+        ]);
+        setOrgNames(Object.fromEntries((entities ?? []).filter((e) => e.name || e.code).map((e) => [e.id, (e.name ?? e.code) as string])));
+        setMerchantNames(Object.fromEntries((merchants ?? []).filter((m) => m.displayName || m.companyName).map((m) => [m.id, (m.displayName ?? m.companyName) as string])));
+      } catch {
+        /* 无权限或接口失败 → 保持空字典，表格回退 ID */
+      }
     },
     { onError: setGlobalError, fallbackMessage: "账号数据读取失败", onStart: () => setGlobalError(null) },
   );
@@ -108,29 +129,29 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       <AdminPageHeader title="员工账号" description="管理员工账号、岗位角色和企业微信同步结果；禁用、手动录入和分配权限模板必须留痕。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-form-row">
-          <input data-testid="access-user-name" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="员工账号" />
-          <input data-testid="access-user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="初始密码" />
-          <input data-testid="access-user-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="手机号（可选，后端仅留哈希）" />
-          <select data-testid="access-user-account-type" value={accountType} onChange={(event) => setAccountType(event.target.value)}>
+          <label>员工账号<input data-testid="access-user-name" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="登录用账号名" /></label>
+          <label>初始密码<input data-testid="access-user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="首次登录使用" /></label>
+          <label>手机号<input data-testid="access-user-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="可选，后端仅留哈希" /></label>
+          <label>账号类型<select data-testid="access-user-account-type" value={accountType} onChange={(event) => setAccountType(event.target.value)}>
             <option value="staff">普通员工</option>
             <option value="sales">销售人员</option>
             <option value="supervisor">主管</option>
             <option value="merchant_admin">商户管理员</option>
             <option value="merchant">商户员工</option>
-          </select>
-          <input data-testid="access-user-org" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} placeholder="组织 ID" />
-          <input data-testid="access-user-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)} placeholder="商户 ID（销售/商户账号必填）" />
-          <input data-testid="access-user-consent" value={consentReference} onChange={(event) => setConsentReference(event.target.value)} placeholder="同意/授权凭据编号（可选）" />
-          <input data-testid="access-user-evidence" value={evidenceAttachmentIds} onChange={(event) => setEvidenceAttachmentIds(event.target.value)} placeholder="证据附件 ID，逗号分隔（可选）" />
-          <select data-testid="access-user-status" value={status} onChange={(event) => setStatus(event.target.value)}>
+          </select></label>
+          <label>所属组织<input data-testid="access-user-org" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} placeholder="组织 ID" /></label>
+          <label>所属商户<input data-testid="access-user-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)} placeholder="商户 ID（销售/商户账号必填）" /></label>
+          <label>授权凭据<input data-testid="access-user-consent" value={consentReference} onChange={(event) => setConsentReference(event.target.value)} placeholder="同意/授权凭据编号（可选）" /></label>
+          <label>证据附件<input data-testid="access-user-evidence" value={evidenceAttachmentIds} onChange={(event) => setEvidenceAttachmentIds(event.target.value)} placeholder="附件 ID，逗号分隔（可选）" /></label>
+          <label>初始状态<select data-testid="access-user-status" value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="active">启用</option>
             <option value="invited">待激活</option>
             <option value="disabled">禁用</option>
-          </select>
-          <select data-testid="access-user-template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+          </select></label>
+          <label>权限模板<select data-testid="access-user-template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
             <option value="">暂不赋权</option>
             {templates.map((template) => <option key={template.id} value={template.id}>{templateLabel(template)}</option>)}
-          </select>
+          </select></label>
           <PermissionButton permissionsState={effectivePermissions} permissions={["access.user.manage"]} data-testid="access-user-create" onClick={() => void createUser()} disabled={!username.trim() || !password.trim() || submitting}>新增员工并赋权</PermissionButton>
         </div>
         {formError ? <div data-testid="access-users-error" className="admin-inline-error">{formError}</div> : null}
@@ -143,10 +164,10 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
               <tr key={row.id}>
                 <td>{row.username}</td>
                 <td>{row.phone ?? "-"}</td>
-                <td>{row.accountType}</td>
-                <td>{row.organizationId ?? "-"}</td>
-                <td>{row.merchantId ?? "-"}</td>
-                <td>{row.status ?? "active"}</td>
+                <td>{formatBusinessStatus(row.accountType)}</td>
+                <td>{row.organizationId ? (orgNames[row.organizationId] ?? <span className="admin-id-cell" title={row.organizationId}>{shortId(row.organizationId)}</span>) : "-"}</td>
+                <td>{row.merchantId ? (merchantNames[row.merchantId] ?? <span className="admin-id-cell" title={row.merchantId}>{shortId(row.merchantId)}</span>) : "-"}</td>
+                <td>{formatBusinessStatus(row.status ?? "active")}</td>
               </tr>
             ))}</tbody>
           </table>
