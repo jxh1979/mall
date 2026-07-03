@@ -637,16 +637,23 @@ class MainActivity : Activity() {
   // ---------------------------------------------------------------------------
   private fun showStaffNotices() {
     val status = statusText("正在拉取公司公告…")
-    val list = statusText("")
-    val ackId = editText("要确认已读的公告 id")
+    val list = rowsContainer()
+    val ackId = editText("要确认已读的公告 id（点上方公告自动回填）")
     val refresh = {
       runBackground(
         action = { api.listStaffNotices() },
         onSuccess = { notices ->
-          status.text = "公告 ${notices.size} 条"
-          list.text = if (notices.isEmpty()) "暂无公告" else notices.joinToString("\n\n") { n ->
-            "[${n.consentStatus ?: "-"}] ${n.title ?: n.id}\n${n.body ?: ""}"
-          }
+          status.text = "公告 ${notices.size} 条（点一条自动回填 id）"
+          fillSelectableRows(
+            list,
+            notices.map { n ->
+              "[${n.consentStatus ?: "-"}] ${n.title ?: n.id}\n${n.body ?: ""}" to {
+                ackId.setText(n.id ?: "")
+                status.text = "已选公告：${n.title ?: n.id}"
+              }
+            },
+            emptyText = "暂无公告",
+          )
         },
         onError = { status.text = "拉取失败：${friendly(it)}" },
       )
@@ -688,19 +695,27 @@ class MainActivity : Activity() {
 
   private fun showBarAvailability() {
     val status = statusText("正在拉取酒吧桌位…")
-    val list = statusText("")
-    val barId = editText("酒吧 bar_id")
-    val tableId = editText("桌位 table_id(从上表选空位)")
+    val list = rowsContainer()
+    val barId = editText("酒吧 bar_id(点上方桌位自动回填)")
+    val tableId = editText("桌位 table_id(点上方空位自动回填)")
     val time = editText("到店时间(如 2026-07-02T20:00:00Z)")
     val guests = editText("人数").apply { inputType = InputType.TYPE_CLASS_NUMBER }
     runBackground(
       action = { api.listBarTableAvailability() },
       onSuccess = { rows ->
-        status.text = "桌位 ${rows.size} 个(员工代订免定金,收款在公司设备/前台)"
-        list.text = if (rows.isEmpty()) "暂无桌位" else rows.joinToString("\n") { r ->
-          "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
-            "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ${(r.minConsumptionCent ?: 0) / 100}元"
-        }
+        status.text = "桌位 ${rows.size} 个(员工代订免定金,收款在公司设备/前台;点一条自动回填)"
+        fillSelectableRows(
+          list,
+          rows.map { r ->
+            "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
+              "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ${(r.minConsumptionCent ?: 0) / 100}元" to {
+              tableId.setText(r.id ?: "")
+              r.barId?.let { barId.setText(it) }
+              status.text = "已选桌位：${r.tableCode ?: r.id}"
+            }
+          },
+          emptyText = "暂无桌位",
+        )
       },
       onError = { status.text = "拉取失败：${friendly(it)}" },
     )
@@ -955,7 +970,8 @@ class MainActivity : Activity() {
   // ── G批(2026-07-02 六口径):代客点服务(直付QR) / 我的服务任务 / 我的收款码 ──
   private fun showServiceOrderCreate() {
     val catalog = statusText("正在拉取服务目录…")
-    val itemId = editText("服务项 id(从上表选)")
+    val catalogList = rowsContainer()
+    val itemId = editText("服务项 id(点上方目录自动回填)")
     val performer = editText("履约员工 user_id(客人指定谁填谁)")
     val tableId = editText("桌台 table_id(可空)")
     val note = editText("备注(可空)")
@@ -964,10 +980,18 @@ class MainActivity : Activity() {
     runBackground(
       action = { api.listServiceCatalog() },
       onSuccess = { rows ->
-        catalog.text = if (rows.isEmpty()) "目录为空(请后台维护)" else rows.joinToString("\n") { r ->
-          "${r.id}  ${r.name}  参考价 ¥${(r.priceCent ?: 0) / 100.0}" +
-            (r.durationMinutes?.let { "  约${it}分钟" } ?: "")
-        }
+        catalog.text = "服务目录 ${rows.size} 项(点一项自动回填 id)"
+        fillSelectableRows(
+          catalogList,
+          rows.map { r ->
+            "${r.name}  参考价 ¥${(r.priceCent ?: 0) / 100.0}" +
+              (r.durationMinutes?.let { "  约${it}分钟" } ?: "") to {
+              itemId.setText(r.id ?: "")
+              catalog.text = "已选服务项：${r.name}"
+            }
+          },
+          emptyText = "目录为空(请后台维护)",
+        )
       },
       onError = { catalog.text = "目录拉取失败：${friendly(it)}" },
     )
@@ -1029,7 +1053,7 @@ class MainActivity : Activity() {
     }
     setContentView(screen(
       title = "代客点服务(直付)",
-      children = listOf(catalog, itemId, performer, tableId, note, orderButton, status, qrImage,
+      children = listOf(catalog, catalogList, itemId, performer, tableId, note, orderButton, status, qrImage,
         lastOrderId, paidButton, completeButton,
         secondaryButton("返回首页") { showHome() }),
     ))
@@ -1037,8 +1061,8 @@ class MainActivity : Activity() {
 
   private fun showMyServiceOrders() {
     val status = statusText("正在拉取我的服务任务…")
-    val list = statusText("")
-    val orderId = editText("要操作的服务单 id")
+    val list = rowsContainer()
+    val orderId = editText("要操作的服务单 id(点上方任务自动回填)")
     val labels = mapOf("pending_accept" to "待接单", "accepted" to "已接单", "completed" to "已完成", "cancelled" to "已取消")
     val refresh = {
       runBackground(
@@ -1053,10 +1077,16 @@ class MainActivity : Activity() {
           val count = stats["completed_count"]?.toString()?.trim('"') ?: "0"
           val income = (stats["reference_income_cent"]?.toString()?.trim('"')?.toLongOrNull() ?: 0) / 100.0
           status.text = "本月完成 $count 单,应得 ¥$income(公司代收,月结进工资并代扣个税)"
-          list.text = if (orders.isEmpty()) "暂无服务任务" else orders.joinToString("\n\n") { o ->
-            "${o.id}\n${o.itemName} ¥${(o.priceCent ?: 0) / 100.0} 桌台 ${o.tableId ?: "-"} " +
-              "[${labels[o.status] ?: o.status}]" + (o.customerNote?.let { "\n备注: $it" } ?: "")
-          }
+          fillSelectableRows(
+            list,
+            orders.map { o ->
+              "${o.itemName} ¥${(o.priceCent ?: 0) / 100.0} 桌台 ${o.tableId ?: "-"} " +
+                "[${labels[o.status] ?: o.status}]" + (o.customerNote?.let { "\n备注: $it" } ?: "") to {
+                orderId.setText(o.id ?: "")
+              }
+            },
+            emptyText = "暂无服务任务",
+          )
         },
         onError = { status.text = "拉取失败：${friendly(it)}" },
       )
@@ -1175,6 +1205,40 @@ class MainActivity : Activity() {
     return ScrollView(this).apply {
       setBackgroundColor(Color.WHITE)
       addView(container)
+    }
+  }
+
+  /** 可点选列表容器：配合 [fillSelectableRows] 使用。 */
+  private fun rowsContainer(): LinearLayout = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+  }
+
+  /** 可点选列表：每条记录一个独立 TextView，点中高亮并执行回填，免去肉眼抄 id。 */
+  private fun fillSelectableRows(
+    container: LinearLayout,
+    rows: List<Pair<String, () -> Unit>>,
+    emptyText: String,
+  ) {
+    container.removeAllViews()
+    fun params() = LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { topMargin = dp(4) }
+    if (rows.isEmpty()) {
+      container.addView(statusText(emptyText), params())
+      return
+    }
+    rows.forEach { (text, onPick) ->
+      val row = statusText(text)
+      row.isClickable = true
+      row.setOnClickListener {
+        for (i in 0 until container.childCount) {
+          container.getChildAt(i).setBackgroundColor(Color.parseColor("#f2f4f7"))
+        }
+        row.setBackgroundColor(Color.parseColor("#d9e7ff"))
+        onPick()
+      }
+      container.addView(row, params())
     }
   }
 
