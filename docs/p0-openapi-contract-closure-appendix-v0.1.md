@@ -282,8 +282,8 @@
 | `risk_alert.transfer` | staff-token | platform | 1 | transferRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.view` | staff-token | platform | 2 | searchRiskAlerts, getRiskAlertDetail | 已在权限矩阵正文出现 |
 | `service.catalog.manage` | staff-token | platform | 4 | upsertServiceCatalogItem, listServiceCatalogAll, listServiceOrders, setServicePayConfig | OpenAPI 补充，以本附录为准 |
-| `service.order.create` | staff-token | platform | 6 | listServiceCatalog, createServiceOrder, cancelServiceOrder, serviceOrderPaymentCode, markServiceOrderPaid, getServicePayConfig | OpenAPI 补充，以本附录为准 |
-| `service.order.perform` | staff-token | platform | 6 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, completeServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
+| `service.order.create` | staff-token | platform | 7 | listServiceCatalog, createServiceOrder, completeServiceOrder, cancelServiceOrder, serviceOrderPaymentCode, markServiceOrderPaid, getServicePayConfig | OpenAPI 补充，以本附录为准 |
+| `service.order.perform` | staff-token | platform | 5 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.punch` | staff-token | platform | 1 | punchStaffAttendance | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.view` | staff-token | platform | 1 | listStaffAttendance | OpenAPI 补充，以本附录为准 |
 | `staff.device.bind` | device-credential, staff-token | project | 2 | bindStaffDeviceCredential, reportStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
@@ -1325,8 +1325,8 @@
 | `service.order.accepted` | success | `acceptServiceOrder` | `POST` | `/api/v1/services/orders/{id}/accept` | P0-待归类 | `service.order.perform` | 接口级事件，以本附录为准 |
 | `service.order.cancel_failed` | failure | `cancelServiceOrder` | `POST` | `/api/v1/services/orders/{id}/cancel` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
 | `service.order.cancelled` | success | `cancelServiceOrder` | `POST` | `/api/v1/services/orders/{id}/cancel` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
-| `service.order.complete_failed` | failure | `completeServiceOrder` | `POST` | `/api/v1/services/orders/{id}/complete` | P0-待归类 | `service.order.perform` | 接口级事件，以本附录为准 |
-| `service.order.completed` | success | `completeServiceOrder` | `POST` | `/api/v1/services/orders/{id}/complete` | P0-待归类 | `service.order.perform` | 接口级事件，以本附录为准 |
+| `service.order.complete_failed` | failure | `completeServiceOrder` | `POST` | `/api/v1/services/orders/{id}/complete` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
+| `service.order.completed` | success | `completeServiceOrder` | `POST` | `/api/v1/services/orders/{id}/complete` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
 | `service.order.create_failed` | failure | `createServiceOrder` | `POST` | `/api/v1/services/orders` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
 | `service.order.created` | success | `createServiceOrder` | `POST` | `/api/v1/services/orders` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
 | `service.order.list_failed` | failure | `listServiceOrders` | `GET` | `/api/v1/services/orders` | P0-待归类 | `service.catalog.manage` | 接口级事件，以本附录为准 |
@@ -1935,7 +1935,7 @@
 | P0-待归类 | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | 月结(定格全员薪资单) | `staff.payroll.manage` | `staff.payroll.month_closed` / `staff.payroll.month_close_failed` | web | operation 级补充 |
 | P0-待归类 | `completeContractSettlement` | `POST` | `/api/v1/contracts/settlements/{settlement_id}/complete` | 结清退租结算→已结清+终止合同 | `contract.settlement.manage` | `contract.settlement_completed` / `contract.settlement_complete_failed` | web | operation 级补充 |
 | P0-待归类 | `completeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/complete` | 完成工单处理 | `facility.work_order.manage` | `facility.work_order_completed` / `facility.work_order_complete_failed` | web | operation 级补充 |
-| P0-待归类 | `completeServiceOrder` | `POST` | `/api/v1/services/orders/{id}/complete` | 完成履约(直付已现场发生) | `service.order.perform` | `service.order.completed` / `service.order.complete_failed` | staff_private_phone, web | operation 级补充 |
+| P0-待归类 | `completeServiceOrder` | `POST` | `/api/v1/services/orders/{id}/complete` | 完成履约(直付已现场发生) | `service.order.create` | `service.order.completed` / `service.order.complete_failed` | staff_work_phone, web | operation 级补充 |
 | P0-待归类 | `confirmFacilityInspectionSupervisor` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/supervisor-confirm` | 主管确认巡检任务关闭 | `facility.inspection.manage` | `facility.inspection_task_closed` / `facility.inspection_task_close_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | 确认商户账单 | `merchant.billing.confirm` | `merchant.billing.confirm` / `merchant.billing.confirm_failed` | web | operation 级补充 |
 | P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
@@ -2020,7 +2020,7 @@
 | P0-待归类 | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | 查询企微会话违规命中列表 | `wecom.risk_hit.view` | `wecom.risk_hit.list` / `wecom.risk_hit.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listWorkOrdersAssignedToMe` | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | 我的工单(员工自有手机) | `facility.work_order.view_assigned` | `facility.work_order_assigned_list.viewed` / `facility.work_order_assigned_list.view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `markFacilityWorkOrdersOverdue` | `POST` | `/api/v1/facility/work-orders/mark-overdue` | 批量标记逾期工单 | `facility.work_order.manage` | `facility.work_order_overdue_marked` / `facility.work_order_overdue_mark_failed` | web | operation 级补充 |
-| P0-待归类 | `markServiceOrderPaid` | `POST` | `/api/v1/services/orders/{id}/mark-paid` | 确认收款到公司账户(服务员现场) | `service.order.create` | `service.order.paid` / `service.order.pay_confirm_failed` | staff_private_phone, web, tablet | operation 级补充 |
+| P0-待归类 | `markServiceOrderPaid` | `POST` | `/api/v1/services/orders/{id}/mark-paid` | 确认收款到公司账户(服务员现场) | `service.order.create` | `service.order.paid` / `service.order.pay_confirm_failed` | staff_work_phone, web, tablet | operation 级补充 |
 | P0-待归类 | `myServicePaymentCode` | `GET` | `/api/v1/services/payment-code/mine` | 我的收款码 | `service.order.perform` | `service.payment_code.viewed` / `service.payment_code.view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `myServiceStats` | `GET` | `/api/v1/services/orders/my-stats` | 我的服务统计(当月次数+参考收入) | `service.order.perform` | `service.order.stats_viewed` / `service.order.stats_view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `myStaffAttendanceMonthView` | `GET` | `/api/v1/staff/attendance/month-view` | 考勤月视图(员工手机,逐日六态) | `staff.shift.view` | `staff.attendance_month.viewed` / `staff.attendance_month.view_failed` | staff_private_phone, web | operation 级补充 |
