@@ -27,7 +27,7 @@ public interface StaffRepository {
             String sourceId, long amountCent, String note, java.time.Instant now);
 
     /** 月结:对有薪资要素的员工重算定格(base+Σledger提成+Σ酒吧提成+Σbonus-Σpenalty);幂等覆盖。返回生成单数。 */
-    int closePayrollMonth(String month, String closedBy, java.time.Instant now);
+    int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope);
 
     /** P0 租户隔离(V214):projectScope=null 见全量;非空仅见 project_id=该值的行(下同)。 */
     java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId,

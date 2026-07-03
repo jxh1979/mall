@@ -81,7 +81,7 @@ class JdbcStaffRepository implements StaffRepository {
     }
 
     @Override
-    public int closePayrollMonth(String month, String closedBy, java.time.Instant now) {
+    public int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope) {
         // 月结重算:固定档案 + 台账提成 + 酒吧提成(bar_commission_calculations 按月/非作废) + 奖 - 罚;
         // 有任一薪资要素的员工都出单;幂等覆盖(uq user+month)。
         return jdbcTemplate.update("""
@@ -132,6 +132,9 @@ class JdbcStaffRepository implements StaffRepository {
                   LEFT JOIN (SELECT DISTINCT ON (user_id) user_id, project_id FROM staff_profiles
                               ORDER BY user_id, created_at DESC) sp
                          ON sp.user_id = u.user_id
+                 -- P0 项目级月结(V214):平台口径(scope=null)重算全量;项目口径仅本综合体员工,
+                 -- 绝不 INSERT/覆盖其他项目的薪资单。无档案员工(sp.project_id 为 NULL)只在平台口径纳入。
+                 WHERE (:project_scope::text IS NULL OR sp.project_id = :project_scope)
                 ON CONFLICT (user_id, month) DO UPDATE SET
                     project_id = EXCLUDED.project_id,
                     base_cent = EXCLUDED.base_cent,
@@ -144,7 +147,8 @@ class JdbcStaffRepository implements StaffRepository {
                     closed_at = EXCLUDED.closed_at
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("month", month).addValue("closed_by", closedBy)
-                .addValue("now", java.sql.Timestamp.from(now)));
+                .addValue("now", java.sql.Timestamp.from(now))
+                .addValue("project_scope", projectScope));
     }
 
     @Override
