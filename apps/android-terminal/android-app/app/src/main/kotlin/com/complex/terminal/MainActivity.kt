@@ -237,7 +237,7 @@ class MainActivity : Activity() {
       primaryButton("我的薪资") { showMyPayroll() },
       primaryButton("考勤月视图") { showAttendanceMonth() },
       primaryButton("请假") { showLeave() },
-      statusText("—— 服务点单(直付履约人,酒吧不经手) ——"),
+      statusText("—— 服务点单(公司代收,月结分账) ——"),
       primaryButton("代客点服务") { showServiceOrderCreate() },
       primaryButton("我的服务收入") { showMyServiceOrders() },
       secondaryButton("我的收款码") { showMyPaymentCode() },
@@ -989,7 +989,7 @@ class MainActivity : Activity() {
     ))
   }
 
-  // ── G批(2026-07-02 六口径):代客点服务(直付QR) / 我的服务任务 / 我的收款码 ──
+  // ── G批(2026-07-02 六口径):代客点服务(公司代收QR) / 我的服务任务 / 我的收款码 ──
   private fun showServiceOrderCreate() {
     val catalog = statusText("正在拉取服务目录…")
     val catalogList = rowsContainer()
@@ -997,7 +997,7 @@ class MainActivity : Activity() {
     val performer = editText("履约员工 user_id(客人指定谁填谁)")
     val tableId = editText("桌台 table_id(可空)")
     val note = editText("备注(可空)")
-    val status = statusText("下单后自动出示履约人收款码,客人扫码直付——酒吧不经手不入账。")
+    val status = statusText("下单后出示公司统一收款码,客人扫码支付、钱进公司账户;完成履约后管理费归公司,履约人应得份额月结进薪资并代扣个税。")
     val qrImage = android.widget.ImageView(this)
     runBackground(
       action = { api.listServiceCatalog() },
@@ -1074,7 +1074,7 @@ class MainActivity : Activity() {
       )
     }
     setContentView(screen(
-      title = "代客点服务(直付)",
+      title = "代客点服务(公司代收)",
       children = listOf(catalog, catalogList, itemId, performer, tableId, note, orderButton, status, qrImage,
         lastOrderId, paidButton, completeButton,
         secondaryButton("返回首页") { showHome() }),
@@ -1127,7 +1127,7 @@ class MainActivity : Activity() {
       if (id.isEmpty()) { status.text = "请填服务单 id"; return@primaryButton }
       runBackground(
         action = { api.completeServiceOrder(id, ServiceActionReq("cmp_${System.currentTimeMillis()}")) },
-        onSuccess = { status.text = "已完成：${it.id}(直付已在现场发生)"; refresh() },
+        onSuccess = { status.text = "已完成：${it.id}(已分账:管理费归公司,应得月结进薪资)"; refresh() },
         onError = { status.text = "完成失败：${friendly(it)}" },
       )
     }
@@ -1174,7 +1174,7 @@ class MainActivity : Activity() {
       )
     }
     setContentView(screen(
-      title = "我的收款码(直付)",
+      title = "我的收款码(历史保留)",
       children = listOf(status, qrInput, scanButton, saveButton, qrImage,
         secondaryButton("返回首页") { showHome() }),
     ))

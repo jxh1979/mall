@@ -592,7 +592,7 @@ data class AttendanceDayRow(
   val shiftEndAt: String? = null,
 )
 
-// ── G批(2026-07-02 六口径拍板):服务点单——目录/代客下单指定履约人/直付收款码/履约流转 ──
+// ── G批(2026-07-02 六口径拍板):服务点单——目录/代客下单指定履约人/公司收款码/履约流转 ──
 
 @Serializable
 data class ServiceCatalogRow(
