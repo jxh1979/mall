@@ -83,6 +83,21 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("PARAM_INVALID", "REQUEST_BODY_INVALID", "request body is invalid"));
     }
 
+    /**
+     * Critical 修复(2026-07-03,request_id f5a9eddd):必填 query 参数缺失(如
+     * GET /api/v1/leasing/follow-ups 不带 ref_type/ref_id)此前无专属处理器,
+     * 掉进兜底 Exception 处理器返回 500;契约上参数缺失=调用方错误,应为 400 PARAM_INVALID。
+     */
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    ResponseEntity<ApiResponse<Void>> handleMissingParameter(
+            org.springframework.web.bind.MissingServletRequestParameterException exception) {
+        log.warn("missing request parameter: {}", exception.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED",
+                        "required parameter '" + exception.getParameterName() + "' is missing"));
+    }
+
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException exception) {
         log.warn("method not supported: {}", exception.getMessage());
