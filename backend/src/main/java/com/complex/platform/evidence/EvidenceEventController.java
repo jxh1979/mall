@@ -44,9 +44,11 @@ public class EvidenceEventController {
     }
 
     @GetMapping("/events")
-    public ApiResponse<List<EvidenceEventRecord>> listEvents(@RequestParam(defaultValue = "20") int limit) {
+    public ApiResponse<com.complex.platform.common.api.PageResponse<EvidenceEventRecord>> listEvents(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         authorizationService.requirePermission("evidence.event.view");
-        return ApiResponse.ok(service.listEvents(limit));
+        return ApiResponse.ok(service.listEvents(page, size));
     }
 
     @PostMapping("/attachments/upload-intents")

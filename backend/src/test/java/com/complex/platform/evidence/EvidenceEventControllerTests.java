@@ -119,7 +119,7 @@ class EvidenceEventControllerTests {
 
     @Test
     void listEventsUsesOpenApiViewPermissionAndAndroidListShape() throws Exception {
-        when(service.listEvents(20)).thenReturn(List.of(new EvidenceEventRecord(
+        when(service.listEvents(1, 20)).thenReturn(new com.complex.platform.common.api.PageResponse<>(List.of(new EvidenceEventRecord(
                 "evt_1",
                 "P0-ANDROID-1",
                 "staff_1",
@@ -131,13 +131,14 @@ class EvidenceEventControllerTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:01Z"),
                 null
-        )));
+        )), 1, 20, 1));
 
-        mockMvc.perform(get("/api/v1/evidence/events?limit=20")
+        mockMvc.perform(get("/api/v1/evidence/events?page=1&size=20")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].event_type").value("terminal.login"))
-                .andExpect(jsonPath("$.data[0].merchant_id").doesNotExist());
+                .andExpect(jsonPath("$.data.items[0].event_type").value("terminal.login"))
+                .andExpect(jsonPath("$.data.items[0].merchant_id").doesNotExist())
+                .andExpect(jsonPath("$.data.total").value(1));
 
         verify(authorizationService).requirePermission("evidence.event.view");
     }

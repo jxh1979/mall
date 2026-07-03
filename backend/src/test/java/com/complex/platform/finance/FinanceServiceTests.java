@@ -899,7 +899,7 @@ class FinanceServiceTests {
 
         // Merchant A lists: should only see their item
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_a"));
-        PageResponse<ArApItemRecord> result = service.listArApItems();
+        PageResponse<ArApItemRecord> result = service.listArApItems("", 1, 20);
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().get(0).merchantId()).isEqualTo("merchant_a");
     }
@@ -914,7 +914,7 @@ class FinanceServiceTests {
 
         // Platform admin: empty scope = see all
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
-        PageResponse<ArApItemRecord> result = service.listArApItems();
+        PageResponse<ArApItemRecord> result = service.listArApItems("", 1, 20);
         assertThat(result.items()).hasSize(2);
     }
 

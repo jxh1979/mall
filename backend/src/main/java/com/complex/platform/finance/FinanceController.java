@@ -44,9 +44,12 @@ public class FinanceController {
     }
 
     @GetMapping("/ar-ap-items")
-    public ApiResponse<PageResponse<ArApItemRecord>> listArApItems() {
+    public ApiResponse<PageResponse<ArApItemRecord>> listArApItems(
+            @RequestParam(name = "keyword", required = false) String keyword,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         authorizationService.requirePermission("finance.ar_ap.view");
-        return ApiResponse.ok(service.listArApItems());
+        return ApiResponse.ok(service.listArApItems(keyword, page, size));
     }
 
     @GetMapping("/ar-ap-items/export")

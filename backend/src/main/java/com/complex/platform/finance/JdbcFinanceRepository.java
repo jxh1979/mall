@@ -100,6 +100,37 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public com.complex.platform.common.api.PageResponse<ArApItemRecord> listArApItemsPaged(
+            String merchantId, String keyword, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 20 : Math.min(size, 200);
+        String trimmed = keyword == null ? "" : keyword.trim();
+        // 租户隔离谓词与 listArApItems/ByMerchant 完全同口径:merchantId 非空才加 merchant_id 过滤(平台口径不加)。
+        // 关键词跨 单号/方向/状态 服务端过滤,ILIKE 大小写不敏感;参数化绑定,无拼接注入。
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("kw", trimmed.isEmpty() ? null : "%" + trimmed + "%", java.sql.Types.VARCHAR);
+        String where = """
+                 WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
+                   AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw)
+                """;
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<ArApItemRecord> items = jdbcTemplate.query("""
+                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
+                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
+                       accounting_period, status, created_at, updated_at, merchant_id
+                  FROM ar_ap_items
+                """ + where + """
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapArApItem);
+        return new com.complex.platform.common.api.PageResponse<>(
+                items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
     public Optional<ArApItemRecord> findArApItemById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
