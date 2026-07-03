@@ -513,6 +513,7 @@ export default function AdminApp() {
     </main>
   ) : (
     <div className="admin-shell" data-testid="admin-shell">
+      <a className="skip-link" href="#main-content">跳到主内容</a>
       {navOpen ? (
         <div
           className="admin-nav-backdrop"
@@ -603,7 +604,7 @@ export default function AdminApp() {
             <button type="button" data-testid="admin-logout" onClick={logout}>退出</button>
           </div>
         </header>
-        <div className="admin-content">
+        <div className="admin-content" id="main-content" tabIndex={-1}>
           {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
           {!routeAllowsAccountForm(route, accountForm) ? (
             // 形态不匹配（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
