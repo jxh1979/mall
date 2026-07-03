@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -139,7 +140,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
   return (
     <section data-testid="risk-alerts-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="risk-alerts-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="risk-alerts-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="risk_alert.viewed / risk_alert.created / analytics.risk_alert.resolved" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="risk-alerts-summary">

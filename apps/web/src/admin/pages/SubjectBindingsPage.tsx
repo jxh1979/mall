@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -87,9 +88,9 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
   return (
     <section data-testid="subject-bindings-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="subject-bindings-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="subject-bindings-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="entity_binding.viewed / entity_binding.changed" />
-      {error ? <div className="admin-inline-error" data-testid="subject-bindings-error">{error}</div> : null}
+      {error ? <div className="admin-inline-error" data-testid="subject-bindings-error">{error.message}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {bindings.length === 0 ? <div className="admin-state admin-empty" data-testid="subject-bindings-empty">{TEXT.empty}</div> : (
           <>

@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -154,7 +155,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
   return (
     <section data-testid="business-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="business-analytics-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="business-analytics-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="analytics.business_metric_snapshot.viewed / local.management_review_ready" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {snapshots.length === 0 ? <div className="admin-state admin-empty" data-testid="business-analytics-empty">{TEXT.empty}</div> : (

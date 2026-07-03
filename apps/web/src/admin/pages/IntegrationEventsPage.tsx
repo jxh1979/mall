@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -180,7 +181,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
   return (
     <section data-testid="integration-events-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="integration-events-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="integration-events-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="integration.retry_task.viewed / integration.compensation_task.viewed / integration.order_sync.viewed / integration.voucher_verification.viewed / local.integration_polling_checked" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="integration-events-summary">

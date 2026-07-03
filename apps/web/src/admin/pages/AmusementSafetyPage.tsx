@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -168,7 +169,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   return (
     <section data-testid="amusement-safety-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="amusement-safety-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="amusement-safety-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="amusement.safety_inspection.viewed / created / submitted / rectification_submitted / rechecked / reopened" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="amusement-safety-summary">

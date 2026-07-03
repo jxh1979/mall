@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -95,7 +96,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
   return (
     <section data-testid="vendor-work-orders-page">
       <AdminPageHeader title="外包维保工单" description="维保单位只能查看和处理派给自己的楼宇工单；验收已收回物业侧，外包侧仅保留开始与完成。" />
-      <div className="admin-generic-evidence" data-testid="vendor-work-orders-evidence">接口证据：GET /api/v1/facility/work-orders；GET /api/v1/facility/equipment；POST /api/v1/facility/work-orders/{"{work_order_id}"}/start|complete。</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="vendor-work-orders-evidence">接口证据：GET /api/v1/facility/work-orders；GET /api/v1/facility/equipment；POST /api/v1/facility/work-orders/{"{work_order_id}"}/start|complete。</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="vendor-work-orders-summary">
           <div className="admin-kpi-card"><span>已指派工单</span><strong>{rows.length}</strong><small>assignee</small></div>

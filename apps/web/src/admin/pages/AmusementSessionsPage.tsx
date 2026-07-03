@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -85,7 +86,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   return (
     <section data-testid="amusement-sessions-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="amusement-sessions-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="amusement-sessions-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="amusement_project.viewed / amusement_session.created" />
       {formError ? <div className="admin-inline-error" data-testid="amusement-sessions-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
