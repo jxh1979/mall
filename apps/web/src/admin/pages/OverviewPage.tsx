@@ -87,8 +87,20 @@ export function OverviewPage({ api, setGlobalError }: AdminPageProps) {
             {hasVolume ? (
               <div className="admin-chart-block" data-testid="overview-chart-volume">
                 <span>核销 / 会员 / 风险量对比</span>
-                <MiniBars values={volumeValues} width={200} height={48} testid="overview-volume-bars" ariaLabel="核销会员风险量对比" />
-                <small className="admin-muted-action">{VOLUME_BARS.map((item, index) => `${item.label} ${volumeValues[index]}`).join(" · ")}</small>
+                {/* 直读横向条形：每行 名称 + 条 + 数值，0 值也可读；替代无标注的悬空色块。 */}
+                <div className="admin-hbars" data-testid="overview-volume-bars" role="img" aria-label="核销会员风险量对比">
+                  {VOLUME_BARS.map((item, index) => {
+                    const value = volumeValues[index] ?? 0;
+                    const max = Math.max(...volumeValues, 1);
+                    return (
+                      <div className="admin-hbar-row" key={item.code} data-testid={`overview-volume-bar-${item.code}`}>
+                        <span className="admin-hbar-label">{item.label}</span>
+                        <span className="admin-hbar-track"><span className="admin-hbar-fill" style={{ width: `${Math.round((value / max) * 100)}%` }} /></span>
+                        <span className="admin-hbar-value admin-num">{value}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
           </div>
