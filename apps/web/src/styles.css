@@ -2071,10 +2071,11 @@ body {
     padding: 0 14px;
   }
 
-  /* 触控目标：移动断点内按钮 ≥44px。 */
+  /* 触控目标：移动断点内按钮 ≥44px（含表格窄操作按钮 min-width，如"明细"）。 */
   .admin-shell button,
   .admin-auth-shell button {
     min-height: 44px;
+    min-width: 44px;
   }
 
   .admin-main {
