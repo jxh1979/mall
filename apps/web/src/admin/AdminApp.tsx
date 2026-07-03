@@ -80,6 +80,7 @@ const SmsNotificationSwitchesPage = React.lazy(() => import("./pages/SmsNotifica
 const LeasingRentalStatusPage = React.lazy(() => import("./pages/LeasingRentalStatusPage").then((m) => ({ default: m.LeasingRentalStatusPage })));
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
 const FloorPlanImportPage = React.lazy(() => import("./pages/FloorPlanImportPage").then((m) => ({ default: m.FloorPlanImportPage })));
+const T3AReadonlyAnalyticsPage = React.lazy(() => import("./pages/T3AReadonlyAnalyticsPage").then((m) => ({ default: m.T3AReadonlyAnalyticsPage })));
 
 // 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
 const ICON_PATHS: Record<string, string> = {
@@ -294,6 +295,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <OrganizationMerchantPage {...props} />;
     case "ADM-FLR-001":
       return <FloorPlanImportPage {...props} />;
+    case "ADM-ANA-009":
+      return <T3AReadonlyAnalyticsPage {...props} />;
     default:
       // findAdminRoute 兜底到 adminRoutes[0]，正常导航不会落到这里；保留未知页面占位仅为类型完备与极端防御。
       return <div className="admin-state admin-error">未知页面：{route.pageId}</div>;

@@ -60,6 +60,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-006", label: "工单时效", route: "/admin/analytics/work-order-sla" },
   { pageId: "ADM-ANA-007", label: "能耗分析", route: "/admin/analytics/energy" },
   { pageId: "ADM-ANA-008", label: "月度对比", route: "/admin/analytics/monthly" },
+  { pageId: "ADM-ANA-009", label: "T3-A 只读经营分析", route: "/admin/analytics/t3a-readonly" },
   { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
   { pageId: "ADM-STF-002", label: "薪酬与请假", route: "/admin/staff/payroll" },
   { pageId: "ADM-SVC-001", label: "服务点单", route: "/admin/services/orders" },
@@ -247,6 +248,12 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       await expect(page.getByTestId(`admin-nav-${spec.pageId}`)).toBeVisible();
       await openAdminRoute(page, spec);
+      if (spec.pageId === "ADM-ANA-009") {
+        await expect(page.getByTestId("t3a-readonly-analytics-page")).toBeVisible();
+        await expect(page.getByTestId("t3a-readonly-note")).toContainText("只读分析，不发控制指令");
+        await expect(page.getByTestId("t3a-summary")).toBeVisible();
+        continue;
+      }
       if (spec.pageId === "ADM-FLR-001") {
         await expect(page.getByTestId("floor-plan-import-page")).toBeVisible();
         await expect(page.getByTestId("floor-plan-evidence")).toContainText("/api/v1/floor-plans");

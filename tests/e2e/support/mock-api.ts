@@ -403,6 +403,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/business-metric-snapshots": state.metricSnapshots,
     "/api/v1/analytics/group-overview": { asOf: "2026-06-19T00:00:00Z", businessDate: "2026-06-19", projects: [{ projectId: "project_1", projectName: "综合体一号", merchantCount: 3, metrics: {} }] },
     "/api/v1/floor-plans": [{ id: "fp-1", plan_name: "示例平面图", building_code: "B1", floor_no: "1F", version_no: "v1", status: "draft" }],
+    "/api/v1/analytics/robot": [{ metric_id: "rm-1", robot_id: "robot-1", provider_code: "mockbot", task_count: 10, success_count: 9, failure_count: 1, business_date: "2026-07-01", summary: "示例机器人" }],
   };
   return routes[pathname] ?? empty;
 }

@@ -48,7 +48,7 @@ for (const marker of [
   }
 }
 
-const source = readText("apps/web/src/main.tsx");
+const source = readText("apps/web/src/admin/pages/T3AReadonlyAnalyticsPage.tsx");
 for (const marker of [
   "T3A_READONLY_ANALYTICS_READY",
   "T3A_READONLY_ANALYTICS_VIEW_START",
