@@ -50,6 +50,38 @@ public class AuditedOperationExecutor {
         }
     }
 
+    /**
+     * 服务端真分页版本：调用方(service)自己带 page/size 查库并构建含真实 total 的 PageResponse,
+     * 本方法只负责统一审计留痕(成功记 count=当前页条数,失败记错误码),不改分页语义。
+     * 租户隔离谓词由调用方 SQL 保持(与 readPage 同口径),本层不介入。
+     */
+    public <T> PageResponse<T> readPageResult(AuditedOperation operation, Supplier<PageResponse<T>> action) {
+        try {
+            PageResponse<T> page = action.get();
+            auditEventService.recordSuccess(
+                    operation.successEvent(),
+                    operation.permissionCode(),
+                    operation.businessType(),
+                    "all",
+                    null,
+                    null,
+                    Map.of("count", page.items().size(), "total", page.total())
+            );
+            return page;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    operation.failureEvent(),
+                    operation.permissionCode(),
+                    operation.businessType(),
+                    "all",
+                    null,
+                    null,
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
     public <T> T readSingle(AuditedOperation operation, Supplier<T> action, Function<Object, String> businessIdResolver) {
         try {
             T item = action.get();

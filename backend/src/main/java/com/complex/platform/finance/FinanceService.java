@@ -134,17 +134,15 @@ public class FinanceService {
                 com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null);
     }
 
-    public PageResponse<ArApItemRecord> listArApItems() {
-        return readPage(
-                "finance_ar_ap.viewed",
-                "finance_ar_ap.view_failed",
-                "finance.ar_ap.view",
-                "ar_ap_item",
+    public PageResponse<ArApItemRecord> listArApItems(String keyword, int page, int size) {
+        // 服务端真分页:租户 scope(currentMerchantScope)决定 merchant_id 谓词,keyword 跨 单号/方向/状态 服务端筛选。
+        return operations.readPageResult(
+                AuditedOperation.of(
+                        "finance_ar_ap.viewed", "finance_ar_ap.view_failed",
+                        "finance.ar_ap.view", "ar_ap_item"),
                 () -> {
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    return scope.isPresent()
-                            ? repository.listArApItemsByMerchant(scope.get())
-                            : repository.listArApItems();
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
+                    return repository.listArApItemsPaged(merchantId, keyword, page, size);
                 }
         );
     }

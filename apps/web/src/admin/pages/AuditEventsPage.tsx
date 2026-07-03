@@ -3,22 +3,25 @@ import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
-import { useAdminResource } from "../hooks/useAdminResource";
-import { usePagedRows, TablePager } from "../components/TablePager";
+import { useServerPagedRows } from "../hooks/useServerPagedRows";
+import { TablePager } from "../components/TablePager";
 import type { AdminPageProps, AuditEventRow } from "../types";
+import type { PagedResult } from "../client/adminClient";
 import { PermissionButton } from "../security/Can";
+
+const PAGE_SIZE = 10;
 
 const TEXT = {
   title: "审计事件",
   description: "统一查询员工、客户、第三方、财务和生产操作留痕；审计事件只能追加和导出留痕，不允许在业务后台编辑或删除历史事件。",
-  evidence: "接口证据：读取/追加 /api/v1/evidence/events；导出动作本身通过 EventBatchRequest 写入 evidence.events_reported 留痕。",
+  evidence: "接口证据：读取/追加 /api/v1/evidence/events（服务端分页 page/size，可翻更早历史）；导出动作本身通过 EventBatchRequest 写入 evidence.events_reported 留痕。",
   loadFailed: "审计事件读取失败",
   exportFailed: "审计事件导出留痕失败",
   total: "事件总数",
-  success: "成功事件",
-  failed: "失败/阻断",
-  categories: "事件分类",
-  search: "搜索 trace / 事件 / 对象 / 摘要",
+  success: "本页成功",
+  failed: "本页失败/阻断",
+  categories: "本页分类",
+  search: "本页内筛选 trace / 事件 / 对象 / 摘要",
   exportReason: "导出原因",
   export: "导出并留痕",
   detail: "查看详情",
@@ -51,6 +54,7 @@ function eventObject(row: AuditEventRow) {
   return `${objectType}:${objectId}`;
 }
 
+// ponytail: 后端 evidence/events 只支持 page/size（无 keyword），故筛选仅作用于当前服务端页。
 function matches(row: AuditEventRow, keyword: string) {
   if (!keyword.trim()) return true;
   const haystack = [row.eventType, row.event_type, row.eventCategory, row.event_category, row.summary, row.result, row.riskLevel, row.risk_level, eventTrace(row), eventObject(row)].map(textValue).join(" ").toLowerCase();
@@ -66,7 +70,6 @@ function nowIso() {
 }
 
 export function AuditEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
-  const [rows, setRows] = React.useState<AuditEventRow[]>([]);
   const [query, setQuery] = React.useState("");
   const [exportReason, setExportReason] = React.useState("验收导出审计事件");
   const [selectedIndex, setSelectedIndex] = React.useState(0);
@@ -74,19 +77,26 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
 
-  const { loading, error, reload } = useAdminResource(
-    async () => {
-      setRows(await api.get<AuditEventRow[]>("/api/v1/evidence/events"));
+  const fetchPage = React.useCallback(
+    (page: number, size: number): Promise<PagedResult<AuditEventRow>> => {
+      const params = new URLSearchParams({ page: String(page), size: String(size) });
+      return api.getPaged<AuditEventRow>(`/api/v1/evidence/events?${params.toString()}`);
     },
-    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
+    [api],
   );
 
-  const filteredRows = rows.filter((row) => matches(row, query));
-  const paged = usePagedRows(filteredRows, 10, query);
-  const selected = filteredRows[selectedIndex] ?? filteredRows[0] ?? rows[0];
-  const successCount = rows.filter((row) => ["success", "succeeded"].includes(String(row.result ?? ""))).length;
-  const failedCount = rows.filter((row) => ["failed", "blocked"].includes(String(row.result ?? ""))).length;
-  const categoryCount = new Set(rows.map((row) => row.eventCategory ?? row.event_category).filter(Boolean)).size;
+  const events = useServerPagedRows<AuditEventRow>(fetchPage, PAGE_SIZE, {
+    onError: setGlobalError,
+    fallbackMessage: TEXT.loadFailed,
+  });
+
+  // 当前服务端页的行；筛选/KPI 均只作用于本页（后端未提供关键词与全量聚合）。
+  const pageRows = events.rows;
+  const filteredRows = pageRows.filter((row) => matches(row, query));
+  const selected = filteredRows[selectedIndex] ?? filteredRows[0] ?? pageRows[0];
+  const successCount = pageRows.filter((row) => ["success", "succeeded"].includes(String(row.result ?? ""))).length;
+  const failedCount = pageRows.filter((row) => ["failed", "blocked"].includes(String(row.result ?? ""))).length;
+  const categoryCount = new Set(pageRows.map((row) => row.eventCategory ?? row.event_category).filter(Boolean)).size;
 
   React.useEffect(() => {
     if (selectedIndex >= filteredRows.length) setSelectedIndex(0);
@@ -110,8 +120,11 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
         summary: exportReason,
         occurred_at: nowIso(),
         payload: {
-          exported_count: filteredRows.length,
-          query,
+          // 导出留痕记录当前页快照与全量总数（后端未提供全量导出接口，保持诚实语义）。
+          page: events.page,
+          page_count: events.pageCount,
+          total: events.total,
+          page_exported_count: filteredRows.length,
           trace_ids: filteredRows.map(eventTrace).filter((trace) => trace !== "-"),
         },
       }],
@@ -122,7 +135,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     try {
       const result = await api.post("/api/v1/evidence/events", request);
       setActionResult({ action: "audit_events_exported", audit: "evidence.events_reported", request, result });
-      await reload();
+      events.reload();
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : TEXT.exportFailed;
       setFormError(message);
@@ -138,9 +151,9 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="audit-events-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="evidence.event_viewed / evidence.events_reported" />
-      <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
+      <AdminDataState loading={events.loading} error={events.error} empty={events.total === 0} onRetry={events.reload}>
         <div className="admin-kpi-grid" data-testid="audit-events-summary">
-          <div className="admin-kpi-card"><span>{TEXT.total}</span><strong>{rows.length}</strong><small>{TEXT.eventType}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.total}</span><strong>{events.total}</strong><small>{TEXT.eventType}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.success}</span><strong>{successCount}</strong><small>{TEXT.result}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.failed}</span><strong>{failedCount}</strong><small>{TEXT.risk}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.categories}</span><strong>{categoryCount}</strong><small>{TEXT.category}</small></div>
@@ -161,7 +174,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="audit-events-table">
               <thead><tr><th>{TEXT.detail}</th><th>{TEXT.eventType}</th><th>{TEXT.category}</th><th>{TEXT.result}</th><th>{TEXT.risk}</th><th>{TEXT.source}</th><th>{TEXT.trace}</th><th>{TEXT.object}</th><th>{TEXT.summary}</th><th>{TEXT.occurredAt}</th></tr></thead>
-              <tbody>{paged.pageRows.map((row) => {
+              <tbody>{filteredRows.map((row) => {
                 const index = filteredRows.indexOf(row);
                 return (
                 <tr key={eventKey(row, index)}>
@@ -179,7 +192,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                 );
               })}</tbody>
             </table>
-            <TablePager testid="audit-events-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
+            <TablePager testid="audit-events-pager" page={events.page} pageCount={events.pageCount} total={events.total} onPrev={events.prev} onNext={events.next} />
           </div>
         )}
 

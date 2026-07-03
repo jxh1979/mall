@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import com.complex.platform.common.api.PageResponse;
 
 public interface FinanceRepository {
 
@@ -142,6 +143,28 @@ public interface FinanceRepository {
     List<ArApItemRecord> listArApItems();
 
     List<ArApItemRecord> listArApItemsByMerchant(String merchantId);
+
+    /**
+     * 服务端分页 + 关键词(跨 单号/方向/状态)筛选。merchantId 非空即商户 scope(WHERE merchant_id=),
+     * 为 null 即平台全量;两分支都必须保持既有租户隔离谓词。返回真实 total。
+     * default 兜底(内存 filter+slice)让测试假仓储无需改动;生产 Jdbc 实现 @Override 为真 SQL LIMIT/OFFSET。
+     */
+    default PageResponse<ArApItemRecord> listArApItemsPaged(String merchantId, String keyword, int page, int size) {
+        java.util.List<ArApItemRecord> all = merchantId == null
+                ? listArApItems() : listArApItemsByMerchant(merchantId);
+        String kw = keyword == null ? "" : keyword.trim().toLowerCase();
+        java.util.List<ArApItemRecord> filtered = all.stream()
+                .filter(it -> kw.isEmpty()
+                        || (it.itemNo() != null && it.itemNo().toLowerCase().contains(kw))
+                        || (it.direction() != null && it.direction().toLowerCase().contains(kw))
+                        || (it.status() != null && it.status().toLowerCase().contains(kw)))
+                .toList();
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 20 : size;
+        int from = Math.min((safePage - 1) * safeSize, filtered.size());
+        int to = Math.min(from + safeSize, filtered.size());
+        return new PageResponse<>(filtered.subList(from, to), safePage, safeSize, filtered.size());
+    }
 
     Optional<ArApItemRecord> findArApItemById(String id);
 

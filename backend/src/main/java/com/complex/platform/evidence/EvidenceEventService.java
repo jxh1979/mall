@@ -57,11 +57,13 @@ public class EvidenceEventService {
         );
     }
 
-    public List<EvidenceEventRecord> listEvents(int limit) {
-        int safeLimit = limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
+    public com.complex.platform.common.api.PageResponse<EvidenceEventRecord> listEvents(int page, int size) {
+        int safeSize = size <= 0 ? DEFAULT_LIMIT : Math.min(size, MAX_LIMIT);
+        int safePage = page < 1 ? 1 : page;
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         try {
-            List<EvidenceEventRecord> events = repository.listLatest(safeLimit, merchantId);
+            com.complex.platform.common.api.PageResponse<EvidenceEventRecord> result =
+                    repository.listPage(safePage, safeSize, merchantId);
             auditEventService.recordSuccess(
                     "evidence.event_viewed",
                     VIEW_PERMISSION,
@@ -69,9 +71,9 @@ public class EvidenceEventService {
                     "all",
                     null,
                     null,
-                    Map.of("count", events.size())
+                    Map.of("count", result.items().size(), "total", result.total())
             );
-            return events;
+            return result;
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     "evidence.event_view_failed",

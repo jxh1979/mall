@@ -17,6 +17,7 @@ const READINESS_ROWS: ReadinessItemRow[] = [
 function makeApi(overrides: Partial<AdminApiClient> = {}): AdminApiClient {
   return {
     get: vi.fn().mockResolvedValue(READINESS_ROWS),
+    getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post: vi.fn().mockResolvedValue({}),
     put: vi.fn().mockResolvedValue({ id: "blocker-1", status: "verified" }),
     patch: vi.fn().mockResolvedValue({}),

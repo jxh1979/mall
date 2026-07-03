@@ -2,16 +2,17 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { useSelectedRow } from "../hooks/useSelectedRow";
-import { rowMatchesKeyword } from "../components/rowSearch";
-import { usePagedRows, TablePager } from "../components/TablePager";
+import { TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
 import type { AdminPageProps, FinanceLedgerRow } from "../types";
+import type { PagedResult } from "../client/adminClient";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
 // 后端写权限码（与 FinanceController.requirePermission 对齐）
 const PAYMENT_PERMISSION = "finance.payment.register";
+const PAGE_SIZE = 10;
 
 // 排序指示符修复：共享 useSortedRows 的「↕」在当前 UI 字体下渲染成冒号状（表头看起来是「凭证:」）。
 // ponytail: 本页改用 ▲/▼ 且仅在已排序列显示（键盘可排序与 aria-sort 由 thProps 保证）；
@@ -28,30 +29,41 @@ function centToYuan(cent: number | undefined): string {
 }
 
 export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
-  const [rows, setRows] = React.useState<FinanceLedgerRow[]>([]);
-  const { setSelectedId, selected } = useSelectedRow(rows);
   const [amount, setAmount] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
-  const [query, setQuery] = React.useState("");
+  // 搜索输入草稿（即时搜索降级：输入不触发请求，回车/点查询才 search() 提交跳回第 1 页）。
+  const [draft, setDraft] = React.useState("");
 
-  const { loading, error, reload } = useAdminResource(
-    async () => {
-      setRows(await api.get<FinanceLedgerRow[]>("/api/v1/finance/ar-ap-items"));
+  const fetchPage = React.useCallback(
+    (page: number, size: number, keyword: string): Promise<PagedResult<FinanceLedgerRow>> => {
+      const params = new URLSearchParams({ page: String(page), size: String(size) });
+      if (keyword.trim()) params.set("keyword", keyword.trim());
+      return api.getPaged<FinanceLedgerRow>(`/api/v1/finance/ar-ap-items?${params.toString()}`);
     },
-    { onError: setGlobalError, fallbackMessage: "应收应付台账读取失败", onStart: () => setGlobalError(null) },
+    [api],
   );
 
-  const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
-  const sort = useSortedRows(filteredRows, {
+  const ledger = useServerPagedRows<FinanceLedgerRow>(fetchPage, PAGE_SIZE, {
+    onError: setGlobalError,
+    fallbackMessage: "应收应付台账读取失败",
+  });
+  const { setSelectedId, selected } = useSelectedRow(ledger.rows);
+
+  // ponytail: 排序仅作用于当前服务端页的 rows（后端 ar-ap-items 未预埋排序参数）。
+  // 升级路径：后端加 sort/order 参数后，把 sort.key/direction 传入 fetchPage 即可改为全局排序。
+  const sort = useSortedRows(ledger.rows, {
     voucher: (row) => voucherNo(row),
     direction: (row) => row.direction,
     dueDate: (row) => row.dueDate,
     status: (row) => row.status,
   });
-  const paged = usePagedRows(sort.sorted, 10, `${query}:${sort.key}:${sort.direction}`);
+
+  function submitSearch() {
+    ledger.search(draft);
+  }
 
   function validatePayment() {
     if (!selected?.id) {
@@ -86,7 +98,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         reason,
       });
       setActionResult({ action: "ledger_payment", status: "partial", ledgerItemId: selected.id, result });
-      await reload();
+      ledger.reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "核销/调账登记失败";
       setFormError(message);
@@ -115,10 +127,12 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
     }
   }
 
+  const empty = !ledger.loading && ledger.total === 0 && ledger.keyword === "";
+
   return (
     <section data-testid="finance-ledger-page">
       <AdminPageHeader title="应收应付台账" description="P0 完整台账支持应收、应付、部分核销、余额和调整原因留痕。" />
-      <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
+      <AdminDataState loading={ledger.loading} error={ledger.error} empty={empty} onRetry={ledger.reload}>
         <div className="admin-form-row">
           <label>核销金额（元）<input data-testid="finance-payment-amount" type="number" min={0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="如 100.00" /></label>
           <label>核销/调整原因<input data-testid="finance-payment-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="必填，留痕用" /></label>
@@ -136,16 +150,23 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         </div>
         {formError ? <div data-testid="finance-ledger-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-list-toolbar" data-testid="finance-ledger-filter">
-          <input data-testid="finance-ledger-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索凭证 / 方向 / 状态" />
-          <span className="admin-muted-action" data-testid="finance-ledger-filter-count">匹配 {filteredRows.length} / {rows.length} 条</span>
+          <input
+            data-testid="finance-ledger-search"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") submitSearch(); }}
+            placeholder="搜索凭证 / 方向 / 状态（回车查询）"
+          />
+          <button type="button" data-testid="finance-ledger-search-submit" onClick={submitSearch}>查询</button>
+          <span className="admin-muted-action" data-testid="finance-ledger-filter-count">{ledger.keyword ? `"${ledger.keyword}" 命中 ${ledger.total} 条` : `共 ${ledger.total} 条`}</span>
         </div>
-        {filteredRows.length === 0 ? (
+        {ledger.total === 0 && ledger.keyword !== "" ? (
           <div className="admin-state admin-empty" data-testid="finance-ledger-filter-empty">无匹配凭证</div>
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="finance-ledger-table">
             <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sort.indicator("dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th></tr></thead>
-            <tbody>{paged.pageRows.map((row) => (
+            <tbody>{sort.sorted.map((row) => (
               <tr key={row.id}>
                 <td><input type="radio" aria-label={`选择凭证 ${voucherNo(row)}`} data-testid={`finance-ledger-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                 <td>{voucherNo(row)}</td>
@@ -156,7 +177,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
               </tr>
             ))}</tbody>
           </table>
-          <TablePager testid="finance-ledger-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
+          <TablePager testid="finance-ledger-pager" page={ledger.page} pageCount={ledger.pageCount} total={ledger.total} onPrev={ledger.prev} onNext={ledger.next} />
         </div>
         )}
       </AdminDataState>

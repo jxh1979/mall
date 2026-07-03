@@ -67,6 +67,31 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
     }
 
     @Override
+    public com.complex.platform.common.api.PageResponse<EvidenceEventRecord> listPage(
+            int page, int size, String merchantId) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 20 : Math.min(size, 200);
+        // 租户隔离谓词与 listLatest 同口径:merchantId 非空才加 merchant_id 过滤(平台口径不加)。
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+        String where = " WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)";
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM evidence_events" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<EvidenceEventRecord> items = jdbcTemplate.query("""
+                SELECT id, device_code, staff_id, event_type, event_category, result,
+                       summary, payload::text AS payload, occurred_at, received_at, merchant_id
+                  FROM evidence_events
+                """ + where + """
+                 ORDER BY received_at DESC, id DESC
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapEvent);
+        return new com.complex.platform.common.api.PageResponse<>(
+                items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
     public EvidenceAttachmentRecord saveAttachment(EvidenceAttachmentRecord attachment) {
         jdbcTemplate.update("""
                 INSERT INTO evidence_attachments (

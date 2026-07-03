@@ -150,7 +150,7 @@ class FinanceControllerTests {
 
     @Test
     void listArApItemsUsesOpenApiViewPermissionAndPageShape() throws Exception {
-        when(service.listArApItems()).thenReturn(new PageResponse<>(List.of(arApItem()), 1, 50, 1));
+        when(service.listArApItems(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(new PageResponse<>(List.of(arApItem()), 1, 50, 1));
 
         mockMvc.perform(get("/api/v1/finance/ar-ap-items")
                         .with(user("finance").roles("P0_SMOKE")))

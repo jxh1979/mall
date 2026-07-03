@@ -67,7 +67,7 @@ class EvidenceEventServiceTests {
 
     @Test
     void auditEventRecordsActorIdFromSecurityContext() {
-        service.listEvents(10);
+        service.listEvents(1, 10);
 
         AuditEvent auditEvent = auditEventRepository.events.getLast();
         assertThat(auditEvent.actorId())
@@ -103,14 +103,14 @@ class EvidenceEventServiceTests {
 
         // Merchant A lists — must only see their own event
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
-        List<EvidenceEventRecord> merchantAEvents = service.listEvents(10);
+        List<EvidenceEventRecord> merchantAEvents = service.listEvents(1, 10).items();
         assertThat(merchantAEvents)
                 .extracting(EvidenceEventRecord::eventType)
                 .containsExactly("terminal.login");
 
         // Platform admin lists — sees all
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
-        List<EvidenceEventRecord> allEvents = service.listEvents(10);
+        List<EvidenceEventRecord> allEvents = service.listEvents(1, 10).items();
         assertThat(allEvents).hasSize(2);
     }
 
@@ -358,7 +358,7 @@ class EvidenceEventServiceTests {
                 List.of(event("terminal.login", "login"), event("terminal.logout", "logout"))
         ));
 
-        List<EvidenceEventRecord> events = service.listEvents(1);
+        List<EvidenceEventRecord> events = service.listEvents(1, 1).items();
 
         assertThat(events).hasSize(1);
         assertThat(events.getFirst().eventType()).isEqualTo("terminal.logout");
