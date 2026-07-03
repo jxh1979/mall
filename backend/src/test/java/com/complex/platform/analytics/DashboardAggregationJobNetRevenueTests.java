@@ -129,9 +129,9 @@ class DashboardAggregationJobNetRevenueTests {
         assertThat(repository.rolledUpMonthFirst).isEqualTo(BUSINESS_DATE.withDayOfMonth(1));
         assertThat(repository.rolledUpUpTo).isEqualTo(BUSINESS_DATE);
         assertThat(repository.rolledUpSumKeys).contains("revenue.net", "member.new", "energy.total_electricity");
-        assertThat(repository.rolledUpLastKeys).contains("ar.balance", "occupancy.rate", "wo.backlog");
-        assertThat(repository.rolledUpSumKeys).doesNotContain("wo.overdue_rate", "wo.response_hours_p50");
-        assertThat(repository.rolledUpLastKeys).doesNotContain("wo.overdue_rate", "wo.response_hours_p50");
+        assertThat(repository.rolledUpLastKeys).contains("ar.balance", "occupancy.rate", "wo.backlog", "mwo.backlog");
+        assertThat(repository.rolledUpSumKeys).doesNotContain("wo.overdue_rate", "wo.response_hours_p50", "mwo.overdue_rate", "mwo.handle_hours_p50");
+        assertThat(repository.rolledUpLastKeys).doesNotContain("wo.overdue_rate", "wo.response_hours_p50", "mwo.overdue_rate", "mwo.handle_hours_p50");
     }
 
     @Test
@@ -141,6 +141,8 @@ class DashboardAggregationJobNetRevenueTests {
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
         repository.workOrderSla = new AnalyticsRecords.WorkOrderSla(
                 new BigDecimal("2.5"), new BigDecimal("6"), 4, 1, 7);
+        repository.merchantWorkOrderSla = new AnalyticsRecords.WorkOrderSla(
+                null, new BigDecimal("5"), 4, 2, 3);
         repository.energyByType = Map.of("electricity", new BigDecimal("100.5"), "water", new BigDecimal("8"));
         repository.abnormalReadings = 3;
         repository.occupancy = new AnalyticsRecords.OccupancyAreas(
@@ -152,6 +154,11 @@ class DashboardAggregationJobNetRevenueTests {
         assertThat(repository.upserts.get("wo.handle_hours_p50|platform")).isEqualByComparingTo("6");
         assertThat(repository.upserts.get("wo.overdue_rate|platform")).isEqualByComparingTo("0.2500");
         assertThat(repository.upserts.get("wo.backlog|platform")).isEqualByComparingTo("7");
+        // 清单#13:商户服务工单并入(无响应节点不产出响应P50;处理=提交→关单;超时率=2/4)。
+        assertThat(repository.upserts.get("mwo.handle_hours_p50|platform")).isEqualByComparingTo("5");
+        assertThat(repository.upserts.get("mwo.overdue_rate|platform")).isEqualByComparingTo("0.5000");
+        assertThat(repository.upserts.get("mwo.backlog|platform")).isEqualByComparingTo("3");
+        assertThat(repository.upserts).doesNotContainKey("mwo.response_hours_p50|platform");
         assertThat(repository.upserts.get("energy.total_electricity|platform")).isEqualByComparingTo("100.5");
         assertThat(repository.upserts.get("energy.total_water|platform")).isEqualByComparingTo("8");
         assertThat(repository.upserts.get("energy.electricity_per_sqm|platform")).isEqualByComparingTo("0.5000");
@@ -160,6 +167,8 @@ class DashboardAggregationJobNetRevenueTests {
         CapturingAnalyticsRepository zero = new CapturingAnalyticsRepository();
         new DashboardAggregationJob(zero).refreshSnapshots(BUSINESS_DATE);
         assertThat(zero.upserts).doesNotContainKey("wo.overdue_rate|platform");
+        assertThat(zero.upserts).doesNotContainKey("mwo.overdue_rate|platform");
+        assertThat(zero.upserts).doesNotContainKey("mwo.handle_hours_p50|platform");
         assertThat(zero.upserts).doesNotContainKey("wo.response_hours_p50|platform");
         assertThat(zero.upserts).doesNotContainKey("energy.electricity_per_sqm|platform");
     }
@@ -505,11 +514,21 @@ class DashboardAggregationJobNetRevenueTests {
         }
 
         AnalyticsRecords.WorkOrderSla workOrderSla = new AnalyticsRecords.WorkOrderSla(null, null, 0, 0, 0);
+        AnalyticsRecords.WorkOrderSla merchantWorkOrderSla = new AnalyticsRecords.WorkOrderSla(null, null, 0, 0, 0);
         Map<String, BigDecimal> energyByType = Map.of();
         long abnormalReadings = 0;
 
         public AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {
             return workOrderSla;
+        }
+
+        public AnalyticsRecords.WorkOrderSla merchantWorkOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {
+            return merchantWorkOrderSla;
+        }
+
+        public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueMerchantWorkOrders(
+                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+            return java.util.List.of();
         }
 
         public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(

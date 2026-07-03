@@ -191,6 +191,10 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("wo-response-p50")).toContainText("2.5 小时");
     await expect(page.getByTestId("wo-overdue-rate")).toContainText("25.00%");
     await expect(page.getByTestId("wo-overdue-table")).toContainText("示例超时工单");
+    await expect(page.getByTestId("mwo-handle-p50")).toContainText("5.0 小时");
+    await expect(page.getByTestId("mwo-overdue-rate")).toContainText("50.00%");
+    await expect(page.getByTestId("mwo-backlog")).toContainText("3");
+    await expect(page.getByTestId("mwo-overdue-table")).toContainText("示例超时工单");
   } else if (spec.pageId === "ADM-ANA-007") {
     await expect(page.getByTestId("energy-analytics-page")).toBeVisible();
     await expect(page.getByTestId("energy-total-electricity")).toContainText("1,200.5 kWh");

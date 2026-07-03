@@ -183,6 +183,16 @@ public interface AnalyticsRepository {
     java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
             java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset);
 
+    /** 清单#13 商户服务工单时效(同 facility 窗):流转无响应节点故 responseP50 恒为 null;
+     * 处理P50=closed_at 落窗(提交→关单);超时分母=due_at 落窗且非 cancelled、
+     * 分子=其中 sla_breached(V120 升级作业在办期间过限标记)或关单晚于时限或未完成且时限已过(实时兜底);
+     * 积压=asOf 时点未完成存量(不含 resolved/closed/cancelled)。 */
+    AnalyticsRecords.WorkOrderSla merchantWorkOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf);
+
+    /** 清单#13 钻取:商户服务工单超时明细(与 mwo.overdue_rate 分子同过滤同口径;表无 code 列,code 为 null)。 */
+    java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueMerchantWorkOrders(
+            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset);
+
     /** S5 能耗:窗内按表计类型合计 consumption(电/水/气/冷热单位不同,不跨类合计)。 */
     Map<String, BigDecimal> energyConsumptionByType(java.time.Instant start, java.time.Instant end);
 

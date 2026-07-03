@@ -335,6 +335,9 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
       "wo.handle_hours_p50": { value: 6, unit: "hours" },
       "wo.overdue_rate": { value: 0.25, unit: "rate" },
       "wo.backlog": { value: 7, unit: "count" },
+      "mwo.handle_hours_p50": { value: 5, unit: "hours" },
+      "mwo.overdue_rate": { value: 0.5, unit: "rate" },
+      "mwo.backlog": { value: 3, unit: "count" },
     } },
     "/api/v1/analytics/work-order-sla/overdue-orders": [
       { work_order_id: "wo-e2e-1", code: "WO-2026-001", title: "示例超时工单", status: "processing", priority: "high", handle_due_at: "2026-07-01T02:00:00Z", overdue_hours: 6.5 },

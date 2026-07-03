@@ -1289,6 +1289,58 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public AnalyticsRecords.WorkOrderSla merchantWorkOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end))
+                .addValue("as_of", timestampWithTimeZone(asOf));
+        return jdbcTemplate.queryForObject("""
+                SELECT
+                  (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (closed_at - created_at)) / 3600.0)
+                     FROM merchant_service_work_orders WHERE closed_at >= :start AND closed_at < :end) AS handle_p50,
+                  (SELECT COUNT(*) FROM merchant_service_work_orders
+                    WHERE due_at >= :start AND due_at < :end AND status <> 'cancelled') AS due_count,
+                  (SELECT COUNT(*) FROM merchant_service_work_orders
+                    WHERE due_at >= :start AND due_at < :end AND status <> 'cancelled'
+                      AND (sla_breached OR closed_at > due_at
+                           OR (closed_at IS NULL AND status NOT IN ('resolved', 'closed') AND due_at < :as_of))) AS overdue_count,
+                  (SELECT COUNT(*) FROM merchant_service_work_orders WHERE created_at <= :as_of
+                      AND status NOT IN ('resolved', 'closed', 'cancelled')) AS backlog
+                """, params, (rs, n) -> new AnalyticsRecords.WorkOrderSla(
+                null, rs.getBigDecimal("handle_p50"),
+                rs.getLong("due_count"), rs.getLong("overdue_count"), rs.getLong("backlog")));
+    }
+
+    @Override
+    public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueMerchantWorkOrders(
+            java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end))
+                .addValue("as_of", timestampWithTimeZone(asOf))
+                .addValue("limit", Math.min(Math.max(limit, 1), 200))
+                .addValue("offset", Math.max(offset, 0));
+        return jdbcTemplate.query("""
+                SELECT id, title, status, priority, owner_user_id, due_at, closed_at,
+                       ROUND((EXTRACT(EPOCH FROM (COALESCE(closed_at, :as_of) - due_at)) / 3600.0)::numeric, 1) AS overdue_hours
+                  FROM merchant_service_work_orders
+                 WHERE due_at >= :start AND due_at < :end AND status <> 'cancelled'
+                   AND (sla_breached OR closed_at > due_at
+                        OR (closed_at IS NULL AND status NOT IN ('resolved', 'closed') AND due_at < :as_of))
+                 ORDER BY overdue_hours DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> {
+            java.sql.Timestamp due = rs.getTimestamp("due_at");
+            java.sql.Timestamp closed = rs.getTimestamp("closed_at");
+            return new AnalyticsRecords.OverdueWorkOrderRow(
+                    rs.getString("id"), null, rs.getString("title"), rs.getString("status"),
+                    rs.getString("priority"), rs.getString("owner_user_id"),
+                    due == null ? null : due.toInstant(), closed == null ? null : closed.toInstant(),
+                    rs.getBigDecimal("overdue_hours"));
+        });
+    }
+
+    @Override
     public Map<String, BigDecimal> energyConsumptionByType(java.time.Instant start, java.time.Instant end) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("start", timestampWithTimeZone(start))

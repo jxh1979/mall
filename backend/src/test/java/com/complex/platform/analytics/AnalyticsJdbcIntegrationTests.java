@@ -174,6 +174,49 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void merchantWorkOrderSlaUsesClosedAtAndSlaBreachedRulings() {
+        // 清单#13(真库):商户单无响应节点(responseP50 恒 null);处理=提交→关单;
+        // 超时=sla_breached(在办期间过限)或关单晚于时限或未完成且时限已过;cancelled 不进分母;
+        // resolved 未过限(sla_breached=false)不算超时(表无 resolved 时点,以升级作业标记为准)。
+        java.time.Instant start = java.time.Instant.parse("2099-01-01T04:00:00Z");
+        java.time.Instant end = java.time.Instant.parse("2099-01-02T04:00:00Z");
+        java.time.Instant asOf = java.time.Instant.parse("2099-01-02T00:00:00Z");
+        // A 按时关单:2h。
+        insertMerchantWorkOrder("mwo_s4_a", "2099-01-01T05:00:00Z", "2099-01-01T10:00:00Z",
+                "2099-01-01T07:00:00Z", "closed", false);
+        // B 超时关单:7h,晚于时限 6h(升级作业已标记)。
+        insertMerchantWorkOrder("mwo_s4_b", "2099-01-01T05:00:00Z", "2099-01-01T06:00:00Z",
+                "2099-01-01T12:00:00Z", "closed", true);
+        // C 超时未完成:时限已过 17h 仍在办(实时兜底,升级作业未及标记)。
+        insertMerchantWorkOrder("mwo_s4_c", "2099-01-01T05:00:00Z", "2099-01-01T07:00:00Z",
+                null, "processing", false);
+        // D 已取消:不进分母分子。
+        insertMerchantWorkOrder("mwo_s4_d", "2099-01-01T05:00:00Z", "2099-01-01T08:00:00Z",
+                null, "cancelled", false);
+        // E 已处理待关闭且未过限:进分母不算超时。
+        insertMerchantWorkOrder("mwo_s4_e", "2099-01-01T05:00:00Z", "2099-01-01T09:00:00Z",
+                null, "resolved", false);
+
+        AnalyticsRecords.WorkOrderSla sla = repository.merchantWorkOrderSla(start, end, asOf);
+        assertThat(sla.responseP50Hours()).isNull();
+        assertThat(sla.handleP50Hours()).isEqualByComparingTo("4.5");   // (2h+7h)/2
+        assertThat(sla.dueCount()).isEqualTo(4);                        // A/B/C/E(D cancelled 除外)
+        assertThat(sla.overdueCount()).isEqualTo(2);                    // B/C
+        assertThat(sla.backlog()).isGreaterThanOrEqualTo(1);            // C(共享库允许其它存量)
+
+        java.util.List<AnalyticsRecords.OverdueWorkOrderRow> rows =
+                repository.listOverdueMerchantWorkOrders(start, end, asOf, 200, 0);
+        java.util.List<String> ids = rows.stream().map(AnalyticsRecords.OverdueWorkOrderRow::workOrderId).toList();
+        assertThat(ids).contains("mwo_s4_b", "mwo_s4_c").doesNotContain("mwo_s4_a", "mwo_s4_d", "mwo_s4_e");
+        AnalyticsRecords.OverdueWorkOrderRow b = rows.stream()
+                .filter(r -> r.workOrderId().equals("mwo_s4_b")).findFirst().orElseThrow();
+        assertThat(b.overdueHours()).isEqualByComparingTo("6.0");
+        AnalyticsRecords.OverdueWorkOrderRow c = rows.stream()
+                .filter(r -> r.workOrderId().equals("mwo_s4_c")).findFirst().orElseThrow();
+        assertThat(c.overdueHours()).isEqualByComparingTo("17.0");
+    }
+
+    @Test
     void energyConsumptionByTypeHonorsWindowAndAbnormalDrilldownMatches() {
         // S5(真库):按表计类型分列合计、窗外读数不进、异常明细与计数同过滤。
         insertMeter("mt_s5_e", "S5电表", "electricity");
@@ -211,6 +254,22 @@ class AnalyticsJdbcIntegrationTests {
                     put("id", id); put("status", status); put("created_at", createdAt);
                     put("assigned_at", assignedAt); put("responded_at", respondedAt);
                     put("handle_due_at", handleDueAt); put("completed_at", completedAt);
+                }});
+    }
+
+    private void insertMerchantWorkOrder(String id, String createdAt, String dueAt,
+            String closedAt, String status, boolean slaBreached) {
+        jdbcTemplate.update("""
+                INSERT INTO merchant_service_work_orders (id, merchant_id, work_order_type, priority, status,
+                        title, description, reported_by_user_id, reported_channel, evidence_attachment_ids,
+                        due_at, closed_at, created_at, updated_at, sla_breached)
+                VALUES (:id, 'mch_s4m', 'repair', 'medium', :status,
+                        :id, :id, 'usr_s4m', 'web', '[]'::jsonb,
+                        :due_at::timestamptz, :closed_at::timestamptz, :created_at::timestamptz,
+                        :created_at::timestamptz, :sla_breached)
+                """, new java.util.HashMap<String, Object>() {{
+                    put("id", id); put("status", status); put("created_at", createdAt);
+                    put("due_at", dueAt); put("closed_at", closedAt); put("sla_breached", slaBreached);
                 }});
     }
 

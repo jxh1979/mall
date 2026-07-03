@@ -69,6 +69,10 @@ public class DashboardAggregationJob {
     static final String WO_HANDLE_HOURS_P50 = "wo.handle_hours_p50";      // 处理 P50(小时,窗内无完成单不产出)
     static final String WO_OVERDUE_RATE = "wo.overdue_rate";              // 超时率(分母=处理时限落窗单数,0不产出)
     static final String WO_BACKLOG = "wo.backlog";                        // 时点积压(未完成存量)
+    // 清单#13:商户服务工单并入工单时效(独立键分行对照;流转无响应节点故无 mwo.response;窗同 facility)。
+    static final String MWO_HANDLE_HOURS_P50 = "mwo.handle_hours_p50";    // 商户单处理 P50(提交→关单,小时)
+    static final String MWO_OVERDUE_RATE = "mwo.overdue_rate";            // 商户单超时率(sla_breached+实时兜底,已取消不进分母)
+    static final String MWO_BACKLOG = "mwo.backlog";                      // 商户单时点积压(不含已处理待关闭/已关闭/已取消)
     // S5 能耗(energy 窗):按表计类型分列(电/水/气/冷热单位不同,不跨类合计)。
     static final String ENERGY_TOTAL_PREFIX = "energy.total_";
     static final String ENERGY_ELECTRICITY_PER_SQM = "energy.electricity_per_sqm"; // 分母=可租面积(与出租率同分母,0不产出)
@@ -82,7 +86,7 @@ public class DashboardAggregationJob {
             "energy.total_heat_cold");
     public static final java.util.List<String> MONTHLY_LAST_KEYS = java.util.List.of(
             AR_BALANCE, AR_AGING_90P, AR_COLLECTION_RATE_MTD, OCC_RATE, OCC_PARKING_RATE,
-            OCC_SIGNED_PENDING_AREA, CONTRACT_EXPIRING_90D, WO_BACKLOG);
+            OCC_SIGNED_PENDING_AREA, CONTRACT_EXPIRING_90D, WO_BACKLOG, MWO_BACKLOG);
 
     static final String SEGMENT_PLATFORM = "platform";
     static final String SEGMENT_MERCHANT = "merchant";
@@ -283,6 +287,21 @@ public class DashboardAggregationJob {
                     now, platformTotals);
         }
         upsertPlatform(WO_BACKLOG, "facility", businessDate, BigDecimal.valueOf(workOrderSla.backlog()), now, platformTotals);
+
+        // 清单#13:商户服务工单同窗并入(完成=关单;超时以 V120 sla_breached 为准+实时兜底;分母0不产出)。
+        AnalyticsRecords.WorkOrderSla merchantWoSla = repository.merchantWorkOrderSla(
+                businessDayResolver.startInstant("facility", businessDate),
+                businessDayResolver.endInstant("facility", businessDate), now);
+        if (merchantWoSla.handleP50Hours() != null) {
+            upsertPlatform(MWO_HANDLE_HOURS_P50, "facility", businessDate, merchantWoSla.handleP50Hours(), now, platformTotals);
+        }
+        if (merchantWoSla.dueCount() > 0) {
+            upsertPlatform(MWO_OVERDUE_RATE, "facility", businessDate,
+                    BigDecimal.valueOf(merchantWoSla.overdueCount())
+                            .divide(BigDecimal.valueOf(merchantWoSla.dueCount()), 4, java.math.RoundingMode.HALF_UP),
+                    now, platformTotals);
+        }
+        upsertPlatform(MWO_BACKLOG, "facility", businessDate, BigDecimal.valueOf(merchantWoSla.backlog()), now, platformTotals);
 
         // S5 能耗:按表计类型分列合计(不跨类合计);电耗/㎡分母=可租面积(与出租率同分母,0不产出);异常读数计数。
         java.time.Instant energyStart = businessDayResolver.startInstant("energy", businessDate);

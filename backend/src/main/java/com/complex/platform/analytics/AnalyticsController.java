@@ -163,11 +163,12 @@ public class AnalyticsController {
 
     @GetMapping("/work-order-sla/overdue-orders")
     public ApiResponse<PageResponse<AnalyticsRecords.OverdueWorkOrderRow>> listOverdueWorkOrders(
+            @org.springframework.web.bind.annotation.RequestParam(value = "source", required = false, defaultValue = "facility") String source,
             @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
             @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
         authorizationService.requirePermission("facility.work_order.manage");
         authorizationService.requirePlatformScope();
-        java.util.List<AnalyticsRecords.OverdueWorkOrderRow> items = service.listOverdueWorkOrders(limit, offset);
+        java.util.List<AnalyticsRecords.OverdueWorkOrderRow> items = service.listOverdueWorkOrders(source, limit, offset);
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
     }
 

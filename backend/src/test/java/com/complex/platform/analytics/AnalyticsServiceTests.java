@@ -1047,6 +1047,15 @@ class AnalyticsServiceTests {
             return new AnalyticsRecords.WorkOrderSla(null, null, 0, 0, 0);
         }
 
+        public AnalyticsRecords.WorkOrderSla merchantWorkOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {
+            return new AnalyticsRecords.WorkOrderSla(null, null, 0, 0, 0);
+        }
+
+        public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueMerchantWorkOrders(
+                java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
+            return java.util.List.of();
+        }
+
         public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(
                 java.time.Instant start, java.time.Instant end, java.time.Instant asOf, int limit, int offset) {
             return java.util.List.of();

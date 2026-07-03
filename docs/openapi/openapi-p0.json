@@ -26895,7 +26895,7 @@
         ],
         "operationId": "listOverdueWorkOrders",
         "summary": "超时工单明细(时效钻取)",
-        "description": "BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。",
+        "description": "BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单 (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -26905,6 +26905,18 @@
         "x-audit-event-success": "analytics.overdue_work_orders.viewed",
         "x-audit-event-failure": "analytics.overdue_work_orders.view_failed",
         "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "facility",
+                "merchant"
+              ]
+            }
+          },
           {
             "name": "limit",
             "in": "query",

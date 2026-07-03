@@ -126,6 +126,12 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.WO_OVERDUE_RATE, "facility", "rate", true,
                     "overdue rate is platform-scope only (not emitted when no orders due in window)"),
             new MetricCatalogEntry(DashboardAggregationJob.WO_BACKLOG, "facility", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
+            // 清单#13 商户服务工单时效(平台口径,facility 窗;流转无响应节点故无响应 P50):
+            new MetricCatalogEntry(DashboardAggregationJob.MWO_HANDLE_HOURS_P50, "facility", "hours", true,
+                    "merchant work-order handle P50 is platform-scope only (submit to close; not emitted when no closed orders in window)"),
+            new MetricCatalogEntry(DashboardAggregationJob.MWO_OVERDUE_RATE, "facility", "rate", true,
+                    "overdue per V120 sla_breached plus realtime fallback; cancelled excluded; not emitted when no orders due in window"),
+            new MetricCatalogEntry(DashboardAggregationJob.MWO_BACKLOG, "facility", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
             // S5 能耗(平台口径,energy 窗;按表计类型分列,单位不同不跨类合计):
             new MetricCatalogEntry("energy.total_electricity", "energy", "kwh", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry("energy.total_water", "energy", "ton", true, MERCHANT_SCOPE_UNAVAILABLE),
@@ -488,8 +494,13 @@ public class AnalyticsService {
         return current.subtract(base).divide(base.abs(), 4, java.math.RoundingMode.HALF_UP);
     }
 
-    /** S4 钻取:超时工单明细(实时,与 wo.overdue_rate 分子同过滤:处理时限落当日 facility 窗且超时)。 */
-    public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(int limit, int offset) {
+    /** S4 钻取:超时工单明细(实时,与超时率分子同过滤:时限落当日 facility 窗且超时;
+     * 清单#13:source=merchant 查商户服务工单,同窗同口径)。 */
+    public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(String source, int limit, int offset) {
+        boolean merchant = "merchant".equals(source);
+        if (!merchant && !"facility".equals(source)) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "source must be facility or merchant");
+        }
         return readSingle(
                 "analytics.overdue_work_orders.viewed",
                 "analytics.overdue_work_orders.view_failed",
@@ -498,9 +509,11 @@ public class AnalyticsService {
                 () -> {
                     Instant now = Instant.now(clock);
                     LocalDate businessDate = businessDayResolver.businessDate("facility", now);
-                    return repository.listOverdueWorkOrders(
-                            businessDayResolver.startInstant("facility", businessDate),
-                            businessDayResolver.endInstant("facility", businessDate), now, limit, offset);
+                    java.time.Instant windowStart = businessDayResolver.startInstant("facility", businessDate);
+                    java.time.Instant windowEnd = businessDayResolver.endInstant("facility", businessDate);
+                    return merchant
+                            ? repository.listOverdueMerchantWorkOrders(windowStart, windowEnd, now, limit, offset)
+                            : repository.listOverdueWorkOrders(windowStart, windowEnd, now, limit, offset);
                 }
         );
     }
