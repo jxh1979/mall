@@ -58,6 +58,8 @@ test.describe("full admin visual and responsive acceptance", () => {
       animations: "disabled",
     });
 
+    // ≤860px 侧栏收起为抽屉：先点汉堡展开再点导航项（导航后自动关闭）。
+    await page.getByTestId("admin-nav-toggle").click();
     await page.getByTestId("admin-nav-ADM-TKT-002").click();
     await expect(page).toHaveURL(/\/admin\/ticketing\/dynamic-pricing$/);
     await expect(page.getByTestId("dynamic-pricing-page")).toBeVisible();

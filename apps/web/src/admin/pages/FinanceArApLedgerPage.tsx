@@ -15,10 +15,6 @@ const PAYMENT_PERMISSION = "finance.payment.register";
 
 // 排序指示符修复：共享 useSortedRows 的「↕」在当前 UI 字体下渲染成冒号状（表头看起来是「凭证:」）。
 // ponytail: 本页改用 ▲/▼ 且仅在已排序列显示（键盘可排序与 aria-sort 由 thProps 保证）；
-// 根因在共享组件 useSortedRows.indicator（白名单外），全局统一换字形留给主会话处置。
-function sortMark(sort: { key: string | null; direction: "asc" | "desc" }, forKey: string): string {
-  return sort.key === forKey ? (sort.direction === "asc" ? " ▲" : " ▼") : "";
-}
 
 // 凭证号：后端 ar-ap-items 返回 item_no（camel 后 itemNo）；billNo/sourceDoc 仅作旧数据兜底。
 function voucherNo(row: FinanceLedgerRow): string {
@@ -148,7 +144,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="finance-ledger-table">
-            <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sortMark(sort, "voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sortMark(sort, "direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sortMark(sort, "dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sortMark(sort, "status")}</th></tr></thead>
+            <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sort.indicator("dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th></tr></thead>
             <tbody>{paged.pageRows.map((row) => (
               <tr key={row.id}>
                 <td><input type="radio" aria-label={`选择凭证 ${voucherNo(row)}`} data-testid={`finance-ledger-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>

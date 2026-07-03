@@ -53,8 +53,8 @@ export function useSortedRows<T>(rows: T[], accessors: Record<string, Accessor<T
   }
 
   function indicator(forKey: string): string {
-    if (key !== forKey) return " ↕";
-    return direction === "asc" ? " ↑" : " ↓";
+    if (key !== forKey) return "";
+    return direction === "asc" ? " ▲" : " ▼";
   }
 
   /** 4.1 无障碍：排序表头属性——键盘 Enter/Space 可排序、aria-sort 播报当前方向。 */
