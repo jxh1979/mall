@@ -1,11 +1,17 @@
 import React from "react";
 import { ConfigProvider, theme } from "antd";
+import zhCN from "antd/es/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
 import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
 import { accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, routeAllowsAccountForm } from "./adminRoutes";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
+
+// antd 组件（日期选择器等）中文化；dayjs 同步切中文（周一开头/中文月份）。
+dayjs.locale("zh-cn");
 
 // P2 bundle 优化：admin 页面路由级 lazy 分包。
 // 此前 32 个页面组件 eager 导入，全部塞进 AdminApp chunk（~224kB）。
@@ -392,6 +398,19 @@ export default function AdminApp() {
 
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
 
+  // 移动端（≤860px）侧栏抽屉：默认收起，汉堡按钮开合；选中菜单项/点遮罩/Esc 关闭。
+  // 桌面端侧栏常驻，此状态无效果（CSS 媒体查询控制）。
+  const [navOpen, setNavOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!navOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navOpen]);
+
   function toggleGroup(key: string) {
     setCollapsedGroups((current) => ({ ...current, [key]: !current[key] }));
   }
@@ -415,6 +434,7 @@ export default function AdminApp() {
     setFocusObjectId(undefined);
     setActionResult(null);
     setGlobalError(null);
+    setNavOpen(false);
     // 固定高度布局下内容滚动发生在 .admin-content 内；切换页面后复位到顶部，
     // 避免从长列表页跳到短页面时停留在空白滚动位置。
     document.querySelector(".admin-content")?.scrollTo({ top: 0 });
@@ -436,6 +456,7 @@ export default function AdminApp() {
     setRoute(target);
     setActionResult(null);
     setGlobalError(null);
+    setNavOpen(false);
     document.querySelector(".admin-content")?.scrollTo({ top: 0 });
     const url = objectId ? `${target.route}?focus=${encodeURIComponent(objectId)}` : target.route;
     window.history.pushState({ pageId: target.pageId }, "", url);
@@ -492,7 +513,15 @@ export default function AdminApp() {
     </main>
   ) : (
     <div className="admin-shell" data-testid="admin-shell">
-      <aside className="admin-sidebar">
+      {navOpen ? (
+        <div
+          className="admin-nav-backdrop"
+          data-testid="admin-nav-backdrop"
+          aria-hidden="true"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
+      <aside className={navOpen ? "admin-sidebar is-open" : "admin-sidebar"}>
         <div className="admin-brand">
           <span className="admin-brand-mark">星</span>
           <div className="admin-brand-text">
@@ -555,6 +584,18 @@ export default function AdminApp() {
       </aside>
       <section className="admin-main">
         <header className="admin-topbar">
+          <button
+            type="button"
+            className="admin-nav-toggle"
+            data-testid="admin-nav-toggle"
+            aria-label={navOpen ? "关闭导航" : "打开导航"}
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen((open) => !open)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
           <div><strong>{route.label}</strong><span>{route.pageId} · {route.route}</span></div>
           <div className="admin-topbar-actions">
             <span className="admin-topbar-store">营业中 · 综合体</span>
@@ -584,7 +625,7 @@ export default function AdminApp() {
   );
 
   return (
-    <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#1b1d21", borderRadius: 10, fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" } }}>
+    <ConfigProvider locale={zhCN} theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#1b1d21", borderRadius: 10, fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" } }}>
       {shell}
     </ConfigProvider>
   );

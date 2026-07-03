@@ -163,6 +163,23 @@ body {
   padding: 20px 24px 28px;
 }
 
+/* 客人端每页 h1（语义地标，由 CustomerApp 统一渲染，pages 不动）。 */
+.customer-page-title {
+  margin: 0 0 12px;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* 客人端退出登录：从裸 <a>（约 14px 高）扩到 ≥44px 触控区。 */
+.customer-logout-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+}
+
 .page-header {
   margin: 0 0 18px;
   padding: 18px 20px;
@@ -902,6 +919,18 @@ body {
     padding: 14px;
   }
 
+  /* 触控目标：移动端 antd 按钮 ≥44px。 */
+  .app-shell .ant-btn {
+    min-height: 44px;
+  }
+
+  /* 窄屏下 antd Sider 零宽触发器悬浮在内容左上角，h1 左移避让。 */
+  .customer-page-title {
+    min-height: 40px;
+    margin-left: 52px;
+    line-height: 40px;
+  }
+
   .page-header {
     padding: 16px;
   }
@@ -982,7 +1011,9 @@ body {
   --adm-border-strong: #d7dade;
   --adm-text: #1a1c1e;
   --adm-text-2: #5a616a;
-  --adm-text-3: #9aa0a8;
+  /* WCAG AA：#9aa0a8 在白底仅 2.64:1，加深到 5.9:1（浅灰底≥5.2:1）；
+     暗侧栏上的次要文字改用 --adm-sb-text-dim 保持原视觉。 */
+  --adm-text-3: #5b6472;
   --adm-accent: #1b1d21;
   --adm-accent-weak: color-mix(in srgb, var(--adm-accent) 9%, #fff);
   --adm-accent-soft: color-mix(in srgb, var(--adm-accent) 14%, #fff);
@@ -992,6 +1023,7 @@ body {
   --adm-shadow-md: 0 4px 16px rgba(20, 22, 26, 0.07), 0 1px 3px rgba(20, 22, 26, 0.05);
   --adm-sb-bg: #17181b;
   --adm-sb-text: #9ca1a9;
+  --adm-sb-text-dim: #9aa0a8;
   --adm-sb-text-strong: #f2f3f5;
   --adm-sb-active-bg: #26282c;
   --adm-sb-border: #26282c;
@@ -1001,7 +1033,8 @@ body {
   --adm-info-bg: #e9eefb;
   --adm-warn: #a8772a;
   --adm-warn-bg: #fbf0dd;
-  --adm-danger: #c2453c;
+  /* WCAG AA：#c2453c 在浅红底 4.22:1，加深到 ≥5:1。 */
+  --adm-danger: #b03a31;
   --adm-danger-bg: #fbe8e6;
   --adm-font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --adm-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1085,7 +1118,8 @@ body {
   text-align: center;
   font-size: 12px;
   letter-spacing: 0.08em;
-  color: #6b7078;
+  /* WCAG AA：#6b7078 在 #17181b 上仅 3.56:1，提亮到 ≥5:1。 */
+  color: #8a9098;
 }
 
 .admin-auth-form-wrap {
@@ -1199,7 +1233,7 @@ body {
 
 .admin-brand-sub {
   font-size: 11.5px;
-  color: var(--adm-text-3);
+  color: var(--adm-sb-text-dim);
 }
 
 /* ---------- 导航 ---------- */
@@ -1247,7 +1281,7 @@ body {
   place-items: center;
   width: 18px;
   flex: none;
-  color: var(--adm-text-3);
+  color: var(--adm-sb-text-dim);
 }
 
 .admin-sidebar nav button.admin-nav-group-header span {
@@ -1261,7 +1295,7 @@ body {
 
 .admin-sidebar nav button.admin-nav-group-header small {
   flex: none;
-  color: var(--adm-text-3);
+  color: var(--adm-sb-text-dim);
   font-size: 12px;
   transition: transform 0.2s;
 }
@@ -1288,12 +1322,12 @@ body {
   margin-right: 5px;
   flex: none;
   border-radius: 50%;
-  background: var(--adm-text-3);
+  background: var(--adm-sb-text-dim);
   opacity: 0.5;
 }
 
 .admin-sidebar nav .admin-nav-group-items button span {
-  color: var(--adm-text-3);
+  color: var(--adm-sb-text-dim);
   font-size: 11px;
   font-weight: 500;
   display: none; /* 二级项隐藏冗余的模块名，仅显示页面标题，贴近原型 */
@@ -1361,7 +1395,7 @@ body {
 
 .admin-sidebar-foot .admin-sf-role {
   font-size: 11.5px;
-  color: var(--adm-text-3);
+  color: var(--adm-sb-text-dim);
 }
 
 /* ============================================================
@@ -1390,9 +1424,11 @@ body {
   border-radius: 0;
 }
 
-.admin-topbar > div:first-child {
+/* first-of-type 而非 first-child：移动端标题前多了汉堡按钮（button），标题仍是第一个 div。 */
+.admin-topbar > div:first-of-type {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 1px;
   min-width: 0;
 }
@@ -1458,6 +1494,15 @@ body {
   background: var(--adm-surface-3);
   border-color: var(--adm-border-strong);
   color: var(--adm-text);
+}
+
+/* 移动端汉堡按钮 + 抽屉遮罩：桌面隐藏，≤860px 媒体块内启用。 */
+.admin-topbar .admin-nav-toggle {
+  display: none;
+}
+
+.admin-nav-backdrop {
+  display: none;
 }
 
 /* 滚动内容容器 */
@@ -1676,12 +1721,30 @@ body {
   border-color: var(--adm-border-strong);
 }
 
+/* WCAG 2.4.7 键盘焦点可见：此前输入类 outline:none 后仅换 border 色（同色系不可辨）。
+   统一在 :focus-visible 时给品牌色 outline，不影响既有 border 过渡。 */
+.admin-shell :is(input, select, textarea, button):focus-visible,
+.admin-auth-shell :is(input, select, textarea, button):focus-visible {
+  outline: 2px solid var(--adm-accent);
+  outline-offset: 2px;
+}
+
 .admin-checkbox {
   display: inline-flex !important;
   align-items: center;
   gap: 6px;
+  padding: 8px 0;
   font-size: 13px;
   color: var(--adm-text-2);
+}
+
+/* 触控目标：勾选/单选控件 ≥20px（含表格内 radio/checkbox）。 */
+.admin-shell input[type="checkbox"],
+.admin-shell input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--adm-accent);
 }
 
 /* ============================================================
@@ -1962,13 +2025,56 @@ body {
     overflow: visible;
   }
 
+  /* 侧栏改为默认收起的抽屉：不再占据首屏（旧行为是 50vh 导航墙）。
+     打开由 AdminApp 的汉堡按钮切换 .is-open，遮罩/选中菜单项点击关闭。 */
   .admin-sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--adm-sb-border);
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    width: min(300px, 84vw);
+    border-right: 1px solid var(--adm-sb-border);
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
   }
 
-  .admin-sidebar nav {
-    max-height: 50vh;
+  .admin-sidebar.is-open {
+    transform: none;
+    box-shadow: var(--adm-shadow-md);
+  }
+
+  .admin-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(20, 22, 26, 0.45);
+    border: 0;
+    padding: 0;
+  }
+
+  .admin-topbar .admin-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .admin-topbar {
+    gap: 10px;
+    padding: 0 14px;
+  }
+
+  /* 触控目标：移动断点内按钮 ≥44px。 */
+  .admin-shell button,
+  .admin-auth-shell button {
+    min-height: 44px;
   }
 
   .admin-main {
