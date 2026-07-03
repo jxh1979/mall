@@ -14,6 +14,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-CONT-001", label: "合同生命周期工作台", route: "/admin/contracts" },
   { pageId: "ADM-FAC-001", label: "楼宇运营工作台", route: "/admin/facility/workbench" },
   { pageId: "ADM-ENE-001", label: "能源工作台", route: "/admin/energy/workbench" },
+  { pageId: "ADM-FLR-001", label: "商场平面图导入", route: "/admin/space/floor-plans" },
   { pageId: "ADM-ACC-003", label: "访问治理工作台", route: "/admin/access/governance" },
   { pageId: "ADM-LEASE-001", label: "招商工作台", route: "/admin/leasing/workbench" },
   { pageId: "ADM-LEASE-002", label: "租赁状态看板", route: "/admin/leasing/rental-status" },
@@ -246,6 +247,12 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       await expect(page.getByTestId(`admin-nav-${spec.pageId}`)).toBeVisible();
       await openAdminRoute(page, spec);
+      if (spec.pageId === "ADM-FLR-001") {
+        await expect(page.getByTestId("floor-plan-import-page")).toBeVisible();
+        await expect(page.getByTestId("floor-plan-evidence")).toContainText("/api/v1/floor-plans");
+        await expect(page.getByTestId("floor-plans-table")).toContainText("示例平面图");
+        continue;
+      }
       if (spec.pageId === "ADM-GOV-001") {
         await expect(page.getByTestId("governance-topology-evidence")).toContainText("/api/v1/platform/business-entities");
         await expect(page.getByTestId("governance-topology-evidence")).toContainText("/api/v1/platform/spaces");

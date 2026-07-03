@@ -17,7 +17,7 @@ function expectContains(file, source, needle, reason) {
   if (!source.includes(needle)) failures.push(file + ': missing ' + reason);
 }
 
-const webFile = 'apps/web/src/main.tsx';
+const webFile = 'apps/web/src/admin/pages/FloorPlanImportPage.tsx';
 const packageFile = 'package.json';
 const openapiFile = 'docs/openapi/openapi-p0.json';
 const web = read(webFile);
@@ -27,17 +27,16 @@ const openapiText = read(openapiFile);
 const openapi = openapiText ? JSON.parse(openapiText) : { paths: {}, components: {} };
 
 expectContains(packageFile, JSON.stringify(pkg.scripts || {}), 'verify:p2-floor-plan-web-entry', 'verification script entry');
-expectContains(webFile, web, 'floorplan', 'floorplan SectionKey value');
-expectContains(webFile, web, 'children: ["foundation", "floorplan", "interfaces", "security", "events"]', 'floorplan navigation entry under platform governance');
-expectContains(webFile, web, 'P2 \u5e73\u9762\u56fe\u5bfc\u5165', 'P2 floor plan import visible workbench heading');
-expectContains(webFile, web, '\u5546\u573a\u5e73\u9762\u56fe', 'floor plan menu label');
-expectContains(webFile, web, 'floorPlans:', 'floor plan snapshot collection');
+expectContains(webFile, web, 'floor-plan-import-page', 'floor plan import page testid');
+expectContains(webFile, web, 'P2 \u5e73\u9762\u56fe\u5bfc\u5165', 'P2 floor plan import visible heading');
+expectContains(webFile, web, '\u5546\u573a\u5e73\u9762\u56fe\u5bfc\u5165', 'floor plan page title');
+expectContains(webFile, web, 'floorPlans', 'floor plan snapshot collection');
 expectContains(webFile, web, 'floorPlanImportDetails', 'floor plan import candidate/error details state');
 expectContains(webFile, web, '/api/v1/floor-plans', 'floor plan list/create API reference');
 expectContains(webFile, web, '/api/v1/floor-plans/${floorPlanId}/imports', 'floor plan import create/list API reference');
 expectContains(webFile, web, '/api/v1/floor-plans/${floorPlanId}/imports/${importId}/candidates', 'floor plan import details API reference');
-expectContains(webFile, web, '/api/v1/floor-plans/${floorPlanId}/imports/${importId}/publish', 'floor plan import publish API reference');
-expectContains(webFile, web, 'confirmHighImpactAction', 'manual confirmation function usage');
+expectContains(webFile, web, '/api/v1/floor-plans/${selectedPlanId}/imports/${selectedImportId}/publish', 'floor plan import publish API reference');
+expectContains(webFile, web, 'HighRiskConfirm', 'high-risk publish confirmation component');
 expectContains(webFile, web, '\u53d1\u5e03\u5e73\u9762\u56fe\u5bfc\u5165\u5019\u9009', 'floor plan publish confirmation title');
 expectContains(webFile, web, '\u5019\u9009 ID', 'candidate id field label');
 

@@ -1,0 +1,184 @@
+import React from "react";
+import { AdminDataState } from "../components/AdminDataState";
+import { AdminPageHeader } from "../components/AdminPageHeader";
+import { AuditTrailHint } from "../components/AuditTrailHint";
+import { TechDetails } from "../components/TechDetails";
+import { useAdminResource } from "../hooks/useAdminResource";
+import { PermissionButton } from "../security/Can";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
+import type { AdminPageProps } from "../types";
+
+// 后端 floorplan 域记录映射(接现有 /api/v1/floor-plans/* 契约)。
+type FloorPlan = { id: string; projectId?: string; buildingCode?: string; floorNo?: string; planName?: string; versionNo?: string; status?: string };
+type ImportTask = { id: string; floorPlanId?: string; sourceFormat?: string; sourceName?: string; status?: string; candidateCount?: number; errorCount?: number };
+type ImportCandidate = { id: string; candidateNo?: number; shapeType?: string; refType?: string; refId?: string; label?: string; status?: string };
+type ImportError = { id: string; lineNo?: number; fieldName?: string; errorCode?: string; errorMessage?: string };
+type FloorPlanImportDetails = { task?: ImportTask; candidates?: ImportCandidate[]; errors?: ImportError[] };
+
+const MANAGE = ["floor_plan.manage"];
+// 高危动作二次确认标题(发布候选写入正式平面图区域,不可静默覆盖):由 HighRiskConfirm 弹窗承载。
+const PUBLISH_CONFIRM_TITLE = "发布平面图导入候选";
+
+/**
+ * P2 平面图导入(商场平面图):上传/导入商场平面布局,解析出候选区域(铺位/摊位/公共区),
+ * 人工复核候选与错误后,发布到正式平面图区域。发布=高危动作,经 confirmHighImpactAction 二次确认。
+ * 2026-06 改版丢失前端后重建为独立 admin 页(接现有 floorplan 后端)。
+ */
+export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+  const [floorPlans, setFloorPlans] = React.useState<FloorPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = React.useState("");
+  const [imports, setImports] = React.useState<ImportTask[]>([]);
+  const [selectedImportId, setSelectedImportId] = React.useState("");
+  const [floorPlanImportDetails, setFloorPlanImportDetails] = React.useState<FloorPlanImportDetails | null>(null);
+  const [planForm, setPlanForm] = React.useState({ planName: "", buildingCode: "", floorNo: "" });
+  const [importForm, setImportForm] = React.useState({ sourceFormat: "geojson", sourceName: "", sourcePayload: "" });
+  const [publishCandidateIds, setPublishCandidateIds] = React.useState("");
+
+  const { loading, error, reload } = useAdminResource(
+    async () => {
+      const list = await api.get<{ items?: FloorPlan[] } | FloorPlan[]>("/api/v1/floor-plans");
+      setFloorPlans(Array.isArray(list) ? list : (list?.items ?? []));
+    },
+    { onError: setGlobalError, fallbackMessage: "平面图读取失败", onStart: () => setGlobalError(null) },
+  );
+
+  const loadImports = async (floorPlanId: string) => {
+    setSelectedPlanId(floorPlanId);
+    setSelectedImportId("");
+    setFloorPlanImportDetails(null);
+    const res = await api.get<{ items?: ImportTask[] } | ImportTask[]>(`/api/v1/floor-plans/${floorPlanId}/imports`);
+    setImports(Array.isArray(res) ? res : (res?.items ?? []));
+  };
+
+  const loadCandidates = async (floorPlanId: string, importId: string) => {
+    setSelectedImportId(importId);
+    const details = await api.get<FloorPlanImportDetails>(`/api/v1/floor-plans/${floorPlanId}/imports/${importId}/candidates`);
+    setFloorPlanImportDetails(details);
+  };
+
+  const createPlan = async () => {
+    try {
+      await api.post("/api/v1/floor-plans", {
+        idempotency_key: `fp-${Date.now()}`, plan_name: planForm.planName,
+        building_code: planForm.buildingCode, floor_no: planForm.floorNo, status: "draft",
+      });
+      setActionResult({ action: "floor_plan_created", planName: planForm.planName });
+      reload();
+    } catch (e) { setGlobalError((e as Error).message); }
+  };
+
+  const createImport = async () => {
+    try {
+      const res = await api.post<ImportTask>(`/api/v1/floor-plans/${selectedPlanId}/imports`, {
+        idempotency_key: `fpi-${Date.now()}`, source_format: importForm.sourceFormat,
+        source_name: importForm.sourceName, source_payload: importForm.sourcePayload,
+      });
+      setActionResult({ action: "floor_plan_import_created", importId: res?.id });
+      await loadImports(selectedPlanId);
+    } catch (e) { setGlobalError((e as Error).message); }
+  };
+
+  const publishImport = async () => {
+    try {
+      const ids = publishCandidateIds.split(",").map((s) => s.trim()).filter(Boolean);
+      const result = await api.post(`/api/v1/floor-plans/${selectedPlanId}/imports/${selectedImportId}/publish`, {
+        idempotency_key: `fpp-${Date.now()}`, candidate_ids: ids,
+      });
+      setActionResult({ action: "floor_plan_import_published", candidateIds: ids, result });
+      await loadCandidates(selectedPlanId, selectedImportId);
+    } catch (e) { setGlobalError((e as Error).message); }
+  };
+
+  const pendingCandidates = floorPlanImportDetails?.candidates?.filter((item) => item.status === "pending") ?? [];
+
+  return (
+    <section data-testid="floor-plan-import-page">
+      <AdminPageHeader title="商场平面图导入" description="P2 平面图导入：上传商场平面图，解析出候选区域，人工复核候选与错误后发布到正式平面图。发布为高危动作，需二次确认。" />
+      <AuditTrailHint event="floor_plan.created / floor_plan.import_published" />
+      <TechDetails><div className="admin-generic-evidence" data-testid="floor-plan-evidence">/api/v1/floor-plans</div></TechDetails>
+      <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        <div className="admin-form-grid" data-testid="floor-plan-create-form">
+          <label>平面图名称<input data-testid="floor-plan-name" value={planForm.planName} onChange={(e) => setPlanForm({ ...planForm, planName: e.target.value })} /></label>
+          <label>楼栋<input data-testid="floor-plan-building" value={planForm.buildingCode} onChange={(e) => setPlanForm({ ...planForm, buildingCode: e.target.value })} /></label>
+          <label>楼层<input data-testid="floor-plan-floor" value={planForm.floorNo} onChange={(e) => setPlanForm({ ...planForm, floorNo: e.target.value })} /></label>
+          <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="floor-plan-create" onClick={() => void createPlan()}>创建平面图</PermissionButton>
+        </div>
+        <table className="admin-table" data-testid="floor-plans-table">
+          <thead><tr><th>名称</th><th>楼栋/层</th><th>版本</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            {floorPlans.map((plan) => (
+              <tr key={plan.id}>
+                <td>{plan.planName ?? plan.id}</td><td>{plan.buildingCode ?? "-"}/{plan.floorNo ?? "-"}</td>
+                <td>{plan.versionNo ?? "-"}</td><td>{plan.status ?? "-"}</td>
+                <td><button type="button" data-testid={`floor-plan-select-${plan.id}`} onClick={() => void loadImports(plan.id)}>查看导入</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {selectedPlanId ? (
+          <>
+            <h3>导入任务</h3>
+            <div className="admin-form-grid" data-testid="floor-plan-import-form">
+              <label>来源格式<input data-testid="floor-plan-import-format" value={importForm.sourceFormat} onChange={(e) => setImportForm({ ...importForm, sourceFormat: e.target.value })} /></label>
+              <label>来源名称<input data-testid="floor-plan-import-name" value={importForm.sourceName} onChange={(e) => setImportForm({ ...importForm, sourceName: e.target.value })} /></label>
+              <label>来源内容<textarea data-testid="floor-plan-import-payload" value={importForm.sourcePayload} onChange={(e) => setImportForm({ ...importForm, sourcePayload: e.target.value })} /></label>
+              <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="floor-plan-import-create" onClick={() => void createImport()}>创建导入</PermissionButton>
+            </div>
+            <table className="admin-table" data-testid="floor-plan-imports-table">
+              <thead><tr><th>来源</th><th>状态</th><th>候选数</th><th>错误数</th><th>操作</th></tr></thead>
+              <tbody>
+                {imports.map((task) => (
+                  <tr key={task.id}>
+                    <td>{task.sourceName ?? task.id}</td><td>{task.status ?? "-"}</td>
+                    <td>{task.candidateCount ?? 0}</td><td>{task.errorCount ?? 0}</td>
+                    <td><button type="button" data-testid={`floor-plan-import-select-${task.id}`} onClick={() => void loadCandidates(selectedPlanId, task.id)}>候选明细</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : null}
+        {floorPlanImportDetails ? (
+          <>
+            <div className="admin-kpi-grid" data-testid="floor-plan-import-summary">
+              <div className="admin-kpi-card"><span>待发布候选</span><strong data-testid="floor-plan-pending-count">{pendingCandidates.length}</strong></div>
+              <div className="admin-kpi-card"><span>导入错误</span><strong>{floorPlanImportDetails.errors?.length ?? 0}</strong></div>
+            </div>
+            <h3>候选明细</h3>
+            <table className="admin-table" data-testid="floor-plan-candidates-table">
+              <thead><tr><th>序号</th><th>类型</th><th>关联</th><th>标签</th><th>状态</th></tr></thead>
+              <tbody>
+                {(floorPlanImportDetails.candidates ?? []).slice(0, 50).map((candidate) => (
+                  <tr key={candidate.id}>
+                    <td>{candidate.candidateNo ?? "-"}</td><td>{candidate.shapeType ?? "-"}</td>
+                    <td>{candidate.refType ?? "-"}:{candidate.refId ?? "-"}</td><td>{candidate.label ?? "-"}</td><td>{candidate.status ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <h3>导入错误</h3>
+            <table className="admin-table" data-testid="floor-plan-errors-table">
+              <thead><tr><th>行号</th><th>字段</th><th>错误码</th><th>说明</th></tr></thead>
+              <tbody>
+                {(floorPlanImportDetails.errors ?? []).slice(0, 50).map((row) => (
+                  <tr key={row.id}><td>{row.lineNo ?? "-"}</td><td>{row.fieldName ?? "-"}</td><td>{row.errorCode ?? "-"}</td><td>{row.errorMessage ?? "-"}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="admin-form-grid" data-testid="floor-plan-publish-form">
+              <label>候选 ID（逗号分隔，留空=全部待发布）<input data-testid="floor-plan-publish-candidates" value={publishCandidateIds} onChange={(e) => setPublishCandidateIds(e.target.value)} /></label>
+              <HighRiskConfirm
+                label="发布候选到正式平面图"
+                impact={`${PUBLISH_CONFIRM_TITLE}：发布后候选会写入正式平面图区域，请确认已完成业务复核，发布不可静默覆盖既有区域证据。`}
+                onConfirm={() => void publishImport()}
+                permissionsState={effectivePermissions}
+                permissions={MANAGE}
+                data-testid="floor-plan-publish"
+              />
+            </div>
+          </>
+        ) : null}
+      </AdminDataState>
+    </section>
+  );
+}
