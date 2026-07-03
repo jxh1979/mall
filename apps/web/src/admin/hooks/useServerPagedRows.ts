@@ -1,5 +1,6 @@
 import React from "react";
 import type { PagedResult } from "../client/adminClient";
+import { formatApiErrorDetail } from "../../shared/apiError";
 
 export interface ServerPagedState<T> {
   rows: T[];
@@ -7,7 +8,7 @@ export interface ServerPagedState<T> {
   page: number;
   pageCount: number;
   loading: boolean;
-  error: string | null;
+  error: { message: string; detail: string | null } | null;
   /** 当前生效(已提交)的关键词——匹配计数/空态文案用它,而非输入框草稿。 */
   keyword: string;
   prev: () => void;
@@ -32,7 +33,7 @@ export function useServerPagedRows<T>(
   const [keyword, setKeyword] = React.useState("");
   const [result, setResult] = React.useState<PagedResult<T>>({ items: [], total: 0, page: 1, size: pageSize });
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<{ message: string; detail: string | null } | null>(null);
   const [tick, setTick] = React.useState(0);
 
   const fetchRef = React.useRef(fetchPage);
@@ -53,7 +54,7 @@ export function useServerPagedRows<T>(
       .catch((loadError: unknown) => {
         if (cancelled) return;
         const message = loadError instanceof Error ? loadError.message : fallback;
-        setError(message);
+        setError({ message, detail: formatApiErrorDetail(loadError) });
         onErrorRef.current?.(message);
       })
       .finally(() => {

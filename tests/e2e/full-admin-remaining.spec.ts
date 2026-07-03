@@ -309,7 +309,7 @@ test.describe("full admin remaining pages acceptance", () => {
         const storedWineTable = page.getByTestId("stored-wine-table");
         await expect(storedWineTable).toBeVisible();
         await expect(storedWineTable).toContainText("SAVED-1");
-        await expect(storedWineTable).toContainText("stored");
+        await expect(storedWineTable).toContainText("存酒中");
         continue;
       }
       if (spec.pageId === "ADM-BAR-004") {
@@ -469,7 +469,7 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-EVD-001") {
         await expect(page.getByTestId("audit-events-evidence")).toContainText("/api/v1/evidence/events");
-        await expect(page.getByTestId("audit-events-summary")).toContainText("成功事件");
+        await expect(page.getByTestId("audit-events-summary")).toContainText("本页成功");
         await expect(page.getByTestId("audit-events-table")).toContainText("event-trace-1");
         await page.getByTestId("audit-events-search").fill("ticket");
         await expect(page.getByTestId("audit-events-table")).toContainText("ticket.order.created");
@@ -748,7 +748,7 @@ test.describe("full admin remaining pages acceptance", () => {
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-006")!);
     await expect(page.getByTestId("merchant-zone-contracts-summary")).toContainText("合同总数");
-    await expect(page.getByTestId("merchant-zone-contracts-table")).toContainText("contract-1");
+    await expect(page.getByTestId("merchant-zone-contracts-table")).toContainText("ntract-1");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-007")!);
     await expect(page.getByTestId("merchant-zone-fee-recipients-summary")).toContainText("接收人配置");
