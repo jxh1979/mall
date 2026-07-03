@@ -366,20 +366,27 @@ class MainActivity : Activity() {
   // 酒吧支付引导：创建支付意图（生成支付二维码由后端返回 channel/status，UI 展示引导）+ 结算。
   private fun showBarPayment(order: BarOrderRecord) {
     val billId = editText("账单 bill_id（下单后生成）")
-    val amount = editText("金额（元）").apply {
-      inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-      setText("%.2f".format(order.totalAmountCent / 100.0))
+    // 金额防误：结算金额=订单金额，只读展示，杜绝手滑改小。
+    val cents = order.totalAmountCent
+    val amount = statusText("应收金额：¥${"%.2f".format(cents / 100.0)}（按订单金额结算，不可修改）")
+    // 渠道防误：自由文本改为 wechat/alipay 单选，默认微信。
+    val wechatRadio = android.widget.RadioButton(this).apply { text = "微信 wechat"; id = View.generateViewId() }
+    val alipayRadio = android.widget.RadioButton(this).apply { text = "支付宝 alipay"; id = View.generateViewId() }
+    val channel = android.widget.RadioGroup(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      addView(wechatRadio)
+      addView(alipayRadio)
+      check(wechatRadio.id)
     }
-    val channel = editText("支付渠道 channel（如 wechat / alipay）").apply { setText("wechat") }
+    fun selectedChannel(): String = if (alipayRadio.isChecked) "alipay" else "wechat"
     val status = statusText("订单 ${order.id}\n创建支付意图后引导顾客扫码支付，再结算账单。")
 
     val intentButton = secondaryButton("创建支付意图（引导扫码）") {
       val bill = billId.text.toString().trim()
       if (bill.isEmpty()) { status.text = "请输入账单 bill_id"; return@secondaryButton }
-      val cents = parseAmountCent(amount.text.toString()) ?: run { status.text = "金额格式不正确"; return@secondaryButton }
       status.text = "正在创建支付意图…"
       runBackground(
-        action = { workflow.createBarPaymentIntent(bill, cents, channel.text.toString().trim().ifEmpty { "wechat" }) },
+        action = { workflow.createBarPaymentIntent(bill, cents, selectedChannel()) },
         onSuccess = { intent ->
           status.text = buildString {
             append("支付意图：").append(intent.id).append("（").append(intent.status).append("）\n")
@@ -394,8 +401,7 @@ class MainActivity : Activity() {
     val settleButton = primaryButton("结算账单 settle") {
       val bill = billId.text.toString().trim()
       if (bill.isEmpty()) { status.text = "请输入账单 bill_id"; return@primaryButton }
-      val cents = parseAmountCent(amount.text.toString()) ?: run { status.text = "金额格式不正确"; return@primaryButton }
-      val ch = channel.text.toString().trim().ifEmpty { "wechat" }
+      val ch = selectedChannel()
       confirmThen(
         title = "结算账单",
         message = "将按 ¥${"%.2f".format(cents / 100.0)}（渠道 $ch）结算账单 $bill。\n结算即确认收款完成、账单关闭，不可撤销。\n请确认客人已完成支付。",
@@ -620,9 +626,6 @@ class MainActivity : Activity() {
     }
     return "$text（${error.statusCode} ${error.path}）"
   }
-
-  private fun parseAmountCent(input: String): Long? =
-    input.trim().toDoubleOrNull()?.let { Math.round(it * 100) }
 
   // ---------- 视图工厂（纯 Android Views，无 AndroidX/Compose） ----------
 
