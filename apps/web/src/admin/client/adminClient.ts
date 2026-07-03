@@ -1,3 +1,5 @@
+import { apiErrorFromResponse } from "../../shared/apiError";
+
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 type JsonBody = Record<string, unknown>;
@@ -63,7 +65,23 @@ export class AdminApi {
   /** 商户专区（3.18 方案A）：merchant 归属账号按 merchant_portal 终端上报，受 V197 商户门户总开关约束；员工/平台账号仍为 web。 */
   terminalType: string = "web";
 
-  constructor(private readonly accessToken: string) {}
+  /** 会话续期（用户裁决 localStorage+refresh_token）：401 时用它调 /auth/refresh，成功重放原请求一次。 */
+  refreshToken: string | null = null;
+
+  /** 刷新成功回调（AdminApp 持久化新 token 并更新状态）。 */
+  onTokensRefreshed: ((tokens: { accessToken: string; refreshToken: string | null }) => void) | null = null;
+
+  /** 刷新失败/无刷新凭证回调（AdminApp 清凭证回登录页，提示「登录已过期」）。 */
+  onSessionExpired: (() => void) | null = null;
+
+  private accessToken: string;
+
+  /** 并发 401 只发一次刷新请求。 */
+  private refreshing: Promise<boolean> | null = null;
+
+  constructor(accessToken: string) {
+    this.accessToken = accessToken;
+  }
 
   get<T>(path: string): Promise<T> {
     return this.request<T>(path);
@@ -85,7 +103,7 @@ export class AdminApi {
     return this.request<T>(path, "DELETE");
   }
 
-  private async request<T>(path: string, method = "GET", body?: JsonBody): Promise<T> {
+  private buildInit(method: string, body: JsonBody | undefined): RequestInit {
     const headers = new Headers();
     if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);
     // 3.19 二期：声明终端后后端按 terminal.enabled 逐请求强制（矩阵页关端/关模块=接口硬拒）。
@@ -96,9 +114,53 @@ export class AdminApi {
       headers.set("content-type", "application/json");
       init.body = JSON.stringify(normalizeRequestBody(body));
     }
-    const response = await fetch(`${this.apiBaseUrl}${path}`, init);
+    return init;
+  }
+
+  private async request<T>(path: string, method = "GET", body?: JsonBody): Promise<T> {
+    // 幂等键在首发时生成一次，401 刷新后的重放沿用同一键（服务端按幂等键去重）。
+    const stableBody = body ? { ...body, idempotencyKey: body.idempotencyKey ?? nextIdempotencyKey() } : undefined;
+    // 认证域自身（登录/刷新/登出）失败不再走刷新，避免自递归。
+    const isAuthEndpoint = path.includes("/auth/");
+    let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
+    if (response.status === 401 && this.refreshToken && !isAuthEndpoint) {
+      if (await this.tryRefresh()) {
+        response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
+      } else {
+        this.onSessionExpired?.();
+      }
+    }
     const text = await response.text();
-    if (!response.ok) throw new Error(`${path} ${response.status}: ${text || response.statusText}`);
+    if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
     return (text ? unwrap(JSON.parse(text)) : null) as T;
+  }
+
+  private tryRefresh(): Promise<boolean> {
+    this.refreshing ??= this.doRefresh().finally(() => {
+      this.refreshing = null;
+    });
+    return this.refreshing;
+  }
+
+  private async doRefresh(): Promise<boolean> {
+    try {
+      const headers = new Headers({ "content-type": "application/json", "x-terminal-type": this.terminalType });
+      if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);
+      const response = await fetch(`${this.apiBaseUrl}/api/v1/auth/refresh`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ refresh_token: this.refreshToken }),
+      });
+      if (!response.ok) return false;
+      const text = await response.text();
+      const data = (text ? unwrap(JSON.parse(text)) : null) as { accessToken?: string; refreshToken?: string } | null;
+      if (!data?.accessToken) return false;
+      this.accessToken = data.accessToken;
+      if (data.refreshToken) this.refreshToken = data.refreshToken;
+      this.onTokensRefreshed?.({ accessToken: this.accessToken, refreshToken: this.refreshToken });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
