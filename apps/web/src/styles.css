@@ -825,21 +825,15 @@ body {
 }
 
 @media (max-width: 760px) {
+  /* 修复客人端 375px 内容列坍缩为 32px：
+     旧规则把 .app-shell（现仅客人端使用，后台是 .admin-shell 独立子树）强制 display:block，
+     打断 antd Layout 的 flex 后，.ant-layout-has-sider > .ant-layout 自带的 width:0 不再被
+     flex 拉伸，内容列只剩 padding。删除该覆盖，交还 antd Layout 自适应（Sider breakpoint
+     已在窄屏折叠为 0）。.main-layout/.sidebar 等类属退役控制台遗留，现无后台消费方。 */
   .app-shell,
   .app-shell.ant-layout {
-    display: block;
-    width: 100%;
     min-width: 0;
     overflow-x: hidden;
-  }
-
-  .app-shell.ant-layout-has-sider > .main-layout,
-  .app-shell > .main-layout,
-  .main-layout.ant-layout {
-    display: block;
-    width: 100% !important;
-    min-width: 0;
-    flex: none !important;
   }
 
   .sidebar,
@@ -1621,6 +1615,27 @@ body {
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--adm-text-2);
+}
+
+/* 技术段落折叠（用户裁决）：接口证据/操作留痕/错误技术详情默认收起，summary 作低调入口。 */
+.admin-tech-details {
+  margin: 6px 0;
+  font-size: 12.5px;
+  color: var(--adm-text-2);
+}
+
+.admin-tech-details > summary {
+  cursor: pointer;
+  color: var(--adm-text-2);
+  font-size: 12px;
+  user-select: none;
+}
+
+.admin-tech-details pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12px;
 }
 
 .admin-list-toolbar {
