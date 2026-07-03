@@ -6,7 +6,10 @@ import {
   UnorderedListOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
-import { Layout, Menu } from "antd";
+import { ConfigProvider, Layout, Menu } from "antd";
+import zhCN from "antd/es/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
 import { useEffect, useMemo, useState } from "react";
 
 import { CustomerAuthShell } from "./components/CustomerAuthShell";
@@ -23,11 +26,26 @@ import { PointsPage } from "./pages/PointsPage";
 import { WalletPage } from "./pages/WalletPage";
 import type { CustomerSession } from "./types";
 
+// antd 组件（日期选择器等）中文化；dayjs 同步切中文，避免 "Select date" 类英文文案。
+dayjs.locale("zh-cn");
+
 const { Header, Content, Sider } = Layout;
 
 type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet";
 
 const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet"];
+
+// 页面标题单一来源：侧栏菜单与每页 h1（语义地标）共用。
+const PAGE_TITLES: Record<PageKey, string> = {
+  home: "首页 / 票种",
+  buy: "购票",
+  reserve: "订台",
+  invitation: "订卡邀请函",
+  scan: "扫码点单",
+  orders: "我的订单 / 票 / 二维码",
+  points: "积分 / 签到",
+  wallet: "储值 / 会员",
+};
 
 // 3.11 多页入口 + 深链修复：
 // - /ticketing /bar /amusement 入口页重定向到 /?page=xxx，这里必须解析 ?page=（此前只看 pathname，入口全落首页）；
@@ -121,56 +139,56 @@ export default function CustomerApp(): React.ReactElement {
     goTo("home");
   };
 
-  if (restoring) {
-    return <CustomerAuthShell error={null} loading onLogin={onLogin} />;
-  }
-  if (!session || !service) {
-    return <CustomerAuthShell error={error} errorDetail={errorDetail} loading={loading} onLogin={onLogin} />;
-  }
-
-  const menuItems = [
-    { key: "home", icon: <HomeOutlined />, label: "首页 / 票种" },
-    { key: "buy", icon: <ShoppingOutlined />, label: "购票" },
-    { key: "reserve", icon: <CalendarOutlined />, label: "订台" },
-    { key: "invitation", icon: <CalendarOutlined />, label: "订卡邀请函" },
-    { key: "scan", icon: <ShoppingOutlined />, label: "扫码点单" },
-    { key: "orders", icon: <UnorderedListOutlined />, label: "我的订单 / 票 / 二维码" },
-    { key: "points", icon: <StarOutlined />, label: "积分 / 签到" },
-    { key: "wallet", icon: <WalletOutlined />, label: "储值 / 会员" },
-  ];
-
-  return (
-    <Layout className="app-shell" style={{ minHeight: "100vh" }} data-testid="customer-app">
-      <Sider breakpoint="lg" collapsedWidth="0">
-        <div className="brand" style={{ color: "#fff", padding: 16 }}>
-          综合体客人端
-        </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[page]}
-          items={menuItems}
-          onClick={(info) => goTo(info.key as PageKey)}
-        />
-      </Sider>
-      <Layout>
-        <Header style={{ background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span data-testid="customer-phone">已登录：{session.maskedPhone}</span>
-          <a onClick={onLogout} data-testid="customer-logout">
-            退出登录
-          </a>
-        </Header>
-        <Content style={{ padding: 16 }}>
-          {page === "home" ? <HomePage service={service} /> : null}
-          {page === "buy" ? <BuyTicketPage service={service} /> : null}
-          {page === "reserve" ? <BarReservationPage service={service} /> : null}
-          {page === "invitation" ? <BarInvitationPage service={service} /> : null}
-          {page === "scan" ? <BarScanOrderPage service={service} /> : null}
-          {page === "orders" ? <MyOrdersPage service={service} /> : null}
-          {page === "points" ? <PointsPage service={service} /> : null}
-          {page === "wallet" ? <WalletPage service={service} /> : null}
-        </Content>
+  const body =
+    restoring ? (
+      <CustomerAuthShell error={null} loading onLogin={onLogin} />
+    ) : !session || !service ? (
+      <CustomerAuthShell error={error} errorDetail={errorDetail} loading={loading} onLogin={onLogin} />
+    ) : (
+      <Layout className="app-shell" style={{ minHeight: "100vh" }} data-testid="customer-app">
+        <Sider breakpoint="lg" collapsedWidth="0">
+          <div className="brand" style={{ color: "#fff", padding: 16 }}>
+            综合体客人端
+          </div>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[page]}
+            items={[
+              { key: "home", icon: <HomeOutlined />, label: PAGE_TITLES.home },
+              { key: "buy", icon: <ShoppingOutlined />, label: PAGE_TITLES.buy },
+              { key: "reserve", icon: <CalendarOutlined />, label: PAGE_TITLES.reserve },
+              { key: "invitation", icon: <CalendarOutlined />, label: PAGE_TITLES.invitation },
+              { key: "scan", icon: <ShoppingOutlined />, label: PAGE_TITLES.scan },
+              { key: "orders", icon: <UnorderedListOutlined />, label: PAGE_TITLES.orders },
+              { key: "points", icon: <StarOutlined />, label: PAGE_TITLES.points },
+              { key: "wallet", icon: <WalletOutlined />, label: PAGE_TITLES.wallet },
+            ]}
+            onClick={(info) => goTo(info.key as PageKey)}
+          />
+        </Sider>
+        <Layout>
+          <Header style={{ background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span data-testid="customer-phone">已登录：{session.maskedPhone}</span>
+            <a className="customer-logout-link" onClick={onLogout} data-testid="customer-logout">
+              退出登录
+            </a>
+          </Header>
+          <Content style={{ padding: 16 }}>
+            {/* 每页 h1 语义地标（此前全站无 h1）；标题与侧栏菜单同源。 */}
+            <h1 className="customer-page-title">{PAGE_TITLES[page]}</h1>
+            {page === "home" ? <HomePage service={service} /> : null}
+            {page === "buy" ? <BuyTicketPage service={service} /> : null}
+            {page === "reserve" ? <BarReservationPage service={service} /> : null}
+            {page === "invitation" ? <BarInvitationPage service={service} /> : null}
+            {page === "scan" ? <BarScanOrderPage service={service} /> : null}
+            {page === "orders" ? <MyOrdersPage service={service} /> : null}
+            {page === "points" ? <PointsPage service={service} /> : null}
+            {page === "wallet" ? <WalletPage service={service} /> : null}
+          </Content>
+        </Layout>
       </Layout>
-    </Layout>
-  );
+    );
+
+  return <ConfigProvider locale={zhCN}>{body}</ConfigProvider>;
 }

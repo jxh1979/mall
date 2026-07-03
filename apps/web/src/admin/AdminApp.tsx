@@ -1,11 +1,17 @@
 import React from "react";
 import { ConfigProvider, theme } from "antd";
+import zhCN from "antd/es/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
 import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
 import { accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, routeAllowsAccountForm } from "./adminRoutes";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
+
+// antd 组件（日期选择器等）中文化；dayjs 同步切中文（周一开头/中文月份）。
+dayjs.locale("zh-cn");
 
 // P2 bundle 优化：admin 页面路由级 lazy 分包。
 // 此前 32 个页面组件 eager 导入，全部塞进 AdminApp chunk（~224kB）。
@@ -619,7 +625,7 @@ export default function AdminApp() {
   );
 
   return (
-    <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#1b1d21", borderRadius: 10, fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" } }}>
+    <ConfigProvider locale={zhCN} theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#1b1d21", borderRadius: 10, fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" } }}>
       {shell}
     </ConfigProvider>
   );
