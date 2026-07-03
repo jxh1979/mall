@@ -75,6 +75,11 @@ async function adminLogin(page: import("@playwright/test").Page, path = "/admin/
 }
 
 async function openAdminRoute(page: import("@playwright/test").Page, spec: RouteSpec) {
+  // ≤860px 侧栏默认收起为抽屉：先点汉堡按钮展开导航（导航后自动关闭）。桌面视口按钮隐藏，跳过。
+  const navToggle = page.getByTestId("admin-nav-toggle");
+  if (await navToggle.isVisible()) {
+    await navToggle.click();
+  }
   await page.getByTestId(`admin-nav-${spec.pageId}`).click();
   await expect(page).toHaveURL(new RegExp(`${spec.route}$`));
   await expect(page.getByTestId("admin-page-title")).toContainText(spec.label);
