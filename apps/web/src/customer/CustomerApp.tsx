@@ -146,6 +146,7 @@ export default function CustomerApp(): React.ReactElement {
       <CustomerAuthShell error={error} errorDetail={errorDetail} loading={loading} onLogin={onLogin} />
     ) : (
       <Layout className="app-shell" style={{ minHeight: "100vh" }} data-testid="customer-app">
+        <a className="skip-link" href="#main-content">跳到主内容</a>
         <Sider breakpoint="lg" collapsedWidth="0">
           <div className="brand" style={{ color: "#fff", padding: 16 }}>
             综合体客人端
@@ -174,7 +175,7 @@ export default function CustomerApp(): React.ReactElement {
               退出登录
             </a>
           </Header>
-          <Content style={{ padding: 16 }}>
+          <Content id="main-content" tabIndex={-1} style={{ padding: 16 }}>
             {/* 每页 h1 语义地标（此前全站无 h1）；标题与侧栏菜单同源。 */}
             <h1 className="customer-page-title">{PAGE_TITLES[page]}</h1>
             {page === "home" ? <HomePage service={service} /> : null}
