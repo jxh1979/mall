@@ -57,6 +57,7 @@ export type AdminRoute = {
 
 export type AdminApiClient = {
   get<T>(path: string): Promise<T>;
+  getPaged<T>(path: string): Promise<{ items: T[]; total: number; page: number; size: number }>;
   post<T>(path: string, body?: Record<string, unknown>): Promise<T>;
   put<T>(path: string, body?: Record<string, unknown>): Promise<T>;
   patch<T>(path: string, body?: Record<string, unknown>): Promise<T>;

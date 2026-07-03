@@ -15,6 +15,7 @@ const ACCOUNT = {
 function makeApi(overrides: Partial<AdminApiClient> = {}): AdminApiClient {
   return {
     get: vi.fn().mockResolvedValue([ACCOUNT]),
+    getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post: vi.fn().mockResolvedValue({ ...ACCOUNT, status: "blacklisted" }),
     put: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
