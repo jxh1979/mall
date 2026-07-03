@@ -479,6 +479,36 @@ class StaffJdbcIntegrationTests {
                 .extracting(StaffAttendanceRecord::userId).contains(userId);
     }
 
+    @org.junit.jupiter.api.Test
+    void idempotencyPreventsDuplicateAdjustmentCommissionAndLeave() {
+        // P0 真幂等(2026-07-03):奖惩/提成/请假重复提交=命中重放,不重复入账/建单。
+        authenticateAsPlatformAdmin();
+        var adjReq = new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
+                key(), "usr_admin", "2099-06", "bonus", 1000L, "幂等测试奖金");
+        service.addPayrollAdjustment(adjReq);
+        service.addPayrollAdjustment(adjReq);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_payroll_adjustments WHERE user_id='usr_admin' AND reason='幂等测试奖金'",
+                Integer.class)).isEqualTo(1);
+
+        var cmlReq = new com.complex.platform.access.staff.dto.StaffCommissionRequest(
+                key(), "usr_admin", "2099-06", "manual", null, 2000L, "幂等测试提成");
+        service.addCommission(cmlReq);
+        service.addCommission(cmlReq);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_commission_ledger WHERE user_id='usr_admin' AND note='幂等测试提成'",
+                Integer.class)).isEqualTo(1);
+
+        var leaveReq = new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                key(), "annual", java.time.LocalDate.parse("2099-06-01"),
+                java.time.LocalDate.parse("2099-06-02"), "幂等测试请假");
+        com.complex.platform.access.staff.StaffLeaveRequestRecord l1 = service.submitLeave(leaveReq);
+        com.complex.platform.access.staff.StaffLeaveRequestRecord l2 = service.submitLeave(leaveReq);
+        assertThat(l2.id()).isEqualTo(l1.id());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_leave_requests WHERE reason='幂等测试请假'", Integer.class)).isEqualTo(1);
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }

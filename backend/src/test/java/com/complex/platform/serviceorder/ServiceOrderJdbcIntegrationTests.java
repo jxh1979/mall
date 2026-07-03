@@ -158,6 +158,50 @@ class ServiceOrderJdbcIntegrationTests {
                 .extracting(ServiceOrderRecord::id).contains(order.id());
     }
 
+    @Test
+    void idempotencyReplaysFirstResultForCreateMarkPaidComplete() {
+        // P0 真幂等(2026-07-03):幂等键唯一占位+命中重放首次结果——重复提交不重复建单/不重复分账入提成。
+        service.setPayConfig(new com.complex.platform.serviceorder.dto.ServicePayConfigRequest(key(), "https://qr/company"));
+        ServiceCatalogItemRecord item = service.upsertCatalogItem(
+                new com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest(
+                        key(), null, "幂等舞", 20000L, 10, true, "percent", 1000L));
+
+        String createKey = key();
+        ServiceOrderRecord first = service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                createKey, item.id(), "usr_admin", null, null, null));
+        ServiceOrderRecord replay = service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                createKey, item.id(), "usr_admin", null, null, null));
+        assertThat(replay.id()).isEqualTo(first.id());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM service_orders WHERE catalog_item_id = ?", Integer.class, item.id()))
+                .isEqualTo(1);
+
+        String payKey = key();
+        ServiceOrderRecord paid = service.markPaid(first.id(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest(payKey, null));
+        ServiceOrderRecord paidReplay = service.markPaid(first.id(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest(payKey, null));
+        assertThat(paidReplay.status()).isEqualTo("paid");
+        assertThat(paidReplay.paidAt()).isEqualTo(paid.paidAt());
+
+        String completeKey = key();
+        ServiceOrderRecord done = service.complete(first.id(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderActionRequest(completeKey));
+        ServiceOrderRecord doneReplay = service.complete(first.id(),
+                new com.complex.platform.serviceorder.dto.ServiceOrderActionRequest(completeKey));
+        assertThat(doneReplay.dancerShareCent()).isEqualTo(done.dancerShareCent());
+        // 关键:提成台账只入一次。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_commission_ledger WHERE source_type='service_order' AND source_id = ?",
+                Integer.class, first.id())).isEqualTo(1);
+
+        // 同键不同请求体 → 冲突拒绝(防误用旧键提交新单)。
+        assertThatThrownBy(() -> service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                createKey, item.id(), "usr_admin", "bar_x", null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }

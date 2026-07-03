@@ -24,14 +24,17 @@ public class ServiceOrderService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final com.complex.platform.access.staff.StaffRepository staffRepository;
+    private final com.complex.platform.common.idempotency.IdempotencyService idempotencyService;
 
     public ServiceOrderService(ServiceOrderRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService,
-            com.complex.platform.access.staff.StaffRepository staffRepository) {
+            com.complex.platform.access.staff.StaffRepository staffRepository,
+            com.complex.platform.common.idempotency.IdempotencyService idempotencyService) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.staffRepository = staffRepository;
+        this.idempotencyService = idempotencyService;
     }
 
     public ServiceCatalogItemRecord upsertCatalogItem(com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest request) {
@@ -88,9 +91,16 @@ public class ServiceOrderService {
         return Map.of("qr_content", repository.findPaymentCode(actor.id()).orElse(""));
     }
 
-    /** 口径②③:代客下单+指定履约人;价格与名称取目录快照;履约人须已录收款码(否则客人没法付)。 */
+    /** 口径②③:代客下单+指定履约人;价格与名称取目录快照;履约人须已录收款码(否则客人没法付)。
+     * P0 真幂等(2026-07-03):幂等键唯一占位+命中重放首次结果,重复提交不再重复建单。 */
     public ServiceOrderRecord createOrder(com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
         authorizationService.requirePermission("service.order.create");
+        return idempotencyService.execute("createServiceOrder",
+                request == null ? null : request.idempotencyKey(), request,
+                () -> doCreateOrder(request), ServiceOrderRecord.class);
+    }
+
+    private ServiceOrderRecord doCreateOrder(com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
         if (request == null || request.catalogItemId() == null || request.catalogItemId().isBlank()
                 || request.performerUserId() == null || request.performerUserId().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "catalog_item_id and performer_user_id required");
@@ -122,6 +132,12 @@ public class ServiceOrderService {
     /** 兼容保留(舞者工作时无手机,新流程不经 accept——created→paid 后由服务员直接完成)。 */
     public ServiceOrderRecord accept(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
         authorizationService.requirePermission("service.order.perform");
+        return idempotencyService.execute("acceptServiceOrder:" + id,
+                request == null ? null : request.idempotencyKey(), request,
+                () -> doAccept(id, request), ServiceOrderRecord.class);
+    }
+
+    private ServiceOrderRecord doAccept(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
         ServiceOrderRecord current = require(id);
         if (!current.status().equals("pending_accept")) {
             throw ApiException.badRequest("VALIDATION_FAILED", "accept only applies to legacy pending_accept orders");
@@ -130,9 +146,16 @@ public class ServiceOrderService {
                 request == null ? null : request.idempotencyKey());
     }
 
-    /** H批:服务员现场目视客人扫公司收款码支付成功 → 确认收款(钱进公司账户,财务可对账)。 */
+    /** H批:服务员现场目视客人扫公司收款码支付成功 → 确认收款(钱进公司账户,财务可对账)。
+     * P0 真幂等:资金确认动作,重复提交重放首次结果。 */
     public ServiceOrderRecord markPaid(String id, com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
         authorizationService.requirePermission("service.order.create");
+        return idempotencyService.execute("markServiceOrderPaid:" + id,
+                request == null ? null : request.idempotencyKey(), request,
+                () -> doMarkPaid(id, request), ServiceOrderRecord.class);
+    }
+
+    private ServiceOrderRecord doMarkPaid(String id, com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
         ServiceOrderRecord current = require(id);
         if (!current.status().equals("created")) {
             throw ApiException.badRequest("VALIDATION_FAILED",
@@ -156,9 +179,16 @@ public class ServiceOrderService {
     }
 
     /** H批:完成履约(服务员现场操作;舞者无手机)。前置=已收款到公司账户;
-     * 完成时分账:管理费(目录比例/固定)归公司,余额写提成台账归舞者(月结进薪资并代扣个税)。 */
+     * 完成时分账:管理费(目录比例/固定)归公司,余额写提成台账归舞者(月结进薪资并代扣个税)。
+     * P0 真幂等:分账+提成入台账为资金动作,重复提交重放首次结果,提成不重复入账。 */
     public ServiceOrderRecord complete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
         authorizationService.requirePermission("service.order.create");
+        return idempotencyService.execute("completeServiceOrder:" + id,
+                request == null ? null : request.idempotencyKey(), request,
+                () -> doComplete(id, request), ServiceOrderRecord.class);
+    }
+
+    private ServiceOrderRecord doComplete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
         ServiceOrderRecord current = require(id);
         if (!current.status().equals("paid") && !current.status().equals("accepted")) {
             throw ApiException.badRequest("NOT_PAID_YET",

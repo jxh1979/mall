@@ -623,9 +623,16 @@ public class StaffService {
                 java.util.Map.of("monthly_salary_cent", request.monthlySalaryCent()));
     }
 
-    /** F批:奖金/处罚手录——必须带事由,审计留痕。 */
+    /** F批:奖金/处罚手录——必须带事由,审计留痕。
+     * P0 真幂等(2026-07-03):幂等键唯一占位+命中重放,重复提交不再重复入账。 */
     public void addPayrollAdjustment(com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
         authorizationService.requirePermission("staff.payroll.manage");
+        idempotencyService.execute("addStaffPayrollAdjustment",
+                request == null ? null : request.idempotencyKey(), request,
+                () -> doAddPayrollAdjustment(request), String.class);
+    }
+
+    private String doAddPayrollAdjustment(com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                 || request.adjType() == null || !java.util.Set.of("bonus", "penalty").contains(request.adjType())
@@ -643,11 +650,19 @@ public class StaffService {
                 java.util.Map.of("user_id", request.userId().trim(), "month", request.month(),
                         "adj_type", request.adjType(), "amount_cent", request.amountCent(),
                         "reason", request.reason().trim()));
+        return id;
     }
 
-    /** F批:提成入台账(手录/系统写入口;服务点单等业务后续自动写)。 */
+    /** F批:提成入台账(手录/系统写入口;服务点单等业务后续自动写)。
+     * P0 真幂等:重复提交不再重复入提成台账。 */
     public void addCommission(com.complex.platform.access.staff.dto.StaffCommissionRequest request) {
         authorizationService.requirePermission("staff.payroll.manage");
+        idempotencyService.execute("addStaffCommission",
+                request == null ? null : request.idempotencyKey(), request,
+                () -> doAddCommission(request), String.class);
+    }
+
+    private String doAddCommission(com.complex.platform.access.staff.dto.StaffCommissionRequest request) {
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                 || request.amountCent() == null || request.amountCent() < 0) {
@@ -662,6 +677,7 @@ public class StaffService {
                 "staff_commission_ledger", id, null, request.idempotencyKey(),
                 java.util.Map.of("user_id", request.userId().trim(), "month", request.month(),
                         "amount_cent", request.amountCent()));
+        return id;
     }
 
     /** F批(2026-07-02 拍板):月结——重算定格全员薪资单(可重复执行=覆盖,补录奖惩后重结);
@@ -693,9 +709,16 @@ public class StaffService {
         return page(repository.listPayrollStatements(month, actor.id(), null));
     }
 
-    /** F批:员工提交请假(四类:事假/病假/调休/年假;主管审)。 */
+    /** F批:员工提交请假(四类:事假/病假/调休/年假;主管审)。
+     * P0 真幂等:重复提交重放首次结果,不再重复建请假单。 */
     public StaffLeaveRequestRecord submitLeave(com.complex.platform.access.staff.dto.StaffLeaveRequest request) {
         authorizationService.requirePermission("staff.leave.submit");
+        return idempotencyService.execute("submitStaffLeave",
+                request == null ? null : request.idempotencyKey(), request,
+                () -> doSubmitLeave(request), StaffLeaveRequestRecord.class);
+    }
+
+    private StaffLeaveRequestRecord doSubmitLeave(com.complex.platform.access.staff.dto.StaffLeaveRequest request) {
         if (request == null || request.leaveType() == null
                 || !java.util.Set.of("personal", "sick", "comp", "annual").contains(request.leaveType())
                 || request.startDate() == null || request.endDate() == null
