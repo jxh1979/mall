@@ -730,7 +730,7 @@ class MainActivity : Activity() {
           list,
           rows.map { r ->
             "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
-              "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ${(r.minConsumptionCent ?: 0) / 100}元" to {
+              "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
               tableId.setText(r.id ?: "")
               r.barId?.let { barId.setText(it) }
               status.text = "已选桌位：${r.tableCode ?: r.id}"
@@ -896,11 +896,11 @@ class MainActivity : Activity() {
             val r = rows.first()
             status.text = "$m 薪资单(已定格)"
             detail.text = buildString {
-              append("固定工资: ¥").append((r.baseCent ?: 0) / 100.0).append('\n')
-              append("提成: ¥").append((r.commissionCent ?: 0) / 100.0).append('\n')
-              append("激励奖金: ¥").append((r.bonusCent ?: 0) / 100.0).append('\n')
-              append("处罚扣款: -¥").append((r.penaltyCent ?: 0) / 100.0).append('\n')
-              append("实发合计: ¥").append((r.totalCent ?: 0) / 100.0)
+              append("固定工资: ¥").append("%.2f".format((r.baseCent ?: 0) / 100.0)).append('\n')
+              append("提成: ¥").append("%.2f".format((r.commissionCent ?: 0) / 100.0)).append('\n')
+              append("激励奖金: ¥").append("%.2f".format((r.bonusCent ?: 0) / 100.0)).append('\n')
+              append("处罚扣款: -¥").append("%.2f".format((r.penaltyCent ?: 0) / 100.0)).append('\n')
+              append("实发合计: ¥").append("%.2f".format((r.totalCent ?: 0) / 100.0))
             }
           }
         },
@@ -1006,7 +1006,7 @@ class MainActivity : Activity() {
         fillSelectableRows(
           catalogList,
           rows.map { r ->
-            "${r.name}  参考价 ¥${(r.priceCent ?: 0) / 100.0}" +
+            "${r.name}  参考价 ¥${"%.2f".format((r.priceCent ?: 0) / 100.0)}" +
               (r.durationMinutes?.let { "  约${it}分钟" } ?: "") to {
               itemId.setText(r.id ?: "")
               catalog.text = "已选服务项：${r.name}"
@@ -1038,8 +1038,8 @@ class MainActivity : Activity() {
       runBackground(
         action = { api.completeServiceOrder(id, ServiceActionReq("cp_${System.currentTimeMillis()}")) },
         onSuccess = { o ->
-          status.text = "已完成:管理费 ¥${(o.mgmtFeeCent ?: 0) / 100.0} 归公司," +
-            "舞者应得 ¥${(o.dancerShareCent ?: 0) / 100.0}(月结进工资,代扣个税)"
+          status.text = "已完成:管理费 ¥${"%.2f".format((o.mgmtFeeCent ?: 0) / 100.0)} 归公司," +
+            "舞者应得 ¥${"%.2f".format((o.dancerShareCent ?: 0) / 100.0)}(月结进工资,代扣个税)"
         },
         onError = { status.text = "完成失败：${friendly(it)}" },
       )
@@ -1061,7 +1061,7 @@ class MainActivity : Activity() {
         },
         onSuccess = { (order, qr) ->
           lastOrderId.setText(order.id ?: "")
-          status.text = "已下单 ${order.itemName}(${order.id});请客人扫码支付到公司账户 ¥${(order.priceCent ?: 0) / 100.0}"
+          status.text = "已下单 ${order.itemName}(${order.id});请客人扫码支付到公司账户 ¥${"%.2f".format((order.priceCent ?: 0) / 100.0)}"
           if (qr.isNotEmpty()) {
             runCatching {
               val bitmap = com.journeyapps.barcodescanner.BarcodeEncoder()
@@ -1097,12 +1097,12 @@ class MainActivity : Activity() {
         },
         onSuccess = { (orders, stats) ->
           val count = stats["completed_count"]?.toString()?.trim('"') ?: "0"
-          val income = (stats["reference_income_cent"]?.toString()?.trim('"')?.toLongOrNull() ?: 0) / 100.0
+          val income = "%.2f".format((stats["reference_income_cent"]?.toString()?.trim('"')?.toLongOrNull() ?: 0) / 100.0)
           status.text = "本月完成 $count 单,应得 ¥$income(公司代收,月结进工资并代扣个税)"
           fillSelectableRows(
             list,
             orders.map { o ->
-              "${o.itemName} ¥${(o.priceCent ?: 0) / 100.0} 桌台 ${o.tableId ?: "-"} " +
+              "${o.itemName} ¥${"%.2f".format((o.priceCent ?: 0) / 100.0)} 桌台 ${o.tableId ?: "-"} " +
                 "[${labels[o.status] ?: o.status}]" + (o.customerNote?.let { "\n备注: $it" } ?: "") to {
                 orderId.setText(o.id ?: "")
               }
