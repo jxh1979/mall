@@ -47,7 +47,16 @@ public class SecurityConfig {
                     authorize.anyRequest().authenticated();
                 })
                 .httpBasic(AbstractHttpConfigurer::disable)
-                .formLogin(AbstractHttpConfigurer::disable);
+                .formLogin(AbstractHttpConfigurer::disable)
+                // 安全响应头（纵深防御）：CSP 收紧脚本源、frame-ancestors none 防点击劫持、nosniff 防 MIME 嗅探。
+                // SPA 文档由前端静态托管方另发 CSP meta；此处覆盖后端直返的任何内容。
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.deny())
+                        .contentTypeOptions(withDefaults -> {})
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                                        + "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
+                                        + "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")));
 
         bearerAuthenticationFilter.ifAvailable(filter ->
                 http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class));

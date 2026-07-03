@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- CSP：收紧 XSS 注入面。script-src self 禁止注入脚本执行；style/img/字体放宽以适配 Vite 与内联样式；connect-src self（同源 API）。frame-ancestors 在 meta 中无效，需由前端静态托管方以响应头下发 X-Frame-Options/frame-ancestors。 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <!-- nosemgrep: html.security.audit.missing-integrity.missing-integrity -- data URI favicon is inline, not an externally hosted subresource. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f766e'/%3E%3Cpath d='M18 50V18h28v32h-7V36H25v14zM25 24v7h14v-7z' fill='white'/%3E%3C/svg%3E" />
     <title>综合体管理系统</title>
