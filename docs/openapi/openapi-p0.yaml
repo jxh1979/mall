@@ -8174,7 +8174,7 @@ paths:
         - service
       operationId: upsertServiceCatalogItem
       summary: 维护服务目录项(固定参考价)
-      description: G批口径①:后台目录+固定价;直付口径下价格为参考台账,非平台营收。
+      description: G批口径①(H批修订):后台目录+固定价;公司代收口径下价格为实收金额,全额入公司账,完成履约时按管理费/提成分账列支。
       x-permission: service.catalog.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -8208,7 +8208,7 @@ paths:
                   maxLength: 120
                 price_cent:
                   type: integer
-                  description: 固定参考价(分;直付口径,非平台营收)。
+                  description: 固定价(分;H批公司代收口径,实收全额入公司账)。
                   minimum: 0
                 duration_minutes:
                   type: integer
@@ -8265,8 +8265,7 @@ paths:
         - service
       operationId: setMyServicePaymentCode
       summary: 录入我的收款码(履约人)
-      description: G批口径④(直付,税务拍板):履约人录入自己的支付宝/微信固定收款码内容(链接文本,
-        App 重绘二维码);客人点其服务后扫码直付到个人,酒吧不经手不抽成。
+      description: G批历史能力(兼容保留):履约人录入个人收款码。H批(2026-07-02 最终拍板)已废弃个人码收款流程,现场收款一律走公司统一收款码代收;本接口仅存量兼容,不再作为下单前置。
       x-permission: service.order.perform
       x-data-scope: platform
       x-terminal-allowed:
@@ -8332,8 +8331,7 @@ paths:
         - service
       operationId: createServiceOrder
       summary: 代客下单(指定履约人)
-      description: G批口径②③:服务员代客点(客人App自点预留 app 终端);下单即指定履约人,
-        价格/名称取目录快照;履约人须已录收款码(直付前置)。
+      description: G批口径②③(H批修订):服务员代客点(客人App自点预留 app 终端);下单即指定履约人,价格/名称取目录快照;H批公司代收:下单后向客人出示公司统一收款码,不再要求履约人预录个人收款码。
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -8623,7 +8621,7 @@ paths:
       tags:
         - service
       operationId: completeServiceOrder
-      summary: 完成履约(直付已现场发生)
+      summary: 完成履约(公司代收:管理费归公司,应得月结进薪资)
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -8671,7 +8669,7 @@ paths:
         - service
       operationId: cancelServiceOrder
       summary: 取消服务单(履约前;留原因)
-      description: G批口径⑤:待接单/已接单可取消;已完成不可退(直付已发生,纠纷线下处理)。
+      description: G批口径⑤(H批修订):履约完成前可取消;已收款(公司账户)后取消记退款备注,公司线下退、财务留痕;已完成不可退,纠纷线下处理。
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -8723,7 +8721,7 @@ paths:
       tags:
         - service
       operationId: serviceOrderPaymentCode
-      summary: 出示履约人收款码(客人扫码直付)
+      summary: 出示公司统一收款码(H批代收;个人码流程已废弃)
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -8757,7 +8755,7 @@ paths:
         - service
       operationId: myServiceStats
       summary: 我的服务统计(当月次数+参考收入)
-      description: G批口径④:参考收入=直付台账合计,非平台营收、非薪资提成。
+      description: H批公司代收口径:当月完成次数+分账应得合计;应得月结进薪资提成并按劳务报酬税表代扣个税。
       x-permission: service.order.perform
       x-data-scope: platform
       x-terminal-allowed:
