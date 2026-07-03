@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -49,7 +50,7 @@ export function GovernanceTopologyPage({ api, setGlobalError }: AdminPageProps) 
   return (
     <section data-testid="governance-topology-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="governance-topology-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="governance-topology-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="governance_topology.viewed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {entities.length === 0 && merchants.length === 0 && projects.length === 0 && spaces.length === 0 ? (

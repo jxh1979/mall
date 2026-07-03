@@ -176,7 +176,8 @@ function createState(empty = false) {
     amusementSessions,
     users: empty ? [] : [{ id: "user-1", username: "admin", accountType: "platform_admin", status: "active", organizationId: "org-1" }],
     permissionTemplates: empty ? [] : [{ id: "template-basic", templateName: "普通员工", templateType: "base", status: "active", validUntil: null, singleUse: false, permissions: ["analytics.dashboard.view"] }],
-    financeItems: empty ? [] : [{ id: "bill-1", billNo: "BILL-1", sourceDoc: "SO-1", counterparty: "Main Merchant", direction: "receivable", totalAmount: 9900, paidAmount: 0, status: "pending", createdAt: now }],
+    // 对齐后端 ArApItemRecord 真实字段：item_no/amount_cent/paid_amount_cent/unpaid_amount_cent/due_date。
+    financeItems: empty ? [] : [{ id: "bill-1", itemNo: "BILL-1", sourceType: "merchant_bill", sourceId: "SO-1", counterparty: "Main Merchant", direction: "receivable", amountCent: 9900, paidAmountCent: 0, unpaidAmountCent: 9900, currency: "CNY", dueDate: "2026-07-15", status: "pending", createdAt: now }],
     readinessItems: empty ? [] : [{ id: "blocker-1", blockerCode: "SEC-P0-OPS-RECOVERY-001", title: "NAS 恢复演练", owner: "IT", status: "open", evidenceRef: null, dueAt: "2026-06-30" }],
   };
 }
@@ -426,9 +427,16 @@ function effectivePermissionsFor(options: MockOptions) {
     return { grants: [], denies: [], wildcard: true, computedAt: now };
   }
   if (accountType === "merchant_operator") {
-    // 对齐页面-权限矩阵 ADM-MER-002（MERCHANT_OPERATOR 可用商户授权工作台，需工单+账单两项读权限）。
+    // 对齐页面-权限矩阵 ADM-MER-002（MERCHANT_OPERATOR 可用商户授权工作台，需工单+账单两项读权限），
+    // 加商户专区（ADM-MER-005/006/007）结算/合同/费用通知权限（商户专区一期落地口径）。
     return {
-      grants: ["merchant.service_work_order.view", "merchant.billing.view"],
+      grants: [
+        "merchant.service_work_order.view",
+        "merchant.billing.view",
+        "merchant.portal.settlement.view",
+        "contract.view",
+        "merchant.portal.fee_recipient.manage",
+      ],
       denies: [],
       wildcard: false,
       computedAt: now,
@@ -499,7 +507,8 @@ export async function installMockApi(page: Page, options: MockOptions = {}) {
 async function handleWrite(route: Route, pathname: string, state: MockState, options: MockOptions) {
   const body = await requestBody(route);
   if (pathname === "/api/v1/auth/login") {
-    if (options.authFailure) return json(route, { code: "UNAUTHORIZED", message: "mock invalid credentials" }, 401);
+    // 对齐真实后端：登录失败 code=UNAUTHORIZED + detail_code=INVALID_CREDENTIALS（前端翻译为「账号或密码不正确」）。
+    if (options.authFailure) return json(route, { code: "UNAUTHORIZED", detail_code: "INVALID_CREDENTIALS", message: "mock invalid credentials" }, 401);
     return json(route, { accessToken: "mock-token", refreshToken: "mock-refresh", sessionId: "session-1", tokenType: "Bearer", user: mockUser(options.user) });
   }
   if (pathname === "/api/v1/access/users") {

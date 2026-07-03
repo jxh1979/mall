@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -177,7 +178,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   return (
     <section data-testid="bar-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="bar-orders-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="bar-orders-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="bar.order.read / bar.order.bill / bar.order.deliver / bar.bill.settle" />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="bar-orders-summary">

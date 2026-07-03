@@ -2,7 +2,7 @@ import React from "react";
 import { ConfigProvider, theme } from "antd";
 import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
-import { adminRoutes, findAdminRoute, groupedAdminRoutes } from "./adminRoutes";
+import { accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, routeAllowsAccountForm } from "./adminRoutes";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
@@ -124,6 +124,36 @@ type LoginResponse = {
   tokenType?: string;
   user: AdminUser;
 };
+
+// 会话持久化（用户裁决：localStorage + refresh_token）。F5 不再掉登录；401 时自动续期。
+const SESSION_STORAGE_KEY = "admin.session.v1";
+
+type StoredSession = {
+  accessToken: string;
+  refreshToken: string | null;
+  user: AdminUser;
+};
+
+function loadStoredSession(): StoredSession | null {
+  try {
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredSession;
+    if (!parsed || typeof parsed.accessToken !== "string" || !parsed.accessToken || !parsed.user) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredSession(session: StoredSession | null) {
+  try {
+    if (session) window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    else window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // 隐私模式等存储不可用时静默降级为内存会话。
+  }
+}
 
 function activeRouteFromLocation() {
   return findAdminRoute(window.location.pathname);
@@ -266,8 +296,11 @@ export default function AdminApp() {
   const [focusObjectId, setFocusObjectId] = React.useState<string | undefined>(
     () => new URLSearchParams(window.location.search).get("focus") ?? undefined,
   );
-  const [token, setToken] = React.useState("");
-  const [user, setUser] = React.useState<AdminUser | null>(null);
+  // 启动时从 localStorage 恢复会话（F5 不掉登录）；token 失效时请求层 401→refresh 兜底。
+  const storedSession = React.useRef(loadStoredSession()).current;
+  const [token, setToken] = React.useState(storedSession?.accessToken ?? "");
+  const [refreshToken, setRefreshToken] = React.useState<string | null>(storedSession?.refreshToken ?? null);
+  const [user, setUser] = React.useState<AdminUser | null>(storedSession?.user ?? null);
   const [effectivePermissions, setEffectivePermissions] = React.useState<EffectivePermissionsState>({ status: "loading" });
   const [username, setUsername] = React.useState("admin");
   const [password, setPassword] = React.useState("");
@@ -279,8 +312,23 @@ export default function AdminApp() {
     const instance = new AdminApi(token);
     // 商户专区(3.18 方案A):merchant 归属账号整个后台会话按 merchant_portal 终端上报(V197 总开关+V199 模块开关约束)。
     instance.terminalType = user?.merchantId ? "merchant_portal" : "web";
+    // 会话续期：401 → /auth/refresh → 重放原请求一次；刷新失败清凭证回登录视图。
+    instance.refreshToken = refreshToken;
+    instance.onTokensRefreshed = (tokens) => {
+      if (user) saveStoredSession({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user });
+      setToken(tokens.accessToken);
+      setRefreshToken(tokens.refreshToken);
+    };
+    instance.onSessionExpired = () => {
+      saveStoredSession(null);
+      setToken("");
+      setRefreshToken(null);
+      setUser(null);
+      setEffectivePermissions({ status: "loading" });
+      setGlobalError("登录已过期，请重新登录");
+    };
     return instance;
-  }, [token, user]);
+  }, [token, refreshToken, user]);
 
   React.useEffect(() => {
     const onPopState = () => {
@@ -348,9 +396,15 @@ export default function AdminApp() {
     setCollapsedGroups((current) => ({ ...current, [key]: !current[key] }));
   }
 
+  // 菜单按账号形态隐藏（用户裁决）：外包/商户专用页对不匹配形态不渲染、不导航。
+  const accountForm = accountFormOf(user);
+
   function navigate(nextRoute: AdminRoute) {
     // onClick 级拦截：无权限项不导航（不止 aria-disabled）。
     if (!hasPermissions(effectivePermissions, nextRoute.requiredPermissions)) {
+      return;
+    }
+    if (!routeAllowsAccountForm(nextRoute, accountForm)) {
       return;
     }
     // 3.19 二期：被终端开关关闭的模块不导航（菜单已隐藏，此处兜底直链/历史记录）。
@@ -375,6 +429,9 @@ export default function AdminApp() {
     if (!target || !hasPermissions(effectivePermissions, target.requiredPermissions)) {
       return;
     }
+    if (!routeAllowsAccountForm(target, accountForm)) {
+      return;
+    }
     setFocusObjectId(objectId);
     setRoute(target);
     setActionResult(null);
@@ -392,7 +449,9 @@ export default function AdminApp() {
       const loginApi = new AdminApi("");
       const response = await loginApi.post<LoginResponse>("/api/v1/auth/login", { login_name: username, password });
       setToken(response.accessToken);
+      setRefreshToken(response.refreshToken ?? null);
       setUser(response.user);
+      saveStoredSession({ accessToken: response.accessToken, refreshToken: response.refreshToken ?? null, user: response.user });
     } catch (loginError) {
       setGlobalError(loginError instanceof Error ? loginError.message : "登录失败");
     } finally {
@@ -401,7 +460,9 @@ export default function AdminApp() {
   }
 
   function logout() {
+    saveStoredSession(null);
     setToken("");
+    setRefreshToken(null);
     setUser(null);
     setEffectivePermissions({ status: "loading" });
     setActionResult(null);
@@ -440,7 +501,10 @@ export default function AdminApp() {
           </div>
         </div>
         <nav data-testid="admin-nav">
-          {groupedAdminRoutes().filter((group) => !hiddenGroups.has(group.key)).map((group) => {
+          {groupedAdminRoutes()
+            .map((group) => ({ ...group, routes: group.routes.filter((item) => routeAllowsAccountForm(item, accountForm)) }))
+            .filter((group) => !hiddenGroups.has(group.key) && group.routes.length > 0)
+            .map((group) => {
             const collapsed = collapsedGroups[group.key] ?? false;
             return (
               <div className="admin-nav-group" key={group.key} data-testid={`admin-nav-group-${group.key}`}>
@@ -500,6 +564,10 @@ export default function AdminApp() {
         </header>
         <div className="admin-content">
           {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
+          {!routeAllowsAccountForm(route, accountForm) ? (
+            // 形态不匹配（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
+            <div className="admin-denied" data-testid="admin-account-form-mismatch">{accountFormHint(route)}</div>
+          ) : (
           <PermissionGate permissionsState={effectivePermissions} permissions={route.requiredPermissions}>
             {/* lazy 页面用 Suspense 包裹；fallback 故意为 null（轻量占位，
                 不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
@@ -508,6 +576,7 @@ export default function AdminApp() {
               {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId })}
             </React.Suspense>
           </PermissionGate>
+          )}
           {actionResult ? <pre className="admin-result" role="status" aria-live="polite" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
         </div>
       </section>

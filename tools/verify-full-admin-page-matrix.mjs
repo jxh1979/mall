@@ -120,7 +120,7 @@ function parseCsv(content) {
 
 function parseRoutes(source) {
   const routes = new Map();
-  const routePattern = /\{\s*pageId:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*module:\s*"([^"]+)",\s*(?:group:\s*"[^"]+",\s*)?route:\s*"([^"]+)",\s*requiredPermissions:\s*\[([^\]]*)\]\s*\}/g;
+  const routePattern = /\{\s*pageId:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*module:\s*"([^"]+)",\s*(?:group:\s*"[^"]+",\s*)?route:\s*"([^"]+)",\s*requiredPermissions:\s*\[([^\]]*)\](?:,\s*accountForms:\s*\[[^\]]*\])?\s*\}/g;
   let match;
   while ((match = routePattern.exec(source)) !== null) {
     const [, pageId, label, moduleName, route, permissionsSource] = match;

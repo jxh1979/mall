@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -238,7 +239,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: A
   return (
     <section data-testid="leasing-workbench-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="leasing-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="leasing-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="leasing.lead.created / assigned / status_changed · follow_up.added · intent.created / advanced / signed · brand.created / blacklisted" />
       <AdminDataState loading={loading} error={error} empty={leads.length === 0 && intents.length === 0 && brands.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="leasing-summary">

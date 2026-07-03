@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -147,7 +148,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
   return (
     <section data-testid="dynamic-pricing-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="dynamic-pricing-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="dynamic-pricing-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="ticket_dynamic_pricing.viewed / created / simulated / published" />
       <AdminDataState loading={loading} error={error} empty={rules.length === 0} onRetry={reloadResource}>
         <div className="admin-kpi-grid" data-testid="dynamic-pricing-summary">

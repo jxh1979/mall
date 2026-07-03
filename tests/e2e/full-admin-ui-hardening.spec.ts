@@ -58,6 +58,8 @@ test.describe("full admin UI hardening acceptance", () => {
     await expect(page.getByTestId("admin-empty")).toBeVisible();
 
     await installMockApi(page, { errorPath: "/api/v1/evidence/events" });
+    // 会话现持久化到 localStorage（fix/web-critical）：先清会话再刷新，才能回到登录视图重新登录。
+    await page.evaluate(() => window.localStorage.clear());
     await page.reload();
     await adminLogin(page, "/admin/audit/events");
     await openNav(page, "ADM-EVD-001");

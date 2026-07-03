@@ -168,7 +168,8 @@ test.describe("full admin MVP acceptance", () => {
 
   // 承接退役 legacy 控制台的两条鉴权错误呈现验收（P0-UI-09/04/08）：
   // legacy 壳删除后，这两类后端错误的 UI 呈现改在 admin 壳验证。
-  test("ADM-MVP-09 failed login surfaces backend 401 and stays on auth screen", async ({ page }) => {
+  // 错误翻译层上线后（fix/web-critical）：用户界面只看中文业务话术，不再直出状态码/接口报文。
+  test("ADM-MVP-09 failed login surfaces business wording and stays on auth screen", async ({ page }) => {
     await installMockApi(page, { authFailure: true });
     await page.goto("/admin/overview");
     await page.getByTestId("login-username").fill("admin");
@@ -176,15 +177,15 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("login-submit").click();
 
     await expect(page.getByTestId("login-view")).toBeVisible();
-    await expect(page.getByTestId("global-error")).toContainText("401");
+    await expect(page.getByTestId("global-error")).toContainText("账号或密码不正确");
+    await expect(page.getByTestId("global-error")).not.toContainText("{");
     await expect(page.getByTestId("admin-shell")).toHaveCount(0);
   });
 
-  test("ADM-MVP-10 forbidden backend access surfaces 403 without hiding the audit trail", async ({ page }) => {
+  test("ADM-MVP-10 forbidden backend access surfaces business wording without hiding the audit trail", async ({ page }) => {
     await installMockApi(page, { forbiddenPath: "/api/v1/analytics/dashboards/p0-overview" });
     await adminLogin(page, "/admin/overview");
 
-    await expect(page.getByTestId("global-error")).toContainText("403");
-    await expect(page.getByTestId("global-error")).toContainText("FORBIDDEN");
+    await expect(page.getByTestId("global-error")).toContainText("当前账号无权进行此操作");
   });
 });

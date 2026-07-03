@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminAction } from "../hooks/useAdminAction";
@@ -133,7 +134,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
   return (
     <section data-testid="vendor-site-entries-page">
       <AdminPageHeader title="外包进场报备" description="施工/装修队只能查看、创建、提交自己的进场报备，并在施工中报备上传完工材料；审核验收由平台角色处理。" />
-      <div className="admin-generic-evidence" data-testid="vendor-site-entries-evidence">接口证据：GET/POST /api/v1/facility/site-entry-reports；POST /api/v1/facility/site-entry-reports/{"{report_id}"}/submit；POST /api/v1/facility/site-entry-reports/{"{report_id}"}/completion。</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="vendor-site-entries-evidence">接口证据：GET/POST /api/v1/facility/site-entry-reports；POST /api/v1/facility/site-entry-reports/{"{report_id}"}/submit；POST /api/v1/facility/site-entry-reports/{"{report_id}"}/completion。</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="vendor-site-entries-summary">
           <div className="admin-kpi-card"><span>我的报备</span><strong>{rows.length}</strong><small>{user.username}</small></div>

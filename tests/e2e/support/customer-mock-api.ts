@@ -175,6 +175,11 @@ export async function installCustomerMockApi(page: Page, options: CustomerMockOp
     if (url.pathname === "/api/v1/system/health") {
       return json(route, { ok: true, service: "customer-mock-api", time: now });
     }
+    // 3.3 免登录会话恢复：mock 无 httpOnly cookie，对齐真实后端返回 401（否则兜底 200 空数组
+    // 会被前端当作会话恢复成功，测试一进页面就是已登录态）。
+    if (url.pathname === "/api/v1/customer/session") {
+      return json(route, { code: "UNAUTHORIZED", message: "no customer session" }, 401);
+    }
     if (isWrite) return handleWrite(route, url.pathname, state, options);
     const data = listRoutes(url.pathname, state, options);
     return json(route, data ?? []);

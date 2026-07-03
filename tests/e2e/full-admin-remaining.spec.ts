@@ -222,6 +222,11 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   }
 }
 
+// 账号形态裁决（fix/web-critical）：商户专区/外包工作台页面只对匹配形态渲染菜单；
+// 平台账号（admin）菜单不出现这些项，直链进入显示业务化提示（不放请求打 403/400）。
+const merchantOnlyPages = new Set(["ADM-MER-003", "ADM-MER-004", "ADM-MER-005", "ADM-MER-006", "ADM-MER-007"]);
+const vendorOnlyPages = new Set(["ADM-VND-001", "ADM-VND-002", "ADM-VND-003", "ADM-VND-004"]);
+
 test.describe("full admin remaining pages acceptance", () => {
   test("ADM-REM-01 exposes all non-first admin pages with route, evidence and readable content", async ({ page }) => {
     test.slow(); // visits all remaining pages with detailed assertions; triple the timeout under parallel load
@@ -229,6 +234,11 @@ test.describe("full admin remaining pages acceptance", () => {
     await adminLogin(page, "/admin/governance/topology");
 
     for (const spec of remainingRoutes) {
+      if (merchantOnlyPages.has(spec.pageId) || vendorOnlyPages.has(spec.pageId)) {
+        // 平台账号：形态不匹配的页面菜单不渲染（内容验收在 ADM-REM-04/05 用匹配账号覆盖）。
+        await expect(page.getByTestId(`admin-nav-${spec.pageId}`)).toHaveCount(0);
+        continue;
+      }
       await expect(page.getByTestId(`admin-nav-${spec.pageId}`)).toBeVisible();
       await openAdminRoute(page, spec);
       if (spec.pageId === "ADM-GOV-001") {
@@ -452,65 +462,6 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("merchant-scope-boundary")).toContainText("不得访问平台治理");
         continue;
       }
-      if (spec.pageId === "ADM-MER-007") {
-        await expect(page.getByTestId("merchant-zone-fee-recipients-summary")).toContainText("接收人配置");
-        await expect(page.getByTestId("merchant-zone-fee-recipients-table")).toContainText("15577000001");
-        await expect(page.getByTestId("merchant-zone-fee-recipient-form")).toBeVisible();
-        continue;
-      }
-      if (spec.pageId === "ADM-MER-005") {
-        await expect(page.getByTestId("merchant-zone-settlements-summary")).toContainText("结算单");
-        await expect(page.getByTestId("merchant-zone-settlements-table")).toContainText("cst-1");
-        await expect(page.getByTestId("merchant-zone-settlement-dispute-form")).toBeVisible();
-        continue;
-      }
-      if (spec.pageId === "ADM-MER-006") {
-        await expect(page.getByTestId("merchant-zone-contracts-summary")).toContainText("合同总数");
-        await expect(page.getByTestId("merchant-zone-contracts-table")).toContainText("contract-1");
-        continue;
-      }
-      if (spec.pageId === "ADM-MER-004") {
-        await expect(page.getByTestId("merchant-zone-work-orders-summary")).toContainText("工单总数");
-        await expect(page.getByTestId("merchant-zone-work-orders-table")).toContainText("空调漏水");
-        await expect(page.getByTestId("merchant-zone-work-order-form")).toBeVisible();
-        continue;
-      }
-      if (spec.pageId === "ADM-MER-003") {
-        await expect(page.getByTestId("merchant-zone-bills-summary")).toContainText("账单总数");
-        await expect(page.getByTestId("merchant-zone-bills-table")).toContainText("MBILL-1");
-        await expect(page.getByTestId("merchant-zone-bills-table")).toContainText("120,000.00");
-        continue;
-      }
-      if (spec.pageId === "ADM-VND-001") {
-        await expect(page.getByTestId("vendor-work-orders-table")).toContainText("VND-WO-1");
-        await expect(page.getByTestId("vendor-work-orders-table")).toContainText("vendor-user");
-        await expect(page.getByTestId("vendor-work-order-accept")).toHaveCount(0);
-        await expect(page.getByTestId("vendor-work-orders-evidence")).toContainText("/api/v1/facility/equipment");
-        await expect(page.getByTestId("vendor-work-order-equipment-table")).toBeVisible();
-        await expect(page.getByTestId("vendor-work-order-equipment-table")).toContainText("空调主机");
-        continue;
-      }
-      if (spec.pageId === "ADM-VND-002") {
-        await expect(page.getByTestId("vendor-inspections-table")).toContainText("夜间安保巡检");
-        await expect(page.getByTestId("vendor-inspections-table")).toContainText("vendor-user");
-        await expect(page.getByTestId("vendor-inspection-templates-table")).toBeVisible();
-        await expect(page.getByTestId("vendor-inspection-templates-table")).toContainText("夜间安保模板");
-        await expect(page.getByTestId("vendor-inspection-report-exception")).toBeVisible();
-        await page.getByTestId("vendor-inspection-report-exception").click();
-        await expect(page.getByTestId("admin-action-result")).toContainText("vendor_inspection_exception_reported");
-        continue;
-      }
-      if (spec.pageId === "ADM-VND-003") {
-        await expect(page.getByTestId("vendor-site-entries-table")).toContainText("店铺装修围挡施工");
-        await expect(page.getByTestId("vendor-site-entries-table")).toContainText("vendor-user");
-        await expect(page.getByTestId("vendor-site-entry-completion-upload")).toBeVisible();
-        await expect(page.getByTestId("vendor-site-entry-completion-upload")).toBeEnabled();
-        await page.getByTestId("vendor-site-entry-completion-note").fill("完工材料已上传");
-        await page.getByTestId("vendor-site-entry-completion-attachments").fill("att-completion-1");
-        await page.getByTestId("vendor-site-entry-completion-upload").click();
-        await expect(page.getByTestId("admin-action-result")).toContainText("vendor_site_entry_completion_uploaded");
-        continue;
-      }
       if (spec.pageId === "ADM-EVD-001") {
         await expect(page.getByTestId("audit-events-evidence")).toContainText("/api/v1/evidence/events");
         await expect(page.getByTestId("audit-events-summary")).toContainText("成功事件");
@@ -563,6 +514,12 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
     }
+
+    // 平台账号直链进入形态受限页：显示业务化提示，不渲染页面（会话已持久化，刷新后仍在登录态）。
+    await page.goto("/admin/vendor/subordinates");
+    await expect(page.getByTestId("admin-account-form-mismatch")).toContainText("外包机构账号");
+    await page.goto("/admin/merchant-zone/bills");
+    await expect(page.getByTestId("admin-account-form-mismatch")).toContainText("商户账号");
   });
 
   test("ADM-REM-02 governance, contract, ticketing, bar and amusement actions are auditable", async ({ page }) => {
@@ -739,9 +696,13 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-compensation");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-EVD-001")!);
-    await expect(page.getByTestId("admin-error")).toContainText("SERVER_ERROR");
+    // 错误翻译层：正文给业务话术，原始报文（含 SERVER_ERROR）收进折叠的技术详情供报障。
+    await expect(page.getByTestId("admin-error")).toContainText("服务暂时不可用");
+    await expect(page.getByTestId("admin-error-detail")).toContainText("SERVER_ERROR");
 
     await installMockApi(page, { empty: true });
+    // 会话现持久化到 localStorage：先清会话再刷新，才能回到登录视图重新登录。
+    await page.evaluate(() => window.localStorage.clear());
     await page.reload();
     await adminLogin(page, "/admin/analytics/business");
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-ANA-001")!);
@@ -765,10 +726,32 @@ test.describe("full admin remaining pages acceptance", () => {
     const billsRequestPromise = page.waitForRequest((request) => request.url().includes("/api/v1/merchant-billing/bills"));
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-003")!);
     expect((await billsRequestPromise).headers()["x-terminal-type"]).toBe("merchant_portal");
+    await expect(page.getByTestId("merchant-zone-bills-summary")).toContainText("账单总数");
     await expect(page.getByTestId("merchant-zone-bills-table")).toContainText("MBILL-1");
+    await expect(page.getByTestId("merchant-zone-bills-table")).toContainText("120,000.00");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-004")!);
+    await expect(page.getByTestId("merchant-zone-work-orders-summary")).toContainText("工单总数");
     await expect(page.getByTestId("merchant-zone-work-orders-table")).toContainText("空调漏水");
+    await expect(page.getByTestId("merchant-zone-work-order-form")).toBeVisible();
+
+    // 账号形态裁决：商户专区页内容验收从 ADM-REM-01（平台账号已不可见）移到商户账号会话。
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-005")!);
+    await expect(page.getByTestId("merchant-zone-settlements-summary")).toContainText("结算单");
+    await expect(page.getByTestId("merchant-zone-settlements-table")).toContainText("cst-1");
+    await expect(page.getByTestId("merchant-zone-settlement-dispute-form")).toBeVisible();
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-006")!);
+    await expect(page.getByTestId("merchant-zone-contracts-summary")).toContainText("合同总数");
+    await expect(page.getByTestId("merchant-zone-contracts-table")).toContainText("contract-1");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-007")!);
+    await expect(page.getByTestId("merchant-zone-fee-recipients-summary")).toContainText("接收人配置");
+    await expect(page.getByTestId("merchant-zone-fee-recipients-table")).toContainText("15577000001");
+    await expect(page.getByTestId("merchant-zone-fee-recipient-form")).toBeVisible();
+
+    // 商户形态看不到外包工作台菜单。
+    await expect(page.getByTestId("admin-nav-ADM-VND-001")).toHaveCount(0);
 
     await page.getByTestId("admin-logout").click();
     await adminLogin(page, "/admin/finance/ar-ap-ledger");
@@ -782,9 +765,37 @@ test.describe("full admin remaining pages acceptance", () => {
     for (const spec of remainingRoutes.filter((item) => item.pageId.startsWith("ADM-VND-"))) {
       await expect(page.getByTestId(`admin-nav-${spec.pageId}`)).toBeVisible();
       await openAdminRoute(page, spec);
+
+      // 账号形态裁决：外包工作台页内容验收从 ADM-REM-01（平台账号已不可见）移到外包账号会话。
+      if (spec.pageId === "ADM-VND-001") {
+        await expect(page.getByTestId("vendor-work-orders-table")).toContainText("VND-WO-1");
+        await expect(page.getByTestId("vendor-work-orders-table")).toContainText("vendor-user");
+        await expect(page.getByTestId("vendor-work-order-accept")).toHaveCount(0);
+        await expect(page.getByTestId("vendor-work-orders-evidence")).toContainText("/api/v1/facility/equipment");
+        await expect(page.getByTestId("vendor-work-order-equipment-table")).toContainText("空调主机");
+      }
+      if (spec.pageId === "ADM-VND-002") {
+        await expect(page.getByTestId("vendor-inspections-table")).toContainText("夜间安保巡检");
+        await expect(page.getByTestId("vendor-inspections-table")).toContainText("vendor-user");
+        await expect(page.getByTestId("vendor-inspection-templates-table")).toContainText("夜间安保模板");
+        await expect(page.getByTestId("vendor-inspection-report-exception")).toBeVisible();
+        await page.getByTestId("vendor-inspection-report-exception").click();
+        await expect(page.getByTestId("admin-action-result")).toContainText("vendor_inspection_exception_reported");
+      }
+      if (spec.pageId === "ADM-VND-003") {
+        await expect(page.getByTestId("vendor-site-entries-table")).toContainText("店铺装修围挡施工");
+        await expect(page.getByTestId("vendor-site-entries-table")).toContainText("vendor-user");
+        await expect(page.getByTestId("vendor-site-entry-completion-upload")).toBeEnabled();
+        await page.getByTestId("vendor-site-entry-completion-note").fill("完工材料已上传");
+        await page.getByTestId("vendor-site-entry-completion-attachments").fill("att-completion-1");
+        await page.getByTestId("vendor-site-entry-completion-upload").click();
+        await expect(page.getByTestId("admin-action-result")).toContainText("vendor_site_entry_completion_uploaded");
+      }
     }
 
     await expect(page.getByTestId("admin-nav-ADM-FAC-001")).toBeDisabled();
+    // 外包形态看不到商户专区菜单。
+    await expect(page.getByTestId("admin-nav-ADM-MER-003")).toHaveCount(0);
   });
 
 });

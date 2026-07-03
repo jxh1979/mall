@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -195,7 +196,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   return (
     <section data-testid="merchant-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="merchant-work-orders-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="merchant-work-orders-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="merchant_service.work_order.viewed / created / assigned / action_added / closed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="merchant-work-orders-summary">

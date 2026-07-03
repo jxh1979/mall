@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -101,7 +102,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
   return (
     <section data-testid="admission-audits-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="admission-audits-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="admission-audits-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="merchant_admission.viewed / merchant_admission.audit_exported" />
       {formError ? <div className="admin-inline-error" data-testid="admission-audits-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>

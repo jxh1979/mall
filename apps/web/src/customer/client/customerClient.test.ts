@@ -7,6 +7,7 @@ import {
   normalizeRequestBody,
   unwrap,
 } from "./customerClient";
+import { ApiError } from "../../shared/apiError";
 
 function jsonResponse(data: unknown): Response {
   return new Response(JSON.stringify({ code: "OK", message: "ok", data }), {
@@ -99,10 +100,22 @@ describe("CustomerApi requests", () => {
     expect((init.headers as Headers).get("authorization")).toBeNull();
   });
 
-  it("throws on non-OK responses", async () => {
+  it("throws business-worded errors on non-OK responses (technical info in detail)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("boom", { status: 401 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(new CustomerApi("tok").get("/api/v1/customer/points")).rejects.toThrow(/401/);
+    const error = await new CustomerApi("tok").get("/api/v1/customer/points").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).message).toBe("登录已过期，请重新登录");
+    expect((error as ApiError).detail).toMatchObject({ path: "/api/v1/customer/points", status: 401, raw: "boom" });
+  });
+
+  it("translates invalid credentials into business wording", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: "UNAUTHORIZED", detail_code: "INVALID_CREDENTIALS", message: "invalid" }), { status: 401 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(customerPhoneLogin({ phone: "13800000000", smsCode: "0000" })).rejects.toThrow("账号或密码不正确");
   });
 });

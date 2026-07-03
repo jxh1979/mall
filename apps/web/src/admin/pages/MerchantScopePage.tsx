@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -77,7 +78,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError }
   return (
     <section data-testid="merchant-scope-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="merchant-scope-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="merchant-scope-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="merchant.scope.viewed / merchant.scope_confirmed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {!hasRows ? <div className="admin-state admin-empty" data-testid="merchant-scope-empty">{TEXT.empty}</div> : (

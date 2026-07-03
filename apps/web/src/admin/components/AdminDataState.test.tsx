@@ -26,4 +26,19 @@ describe("AdminDataState", () => {
     fireEvent.click(screen.getByRole("button", { name: "\u91cd\u8bd5" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
+
+  it("renders business message plus collapsed technical detail when error carries detail", () => {
+    render(
+      <AdminDataState loading={false} error={{ message: "\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5", detail: "/api/v1/x 500\nrequest_id=req-1" }}>
+        ready
+      </AdminDataState>,
+    );
+
+    expect(screen.getByText("\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5")).not.toBeNull();
+    const detail = screen.getByTestId("admin-error-detail");
+    expect(detail.textContent).toContain("\u6280\u672f\u8be6\u60c5");
+    expect(detail.textContent).toContain("request_id=req-1");
+    // \u9ed8\u8ba4\u6298\u53e0
+    expect((detail as HTMLDetailsElement).open).toBe(false);
+  });
 });

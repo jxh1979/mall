@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -133,7 +134,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   return (
     <section data-testid="ticket-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="ticket-orders-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="ticket-orders-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="ticket_order.viewed / ticket.issued / ticket_verification.previewed" />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reloadResource}>
         <div className="admin-kpi-grid" data-testid="ticket-orders-summary">

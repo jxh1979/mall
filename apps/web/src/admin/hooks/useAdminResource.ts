@@ -1,8 +1,15 @@
 import React from "react";
+import { formatApiErrorDetail } from "../../shared/apiError";
+
+/** message=业务话术（原 err.message），detail=技术详情（path/status/request_id/原文），供折叠报障。 */
+export interface AdminResourceError {
+  message: string;
+  detail: string | null;
+}
 
 export interface AdminResourceState {
   loading: boolean;
-  error: string | null;
+  error: AdminResourceError | null;
   reload: () => Promise<void>;
 }
 
@@ -27,7 +34,7 @@ export function useAdminResource(
 ): AdminResourceState {
   const { onError, fallbackMessage, onStart } = options;
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<AdminResourceError | null>(null);
 
   const fetcherRef = React.useRef(fetcher);
   fetcherRef.current = fetcher;
@@ -44,7 +51,7 @@ export function useAdminResource(
       setError(null);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : fallbackMessage;
-      setError(message);
+      setError({ message, detail: formatApiErrorDetail(loadError) });
       onErrorRef.current(message);
     } finally {
       setLoading(false);

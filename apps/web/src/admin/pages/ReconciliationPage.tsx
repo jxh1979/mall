@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -118,7 +119,7 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
   return (
     <section data-testid="reconciliation-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="reconciliation-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="reconciliation-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="finance.reconciliation_batch.viewed / finance_reconciliation.difference_found / local.manual_review_logged" />
       <AdminDataState loading={loading} error={error} empty={batches.length === 0 && differences.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="reconciliation-summary">

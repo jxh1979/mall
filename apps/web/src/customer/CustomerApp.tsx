@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CustomerAuthShell } from "./components/CustomerAuthShell";
 import { CustomerService } from "./client/customerService";
 import { customerLogout, customerPhoneLogin, customerRestoreSession } from "./client/customerClient";
+import { formatApiErrorDetail } from "../shared/apiError";
 import { BarInvitationPage } from "./pages/BarInvitationPage";
 import { BarReservationPage } from "./pages/BarReservationPage";
 import { BarScanOrderPage } from "./pages/BarScanOrderPage";
@@ -26,9 +27,19 @@ const { Header, Content, Sider } = Layout;
 
 type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet";
 
-// 3.11 多页入口：/ticketing /bar /amusement 直达对应功能页，而非默认客人首页。
-function initialPageFromPath(): PageKey {
-  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet"];
+
+// 3.11 多页入口 + 深链修复：
+// - /ticketing /bar /amusement 入口页重定向到 /?page=xxx，这里必须解析 ?page=（此前只看 pathname，入口全落首页）；
+// - ?page= 支持入口别名（ticketing/amusement→buy，bar→scan）与全部 tab key，刷新/后退凭 URL 恢复当前 tab。
+function pageFromLocation(): PageKey {
+  if (typeof window === "undefined") return "home";
+  const query = new URLSearchParams(window.location.search).get("page");
+  if (query) {
+    const mapped = query === "ticketing" || query === "amusement" ? "buy" : query === "bar" ? "scan" : query;
+    if ((PAGE_KEYS as readonly string[]).includes(mapped)) return mapped as PageKey;
+  }
+  const path = window.location.pathname;
   if (path.startsWith("/ticketing") || path.startsWith("/amusement")) return "buy";
   if (path.startsWith("/bar")) return "scan";
   return "home";
@@ -40,8 +51,23 @@ export default function CustomerApp(): React.ReactElement {
   const [session, setSession] = useState<CustomerSession | null>(null);
   const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState<PageKey>(initialPageFromPath());
+  const [page, setPage] = useState<PageKey>(pageFromLocation());
+
+  // 切 tab 写入历史（/?page=xxx），后退/前进凭 popstate 恢复上一个 tab，后退不再直接退出站点。
+  const goTo = (next: PageKey) => {
+    setPage(next);
+    if (pageFromLocation() !== next) {
+      window.history.pushState({ page: next }, "", next === "home" ? "/" : `/?page=${next}`);
+    }
+  };
+
+  useEffect(() => {
+    const onPopState = () => setPage(pageFromLocation());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +96,7 @@ export default function CustomerApp(): React.ReactElement {
   const onLogin = async (values: { phone: string; smsCode: string }) => {
     setLoading(true);
     setError(null);
+    setErrorDetail(null);
     try {
       const result = await customerPhoneLogin({ phone: values.phone, smsCode: values.smsCode, scene: "login" });
       const next: CustomerSession = {
@@ -82,6 +109,7 @@ export default function CustomerApp(): React.ReactElement {
       setSession(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");
+      setErrorDetail(formatApiErrorDetail(err));
     } finally {
       setLoading(false);
     }
@@ -90,14 +118,14 @@ export default function CustomerApp(): React.ReactElement {
   const onLogout = () => {
     void customerLogout();
     setSession(null);
-    setPage("home");
+    goTo("home");
   };
 
   if (restoring) {
     return <CustomerAuthShell error={null} loading onLogin={onLogin} />;
   }
   if (!session || !service) {
-    return <CustomerAuthShell error={error} loading={loading} onLogin={onLogin} />;
+    return <CustomerAuthShell error={error} errorDetail={errorDetail} loading={loading} onLogin={onLogin} />;
   }
 
   const menuItems = [
@@ -122,7 +150,7 @@ export default function CustomerApp(): React.ReactElement {
           mode="inline"
           selectedKeys={[page]}
           items={menuItems}
-          onClick={(info) => setPage(info.key as PageKey)}
+          onClick={(info) => goTo(info.key as PageKey)}
         />
       </Sider>
       <Layout>

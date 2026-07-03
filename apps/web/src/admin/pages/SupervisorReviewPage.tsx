@@ -1,4 +1,5 @@
 import React from "react";
+import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -142,7 +143,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
   return (
     <section data-testid="supervisor-review-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <div className="admin-generic-evidence" data-testid="supervisor-review-evidence">{TEXT.evidence}</div>
+      <TechDetails><div className="admin-generic-evidence" data-testid="supervisor-review-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="governance.supervisor_review.policy_read / evaluated / approved" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="supervisor-review-summary">

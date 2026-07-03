@@ -4,6 +4,8 @@
 // - 统一信封 { code, message, data } 解包，data.items 列表拆箱
 // - 写操作自动补幂等键（Idempotency-Key 头 + body.idempotency_key）
 
+import { apiErrorFromResponse } from "../../shared/apiError";
+
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 type JsonBody = Record<string, unknown>;
@@ -92,7 +94,8 @@ export class CustomerApi {
     }
     const response = await fetch(`${this.apiBaseUrl}${path}`, init);
     const text = await response.text();
-    if (!response.ok) throw new Error(`${path} ${response.status}: ${text || response.statusText}`);
+    // 错误翻译层：客人只看中文业务话术（err.message），技术信息收进 err.detail 供「详情」折叠展示。
+    if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
     return (text ? unwrap(JSON.parse(text)) : null) as T;
   }
 }

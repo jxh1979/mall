@@ -1,4 +1,4 @@
-import type { AdminNavGroup, AdminRoute } from "./types";
+import type { AdminAccountForm, AdminNavGroup, AdminRoute } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-OV-001", label: "总控驾驶舱", module: "总控", group: "overview", route: "/admin/overview", requiredPermissions: ["analytics.dashboard.view"] },
@@ -34,15 +34,15 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-FIN-003", label: "退款分级授权", module: "财务", group: "finance", route: "/admin/finance/refund-authority", requiredPermissions: ["refund.authority.view"] },
   { pageId: "ADM-MER-001", label: "商户服务工单", module: "商户服务", group: "governance", route: "/admin/merchant-service/tickets", requiredPermissions: ["merchant.service_work_order.view"] },
   { pageId: "ADM-MER-002", label: "商户授权工作台", module: "商户门户", group: "governance", route: "/admin/merchant-portal/scope", requiredPermissions: ["merchant.service_work_order.view", "merchant.billing.view"] },
-  { pageId: "ADM-VND-001", label: "外包维保工单", module: "外包工作台", group: "vendor", route: "/admin/vendor/work-orders", requiredPermissions: ["facility.work_order.view_assigned"] },
+  { pageId: "ADM-VND-001", label: "外包维保工单", module: "外包工作台", group: "vendor", route: "/admin/vendor/work-orders", requiredPermissions: ["facility.work_order.view_assigned"], accountForms: ["vendor"] },
   { pageId: "ADM-GOV-007", label: "空间类型字典", module: "治理", group: "governance", route: "/admin/governance/space-types", requiredPermissions: ["governance.space.view"] },
-  { pageId: "ADM-VND-004", label: "外包下属账号", module: "外包工作台", group: "vendor", route: "/admin/vendor/subordinates", requiredPermissions: ["partner.subordinate.view"] },
+  { pageId: "ADM-VND-004", label: "外包下属账号", module: "外包工作台", group: "vendor", route: "/admin/vendor/subordinates", requiredPermissions: ["partner.subordinate.view"], accountForms: ["vendor"] },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", module: "终端", group: "integration", route: "/admin/terminals/switch-matrix", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-CUS-001", label: "客人账号管理", module: "客人", group: "governance", route: "/admin/customers/accounts", requiredPermissions: ["customer.account.manage"] },
   { pageId: "ADM-INT-004", label: "短信通知开关", module: "第三方接入", group: "integration", route: "/admin/integrations/sms-switches", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-LEASE-002", label: "租赁状态看板", module: "招商租赁", group: "governance", route: "/admin/leasing/rental-status", requiredPermissions: ["contract.draft.manage"] },
-  { pageId: "ADM-VND-002", label: "外包巡检任务", module: "外包工作台", group: "vendor", route: "/admin/vendor/inspections", requiredPermissions: ["facility.inspection.view_assigned"] },
-  { pageId: "ADM-VND-003", label: "外包进场报备", module: "外包工作台", group: "vendor", route: "/admin/vendor/site-entries", requiredPermissions: ["facility.site_entry.view_assigned"] },
+  { pageId: "ADM-VND-002", label: "外包巡检任务", module: "外包工作台", group: "vendor", route: "/admin/vendor/inspections", requiredPermissions: ["facility.inspection.view_assigned"], accountForms: ["vendor"] },
+  { pageId: "ADM-VND-003", label: "外包进场报备", module: "外包工作台", group: "vendor", route: "/admin/vendor/site-entries", requiredPermissions: ["facility.site_entry.view_assigned"], accountForms: ["vendor"] },
   { pageId: "ADM-INT-002", label: "回调/轮询/补偿", module: "第三方", group: "integration", route: "/admin/integrations/events", requiredPermissions: ["integration.retry.view", "integration.compensation.view", "integration.order_sync.view", "integration.reconciliation.view"] },
   { pageId: "ADM-INT-003", label: "第三方开关", module: "第三方", group: "integration", route: "/admin/integrations/switches", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-RISK-001", label: "风控预警", module: "风控", group: "risk", route: "/admin/risk/alerts", requiredPermissions: ["analytics.risk_alert.view"] },
@@ -58,11 +58,11 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-STF-002", label: "薪酬与请假", module: "人事", group: "ops", route: "/admin/staff/payroll", requiredPermissions: ["staff.payroll.manage"] },
   { pageId: "ADM-SVC-001", label: "服务点单", module: "服务", group: "ops", route: "/admin/services/orders", requiredPermissions: ["service.catalog.manage"] },
   { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view"] },
-  { pageId: "ADM-MER-003", label: "我的账单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/bills", requiredPermissions: ["merchant.billing.view"] },
-  { pageId: "ADM-MER-004", label: "我的工单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/work-orders", requiredPermissions: ["merchant.service_work_order.view"] },
-  { pageId: "ADM-MER-005", label: "我的对账", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/settlements", requiredPermissions: ["merchant.portal.settlement.view"] },
-  { pageId: "ADM-MER-006", label: "我的合同", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/contracts", requiredPermissions: ["contract.view"] },
-  { pageId: "ADM-MER-007", label: "费用通知", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/fee-recipients", requiredPermissions: ["merchant.portal.fee_recipient.manage"] },
+  { pageId: "ADM-MER-003", label: "我的账单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/bills", requiredPermissions: ["merchant.billing.view"], accountForms: ["merchant"] },
+  { pageId: "ADM-MER-004", label: "我的工单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/work-orders", requiredPermissions: ["merchant.service_work_order.view"], accountForms: ["merchant"] },
+  { pageId: "ADM-MER-005", label: "我的对账", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/settlements", requiredPermissions: ["merchant.portal.settlement.view"], accountForms: ["merchant"] },
+  { pageId: "ADM-MER-006", label: "我的合同", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/contracts", requiredPermissions: ["contract.view"], accountForms: ["merchant"] },
+  { pageId: "ADM-MER-007", label: "费用通知", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/fee-recipients", requiredPermissions: ["merchant.portal.fee_recipient.manage"], accountForms: ["merchant"] },
 ];
 
 // 业务域分组顺序与展示文案（frontend-admin §4.3：8 业务域 + 平台域聚合）。
@@ -123,4 +123,27 @@ export function groupedAdminRoutes(): AdminNavGroupView[] {
 
 export function findAdminRoute(pathname: string) {
   return adminRoutes.find((route) => route.route === pathname) ?? adminRoutes[0]!;
+}
+
+/**
+ * 账号形态判定（登录响应 user 字段）：
+ * 外包机构账号 accountType=outsourced_vendor（后端 AuthorizationService 同口径）；
+ * 商户归属账号看 merchantId（与 AdminApp merchant_portal 终端上报同口径）；其余为平台/员工形态。
+ */
+export function accountFormOf(user: { accountType?: string | null; merchantId?: string | null } | null | undefined): AdminAccountForm {
+  if (user?.accountType === "outsourced_vendor") return "vendor";
+  if (user?.merchantId) return "merchant";
+  return "platform";
+}
+
+/** 该路由是否对某账号形态展示；未标 accountForms 的路由对全部形态展示。 */
+export function routeAllowsAccountForm(route: AdminRoute, form: AdminAccountForm): boolean {
+  return !route.accountForms || route.accountForms.includes(form);
+}
+
+/** 形态不匹配时的业务化提示（不再放请求打 403/400）。 */
+export function accountFormHint(route: AdminRoute): string {
+  if (route.accountForms?.includes("vendor")) return "此页面供外包机构账号使用，当前账号无需使用。";
+  if (route.accountForms?.includes("merchant")) return "此页面供商户账号使用，当前账号无需使用。";
+  return "此页面不适用于当前账号形态。";
 }
