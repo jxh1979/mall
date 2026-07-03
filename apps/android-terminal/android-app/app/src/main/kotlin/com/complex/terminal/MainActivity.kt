@@ -81,6 +81,27 @@ class MainActivity : Activity() {
     showLogin()
   }
 
+  // ── 返回键：非首页屏回首页（与各屏「返回首页」按钮一致，无路由栈）；
+  //    首页/登录页两秒内双击才退出，避免误触闪退感。 ──
+  private var onRootScreen = true
+  private var lastBackPressAt = 0L
+
+  @Deprecated("Deprecated in Java")
+  override fun onBackPressed() {
+    if (onRootScreen) {
+      val now = System.currentTimeMillis()
+      if (now - lastBackPressAt < 2000) {
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+      } else {
+        lastBackPressAt = now
+        android.widget.Toast.makeText(this, "再按一次退出", android.widget.Toast.LENGTH_SHORT).show()
+      }
+    } else {
+      showHome()
+    }
+  }
+
   override fun onResume() {
     super.onResume()
     val adapter = nfcAdapter ?: return
@@ -143,6 +164,7 @@ class MainActivity : Activity() {
       screen(
         title = "综合体终端 · 登录",
         children = listOf(status, username, password, loginButton),
+        root = true,
       ),
     )
   }
@@ -224,7 +246,7 @@ class MainActivity : Activity() {
       secondaryButton("重新登录") { logoutAndRestart() },
     )
 
-    setContentView(screen(title = "现场操作首页", children = children))
+    setContentView(screen(title = "现场操作首页", children = children, root = true))
   }
 
   private fun homeSummary(): String {
@@ -1182,7 +1204,8 @@ class MainActivity : Activity() {
     ))
   }
 
-  private fun screen(title: String, children: List<View>): View {
+  private fun screen(title: String, children: List<View>, root: Boolean = false): View {
+    onRootScreen = root
     val titleView = TextView(this).apply {
       text = title
       textSize = 22f
