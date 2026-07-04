@@ -740,6 +740,49 @@ public class StaffService {
         }
     }
 
+    /** 个税税表(V217):后台查劳务报酬预扣税表全档位(读复用 payroll.manage)。 */
+    public java.util.List<PayrollTaxBracketRecord> listTaxBrackets(String category) {
+        authorizationService.requirePermission("staff.payroll.manage");
+        return repository.listTaxBrackets(category == null || category.isBlank() ? null : category.trim());
+    }
+
+    /** 个税税表(V217):维护一档(高敏,决定代扣个税口径);税法参数变更改配置不改代码;审计留痕。 */
+    public PayrollTaxBracketRecord upsertTaxBracket(
+            com.complex.platform.access.staff.dto.PayrollTaxBracketRequest request) {
+        authorizationService.requirePermission("staff.tax_bracket.manage");
+        if (request == null || request.id() == null || request.id().isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "id is required");
+        }
+        String category = request.category() == null || request.category().isBlank()
+                ? "labor_remuneration" : request.category().trim();
+        if (request.seq() == null || request.incomeFloorCent() == null || request.incomeBaseBps() == null
+                || request.rateBps() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "seq/income_floor_cent/income_base_bps/rate_bps required");
+        }
+        if (request.incomeFloorCent() < 0
+                || request.incomeBaseBps() <= 0 || request.incomeBaseBps() > 10000
+                || request.rateBps() < 0 || request.rateBps() > 10000) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "income_base_bps in (0,10000], rate_bps in [0,10000], income_floor_cent>=0");
+        }
+        if (request.incomeCeilingCent() != null && request.incomeCeilingCent() < request.incomeFloorCent()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "income_ceiling_cent must be >= income_floor_cent");
+        }
+        Instant now = Instant.now();
+        var actor = authorizationService.currentActor();
+        PayrollTaxBracketRecord saved = repository.upsertTaxBracket(new PayrollTaxBracketRecord(
+                request.id().trim(), category, request.seq(), request.incomeFloorCent(),
+                request.incomeCeilingCent(), request.incomeBaseBps(),
+                request.flatDeductionCent() == null ? 0L : request.flatDeductionCent(), request.rateBps(),
+                request.quickDeductionCent() == null ? 0L : request.quickDeductionCent(),
+                request.effectiveFrom(), actor == null ? null : actor.id(), now));
+        auditEventService.recordSuccess("staff.payroll.tax_bracket_changed", "staff.tax_bracket.manage",
+                "payroll_tax_brackets", saved.id(), null, request.idempotencyKey(),
+                java.util.Map.of("category", category, "seq", request.seq(),
+                        "rate_bps", request.rateBps(), "income_floor_cent", request.incomeFloorCent()));
+        return saved;
+    }
+
     /** F批:后台按月查全员薪资单。 */
     public PageResponse<StaffPayrollStatementRecord> listPayroll(String month) {
         authorizationService.requirePermission("staff.payroll.manage");

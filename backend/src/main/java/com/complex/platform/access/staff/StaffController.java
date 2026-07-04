@@ -165,6 +165,23 @@ public class StaffController {
         return ApiResponse.ok(service.listMyPayroll(month));
     }
 
+    /** 个税税表(V217):查劳务报酬预扣税表(默认 labor_remuneration)。 */
+    @GetMapping("/payroll/tax-brackets")
+    public ApiResponse<java.util.List<PayrollTaxBracketRecord>> listTaxBrackets(
+            @org.springframework.web.bind.annotation.RequestParam(value = "category", required = false)
+            String category) {
+        return ApiResponse.ok(service.listTaxBrackets(category));
+    }
+
+    /** 个税税表(V217):维护一档(税法参数变更改配置不改代码;高敏权限 staff.tax_bracket.manage)。 */
+    @PostMapping("/payroll/tax-brackets")
+    public ApiResponse<PayrollTaxBracketRecord> upsertTaxBracket(
+            @RequestBody @jakarta.validation.Valid
+            com.complex.platform.access.staff.dto.PayrollTaxBracketRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.upsertTaxBracket(request));
+    }
+
     @PostMapping("/leaves")
     public ApiResponse<StaffLeaveRequestRecord> submitLeave(
             @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffLeaveRequest request) {

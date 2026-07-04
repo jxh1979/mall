@@ -173,6 +173,63 @@ class JdbcStaffRepository implements StaffRepository {
     }
 
     @Override
+    public java.util.List<PayrollTaxBracketRecord> listTaxBrackets(String category) {
+        return jdbcTemplate.query("""
+                SELECT id, category, seq, income_floor_cent, income_ceiling_cent, income_base_bps,
+                       flat_deduction_cent, rate_bps, quick_deduction_cent, effective_from, updated_by, updated_at
+                  FROM payroll_tax_brackets
+                 WHERE (:category::text IS NULL OR category = :category)
+                 ORDER BY category, seq
+                """, new MapSqlParameterSource().addValue("category", category),
+                (rs, n) -> mapTaxBracket(rs));
+    }
+
+    @Override
+    public PayrollTaxBracketRecord upsertTaxBracket(PayrollTaxBracketRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO payroll_tax_brackets (id, category, seq, income_floor_cent, income_ceiling_cent,
+                        income_base_bps, flat_deduction_cent, rate_bps, quick_deduction_cent, effective_from,
+                        updated_by, updated_at)
+                VALUES (:id, :category, :seq, :floor, :ceiling, :base_bps, :flat, :rate_bps, :quick, :eff,
+                        :updated_by, :now)
+                ON CONFLICT (id) DO UPDATE SET
+                    category = EXCLUDED.category, seq = EXCLUDED.seq,
+                    income_floor_cent = EXCLUDED.income_floor_cent,
+                    income_ceiling_cent = EXCLUDED.income_ceiling_cent,
+                    income_base_bps = EXCLUDED.income_base_bps,
+                    flat_deduction_cent = EXCLUDED.flat_deduction_cent,
+                    rate_bps = EXCLUDED.rate_bps,
+                    quick_deduction_cent = EXCLUDED.quick_deduction_cent,
+                    effective_from = EXCLUDED.effective_from,
+                    updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", record.id()).addValue("category", record.category())
+                .addValue("seq", record.seq()).addValue("floor", record.incomeFloorCent())
+                .addValue("ceiling", record.incomeCeilingCent()).addValue("base_bps", record.incomeBaseBps())
+                .addValue("flat", record.flatDeductionCent()).addValue("rate_bps", record.rateBps())
+                .addValue("quick", record.quickDeductionCent()).addValue("eff", record.effectiveFrom())
+                .addValue("updated_by", record.updatedBy())
+                .addValue("now", timestampWithTimeZone(record.updatedAt())));
+        return jdbcTemplate.query("""
+                SELECT id, category, seq, income_floor_cent, income_ceiling_cent, income_base_bps,
+                       flat_deduction_cent, rate_bps, quick_deduction_cent, effective_from, updated_by, updated_at
+                  FROM payroll_tax_brackets WHERE id = :id
+                """, new MapSqlParameterSource().addValue("id", record.id()),
+                (rs, n) -> mapTaxBracket(rs)).stream().findFirst().orElse(null);
+    }
+
+    private static PayrollTaxBracketRecord mapTaxBracket(ResultSet rs) throws SQLException {
+        Long ceiling = rs.getObject("income_ceiling_cent") == null ? null : rs.getLong("income_ceiling_cent");
+        java.sql.Date eff = rs.getDate("effective_from");
+        return new PayrollTaxBracketRecord(
+                rs.getString("id"), rs.getString("category"), rs.getInt("seq"),
+                rs.getLong("income_floor_cent"), ceiling, rs.getInt("income_base_bps"),
+                rs.getLong("flat_deduction_cent"), rs.getInt("rate_bps"), rs.getLong("quick_deduction_cent"),
+                eff == null ? null : eff.toLocalDate(), rs.getString("updated_by"),
+                rs.getTimestamp("updated_at").toInstant());
+    }
+
+    @Override
     public StaffLeaveRequestRecord saveLeaveRequest(StaffLeaveRequestRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO staff_leave_requests (id, user_id, leave_type, start_date, end_date, reason,

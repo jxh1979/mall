@@ -33,6 +33,12 @@ public interface StaffRepository {
     java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId,
             String projectScope);
 
+    /** 个税税表(V217):列某税目全档位(按 seq)。 */
+    java.util.List<PayrollTaxBracketRecord> listTaxBrackets(String category);
+
+    /** 个税税表(V217):按 id 幂等 upsert 一档,返回落库后的行。 */
+    PayrollTaxBracketRecord upsertTaxBracket(PayrollTaxBracketRecord record);
+
     StaffLeaveRequestRecord saveLeaveRequest(StaffLeaveRequestRecord record);
 
     java.util.Optional<StaffLeaveRequestRecord> findLeaveById(String id);
