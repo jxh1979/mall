@@ -1,5 +1,8 @@
 # 综合体管理系统开发规格总文档
 
+> 2026-07-04 逻辑一致性修订：补名词四层脚注。
+> 名词四层脚注：本文「多商户/组织/项目公司/SPV」为业务概念分层（业务：平台 → 项目公司 → 管理公司·SPV → 商户）；DB 层**无 `organizations`/`org_type` 表**，四层主体统一落 `business_entities`，用 `entity_role`（文本，无 CHECK）区分角色。「场地/门店/点位」空间四级模型已作废，真实为**扁平单表 `spaces`**（`space_type` + `parent_space_id`，`status` 仅 `active`/`unavailable`）。`projects` 表是**业态场馆**（venue_type），非「项目公司」。见 merchant-space-contract-model-v0.1 §2.4/§5。
+
 本文档是项目后续拆解、评审和编码的总入口。目标不是写概念方案，而是形成可以直接指导后端、前端、安卓端、运维和数据服务开发的系统规格。
 
 ## 1. 文档目标
