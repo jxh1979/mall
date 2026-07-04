@@ -202,7 +202,7 @@
 ## 10. 数据模型变更清单
 
 ### 10.1 新建表
-- `management_companies`(L3 业态主体:type ∈ 娱乐平台/酒吧SPV/中央餐饮/游乐/传媒/资产;project_id;持股/分红配置)
+- **管理公司/业态主体层**(L3:娱乐平台/酒吧SPV/中央餐饮/游乐/传媒/资产;持股/分红配置)——⚠️ 2026-07-04 对齐代码:**DB 层复用 `business_entities` + `entity_role` 承载(现状无 organizations 表),不新建 management_companies 表**;四主体绑定见 `business_entity_bindings`(active 唯一);`projects` 表是业态经营单元/场馆(非"项目公司")。详见 `merchant-space-contract-model-v0.1.md`
 - `venue_sessions`(场次/开歇业周期)+ `entitlement_entry_records`(入场记录)
 - `settlement_transactions`(按核销的结算流水:票→权益→核销→主体→金额→税务属性)
 - `settlement_bills` / `settlement_items`(结算单 + 明细,对齐底稿口径)
