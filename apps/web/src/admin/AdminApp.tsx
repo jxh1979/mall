@@ -75,6 +75,9 @@ const TerminalSwitchMatrixPage = React.lazy(() => import("./pages/TerminalSwitch
 const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPage").then((m) => ({ default: m.CustomerAccountsPage })));
 const RefundAuthorityPage = React.lazy(() => import("./pages/RefundAuthorityPage").then((m) => ({ default: m.RefundAuthorityPage })));
 const OperatingParamsPage = React.lazy(() => import("./pages/OperatingParamsPage").then((m) => ({ default: m.OperatingParamsPage })));
+const PayrollTaxBracketsPage = React.lazy(() => import("./pages/PayrollTaxBracketsPage").then((m) => ({ default: m.PayrollTaxBracketsPage })));
+const AiThresholdsPage = React.lazy(() => import("./pages/AiThresholdsPage").then((m) => ({ default: m.AiThresholdsPage })));
+const NotificationWindowsPage = React.lazy(() => import("./pages/NotificationWindowsPage").then((m) => ({ default: m.NotificationWindowsPage })));
 const SpaceTypesPage = React.lazy(() => import("./pages/SpaceTypesPage").then((m) => ({ default: m.SpaceTypesPage })));
 const VendorSubordinatesPage = React.lazy(() => import("./pages/VendorSubordinatesPage").then((m) => ({ default: m.VendorSubordinatesPage })));
 const SmsNotificationSwitchesPage = React.lazy(() => import("./pages/SmsNotificationSwitchesPage").then((m) => ({ default: m.SmsNotificationSwitchesPage })));
@@ -274,6 +277,12 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <GroupOverviewPage {...props} />;
     case "ADM-ANA-003":
       return <OperatingParamsPage {...props} />;
+    case "ADM-STF-003":
+      return <PayrollTaxBracketsPage {...props} />;
+    case "ADM-ANA-010":
+      return <AiThresholdsPage {...props} />;
+    case "ADM-ANA-011":
+      return <NotificationWindowsPage {...props} />;
     case "ADM-GOV-007":
       return <SpaceTypesPage {...props} />;
     case "ADM-VND-004":

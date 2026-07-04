@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 595 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 305 | 人工权限矩阵正文未覆盖 202 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1190 | 人工事件矩阵正文未覆盖 1148 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 595 | 人工任务映射正文未逐项覆盖 589 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 356 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 603 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 307 | 人工权限矩阵正文未覆盖 204 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1206 | 人工事件矩阵正文未覆盖 1164 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 603 | 人工任务映射正文未逐项覆盖 597 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 360 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -83,9 +83,9 @@
 | `amusement.verification.override` | staff-token | project-amusement, project-amusement-point | 2 | listAmusementManualOverrides, createAmusementManualOverride | 已在权限矩阵正文出现 |
 | `amusement.verification.view` | staff-token | project-amusement | 1 | listAmusementVerifications | 已在权限矩阵正文出现 |
 | `amusement.waiver.acknowledge` | staff-token | project-amusement | 1 | acknowledgeAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
-| `analytics.dashboard.view` | staff-token | platform, project | 14 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, listBusinessDayCutoffs, getMonthlyComparison, getAnomalyConfig ... | 已在权限矩阵正文出现 |
+| `analytics.dashboard.view` | staff-token | platform, project | 17 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, getAiThresholds, listNotificationWindows, listRevenueAttributionRules ... | 已在权限矩阵正文出现 |
 | `analytics.group.view` | staff-token | group | 1 | getGroupOverview | OpenAPI 补充，以本附录为准 |
-| `analytics.operating_params.manage` | staff-token | platform, project | 5 | upsertOperatingParams, upsertBusinessDayCutoff, updateAnomalyConfig, upsertHolidayPeriod, fetchHolidayCalendar | OpenAPI 补充，以本附录为准 |
+| `analytics.operating_params.manage` | staff-token | platform, project | 7 | upsertOperatingParams, updateAiThresholds, upsertRevenueAttributionRule, upsertBusinessDayCutoff, updateAnomalyConfig, upsertHolidayPeriod, fetchHolidayCalendar | OpenAPI 补充，以本附录为准 |
 | `analytics.report.export` | staff-token | platform | 1 | exportMonthlyReport | OpenAPI 补充，以本附录为准 |
 | `analytics.review.lock` | staff-token | project | 2 | listReviewLocks, createReviewLock | OpenAPI 补充，以本附录为准 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
@@ -272,6 +272,7 @@
 | `partner.org.view` | staff-token | platform | 1 | listPartnerOrgs | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.manage` | staff-token | self | 2 | createPartnerSubordinate, disablePartnerSubordinate | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.view` | staff-token | self | 2 | listPartnerSubordinates, listSubordinateCompletion | OpenAPI 补充，以本附录为准 |
+| `platform.notification_window.manage` | staff-token | platform | 1 | upsertNotificationWindow | OpenAPI 补充，以本附录为准 |
 | `public` | public | customer, none, project, public-project | 6 | login, customerPhoneLogin, customerLogout, listCustomerTicketProducts, getSystemHealth, listCustomerMembershipPlans | 已在权限矩阵正文出现 |
 | `refund.authority.manage` | staff-token | project | 2 | upsertRefundAuthorityLimit, upsertRefundAutoRule | OpenAPI 补充，以本附录为准 |
 | `refund.authority.view` | staff-token | project | 2 | listRefundAuthorityLimits, listRefundAutoRules | OpenAPI 补充，以本附录为准 |
@@ -292,13 +293,14 @@
 | `staff.device.revoke` | staff-token | project | 1 | revokeStaffDeviceCredential | OpenAPI 补充，以本附录为准 |
 | `staff.leave.submit` | staff-token | platform | 2 | submitStaffLeave, listMyStaffLeaves | OpenAPI 补充，以本附录为准 |
 | `staff.notice.view` | staff-token | project | 2 | listEmployeeNotices, acknowledgeEmployeeNotice | OpenAPI 补充，以本附录为准 |
-| `staff.payroll.manage` | staff-token | platform | 5 | setStaffBaseSalary, addStaffPayrollAdjustment, addStaffCommission, closeStaffPayrollMonth, listStaffPayroll | OpenAPI 补充，以本附录为准 |
+| `staff.payroll.manage` | staff-token | platform | 6 | listPayrollTaxBrackets, setStaffBaseSalary, addStaffPayrollAdjustment, addStaffCommission, closeStaffPayrollMonth, listStaffPayroll | OpenAPI 补充，以本附录为准 |
 | `staff.payroll.view_mine` | staff-token | platform | 1 | listMyStaffPayroll | OpenAPI 补充，以本附录为准 |
 | `staff.profile.review` | staff-token | project | 1 | reviewStaffRegistration | OpenAPI 补充，以本附录为准 |
 | `staff.profile.submit` | staff-token | project | 1 | submitStaffRegistration | OpenAPI 补充，以本附录为准 |
 | `staff.profile.view` | staff-token | project | 1 | listStaffProfiles | OpenAPI 补充，以本附录为准 |
 | `staff.shift.manage` | staff-token | platform | 4 | listStaffShifts, upsertStaffShift, listStaffLeaves, reviewStaffLeave | OpenAPI 补充，以本附录为准 |
 | `staff.shift.view` | staff-token | platform | 3 | listMyStaffShifts, listMyStaffAttendance, myStaffAttendanceMonthView | OpenAPI 补充，以本附录为准 |
+| `staff.tax_bracket.manage` | staff-token | platform | 1 | upsertPayrollTaxBracket | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
 | `terminal.device.bind` | staff-token | project, project-device | 4 | bindDevice, returnTerminalDevice, getTerminalOfflineEntitlements, syncTerminalTasks | 已在权限矩阵正文出现 |
 | `terminal.device.lifecycle` | staff-token | - | 4 | markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap | OpenAPI 补充，以本附录为准 |
@@ -498,6 +500,10 @@
 | `analytics.ai_quality_task.viewed_failed` | failure | `listAiQualityTasks` | `GET` | `/api/v1/analytics/ai-quality/tasks` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality.local_llm_suggestion.created` | success | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality.local_llm_suggestion.failed` | failure | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
+| `analytics.ai_thresholds.update_failed` | failure | `updateAiThresholds` | `POST` | `/api/v1/analytics/ai-thresholds` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
+| `analytics.ai_thresholds.updated` | success | `updateAiThresholds` | `POST` | `/api/v1/analytics/ai-thresholds` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
+| `analytics.ai_thresholds.view_failed` | failure | `getAiThresholds` | `GET` | `/api/v1/analytics/ai-thresholds` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.ai_thresholds.viewed` | success | `getAiThresholds` | `GET` | `/api/v1/analytics/ai-thresholds` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.anomaly_config.update_failed` | failure | `updateAnomalyConfig` | `POST` | `/api/v1/analytics/anomaly-config` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
 | `analytics.anomaly_config.updated` | success | `updateAnomalyConfig` | `POST` | `/api/v1/analytics/anomaly-config` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
 | `analytics.anomaly_config.view_failed` | failure | `getAnomalyConfig` | `GET` | `/api/v1/analytics/anomaly-config` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -538,10 +544,18 @@
 | `analytics.monthly_comparison.viewed` | success | `getMonthlyComparison` | `GET` | `/api/v1/analytics/monthly-comparison` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.monthly_report.export_failed` | failure | `exportMonthlyReport` | `GET` | `/api/v1/analytics/reports/monthly-export` | ANA-风控分析 | `analytics.report.export` | 接口级事件，以本附录为准 |
 | `analytics.monthly_report.exported` | success | `exportMonthlyReport` | `GET` | `/api/v1/analytics/reports/monthly-export` | ANA-风控分析 | `analytics.report.export` | 接口级事件，以本附录为准 |
+| `analytics.notification_windows.update_failed` | failure | `upsertNotificationWindow` | `POST` | `/api/v1/analytics/notification-windows` | ANA-风控分析 | `platform.notification_window.manage` | 接口级事件，以本附录为准 |
+| `analytics.notification_windows.updated` | success | `upsertNotificationWindow` | `POST` | `/api/v1/analytics/notification-windows` | ANA-风控分析 | `platform.notification_window.manage` | 接口级事件，以本附录为准 |
+| `analytics.notification_windows.view_failed` | failure | `listNotificationWindows` | `GET` | `/api/v1/analytics/notification-windows` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.notification_windows.viewed` | success | `listNotificationWindows` | `GET` | `/api/v1/analytics/notification-windows` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.operating_params.view_failed` | failure | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.operating_params.viewed` | success | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.overdue_work_orders.view_failed` | failure | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | ANA-风控分析 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `analytics.overdue_work_orders.viewed` | success | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | ANA-风控分析 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `analytics.revenue_attribution_rule.update_failed` | failure | `upsertRevenueAttributionRule` | `POST` | `/api/v1/analytics/revenue-attribution-rules` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
+| `analytics.revenue_attribution_rule.updated` | success | `upsertRevenueAttributionRule` | `POST` | `/api/v1/analytics/revenue-attribution-rules` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
+| `analytics.revenue_attribution_rule.view_failed` | failure | `listRevenueAttributionRules` | `GET` | `/api/v1/analytics/revenue-attribution-rules` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.revenue_attribution_rule.viewed` | success | `listRevenueAttributionRules` | `GET` | `/api/v1/analytics/revenue-attribution-rules` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.review_lock.viewed` | success | `listReviewLocks` | `GET` | `/api/v1/analytics/review-locks` | ANA-风控分析 | `analytics.review.lock` | 接口级事件，以本附录为准 |
 | `analytics.review_lock.viewed_failed` | failure | `listReviewLocks` | `GET` | `/api/v1/analytics/review-locks` | ANA-风控分析 | `analytics.review.lock` | 接口级事件，以本附录为准 |
 | `analytics.review.lock_failed` | failure | `createReviewLock` | `POST` | `/api/v1/analytics/review-locks` | ANA-风控分析 | `analytics.review.lock` | 接口级事件，以本附录为准 |
@@ -1399,6 +1413,10 @@
 | `staff.payroll.commission_added` | success | `addStaffCommission` | `POST` | `/api/v1/staff/payroll/commissions` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.month_close_failed` | failure | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.month_closed` | success | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.tax_bracket_change_failed` | failure | `upsertPayrollTaxBracket` | `POST` | `/api/v1/staff/payroll/tax-brackets` | P0-待归类 | `staff.tax_bracket.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.tax_bracket_changed` | success | `upsertPayrollTaxBracket` | `POST` | `/api/v1/staff/payroll/tax-brackets` | P0-待归类 | `staff.tax_bracket.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.tax_bracket_view_failed` | failure | `listPayrollTaxBrackets` | `GET` | `/api/v1/staff/payroll/tax-brackets` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.payroll.tax_bracket_viewed` | success | `listPayrollTaxBrackets` | `GET` | `/api/v1/staff/payroll/tax-brackets` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.view_failed` | failure | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.viewed` | success | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.profile.view_failed` | failure | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | AUTH-账号权限 | `staff.profile.view` | 接口级事件，以本附录为准 |
@@ -1598,6 +1616,7 @@
 | ANA-风控分析 | `exportMonthlyReport` | `GET` | `/api/v1/analytics/reports/monthly-export` | 月度经营报表导出(分权) | `analytics.report.export` | `analytics.monthly_report.exported` / `analytics.monthly_report.export_failed` | web | operation 级补充 |
 | ANA-风控分析 | `fetchHolidayCalendar` | `POST` | `/api/v1/analytics/holiday-calendar/fetch` | 从 URL 抓取节假日日历 | `analytics.operating_params.manage` | `analytics.holiday_calendar.fetched` / `analytics.holiday_calendar.fetch_failed` | web | operation 级补充 |
 | ANA-风控分析 | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | Generate local LLM AI quality suggestion | `analytics.risk_alert.manage` | `analytics.ai_quality.local_llm_suggestion.created` / `analytics.ai_quality.local_llm_suggestion.failed` | web | operation 级补充 |
+| ANA-风控分析 | `getAiThresholds` | `GET` | `/api/v1/analytics/ai-thresholds` | AI/对标阈值配置 | `analytics.dashboard.view` | `analytics.ai_thresholds.viewed` / `analytics.ai_thresholds.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | P0 经营看板下钻（按域） | `analytics.dashboard.view` | `analytics.dashboard_domain.viewed` / `analytics.dashboard_domain.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getAnalyticsTrafficHourly` | `GET` | `/api/v1/analytics/traffic-hourly` | 分时段客流分布 | `analytics.dashboard.view` | `analytics.traffic_hourly.viewed` / `analytics.traffic_hourly.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getAnomalyConfig` | `GET` | `/api/v1/analytics/anomaly-config` | 读指标异常检测阈值 | `analytics.dashboard.view` | `analytics.anomaly_config.viewed` / `analytics.anomaly_config.view_failed` | web | operation 级补充 |
@@ -1619,18 +1638,23 @@
 | ANA-风控分析 | `listMerchantHealthScores` | `GET` | `/api/v1/analytics/merchant-health` | 查询商户健康度scores | `analytics.dashboard.view` | `analytics.merchant_health.viewed` / `analytics.merchant_health.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listMetricAnomalies` | `GET` | `/api/v1/analytics/metric-anomalies` | 查询指标异常 | `analytics.risk_alert.view` | `analytics.metric_anomaly.viewed` / `analytics.metric_anomaly.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listMetricDefinitions` | `GET` | `/api/v1/analytics/metric-definitions` | 查询指标定义 | `analytics.dashboard.view` | `analytics.metric_definition.viewed` / `analytics.metric_definition.viewed_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listNotificationWindows` | `GET` | `/api/v1/analytics/notification-windows` | 提醒窗天数配置 | `analytics.dashboard.view` | `analytics.notification_windows.viewed` / `analytics.notification_windows.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | 查询综合体经营参数（坪效面积） | `analytics.dashboard.view` | `analytics.operating_params.viewed` / `analytics.operating_params.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | 超时工单明细(时效钻取) | `facility.work_order.manage` | `analytics.overdue_work_orders.viewed` / `analytics.overdue_work_orders.view_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listRevenueAttributionRules` | `GET` | `/api/v1/analytics/revenue-attribution-rules` | 商户收入归因口径规则清单 | `analytics.dashboard.view` | `analytics.revenue_attribution_rule.viewed` / `analytics.revenue_attribution_rule.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listReviewLocks` | `GET` | `/api/v1/analytics/review-locks` | 经营复盘锁定记录 | `analytics.review.lock` | `analytics.review_lock.viewed` / `analytics.review_lock.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listRiskAlerts` | `GET` | `/api/v1/analytics/risk-alerts` | 风险预警 | `analytics.risk_alert.view` | `risk_alert.viewed` / `risk_alert.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listRiskRules` | `GET` | `/api/v1/analytics/risk-rules` | 查询风险规则 | `analytics.risk_alert.view` | `analytics.risk_rule.viewed` / `analytics.risk_rule.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listStaffServiceScores` | `GET` | `/api/v1/analytics/staff-service-score` | 查询员工服务scores | `analytics.risk_alert.view` | `analytics.staff_service_score.viewed` / `analytics.staff_service_score.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listVacantSpaces` | `GET` | `/api/v1/analytics/occupancy/vacant-spaces` | 空置铺位明细(出租率钻取) | `contract.view` | `analytics.vacant_spaces.viewed` / `analytics.vacant_spaces.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `resolveRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | 处理风险alert | `analytics.risk_alert.manage` | `analytics.risk_alert.resolved` / `analytics.risk_alert.resolved_failed` | web | operation 级补充 |
+| ANA-风控分析 | `updateAiThresholds` | `POST` | `/api/v1/analytics/ai-thresholds` | 维护 AI/对标阈值 | `analytics.operating_params.manage` | `analytics.ai_thresholds.updated` / `analytics.ai_thresholds.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `updateAnomalyConfig` | `POST` | `/api/v1/analytics/anomaly-config` | 改指标异常检测阈值 | `analytics.operating_params.manage` | `analytics.anomaly_config.updated` / `analytics.anomaly_config.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | 修改某业务域的经营日切分小时 | `analytics.operating_params.manage` | `analytics.business_day_cutoff.updated` / `analytics.business_day_cutoff.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertHolidayPeriod` | `POST` | `/api/v1/analytics/holiday-calendar` | 手动录入节假日区间 | `analytics.operating_params.manage` | `analytics.holiday_calendar.updated` / `analytics.holiday_calendar.update_failed` | web | operation 级补充 |
+| ANA-风控分析 | `upsertNotificationWindow` | `POST` | `/api/v1/analytics/notification-windows` | 维护提醒窗天数 | `platform.notification_window.manage` | `analytics.notification_windows.updated` / `analytics.notification_windows.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertOperatingParams` | `POST` | `/api/v1/analytics/operating-params` | 新增或更新综合体经营参数（坪效面积） | `analytics.operating_params.manage` | `operating_params.changed` / `operating_params.change_failed` | web | operation 级补充 |
+| ANA-风控分析 | `upsertRevenueAttributionRule` | `POST` | `/api/v1/analytics/revenue-attribution-rules` | 维护商户收入归因口径规则 | `analytics.operating_params.manage` | `analytics.revenue_attribution_rule.updated` / `analytics.revenue_attribution_rule.update_failed` | web | operation 级补充 |
 | AUTH-登录会话 | `login` | `POST` | `/api/v1/auth/login` | 员工或商户员工登录 | `public` | `auth.login.succeeded` / `auth.login.failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | 已在任务映射正文出现 |
 | AUTH-登录会话 | `logout` | `POST` | `/api/v1/auth/logout` | 退出登录 | `authenticated` | `auth.logout` / `auth.logout_failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | 已在任务映射正文出现 |
 | AUTH-登录会话 | `refreshToken` | `POST` | `/api/v1/auth/refresh` | 刷新会话 | `authenticated` | `auth.token.refreshed` / `auth.token_refresh_failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | operation 级补充 |
@@ -2012,6 +2036,7 @@
 | P0-待归类 | `listMyStaffShifts` | `GET` | `/api/v1/staff/shifts/mine` | 我的班次与点位(员工手机) | `staff.shift.view` | `staff.shift_mine.viewed` / `staff.shift_mine.view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `listPartnerOrgs` | `GET` | `/api/v1/partner/orgs` | 外部协作机构列表 | `partner.org.view` | `partner_org.viewed` / `partner_org.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listPartnerSubordinates` | `GET` | `/api/v1/partner/subordinates` | 本机构下属账号列表 | `partner.subordinate.view` | `partner_subordinate.viewed` / `partner_subordinate.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listPayrollTaxBrackets` | `GET` | `/api/v1/staff/payroll/tax-brackets` | 个税税表档位清单 | `staff.payroll.manage` | `staff.payroll.tax_bracket_viewed` / `staff.payroll.tax_bracket_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listServiceCatalog` | `GET` | `/api/v1/services/catalog` | 服务目录(上架项,下单用) | `service.order.create` | `service.catalog.viewed` / `service.catalog.view_failed` | staff_private_phone, web, tablet, app | operation 级补充 |
 | P0-待归类 | `listServiceCatalogAll` | `GET` | `/api/v1/services/catalog/all` | 服务目录全量(含下架,后台维护) | `service.catalog.manage` | `service.catalog.viewed` / `service.catalog.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listServiceOrders` | `GET` | `/api/v1/services/orders` | 服务单列表(后台) | `service.catalog.manage` | `service.order.listed` / `service.order.list_failed` | web | operation 级补充 |
@@ -2074,6 +2099,7 @@
 | P0-待归类 | `updateFacilityEquipment` | `POST` | `/api/v1/facility/equipment/{equipment_id}` | 更新设备台账 | `facility.equipment.manage` | `facility.equipment_updated` / `facility.equipment_update_failed` | web | operation 级补充 |
 | P0-待归类 | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | 招商线索状态流转(7 态) | `leasing.lead.manage` | `leasing.lead.status_changed` / `leasing.lead.status_change_failed` | web | operation 级补充 |
 | P0-待归类 | `uploadSiteEntryCompletion` | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/completion` | 外包上传完工资料（待物业验收） | `facility.site_entry.upload_completion_assigned` | `facility.site_entry.upload_completion_assigned` / `facility.site_entry.upload_completion_failed` | web | operation 级补充 |
+| P0-待归类 | `upsertPayrollTaxBracket` | `POST` | `/api/v1/staff/payroll/tax-brackets` | 维护个税税表档位 | `staff.tax_bracket.manage` | `staff.payroll.tax_bracket_changed` / `staff.payroll.tax_bracket_change_failed` | web | operation 级补充 |
 | P0-待归类 | `upsertServiceCatalogItem` | `POST` | `/api/v1/services/catalog` | 维护服务目录项(固定参考价) | `service.catalog.manage` | `service.catalog.saved` / `service.catalog.save_failed` | web | operation 级补充 |
 | P0-待归类 | `upsertStaffShift` | `POST` | `/api/v1/staff/shifts` | 主管排班(双端) | `staff.shift.manage` | `staff.shift.saved` / `staff.shift.save_failed` | web, staff_private_phone | operation 级补充 |
 | P0-待归类 | `upsertWecomRetentionPolicy` | `POST` | `/api/v1/compliance/wecom/retention-policies` | 配置企微留存策略（默认180天） | `wecom.retention.manage` | `wecom.retention_policy_set` / `wecom.retention_policy_failed` | web | operation 级补充 |

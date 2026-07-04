@@ -294,6 +294,22 @@ public class AnalyticsController {
         return ApiResponse.ok(operatingParamsService.updateAiThresholds(request));
     }
 
+    @GetMapping("/revenue-attribution-rules")
+    public ApiResponse<java.util.List<AnalyticsRecords.MerchantRevenueAttributionRule>> listRevenueAttributionRules() {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(operatingParamsService.listRevenueAttributionRules());
+    }
+
+    @PostMapping("/revenue-attribution-rules")
+    public ApiResponse<AnalyticsRecords.MerchantRevenueAttributionRule> upsertRevenueAttributionRule(
+            @RequestBody @jakarta.validation.Valid RevenueAttributionRuleRequest request) {
+        authorizationService.requirePermission("analytics.operating_params.manage");
+        authorizationService.requirePlatformScope();
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(operatingParamsService.upsertRevenueAttributionRule(request));
+    }
+
     @GetMapping("/operating-params")
     public ApiResponse<PageResponse<OperatingParamsRecord>> listOperatingParams() {
         authorizationService.requirePermission("analytics.dashboard.view");

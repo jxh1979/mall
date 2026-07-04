@@ -29,6 +29,11 @@ const METRIC_LABELS: Record<string, string> = {
   "occupancy.rentable_area": "可租面积",
   "occupancy.signed_pending_area": "已签待入驻面积",
   "occupancy.parking_rate": "车位使用率",
+  // 招商漏斗 / 租售比(V220)
+  "leasing.lead_count": "新增招商线索",
+  "leasing.intent_conversion_rate": "线索转意向率",
+  "leasing.signed_conversion_rate": "意向转签约率",
+  "leasing.rent_to_sales": "租售比",
   // 能耗
   "energy.total_electricity": "总用电量",
   "energy.total_water": "总用水量",

@@ -243,7 +243,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("approved_by", refund.approvedBy())
                 .addValue("approved_at", timestampWithTimeZone(refund.approvedAt()))
                 .addValue("created_at", timestampWithTimeZone(refund.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(refund.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(refund.updatedAt()))
+                .addValue("merchant_id", refund.merchantId());
     }
 
     MapSqlParameterSource ticketRefundLineParameters(TicketRefundLineRecord line) {

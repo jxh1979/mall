@@ -347,7 +347,8 @@ class TicketingControllerTests {
                 null,
                 null,
                 Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                "merchant_1"
         ));
         when(service.approveTicketRefund(any(String.class), any(StatusChangeRequest.class))).thenReturn(new TicketRefundRecord(
                 "refund_1",
@@ -360,7 +361,8 @@ class TicketingControllerTests {
                 "ops",
                 Instant.parse("2026-06-14T00:01:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:01:00Z")
+                Instant.parse("2026-06-14T00:01:00Z"),
+                "merchant_1"
         ));
         when(service.listTicketRefundLines("refund_1")).thenReturn(new PageResponse<>(List.of(new TicketRefundLineRecord(
                 "refund_line_1",

@@ -594,32 +594,20 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate, String windowDomain) {
-        // 清单#4：本商户售票退款分量——按 ticket_refunds（created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径）
-        // 关联订单各权益 allocated 占比把退款分摊到 merchant。逐笔退款用"最大余数补尾"保证 Σ分摊==退款额、分到分不丢分。
-        //
-        // SQL 取明细行：每笔退款 × 该订单各 merchant 的 allocated 小计 + 该订单 allocated 总额（基数）。
-        // 订单无 allocated 权益（基数为 0）→ 不产生明细行 → 该退款保守不归任何商户（与售票分量口径一致）。
-        List<RefundMerchantShareRow> rows = jdbcTemplate.query("""
-                SELECT r.id AS refund_id,
-                       r.refund_amount_cent AS refund_amount,
-                       e.merchant_id AS merchant_id,
-                       SUM(e.allocated_revenue_cent) AS merchant_allocated,
-                       SUM(SUM(e.allocated_revenue_cent)) OVER (PARTITION BY r.id) AS order_total_allocated
-                  FROM ticket_refunds r
-                  JOIN issued_entitlements e ON e.order_id = r.target_id
-                 WHERE e.allocated_revenue_cent IS NOT NULL
-                   AND r.created_at >= :start
-                   AND r.created_at < :end
-                 GROUP BY r.id, r.refund_amount_cent, e.merchant_id
-                 ORDER BY r.id, e.merchant_id
-                """, dayRange(windowDomain, businessDate), (resultSet, rowNum) -> new RefundMerchantShareRow(
-                resultSet.getString("refund_id"),
-                resultSet.getLong("refund_amount"),
-                resultSet.getString("merchant_id"),
-                resultSet.getLong("merchant_allocated"),
-                resultSet.getLong("order_total_allocated")
-        ));
-        return distributeRefundsByMerchant(rows);
+        // V220：ticket_refunds 已直挂 merchant_id（受理退款的销售商户），直接 GROUP BY 汇总。
+        // created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径；merchant_id 为 null（平台直营单）不归任何商户。
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COALESCE(SUM(refund_amount_cent), 0) AS total
+                  FROM ticket_refunds
+                 WHERE merchant_id IS NOT NULL
+                   AND created_at >= :start
+                   AND created_at < :end
+                 GROUP BY merchant_id
+                """, dayRange(windowDomain, businessDate),
+                (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total")));
+        return result;
     }
 
     @Override
@@ -640,63 +628,6 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return result;
     }
 
-    private record RefundMerchantShareRow(
-            String refundId, long refundAmount, String merchantId, long merchantAllocated, long orderTotalAllocated) {
-    }
-
-    /**
-     * 逐笔退款按各商户 allocated 占比分摊（最大余数补尾，Σ分摊恰=退款额），再跨退款累加到 merchant。
-     * 基数 orderTotalAllocated<=0 的退款行不会出现（SQL 已过滤），故无需特殊处理。
-     */
-    private Map<String, BigDecimal> distributeRefundsByMerchant(List<RefundMerchantShareRow> rows) {
-        Map<String, java.util.List<RefundMerchantShareRow>> byRefund = new LinkedHashMap<>();
-        for (RefundMerchantShareRow row : rows) {
-            byRefund.computeIfAbsent(row.refundId(), key -> new java.util.ArrayList<>()).add(row);
-        }
-        Map<String, Long> totals = new LinkedHashMap<>();
-        for (java.util.List<RefundMerchantShareRow> group : byRefund.values()) {
-            long base = group.get(0).orderTotalAllocated();
-            long refundAmount = group.get(0).refundAmount();
-            if (base <= 0) {
-                continue;
-            }
-            long assigned = 0;
-            // floor 分配 + 余数排序补尾，保证 Σ恰=refundAmount。
-            long[] floors = new long[group.size()];
-            double[] remainders = new double[group.size()];
-            for (int i = 0; i < group.size(); i++) {
-                long product = refundAmount * group.get(i).merchantAllocated();
-                floors[i] = product / base;
-                remainders[i] = (double) (product % base) / base;
-                assigned += floors[i];
-            }
-            long leftover = refundAmount - assigned;
-            Integer[] order = new Integer[group.size()];
-            for (int i = 0; i < order.length; i++) {
-                order[i] = i;
-            }
-            java.util.Arrays.sort(order, (a, b) -> Double.compare(remainders[b], remainders[a]));
-            for (int i = 0; i < group.size(); i++) {
-                long share = floors[i] + (rankOf(order, i) < leftover ? 1L : 0L);
-                if (share == 0L) {
-                    continue;
-                }
-                totals.merge(group.get(i).merchantId(), share, Long::sum);
-            }
-        }
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        totals.forEach((merchantId, value) -> result.put(merchantId, BigDecimal.valueOf(value)));
-        return result;
-    }
-
-    private int rankOf(Integer[] order, int index) {
-        for (int rank = 0; rank < order.length; rank++) {
-            if (order[rank] == index) {
-                return rank;
-            }
-        }
-        return order.length;
-    }
 
     @Override
     public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {
@@ -1220,6 +1151,104 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 .addValue("conf", minConfidence).addValue("dev", benchmarkDeviation)
                 .addValue("updated_by", updatedBy).addValue("now", timestampWithTimeZone(now)));
         return readAiThresholds();
+    }
+
+    private static final String MRAR_COLUMNS =
+            "id, rule_scope, merchant_id, revenue_source, attribution_mode, share_bps, "
+            + "refund_attribution, status, is_draft, updated_by, updated_at";
+
+    private AnalyticsRecords.MerchantRevenueAttributionRule mapAttributionRule(java.sql.ResultSet rs, int n)
+            throws java.sql.SQLException {
+        return new AnalyticsRecords.MerchantRevenueAttributionRule(
+                rs.getString("id"), rs.getString("rule_scope"), rs.getString("merchant_id"),
+                rs.getString("revenue_source"), rs.getString("attribution_mode"), rs.getInt("share_bps"),
+                rs.getString("refund_attribution"), rs.getString("status"), rs.getBoolean("is_draft"),
+                rs.getString("updated_by"),
+                rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant());
+    }
+
+    @Override
+    public java.util.List<AnalyticsRecords.MerchantRevenueAttributionRule> listRevenueAttributionRules() {
+        return jdbcTemplate.query("SELECT " + MRAR_COLUMNS
+                + " FROM merchant_revenue_attribution_rules ORDER BY rule_scope, revenue_source, merchant_id",
+                new MapSqlParameterSource(), this::mapAttributionRule);
+    }
+
+    @Override
+    public AnalyticsRecords.MerchantRevenueAttributionRule findDefaultAttributionRule(String revenueSource) {
+        return jdbcTemplate.query("SELECT " + MRAR_COLUMNS
+                + " FROM merchant_revenue_attribution_rules"
+                + " WHERE rule_scope = 'default' AND revenue_source = :source AND status = 'active'",
+                new MapSqlParameterSource("source", revenueSource), this::mapAttributionRule)
+                .stream().findFirst().orElse(null);
+    }
+
+    @Override
+    public AnalyticsRecords.MerchantRevenueAttributionRule upsertRevenueAttributionRule(
+            AnalyticsRecords.MerchantRevenueAttributionRule rule, String updatedBy, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO merchant_revenue_attribution_rules (
+                    id, rule_scope, merchant_id, revenue_source, attribution_mode, share_bps,
+                    refund_attribution, status, is_draft, updated_by, updated_at
+                ) VALUES (
+                    :id, :scope, :merchant_id, :source, :mode, :bps,
+                    :refund, :status, :is_draft, :updated_by, :now
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    rule_scope = EXCLUDED.rule_scope,
+                    merchant_id = EXCLUDED.merchant_id,
+                    revenue_source = EXCLUDED.revenue_source,
+                    attribution_mode = EXCLUDED.attribution_mode,
+                    share_bps = EXCLUDED.share_bps,
+                    refund_attribution = EXCLUDED.refund_attribution,
+                    status = EXCLUDED.status,
+                    is_draft = EXCLUDED.is_draft,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", rule.id())
+                .addValue("scope", rule.ruleScope())
+                .addValue("merchant_id", rule.merchantId(), java.sql.Types.VARCHAR)
+                .addValue("source", rule.revenueSource())
+                .addValue("mode", rule.attributionMode())
+                .addValue("bps", rule.shareBps())
+                .addValue("refund", rule.refundAttribution())
+                .addValue("status", rule.status())
+                .addValue("is_draft", rule.isDraft())
+                .addValue("updated_by", updatedBy)
+                .addValue("now", timestampWithTimeZone(now)));
+        return jdbcTemplate.query("SELECT " + MRAR_COLUMNS
+                + " FROM merchant_revenue_attribution_rules WHERE id = :id",
+                new MapSqlParameterSource("id", rule.id()), this::mapAttributionRule)
+                .stream().findFirst().orElse(null);
+    }
+
+    @Override
+    public AnalyticsRecords.LeasingFunnel leasingFunnel(LocalDate businessDate, String windowDomain) {
+        // V220 招商漏斗:按线索 created_at 落经营日窗口;已达意向 = 进展到 converted_to_intent 及之后阶段(含 negotiating/signed);
+        // 已签约 = signed。lost/on_hold/pending_follow_up/following_up 不计入意向。
+        return jdbcTemplate.query("""
+                SELECT COUNT(*) AS lead_count,
+                       COUNT(*) FILTER (WHERE status IN ('converted_to_intent', 'negotiating', 'signed')) AS intent_count,
+                       COUNT(*) FILTER (WHERE status = 'signed') AS signed_count
+                  FROM leasing_leads
+                 WHERE created_at >= :start AND created_at < :end
+                """, dayRange(windowDomain, businessDate), (rs, n) -> new AnalyticsRecords.LeasingFunnel(
+                rs.getLong("lead_count"), rs.getLong("intent_count"), rs.getLong("signed_count")))
+                .stream().findFirst().orElse(new AnalyticsRecords.LeasingFunnel(0, 0, 0));
+    }
+
+    @Override
+    public BigDecimal sumThirdpartyTurnoverCents(LocalDate businessDate, String windowDomain) {
+        // V220 第三方回流营业额:成功回流订单(sync_type='order', status='synced')金额合计,按 created_at 落窗。
+        // integration_order_syncs 无 merchant_id → 仅平台级(租售比分母)。
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0)
+                  FROM integration_order_syncs
+                 WHERE sync_type = 'order' AND status = 'synced'
+                   AND created_at >= :start AND created_at < :end
+                """, dayRange(windowDomain, businessDate), Long.class);
+        return BigDecimal.valueOf(total == null ? 0L : total);
     }
 
     @Override

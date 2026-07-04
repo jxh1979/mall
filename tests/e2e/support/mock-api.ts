@@ -283,6 +283,16 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/robot": empty,
     "/api/v1/analytics/metric-definitions": state.metricDefinitions,
     "/api/v1/analytics/anomaly-config": { surge_pct: 0.5, high_pct: 0.8, enabled: true },
+    "/api/v1/analytics/ai-thresholds": { local_llm_min_confidence: 0.6, benchmark_deviation: 0.2 },
+    "/api/v1/analytics/notification-windows": [
+      { window_key: "contract.renewal", days: 30, description: "商户合同续约提醒提前天数" },
+      { window_key: "inventory.saved_bottle", days: 7, description: "存酒临期提醒提前天数" },
+      { window_key: "leasing.lead_follow_up", days: 3, description: "招商线索未跟进提醒天数" },
+    ],
+    "/api/v1/staff/payroll/tax-brackets": [
+      { id: "ptb_labor_1", category: "labor_remuneration", seq: 1, income_floor_cent: 1, income_ceiling_cent: 400000, income_base_bps: 10000, flat_deduction_cent: 80000, rate_bps: 2000, quick_deduction_cent: 0 },
+      { id: "ptb_labor_2", category: "labor_remuneration", seq: 2, income_floor_cent: 400001, income_ceiling_cent: 2500000, income_base_bps: 8000, flat_deduction_cent: 0, rate_bps: 2000, quick_deduction_cent: 0 },
+    ],
     "/api/v1/analytics/holiday-calendar": [
       { holiday_name: "春节", holiday_year: 2026, start_date: "2026-02-15", end_date: "2026-02-22", source: "manual" },
       { holiday_name: "春节", holiday_year: 2025, start_date: "2025-01-28", end_date: "2025-02-04", source: "seed" },

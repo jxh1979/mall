@@ -348,6 +348,26 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** V221 商户级收入归因口径(可配置):某收入来源如何计入商户 net。种子=复现现有硬编码口径。 */
+    public record MerchantRevenueAttributionRule(
+            String id,
+            String ruleScope,          // default / merchant
+            String merchantId,         // rule_scope=merchant 时的商户;default 时 null
+            String revenueSource,      // ticket / bar / contract_rent / thirdparty
+            String attributionMode,    // gross / share_bps / exclude
+            int shareBps,              // share_bps 模式下缩放万分比[0,10000]
+            String refundAttribution,  // net_deduct / ignore
+            String status,             // active / inactive
+            boolean isDraft,
+            String updatedBy,
+            Instant updatedAt
+    ) {
+    }
+
+    /** V220 招商漏斗计数(经营日窗口, 按线索 created_at 归属):总线索/已达意向/已签约。比率由 ETL 派生。 */
+    public record LeasingFunnel(long leadCount, long intentCount, long signedCount) {
+    }
+
     /** M3 异常检测阈值配置(环比突变,2026-07-02 拍板:阈值后台可调)。 */
     public record AnomalyConfig(
             BigDecimal surgePct,

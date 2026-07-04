@@ -17293,6 +17293,206 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/staff/payroll/tax-brackets:
+    get:
+      tags:
+        - staff
+      operationId: listPayrollTaxBrackets
+      summary: 个税税表档位清单
+      description: V217：列劳务报酬预扣个税税表分档(payroll_tax_brackets)，经营参数页维护读。
+      x-permission: staff.payroll.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: staff.payroll.tax_bracket_viewed
+      x-audit-event-failure: staff.payroll.tax_bracket_view_failed
+      responses:
+        200:
+          : #/components/responses/Page
+        403:
+          : #/components/responses/Error
+        500:
+          : #/components/responses/Error
+      x-auth-context: staff-token
+    post:
+      tags:
+        - staff
+      operationId: upsertPayrollTaxBracket
+      summary: 维护个税税表档位
+      description: V217：按 id 幂等 upsert 一档(税法参数变更改配置不改代码；高敏 staff.tax_bracket.manage)。
+      x-permission: staff.tax_bracket.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: staff.payroll.tax_bracket_changed
+      x-audit-event-failure: staff.payroll.tax_bracket_change_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        200:
+          : #/components/responses/Success
+        400:
+          : #/components/responses/Error
+        409:
+          : #/components/responses/Error
+        500:
+          : #/components/responses/Error
+      x-auth-context: staff-token
+  /api/v1/analytics/ai-thresholds:
+    get:
+      tags:
+        - analytics
+      operationId: getAiThresholds
+      summary: AI/对标阈值配置
+      description: V218：读 AI建议采纳最低置信度 + 对标偏离告警线(单例 default)，经营参数页维护读。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.ai_thresholds.viewed
+      x-audit-event-failure: analytics.ai_thresholds.view_failed
+      responses:
+        200:
+          : #/components/responses/Page
+        403:
+          : #/components/responses/Error
+        500:
+          : #/components/responses/Error
+      x-auth-context: staff-token
+    post:
+      tags:
+        - analytics
+      operationId: updateAiThresholds
+      summary: 维护 AI/对标阈值
+      description: V218：更新 AI采纳置信度 + 对标偏离线(均∈[0,1])；阈值变更改配置不改代码。
+      x-permission: analytics.operating_params.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: analytics.ai_thresholds.updated
+      x-audit-event-failure: analytics.ai_thresholds.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        200:
+          : #/components/responses/Success
+        400:
+          : #/components/responses/Error
+        409:
+          : #/components/responses/Error
+        500:
+          : #/components/responses/Error
+      x-auth-context: staff-token
+  /api/v1/analytics/notification-windows:
+    get:
+      tags:
+        - analytics
+      operationId: listNotificationWindows
+      summary: 提醒窗天数配置
+      description: V219：列各提醒窗提前天数，经营参数页维护读。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.notification_windows.viewed
+      x-audit-event-failure: analytics.notification_windows.view_failed
+      responses:
+        200:
+          : #/components/responses/Page
+        403:
+          : #/components/responses/Error
+        500:
+          : #/components/responses/Error
+      x-auth-context: staff-token
+    post:
+      tags:
+        - analytics
+      operationId: upsertNotificationWindow
+      summary: 维护提醒窗天数
+      description: V219：按 window_key upsert 提醒提前天数(>0)；运营调窗口改配置不改代码。
+      x-permission: platform.notification_window.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: analytics.notification_windows.updated
+      x-audit-event-failure: analytics.notification_windows.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        200:
+          : #/components/responses/Success
+        400:
+          : #/components/responses/Error
+        409:
+          : #/components/responses/Error
+        500:
+          : #/components/responses/Error
+      x-auth-context: staff-token
+  /api/v1/analytics/revenue-attribution-rules:
+    get:
+      tags:
+        - analytics
+      operationId: listRevenueAttributionRules
+      summary: 商户收入归因口径规则清单
+      description: V221：列各收入来源计入商户 net 的归因口径规则。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.revenue_attribution_rule.viewed
+      x-audit-event-failure: analytics.revenue_attribution_rule.view_failed
+      responses:
+        200:
+          : #/components/responses/Page
+        403:
+          : #/components/responses/Error
+        500:
+          : #/components/responses/Error
+      x-auth-context: staff-token
+    post:
+      tags:
+        - analytics
+      operationId: upsertRevenueAttributionRule
+      summary: 维护商户收入归因口径规则
+      description: V221：upsert 一条归因口径(gross|share_bps|exclude / net_deduct|ignore)；口径变更改配置不改代码。
+      x-permission: analytics.operating_params.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: analytics.revenue_attribution_rule.updated
+      x-audit-event-failure: analytics.revenue_attribution_rule.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        200:
+          : #/components/responses/Success
+        400:
+          : #/components/responses/Error
+        409:
+          : #/components/responses/Error
+        500:
+          : #/components/responses/Error
+      x-auth-context: staff-token
   /api/v1/leasing/leads:
     get:
       tags:

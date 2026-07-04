@@ -139,7 +139,8 @@ public class TicketRefundService {
                 selfComplete ? requestedBy : null,   // 额度内自助：审批人=发起人本人（非 SoD 场景，SoD 仅约束复核档）
                 selfComplete ? now : null,
                 now,
-                now
+                now,
+                order.merchantId()   // V220：退款受理商户=原销售订单 merchant_id（平台直营单为 null）
         ));
         createRefundLines(refund, order, refundTargets, now);
         if (selfComplete) {
@@ -175,7 +176,7 @@ public class TicketRefundService {
         }
         TicketRefundRecord approved = new TicketRefundRecord(
                 current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
-                "approved", current.requestedBy(), approvedBy, now, current.createdAt(), now
+                "approved", current.requestedBy(), approvedBy, now, current.createdAt(), now, current.merchantId()
         );
         finalizeApprovedRefund(approved, now);
         return approved;
@@ -267,7 +268,8 @@ public class TicketRefundService {
                 "system",
                 now,
                 now,
-                now));
+                now,
+                order.merchantId()));   // V220：自动退款受理商户=原订单 merchant_id
         createRefundLines(refund, order, refundable, now);
         // 直批生效（镜像 finalizeApprovedRefund 的兑付副作用；系统动作跳过商户闸；未核销无已确认积分故不冲减）：
         repository.listTicketRefundLines(refund.id()).forEach(line -> {

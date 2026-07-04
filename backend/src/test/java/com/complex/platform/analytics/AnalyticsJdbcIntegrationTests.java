@@ -126,6 +126,56 @@ class AnalyticsJdbcIntegrationTests {
                 .extracting(AnalyticsRecords.ArDebtorRow::merchantId).containsExactly("mch_s2_y");
     }
 
+    @Test
+    void leasingFunnelAndRentToSalesMetricsAreEmittedAtPlatformScope() {
+        // V220：招商漏斗 + 租售比 ETL。2099 窗隔离共享库。
+        java.time.LocalDate businessDate = java.time.LocalDate.parse("2099-03-10");
+        Instant at = Instant.parse("2099-03-10T05:00:00Z");
+        // 5 条线索(created_at 落窗)：2 pending / 1 converted_to_intent / 1 negotiating / 1 signed。
+        insertLeasingLead("lead_v220_1", "pending_follow_up", at);
+        insertLeasingLead("lead_v220_2", "following_up", at);
+        insertLeasingLead("lead_v220_3", "converted_to_intent", at);
+        insertLeasingLead("lead_v220_4", "negotiating", at);
+        insertLeasingLead("lead_v220_5", "signed", at);
+        // 合同租金应收 1000.00 元(source_type=contract_rent, due=当日) → 租售比分子。
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, source_type, counterparty_id, amount_cent,
+                        paid_amount_cent, unpaid_amount_cent, currency, due_date, status, created_at, updated_at, merchant_id)
+                VALUES ('ar_v220_rent', 'ar_v220_rent', 'receivable', 'contract_rent', 'mch_v220', 100000, 0, 100000,
+                        'CNY', :due, 'open', :at, :at, 'mch_v220')
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("due", businessDate).addValue("at", java.sql.Timestamp.from(at)));
+        // 第三方回流营业额 5000.00 元(synced order) → 租售比分母。
+        jdbcTemplate.update("""
+                INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type, channel,
+                        external_business_id, status, amount_cent, currency, created_at, updated_at)
+                VALUES ('ios_v220', 'meituan', 'catering', 'order', 'meituan', 'ext_v220', 'synced', 500000, 'CNY', :at, :at)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("at", java.sql.Timestamp.from(at)));
+
+        var job = new DashboardAggregationJob(repository,
+                java.time.Clock.fixed(at, java.time.ZoneOffset.UTC));
+        job.refreshSnapshots(businessDate);
+
+        java.util.Map<String, java.math.BigDecimal> platform = repository.readMetricSnapshots(businessDate, null);
+        assertThat(platform.get("leasing.lead_count")).isEqualByComparingTo("5");
+        // 转意向率 = (converted+negotiating+signed)/total = 3/5 = 0.6。
+        assertThat(platform.get("leasing.intent_conversion_rate")).isEqualByComparingTo("0.6000");
+        // 意向转签约率 = signed/intent = 1/3 ≈ 0.3333。
+        assertThat(platform.get("leasing.signed_conversion_rate")).isEqualByComparingTo("0.3333");
+        // 租售比 = 合同租金 100000 / 第三方营业额 500000 = 0.2。
+        assertThat(platform.get("leasing.rent_to_sales")).isEqualByComparingTo("0.2000");
+    }
+
+    private void insertLeasingLead(String id, String status, Instant createdAt) {
+        jdbcTemplate.update("""
+                INSERT INTO leasing_leads (id, contact_name, source, status, created_at, updated_at)
+                VALUES (:id, :id, 'outbound', :status, :at, :at)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("status", status)
+                .addValue("at", java.sql.Timestamp.from(createdAt)));
+    }
+
     private void insertArItem(String id, String merchantId, long amountCent, long unpaidCent, java.time.LocalDate dueDate) {
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, amount_cent, paid_amount_cent,
@@ -745,10 +795,10 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
-    void ticketAllocatedRevenueAndRefundAreAggregatedAndDistributedByMerchant() {
-        // 清单#4：售票分量按商户(allocated) + 售票退款按 allocated 占比分摊到商户。
+    void ticketAllocatedRevenueByMerchantAndRefundAttributedToSalesMerchant() {
+        // 清单#4 + V220：售票分量按商户(allocated)；售票退款直挂原单销售商户 merchant_id（不再按 allocated 占比分摊）。
         java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-16");
-        // 订单 ord_net 实付 1000，发两张权益：mch_a 分摊 600 / mch_b 分摊 400（Σ=订单实付）。
+        // 订单 ord_net 实付 1000，发两张权益：mch_a 分摊 600 / mch_b 分摊 400（allocated 分量口径不变）。
         insertTicketOrder("ord_net", 1000L, businessDate);
         insertIssuedEntitlementForOrder("ent_net_a", "ord_net", "drink", "mch_a", 600L, businessDate);
         insertIssuedEntitlementForOrder("ent_net_b", "ord_net", "amusement", "mch_b", 400L, businessDate);
@@ -757,13 +807,11 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(allocated.get("mch_a")).isEqualByComparingTo("600");
         assertThat(allocated.get("mch_b")).isEqualByComparingTo("400");
 
-        // 退款 300 针对 ord_net：按 allocated 占比分摊 → mch_a=180(=300*600/1000)、mch_b=120(=300*400/1000)。
-        insertTicketRefund("rf_net", "ord_net", 300L, businessDate);
+        // V220：退款 300 直挂受理销售商户 mch_a（=原单 merchant_id），整额归 mch_a，不再拆分到 mch_b。
+        insertTicketRefund("rf_net", "ord_net", 300L, "mch_a", businessDate);
         Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate, "platform");
-        assertThat(refundShare.get("mch_a")).isEqualByComparingTo("180");
-        assertThat(refundShare.get("mch_b")).isEqualByComparingTo("120");
-        // Σ分摊 == 退款额（不丢分）。
-        assertThat(refundShare.get("mch_a").add(refundShare.get("mch_b"))).isEqualByComparingTo("300");
+        assertThat(refundShare.get("mch_a")).isEqualByComparingTo("300");
+        assertThat(refundShare).doesNotContainKey("mch_b");
     }
 
     @Test
@@ -772,7 +820,7 @@ class AnalyticsJdbcIntegrationTests {
         java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-15");
         insertTicketOrder("ord_noalloc", 500L, businessDate);
         insertIssuedEntitlementForOrder("ent_noalloc", "ord_noalloc", "entry", "mch_x", null, businessDate);
-        insertTicketRefund("rf_noalloc", "ord_noalloc", 200L, businessDate);
+        insertTicketRefund("rf_noalloc", "ord_noalloc", 200L, null, businessDate);
 
         Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate, "platform");
         assertThat(refundShare).doesNotContainKey("mch_x");
@@ -875,14 +923,20 @@ class AnalyticsJdbcIntegrationTests {
                 """, params);
     }
 
-    private void insertTicketRefund(String id, String targetOrderId, long refundAmountCent, java.time.LocalDate businessDate) {
+    private void insertTicketRefund(String id, String targetOrderId, long refundAmountCent,
+                                    String merchantId, java.time.LocalDate businessDate) {
         Instant at = businessDate.atTime(11, 0).toInstant(java.time.ZoneOffset.UTC);
+        var params = new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("target", targetOrderId)
+                .addValue("amount", refundAmountCent)
+                .addValue("merchant_id", merchantId)
+                .addValue("at", java.sql.Timestamp.from(at));
         jdbcTemplate.update("""
                 INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel, status,
-                    created_at, updated_at)
-                VALUES (:id, :target, :amount, 'test refund', 'original', 'approved', :at, :at)
-                """, Map.of("id", id, "target", targetOrderId, "amount", refundAmountCent,
-                "at", java.sql.Timestamp.from(at)));
+                    created_at, updated_at, merchant_id)
+                VALUES (:id, :target, :amount, 'test refund', 'original', 'approved', :at, :at, :merchant_id)
+                """, params);
     }
 
     private void insertInventoryItem(String id, String merchantId, int minQuantity) {

@@ -60,9 +60,12 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-006", label: "工单时效", route: "/admin/analytics/work-order-sla" },
   { pageId: "ADM-ANA-007", label: "能耗分析", route: "/admin/analytics/energy" },
   { pageId: "ADM-ANA-008", label: "月度对比", route: "/admin/analytics/monthly" },
+  { pageId: "ADM-ANA-010", label: "AI阈值", route: "/admin/analytics/ai-thresholds" },
+  { pageId: "ADM-ANA-011", label: "提醒窗配置", route: "/admin/analytics/notification-windows" },
   { pageId: "ADM-ANA-009", label: "T3-A 只读经营分析", route: "/admin/analytics/t3a-readonly" },
   { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
   { pageId: "ADM-STF-002", label: "薪酬与请假", route: "/admin/staff/payroll" },
+  { pageId: "ADM-STF-003", label: "个税税表", route: "/admin/staff/tax-brackets" },
   { pageId: "ADM-SVC-001", label: "服务点单", route: "/admin/services/orders" },
 ];
 
@@ -176,6 +179,17 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("payroll-table")).toContainText("¥8,000");
     await expect(page.getByTestId("leave-table")).toContainText("年假");
     await expect(page.getByTestId("payroll-adj-editor")).toBeVisible();
+  } else if (spec.pageId === "ADM-STF-003") {
+    await expect(page.getByTestId("payroll-tax-brackets-page")).toBeVisible();
+    await expect(page.getByTestId("payroll-tax-brackets-table")).toContainText("20.00%");
+    await expect(page.getByTestId("payroll-tax-brackets-form")).toBeVisible();
+  } else if (spec.pageId === "ADM-ANA-010") {
+    await expect(page.getByTestId("ai-thresholds-page")).toBeVisible();
+    await expect(page.getByTestId("ai-threshold-confidence")).toContainText("60%");
+    await expect(page.getByTestId("ai-thresholds-form")).toBeVisible();
+  } else if (spec.pageId === "ADM-ANA-011") {
+    await expect(page.getByTestId("notification-windows-page")).toBeVisible();
+    await expect(page.getByTestId("notification-windows-table")).toContainText("续约");
   } else if (spec.pageId === "ADM-STF-001") {
     await expect(page.getByTestId("staff-shift-page")).toBeVisible();
     await expect(page.getByTestId("shift-table")).toContainText("usr_staff_1");
