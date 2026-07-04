@@ -115,19 +115,20 @@ class JdbcStaffRepository implements StaffRepository {
                                     SUM(CASE WHEN adj_type = 'penalty' THEN amount_cent ELSE 0 END) AS penalty
                                FROM staff_payroll_adjustments WHERE month = :month GROUP BY user_id) adj
                          ON adj.user_id = u.user_id
-                  LEFT JOIN (SELECT user_id,
-                                    CASE
-                                      WHEN svc <= 0 THEN 0
-                                      WHEN svc <= 400000 THEN GREATEST(0, (svc - 80000) * 20 / 100)
-                                      ELSE CASE
-                                        WHEN svc * 8 / 10 <= 2000000 THEN svc * 8 / 10 * 20 / 100
-                                        WHEN svc * 8 / 10 <= 5000000 THEN svc * 8 / 10 * 30 / 100 - 200000
-                                        ELSE svc * 8 / 10 * 40 / 100 - 700000
-                                      END
-                                    END AS tax_cent
+                  -- 个税可配置化(V217):劳务报酬预扣税表落 payroll_tax_brackets,按毛收入(svc,分)落档,
+                  -- 每档公式 GREATEST(0,(svc*base_bps/10000 - flat_deduction)*rate_bps/10000 - quick_deduction)。
+                  -- 整除链与原 CASE WHEN 逐分等价;税法参数变更改配置表不改代码。svc<=0 无 service_order 劳务→无档匹配→tax 0。
+                  LEFT JOIN (SELECT sb.user_id,
+                                    GREATEST(0,
+                                        (sb.svc * br.income_base_bps / 10000 - br.flat_deduction_cent)
+                                            * br.rate_bps / 10000 - br.quick_deduction_cent) AS tax_cent
                                FROM (SELECT user_id, SUM(amount_cent) AS svc FROM staff_commission_ledger
                                       WHERE month = :month AND source_type = 'service_order'
-                                      GROUP BY user_id) svc_base) tax
+                                      GROUP BY user_id) sb
+                               JOIN payroll_tax_brackets br
+                                 ON br.category = 'labor_remuneration'
+                                AND sb.svc >= br.income_floor_cent
+                                AND (br.income_ceiling_cent IS NULL OR sb.svc <= br.income_ceiling_cent)) tax
                          ON tax.user_id = u.user_id
                   LEFT JOIN (SELECT DISTINCT ON (user_id) user_id, project_id FROM staff_profiles
                               ORDER BY user_id, created_at DESC) sp
