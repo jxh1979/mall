@@ -1,5 +1,8 @@
 # 需求覆盖追溯矩阵 V0.1
 
+> ⚠️ **机读/审计提示(2026-07-03 校正)**:下方 R5/R7 等历史横幅的「仍开放/未建」列表含**已在其后闭合的项**——例如 REQ-06 HMAC 数字签名(R10 已实现「TicketCredentialSigner」HMAC-SHA256)、REQ-39「inventory_trace_codes」(V128 已建)、REQ-53「entitlement_sessions」(V129 已建)。**当前真实状态一律以各 REQ 行内状态 + 最新 R9/R10/R11 横幅 +「backend/src/main/resources/db/migration/」真实迁移为准;切勿把历史「仍开放」措辞当当前事实。** 真实剩余开放项以「pending-development-backlog」+「findings-register」+ production no-go 为准。
+
+
 > ✅ **R11 重建回写（2026-06-27，核验扩至 V171）**：本轮按已落地代码 + 迁移补登「楼宇运营 + 集团治理」域。新增 PRD：`building-operations-prd-v1.0.md`、`group-governance-rebuild-prd-v1.0.md`；真实迁移登记扩至 **V171**。新增追溯行 **REQ-107~REQ-114**：V165 设施设备台账、V166 维保/物业工单、V167 楼宇巡检、V168 能耗抄表与能源费 AR、V169 角色装配、V170 高危授权审批、`group-overview groupBy=project|entity`、V171 合同退租结算状态列宽/默认值修复。新增端点覆盖 `/api/v1/facility/...`、`/api/v1/energy/...`、`/api/v1/access/position-role-templates...`、`/api/v1/access/role-assignments...`、`/api/v1/access/grant-requests...`、`/api/v1/analytics/group-overview?groupBy=...`；新增/本轮关联 UI 页：`ADM-FAC-001`、`ADM-ENE-001`、`ADM-ACC-003`、`ADM-ANA-002 groupBy=project|entity`；新增权限点：`facility.equipment.manage`、`facility.work_order.manage`、`facility.inspection.manage`、`energy.meter.manage`、`energy.reading.manage`、`access.role.assign`、`access.grant_request.*`，并交叉引用 `analytics.group.view`。下方旧横幅若止于 V149，以本 R11 + 真实迁移为准。
 >
 > ✅ **R10 修复回写横幅（2026-06-23 P0+P1 修复 + 文档回写，核验扩至 V149）**：本轮按用户「P0+P1 一起修 + 回写文档」拍板，在 .160 完成一批安全/资金/人身安全红线修复（`mvn -o test` 全绿 1419），并据真实迁移把核验范围由 R9 的 V129 扩至 **V149**。逐项上修（下方行内/旧横幅若与本 R10 冲突，以 R10 + 真实迁移为准）：
