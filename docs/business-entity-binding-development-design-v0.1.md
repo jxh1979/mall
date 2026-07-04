@@ -1,5 +1,7 @@
 # 四类主体唯一绑定开发设计 V0.1
 
+> 2026-07-04 逻辑一致性修订：字段名对齐代码——`business_entities.entity_type` enum → `entity_role`（VARCHAR，无 CHECK）；`business_entity_bindings.business_object_id` → `merchant_id`（VARCHAR64，经营对象=merchant 自身）；唯一约束对齐真实 `uq_business_entity_bindings_active_merchant`（每商户至多一条 active）；`authorization_basis`/`authorization_attachment_id` 标注"移合同审批表、非绑定表核心字段"；补名词四层脚注。权威 ER 见 merchant-space-contract-model-v0.1 §2.1/§2.3。
+
 > 版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
@@ -9,6 +11,8 @@
 目标：把“经营对象、运营主体、合同主体、结算主体可以不同名/不同公司，但必须唯一绑定并留痕”的总控口径落成统一数据模型。
 
 ## 1. 定义
+
+> 名词四层脚注：四类主体（运营/合同/结算/经营对象）与「项目公司/管理公司·SPV/商户」四层，在业务上是概念分层（业务：平台 → 项目公司 → 管理公司·SPV → 商户）；DB 层**无 `organizations`/`org_type` 表**，工商主体统一落 `business_entities`，用 `entity_role`（文本，无 CHECK）区分角色。`projects` 表是**业态场馆**（venue_type），非「项目公司」。见 merchant-space-contract-model-v0.1 §5。
 
 | 名称 | 含义 | 示例 |
 |---|---|---|
@@ -30,12 +34,14 @@
 
 ### 3.1 `business_entities`
 
+> ⚠️ 字段名对齐代码（V005）：主键为 `VARCHAR(64)`（迁移 retrofit，非原生 uuid）；下表 `entity_type` 应为 **`entity_role` VARCHAR(32)（无 CHECK / 无代码枚举校验）**，承载「项目公司 / 管理公司·SPV / 商户主体」等角色文本，非固定 enum。四层主体全落本表，无 `organizations` 表。
+
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `id` | uuid | 是 | 主键 |
 | `project_id` | uuid | 是 | 综合体项目 |
 | `entity_name` | varchar | 是 | 主体名称 |
-| `entity_type` | enum | 是 | `company`、`individual`、`platform_internal`、`other` |
+| `entity_role`（原文 `entity_type`） | varchar | 是 | 角色文本，无 CHECK；示例 `company`、`individual`、`platform_internal`、`other`（当前无 DB 枚举约束） |
 | `credit_code` | varchar | 条件必填 | 统一社会信用代码/证件号哈希 |
 | `legal_representative` | varchar | 否 | 法定代表人 |
 | `contact_phone` | varchar | 否 | 联系电话，展示脱敏 |
@@ -46,17 +52,19 @@
 
 ### 3.2 `business_entity_bindings`
 
+> ⚠️ 字段名对齐代码（V002 基表 + V010 四方扩展）：「经营对象」= merchant 自身，`business_object_id` → **`merchant_id` VARCHAR(64)**；运营主体列代码名为 `operation_entity_id`（原文 `operator_entity_id`）。`authorization_basis`/`authorization_attachment_id` **非本表核心字段**：授权依据/附件走合同审批表（`contract_approval_flows`/合同附件），非绑定表列。
+
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `id` | uuid | 是 | 主键 |
 | `project_id` | uuid | 是 | 综合体项目 |
 | `binding_no` | varchar | 是 | 主体绑定关系编号 |
-| `business_object_id` | uuid | 是 | 经营对象 |
-| `operator_entity_id` | uuid | 是 | 运营主体 |
+| `merchant_id`（原文 `business_object_id`） | varchar(64) | 是 | 经营对象=当前占用商户（merchant 自身） |
+| `operation_entity_id`（原文 `operator_entity_id`） | uuid | 是 | 运营主体 |
 | `contract_entity_id` | uuid | 是 | 合同主体 |
 | `settlement_entity_id` | uuid | 是 | 结算主体 |
-| `authorization_basis` | enum | 是 | `contract`、`supplement_agreement`、`trial_authorization`、`management_decision` |
-| `authorization_attachment_id` | uuid | 是 | 授权依据附件 |
+| ~~`authorization_basis`~~ | enum | — | ⚠️ 移合同审批表，非绑定表核心字段 |
+| ~~`authorization_attachment_id`~~ | uuid | — | ⚠️ 移合同审批/附件，非绑定表核心字段 |
 | `valid_from` | date | 是 | 生效日 |
 | `valid_to` | date | 否 | 失效日 |
 | `status` | enum | 是 | `draft`、`pending_review`、`active`、`suspended`、`expired`、`terminated`、`rejected` |
@@ -65,13 +73,13 @@
 | `reviewed_by` | uuid | 否 | 复核人 |
 | `reviewed_at` | timestamp | 否 | 复核时间 |
 
-唯一约束：
+唯一约束（对齐代码 `uq_business_entity_bindings_active_merchant`）：
 
 | 约束 | 说明 |
 |---|---|
 | `project_id + binding_no` 唯一 | 编号唯一 |
-| `business_object_id + status=active` 唯一 | 同一经营对象只能一个生效绑定 |
-| `business_object_id + version` 唯一 | 历史版本可追溯 |
+| `merchant_id + status=active` 唯一（代码：`uq_business_entity_bindings_active_merchant`，每商户至多一条 active） | 同一商户（经营对象）只能一个生效绑定；激活时命中已存在 active 则 `409 ACTIVE_BINDING_EXISTS` |
+| `merchant_id + version` 唯一 | 历史版本可追溯 |
 
 ### 3.3 `business_entity_binding_usages`
 
@@ -120,7 +128,7 @@
 | `/api/v1/platform/business-entities` | CRUD | 主体档案 |
 | `/api/v1/platform/business-entity-bindings` | GET/POST | 主体绑定草稿、创建和查询 |
 | `/api/v1/platform/business-entity-bindings/{id}/change` | POST | 提交变更、复核通过或驳回 |
-| `/api/v1/platform/business-entity-bindings/active?businessObjectId=` | GET | 查询经营对象当前生效绑定 |
+| `/api/v1/platform/business-entity-bindings/active?businessObjectId=` | GET | 查询经营对象当前生效绑定（经营对象=merchant，入参对应 `merchant_id`） |
 | `/api/v1/platform/business-entity-bindings/{id}/usages` | GET | 查询引用对象 |
 
 ## 6. 权限

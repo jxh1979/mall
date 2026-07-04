@@ -1,5 +1,7 @@
 # Java 后端核心与平台地基开发设计
 
+> 2026-07-04 逻辑一致性修订：§4.2 tenant / §6.1 V001 建表 / §8.2 API / §21.5 口径中 organizations 表已作废（四层主体落 business_entities.entity_role）、空间四级模型（venues/areas/location_points）已作废（真实扁平单表 spaces），均加内联标注；organizations API 标 P1+ 预留；补名词四层脚注（projects 表=业态场馆非项目公司）。
+
 > 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
@@ -120,6 +122,8 @@ backend
 - `AuditableEntity`
 
 ### 4.2 `tenant`
+
+> 2026-07-04 逻辑一致性修订：本节 `Organization` 实体、§6.1 `organizations` 建表、§8.2 `/api/admin/organizations` API 均已作废——代码中无 `organizations`/`org_type` 表，四层主体（业务：平台 → 项目公司 → 管理公司·SPV → 商户）统一落 `business_entities`（`entity_role` 区分角色，无 CHECK），见 merchant-space-contract-model-v0.1 §5；空间四级模型（venues/areas/location_points）已作废，真实为扁平单表 `spaces`。`projects` 表是**业态场馆**（venue_type），非「项目公司」。
 
 负责多组织、多商户和空间结构，是所有业务归属的根。
 
@@ -413,20 +417,22 @@ V010__ticketing_foundation_reference.sql
 
 ### 6.1 `V001__platform_foundation_core.sql`
 
+> ⚠️ 本节多表已作废（以真实 Flyway 迁移为准）：`organizations` 未建（四层主体落 `business_entities.entity_role`，见 merchant-space-contract-model-v0.1 §5）；空间四级 `venues`/`areas`/`location_points` 未建，真实为扁平单表 `spaces`（V005）。下列建表范围与关联约束仅存历史设计参考，勿据此建表或写迁移。
+
 建表范围：
 
-- `organizations`
+- `organizations`（⚠️ 已作废，落 `business_entities`）
 - `merchants`
 - `service_providers`
 - `brands`
-- `venues`
-- `areas`
-- `location_points`
+- `venues`（⚠️ 空间四级已作废，落扁平 `spaces`）
+- `areas`（⚠️ 空间四级已作废，落扁平 `spaces`）
+- `location_points`（⚠️ 空间四级已作废，落扁平 `spaces`）
 - `contracts`
 - `merchant_credentials`
 - `merchant_bank_accounts`
 
-关键约束：
+关键约束（⚠️ 下列关联随上述作废表一并失效，仅历史参考）：
 
 - `merchants.organization_id` 关联 `organizations.id`。
 - `venues.merchant_id` 关联 `merchants.id`。
@@ -640,12 +646,14 @@ metadata jsonb null
 
 ### 8.2 多商户与组织
 
+> ⚠️ 下列 `/api/admin/organizations` 四个接口标 **P1+ 预留**：`organizations` 表已作废（四层主体落 `business_entities.entity_role`，见 merchant-space-contract-model-v0.1 §5），当前无对应表与实现，非 P0 正式路径。
+
 | 方法 | 路径 | 说明 | 权限 |
 |---|---|---|---|
-| POST | `/api/admin/organizations` | 创建组织 | `tenant.organization.manage` |
-| GET | `/api/admin/organizations` | 查询组织列表 | `tenant.organization.view` |
-| GET | `/api/admin/organizations/{id}` | 查询组织详情 | `tenant.organization.view` |
-| PUT | `/api/admin/organizations/{id}` | 更新组织 | `tenant.organization.manage` |
+| POST | `/api/admin/organizations` | 创建组织（⚠️ P1+ 预留，organizations 已作废） | `tenant.organization.manage` |
+| GET | `/api/admin/organizations` | 查询组织列表（⚠️ P1+ 预留） | `tenant.organization.view` |
+| GET | `/api/admin/organizations/{id}` | 查询组织详情（⚠️ P1+ 预留） | `tenant.organization.view` |
+| PUT | `/api/admin/organizations/{id}` | 更新组织（⚠️ P1+ 预留） | `tenant.organization.manage` |
 | POST | `/api/admin/merchants` | 创建商户 | `tenant.merchant.manage` |
 | GET | `/api/admin/merchants` | 查询商户列表 | `tenant.merchant.view` |
 | GET | `/api/admin/merchants/{id}` | 查询商户详情 | `tenant.merchant.view` |
@@ -1486,7 +1494,7 @@ JWT_SECRET=<fill-at-least-32-random-characters>
 2. 后台登录采用 JWT + Refresh Token，Redis 存刷新令牌和黑名单。
 3. ORM 第一阶段采用 Spring Data JPA 起步，复杂查询后续补 QueryDSL 或 jOOQ。
 4. 动态调用地址 P0 采用动态路由前缀，不要求动态域名/动态网关地址。
-5. 平台主体作为特殊 `organization` 建模，平台自营业务建特殊 `merchant` 主体，以统一页面、权限、结算和看板。
+5. 平台主体作为特殊 `organization` 建模，平台自营业务建特殊 `merchant` 主体，以统一页面、权限、结算和看板。（⚠️ 名词四层修订：`organizations` 表已作废，平台主体实为 `business_entities` 中一个 `entity_role`；名词四层=业务：平台 → 项目公司 → 管理公司·SPV → 商户，DB 层一表多角色，见 merchant-space-contract-model-v0.1 §5。`projects` 表是业态场馆非项目公司。）
 6. 事件中心 P0 同步写事件表，P1 增加 NATS 发布。
 7. PostgreSQL、Redis、NATS、MinIO 在开发/预生产继续使用 160 Docker Compose；正式生产前再评估独立服务或云服务。
 8. 第三方 SDK 第一阶段提供 OpenAPI 文档、curl 示例和 Java/JavaScript 示例；P2 再做自动生成 SDK 包。

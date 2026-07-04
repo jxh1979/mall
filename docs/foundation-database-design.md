@@ -1,5 +1,7 @@
 # 地基系统数据库设计第一版
 
+> 2026-07-04 逻辑一致性修订：§2.1 organizations 表头加"已作废"内联标注（四层主体统一落 business_entities.entity_role，见 merchant-space-contract-model-v0.1 §5）；§2.0/2.5/2.7/2.8 空间四级模型表头加"已作废"内联标注（真实为扁平单表 spaces，status 仅 active/unavailable，消防容量落 spaces/venues 非 areas）；admission 两表已有作废标注不再重复。
+
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
 > 本设计多处表/字段为"有设计无迁移"，以真实 Flyway V001–V148 为准收口（V099–V124 新增表/列见 §11 `文档goalP1(2026-06-20)`；V143–V148 见 §11.23–§11.28 `文档goalP1(2026-06-22)`）：
 > - **准入两表**：`contract_admission_rules`(§238)、`admission_audits`(§259) 迁移**零命中**；审批层级实际落 `supervisor_review_decisions`(V057)。§449"admission_audits.approval_level"为过期落点。
@@ -57,6 +59,8 @@
 
 ### 2.0 complex_projects 综合体项目表
 
+> ⚠️ 本表（及 §2.5 venues / §2.7 areas / §2.8 location_points 组成的空间四级模型）已作废：真实空间为**扁平单表 `spaces`**（V005，`space_type` 自由文本 + `parent_space_id` 自套层级；`status` 仅 `active`/`unavailable`，V203），非四级固定表。消防容量卡控落 `spaces`/`venues`，非 `areas`。权威 ER 见 merchant-space-contract-model-v0.1 §2.4。「综合体项目」维度由核心对象的 `project_id` 承载。
+
 当前先创建一个综合体项目，未来新增多个综合体时作为最高数据归属。
 
 | 字段 | 说明 |
@@ -73,6 +77,8 @@
 | status | draft、pending_enable、active、paused、terminated、archived |
 
 ### 2.1 organizations 组织表
+
+> ⚠️ **本表已作废**：代码中**无 `organizations`/`org_type` 表**。名词四层（业务：平台 → 项目公司 → 管理公司·SPV → 商户）在 DB 层统一落 `business_entities` 一张表，用 `entity_role`（VARCHAR，无 CHECK）区分角色。平台主体、商户公司、服务商公司均为 `business_entities` 的不同 `entity_role`，非独立组织表。权威 ER 见 merchant-space-contract-model-v0.1 §5。（注意：`projects` 表是**业态场馆**（venue_type），非「项目公司」。）
 
 用于表示平台组织、商户公司、服务商公司、内部部门等组织节点。
 
@@ -143,6 +149,8 @@
 
 ### 2.5 venues 门店/场地表
 
+> ⚠️ 空间四级模型（complex_projects/venues/areas/location_points）已作废，真实为扁平单表 `spaces`（见 §2.0 标注）。消防容量卡控（fire_capacity/max_occupancy）落 `spaces`/`venues`，非 `areas`。
+
 用于表示酒吧门店、餐饮店、零售店、游乐区域、经营场所。
 
 | 字段 | 说明 |
@@ -183,6 +191,8 @@
 
 ### 2.7 areas 区域表
 
+> ⚠️ 空间四级模型已作废，真实为扁平单表 `spaces`（见 §2.0 标注）。楼层/区域/功能区由 `spaces.space_type`（自由文本）+ `parent_space_id` 表达；消防容量落 `spaces`/`venues`，非本表。
+
 用于定义楼层、区域、功能区。
 
 | 字段 | 说明 |
@@ -202,6 +212,8 @@
 > 修订说明（2026-06-07）：依据 C8，区域补 `fire_capacity`（消防核定容量）与 `max_occupancy`（最大允许在场人数）做消防容量卡控。原因：原 `capacity` 为运营容量，无法承载消防容量上限与超员卡控；区域/场地在售票、入场、开台时需据消防容量限制在场人数。
 
 ### 2.8 location_points 点位表
+
+> ⚠️ 空间四级模型已作废，真实为扁平单表 `spaces`（见 §2.0 标注）。卡座/吧台/闸机等点位由 `spaces.space_type` + `parent_space_id` 承载。
 
 用于卡座、吧台、闸机、摄像头点、货架、机器人站点等具体点位。
 

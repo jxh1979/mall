@@ -1,5 +1,7 @@
 # 地基系统详细拆分
 
+> 2026-07-04 逻辑一致性修订：§1.3.5/§1.6.2 空间四级模型（综合体/楼栋/楼层/区域/点位固定表）加"已作废、真实扁平单表 spaces"标注；admission_audit 引用加"准入走 supervisor_review、admission_audits 从未建"标注；补名词四层脚注（组织=business_entities.entity_role，projects 表=业态场馆非项目公司）。
+
 本文档拆分第一阶段优先建设的四个底层系统：
 
 1. 多商户与组织管理系统
@@ -23,6 +25,8 @@
 ## 1. 多商户与组织管理系统
 
 ### 1.1 系统定位
+
+> 名词四层脚注：本文「组织/商户主体/项目公司/SPV」为业务概念分层（业务：平台 → 项目公司 → 管理公司·SPV → 商户）；DB 层**无 `organizations`/`org_type` 表**，四层主体统一落 `business_entities`，用 `entity_role`（文本，无 CHECK）区分角色。`projects` 表是**业态场馆**（venue_type），非「项目公司」；「项目级/综合体隔离」的 `project_id` 是综合体维度，勿与 `projects` 表混用。见 merchant-space-contract-model-v0.1 §5。
 
 多商户与组织管理系统负责管理综合体内所有经营主体、服务主体、场地、区域、门店、项目和合同关系。
 
@@ -95,6 +99,8 @@
 | 项目状态 | 筹备、开放、暂停、维护、关闭 |
 
 #### 1.3.5 场地、区域与点位管理
+
+> ⚠️ 空间四级模型（complex_projects/venues/areas/location_points 固定表）已作废：真实为**扁平单表 `spaces`**（`space_type` 自由文本 + `parent_space_id` 自套层级，`status` 仅 `active`/`unavailable`）。下表「综合体/楼栋/楼层/区域/点位」为业务描述，落地统一由 `spaces` 承载；消防容量卡控落 `spaces`/`venues`，非 `areas`。权威 ER 见 merchant-space-contract-model-v0.1 §2.4。
 
 | 功能 | 说明 |
 |---|---|
@@ -213,6 +219,8 @@
 12. 后续票务、酒吧、游乐、结算和第三方流程引用该商户时，先检查合同准入规则。
 
 #### 1.6.2 场地点位配置流程
+
+> ⚠️ 空间四级模型已作废，真实为扁平单表 `spaces`（见 §1.3.5 标注）；下列楼层/区域/点位均由 `spaces.space_type` + `parent_space_id` 承载，非四级固定表。
 
 1. 创建综合体楼层和区域。
 2. 创建具体点位，例如入口闸机、吧台、卡座、库房货架。
@@ -850,7 +858,7 @@
 | credential_id | 相关票码、权益码、NFC或其他凭证 |
 | credential_hash | 凭证哈希或防伪核对摘要 |
 | contract_id | 相关合同 |
-| admission_audit_id | 相关合同准入检查记录 |
+| admission_audit_id | 相关合同准入检查记录（⚠️ `admission_audits` 从未建，准入走 `supervisor_review`（V057/V068），此字段为过期落点） |
 | inventory_item_id | 相关物料或商品 |
 | trace_code_id | 相关物品追踪码 |
 | handover_record_id | 相关交接记录 |

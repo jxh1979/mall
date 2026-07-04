@@ -1,5 +1,8 @@
 # 业务系统详细拆分：酒吧、游乐、第三方集成
 
+> 2026-07-04 逻辑一致性修订：补名词四层脚注。
+> 名词四层脚注：本文「商户主体/组织/项目公司/SPV」为业务概念分层（业务：平台 → 项目公司 → 管理公司·SPV → 商户）；DB 层**无 `organizations`/`org_type` 表**，四层主体统一落 `business_entities`，用 `entity_role`（文本，无 CHECK）区分角色。`projects` 表是**业态场馆**（venue_type），非「项目公司」。见 merchant-space-contract-model-v0.1 §5。
+
 本文档是【业务系统：酒吧、游乐、第三方集成】专项维护文档。
 
 本线程负责以下范围：
