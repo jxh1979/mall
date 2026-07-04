@@ -24,10 +24,10 @@ amusement_safety_templates,direct,merchant_id,merchant_id column on amusement_sa
 amusement_sessions,direct,project_id,project_id column on amusement_sessions,ready for project/merchant scoped query enforcement,covered
 amusement_verifications,direct,project_id,project_id column on amusement_verifications,ready for project/merchant scoped query enforcement,covered
 amusement_waiver_acknowledgements,direct,project_id,project_id column on amusement_waiver_acknowledgements,ready for project/merchant scoped query enforcement,covered
-analytics_ai_quality_results,inherited,dimension/project/merchant,dimension/project/merchant fields or derived source table,must join through scope path before multi-complex rollout,covered
-analytics_ai_quality_tasks,inherited,dimension/project/merchant,dimension/project/merchant fields or derived source table,must join through scope path before multi-complex rollout,covered
-analytics_anomaly_config,inherited,dimension/project/merchant,dimension/project/merchant fields or derived source table,must join through scope path before multi-complex rollout,covered
-analytics_business_metric_snapshots,inherited,dimension/project/merchant,dimension/project/merchant fields or derived source table,must join through scope path before multi-complex rollout,covered
+analytics_ai_quality_results,global_reference,global_reference,platform-global AI quality result ledger; unfiltered read gated by requirePlatformScope,intentional platform-global AI governance output; not a tenant access boundary,covered
+analytics_ai_quality_tasks,global_reference,global_reference,platform-global AI quality task ledger; unfiltered read gated by requirePlatformScope,intentional platform-global AI governance output; not a tenant access boundary,covered
+analytics_anomaly_config,global_reference,global_reference,platform-global anomaly threshold config (singleton id='default'); read/write gated by requirePlatformScope,intentional platform-global; per-tenant thresholds would require a separate scoped table,covered
+analytics_business_metric_snapshots,direct,segment_id,"polymorphic (segment_type, segment_id) self-owned scoped-read channel on analytics_business_metric_snapshots","segment_type in {platform(NULL),merchant,project}; merchant/project rows scoped by segment_id (AC-ISO-1)",covered
 analytics_customer_intents,inherited,dimension/project/merchant,dimension/project/merchant fields or derived source table,must join through scope path before multi-complex rollout,covered
 analytics_dashboard_snapshots,direct,project_id,project_id column on analytics_dashboard_snapshots,ready for project/merchant scoped query enforcement,covered
 analytics_merchant_health_scores,direct,merchant_id,merchant_id column on analytics_merchant_health_scores,ready for project/merchant scoped query enforcement,covered

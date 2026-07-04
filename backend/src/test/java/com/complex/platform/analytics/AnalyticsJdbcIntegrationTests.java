@@ -1052,4 +1052,53 @@ class AnalyticsJdbcIntegrationTests {
                  LIMIT 1
                 """, Map.of(), String.class);
     }
+
+    // 负向越权：analytics_business_metric_snapshots 的多态维度 scoped 读通道
+    // (segment_type/segment_id) 必须做行级隔离——project_x 只见 x、平台段 (segment_id IS NULL)
+    // 与其他 project 互不串读。对齐 CSV direct(segment_id) 定性与 AC-ISO-1。
+    @Test
+    void businessMetricSnapshotsSegmentScopedReadIsTenantIsolated() {
+        java.time.LocalDate day = java.time.LocalDate.of(2026, 6, 30);
+        insertMetricSnapshot("snap_projx", "gmv", "project", "px", day, "1000");
+        insertMetricSnapshot("snap_projy", "gmv", "project", "py", day, "2000");
+        insertMetricSnapshot("snap_plat", "gmv", "platform", null, day, "9999");
+
+        Map<String, java.math.BigDecimal> px = repository.readProjectMetricSnapshots(day, "px");
+        assertThat(px).containsOnlyKeys("gmv");
+        assertThat(px.get("gmv")).isEqualByComparingTo("1000");
+
+        Map<String, java.math.BigDecimal> py = repository.readProjectMetricSnapshots(day, "py");
+        assertThat(py.get("gmv")).isEqualByComparingTo("2000");
+
+        // 越权断言：project_x 的读结果不得等于 project_y 的值，且平台段独立。
+        assertThat(px.get("gmv")).isNotEqualByComparingTo(py.get("gmv"));
+
+        // 平台段 (scope=null → segment_id IS NULL) 只见平台行,不吸入任一 project 行。
+        Map<String, java.math.BigDecimal> platform = repository.readMetricSnapshots(day, null);
+        assertThat(platform.get("gmv")).isEqualByComparingTo("9999");
+
+        // project 维度不误读平台段;不存在的 project 返回空。
+        assertThat(repository.readProjectMetricSnapshots(day, "pz")).isEmpty();
+    }
+
+    private void insertMetricSnapshot(String id, String metricKey, String segmentType,
+            String segmentId, java.time.LocalDate businessDate, String actual) {
+        jdbcTemplate.update("""
+                INSERT INTO analytics_business_metric_snapshots
+                    (snapshot_id, metric_key, domain, period_type, business_date,
+                     segment_type, segment_id, actual_value, trend_direction,
+                     projection_method, created_at)
+                VALUES
+                    (:id, :metric_key, 'analytics', 'daily', :business_date,
+                     :segment_type, :segment_id, :actual, 'flat',
+                     'etl_aggregate', now())
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("metric_key", metricKey)
+                .addValue("business_date", businessDate)
+                .addValue("segment_type", segmentType)
+                .addValue("segment_id", segmentId)
+                .addValue("actual", new java.math.BigDecimal(actual)));
+    }
+
 }
