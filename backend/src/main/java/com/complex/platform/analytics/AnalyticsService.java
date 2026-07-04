@@ -73,11 +73,11 @@ public class AnalyticsService {
      */
     static final List<MetricCatalogEntry> METRIC_CATALOG = List.of(
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_TICKET, "finance", "cent", true,
-                    "ticket_orders has no merchant_id; merchant-scoped value not available"),
+                    "revenue.ticket is platform-only paid-in-full; merchant ticket share is in revenue.net (V135 merchant_id / allocated)"),
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_BAR, "bar", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_BAR_REFUND, "bar", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_TICKET_REFUND, "finance", "cent", true,
-                    "ticket_refunds has no merchant_id; merchant-scoped value not available"),
+                    "revenue.ticket_refund is platform-only total refund; per-merchant refund share is in revenue.net (V220 ticket_refunds.merchant_id)"),
             // RC1② + 清单#4：派生净收入（平台口径 = 售票实付+酒吧−退款；
             // 商户行级 = 售票分量(allocated)+酒吧实收−售票退款分摊−酒吧退款；第三方回流不计）。
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_NET, "finance", "cent", true,

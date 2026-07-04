@@ -267,7 +267,7 @@ public interface AnalyticsRepository {
 
     /**
      * RC1②：Σ ticket_refunds.refund_amount_cent——自营售票退款（按 created_at 落经营日窗口，与 T7 日结口径一致）；
-     * ticket_refunds 无 merchant_id，仅平台口径。用于 revenue.net 派生时冲减自营售票收入。
+     * 本方法为平台口径退款总额（不按商户拆）；商户维退款分量见 sumTicketRefundByMerchant（V220 后直挂 merchant_id）。用于 revenue.net 派生时冲减自营售票收入。
      */
     BigDecimal sumTicketRefundCents(LocalDate businessDate, String windowDomain);
 
@@ -304,11 +304,9 @@ public interface AnalyticsRepository {
     Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate, String windowDomain);
 
     /**
-     * 清单#4：本商户售票退款分量——按 ticket_refunds（按 created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径同population）
-     * 关联订单各权益的 allocated_revenue_cent 占比，把每笔退款分摊到 merchant_id。
-     * 口径：单笔退款 → 该订单 Σallocated 为基数 → 各 merchant 的 allocated 占比 × 退款额（最大余数补尾，Σ分摊==退款额）。
-     * 订单无 allocated 权益（基数为 0）的退款保守不归任何商户（与售票分量口径一致，避免摊派）。
-     * 返回 merchantId(可 null) -> 退款分摊额，用于商户行级 revenue.net 冲减。
+     * 清单#4：本商户售票退款分量——V220 后 ticket_refunds 直挂 merchant_id（受理退款的销售商户 = 原订单 merchant_id），
+     * 按 created_at 落经营日窗口，直接 GROUP BY merchant_id 汇总退款额（不再按 allocated 占比反推分摊）。
+     * merchant_id 为 null（平台直营单）保守不归任何商户。返回 merchantId -> 退款额，用于商户行级 revenue.net 冲减。
      */
     Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate, String windowDomain);
 
