@@ -63,6 +63,11 @@ public class DashboardAggregationJob {
     static final String OCC_SIGNED_PENDING_AREA = "occupancy.signed_pending_area";
     static final String OCC_PARKING_RATE = "occupancy.parking_rate";
     static final String CONTRACT_EXPIRING_90D = "contract.expiring_90d";
+    // V220 招商漏斗/租售比(平台口径;integration_order_syncs 无 merchant_id → rent_to_sales 仅平台级):
+    static final String LEASING_LEAD_COUNT = "leasing.lead_count";                     // 招商·新增线索数(落窗)
+    static final String LEASING_INTENT_CONVERSION_RATE = "leasing.intent_conversion_rate"; // 招商·线索转意向率(分母0不产出)
+    static final String LEASING_SIGNED_CONVERSION_RATE = "leasing.signed_conversion_rate"; // 招商·意向转签约率(分母0不产出)
+    static final String LEASING_RENT_TO_SALES = "leasing.rent_to_sales";               // 招商·租售比(合同租金/第三方营业额,分母0不产出)
 
     // S4 工单时效(facility 窗,未配置域回落 4 点基准):
     static final String WO_RESPONSE_HOURS_P50 = "wo.response_hours_p50";  // 响应 P50(小时,窗内无响应单不产出)
@@ -83,7 +88,7 @@ public class DashboardAggregationJob {
     public static final java.util.List<String> MONTHLY_SUM_KEYS = java.util.List.of(
             REVENUE_NET, REVENUE_TICKET, REVENUE_BAR, "revenue.contract_rent", MEMBER_NEW, "verify.done",
             "traffic.amusement", "energy.total_electricity", "energy.total_water", "energy.total_gas",
-            "energy.total_heat_cold");
+            "energy.total_heat_cold", LEASING_LEAD_COUNT);
     public static final java.util.List<String> MONTHLY_LAST_KEYS = java.util.List.of(
             AR_BALANCE, AR_AGING_90P, AR_COLLECTION_RATE_MTD, OCC_RATE, OCC_PARKING_RATE,
             OCC_SIGNED_PENDING_AREA, CONTRACT_EXPIRING_90D, WO_BACKLOG, MWO_BACKLOG);
@@ -317,6 +322,28 @@ public class DashboardAggregationJob {
         }
         upsertPlatform(ENERGY_ABNORMAL_COUNT, "energy", businessDate,
                 BigDecimal.valueOf(repository.countAbnormalReadings(energyStart, energyEnd)), now, platformTotals);
+
+        // V220 招商漏斗 + 租售比(平台口径;比率分母 0 不产出,不伪造)。
+        AnalyticsRecords.LeasingFunnel funnel = repository.leasingFunnel(businessDate, "leasing");
+        upsertPlatform(LEASING_LEAD_COUNT, "leasing", businessDate,
+                BigDecimal.valueOf(funnel.leadCount()), now, platformTotals);
+        if (funnel.leadCount() > 0) {
+            upsertPlatform(LEASING_INTENT_CONVERSION_RATE, "leasing", businessDate,
+                    ratio(BigDecimal.valueOf(funnel.intentCount()), BigDecimal.valueOf(funnel.leadCount())),
+                    now, platformTotals);
+        }
+        if (funnel.intentCount() > 0) {
+            upsertPlatform(LEASING_SIGNED_CONVERSION_RATE, "leasing", businessDate,
+                    ratio(BigDecimal.valueOf(funnel.signedCount()), BigDecimal.valueOf(funnel.intentCount())),
+                    now, platformTotals);
+        }
+        // 租售比 = 平台合同租金应收(已聚合 revenue.contract_rent|finance) / 第三方回流营业额;分母 0 不产出。
+        BigDecimal rentNumerator = platformTotals.getOrDefault(REVENUE_CONTRACT_RENT + "|finance", BigDecimal.ZERO);
+        BigDecimal turnover = repository.sumThirdpartyTurnoverCents(businessDate, "leasing");
+        if (turnover != null && turnover.signum() > 0) {
+            upsertPlatform(LEASING_RENT_TO_SALES, "finance", businessDate,
+                    ratio(rentNumerator, turnover), now, platformTotals);
+        }
 
         // ⑤ 集团多项目 ETL：按 project_id 维度 upsert segment_type='project' 行。
         upsertByProject(businessDate, platformTotals, now);

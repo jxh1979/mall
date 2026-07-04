@@ -192,6 +192,12 @@ public interface AnalyticsRepository {
     AnalyticsRecords.MerchantRevenueAttributionRule upsertRevenueAttributionRule(
             AnalyticsRecords.MerchantRevenueAttributionRule rule, String updatedBy, java.time.Instant now);
 
+    /** V220 招商漏斗:线索总数/已达意向/已签约(按 created_at 落经营日窗口)。 */
+    AnalyticsRecords.LeasingFunnel leasingFunnel(java.time.LocalDate businessDate, String windowDomain);
+
+    /** V220 第三方回流营业额(integration_order_syncs 无 merchant_id → 仅平台级;租售比分母)。 */
+    java.math.BigDecimal sumThirdpartyTurnoverCents(java.time.LocalDate businessDate, String windowDomain);
+
     /** M3:更新异常检测阈值配置(经营参数页后台可调)。 */
     AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now);

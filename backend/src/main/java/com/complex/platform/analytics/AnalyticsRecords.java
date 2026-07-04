@@ -364,6 +364,10 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** V220 招商漏斗计数(经营日窗口, 按线索 created_at 归属):总线索/已达意向/已签约。比率由 ETL 派生。 */
+    public record LeasingFunnel(long leadCount, long intentCount, long signedCount) {
+    }
+
     /** M3 异常检测阈值配置(环比突变,2026-07-02 拍板:阈值后台可调)。 */
     public record AnomalyConfig(
             BigDecimal surgePct,

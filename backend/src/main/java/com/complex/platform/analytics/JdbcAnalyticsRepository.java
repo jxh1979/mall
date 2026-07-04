@@ -1224,6 +1224,34 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public AnalyticsRecords.LeasingFunnel leasingFunnel(LocalDate businessDate, String windowDomain) {
+        // V220 招商漏斗:按线索 created_at 落经营日窗口;已达意向 = 进展到 converted_to_intent 及之后阶段(含 negotiating/signed);
+        // 已签约 = signed。lost/on_hold/pending_follow_up/following_up 不计入意向。
+        return jdbcTemplate.query("""
+                SELECT COUNT(*) AS lead_count,
+                       COUNT(*) FILTER (WHERE status IN ('converted_to_intent', 'negotiating', 'signed')) AS intent_count,
+                       COUNT(*) FILTER (WHERE status = 'signed') AS signed_count
+                  FROM leasing_leads
+                 WHERE created_at >= :start AND created_at < :end
+                """, dayRange(windowDomain, businessDate), (rs, n) -> new AnalyticsRecords.LeasingFunnel(
+                rs.getLong("lead_count"), rs.getLong("intent_count"), rs.getLong("signed_count")))
+                .stream().findFirst().orElse(new AnalyticsRecords.LeasingFunnel(0, 0, 0));
+    }
+
+    @Override
+    public BigDecimal sumThirdpartyTurnoverCents(LocalDate businessDate, String windowDomain) {
+        // V220 第三方回流营业额:成功回流订单(sync_type='order', status='synced')金额合计,按 created_at 落窗。
+        // integration_order_syncs 无 merchant_id → 仅平台级(租售比分母)。
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0)
+                  FROM integration_order_syncs
+                 WHERE sync_type = 'order' AND status = 'synced'
+                   AND created_at >= :start AND created_at < :end
+                """, dayRange(windowDomain, businessDate), Long.class);
+        return BigDecimal.valueOf(total == null ? 0L : total);
+    }
+
+    @Override
     public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now) {
         jdbcTemplate.update("""

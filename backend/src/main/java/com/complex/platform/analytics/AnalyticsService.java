@@ -118,6 +118,14 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.OCC_PARKING_RATE, "leasing", "rate", true,
                     "parking occupancy is platform-scope only (not emitted when parking area is zero)"),
             new MetricCatalogEntry(DashboardAggregationJob.CONTRACT_EXPIRING_90D, "leasing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
+            // V220 招商漏斗/租售比(平台口径;integration_order_syncs 无 merchant_id → rent_to_sales 仅平台级):
+            new MetricCatalogEntry(DashboardAggregationJob.LEASING_LEAD_COUNT, "leasing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.LEASING_INTENT_CONVERSION_RATE, "leasing", "rate", true,
+                    "lead-to-intent conversion is platform-scope only (not emitted when no leads in window)"),
+            new MetricCatalogEntry(DashboardAggregationJob.LEASING_SIGNED_CONVERSION_RATE, "leasing", "rate", true,
+                    "intent-to-signed conversion is platform-scope only (not emitted when no intents in window)"),
+            new MetricCatalogEntry(DashboardAggregationJob.LEASING_RENT_TO_SALES, "finance", "rate", true,
+                    "rent-to-sales is platform-scope only (third-party turnover has no merchant_id; not emitted when turnover is zero)"),
             // S4 工单时效(平台口径,facility 窗):
             new MetricCatalogEntry(DashboardAggregationJob.WO_RESPONSE_HOURS_P50, "facility", "hours", true,
                     "response P50 is platform-scope only (not emitted when no responded orders in window)"),

@@ -952,6 +952,14 @@ class AnalyticsServiceTests {
     }
 
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
+        // V220 招商漏斗 fake:默认空漏斗 + 零营业额(比率分母 0 → ETL 不产出比率行)。
+        public AnalyticsRecords.LeasingFunnel leasingFunnel(LocalDate businessDate, String windowDomain) {
+            return new AnalyticsRecords.LeasingFunnel(0, 0, 0);
+        }
+        public BigDecimal sumThirdpartyTurnoverCents(LocalDate businessDate, String windowDomain) {
+            return BigDecimal.ZERO;
+        }
+
         // V221 归因口径规则:fake 返回空/ null → 触发聚合的 gross+net_deduct 兜底,等价于改造前硬编码口径(net 值不变)。
         public java.util.List<AnalyticsRecords.MerchantRevenueAttributionRule> listRevenueAttributionRules() {
             return java.util.List.of();
