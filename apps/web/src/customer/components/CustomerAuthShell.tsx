@@ -18,10 +18,10 @@ export function CustomerAuthShell({ error, errorDetail, loading, onLogin }: Cust
     <Layout className="app-shell auth-shell" data-testid="customer-auth-shell">
       <Content className="auth-content">
         <div className="auth-panel" data-testid="customer-login-view">
-          <div className="brand auth-brand">
+          <h1 className="brand auth-brand" style={{ margin: 0 }}>
             <ShopOutlined />
             <span>综合体客人端</span>
-          </div>
+          </h1>
           {error ? (
             <Alert
               className="status-alert"
@@ -42,10 +42,10 @@ export function CustomerAuthShell({ error, errorDetail, loading, onLogin }: Cust
           ) : null}
           <Form form={form} layout="vertical" onFinish={onLogin} data-testid="customer-login-form">
             <Form.Item name="phone" label="手机号" rules={[{ required: true, message: "请输入手机号" }]}>
-              <Input data-testid="login-phone" prefix={<MobileOutlined />} autoComplete="tel" />
+              <Input data-testid="login-phone" prefix={<MobileOutlined />} type="tel" autoComplete="tel" />
             </Form.Item>
             <Form.Item name="smsCode" label="短信验证码" rules={[{ required: true, message: "请输入验证码" }]}>
-              <Input data-testid="login-sms" prefix={<LockOutlined />} />
+              <Input data-testid="login-sms" prefix={<LockOutlined />} inputMode="numeric" autoComplete="one-time-code" />
             </Form.Item>
             <Button type="primary" htmlType="submit" loading={loading} block data-testid="login-submit">
               登录

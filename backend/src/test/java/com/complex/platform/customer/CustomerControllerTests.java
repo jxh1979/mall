@@ -227,6 +227,26 @@ class CustomerControllerTests {
     }
 
     @Test
+    void customerSessionProbeWithoutTokenReturnsNoContent() throws Exception {
+        // #7：匿名探测「是否已登录」返回 204 空会话，不再 401 污染控制台。
+        mockMvc.perform(get("/api/v1/customer/session"))
+                .andExpect(status().isNoContent());
+        // 不应查询会话（匿名短路，不触达 service）。
+        verify(service, never()).sessionInfo(any(String.class));
+    }
+
+    @Test
+    void customerSessionProbeWithTokenReturnsIdentity() throws Exception {
+        when(service.sessionInfo("cust_token_1")).thenReturn(
+                new CustomerSessionInfoResponse("cust_1", "138****5678", Instant.parse("2026-08-01T00:00:00Z")));
+        mockMvc.perform(get("/api/v1/customer/session")
+                        .header("X-Customer-Token", "cust_token_1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.customer_id").value("cust_1"))
+                .andExpect(jsonPath("$.data.masked_phone").value("138****5678"));
+    }
+
+    @Test
     void customerBarReservationRoutesUseCustomerTokenAndDoNotRequireStaffPermission() throws Exception {
         when(service.listBarReservationOptions("cust_token_1")).thenReturn(new PageResponse<>(List.of(new CustomerBarReservationOptionResponse(
                 "bar_1",

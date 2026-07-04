@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CustomerApi,
   customerPhoneLogin,
+  customerRestoreSession,
   deriveRefreshIntervalSeconds,
   normalizeRequestBody,
   unwrap,
@@ -117,5 +118,22 @@ describe("CustomerApi requests", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(customerPhoneLogin({ phone: "13800000000", smsCode: "0000" })).rejects.toThrow("账号或密码不正确");
+  });
+
+  it("restores null on anonymous 204 probe without throwing (#7)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    // 匿名探测：后端 204 空会话，前端视为「未登录正常态」返回 null（不产生 error）。
+    await expect(customerRestoreSession()).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores null (swallows) on 401 stale session (#7)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("stale", { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    // 有凭证但失效：仍不抛给调用方，回登录页（try/catch 兜底）。
+    await expect(customerRestoreSession()).resolves.toBeNull();
   });
 });

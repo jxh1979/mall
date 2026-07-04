@@ -334,6 +334,15 @@ body {
   border-bottom: 0;
 }
 
+/* 触控目标 WCAG 2.5.8 (#5)：登录页输入框/按钮 ≥44px。
+   affix-wrapper（带 prefix 图标的输入）是实际点击目标；无 prefix 的裸 .ant-input 单独兜底
+   （用 :not 排除 wrapper 内层，避免嵌套双撑高）。按钮补足桌面/非移动窄屏。 */
+.auth-shell .ant-input-affix-wrapper,
+.auth-shell .ant-input:not(.ant-input-affix-wrapper .ant-input),
+.auth-shell .ant-btn {
+  min-height: 44px;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
