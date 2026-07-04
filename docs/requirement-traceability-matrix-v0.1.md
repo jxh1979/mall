@@ -41,7 +41,7 @@
 > - **REQ-69 审批层级落点**：实际落 `supervisor_review_decisions`（V057），`admission_audits.approval_level` 表/列**不存在**；本行字段名过期。→ 字段名漂移（R5）。
 > - **REQ-74/75 终端开关后端拒绝**：除 kiosk 一处外，finance/bar/ticketing/amusement/inventory 业务接口前**无开关校验**，可绕过；scope 仅产出 global/device 两值。→ **部分覆盖（R5）**。
 > - **REQ-03/73 第三方团购回流**：无 `channel_ticket_mappings`/`external_order_no`/导入端点，"两类订单"只承接自营单。→ **部分覆盖（R5，待业务确认是否 P0）**。
-> - **REQ-81/82 经营看板指标**：analytics 直读迁移种子（手写 INSERT，自标 manual baseline），无 ETL/聚合；前端总览 KPI 字段名与后端 DTO 零交集全渲染 0；analytics 包 0 处 `currentMerchantScope`（无商户行级隔离）。→ **部分覆盖（R5）**。
+> - **REQ-81/82 经营看板指标 [历史 R5，已被 R7/V070 取代]**：~~analytics 直读迁移种子（手写 INSERT，自标 manual baseline），无 ETL/聚合；前端总览 KPI 字段名与后端 DTO 零交集全渲染 0；analytics 包 0 处 `currentMerchantScope`（无商户行级隔离）。→ 部分覆盖（R5）。~~ **【已取代】** 本条为 2026-06-18 R5 旧结论，已被 R7 上修（第 20 行）+ V070 落地推翻，勿再当当前事实。**当前闭环状态**：`V070__t12_dashboard_etl_upsert_key.sql` 起 `DashboardAggregationJob` 按七类指标从真实业务表聚合（`projection_method='etl_aggregate'` upsert 到 `analytics_business_metric_snapshots`，唯一键 `uq_analytics_business_metric_snapshots_etl_key`），替换手写种子；analytics 快照表已带 `project_id`/`merchant_id` 且经 R11 补登（第 3 行）扩展 scoped 读通道（`group-overview?groupBy=project|entity`），商户级拆分由 MetricCatalog 逐指标标注。仅 `ticket_orders`/`ticket_refunds` 等源表无 merchant_id 的售票指标保持无商户维（有意保留，见 REQ-81 表格行）；**平台总览为有意的全局通道**，非隔离缺失。详见下方 REQ-81/REQ-82 表格行。
 >
 > **R5 业务裁决回填（2026-06-18，用户对 10 项待确认问题的拍板，作为正式验收口径来源）**：
 > 1. **二维码防伪（REQ-06/08/09）**：P0=折中——哈希 + 核销端强制 30/60s 刷新窗口校验 + nonce 防重放（截图窗口内失效）；HMAC 签名版本化降 P1。
