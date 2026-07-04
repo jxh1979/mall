@@ -6,7 +6,7 @@ const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:80
 export default defineConfig(({ mode }) => ({
   // 子路径部署：构建产物落在 /complex/ 前缀下（门户 portal.py 把 /complex/ 代理到 preview）；
   // dev（mode!=='serve'）仍在根路径，方便本地直接调试。
-  base: mode === "production" ? "/complex/" : "/",
+  base: "/",
   plugins: [react()],
   server: {
     proxy: {

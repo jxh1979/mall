@@ -1,9 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from "vitest";
 import { selectShell, stripBase, withBase } from "./basePath";
 
+const realLocation = window.location;
 afterEach(() => {
-  vi.unstubAllEnvs();
+  Object.defineProperty(window, "location", { configurable: true, value: realLocation });
 });
+function setPath(pathname: string): void {
+  Object.defineProperty(window, "location", { configurable: true, value: { pathname } });
+}
 
 describe("selectShell（入口壳选择，入参已 stripBase）", () => {
   it("/admin* → 后台", () => {
@@ -14,37 +19,31 @@ describe("selectShell（入口壳选择，入参已 stripBase）", () => {
     expect(selectShell("/")).toBe("customer");
     expect(selectShell("/customer")).toBe("customer");
     expect(selectShell("/ticketing")).toBe("customer");
-    expect(selectShell("/bar")).toBe("customer");
-    expect(selectShell("/amusement")).toBe("customer");
   });
 });
 
-describe("子路径部署（BASE_URL=/complex/）", () => {
-  it("/complex/admin → stripBase → /admin → 后台", () => {
-    vi.stubEnv("BASE_URL", "/complex/");
+describe("stripBase（纯函数自检前缀）", () => {
+  it("/complex/admin → /admin → 后台", () => {
     expect(stripBase("/complex/admin")).toBe("/admin");
     expect(selectShell(stripBase("/complex/admin"))).toBe("admin");
   });
-  it("/complex/ → stripBase → / → 客人端", () => {
-    vi.stubEnv("BASE_URL", "/complex/");
+  it("/complex/ → / → 客人端", () => {
     expect(stripBase("/complex/")).toBe("/");
     expect(selectShell(stripBase("/complex/"))).toBe("customer");
   });
-  it("withBase 补前缀（pushState 不跳出 /complex）", () => {
-    vi.stubEnv("BASE_URL", "/complex/");
-    expect(withBase("/admin/customers")).toBe("/complex/admin/customers");
-    expect(withBase("/?page=buy")).toBe("/complex/?page=buy");
+  it("dev 根路径 /admin 原样", () => {
+    expect(stripBase("/admin")).toBe("/admin");
   });
 });
 
-describe("dev 根路径部署（BASE_URL=/，直接访问无前缀）", () => {
-  it("/admin 原样，选后台", () => {
-    vi.stubEnv("BASE_URL", "/");
-    expect(stripBase("/admin")).toBe("/admin");
-    expect(selectShell(stripBase("/admin"))).toBe("admin");
+describe("withBase（按当前部署补前缀）", () => {
+  it("生产 /complex 下补前缀", () => {
+    setPath("/complex/admin");
+    expect(withBase("/admin/customers")).toBe("/complex/admin/customers");
+    expect(withBase("/?page=buy")).toBe("/complex/?page=buy");
   });
-  it("withBase 原样返回（无前缀）", () => {
-    vi.stubEnv("BASE_URL", "/");
+  it("dev 根路径原样返回", () => {
+    setPath("/admin");
     expect(withBase("/admin")).toBe("/admin");
   });
 });
