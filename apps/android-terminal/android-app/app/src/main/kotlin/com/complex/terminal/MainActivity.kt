@@ -31,8 +31,8 @@ import kotlinx.serialization.json.JsonPrimitive
  * 网络调用一律在后台线程（kotlin.concurrent.thread）执行，回到 UI 线程刷新；
  * 失败/离线均给出中文提示。
  *
- * 占位说明：
- *   - 扫码：未接真机摄像头/扫码 SDK，现场以「文本输入 credential」代替（输入框）。
+ * 实现说明：
+ *   - 扫码：ZXing 内置扫码（IntentIntegrator）调起真机相机，结果回填输入框；无相机时可手动输入 credential 兜底。
  *   - Keystore：设备公钥/指纹取自 AndroidKeyStore（EC P-256，私钥不可导出），见 DeviceKeystore。
  */
 class MainActivity : Activity() {
@@ -226,7 +226,7 @@ class MainActivity : Activity() {
       primaryButton("酒吧点酒下单 / 支付") { showBarOrder() },
       primaryButton("游乐检修提交 / 主管确认") { showMaintenance() },
       secondaryButton("同步待提交任务") { syncTasksAction(info) },
-      secondaryButton("员工设备凭证（占位）") { showStaffDevice() },
+      secondaryButton("员工设备凭证") { showStaffDevice() },
       secondaryButton("票务核销冲正") { showReverse() },
       statusText("—— 员工自有手机(BYOD 一期) ——"),
       primaryButton("公司公告") { showStaffNotices() },
@@ -264,7 +264,7 @@ class MainActivity : Activity() {
 
   // ---------------------------------------------------------------------------
   // 屏 ④ 门票/权益核销 -> preview -> verify
-  // 扫码占位：以文本输入 credential 代替。
+  // 扫码读取 credential（ZXing 相机），无相机时手动输入兜底。
   // ---------------------------------------------------------------------------
   private fun showTicketVerify() {
     val credential = editText("核销凭证（扫码或手动输入）")
@@ -312,7 +312,7 @@ class MainActivity : Activity() {
   // 屏 ⑤ 游乐核销 -> amusementVerifyOnline
   // ---------------------------------------------------------------------------
   private fun showAmusementVerify() {
-    val credential = editText("游乐凭证（扫码占位：手动输入 credential）")
+    val credential = editText("游乐凭证（扫码或手动输入 credential）")
     val sessionId = editText("场次 session_id（可选）")
     val status = statusText("游乐入口在线核销")
 
