@@ -165,7 +165,8 @@ public class DashboardAggregationJob {
         // 单列 revenue.bar_refund（不改写 revenue.bar 实收口径），net 派生时扣减；免单 waiver 不计入（已在更低结算实收体现）。
         upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate, "bar"), now, platformTotals);
 
-        // RC1②：收入·自营售票退款（ticket_refunds 无 merchant_id → 仅平台口径，与 revenue.ticket 同口径）。
+        // RC1②：收入·自营售票退款展示行 REVENUE_TICKET_REFUND 取平台退款总额（sumTicketRefundCents，平台口径）；
+        //        商户维退款分量见下方 ticketRefundByMerchant(V220 直连) 并入商户行级 net。
         // S0 双窗：net 全部分量按 platform 窗（对齐基准 04:00）；展示键各按业务域窗。
         BigDecimal ticketRevenue = nonNull(repository.sumTicketRevenueCents(businessDate, "platform"));
         BigDecimal ticketRefund = nonNull(repository.sumTicketRefundCents(businessDate, "platform"));
