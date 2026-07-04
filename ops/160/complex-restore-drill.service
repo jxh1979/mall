@@ -1,0 +1,10 @@
+[Unit]
+Description=Complex restore drill (weekly, verifies latest daily backup is restorable)
+Documentation=file:///home/james/complex-management/ops/160/README-backup-schedule.md
+ConditionPathIsMountPoint=/mnt/complex-nas-backup
+
+[Service]
+Type=oneshot
+ExecStart=/opt/complex/scripts/complex-restore-drill-guard.sh
+Nice=10
+IOSchedulingClass=idle
