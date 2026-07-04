@@ -1,5 +1,7 @@
 # 集团治理重建 PRD（V1.0·补断点）
 
+> 2026-07-04 逻辑一致性修订：①澄清角色分级——平台/集团级角色可跨项目公司下钻（requirePlatformScope 放行），项目公司管理员限本项目，商户用户 fail-closed 403，消除「集团下钻」与「项目公司级隔离」的表述冲突；②高危权限审批开关 `access.grant_approval.enabled` 据代码校正为**默认开**（原文「默认关」与代码不符）；③57 个高危权限码的 risk_level/requires_approval 改「后台可配、V170 预置不锁死」口径；④对标红点阈值据代码（V218）校正为「后台可配，默认 0.20；analytics_ai_thresholds」，非固定值。
+
 > 生成：2026-06-27。依据：M1 需求采集 §7 + `platform-governance-map-for-operations-v0.1.html`「综合体和集团 / 权限规则」+ V169-V170 迁移 + `com.complex.platform.access` 本轮新增角色装配/授权审批 + `analytics/group-overview` 代码。本文向业务 HTML §十及治理 HTML 对齐；冲突以业务 HTML 为最终解释权，技术字段以真实 DB CHECK 和 Controller 为准。
 > 重建动因：补断点非绿地：现有 RBAC/SupervisorReview 地基不动，只重建 V169-170 的装配闭环+审批激活+下钻。现有权限模板、临时授权、有效权限计算、SupervisorReview 三档审批继续复用；本轮只补“职位 ↔ 模板 ↔ 角色自动适配”“高危授权先审批再生效”“集团按职位模板可见的下钻对标”三处断点。
 
@@ -7,7 +9,7 @@
 - 不重写 RBAC：继续复用 `permissions`、`roles`、`role_permissions`、`user_roles`、`permission_templates`、`permission_template_items`、`permission_template_applications`、`temporary_permission_grants`。
 - 不重写主管复核：高危授权审批复用 `SupervisorReviewService` 与 `supervisor_review_decisions` 的三档审批能力，审批等级仍是 `one_level_up` / `two_levels_up` / `top_authority`。
 - 本轮新增的是治理闭环，不是新权限模型：平台管理员配置岗位模板，HR/平台按用户职位定岗，系统自动授予角色并套模板；高危权限授出前可被审批闸拦住。
-- 集团下钻仍遵守综合体级隔离。`GET /api/v1/analytics/group-overview` 除 `analytics.group.view` 外，还调用 `requirePlatformScope()`，商户 scope 调用 fail-closed。
+- 集团下钻与项目公司级隔离按角色分级共存，不冲突：**平台/集团级角色**（`requirePlatformScope()` 放行者）可跨项目公司汇总下钻；**项目公司管理员**只看本项目公司；**商户用户** scope 一律 fail-closed 403。`GET /api/v1/analytics/group-overview` 除校验 `analytics.group.view` 外，还调用 `requirePlatformScope()`，商户 scope 调用 fail-closed（返回 403）。即「集团下钻」只对平台/集团级角色开放，对项目公司/商户仍按其 scope 收敛。
 - 不做：多套审批流引擎、按业务线重造授权模型、把职位等同于权限。职位只驱动默认角色/模板，最终有效权限仍由 RBAC + 临时授权 + 显式拒绝计算。
 
 ## 1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）
@@ -16,7 +18,7 @@
 | 职位角色模板 `position_role_templates` | `status` | `active` / `inactive` | 活跃模板参与定岗匹配；同组织、职位、职级仅允许一个活跃模板 |
 | 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` | DB CHECK 预留 4 类；当前 `AccessService` 实际支持前三类，`role_permission` 服务层未开放 |
 | 授权申请 `access_grant_requests` | `status` | `pending` / `applied` / `rejected` | 待审批 / 已应用 / 已驳回 |
-| 权限定义 `permissions` | `requires_approval` | `true` / `false` | 高危权限审批开关字段；V170 把一批高危权限置为 `true` |
+| 权限定义 `permissions` | `requires_approval` | `true` / `false` | 高危权限审批开关字段（后台可配，逐权限码可改）；V170 预置把一批高危权限置为 `true`，数值可后台调整 |
 | 权限定义 `permissions` | `risk_level` | 现有表无 CHECK；服务按 `critical` / `high` / 其他分档 | `critical` → l3 / 最高审批；`high` → l2 / 上两级；其他 → l1 / 上一级 |
 | 临时授权 `temporary_permission_grants` | `status` | 现有表无 CHECK；V170 默认写 `active` | 到期由有效权限查询按 `expires_at` 过滤；撤销写 `revoked_by/revoked_at`，单次授权写 `single_use/consumed/consumed_at` |
 | 集团总览 API 参数 | `groupBy` | `project` / `entity` | Controller/Service 校验；非法返回 `VALIDATION_FAILED` |
@@ -51,11 +53,11 @@
 
 ## 3. 高危授权审批（V170）
 **业务规则**
-- 审批总开关：`access.grant_approval.enabled=false` 默认关。关闭时直接授权仍按提权闸和跨组织闸执行，但不会因 `requires_approval=true` 自动阻断；打开后，高危权限必须先走授权申请。
-- V170 激活高危权限审批字段：按迁移 `high_risk` 清单（四类，57 个权限码）对资金/核销/退款/调账类、提权或跨商户跨综合体类、敏感数据类、高危业务操作类权限批量设置 `requires_approval=true`；清单以 V170 迁移为准，不从业务说明另造权限数量。
+- 审批总开关：`access.grant_approval.enabled` **默认开（`:true`，以代码 `AccessService` 默认值为准）**，后台可配。开启时含 `requires_approval=true` 权限的直接授权会被 `GRANT_REQUIRES_APPROVAL` 阻断，高危权限必须先走授权申请（§3 流程）；若后台关闭，直接授权仍按提权闸和跨组织闸执行，但不再因 `requires_approval=true` 自动阻断。（注：历史文档曾记「默认关」，与当前代码不符，2026-07-04 据代码校正。）
+- V170 预置高危权限审批字段：按迁移 `high_risk` 清单（四类，预置 57 个权限码）对资金/核销/退款/调账类、提权或跨商户跨项目公司类、敏感数据类、高危业务操作类权限批量设置 `requires_approval=true`。**该清单为 P0 预置基线、非锁死：`permissions.risk_level` 与 `requires_approval` 均为后台可配字段，可逐权限码增删改（配置表 `permissions`）；V170 只给初值，不硬编码为不可变策略。**清单初值以 V170 迁移为准，不从业务说明另造权限数量。
 - 四类高危覆盖口径：
   - 资金/核销/退款/调账：如 `finance.ar_ap.manage`、`finance.refund.create`、`finance.property_fee.manage`、`bar.bill.adjust`、`customer.stored_value.refund`、`inventory.stock.adjust`。
-  - 提权或跨商户跨综合体：如 `access.permission_template.manage/apply/revoke`、`access.role.manage`、`access.role.assign`、`access.temporary_grant.create/revoke`、`access.grant_request.review`、`governance.supervisor_review.approve`、`governance.project.manage`、`contract.approve.gm`。
+  - 提权或跨商户跨项目公司：如 `access.permission_template.manage/apply/revoke`、`access.role.manage`、`access.role.assign`、`access.temporary_grant.create/revoke`、`access.grant_request.review`、`governance.supervisor_review.approve`、`governance.project.manage`、`contract.approve.gm`。
   - 敏感数据：如 `bar.product.view`、`bar.product.manage`（成本价/内部结算价可见或维护）。
   - 高危业务：如 `bar.product.sold_out`、`bar.bill.reopen`、`bar.order_item.void`、`bar.saved_bottle.manage`、`ticket.verify.reverse`、`amusement.verification.override`、`amusement.over_capacity_policy.configure`。
 - 申请类型当前服务支持三类：`user_role`、`user_position`、`temporary_permission`。DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支。
@@ -81,12 +83,12 @@
 
 ## 4. 集团下钻对标
 **业务规则**
-- 集团视图能看什么由职位模板最终授出的权限决定；只有拥有 `analytics.group.view` 的职位/角色/临时授权可见集团总览。
+- 集团视图能看什么由职位模板最终授出的权限决定；只有拥有 `analytics.group.view` **且通过 `requirePlatformScope()`（平台/集团级角色）**的职位/角色/临时授权可见集团总览。项目公司管理员即便持有该权限，也因 scope 收敛到本项目、无法跨项目公司下钻；商户用户 fail-closed 403。
 - 端点 `GET /api/v1/analytics/group-overview` 接受 `groupBy=project|entity`。`project` 按综合体项目聚合；`entity` 通过 `projects` 关联 `merchants.business_entity_id` 派生，缺主体归 `entity_unassigned`。
 - Controller 同时校验 `analytics.group.view` 和 `requirePlatformScope()`；即使某商户用户误拿到权限，也会因 merchant scope 被拒绝。
 - 指标目录来自真实 ETL 快照：`revenue.net`、`revenue.ticket`、`revenue.bar`、`traffic.amusement`、`verify.done`、`risk.pending_review`；商户数由当日 merchant ETL 快照去重统计。
 - 优先读取 `analytics_business_metric_snapshots(segment_type='project')`；没有 project 口径快照时回退平台口径单行 `project_1/综合体（默认）`，不伪造多项目。
-- 对标红点阈值固定为 `0.20`：项目/主体指标值低于集团均值的 80%（`value < average * (1 - 0.20)`）时，返回 `belowBenchmarkMetrics` 并在前端显示红点。
+- 对标红点阈值**后台可配，默认 `0.20`**（配置表 `analytics_ai_thresholds.benchmark_deviation`，V218 迁入；代码读不到时以 `0.20` 兜底）：项目/主体指标值低于集团均值的 `(1 - 阈值)` 倍（默认 80%，`value < average * (1 - deviation)`）时，返回 `belowBenchmarkMetrics` 并在前端显示红点。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/analytics/group-overview?groupBy=project`
