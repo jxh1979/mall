@@ -1,5 +1,7 @@
 # 招商获客业务域 PRD（V1.0·据需求重建）
 
+> 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 权威ER（四类主体绑定落点=`business_entity_bindings`，非 merchants 三列）+ 明确「后续可拆」的可拆边界与不强一致口径。
+>
 > 生成：2026-06-25。依据：M1 需求采集（`complex-m1-requirements-20260625.md` §1）+ 三份业务 HTML §10（线索/意向/品牌库枚举）+ PGM #merchant「招商前链」。本文是推倒重建（feat/real-estate-rebuild-from-requirements）招商域的产品基线，向业务 HTML 对齐；冲突以业务 HTML 为最终解释权。
 > 重建动因：旧骨架 V164（leasing_leads/offers）系统性简化——线索 5 态≠HTML 7 态、意向 5 阶段被压进报价状态机、品牌库/跟进表全缺。本文据用户需求重建，纠正之。
 
@@ -40,7 +42,10 @@
 ## 6. 线索→正式商户档案（签约转换）
 - 触发：意向「待签约」→ 签约成功。
 - **自动带入字段（全部）**：联系人 + 联系方式；意向业态 + 面积 + 位置；报价租金条款；跟进历史记录。
-- **四类主体**：默认同一公司——转商户时录 1 个主体，经营对象/运营主体/合同主体/结算主体四类**都指向它**；**后续可拆**成不同公司（复用现有 business_entity_bindings 唯一绑定）。
+- **四类主体（口径以 `merchant-space-contract-model-v0.1.md` 权威ER 为准）**：四类=经营对象（商户自身）/ 运营主体 / 合同主体 / 结算主体；三个主体统一落在 `business_entities`（`entity_role` 区分，无独立「项目公司/SPV」表）。
+  - **绑定权威载体 = `business_entity_bindings`（`binding_type=four_party`），每商户至多一条 `active` 绑定**（`uq_business_entity_bindings_active_merchant`；重复激活报 `409 ACTIVE_BINDING_EXISTS`）。转商户初期三主体可都指向同一 `business_entity`。
+  - **可拆边界**：「后续可拆」= 新建一条 active 绑定替换旧绑定，指向不同 运营/合同/结算 主体；**不是**在 `merchants` 的 `*_entity_id` 快照列上改写。`merchants.business_entity_id/contract_entity_id/settlement_entity_id` 仅为档案快照。
+  - 合同签署时另在 `contracts.contract_subject_id/operation_subject_id/settlement_subject_id` 固化该合同主体快照，与商户当前 active 绑定**可不一致**（无外键强绑），勿假定二者恒等。
 - 转换后线索状态→已签约，生成正式 merchant 档案，喂入合同环（合同 draft 引用该商户 + 报价条款）。
 
 ## 7. 权限点（最小颗粒，复用现有权限体系）
