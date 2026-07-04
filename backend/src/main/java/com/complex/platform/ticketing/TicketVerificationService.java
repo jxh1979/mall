@@ -452,6 +452,20 @@ public class TicketVerificationService {
             long[] units = sumOrderUnits(updated.orderId());
             eventPublisher.publishEvent(new PointsConfirmRequestedEvent(updated.orderId(), units[0], units[1]));
         }
+        // 结算重构批１：核销成功 → 发 settlement.settled，settlement 域 AFTER_COMMIT 双写 settlement_transactions
+        // （核销结算逐笔流水,观察期与旧 allocated 快照口径对账）。异步、不属核销主链——下游失败不回滚核销。
+        eventPublisher.publishEvent(new SettlementSettledEvent(
+                updated.id(),
+                updated.orderId(),
+                updated.ticketTypeId(),
+                updated.entitlementType(),
+                updated.merchantId(),
+                updated.totalTimes(),
+                updated.usedTimes(),
+                updated.numPeople(),
+                updated.allocatedRevenueCent(),
+                updated.validTo()
+        ));
         if (credential != null) {
             repository.saveTicketCredential(new TicketCredentialRecord(
                     credential.id(),
