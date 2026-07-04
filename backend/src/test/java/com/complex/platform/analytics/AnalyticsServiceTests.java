@@ -1177,6 +1177,16 @@ class AnalyticsServiceTests {
         }
 
         @Override
+        public AnalyticsRecords.BusinessReviewLockRecord saveReviewLock(AnalyticsRecords.BusinessReviewLockRecord lock) {
+            return lock;
+        }
+
+        @Override
+        public List<AnalyticsRecords.BusinessReviewLockRecord> listReviewLocks(String projectScope) {
+            return List.of();
+        }
+
+        @Override
         public RiskAlertRecord saveRiskAlert(RiskAlertRecord alert) {
             riskAlertSaveCount += 1;
             RiskAlertRecord stored = overrideSavedRiskLevel == null

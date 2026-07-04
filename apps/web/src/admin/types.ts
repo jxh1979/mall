@@ -594,6 +594,17 @@ export type BusinessMetricSnapshotRow = {
   createdAt?: string;
 };
 
+export type BusinessReviewLockRow = {
+  id?: string;
+  projectId?: string | null;
+  domain?: string;
+  operatorNote?: string;
+  metricCount?: number;
+  lockedBy?: string | null;
+  lockedAt?: string;
+  idempotencyKey?: string;
+};
+
 export type MetricDefinitionRow = {
   metricKey: string;
   name?: string;

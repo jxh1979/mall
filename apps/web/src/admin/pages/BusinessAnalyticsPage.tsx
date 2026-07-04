@@ -5,7 +5,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { Sparkline, MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
-import type { AdminPageProps, BusinessMetricSnapshotRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
+import type { AdminPageProps, BusinessMetricSnapshotRow, BusinessReviewLockRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
 import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
@@ -22,6 +22,9 @@ const TEXT = {
   allDomains: "全部",
   lockNote: "复盘说明",
   lockSnapshot: "锁定复盘快照",
+  lockedTitle: "已锁定复盘",
+  lockedEmpty: "暂无锁定记录",
+  locking: "锁定中…",
   empty: "暂无经营指标",
   boundary: "经营分析用于管理复盘和趋势判断；敏感财务仍按角色权限脱敏，AI 预测和外部 BI 生产口径不在本页伪造。",
   metricKey: "指标",
@@ -73,21 +76,26 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
   const [formError, setFormError] = React.useState("");
   // T4.3 分时段客流：traffic-hourly 端点的 24 桶（hour/count）。
   const [hourly, setHourly] = React.useState<Array<{ hour: number; count: number }>>([]);
+  // V216 真落库：加载时读回已锁定复盘（刷新/换人后仍可见），锁定按钮走后端接口。
+  const [reviewLocks, setReviewLocks] = React.useState<BusinessReviewLockRow[]>([]);
+  const [locking, setLocking] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
       // M3(2026-07-02 拍板):定义/异常两块接真管道——定义=代码指标目录每日同步(单一事实源投影),
       // 异常=日环比突变检测(阈值经营参数页可调)。演示种子已随 V207 清除。
-      const [snapshotRows, hourlyResp, definitionRows, anomalyRows] = await Promise.all([
+      const [snapshotRows, hourlyResp, definitionRows, anomalyRows, lockRows] = await Promise.all([
         api.get<BusinessMetricSnapshotRow[]>("/api/v1/analytics/business-metric-snapshots"),
         api.get<{ businessDate?: string; buckets?: Array<{ hour: number; count: number }> }>("/api/v1/analytics/traffic-hourly"),
         api.get<MetricDefinitionRow[]>("/api/v1/analytics/metric-definitions"),
         api.get<MetricAnomalyRow[]>("/api/v1/analytics/metric-anomalies"),
+        api.get<BusinessReviewLockRow[]>("/api/v1/analytics/review-locks"),
       ]);
       setSnapshots(snapshotRows);
       setHourly(hourlyResp?.buckets ?? []);
       setDefinitions(definitionRows ?? []);
       setAnomalies(anomalyRows ?? []);
+      setReviewLocks(lockRows ?? []);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -137,29 +145,45 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
     null,
   );
 
-  function lockSnapshot() {
+  async function lockSnapshot() {
     if (!lockNote.trim()) {
       setFormError("复盘说明不能为空。");
       return;
     }
     setFormError("");
     setGlobalError(null);
-    setActionResult({
-      action: "business_snapshot_locked",
-      audit: "management_review_ready",
-      operatorNote: lockNote,
+    // V216：真落库——project_id 与操作人由后端按 token 派生，前端只带业务域/说明/指标数快照。
+    const request = {
+      idempotencyKey: `review-lock-${Date.now()}`,
       domain: domainFilter,
+      operatorNote: lockNote,
       metricCount: filteredSnapshots.length,
-      anomalyCount: null,
-      evidenceAttachmentIds: ["att-business-analytics-lock"],
-    });
+    };
+    setLocking(true);
+    try {
+      const saved = await api.post<BusinessReviewLockRow>("/api/v1/analytics/review-locks", request);
+      setActionResult({
+        action: "business_snapshot_locked",
+        audit: "analytics.review.locked",
+        operatorNote: lockNote,
+        domain: domainFilter,
+        metricCount: filteredSnapshots.length,
+        anomalyCount: null,
+        result: saved,
+      });
+      await reload();
+    } catch (error) {
+      setGlobalError(error instanceof Error ? error.message : "锁定复盘失败");
+    } finally {
+      setLocking(false);
+    }
   }
 
   return (
     <section data-testid="business-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="business-analytics-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="analytics.business_metric_snapshot.viewed / local.management_review_ready" />
+      <AuditTrailHint event="analytics.business_metric_snapshot.viewed / analytics.review.locked" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {snapshots.length === 0 ? <div className="admin-state admin-empty" data-testid="business-analytics-empty">{TEXT.empty}</div> : (
           <>
@@ -175,10 +199,27 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
               <label>{TEXT.lockNote}<input data-testid="business-analytics-lock-note" value={lockNote} onChange={(event) => setLockNote(event.target.value)} /></label>
             </div>
             <div className="admin-form-row">
-              <button type="button" data-testid="business-analytics-lock-snapshot" onClick={lockSnapshot}>{TEXT.lockSnapshot}</button>
+              <button type="button" data-testid="business-analytics-lock-snapshot" onClick={lockSnapshot} disabled={locking}>{locking ? TEXT.locking : TEXT.lockSnapshot}</button>
               <span className="admin-muted-action" data-testid="business-analytics-boundary">{TEXT.boundary}</span>
             </div>
             {formError ? <div data-testid="business-analytics-form-error" className="admin-inline-error">{formError}</div> : null}
+
+            <div className="admin-chart-panel" data-testid="business-analytics-review-locks">
+              <div className="admin-chart-block">
+                <span>{TEXT.lockedTitle}（{reviewLocks.length}）</span>
+                {reviewLocks.length === 0 ? (
+                  <small className="admin-muted-action" data-testid="business-analytics-review-locks-empty">{TEXT.lockedEmpty}</small>
+                ) : (
+                  <ul className="admin-plain-list" data-testid="business-analytics-review-locks-list">
+                    {reviewLocks.slice(0, 20).map((lock) => (
+                      <li key={lock.id} data-testid={`business-analytics-review-lock-${lock.id}`}>
+                        {(lock.lockedAt ?? "").replace("T", " ").slice(0, 16)} · {lock.domain === "all" ? TEXT.allDomains : formatMetricDomain(lock.domain ?? "")} · {lock.metricCount ?? 0} 项 · {lock.operatorNote}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
 
             {series.length > 0 ? (
               <div className="admin-chart-panel" data-testid="business-analytics-charts">

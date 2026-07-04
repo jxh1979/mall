@@ -338,6 +338,22 @@ public class AnalyticsController {
         return ApiResponse.ok(service.resolveRiskAlert(id, request));
     }
 
+    @GetMapping("/review-locks")
+    public ApiResponse<PageResponse<AnalyticsRecords.BusinessReviewLockRecord>> listReviewLocks() {
+        // 复盘锁定=项目级隔离：仅校验写权限，scope 由 token 派生（service 层过滤）；
+        // 不加 requirePlatformScope（那会拒绝合法的项目主管只看/只锁本综合体）。
+        authorizationService.requirePermission("analytics.review.lock");
+        return ApiResponse.ok(service.listReviewLocks());
+    }
+
+    @PostMapping("/review-locks")
+    public ApiResponse<AnalyticsRecords.BusinessReviewLockRecord> createReviewLock(
+            @RequestBody(required = false) @jakarta.validation.Valid BusinessReviewLockRequest request) {
+        authorizationService.requirePermission("analytics.review.lock");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createReviewLock(request));
+    }
+
     @GetMapping("/risk-rules")
     public ApiResponse<PageResponse<RiskRuleRecord>> listRiskRules() {
         authorizationService.requirePermission("analytics.risk_alert.view");

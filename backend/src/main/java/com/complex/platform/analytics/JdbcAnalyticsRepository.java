@@ -10,6 +10,7 @@ import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord
 import com.complex.platform.analytics.AnalyticsRecords.MerchantSummaryRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricAnomalyRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricDefinitionRecord;
+import com.complex.platform.analytics.AnalyticsRecords.BusinessReviewLockRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RiskAlertRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RiskRuleRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RobotMetricRecord;
@@ -1784,5 +1785,54 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("analytics payload is unreadable", exception);
         }
+    }
+
+    @Override
+    public BusinessReviewLockRecord saveReviewLock(BusinessReviewLockRecord lock) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("id", lock.id())
+                .addValue("project_id", lock.projectId())
+                .addValue("domain", lock.domain())
+                .addValue("operator_note", lock.operatorNote())
+                .addValue("metric_count", lock.metricCount())
+                .addValue("locked_by", lock.lockedBy())
+                .addValue("locked_at", java.sql.Timestamp.from(lock.lockedAt()))
+                .addValue("idempotency_key", lock.idempotencyKey());
+        jdbcTemplate.update("""
+                INSERT INTO business_review_locks (
+                    id, project_id, domain, operator_note, metric_count,
+                    locked_by, locked_at, idempotency_key
+                )
+                VALUES (
+                    :id, :project_id, :domain, :operator_note, :metric_count,
+                    :locked_by, :locked_at, :idempotency_key
+                )
+                """, params);
+        return lock;
+    }
+
+    @Override
+    public List<BusinessReviewLockRecord> listReviewLocks(String projectScope) {
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_scope", projectScope);
+        return jdbcTemplate.query("""
+                SELECT id, project_id, domain, operator_note, metric_count,
+                       locked_by, locked_at, idempotency_key
+                  FROM business_review_locks
+                 WHERE (:project_scope::text IS NULL OR project_id = :project_scope)
+                 ORDER BY locked_at DESC, id
+                """, params, this::mapReviewLock);
+    }
+
+    private BusinessReviewLockRecord mapReviewLock(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new BusinessReviewLockRecord(
+                resultSet.getString("id"),
+                resultSet.getString("project_id"),
+                resultSet.getString("domain"),
+                resultSet.getString("operator_note"),
+                resultSet.getInt("metric_count"),
+                resultSet.getString("locked_by"),
+                instant(resultSet, "locked_at"),
+                resultSet.getString("idempotency_key")
+        );
     }
 }

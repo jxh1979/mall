@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 593 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 595 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -80,6 +80,8 @@
 | analytics | `GET` | `/api/v1/analytics/risk-alerts` | `listRiskAlerts` | 风险预警 | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `risk_alert.viewed` | `risk_alert.view_failed` |
 | analytics | `POST` | `/api/v1/analytics/risk-alerts` | `createRiskAlert` | 创建风险alert | `RiskAlertRequest` | `analytics.risk_alert.manage` | `staff-token` | `project` | web | 是 | `risk_alert.created` | `risk_alert.create_failed` |
 | analytics | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | `resolveRiskAlert` | 处理风险alert | `RiskAlertStatusChangeRequest` | `analytics.risk_alert.manage` | `staff-token` | `project` | web | 是 | `analytics.risk_alert.resolved` | `analytics.risk_alert.resolved_failed` |
+| analytics | `GET` | `/api/v1/analytics/review-locks` | `listReviewLocks` | 经营复盘锁定记录 | `-` | `analytics.review.lock` | `staff-token` | `project` | web | 否 | `analytics.review_lock.viewed` | `analytics.review_lock.viewed_failed` |
+| analytics | `POST` | `/api/v1/analytics/review-locks` | `createReviewLock` | 锁定经营复盘快照 | `BusinessReviewLockRequest` | `analytics.review.lock` | `staff-token` | `project` | web | 是 | `analytics.review.locked` | `analytics.review.lock_failed` |
 | analytics | `GET` | `/api/v1/analytics/risk-rules` | `listRiskRules` | 查询风险规则 | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `analytics.risk_rule.viewed` | `analytics.risk_rule.viewed_failed` |
 | analytics | `GET` | `/api/v1/analytics/robot` | `getRobotAnalytics` | 获取机器人经营分析 | `-` | `analytics.dashboard.view` | `staff-token` | `project` | web | 否 | `analytics.robot.viewed` | `analytics.robot.viewed_failed` |
 | analytics | `GET` | `/api/v1/analytics/staff-service-score` | `listStaffServiceScores` | 查询员工服务scores | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `analytics.staff_service_score.viewed` | `analytics.staff_service_score.viewed_failed` |
@@ -681,5 +683,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 593 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 595 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |
