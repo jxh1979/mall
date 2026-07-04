@@ -98,6 +98,7 @@ SMB 密码不得写入本文。推荐由 IT 在 160 写入仅当前运维用户�
 | 备份证据 | `complex-backup.sh` 在 `REQUIRE_NAS_BACKUP_SYNC=true` 下生成 `.tar.gz` 与 `.sha256` 并同步到 NAS |
 | 恢复证据 | `complex-restore-drill.sh latest` 输出 `restore.drill_completed`，临时库恢复后被删除 |
 | 台账证据 | 生产前置台账记录责任人、credential_ref、到期提醒、演练报告链接和失败补偿动作 |
+| 自动化验证 | `npm run verify:nas-smb-mount-evidence` 校验实时挂载(findmnt)、读写测试与 `docs/production-readiness-evidence/nas-smb-mount-latest.json` 证据一致,全绿方可交付 |
 
 ## 6.3 历史 NAS 验证证据与当前漂移状态
 
