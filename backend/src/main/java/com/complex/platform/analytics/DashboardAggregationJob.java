@@ -550,6 +550,12 @@ public class DashboardAggregationJob {
         merchantIds.addAll(ticketAllocatedByMerchant.keySet());
         merchantIds.addAll(ticketRefundByMerchant.keySet());
         merchantIds.addAll(contractRentByMerchant.keySet());
+        // V221 去硬编码:各收入来源(ticket/bar/contract_rent)的计入方式由 merchant_revenue_attribution_rules 决定,
+        // 而非固定 "售票分量+酒吧实收+租金−售票退款−酒吧退款"。thirdparty 目前无数据源(排除,预留)。
+        // 种子=复现现有口径(ticket share_bps=10000 全额+退款净扣 / bar gross+退款净扣 / rent gross+退款忽略),故 net 值不变。
+        AnalyticsRecords.MerchantRevenueAttributionRule ticketRule = repository.findDefaultAttributionRule("ticket");
+        AnalyticsRecords.MerchantRevenueAttributionRule barRule = repository.findDefaultAttributionRule("bar");
+        AnalyticsRecords.MerchantRevenueAttributionRule rentRule = repository.findDefaultAttributionRule("contract_rent");
         BigDecimal platformNetFromMerchants = BigDecimal.ZERO;
         for (String merchantId : merchantIds) {
             BigDecimal revenue = nonNull(barRevenueByMerchant.get(merchantId));
@@ -558,11 +564,9 @@ public class DashboardAggregationJob {
             BigDecimal ticketRefundShare = nonNull(ticketRefundByMerchant.get(merchantId));
             BigDecimal rent = nonNull(contractRentByMerchant.get(merchantId));
             if (merchantId != null && !merchantId.isBlank()) {
-                BigDecimal merchantNet = ticketShare
-                        .add(revenue)
-                        .add(rent)
-                        .subtract(ticketRefundShare)
-                        .subtract(refund);
+                BigDecimal merchantNet = attributionContribution(ticketRule, ticketShare, ticketRefundShare)
+                        .add(attributionContribution(barRule, revenue, refund))
+                        .add(attributionContribution(rentRule, rent, BigDecimal.ZERO));
                 repository.upsertMetricSnapshot(
                         new MetricSnapshotKey(REVENUE_NET, "finance", PERIOD_DAILY, businessDate, SEGMENT_MERCHANT, merchantId),
                         merchantNet,
@@ -583,6 +587,32 @@ public class DashboardAggregationJob {
                 now
         );
         recordPlatformTotal(platformTotals, REVENUE_NET, "finance", platformNet);
+    }
+
+    /**
+     * V221:按归因口径规则计算某收入来源对商户 net 的净贡献 = 计入收入 −（若 net_deduct）计入退款。
+     * 规则缺失(理论上种子已保证存在)时兜底 gross+net_deduct,即维持原全额口径,避免聚合中断。
+     */
+    private BigDecimal attributionContribution(
+            AnalyticsRecords.MerchantRevenueAttributionRule rule, BigDecimal revenue, BigDecimal refund) {
+        if (rule == null) {
+            return nonNull(revenue).subtract(nonNull(refund));
+        }
+        BigDecimal scaledRevenue = applyAttributionMode(rule, nonNull(revenue));
+        if (!"net_deduct".equals(rule.refundAttribution())) {
+            return scaledRevenue;
+        }
+        return scaledRevenue.subtract(applyAttributionMode(rule, nonNull(refund)));
+    }
+
+    private BigDecimal applyAttributionMode(
+            AnalyticsRecords.MerchantRevenueAttributionRule rule, BigDecimal amount) {
+        return switch (rule.attributionMode()) {
+            case "exclude" -> BigDecimal.ZERO;
+            case "share_bps" -> amount.multiply(BigDecimal.valueOf(rule.shareBps()))
+                    .divide(BigDecimal.valueOf(10000), 0, java.math.RoundingMode.HALF_UP);
+            default -> amount; // gross
+        };
     }
 
     private BigDecimal nonNull(BigDecimal value) {

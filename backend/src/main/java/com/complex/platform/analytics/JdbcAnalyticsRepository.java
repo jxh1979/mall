@@ -1153,6 +1153,76 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return readAiThresholds();
     }
 
+    private static final String MRAR_COLUMNS =
+            "id, rule_scope, merchant_id, revenue_source, attribution_mode, share_bps, "
+            + "refund_attribution, status, is_draft, updated_by, updated_at";
+
+    private AnalyticsRecords.MerchantRevenueAttributionRule mapAttributionRule(java.sql.ResultSet rs, int n)
+            throws java.sql.SQLException {
+        return new AnalyticsRecords.MerchantRevenueAttributionRule(
+                rs.getString("id"), rs.getString("rule_scope"), rs.getString("merchant_id"),
+                rs.getString("revenue_source"), rs.getString("attribution_mode"), rs.getInt("share_bps"),
+                rs.getString("refund_attribution"), rs.getString("status"), rs.getBoolean("is_draft"),
+                rs.getString("updated_by"),
+                rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant());
+    }
+
+    @Override
+    public java.util.List<AnalyticsRecords.MerchantRevenueAttributionRule> listRevenueAttributionRules() {
+        return jdbcTemplate.query("SELECT " + MRAR_COLUMNS
+                + " FROM merchant_revenue_attribution_rules ORDER BY rule_scope, revenue_source, merchant_id",
+                new MapSqlParameterSource(), this::mapAttributionRule);
+    }
+
+    @Override
+    public AnalyticsRecords.MerchantRevenueAttributionRule findDefaultAttributionRule(String revenueSource) {
+        return jdbcTemplate.query("SELECT " + MRAR_COLUMNS
+                + " FROM merchant_revenue_attribution_rules"
+                + " WHERE rule_scope = 'default' AND revenue_source = :source AND status = 'active'",
+                new MapSqlParameterSource("source", revenueSource), this::mapAttributionRule)
+                .stream().findFirst().orElse(null);
+    }
+
+    @Override
+    public AnalyticsRecords.MerchantRevenueAttributionRule upsertRevenueAttributionRule(
+            AnalyticsRecords.MerchantRevenueAttributionRule rule, String updatedBy, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO merchant_revenue_attribution_rules (
+                    id, rule_scope, merchant_id, revenue_source, attribution_mode, share_bps,
+                    refund_attribution, status, is_draft, updated_by, updated_at
+                ) VALUES (
+                    :id, :scope, :merchant_id, :source, :mode, :bps,
+                    :refund, :status, :is_draft, :updated_by, :now
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    rule_scope = EXCLUDED.rule_scope,
+                    merchant_id = EXCLUDED.merchant_id,
+                    revenue_source = EXCLUDED.revenue_source,
+                    attribution_mode = EXCLUDED.attribution_mode,
+                    share_bps = EXCLUDED.share_bps,
+                    refund_attribution = EXCLUDED.refund_attribution,
+                    status = EXCLUDED.status,
+                    is_draft = EXCLUDED.is_draft,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", rule.id())
+                .addValue("scope", rule.ruleScope())
+                .addValue("merchant_id", rule.merchantId(), java.sql.Types.VARCHAR)
+                .addValue("source", rule.revenueSource())
+                .addValue("mode", rule.attributionMode())
+                .addValue("bps", rule.shareBps())
+                .addValue("refund", rule.refundAttribution())
+                .addValue("status", rule.status())
+                .addValue("is_draft", rule.isDraft())
+                .addValue("updated_by", updatedBy)
+                .addValue("now", timestampWithTimeZone(now)));
+        return jdbcTemplate.query("SELECT " + MRAR_COLUMNS
+                + " FROM merchant_revenue_attribution_rules WHERE id = :id",
+                new MapSqlParameterSource("id", rule.id()), this::mapAttributionRule)
+                .stream().findFirst().orElse(null);
+    }
+
     @Override
     public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now) {

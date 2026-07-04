@@ -182,6 +182,16 @@ public interface AnalyticsRepository {
     AnalyticsRecords.AiThresholds upsertAiThresholds(java.math.BigDecimal minConfidence,
             java.math.BigDecimal benchmarkDeviation, String updatedBy, java.time.Instant now);
 
+    /** V221 商户级收入归因口径:列全部规则(default + merchant 特例)。 */
+    java.util.List<AnalyticsRecords.MerchantRevenueAttributionRule> listRevenueAttributionRules();
+
+    /** V221:按 revenue_source 取 default 口径规则(聚合读)。 */
+    AnalyticsRecords.MerchantRevenueAttributionRule findDefaultAttributionRule(String revenueSource);
+
+    /** V221:新增/更新一条归因口径规则(维护接口)。 */
+    AnalyticsRecords.MerchantRevenueAttributionRule upsertRevenueAttributionRule(
+            AnalyticsRecords.MerchantRevenueAttributionRule rule, String updatedBy, java.time.Instant now);
+
     /** M3:更新异常检测阈值配置(经营参数页后台可调)。 */
     AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now);
