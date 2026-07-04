@@ -169,6 +169,19 @@ public interface AnalyticsRepository {
     /** M3:读异常检测阈值配置(default 行;无行返回 null=检测关闭)。 */
     AnalyticsRecords.AnomalyConfig readAnomalyConfig();
 
+    /** V219 提醒窗天数配置:列全部键值。 */
+    java.util.List<AnalyticsRecords.NotificationWindow> listNotificationWindows();
+
+    /** V219 提醒窗天数配置:按 key 幂等 upsert,返回落库行。 */
+    AnalyticsRecords.NotificationWindow upsertNotificationWindow(String windowKey, int days,
+            String description, String updatedBy, java.time.Instant now);
+
+    /** V218 AI/对标阈值(单例 default)。 */
+    AnalyticsRecords.AiThresholds readAiThresholds();
+
+    AnalyticsRecords.AiThresholds upsertAiThresholds(java.math.BigDecimal minConfidence,
+            java.math.BigDecimal benchmarkDeviation, String updatedBy, java.time.Instant now);
+
     /** M3:更新异常检测阈值配置(经营参数页后台可调)。 */
     AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now);

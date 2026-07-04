@@ -115,19 +115,20 @@ class JdbcStaffRepository implements StaffRepository {
                                     SUM(CASE WHEN adj_type = 'penalty' THEN amount_cent ELSE 0 END) AS penalty
                                FROM staff_payroll_adjustments WHERE month = :month GROUP BY user_id) adj
                          ON adj.user_id = u.user_id
-                  LEFT JOIN (SELECT user_id,
-                                    CASE
-                                      WHEN svc <= 0 THEN 0
-                                      WHEN svc <= 400000 THEN GREATEST(0, (svc - 80000) * 20 / 100)
-                                      ELSE CASE
-                                        WHEN svc * 8 / 10 <= 2000000 THEN svc * 8 / 10 * 20 / 100
-                                        WHEN svc * 8 / 10 <= 5000000 THEN svc * 8 / 10 * 30 / 100 - 200000
-                                        ELSE svc * 8 / 10 * 40 / 100 - 700000
-                                      END
-                                    END AS tax_cent
+                  -- 个税可配置化(V217):劳务报酬预扣税表落 payroll_tax_brackets,按毛收入(svc,分)落档,
+                  -- 每档公式 GREATEST(0,(svc*base_bps/10000 - flat_deduction)*rate_bps/10000 - quick_deduction)。
+                  -- 整除链与原 CASE WHEN 逐分等价;税法参数变更改配置表不改代码。svc<=0 无 service_order 劳务→无档匹配→tax 0。
+                  LEFT JOIN (SELECT sb.user_id,
+                                    GREATEST(0,
+                                        (sb.svc * br.income_base_bps / 10000 - br.flat_deduction_cent)
+                                            * br.rate_bps / 10000 - br.quick_deduction_cent) AS tax_cent
                                FROM (SELECT user_id, SUM(amount_cent) AS svc FROM staff_commission_ledger
                                       WHERE month = :month AND source_type = 'service_order'
-                                      GROUP BY user_id) svc_base) tax
+                                      GROUP BY user_id) sb
+                               JOIN payroll_tax_brackets br
+                                 ON br.category = 'labor_remuneration'
+                                AND sb.svc >= br.income_floor_cent
+                                AND (br.income_ceiling_cent IS NULL OR sb.svc <= br.income_ceiling_cent)) tax
                          ON tax.user_id = u.user_id
                   LEFT JOIN (SELECT DISTINCT ON (user_id) user_id, project_id FROM staff_profiles
                               ORDER BY user_id, created_at DESC) sp
@@ -169,6 +170,63 @@ class JdbcStaffRepository implements StaffRepository {
                         rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
                         rs.getLong("penalty_cent"), rs.getLong("tax_cent"), rs.getLong("total_cent"),
                         rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant()));
+    }
+
+    @Override
+    public java.util.List<PayrollTaxBracketRecord> listTaxBrackets(String category) {
+        return jdbcTemplate.query("""
+                SELECT id, category, seq, income_floor_cent, income_ceiling_cent, income_base_bps,
+                       flat_deduction_cent, rate_bps, quick_deduction_cent, effective_from, updated_by, updated_at
+                  FROM payroll_tax_brackets
+                 WHERE (:category::text IS NULL OR category = :category)
+                 ORDER BY category, seq
+                """, new MapSqlParameterSource().addValue("category", category),
+                (rs, n) -> mapTaxBracket(rs));
+    }
+
+    @Override
+    public PayrollTaxBracketRecord upsertTaxBracket(PayrollTaxBracketRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO payroll_tax_brackets (id, category, seq, income_floor_cent, income_ceiling_cent,
+                        income_base_bps, flat_deduction_cent, rate_bps, quick_deduction_cent, effective_from,
+                        updated_by, updated_at)
+                VALUES (:id, :category, :seq, :floor, :ceiling, :base_bps, :flat, :rate_bps, :quick, :eff,
+                        :updated_by, :now)
+                ON CONFLICT (id) DO UPDATE SET
+                    category = EXCLUDED.category, seq = EXCLUDED.seq,
+                    income_floor_cent = EXCLUDED.income_floor_cent,
+                    income_ceiling_cent = EXCLUDED.income_ceiling_cent,
+                    income_base_bps = EXCLUDED.income_base_bps,
+                    flat_deduction_cent = EXCLUDED.flat_deduction_cent,
+                    rate_bps = EXCLUDED.rate_bps,
+                    quick_deduction_cent = EXCLUDED.quick_deduction_cent,
+                    effective_from = EXCLUDED.effective_from,
+                    updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", record.id()).addValue("category", record.category())
+                .addValue("seq", record.seq()).addValue("floor", record.incomeFloorCent())
+                .addValue("ceiling", record.incomeCeilingCent()).addValue("base_bps", record.incomeBaseBps())
+                .addValue("flat", record.flatDeductionCent()).addValue("rate_bps", record.rateBps())
+                .addValue("quick", record.quickDeductionCent()).addValue("eff", record.effectiveFrom())
+                .addValue("updated_by", record.updatedBy())
+                .addValue("now", timestampWithTimeZone(record.updatedAt())));
+        return jdbcTemplate.query("""
+                SELECT id, category, seq, income_floor_cent, income_ceiling_cent, income_base_bps,
+                       flat_deduction_cent, rate_bps, quick_deduction_cent, effective_from, updated_by, updated_at
+                  FROM payroll_tax_brackets WHERE id = :id
+                """, new MapSqlParameterSource().addValue("id", record.id()),
+                (rs, n) -> mapTaxBracket(rs)).stream().findFirst().orElse(null);
+    }
+
+    private static PayrollTaxBracketRecord mapTaxBracket(ResultSet rs) throws SQLException {
+        Long ceiling = rs.getObject("income_ceiling_cent") == null ? null : rs.getLong("income_ceiling_cent");
+        java.sql.Date eff = rs.getDate("effective_from");
+        return new PayrollTaxBracketRecord(
+                rs.getString("id"), rs.getString("category"), rs.getInt("seq"),
+                rs.getLong("income_floor_cent"), ceiling, rs.getInt("income_base_bps"),
+                rs.getLong("flat_deduction_cent"), rs.getInt("rate_bps"), rs.getLong("quick_deduction_cent"),
+                eff == null ? null : eff.toLocalDate(), rs.getString("updated_by"),
+                rs.getTimestamp("updated_at").toInstant());
     }
 
     @Override

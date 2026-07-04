@@ -746,6 +746,25 @@ class DashboardAggregationJobNetRevenueTests {
             return anomalyConfig;
         }
 
+        public java.util.List<AnalyticsRecords.NotificationWindow> listNotificationWindows() {
+            return java.util.List.of();
+        }
+
+        public AnalyticsRecords.NotificationWindow upsertNotificationWindow(String windowKey, int days,
+                String description, String updatedBy, java.time.Instant now) {
+            return new AnalyticsRecords.NotificationWindow(windowKey, days, description, updatedBy, now);
+        }
+
+        public AnalyticsRecords.AiThresholds readAiThresholds() {
+            return new AnalyticsRecords.AiThresholds(
+                    new BigDecimal("0.60"), new BigDecimal("0.20"), null, null);
+        }
+
+        public AnalyticsRecords.AiThresholds upsertAiThresholds(BigDecimal minConfidence,
+                BigDecimal benchmarkDeviation, String updatedBy, java.time.Instant now) {
+            return new AnalyticsRecords.AiThresholds(minConfidence, benchmarkDeviation, updatedBy, now);
+        }
+
         public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
                 boolean enabled, String updatedBy, java.time.Instant now) {
             return new AnalyticsRecords.AnomalyConfig(surgePct, highPct, enabled, updatedBy, now);
