@@ -995,6 +995,45 @@ class AnalyticsJdbcIntegrationTests {
                 """, Map.of(), String.class);
     }
 
+    @Test
+    void reviewLockPersistsAndIsProjectScoped() {
+        // V216: 锁定复盘真落库 + 项目级隔离(projectScope=null 见全量;非空仅本项目)。
+        String suffix = Long.toString(System.nanoTime());
+        AnalyticsRecords.BusinessReviewLockRecord platformLock = repository.saveReviewLock(
+                new AnalyticsRecords.BusinessReviewLockRecord(
+                        "brl_platform_" + suffix, null, "all", "总控周会复盘锁定",
+                        42, "user_platform_admin", Instant.now(), "idem-platform-" + suffix));
+        AnalyticsRecords.BusinessReviewLockRecord projX = repository.saveReviewLock(
+                new AnalyticsRecords.BusinessReviewLockRecord(
+                        "brl_x_" + suffix, "proj_x_" + suffix, "revenue", "X项目复盘",
+                        7, "user_x", Instant.now(), "idem-x-" + suffix));
+        AnalyticsRecords.BusinessReviewLockRecord projY = repository.saveReviewLock(
+                new AnalyticsRecords.BusinessReviewLockRecord(
+                        "brl_y_" + suffix, "proj_y_" + suffix, "bar", "Y项目复盘",
+                        3, "user_y", Instant.now(), "idem-y-" + suffix));
+
+        // 平台 scope(null)=全量：三条都可见。
+        List<String> platformIds = repository.listReviewLocks(null).stream()
+                .map(AnalyticsRecords.BusinessReviewLockRecord::id).toList();
+        assertThat(platformIds).contains(platformLock.id(), projX.id(), projY.id());
+
+        // 项目 X scope：只见本项目 X，绝不见 Y，也不见平台 NULL 行(与 V214 staff 同口径)。
+        List<AnalyticsRecords.BusinessReviewLockRecord> xScoped = repository.listReviewLocks("proj_x_" + suffix);
+        assertThat(xScoped).extracting(AnalyticsRecords.BusinessReviewLockRecord::id)
+                .containsExactly(projX.id());
+        assertThat(xScoped).extracting(AnalyticsRecords.BusinessReviewLockRecord::id)
+                .doesNotContain(projY.id(), platformLock.id());
+        // 落库字段核验。
+        assertThat(xScoped.get(0).operatorNote()).isEqualTo("X项目复盘");
+        assertThat(xScoped.get(0).metricCount()).isEqualTo(7);
+        assertThat(xScoped.get(0).lockedBy()).isEqualTo("user_x");
+    }
+
+    @Test
+    void reviewLockPermissionSeededToPlatformAdmin() {
+        assertThat(platformAdminPermissionCodes()).contains("analytics.review.lock");
+    }
+
     private List<String> platformAdminPermissionCodes() {
         return jdbcTemplate.queryForList("""
                 SELECT permission_code
