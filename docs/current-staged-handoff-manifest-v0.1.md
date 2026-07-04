@@ -15,11 +15,11 @@
 | 项目 | 当前值 |
 |---|---|
 | 状态 | not_ready_for_commit_or_patch_package |
-| 分支 | feat/business-html-audit-and-coding-closure |
-| HEAD | 910f8e7 |
+| 分支 | main |
+| HEAD | 786946c |
 | 暂存文件数 | 0 |
-| 未跟踪文件 | 2 |
-| 混合/未暂存变更 | 56 |
+| 未跟踪文件 | 0 |
+| 混合/未暂存变更 | 0 |
 | 缺失关键文件 | 21 |
 | name-status 指纹 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 
