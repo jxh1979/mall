@@ -63,12 +63,22 @@ public class CustomerController {
         return ApiResponse.ok(null);
     }
 
-    /** 3.3 免登录：会话恢复——凭 cookie/头 token 返回当前客人身份（不回传凭证本身）。 */
+    /**
+     * 3.3 免登录：会话恢复——凭 cookie/头 token 返回当前客人身份（不回传凭证本身）。
+     * #7：这是「是否已登录」的只读探测。匿名（无 cookie 无 token）返回 204 空会话，
+     * 而非 401，避免未登录刷新每次污染控制台。真正需鉴权的写/读接口仍走 requireCustomerToken 抛 401。
+     */
     @GetMapping("/session")
-    public ApiResponse<CustomerSessionInfoResponse> session(
+    public org.springframework.http.ResponseEntity<ApiResponse<CustomerSessionInfoResponse>> session(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization) {
-        return ApiResponse.ok(service.sessionInfo(requireCustomerToken(customerToken, authorization)));
+        String resolved = resolveCustomerToken(customerToken, authorization);
+        if (resolved == null) {
+            // 匿名探测：空会话正常态，返回 204 No Content（无 body）。
+            return org.springframework.http.ResponseEntity.noContent().build();
+        }
+        // 有凭证但失效/过期时 sessionInfo 抛 401（真·失效信号，非每次刷新噪声）。
+        return org.springframework.http.ResponseEntity.ok(ApiResponse.ok(service.sessionInfo(resolved)));
     }
 
     private String sessionCookie(String value, long maxAgeSeconds, boolean secure) {
