@@ -22,3 +22,12 @@ export function stripBase(pathname: string): string {
 export function withBase(path: string): string {
   return `${basePrefix()}${path}`;
 }
+
+/**
+ * 入口壳选择（纯逻辑，便于单测）。入参为已 stripBase 剥掉部署前缀的 App 内路径。
+ * "/admin*" → 后台；根路径与客人入口 → 客人端；其余兜底客人端。
+ */
+export function selectShell(path: string): "admin" | "customer" {
+  if (path.startsWith("/admin")) return "admin";
+  return "customer";
+}
