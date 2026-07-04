@@ -2858,7 +2858,7 @@ class TicketingServiceTests {
             }
             refunds.put(refundId, new TicketRefundRecord(
                     r.id(), r.targetId(), r.refundAmountCent(), r.reason(), r.refundChannel(),
-                    "approved", r.requestedBy(), approvedBy, approvedAt, r.createdAt(), approvedAt));
+                    "approved", r.requestedBy(), approvedBy, approvedAt, r.createdAt(), approvedAt, r.merchantId()));
             return 1;
         }
 

@@ -594,32 +594,20 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate, String windowDomain) {
-        // 清单#4：本商户售票退款分量——按 ticket_refunds（created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径）
-        // 关联订单各权益 allocated 占比把退款分摊到 merchant。逐笔退款用"最大余数补尾"保证 Σ分摊==退款额、分到分不丢分。
-        //
-        // SQL 取明细行：每笔退款 × 该订单各 merchant 的 allocated 小计 + 该订单 allocated 总额（基数）。
-        // 订单无 allocated 权益（基数为 0）→ 不产生明细行 → 该退款保守不归任何商户（与售票分量口径一致）。
-        List<RefundMerchantShareRow> rows = jdbcTemplate.query("""
-                SELECT r.id AS refund_id,
-                       r.refund_amount_cent AS refund_amount,
-                       e.merchant_id AS merchant_id,
-                       SUM(e.allocated_revenue_cent) AS merchant_allocated,
-                       SUM(SUM(e.allocated_revenue_cent)) OVER (PARTITION BY r.id) AS order_total_allocated
-                  FROM ticket_refunds r
-                  JOIN issued_entitlements e ON e.order_id = r.target_id
-                 WHERE e.allocated_revenue_cent IS NOT NULL
-                   AND r.created_at >= :start
-                   AND r.created_at < :end
-                 GROUP BY r.id, r.refund_amount_cent, e.merchant_id
-                 ORDER BY r.id, e.merchant_id
-                """, dayRange(windowDomain, businessDate), (resultSet, rowNum) -> new RefundMerchantShareRow(
-                resultSet.getString("refund_id"),
-                resultSet.getLong("refund_amount"),
-                resultSet.getString("merchant_id"),
-                resultSet.getLong("merchant_allocated"),
-                resultSet.getLong("order_total_allocated")
-        ));
-        return distributeRefundsByMerchant(rows);
+        // V220：ticket_refunds 已直挂 merchant_id（受理退款的销售商户），直接 GROUP BY 汇总。
+        // created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径；merchant_id 为 null（平台直营单）不归任何商户。
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COALESCE(SUM(refund_amount_cent), 0) AS total
+                  FROM ticket_refunds
+                 WHERE merchant_id IS NOT NULL
+                   AND created_at >= :start
+                   AND created_at < :end
+                 GROUP BY merchant_id
+                """, dayRange(windowDomain, businessDate),
+                (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total")));
+        return result;
     }
 
     @Override
@@ -640,63 +628,6 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return result;
     }
 
-    private record RefundMerchantShareRow(
-            String refundId, long refundAmount, String merchantId, long merchantAllocated, long orderTotalAllocated) {
-    }
-
-    /**
-     * 逐笔退款按各商户 allocated 占比分摊（最大余数补尾，Σ分摊恰=退款额），再跨退款累加到 merchant。
-     * 基数 orderTotalAllocated<=0 的退款行不会出现（SQL 已过滤），故无需特殊处理。
-     */
-    private Map<String, BigDecimal> distributeRefundsByMerchant(List<RefundMerchantShareRow> rows) {
-        Map<String, java.util.List<RefundMerchantShareRow>> byRefund = new LinkedHashMap<>();
-        for (RefundMerchantShareRow row : rows) {
-            byRefund.computeIfAbsent(row.refundId(), key -> new java.util.ArrayList<>()).add(row);
-        }
-        Map<String, Long> totals = new LinkedHashMap<>();
-        for (java.util.List<RefundMerchantShareRow> group : byRefund.values()) {
-            long base = group.get(0).orderTotalAllocated();
-            long refundAmount = group.get(0).refundAmount();
-            if (base <= 0) {
-                continue;
-            }
-            long assigned = 0;
-            // floor 分配 + 余数排序补尾，保证 Σ恰=refundAmount。
-            long[] floors = new long[group.size()];
-            double[] remainders = new double[group.size()];
-            for (int i = 0; i < group.size(); i++) {
-                long product = refundAmount * group.get(i).merchantAllocated();
-                floors[i] = product / base;
-                remainders[i] = (double) (product % base) / base;
-                assigned += floors[i];
-            }
-            long leftover = refundAmount - assigned;
-            Integer[] order = new Integer[group.size()];
-            for (int i = 0; i < order.length; i++) {
-                order[i] = i;
-            }
-            java.util.Arrays.sort(order, (a, b) -> Double.compare(remainders[b], remainders[a]));
-            for (int i = 0; i < group.size(); i++) {
-                long share = floors[i] + (rankOf(order, i) < leftover ? 1L : 0L);
-                if (share == 0L) {
-                    continue;
-                }
-                totals.merge(group.get(i).merchantId(), share, Long::sum);
-            }
-        }
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        totals.forEach((merchantId, value) -> result.put(merchantId, BigDecimal.valueOf(value)));
-        return result;
-    }
-
-    private int rankOf(Integer[] order, int index) {
-        for (int rank = 0; rank < order.length; rank++) {
-            if (order[rank] == index) {
-                return rank;
-            }
-        }
-        return order.length;
-    }
 
     @Override
     public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {

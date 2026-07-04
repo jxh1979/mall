@@ -14,6 +14,8 @@ public record TicketRefundRecord(
         String approvedBy,
         Instant approvedAt,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        // V220：受理退款的销售商户（=原单 merchant_id；平台直营单为 null）。商户级退款分量直连用。
+        String merchantId
 ) {
 }

@@ -745,10 +745,10 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
-    void ticketAllocatedRevenueAndRefundAreAggregatedAndDistributedByMerchant() {
-        // 清单#4：售票分量按商户(allocated) + 售票退款按 allocated 占比分摊到商户。
+    void ticketAllocatedRevenueByMerchantAndRefundAttributedToSalesMerchant() {
+        // 清单#4 + V220：售票分量按商户(allocated)；售票退款直挂原单销售商户 merchant_id（不再按 allocated 占比分摊）。
         java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-16");
-        // 订单 ord_net 实付 1000，发两张权益：mch_a 分摊 600 / mch_b 分摊 400（Σ=订单实付）。
+        // 订单 ord_net 实付 1000，发两张权益：mch_a 分摊 600 / mch_b 分摊 400（allocated 分量口径不变）。
         insertTicketOrder("ord_net", 1000L, businessDate);
         insertIssuedEntitlementForOrder("ent_net_a", "ord_net", "drink", "mch_a", 600L, businessDate);
         insertIssuedEntitlementForOrder("ent_net_b", "ord_net", "amusement", "mch_b", 400L, businessDate);
@@ -757,13 +757,11 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(allocated.get("mch_a")).isEqualByComparingTo("600");
         assertThat(allocated.get("mch_b")).isEqualByComparingTo("400");
 
-        // 退款 300 针对 ord_net：按 allocated 占比分摊 → mch_a=180(=300*600/1000)、mch_b=120(=300*400/1000)。
-        insertTicketRefund("rf_net", "ord_net", 300L, businessDate);
+        // V220：退款 300 直挂受理销售商户 mch_a（=原单 merchant_id），整额归 mch_a，不再拆分到 mch_b。
+        insertTicketRefund("rf_net", "ord_net", 300L, "mch_a", businessDate);
         Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate, "platform");
-        assertThat(refundShare.get("mch_a")).isEqualByComparingTo("180");
-        assertThat(refundShare.get("mch_b")).isEqualByComparingTo("120");
-        // Σ分摊 == 退款额（不丢分）。
-        assertThat(refundShare.get("mch_a").add(refundShare.get("mch_b"))).isEqualByComparingTo("300");
+        assertThat(refundShare.get("mch_a")).isEqualByComparingTo("300");
+        assertThat(refundShare).doesNotContainKey("mch_b");
     }
 
     @Test
@@ -772,7 +770,7 @@ class AnalyticsJdbcIntegrationTests {
         java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-15");
         insertTicketOrder("ord_noalloc", 500L, businessDate);
         insertIssuedEntitlementForOrder("ent_noalloc", "ord_noalloc", "entry", "mch_x", null, businessDate);
-        insertTicketRefund("rf_noalloc", "ord_noalloc", 200L, businessDate);
+        insertTicketRefund("rf_noalloc", "ord_noalloc", 200L, null, businessDate);
 
         Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate, "platform");
         assertThat(refundShare).doesNotContainKey("mch_x");
@@ -875,14 +873,20 @@ class AnalyticsJdbcIntegrationTests {
                 """, params);
     }
 
-    private void insertTicketRefund(String id, String targetOrderId, long refundAmountCent, java.time.LocalDate businessDate) {
+    private void insertTicketRefund(String id, String targetOrderId, long refundAmountCent,
+                                    String merchantId, java.time.LocalDate businessDate) {
         Instant at = businessDate.atTime(11, 0).toInstant(java.time.ZoneOffset.UTC);
+        var params = new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("target", targetOrderId)
+                .addValue("amount", refundAmountCent)
+                .addValue("merchant_id", merchantId)
+                .addValue("at", java.sql.Timestamp.from(at));
         jdbcTemplate.update("""
                 INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel, status,
-                    created_at, updated_at)
-                VALUES (:id, :target, :amount, 'test refund', 'original', 'approved', :at, :at)
-                """, Map.of("id", id, "target", targetOrderId, "amount", refundAmountCent,
-                "at", java.sql.Timestamp.from(at)));
+                    created_at, updated_at, merchant_id)
+                VALUES (:id, :target, :amount, 'test refund', 'original', 'approved', :at, :at, :merchant_id)
+                """, params);
     }
 
     private void insertInventoryItem(String id, String merchantId, int minQuantity) {

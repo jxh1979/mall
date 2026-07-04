@@ -448,7 +448,8 @@ class TicketingJdbcIntegrationTests {
                 null,
                 null,
                 now,
-                now
+                now,
+                "merchant_jdbc"
         ));
         repository.saveTicketRefundLine(new TicketRefundLineRecord(
                 "refund_line_jdbc",
