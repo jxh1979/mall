@@ -6,6 +6,7 @@ import "dayjs/locale/zh-cn";
 import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
 import { accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, routeAllowsAccountForm } from "./adminRoutes";
+import { stripBase, withBase } from "../basePath";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
@@ -164,7 +165,7 @@ function saveStoredSession(session: StoredSession | null) {
 }
 
 function activeRouteFromLocation() {
-  return findAdminRoute(window.location.pathname);
+  return findAdminRoute(stripBase(window.location.pathname));
 }
 
 function renderPage(route: AdminRoute, props: AdminPageProps) {
@@ -444,8 +445,8 @@ export default function AdminApp() {
     // 固定高度布局下内容滚动发生在 .admin-content 内；切换页面后复位到顶部，
     // 避免从长列表页跳到短页面时停留在空白滚动位置。
     document.querySelector(".admin-content")?.scrollTo({ top: 0 });
-    if (window.location.pathname !== nextRoute.route) {
-      window.history.pushState({ pageId: nextRoute.pageId }, "", nextRoute.route);
+    if (stripBase(window.location.pathname) !== nextRoute.route) {
+      window.history.pushState({ pageId: nextRoute.pageId }, "", withBase(nextRoute.route));
     }
   }
 
@@ -465,7 +466,7 @@ export default function AdminApp() {
     setNavOpen(false);
     document.querySelector(".admin-content")?.scrollTo({ top: 0 });
     const url = objectId ? `${target.route}?focus=${encodeURIComponent(objectId)}` : target.route;
-    window.history.pushState({ pageId: target.pageId }, "", url);
+    window.history.pushState({ pageId: target.pageId }, "", withBase(url));
   }
 
   async function login(event: React.FormEvent<HTMLFormElement>) {

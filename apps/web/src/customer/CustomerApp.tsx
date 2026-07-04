@@ -12,6 +12,7 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { useEffect, useMemo, useState } from "react";
 
+import { stripBase, withBase } from "../basePath";
 import { CustomerAuthShell } from "./components/CustomerAuthShell";
 import { CustomerService } from "./client/customerService";
 import { customerLogout, customerPhoneLogin, customerRestoreSession } from "./client/customerClient";
@@ -57,7 +58,7 @@ function pageFromLocation(): PageKey {
     const mapped = query === "ticketing" || query === "amusement" ? "buy" : query === "bar" ? "scan" : query;
     if ((PAGE_KEYS as readonly string[]).includes(mapped)) return mapped as PageKey;
   }
-  const path = window.location.pathname;
+  const path = stripBase(window.location.pathname);
   if (path.startsWith("/ticketing") || path.startsWith("/amusement")) return "buy";
   if (path.startsWith("/bar")) return "scan";
   return "home";
@@ -77,7 +78,7 @@ export default function CustomerApp(): React.ReactElement {
   const goTo = (next: PageKey) => {
     setPage(next);
     if (pageFromLocation() !== next) {
-      window.history.pushState({ page: next }, "", next === "home" ? "/" : `/?page=${next}`);
+      window.history.pushState({ page: next }, "", withBase(next === "home" ? "/" : `/?page=${next}`));
     }
   };
 
