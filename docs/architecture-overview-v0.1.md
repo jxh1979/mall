@@ -144,5 +144,7 @@ graph TB
 
 `verify:delivery-gates`（约 50 子闸聚合）+ `verify:p0-contract` + `verify:tenant-isolation --strict` + 后端 `mvn test`（1412）+ 前端 `e2e`（42）+ semgrep。生产上线由 `verify:production-blockers` 把关（外部依赖未到位即阻断）。
 
+> 📌 **前端测试路径口径**：前端单测采用 **colocated 范式**——测试文件与被测源码同目录（`apps/web/src/**/*.test.tsx`，如 `apps/web/src/admin/pages/*.test.tsx`），由 vitest 就地发现。**`apps/web/tests` 不是正式测试目录**（当前为空 0 文件）；任何按 `apps/web/tests` 路径找前端测试而得出"无测试"的审计结论均为路径误判，应改查 colocated 的 `src/**/*.test.tsx`。前端 `e2e`（Playwright）另见 `playwright*.config.ts`。
+
 ---
 版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 状态：现行 ｜ 配套：`README.md` / `README.en.md` / `docs/documentation-map-v0.1.md`
