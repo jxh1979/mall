@@ -183,6 +183,15 @@ public class AnalyticsService {
     // 可为 null（向后兼容/现有单测用旧构造器）；接入为 fail-safe，不阻塞创建主链。
     private final RiskAlertService riskAlertService;
 
+    // V216 经营复盘锁定：项目 scope 与操作人由 token 派生（AC-ISO-2，不取请求体）。
+    // setter 注入保持既有 4 个构造器族不变（现有单测用旧构造器，authorizationService=null 时按平台全量兜底）。
+    private com.complex.platform.access.AuthorizationService authorizationService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAuthorizationService(com.complex.platform.access.AuthorizationService authorizationService) {
+        this.authorizationService = authorizationService;
+    }
+
     @Autowired(required = false)
     void setBusinessDayResolver(com.complex.platform.common.BusinessDayResolver businessDayResolver) {
         this.businessDayResolver = businessDayResolver;
@@ -964,6 +973,66 @@ public class AnalyticsService {
                 redacted.redactionApplied(),
                 manualReviewRequired
         );
+    }
+
+    public PageResponse<AnalyticsRecords.BusinessReviewLockRecord> listReviewLocks() {
+        return readPage(
+                "analytics.review_lock.viewed",
+                "analytics.review_lock.viewed_failed",
+                "analytics.review.lock",
+                "analytics_business_review_lock",
+                () -> repository.listReviewLocks(reviewLockProjectScope())
+        );
+    }
+
+    @Transactional
+    public AnalyticsRecords.BusinessReviewLockRecord createReviewLock(BusinessReviewLockRequest request) {
+        return executeWrite(
+                "analytics.lock-business-review",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AnalyticsRecords.BusinessReviewLockRecord.class,
+                "analytics.review.locked",
+                "analytics.review.lock_failed",
+                "analytics.review.lock",
+                "analytics_business_review_lock",
+                () -> createReviewLockInternal(request)
+        );
+    }
+
+    private AnalyticsRecords.BusinessReviewLockRecord createReviewLockInternal(BusinessReviewLockRequest request) {
+        BusinessReviewLockRequest actual = requireRequest(request);
+        String domain = requireText(actual.domain(), "domain");
+        String operatorNote = requireText(actual.operatorNote(), "operator_note");
+        int metricCount = actual.metricCount() == null ? 0 : Math.max(0, actual.metricCount());
+        // project_id 与 locked_by 由 token 派生，绝不取请求体（AC-ISO-2）。
+        String projectScope = reviewLockProjectScope();
+        String lockedBy = reviewLockActorId();
+        return repository.saveReviewLock(new AnalyticsRecords.BusinessReviewLockRecord(
+                UUID.randomUUID().toString(),
+                projectScope,
+                domain,
+                operatorNote,
+                metricCount,
+                lockedBy,
+                Instant.now(clock),
+                actual.idempotencyKey()
+        ));
+    }
+
+    /** token 派生项目 scope：平台管理员/无组织归属=null 见全量并落 NULL；项目员工=其项目（V214 范式）。 */
+    private String reviewLockProjectScope() {
+        return authorizationService == null
+                ? null
+                : authorizationService.currentProjectScopeQuietly().orElse(null);
+    }
+
+    private String reviewLockActorId() {
+        if (authorizationService == null) {
+            return "system";
+        }
+        var actor = authorizationService.currentActor();
+        return actor == null || actor.id() == null ? "system" : actor.id();
     }
 
     private RiskAlertRecord createRiskAlertInternal(RiskAlertRequest request) {

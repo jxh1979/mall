@@ -447,4 +447,17 @@ public final class AnalyticsRecords {
             Instant createdAt
     ) {
     }
+
+    /** 经营复盘锁定凭据（V216）：project_id 按 token scope 落库，locked_by=操作人，供刷新/换人/审计追责查回。 */
+    public record BusinessReviewLockRecord(
+            String id,
+            String projectId,
+            String domain,
+            String operatorNote,
+            int metricCount,
+            String lockedBy,
+            Instant lockedAt,
+            String idempotencyKey
+    ) {
+    }
 }
