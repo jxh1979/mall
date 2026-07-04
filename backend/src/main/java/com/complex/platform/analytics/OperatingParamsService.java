@@ -160,6 +160,57 @@ public class OperatingParamsService {
         return saved;
     }
 
+    /** V221:列全部商户收入归因口径规则(default + merchant 特例)。 */
+    public java.util.List<AnalyticsRecords.MerchantRevenueAttributionRule> listRevenueAttributionRules() {
+        return repository.listRevenueAttributionRules();
+    }
+
+    /** V221:新增/更新一条收入归因口径规则(经营参数页维护);校验枚举/bps/scope,审计留痕。 */
+    public AnalyticsRecords.MerchantRevenueAttributionRule upsertRevenueAttributionRule(
+            RevenueAttributionRuleRequest request) {
+        RevenueAttributionRuleRequest actual = requireRequest(request);
+        String id = requireText(actual.id(), "id");
+        String scope = requireOneOf(actual.ruleScope(), "rule_scope", "default", "merchant");
+        String source = requireOneOf(actual.revenueSource(), "revenue_source",
+                "ticket", "bar", "contract_rent", "thirdparty");
+        String mode = requireOneOf(actual.attributionMode(), "attribution_mode", "gross", "share_bps", "exclude");
+        String refund = requireOneOf(actual.refundAttribution(), "refund_attribution", "net_deduct", "ignore");
+        String status = requireOneOf(actual.status() == null ? "active" : actual.status(),
+                "status", "active", "inactive");
+        String merchantId = actual.merchantId();
+        if ("merchant".equals(scope) == (merchantId == null || merchantId.isBlank())) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "merchant_id is required for rule_scope=merchant and must be empty for rule_scope=default");
+        }
+        int bps = actual.shareBps() == null ? 10000 : actual.shareBps();
+        if (bps < 0 || bps > 10000) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "share_bps must be in [0,10000]");
+        }
+        boolean isDraft = actual.isDraft() == null || actual.isDraft();
+        AnalyticsRecords.MerchantRevenueAttributionRule saved = repository.upsertRevenueAttributionRule(
+                new AnalyticsRecords.MerchantRevenueAttributionRule(
+                        id, scope, "default".equals(scope) ? null : merchantId, source, mode, bps,
+                        refund, status, isDraft, null, null),
+                null, Instant.now(clock));
+        auditEventService.recordSuccess(
+                "analytics.revenue_attribution_rule.updated", "analytics.operating_params.manage",
+                "merchant_revenue_attribution_rules", id, null, actual.idempotencyKey(),
+                java.util.Map.of("rule_scope", scope, "revenue_source", source,
+                        "attribution_mode", mode, "share_bps", String.valueOf(bps),
+                        "refund_attribution", refund, "is_draft", String.valueOf(isDraft)));
+        return saved;
+    }
+
+    private String requireOneOf(String value, String field, String... allowed) {
+        for (String a : allowed) {
+            if (a.equals(value)) {
+                return value;
+            }
+        }
+        throw ApiException.badRequest("VALIDATION_FAILED",
+                field + " must be one of " + String.join(", ", allowed));
+    }
+
     /** H1:列节假日日历(经营参数页维护区)。 */
     public java.util.List<AnalyticsRecords.HolidayPeriod> listHolidayPeriods(Integer year) {
         return repository.listHolidayPeriods(year);
