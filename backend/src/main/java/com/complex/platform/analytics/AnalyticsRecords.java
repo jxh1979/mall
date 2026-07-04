@@ -329,6 +329,15 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** V218 AI/对标阈值配置(单例 default):AI建议采纳最低置信度 + 对标偏离告警线。 */
+    public record AiThresholds(
+            BigDecimal localLlmMinConfidence,
+            BigDecimal benchmarkDeviation,
+            String updatedBy,
+            Instant updatedAt
+    ) {
+    }
+
     /** M3 异常检测阈值配置(环比突变,2026-07-02 拍板:阈值后台可调)。 */
     public record AnomalyConfig(
             BigDecimal surgePct,

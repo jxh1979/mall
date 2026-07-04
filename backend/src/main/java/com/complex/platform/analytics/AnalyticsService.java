@@ -60,7 +60,7 @@ public class AnalyticsService {
             "warning", "suspicious");
     private static final Set<String> RISK_ALERT_RESOLVE_ACTIONS = Set.of("investigating", "resolved", "dismissed");
     private static final Set<String> TERMINAL_ALERT_STATUSES = Set.of("resolved", "dismissed");
-    private static final BigDecimal LOCAL_LLM_MIN_CONFIDENCE = new BigDecimal("0.60");
+    // V218 阈值可配置化:LOCAL_LLM_MIN_CONFIDENCE 迁入 analytics_ai_thresholds,从 repository 读(默认 0.60 兜底)。
     private static final int MAX_SOURCE_TEXT_CHARS = 12_000;
     private static final int MAX_LLM_INPUT_CHARS = 4_000;
 
@@ -155,7 +155,7 @@ public class AnalyticsService {
      */
     private static final String GROUP_PROJECT_ID = "project_1";
     private static final String GROUP_PROJECT_NAME = "综合体（默认）";
-    private static final BigDecimal BENCHMARK_THRESHOLD = new BigDecimal("0.20");
+    // V218 阈值可配置化:BENCHMARK_THRESHOLD 迁入 analytics_ai_thresholds,从 repository 读(默认 0.20 兜底)。
 
     /**
      * 集团总览汇总指标目录：收入（净收入/售票/酒吧）/客流/核销/风险，来源均为 DashboardAggregationJob 平台口径 ETL 快照。
@@ -740,7 +740,7 @@ public class AnalyticsService {
 
     private Set<String> belowBenchmarkMetrics(Map<String, BigDecimal> snapshots, Map<String, BigDecimal> averages) {
         java.util.LinkedHashSet<String> below = new java.util.LinkedHashSet<>();
-        BigDecimal floorMultiplier = BigDecimal.ONE.subtract(BENCHMARK_THRESHOLD);
+        BigDecimal floorMultiplier = BigDecimal.ONE.subtract(benchmarkDeviation());
         for (GroupMetricEntry entry : GROUP_METRIC_CATALOG) {
             BigDecimal value = snapshots.get(entry.metricCode());
             BigDecimal average = averages.get(entry.metricCode());
@@ -918,6 +918,21 @@ public class AnalyticsService {
         );
     }
 
+    private static final BigDecimal DEFAULT_LLM_MIN_CONFIDENCE = new BigDecimal("0.60");
+    private static final BigDecimal DEFAULT_BENCHMARK_DEVIATION = new BigDecimal("0.20");
+
+    /** V218:AI建议采纳最低置信度(配置读,缺配置兜底默认,行为不变)。 */
+    private BigDecimal localLlmMinConfidence() {
+        AnalyticsRecords.AiThresholds t = repository.readAiThresholds();
+        return t == null || t.localLlmMinConfidence() == null ? DEFAULT_LLM_MIN_CONFIDENCE : t.localLlmMinConfidence();
+    }
+
+    /** V218:对标偏离告警线(配置读,缺配置兜底默认,行为不变)。 */
+    private BigDecimal benchmarkDeviation() {
+        AnalyticsRecords.AiThresholds t = repository.readAiThresholds();
+        return t == null || t.benchmarkDeviation() == null ? DEFAULT_BENCHMARK_DEVIATION : t.benchmarkDeviation();
+    }
+
     private AiQualitySuggestionResponse generateLocalLlmAiQualitySuggestionInternal(AiQualitySuggestionRequest request) {
         AiQualitySuggestionRequest actual = requireRequest(request);
         String sourceType = requireLimitedText(actual.sourceType(), "source_type", 64);
@@ -938,7 +953,7 @@ public class AnalyticsService {
                 || summary.adjusted()
                 || findingCount != suggestion.findingCount();
         boolean manualReviewRequired = !"completed".equals(suggestion.modelStatus())
-                || confidenceScore.compareTo(LOCAL_LLM_MIN_CONFIDENCE) < 0
+                || confidenceScore.compareTo(localLlmMinConfidence()) < 0
                 || modelOutputNormalized;
         Instant now = Instant.now(clock);
         String taskStatus = "completed".equals(suggestion.modelStatus()) ? "completed" : "failed";

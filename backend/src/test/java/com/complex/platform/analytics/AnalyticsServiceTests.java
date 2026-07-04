@@ -1030,6 +1030,16 @@ class AnalyticsServiceTests {
                     new java.math.BigDecimal("0.5"), new java.math.BigDecimal("0.8"), true, null, null);
         }
 
+        public AnalyticsRecords.AiThresholds readAiThresholds() {
+            return new AnalyticsRecords.AiThresholds(
+                    new java.math.BigDecimal("0.60"), new java.math.BigDecimal("0.20"), null, null);
+        }
+
+        public AnalyticsRecords.AiThresholds upsertAiThresholds(java.math.BigDecimal minConfidence,
+                java.math.BigDecimal benchmarkDeviation, String updatedBy, java.time.Instant now) {
+            return new AnalyticsRecords.AiThresholds(minConfidence, benchmarkDeviation, updatedBy, now);
+        }
+
         public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(java.math.BigDecimal surgePct, java.math.BigDecimal highPct,
                 boolean enabled, String updatedBy, java.time.Instant now) {
             return new AnalyticsRecords.AnomalyConfig(surgePct, highPct, enabled, updatedBy, now);

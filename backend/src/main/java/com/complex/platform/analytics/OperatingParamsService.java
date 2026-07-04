@@ -113,6 +113,31 @@ public class OperatingParamsService {
         return saved;
     }
 
+    /** V218:读 AI/对标阈值(经营参数页展示)。 */
+    public AnalyticsRecords.AiThresholds getAiThresholds() {
+        return repository.readAiThresholds();
+    }
+
+    /** V218:维护 AI建议采纳置信度 + 对标偏离告警线(均∈[0,1]);审计留痕。 */
+    public AnalyticsRecords.AiThresholds updateAiThresholds(AiThresholdsRequest request) {
+        AiThresholdsRequest actual = requireRequest(request);
+        java.math.BigDecimal conf = actual.localLlmMinConfidence();
+        java.math.BigDecimal dev = actual.benchmarkDeviation();
+        if (conf == null || dev == null
+                || conf.signum() < 0 || conf.compareTo(java.math.BigDecimal.ONE) > 0
+                || dev.signum() < 0 || dev.compareTo(java.math.BigDecimal.ONE) > 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "local_llm_min_confidence and benchmark_deviation must be in [0,1]");
+        }
+        AnalyticsRecords.AiThresholds saved = repository.upsertAiThresholds(conf, dev, null, Instant.now(clock));
+        auditEventService.recordSuccess(
+                "analytics.ai_thresholds.updated", "analytics.operating_params.manage",
+                "analytics_ai_thresholds", "default", null, actual.idempotencyKey(),
+                java.util.Map.of("local_llm_min_confidence", conf.toPlainString(),
+                        "benchmark_deviation", dev.toPlainString()));
+        return saved;
+    }
+
     /** H1:列节假日日历(经营参数页维护区)。 */
     public java.util.List<AnalyticsRecords.HolidayPeriod> listHolidayPeriods(Integer year) {
         return repository.listHolidayPeriods(year);

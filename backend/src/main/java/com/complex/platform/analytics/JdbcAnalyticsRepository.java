@@ -1162,6 +1162,34 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public AnalyticsRecords.AiThresholds readAiThresholds() {
+        return jdbcTemplate.query("""
+                SELECT local_llm_min_confidence, benchmark_deviation, updated_by, updated_at
+                  FROM analytics_ai_thresholds WHERE id = 'default'
+                """, new MapSqlParameterSource(), (rs, n) -> new AnalyticsRecords.AiThresholds(
+                rs.getBigDecimal("local_llm_min_confidence"), rs.getBigDecimal("benchmark_deviation"),
+                rs.getString("updated_by"), rs.getTimestamp("updated_at").toInstant()))
+                .stream().findFirst().orElse(null);
+    }
+
+    @Override
+    public AnalyticsRecords.AiThresholds upsertAiThresholds(BigDecimal minConfidence, BigDecimal benchmarkDeviation,
+            String updatedBy, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO analytics_ai_thresholds (id, local_llm_min_confidence, benchmark_deviation,
+                        updated_by, updated_at)
+                VALUES ('default', :conf, :dev, :updated_by, :now)
+                ON CONFLICT (id) DO UPDATE SET
+                    local_llm_min_confidence = EXCLUDED.local_llm_min_confidence,
+                    benchmark_deviation = EXCLUDED.benchmark_deviation,
+                    updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("conf", minConfidence).addValue("dev", benchmarkDeviation)
+                .addValue("updated_by", updatedBy).addValue("now", timestampWithTimeZone(now)));
+        return readAiThresholds();
+    }
+
+    @Override
     public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now) {
         jdbcTemplate.update("""

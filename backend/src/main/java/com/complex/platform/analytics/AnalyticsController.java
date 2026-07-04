@@ -262,6 +262,22 @@ public class AnalyticsController {
         return ApiResponse.ok(operatingParamsService.updateAnomalyConfig(request));
     }
 
+    @GetMapping("/ai-thresholds")
+    public ApiResponse<AnalyticsRecords.AiThresholds> getAiThresholds() {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(operatingParamsService.getAiThresholds());
+    }
+
+    @PostMapping("/ai-thresholds")
+    public ApiResponse<AnalyticsRecords.AiThresholds> updateAiThresholds(
+            @RequestBody @jakarta.validation.Valid AiThresholdsRequest request) {
+        authorizationService.requirePermission("analytics.operating_params.manage");
+        authorizationService.requirePlatformScope();
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(operatingParamsService.updateAiThresholds(request));
+    }
+
     @GetMapping("/operating-params")
     public ApiResponse<PageResponse<OperatingParamsRecord>> listOperatingParams() {
         authorizationService.requirePermission("analytics.dashboard.view");
