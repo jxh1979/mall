@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 593 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 304 | 人工权限矩阵正文未覆盖 201 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1186 | 人工事件矩阵正文未覆盖 1144 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 593 | 人工任务映射正文未逐项覆盖 587 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 355 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 595 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 305 | 人工权限矩阵正文未覆盖 202 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1190 | 人工事件矩阵正文未覆盖 1148 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 595 | 人工任务映射正文未逐项覆盖 589 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 356 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -87,6 +87,7 @@
 | `analytics.group.view` | staff-token | group | 1 | getGroupOverview | OpenAPI 补充，以本附录为准 |
 | `analytics.operating_params.manage` | staff-token | platform, project | 5 | upsertOperatingParams, upsertBusinessDayCutoff, updateAnomalyConfig, upsertHolidayPeriod, fetchHolidayCalendar | OpenAPI 补充，以本附录为准 |
 | `analytics.report.export` | staff-token | platform | 1 | exportMonthlyReport | OpenAPI 补充，以本附录为准 |
+| `analytics.review.lock` | staff-token | project | 2 | listReviewLocks, createReviewLock | OpenAPI 补充，以本附录为准 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.view` | staff-token | project | 7 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
 | `audit.operation_log.export` | staff-token | platform | 1 | exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
@@ -541,6 +542,10 @@
 | `analytics.operating_params.viewed` | success | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.overdue_work_orders.view_failed` | failure | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | ANA-风控分析 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `analytics.overdue_work_orders.viewed` | success | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | ANA-风控分析 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `analytics.review_lock.viewed` | success | `listReviewLocks` | `GET` | `/api/v1/analytics/review-locks` | ANA-风控分析 | `analytics.review.lock` | 接口级事件，以本附录为准 |
+| `analytics.review_lock.viewed_failed` | failure | `listReviewLocks` | `GET` | `/api/v1/analytics/review-locks` | ANA-风控分析 | `analytics.review.lock` | 接口级事件，以本附录为准 |
+| `analytics.review.lock_failed` | failure | `createReviewLock` | `POST` | `/api/v1/analytics/review-locks` | ANA-风控分析 | `analytics.review.lock` | 接口级事件，以本附录为准 |
+| `analytics.review.locked` | success | `createReviewLock` | `POST` | `/api/v1/analytics/review-locks` | ANA-风控分析 | `analytics.review.lock` | 接口级事件，以本附录为准 |
 | `analytics.risk_alert.resolved` | success | `resolveRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `analytics.risk_alert.resolved_failed` | failure | `resolveRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `analytics.risk_rule.viewed` | success | `listRiskRules` | `GET` | `/api/v1/analytics/risk-rules` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
@@ -1588,6 +1593,7 @@
 | AMU-游乐安全 | `releaseAmusementGroupBooking` | `POST` | `/api/v1/amusement/group-bookings/{id}/release` | Release P2 amusement group booking and free locked capacity | `amusement.group_booking.manage` | `amusement_group_booking.released.success` / `amusement_group_booking.released.failure` | web | operation 级补充 |
 | AMU-游乐安全 | `removeAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/remove` | 解除游乐项目权益绑定 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `submitAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | 提交巡检结果 | `amusement.safety_inspection.submit` | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | staff_work_phone, web | operation 级补充 |
+| ANA-风控分析 | `createReviewLock` | `POST` | `/api/v1/analytics/review-locks` | 锁定经营复盘快照 | `analytics.review.lock` | `analytics.review.locked` / `analytics.review.lock_failed` | web | operation 级补充 |
 | ANA-风控分析 | `createRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts` | 创建风险alert | `analytics.risk_alert.manage` | `risk_alert.created` / `risk_alert.create_failed` | web | operation 级补充 |
 | ANA-风控分析 | `exportMonthlyReport` | `GET` | `/api/v1/analytics/reports/monthly-export` | 月度经营报表导出(分权) | `analytics.report.export` | `analytics.monthly_report.exported` / `analytics.monthly_report.export_failed` | web | operation 级补充 |
 | ANA-风控分析 | `fetchHolidayCalendar` | `POST` | `/api/v1/analytics/holiday-calendar/fetch` | 从 URL 抓取节假日日历 | `analytics.operating_params.manage` | `analytics.holiday_calendar.fetched` / `analytics.holiday_calendar.fetch_failed` | web | operation 级补充 |
@@ -1615,6 +1621,7 @@
 | ANA-风控分析 | `listMetricDefinitions` | `GET` | `/api/v1/analytics/metric-definitions` | 查询指标定义 | `analytics.dashboard.view` | `analytics.metric_definition.viewed` / `analytics.metric_definition.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | 查询综合体经营参数（坪效面积） | `analytics.dashboard.view` | `analytics.operating_params.viewed` / `analytics.operating_params.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | 超时工单明细(时效钻取) | `facility.work_order.manage` | `analytics.overdue_work_orders.viewed` / `analytics.overdue_work_orders.view_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listReviewLocks` | `GET` | `/api/v1/analytics/review-locks` | 经营复盘锁定记录 | `analytics.review.lock` | `analytics.review_lock.viewed` / `analytics.review_lock.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listRiskAlerts` | `GET` | `/api/v1/analytics/risk-alerts` | 风险预警 | `analytics.risk_alert.view` | `risk_alert.viewed` / `risk_alert.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listRiskRules` | `GET` | `/api/v1/analytics/risk-rules` | 查询风险规则 | `analytics.risk_alert.view` | `analytics.risk_rule.viewed` / `analytics.risk_rule.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listStaffServiceScores` | `GET` | `/api/v1/analytics/staff-service-score` | 查询员工服务scores | `analytics.risk_alert.view` | `analytics.staff_service_score.viewed` / `analytics.staff_service_score.viewed_failed` | web | operation 级补充 |

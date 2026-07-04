@@ -2322,6 +2322,73 @@
         }
       }
     },
+    "/api/v1/analytics/review-locks": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "listReviewLocks",
+        "summary": "经营复盘锁定记录",
+        "description": "用于查询经营复盘锁定记录（刷新/换人/审计追责可查回）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "analytics.review.lock",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics.review_lock.viewed",
+        "x-audit-event-failure": "analytics.review_lock.viewed_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "createReviewLock",
+        "summary": "锁定经营复盘快照",
+        "description": "用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "analytics.review.lock",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "analytics.review.locked",
+        "x-audit-event-failure": "analytics.review.lock_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BusinessReviewLockRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/analytics/risk-rules": {
       "get": {
         "tags": [
@@ -30517,6 +30584,22 @@
           }
         }
       },
+      "BusinessReviewLockRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BusinessReviewLockRequest"
+            },
+            "example": {
+              "idempotency_key": "review-lock-20260703-000001",
+              "domain": "all",
+              "operator_note": "总控周会复盘锁定",
+              "metric_count": 42
+            }
+          }
+        }
+      },
       "RiskAlertRequest": {
         "required": true,
         "content": {
@@ -36822,6 +36905,38 @@
               "archived"
             ],
             "maxLength": 64
+          }
+        }
+      },
+      "BusinessReviewLockRequest": {
+        "type": "object",
+        "description": "经营复盘锁定请求体。project_id 不在请求体（由 token scope 派生），字段须与后端 DTO、前端请求保持一致。",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "operator_note"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "经营复盘锁定.idempotency_key 字段；测试必须覆盖缺失、错类型和越界场景。",
+            "maxLength": 128
+          },
+          "domain": {
+            "type": "string",
+            "description": "经营复盘锁定.domain 字段（对应前端业务域筛选，all 或具体域）；测试必须覆盖缺失、错类型和越界场景。",
+            "maxLength": 64
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "经营复盘锁定.operator_note 复盘说明；测试必须覆盖缺失、错类型和越界场景。",
+            "maxLength": 1000
+          },
+          "metric_count": {
+            "type": "integer",
+            "description": "经营复盘锁定.metric_count 当前筛选下指标条数快照；测试必须覆盖缺失、错类型和越界场景。",
+            "minimum": 0,
+            "maximum": 1000000
           }
         }
       },
