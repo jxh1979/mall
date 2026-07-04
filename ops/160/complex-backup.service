@@ -1,0 +1,12 @@
+[Unit]
+Description=Complex NAS backup (daily, encrypted, synced to /mnt/complex-nas-backup)
+Documentation=file:///home/james/complex-management/ops/160/README-backup-schedule.md
+# Skip cleanly if the NAS is not mounted (nofail mount may be absent after a NAS outage).
+ConditionPathIsMountPoint=/mnt/complex-nas-backup
+
+[Service]
+Type=oneshot
+ExecStart=/opt/complex/scripts/complex-backup-guard.sh
+# Do not thrash on transient failure; the timer re-fires next day.
+Nice=10
+IOSchedulingClass=idle

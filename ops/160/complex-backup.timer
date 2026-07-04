@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily trigger for Complex NAS backup
+Documentation=file:///home/james/complex-management/ops/160/README-backup-schedule.md
+
+[Timer]
+# Daily at 03:30 local (low-traffic window). Cadence per complex-backup-schedule.example (CADENCE=daily).
+OnCalendar=*-*-* 03:30:00
+# If the box was off at 03:30, run at next boot.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

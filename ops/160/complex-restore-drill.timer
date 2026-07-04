@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly trigger for Complex restore drill
+Documentation=file:///home/james/complex-management/ops/160/README-backup-schedule.md
+
+[Timer]
+# Weekly, Monday 04:30 local (after the daily backup window).
+OnCalendar=Mon *-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
