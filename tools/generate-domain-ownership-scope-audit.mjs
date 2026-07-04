@@ -96,7 +96,47 @@ function findColumn(definition, columns) {
   return columns.find((column) => definitionTokens.has(column.toLowerCase()));
 }
 
+// 显式 analytics 表 scope 覆盖（逐表实证定性，出处见 SEC-ANALYTICS-ISOLATION-REGISTER）。
+// 这 4 张表 /^analytics_/ 会被 inheritedRules 统包成 inherited（信息性盲区），但静态列检测无法表达其真实语义，
+// 故在此按 Repository 读写路径 + Controller 门控的实证结论精确覆盖，消除盲区：
+//   - analytics_business_metric_snapshots: 无单一 scope 列，但 (segment_type,segment_id) 为多态维度自持
+//     scoped 读通道（JdbcAnalyticsRepository readMetricSnapshots/readProjectMetricSnapshots:
+//     'segment_type=:.. AND segment_id=:..'；商户端 Controller /dashboards/* 走 currentMerchantScope 行级隔离）
+//     → direct(segment_id)，验证器可对其 'segment_id = :' scoped 谓词做 F1 校验。
+//   - analytics_anomaly_config: 单例 id='default' 的平台级异常阈值配置（repo WHERE id='default'；
+//     Controller /anomaly-config 强制 requirePlatformScope）→ 有意平台级全局。
+//   - analytics_ai_quality_tasks/results: 平台级 AI 质检任务/结果，全表读无租户过滤
+//     （Controller /ai-quality/* 强制 requirePlatformScope）→ 有意平台级全局。
+const ANALYTICS_SCOPE_OVERRIDES = new Map([
+  ["analytics_business_metric_snapshots", {
+    scope_type: "direct",
+    scope_source: "segment_id",
+    scope_path: "polymorphic (segment_type, segment_id) self-owned scoped-read channel on analytics_business_metric_snapshots",
+    multi_complex_note: "segment_type in {platform(NULL),merchant,project}; merchant/project rows scoped by segment_id (AC-ISO-1)",
+  }],
+  ["analytics_anomaly_config", {
+    scope_type: "global_reference",
+    scope_source: "global_reference",
+    scope_path: "platform-global anomaly threshold config (singleton id='default'); read/write gated by requirePlatformScope",
+    multi_complex_note: "intentional platform-global; per-tenant thresholds would require a separate scoped table",
+  }],
+  ["analytics_ai_quality_tasks", {
+    scope_type: "global_reference",
+    scope_source: "global_reference",
+    scope_path: "platform-global AI quality task ledger; unfiltered read gated by requirePlatformScope",
+    multi_complex_note: "intentional platform-global AI governance output; not a tenant access boundary",
+  }],
+  ["analytics_ai_quality_results", {
+    scope_type: "global_reference",
+    scope_source: "global_reference",
+    scope_path: "platform-global AI quality result ledger; unfiltered read gated by requirePlatformScope",
+    multi_complex_note: "intentional platform-global AI governance output; not a tenant access boundary",
+  }],
+]);
+
 function classify(table, definition) {
+  const overridden = ANALYTICS_SCOPE_OVERRIDES.get(table);
+  if (overridden) return overridden;
   const direct = findColumn(definition, directColumns);
   if (direct) {
     return {
