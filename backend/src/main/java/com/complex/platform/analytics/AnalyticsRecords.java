@@ -329,6 +329,16 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** V219 提醒窗天数配置行(键值:window_key -> days)。 */
+    public record NotificationWindow(
+            String windowKey,
+            int days,
+            String description,
+            String updatedBy,
+            Instant updatedAt
+    ) {
+    }
+
     /** V218 AI/对标阈值配置(单例 default):AI建议采纳最低置信度 + 对标偏离告警线。 */
     public record AiThresholds(
             BigDecimal localLlmMinConfidence,

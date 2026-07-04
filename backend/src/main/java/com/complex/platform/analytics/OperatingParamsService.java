@@ -113,6 +113,28 @@ public class OperatingParamsService {
         return saved;
     }
 
+    /** V219:列提醒窗天数配置(经营参数页展示)。 */
+    public java.util.List<AnalyticsRecords.NotificationWindow> listNotificationWindows() {
+        return repository.listNotificationWindows();
+    }
+
+    /** V219:维护提醒窗天数(续约/存酒临期/招商跟进等);days>0;审计留痕。 */
+    public AnalyticsRecords.NotificationWindow upsertNotificationWindow(NotificationWindowRequest request) {
+        NotificationWindowRequest actual = requireRequest(request);
+        String key = requireText(actual.windowKey(), "window_key");
+        Integer days = actual.days();
+        if (days == null || days <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "days must be > 0");
+        }
+        AnalyticsRecords.NotificationWindow saved = repository.upsertNotificationWindow(
+                key, days, actual.description(), null, Instant.now(clock));
+        auditEventService.recordSuccess(
+                "analytics.notification_window.updated", "platform.notification_window.manage",
+                "notification_windows", key, null, actual.idempotencyKey(),
+                java.util.Map.of("window_key", key, "days", days));
+        return saved;
+    }
+
     /** V218:读 AI/对标阈值(经营参数页展示)。 */
     public AnalyticsRecords.AiThresholds getAiThresholds() {
         return repository.readAiThresholds();

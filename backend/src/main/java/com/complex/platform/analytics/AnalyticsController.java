@@ -262,6 +262,22 @@ public class AnalyticsController {
         return ApiResponse.ok(operatingParamsService.updateAnomalyConfig(request));
     }
 
+    @GetMapping("/notification-windows")
+    public ApiResponse<java.util.List<AnalyticsRecords.NotificationWindow>> listNotificationWindows() {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(operatingParamsService.listNotificationWindows());
+    }
+
+    @PostMapping("/notification-windows")
+    public ApiResponse<AnalyticsRecords.NotificationWindow> upsertNotificationWindow(
+            @RequestBody @jakarta.validation.Valid NotificationWindowRequest request) {
+        authorizationService.requirePermission("platform.notification_window.manage");
+        authorizationService.requirePlatformScope();
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(operatingParamsService.upsertNotificationWindow(request));
+    }
+
     @GetMapping("/ai-thresholds")
     public ApiResponse<AnalyticsRecords.AiThresholds> getAiThresholds() {
         authorizationService.requirePermission("analytics.dashboard.view");

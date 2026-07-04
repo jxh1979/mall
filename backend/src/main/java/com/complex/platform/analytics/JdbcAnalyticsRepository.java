@@ -1162,6 +1162,39 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public java.util.List<AnalyticsRecords.NotificationWindow> listNotificationWindows() {
+        return jdbcTemplate.query("""
+                SELECT window_key, days, description, updated_by, updated_at
+                  FROM notification_windows ORDER BY window_key
+                """, new MapSqlParameterSource(), (rs, n) -> new AnalyticsRecords.NotificationWindow(
+                rs.getString("window_key"), rs.getInt("days"), rs.getString("description"),
+                rs.getString("updated_by"), rs.getTimestamp("updated_at").toInstant()));
+    }
+
+    @Override
+    public AnalyticsRecords.NotificationWindow upsertNotificationWindow(String windowKey, int days,
+            String description, String updatedBy, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO notification_windows (window_key, days, description, updated_by, updated_at)
+                VALUES (:key, :days, :desc, :updated_by, :now)
+                ON CONFLICT (window_key) DO UPDATE SET
+                    days = EXCLUDED.days,
+                    description = COALESCE(EXCLUDED.description, notification_windows.description),
+                    updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource().addValue("key", windowKey).addValue("days", days)
+                .addValue("desc", description).addValue("updated_by", updatedBy)
+                .addValue("now", timestampWithTimeZone(now)));
+        return jdbcTemplate.query("""
+                SELECT window_key, days, description, updated_by, updated_at
+                  FROM notification_windows WHERE window_key = :key
+                """, new MapSqlParameterSource().addValue("key", windowKey),
+                (rs, n) -> new AnalyticsRecords.NotificationWindow(
+                        rs.getString("window_key"), rs.getInt("days"), rs.getString("description"),
+                        rs.getString("updated_by"), rs.getTimestamp("updated_at").toInstant()))
+                .stream().findFirst().orElse(null);
+    }
+
+    @Override
     public AnalyticsRecords.AiThresholds readAiThresholds() {
         return jdbcTemplate.query("""
                 SELECT local_llm_min_confidence, benchmark_deviation, updated_by, updated_at

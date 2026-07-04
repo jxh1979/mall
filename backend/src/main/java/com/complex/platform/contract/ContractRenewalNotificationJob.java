@@ -3,6 +3,7 @@ package com.complex.platform.contract;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import com.complex.platform.common.NotificationWindowConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -17,29 +18,38 @@ import org.springframework.stereotype.Component;
 @Component
 public class ContractRenewalNotificationJob {
 
-    // ponytail: 先固定 30 天续约提醒窗口，后续如运营要按商户/合同配置，再迁入 operating params。
+    // V219:续约提醒窗天数迁入 notification_windows(key=contract.renewal),缺配置兜底 30(行为不变)。
     static final int RENEWAL_NOTICE_DAYS = 30;
+    static final String WINDOW_KEY = "contract.renewal";
 
     private final ContractService service;
     private final Clock clock;
     private final boolean scheduledEnabled;
+    private final NotificationWindowConfig windowConfig;
 
     @Autowired
     public ContractRenewalNotificationJob(
             ContractService service,
-            @Value("${contract.renewal.notification.scheduled.enabled:false}") boolean scheduledEnabled
+            @Value("${contract.renewal.notification.scheduled.enabled:false}") boolean scheduledEnabled,
+            NotificationWindowConfig windowConfig
     ) {
-        this(service, Clock.systemUTC(), scheduledEnabled);
+        this(service, Clock.systemUTC(), scheduledEnabled, windowConfig);
     }
 
     ContractRenewalNotificationJob(ContractService service, Clock clock) {
-        this(service, clock, true);
+        this(service, clock, true, new NotificationWindowConfig());
     }
 
     ContractRenewalNotificationJob(ContractService service, Clock clock, boolean scheduledEnabled) {
+        this(service, clock, scheduledEnabled, new NotificationWindowConfig());
+    }
+
+    ContractRenewalNotificationJob(ContractService service, Clock clock, boolean scheduledEnabled,
+            NotificationWindowConfig windowConfig) {
         this.service = service;
         this.clock = clock;
         this.scheduledEnabled = scheduledEnabled;
+        this.windowConfig = windowConfig;
     }
 
     /** @Scheduled 薄包装：默认关闭，仅在 contract.renewal.notification.scheduled.enabled=true 时注册。 */
@@ -53,6 +63,6 @@ public class ContractRenewalNotificationJob {
     }
 
     public void runOnce(LocalDate asOf) {
-        service.processMerchantFeeRenewalNotifications(asOf, RENEWAL_NOTICE_DAYS);
+        service.processMerchantFeeRenewalNotifications(asOf, windowConfig.days(WINDOW_KEY, RENEWAL_NOTICE_DAYS));
     }
 }

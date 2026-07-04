@@ -1030,6 +1030,15 @@ class AnalyticsServiceTests {
                     new java.math.BigDecimal("0.5"), new java.math.BigDecimal("0.8"), true, null, null);
         }
 
+        public java.util.List<AnalyticsRecords.NotificationWindow> listNotificationWindows() {
+            return java.util.List.of();
+        }
+
+        public AnalyticsRecords.NotificationWindow upsertNotificationWindow(String windowKey, int days,
+                String description, String updatedBy, java.time.Instant now) {
+            return new AnalyticsRecords.NotificationWindow(windowKey, days, description, updatedBy, now);
+        }
+
         public AnalyticsRecords.AiThresholds readAiThresholds() {
             return new AnalyticsRecords.AiThresholds(
                     new java.math.BigDecimal("0.60"), new java.math.BigDecimal("0.20"), null, null);

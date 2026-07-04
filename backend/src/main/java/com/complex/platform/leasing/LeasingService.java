@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import com.complex.platform.common.NotificationWindowConfig;
 import org.springframework.stereotype.Service;
 
 /**
@@ -43,22 +44,35 @@ public class LeasingService {
     private static final Set<String> INTENT_KEY_STAGES = Set.of("proposal_quoted", "negotiation");
     private static final Set<String> BRAND_TYPES = Set.of("intentional", "prospective", "partner", "blacklist");
     private static final Set<String> FOLLOW_UP_REF_TYPES = Set.of("lead", "intent");
-    private static final long FOLLOW_UP_REMINDER_DAYS = 3;
+    // V219:招商跟进提醒窗天数迁入 notification_windows(key=leasing.lead_follow_up),缺配置兜底 3(行为不变)。
+    private static final int FOLLOW_UP_REMINDER_DAYS = 3;
+    private static final String FOLLOW_UP_WINDOW_KEY = "leasing.lead_follow_up";
 
     private final LeasingRepository repository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final ContractService contractService;
     private final PlatformService platformService;
+    private final NotificationWindowConfig windowConfig;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public LeasingService(LeasingRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, ContractService contractService,
-            PlatformService platformService) {
+            PlatformService platformService, NotificationWindowConfig windowConfig) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.contractService = contractService;
         this.platformService = platformService;
+        this.windowConfig = windowConfig;
+    }
+
+    /** 测试便捷构造:提醒窗回落默认。 */
+    public LeasingService(LeasingRepository repository, AuditEventService auditEventService,
+            AuthorizationService authorizationService, ContractService contractService,
+            PlatformService platformService) {
+        this(repository, auditEventService, authorizationService, contractService, platformService,
+                new NotificationWindowConfig());
     }
 
     // ============ 线索 ============
@@ -74,7 +88,8 @@ public class LeasingService {
     /** 3 天未跟进的活跃线索（负责人待办提醒）。 */
     public PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUp() {
         authorizationService.requirePlatformScope();
-        Instant cutoff = Instant.now().minus(FOLLOW_UP_REMINDER_DAYS, ChronoUnit.DAYS);
+        Instant cutoff = Instant.now().minus(
+                windowConfig.days(FOLLOW_UP_WINDOW_KEY, FOLLOW_UP_REMINDER_DAYS), ChronoUnit.DAYS);
         // 3.6：下沉仓储层 WHERE due，不再拉全表内存过滤。
         List<LeasingLeadRecord> items = repository.listLeadsNeedingFollowUp(cutoff, currentProjectScope());
         return new PageResponse<>(items, 1, 500, items.size());
