@@ -5,8 +5,11 @@
 > - **✅ 终端开关后端拒绝铁律（§5.4）已落地（V068）**：新增 `ActionGateAspect`（`@Order(10)`，早于业务事务）在带 `@GuardedAction(capability=...)` 的业务方法执行前由 `TerminalSwitchGuard` 校验开关、关闭/读取失败发 `terminal.access_rejected`(reason=disabled|switch_fetch_failed) 并拒绝，**finance/bar/ticketing/amusement/inventory 共 94 处 `@GuardedAction` 全景埋点**，不再可绕过。准入闸 `AdmissionGuard` + `supervisor_review_policies`(V068) 同切面串联（T3 合同准入）。
 > - **✅ scope 7 维已落地（V068）**：`TerminalSwitchGuard.resolveEffectiveSwitch` 解析优先级 device > version > module > business_system > merchant > project > global（默认开启 opt-out，fail-closed）；`terminal_capability_switches.scope_type` 加 7 维 CHECK，不再收窄到 global/device。
 > - **⚠️ opt-out 纪律（2026-06-24 补，对齐平台治理地图「兜底关闭」）**：当前实现是"无显式开关行 = 默认开启(opt-out)"，仅"开关拉取失败/超时/不可解析"按 fail-closed（§5.6）。读取异常 fail-closed 与业务 HTML「拉取失败按兜底关闭」一致；但"受控能力无 seed 行即默认放行"与业务侧「白名单式默认关」心智仍有差。**硬约束**：每新增一类受控能力（终端/模块/第三方/MDM/人脸等）必须同批 seed 一条 `enabled=FALSE` 兜底行（参照 V146 `face.verification.enabled`=FALSE、V071/V093/V096/V097/V098 各受控前缀默认关），不得依赖默认开放；评审与门禁应核对"新增受控能力是否配套 FALSE seed"。
-> - **部分收口——异常责任链事件名漂移已对齐（`文档goalP1(2026-06-20)`）**：异常责任链 `risk_alerts`/`risk_alert_actions` 已由 V103 落地，代码真实事件名为 `exception.reported/claimed/transferred/escalated/resolved/dismissed`（`RiskAlertService`）；§4.1 已就地补"字典名→代码真实名"映射（`exception.first_handled`→`exception.claimed` 等），并新增 §4.1.6 登记 V099–V124 全部新功能真实事件名。**仍开放**：销售归属/服务责任事件名 `order.acquired`/`order.sales_attributed` 代码**仍零命中、无替代发布**（§4.1 已标注为待接线占位）；三层过程留痕(business_process_instances/step_records，V059 建表但未全面接线)见 `evidence-risk-layer-spec-v0.2.md`。
+>   - **✅ 2026-07-04 据实核对现状（ssh 核对迁移 seed）**：终端总开关 `terminal.enabled`（V197，10 端）与 Web 后台/商户专区模块开关（V198/V199）**按设计 seed=TRUE**——它们是**已发布、有意默认开**的可控能力（关闭=停用某端/模块，属运营动作，非「未受控放行」）。**全部受控/预留能力均已配套显式 `enabled=FALSE` 兜底行**：`payment.gateway.enabled`(V093)、`face.verification.enabled`(V146)、`terminal.camera_scan.enabled`/`customer.native_client.enabled`(V097)、`staff.device_keystore.enabled`/`terminal.tablet.enabled`(V098)、`wecom.ai_qc.enabled`(V096)、`integration.*.sync`(V071)、`managed_work_devices`(V088)、`sms_notification` 总开关(V177，域级子开关按 AND 语义)。**结论：不存在「受控能力无 seed 行→默认放行」的存量定时炸弹**；opt-out 仅对上述有意默认开的总/模块开关成立。**强制纪律照旧**：新增任一受控能力必须同批 seed FALSE + 对存量做一次回溯核对，评审/门禁核对「新增受控能力是否配套 FALSE seed」。
+> - **部分收口——异常责任链事件名漂移已对齐（`文档goalP1(2026-06-20)`）**：异常责任链 `risk_alerts`/`risk_alert_actions` 已由 V103 落地，代码真实事件名为 `exception.reported/claimed/transferred/escalated/resolved/dismissed`（`RiskAlertService`）；§4.1 已就地补"字典名→代码真实名"映射（`exception.first_handled`→`exception.claimed` 等），并新增 §4.1.6 登记 V099–V124 全部新功能真实事件名。**已收口（2026-07-04）**：销售归属/服务责任事件名 `order.acquired`/`order.sales_attributed` 代码零命中、无替代发布，本轮已裁定改为**记录型留痕**（`service_responsibility_records.sales_staff_id`，`TraceabilityService.recordResponsibility`），§4.1 两事件已作废、不再作为待接线占位。三层过程留痕(business_process_instances/step_records，V059 建表但未全面接线)见 `evidence-risk-layer-spec-v0.2.md`。
 > - **候选验收口径（已正式）**：关闭某端/模块后调用其业务接口被后端拒绝并写 `terminal.access_rejected`，前端隐藏仅作辅助。
+
+> 2026-07-04 逻辑一致性修订：①销售归属留痕由「事件型」改为「记录型」口径——经核对代码 `order.acquired`/`order.sales_attributed` 两事件零命中且无替代发布，销售归属实际以 `service_responsibility_records.sales_staff_id`（`TraceabilityService.recordResponsibility`）记录型留痕承载，PRD 同步作废这两个事件名（§4.1）。②R7 opt-out 据实写现状：终端总开关（V197）与 Web/商户模块（V198/V199）按设计 seed=TRUE（已发布可控能力有意默认开），全部受控/预留能力（支付网关/人脸/摄像头扫码/原生客户端/平板/设备Keystore/企微AI质检/第三方同步/受管设备/短信总开关）均已显式 seed=FALSE，不存在「受控能力无 seed 行默认放行」的定时炸弹；新增受控能力强制同批 seed FALSE + 存量回溯。③补 §1A「业务系×留痕动作」矩阵。
 
 ## 1. 文档定位
 
@@ -16,6 +19,51 @@
 2. 所有终端都必须有开关接口，包括客人 App、小程序、Web 前端、工作人员平板 App、员工工作手机、员工私人手机 App、商户侧 App/Web、触摸屏一体机等，为后续酒吧系统和乐园系统独立 SaaS 化预留能力。
 
 本文不替代供应链、酒吧、游乐、终端或开放平台 PRD，而是作为这些系统共用的底层约束。
+
+## 1A. 业务系 × 留痕动作实现矩阵
+
+> 2026-07-04 逻辑一致性修订新增：§1「所有有过程的业务动作都必须留痕」是原则，但此前无「业务系 × 留痕动作 × 实现状态」清单，无法据实核对覆盖面。本矩阵按业务系列出核心留痕动作与实现状态（✅=事件/记录已接线；记录型=以责任/流水表记录而非事件；🅿=P1+）。事件名以 §4.1 唯一权威字典为准；权威事件字典漂移已在 §4.1.6 收口。
+
+| 业务系 | 留痕动作 | 承载事件/记录（§4.1 权威名） | 实现状态 |
+|---|---|---|---|
+| 票务 | 出票 | `ticket.issued` | ✅ |
+| 票务 | 退票/退款 | `ticket.refunded` / `refund.succeeded` | ✅ |
+| 票务 | 改期/变更 | `ticket.changed` | ✅ |
+| 票务 | 下单锁库/释放 | `ticket.inventory_locked` / `ticket.inventory_released` | ✅ |
+| 票务 | 核销预检/成功/失败/撤销/人工放行 | `verification.previewed`/`succeeded`/`failed`/`reversed`/`manual_overridden` | ✅ |
+| 酒吧 | 开台/转台/清台 | `bar.table.opened`/`transferred`/`cleared` | ✅ |
+| 酒吧 | 订台创建/定金支付/定金结算 | `reservation.created`/`reservation.deposit_paid`/`reservation.deposit_settled` | ✅ |
+| 酒吧 | 点单创建/送达/账单结清 | `bar.order_created`/`bar.order_delivered`/`bar.bill_settled` | ✅ |
+| 酒吧 | 存酒登记/取酒/作废 | `bar.saved_bottle.created`/`saved_bottle_picked_up`/`saved_bottle.voided` | ✅ |
+| 酒吧 | 赠饮核销 | `bar.gift_redeemed` | ✅ |
+| 酒吧 | 卡座提成计算/调整 | `bar.table_commission.calculated`/`adjusted` | ✅ |
+| 酒吧 | 退菜退酒审批决策 | `bar.order_item_void_decided` (V117/V124) | ✅ |
+| 酒吧 | 年龄/人脸核验预检/请求/通过/拒绝/阻断 | `bar.age_verification.*` | ✅（人脸能力默认关，见 R7） |
+| 酒吧 | **销售归属** | **记录型**：`service_responsibility_records.sales_staff_id`（`order.acquired`/`sales_attributed` 已作废） | 记录型 ✅ |
+| 游乐 | 核销成功/失败/人工放行 | `amusement.verification_succeeded`/`_failed`/`_overridden` | ✅ |
+| 游乐 | 设备/项目状态变化 | `amusement.device_status_changed` | ✅ |
+| 游乐 | 安全巡检提交 | `amusement.safety_inspection.submitted` | ✅ |
+| 游乐 | 超容落事件 | `amusement.incident.over_capacity` (V104) | ✅ |
+| 财务 | 现金/POS 收款 | `payment.cash_received` / `payment.pos_received` | ✅ |
+| 财务 | 支付通道回调/轮询/退款终态 | `payment.gateway_notified`/`payment.poll_checked`/`refund.succeeded` | ✅（支付网关默认关，见 R7） |
+| 财务 | 账单调整/免单 | `bill.adjusted` / `bill.waived` | ✅ |
+| 财务 | 结算确认 | `settlement.confirmed` | ✅ |
+| 财务 | 物业费计费 | `finance_property_fee.billed`（原 CAM true-up 已废止 V150） | ✅ |
+| 供应链 | 入库/出库/调拨/盘点/报损/报溢/冲正 | `inventory.*`（见 §4.1.1） | ✅ |
+| 供应链 | 采购下单/供应合同审批/供应商拉黑 | `purchase.ordered`/`supply_contract.approved`/`supplier.blacklisted` | ✅ |
+| 供应链 | 机器人取货/送达/后厨收货/服务员取走送达 | `robot.*` / `bar_kitchen.goods_received` / `bar_service.goods_*` | ✅ |
+| 会员 | 积分获取/扣减/兑换/到期 | `points.earned`/`deducted`/`redeemed`/`expired` | ✅ |
+| 合规 | 同意采集/撤回、个人信息销毁/匿名化 | `consent.recorded`/`withdrawn`、`personal_data.purged`/`anonymized` | ✅ |
+| 合规 | 场所超容 | `venue.over_capacity` | ✅ |
+| 治理/准入 | 准入卡住/放行/升级 | `admission.blocked`/`released`/`escalated`（字典旧名 `contract.blocked/released` 已映射） | ✅ |
+| 异常责任链 | 上报/接单/转交/升级/关闭/驳回 | `exception.reported`/`claimed`/`transferred`/`escalated`/`resolved`/`dismissed` (V103) | ✅ |
+| 企微 | 会话入库/违规命中/复核/同步批次 | `wecom.message_received`/`wecom.risk.hit_detected`/`hit_reviewed`/`wecom.conversation_synced` | ✅ |
+| 第三方 | 订单同步/券核销/对账差异/渠道对账 | `catering.order_synced`/`retail.order_synced`/`voucher.verified_synced`/`reconciliation.diff_found`/`integration.channel_reconciliation.*` | ✅ |
+| 设备/权限 | 设备生命周期/MDM 违规处置/权限授予撤销/敏感查看/证据导出 | `terminal.device.*`/`mdm.violation.handled`/`permission.granted`/`revoked`/`sensitive.viewed`/`evidence.exported` | ✅ |
+| 终端开关 | 关闭端/模块后端拒绝 | `terminal.access_rejected` | ✅ |
+| 视频 | 候选片段匹配 | `video.candidate_matched` | 🅿（P1 接入视频平台） |
+
+> 说明：本矩阵为覆盖面自检清单，非新增编码要求；各动作权威事件名与载荷以 §4.1 及 `v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准。
 
 > 修订说明（2026-06-07）：本文第 4.1 节"标准事件类型"是全系统**唯一权威事件字典**，`java-backend §14` 事件清单、`foundation-database` 事件清单、`data-risk-ai` 分析域事件名以及酒吧/安卓落地层事件名，均须与本节一字一致；其他文档不得另起命名（如 `bar.sales.attributed`），分析域只消费本节标准事件名。依据《统一口径基准》D4、finding tracewire-1/trace-2/devtech-6。
 
@@ -64,7 +112,7 @@
 | 过程 | 必须留下的事实 | 优先自动留痕方式 |
 |---|---|---|
 | 订单获取 | 订单来源、渠道、销售人员、创建终端、创建时间、客人身份、关联卡座或项目 | App/小程序/第三方回调自动写入；销售工作台创建订台时自动记录销售账号 |
-| 销售归属 | 谁促成订台、谁维护客户、是否涉及提成或业绩归属 | 销售登录状态、岗位快照、客户归属、订台单创建人、跟进记录自动关联 |
+| 销售归属 | 谁促成订台、谁维护客户、是否涉及提成或业绩归属 | **记录型留痕**（非事件型）：由 `TraceabilityService.recordResponsibility` 写 `service_responsibility_records`（`sales_staff_id`/`sales_staff_position_type_snapshot`/`commission_record_id`）承载；销售登录状态、岗位快照、客户归属、订台单创建人自动带入。`order.acquired`/`order.sales_attributed` 事件已作废（见 §4.1） |
 | 票务购买 | 购买渠道、票种、价格策略、优惠规则、支付结果、防伪码生成 | 官方端和第三方订单回流自动写事件，员工不能代买门票 |
 | 票务核销 | 谁核销、在哪个入口核销、核销设备、核销结果、失败原因、人工放行人 | 工作手机扫码自动带入员工、设备、点位和时间 |
 | 会员积分 | 积分发放、扣减、兑换礼品、等级变化、规则命中 | 订单支付、核销、兑换动作自动触发 |
@@ -182,8 +230,8 @@ flowchart TD
 | `bar_service.goods_delivered` | 服务员送达客人或卡座 |
 | `inventory.exception_reported` | 库存或交接异常 |
 | `inventory.exception_resolved` | 异常处理完成 |
-| `order.acquired` | 订单被获取或创建。**`文档goalP1(2026-06-20)` 漂移修正**：审计确认本事件名代码**零命中**、无等效替代发布；销售归属链当前未按本名落事件。本名暂保留为待接线占位（标记"字典名→代码暂无落点"），分析域勿依赖本名取数，待销售归属服务接线后回填权威落点。 |
-| `order.sales_attributed` | 订单销售归属确认或变更。**`文档goalP1(2026-06-20)` 漂移修正**：同 `order.acquired`，代码**零命中**、无等效替代；暂保留为待接线占位（"字典名→代码暂无落点"），分析域勿依赖。 |
+| ~~`order.acquired`~~ | ~~订单被获取或创建~~ **已作废（2026-07-04）**：代码零命中、无等效替代发布。销售归属**不采用事件型留痕**，改由**记录型留痕**承载（见下条与 §6.6）。本事件名不再作为字典项，分析/风控/审计一律**不消费**本名。 |
+| ~~`order.sales_attributed`~~ | ~~订单销售归属确认或变更~~ **已作废（2026-07-04）**：代码零命中、无等效替代。销售归属确认/变更以 `service_responsibility_records.sales_staff_id`（+`sales_staff_position_type_snapshot`）**记录型留痕**为权威落点（写入方 `TraceabilityService.recordResponsibility`，见 §2.3「销售归属」行与 §6.6）；PRD 同步作废本事件名，分析/风控/审计**不消费**本名。 |
 | `reservation.deposit_paid` | 订台定金支付完成 |
 | `table.service_assigned` | 卡座或桌台分配责任服务员 |
 | `table.service_changed` | 服务责任人变更 |
@@ -678,6 +726,9 @@ flowchart TD
 | 2026-06-18 E2 | 增 | §5.4 关闭后的表现 | 补同口径修订说明：确认 `legacy-console` 为正式 Web 前端，Web 端写动作边界（不直接核销/人工放行/结账支付/存取酒，只跳转）与"终端开关后端拒绝铁律"一致；Web 模块开关关闭后后端仍须独立校验拒绝并写 `terminal.access_rejected` | 业务已确认（2026-06-18）legacy-console 为正式 Web 前端，须按终端铁律约束 Web 端写动作边界 |
 | 2026-06-18 D7 收口 | 改 | §7/§8 | 收口 §7 与 §8 自相矛盾：§7 明确旧 `/exceptions/*`、`/api/mobile/*` 及 `/api/admin/exceptions/*` 历史路径 deprecated、不作正式契约；§8 明确异常责任链（发现→第一处理→转派→升级→关闭）P0 必做，须改用正式 OpenAPI operationId 并登记到 operation 验收矩阵，含 first-handle/transfer/escalate/close 写动作及验收。两节各管路径形态与能力范围、不再互斥；operationId 待 OpenAPI 与验收矩阵登记后定稿 | D7 异常接口 §7/§8 自相矛盾收口 |
 | 2026-06-20 `文档goalP1` | 改 | §4.1 标准事件类型 | 漂移修正：`order.acquired`/`order.sales_attributed` 代码零命中、无替代，标注为待接线占位（"字典名→代码暂无落点"）；`contract.blocked`→`admission.blocked`、`contract.released`→`admission.released`、`exception.first_handled`→`exception.claimed` 三处就地补"字典名→代码真实名"映射；主表补 `exception.transferred`/`exception.dismissed`（V103 责任链真实事件名） | Grep backend 确认事件名漂移；V103 统一异常责任链 |
+| 2026-07-04 | 改 | §4.1、§2.3 | 销售归属由事件型改记录型：`order.acquired`/`order.sales_attributed` 代码零命中已作废，改由 `service_responsibility_records.sales_staff_id`（TraceabilityService.recordResponsibility）记录型留痕承载；分析/风控/审计不再消费这两个事件名 | 逻辑一致性修订；ssh 核对代码零命中 |
+| 2026-07-04 | 改 | R7 横幅 opt-out 纪律 | 据实核对现状：终端总开关(V197)/Web·商户模块(V198/V199)按设计 seed=TRUE（有意默认开的已发布能力），全部受控/预留能力(V071/V088/V093/V096/V097/V098/V146/V177)均已显式 seed=FALSE，不存在「无 seed 行默认放行」定时炸弹；新增受控能力强制 seed FALSE+存量回溯照旧 | 逻辑一致性修订；ssh 核对迁移 seed |
+| 2026-07-04 | 增 | §1A | 新增「业务系 × 留痕动作 × 实现状态」矩阵，据实核对 §1「所有业务动作留痕」原则的覆盖面（票务/酒吧/游乐/财务/供应链/会员/合规/治理/异常/企微/第三方/设备/终端开关/视频） | 逻辑一致性修订：§1 vs §4.1 缺业务系×动作实现清单 |
 | 2026-06-20 `文档goalP1` | 增 | §4.1.6 V099–V124 新功能事件登记 | 新增小节登记本会话 V099–V124 新功能事件（均经 Grep 核对为代码真实发布名）：`exception.reported/claimed/transferred/escalated/resolved/dismissed`(V103)、`amusement.incident.over_capacity`(V104)、`points.earned/deducted`(V100)、`wecom.risk.hit_detected/hit_reviewed`(V106)、`terminal.device.repaired/lost/found/scrapped`+`mdm.violation.handled`(V107)、`merchant_service.work_order.escalated`(V120)、`bar.order_item_void_decided`(V117/V124)、`finance_cam.trued_up`(V121，注意下划线连写)、`integration.channel_reconciliation.completed/failed`(V109)；指向 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为新功能事件权威 | 权威事件字典漂移收口 + 新功能事件登记 |
 
 ## 附:按钮级开关禁用扫描结论(2026-07-02,修复计划 3.19 验收尾巴收口)
