@@ -31,6 +31,10 @@ public class BarTableSessionService {
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
         int allowedFreeGuests = nonNegative(actual.allowedFreeEntryCount(), "allowed_free_entry_count");
+        // 可进人数（容量）独立于免票入场人数：未填时沿用免票人数口径（向后兼容），填了就按填的落库。
+        int capacity = actual.capacity() == null
+                ? allowedFreeGuests
+                : nonNegative(actual.capacity(), "capacity");
         long minimumSpend = nonNegative(actual.minimumSpendCent(), "minimum_spend_cent");
         return repository.saveTable(new BarTableRecord(
                 "table_" + slug,
@@ -39,7 +43,7 @@ public class BarTableSessionService {
                 "T-" + slug.toUpperCase(Locale.ROOT),
                 requireText(actual.tableName(), "table_name"),
                 trimToDefault(actual.tableType(), "card_seat"),
-                Math.max(allowedFreeGuests, 0),
+                capacity,
                 allowedFreeGuests,
                 minimumSpend,
                 CURRENCY_CNY,
@@ -66,11 +70,19 @@ public class BarTableSessionService {
         return repository.saveTable(tableWithStatus(table, "opened", Instant.now()));
     }
 
+    // 平台直营会话的租户占位：bar_table_sessions.merchant_id 为 NOT NULL（V019），
+    // 而平台管理员/平台直营桌台的 merchant_id 为空，用与 analytics 同口径的 __platform__ 占位，
+    // 既满足非空约束又不落进任何商户的行级隔离查询（WHERE merchant_id = :scope 永不命中占位）。
+    private static final String PLATFORM_MERCHANT_PLACEHOLDER = "__platform__";
+
     BarTableSessionRecord createTableSession(BarTableSessionRequest request) {
         BarTableSessionRequest actual = requireRequest(request);
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         BarTableRecord table = repository.findTableById(requireText(actual.tableId(), "table_id"))
                 .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+        // 会话商户归属：优先调用方商户范围，其次桌台商户，平台直营（皆空）落 __platform__ 占位满足非空约束。
+        String merchantId = authorizationService.currentMerchantScope()
+                .or(() -> Optional.ofNullable(trimToNull(table.merchantId())))
+                .orElse(PLATFORM_MERCHANT_PLACEHOLDER);
         String barId = requireText(actual.barId(), "bar_id");
         if (!barId.equals(table.barId())) {
             throw ApiException.conflict("BAR_SCOPE_MISMATCH", "table session must be opened in the table bar");

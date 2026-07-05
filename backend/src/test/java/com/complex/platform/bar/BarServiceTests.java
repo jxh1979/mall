@@ -83,6 +83,35 @@ class BarServiceTests {
     }
 
     @Test
+    void createTableLandsIndependentCapacitySeparateFromFreeEntryCount() {
+        // 可进人数（容量）与免票入场人数解耦：显式传 capacity=8、免票=2，两者各自落库、互不相等。
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "cap-independent", "create", List.of(), "bar_1", "容量测试桌", "card_seat",
+                50000L, 2, 8, "active"));
+        assertThat(table.capacity()).isEqualTo(8);
+        assertThat(table.allowedPassFreeGuestCount()).isEqualTo(2);
+    }
+
+    @Test
+    void createTableWithoutCapacityFallsBackToFreeEntryCount() {
+        // 未传 capacity（旧签名/前端不填）时沿用免票人数口径，保持向后兼容。
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "cap-fallback", "create", List.of(), "bar_1", "回退桌", "card_seat", 50000L, 5, "active"));
+        assertThat(table.capacity()).isEqualTo(5);
+        assertThat(table.allowedPassFreeGuestCount()).isEqualTo(5);
+    }
+
+    @Test
+    void createTableSessionForPlatformDirectFillsNonNullMerchantPlaceholder() {
+        // 平台直营开台（平台管理员 + 桌台 merchant 为空）：会话 merchant_id 落 __platform__ 占位，
+        // 满足 bar_table_sessions.merchant_id NOT NULL 约束（此前直插 null 触发 500）。
+        BarTableRecord table = createTable("platform-open", "bar_1", "active", 50000L);
+        assertThat(table.merchantId()).isNull();
+        BarTableSessionRecord session = createSession("platform-open", table.id(), "bar_1", null);
+        assertThat(session.merchantId()).isEqualTo("__platform__");
+    }
+
+    @Test
     void scanOrderBindsOpenSessionInheritsEntryGateAndSourcesApp() {
         // 扫码点单（绑桌台会话 + 继承入场闸）：开启功能标志后，扫开台会话二维码下单 → 单据绑会话桌台、来源 app/miniapp、
         // 不重复核龄（继承场馆入场闸结论）；bar/桌台取自会话（扫码定位），客户端只传 items。

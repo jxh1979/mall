@@ -15,6 +15,13 @@ const BAR_TRANSFER_PERMISSION = "bar.table_session.transfer";
 const BAR_MERGE_PERMISSION = "bar.table_session.merge";
 const BAR_RENEW_PERMISSION = "bar.table_session.renew";
 const BAR_INVITATION_PERMISSION = "bar.reservation.invitation.manage";
+const BAR_TABLE_MANAGE_PERMISSION = "bar.table.manage";
+const BAR_RESERVATION_CREATE_PERMISSION = "bar.reservation.create";
+const BAR_SESSION_CREATE_PERMISSION = "bar.table_session.create";
+
+function todayBusinessDate() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function nextRenewedUntil(minutes: number) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -35,6 +42,10 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
   const [barError, setBarError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  // 从零起单三表单：新建卡座 / 新建订台（代客）/ 开台。全站零英文，受权限按钮约束。
+  const [newTable, setNewTable] = React.useState({ barId: "bar-main", tableName: "", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
+  const [newReservation, setNewReservation] = React.useState({ barId: "bar-main", tableId: "", guestCount: "2", salespersonUserId: "" });
+  const [newSession, setNewSession] = React.useState({ barId: "bar-main", tableId: "", businessDate: todayBusinessDate(), guestCount: "2", salesStaffId: "", serviceStaffId: "" });
   // 行明细抽屉：三张业务表整行可点 → 完整字段（状态中文·开台/关台/预定时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -188,6 +199,119 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
+  // 新建卡座：可进人数（容量）独立于免通票入场人数；低消按元填、后端按分存。
+  function validateNewTable() {
+    if (!newTable.barId.trim()) return fail("新建卡座请填写所属酒吧。");
+    if (!newTable.tableName.trim()) return fail("新建卡座请填写卡座名称。");
+    const cap = Number(newTable.capacity);
+    if (!Number.isFinite(cap) || cap <= 0) return fail("可进人数必须大于 0。");
+    const free = Number(newTable.allowedFreeEntryCount);
+    if (!Number.isFinite(free) || free < 0) return fail("免通票入场人数不能为负。");
+    const spend = Number(newTable.minimumSpendYuan);
+    if (!Number.isFinite(spend) || spend < 0) return fail("低消金额不能为负。");
+    setBarError("");
+    return true;
+  }
+
+  async function createTable() {
+    if (!validateNewTable()) return;
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const result = await api.post("/api/v1/bar/tables", {
+        barId: newTable.barId.trim(),
+        tableName: newTable.tableName.trim(),
+        capacity: Number(newTable.capacity),
+        allowedFreeEntryCount: Number(newTable.allowedFreeEntryCount),
+        minimumSpendCent: Math.round(Number(newTable.minimumSpendYuan) * 100),
+      });
+      setActionResult({ action: "bar_table_create", status: "created", result });
+      setBarError("");
+      setNewTable((prev) => ({ ...prev, tableName: "" }));
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "新建卡座失败";
+      setBarError(message);
+      setGlobalError(message);
+      setActionResult({ action: "bar_table_create", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 新建订台（代客）：order_source 由后端自动置为 staff（代客下单），前端只填卡座与人数。
+  function validateNewReservation() {
+    if (!newReservation.barId.trim()) return fail("新建订台请填写所属酒吧。");
+    if (!newReservation.tableId.trim()) return fail("新建订台请填写卡座 ID。");
+    const count = Number(newReservation.guestCount);
+    if (!Number.isFinite(count) || count <= 0) return fail("订台人数必须大于 0。");
+    setBarError("");
+    return true;
+  }
+
+  async function createReservation() {
+    if (!validateNewReservation()) return;
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const result = await api.post("/api/v1/bar/reservations", {
+        barId: newReservation.barId.trim(),
+        tableId: newReservation.tableId.trim(),
+        reservationTime: new Date().toISOString(),
+        guestCount: Number(newReservation.guestCount),
+        salespersonUserId: newReservation.salespersonUserId.trim() || undefined,
+      });
+      setActionResult({ action: "bar_reservation_create", status: "created", result });
+      setBarError("");
+      setNewReservation((prev) => ({ ...prev, tableId: "" }));
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "新建订台失败";
+      setBarError(message);
+      setGlobalError(message);
+      setActionResult({ action: "bar_reservation_create", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 开台：为选定卡座新建开台会话（可选带营业日、销售/服务员）。
+  function validateNewSession() {
+    if (!newSession.barId.trim()) return fail("开台请填写所属酒吧。");
+    if (!newSession.tableId.trim()) return fail("开台请填写卡座 ID。");
+    if (!newSession.businessDate.trim()) return fail("开台请填写营业日。");
+    const count = Number(newSession.guestCount);
+    if (!Number.isFinite(count) || count <= 0) return fail("开台人数必须大于 0。");
+    setBarError("");
+    return true;
+  }
+
+  async function createSession() {
+    if (!validateNewSession()) return;
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const result = await api.post("/api/v1/bar/table-sessions", {
+        barId: newSession.barId.trim(),
+        tableId: newSession.tableId.trim(),
+        businessDate: newSession.businessDate,
+        guestCount: Number(newSession.guestCount),
+        salesStaffId: newSession.salesStaffId.trim() || undefined,
+        serviceStaffId: newSession.serviceStaffId.trim() || undefined,
+      });
+      setActionResult({ action: "bar_table_session_create", status: "opened", result });
+      setBarError("");
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "开台失败";
+      setBarError(message);
+      setGlobalError(message);
+      setActionResult({ action: "bar_table_session_create", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // 邀请函签发/吊销前置校验：未选订台则不弹二次确认、不发请求（与 runInvitationAction 内守卫同口径）。
   function requireSelectedReservation(): boolean {
     if (!selectedReservation?.id) {
@@ -243,6 +367,35 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <div className="admin-state" data-testid="bar-table-sessions-focus">已从下钻定位到桌位：{focusObjectId}</div>
       )}
       <AdminPageHeader title="卡座与订台" description="卡座只免预定卡座所在酒吧、限定人数入场；转卡、合并、续卡必须受结账与审批约束。" />
+
+      {/* 从零起单入口：即便零数据也常驻可见（放在空态短路之外），支持新建卡座 / 新建订台（代客）/ 开台。 */}
+      <h3>从零起单</h3>
+      <div className="admin-form-row" data-testid="bar-create-table-form">
+        <label>所属酒吧<input data-testid="bar-new-table-bar" value={newTable.barId} onChange={(event) => setNewTable((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
+        <label>卡座名称<input data-testid="bar-new-table-name" value={newTable.tableName} onChange={(event) => setNewTable((p) => ({ ...p, tableName: event.target.value }))} placeholder="如 VIP-01" /></label>
+        <label>可进人数<input data-testid="bar-new-table-capacity" type="number" min={1} value={newTable.capacity} onChange={(event) => setNewTable((p) => ({ ...p, capacity: event.target.value }))} placeholder="容量" /></label>
+        <label>免通票入场人数<input data-testid="bar-new-table-free" type="number" min={0} value={newTable.allowedFreeEntryCount} onChange={(event) => setNewTable((p) => ({ ...p, allowedFreeEntryCount: event.target.value }))} placeholder="免票人数" /></label>
+        <label>低消（元）<input data-testid="bar-new-table-spend" type="number" min={0} value={newTable.minimumSpendYuan} onChange={(event) => setNewTable((p) => ({ ...p, minimumSpendYuan: event.target.value }))} placeholder="低消" /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_MANAGE_PERMISSION]} disabled={submitting} onClick={() => void createTable()} data-testid="bar-new-table-submit">新建卡座</PermissionButton>
+      </div>
+      <div className="admin-form-row" data-testid="bar-create-reservation-form">
+        <label>所属酒吧<input data-testid="bar-new-reservation-bar" value={newReservation.barId} onChange={(event) => setNewReservation((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
+        <label>卡座 ID<input data-testid="bar-new-reservation-table" value={newReservation.tableId} onChange={(event) => setNewReservation((p) => ({ ...p, tableId: event.target.value }))} placeholder="要订的卡座 ID" /></label>
+        <label>人数<input data-testid="bar-new-reservation-guests" type="number" min={1} value={newReservation.guestCount} onChange={(event) => setNewReservation((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
+        <label>销售员（选填）<input data-testid="bar-new-reservation-sales" value={newReservation.salespersonUserId} onChange={(event) => setNewReservation((p) => ({ ...p, salespersonUserId: event.target.value }))} placeholder="销售员 ID" /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_RESERVATION_CREATE_PERMISSION]} disabled={submitting} onClick={() => void createReservation()} data-testid="bar-new-reservation-submit">新建订台（代客）</PermissionButton>
+      </div>
+      <div className="admin-form-row" data-testid="bar-create-session-form">
+        <label>所属酒吧<input data-testid="bar-new-session-bar" value={newSession.barId} onChange={(event) => setNewSession((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
+        <label>卡座 ID<input data-testid="bar-new-session-table" value={newSession.tableId} onChange={(event) => setNewSession((p) => ({ ...p, tableId: event.target.value }))} placeholder="要开台的卡座 ID" /></label>
+        <label>营业日<input data-testid="bar-new-session-date" type="date" value={newSession.businessDate} onChange={(event) => setNewSession((p) => ({ ...p, businessDate: event.target.value }))} /></label>
+        <label>人数<input data-testid="bar-new-session-guests" type="number" min={1} value={newSession.guestCount} onChange={(event) => setNewSession((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
+        <label>销售（选填）<input data-testid="bar-new-session-sales" value={newSession.salesStaffId} onChange={(event) => setNewSession((p) => ({ ...p, salesStaffId: event.target.value }))} placeholder="销售 ID" /></label>
+        <label>服务员（选填）<input data-testid="bar-new-session-service" value={newSession.serviceStaffId} onChange={(event) => setNewSession((p) => ({ ...p, serviceStaffId: event.target.value }))} placeholder="服务员 ID" /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_SESSION_CREATE_PERMISSION]} disabled={submitting} onClick={() => void createSession()} data-testid="bar-new-session-submit">开台</PermissionButton>
+      </div>
+      {barError ? <div data-testid="bar-create-error" className="admin-inline-error">{barError}</div> : null}
+
       <AdminDataState loading={loading} error={error} empty={tables.length === 0 && reservations.length === 0 && sessions.length === 0} onRetry={reload}>
         <div className="admin-form-row">
           <label>入场人数（人）<input data-testid="bar-checkin-count" type="number" min={1} value={guestCount} onChange={(event) => setGuestCount(event.target.value)} placeholder="入场人数" /></label>

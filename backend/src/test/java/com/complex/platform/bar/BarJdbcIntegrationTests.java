@@ -694,4 +694,36 @@ class BarJdbcIntegrationTests {
                  LIMIT 1
                 """, String.class);
     }
+    @Test
+    void barTableSessionPersistsWithPlatformMerchantPlaceholder() {
+        // 平台直营开台修复：会话 merchant_id 落 __platform__ 占位可通过 NOT NULL 约束真正入库；
+        // 此前平台管理员开台（merchant 为 null）直插会触发 500（null value in column merchant_id）。
+        Instant now = Instant.parse("2026-06-20T02:00:00Z");
+        repository.saveTable(new BarTableRecord(
+                "table_platform_open", "bar_jdbc", null, "T-PLAT", "Platform Direct", "card_seat",
+                8, 2, 50000L, "CNY", "active", now, now));
+        BarTableSessionRecord saved = repository.saveTableSession(new BarTableSessionRecord(
+                "session_platform_open", "bar_jdbc", "__platform__", LocalDate.parse("2026-06-20"),
+                "table_platform_open", null, null, 2, 50000L, 2, null, null, "open",
+                now, null, null, 1L, now, now));
+        assertThat(saved.merchantId()).isEqualTo("__platform__");
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM bar_table_sessions WHERE id = ? AND merchant_id = ?",
+                Integer.class, "session_platform_open", "__platform__");
+        assertThat(count).isEqualTo(1);
+    }
+
+    @Test
+    void barTableSessionMerchantIdRejectsNull() {
+        // 约束回归：merchant_id 为 NOT NULL——正是 __platform__ 占位修复要绕过的坑，直插 null 必被拒。
+        Instant now = Instant.parse("2026-06-20T02:00:00Z");
+        repository.saveTable(new BarTableRecord(
+                "table_null_merchant", "bar_jdbc", null, "T-NULLM", "Null Merchant", "card_seat",
+                8, 2, 50000L, "CNY", "active", now, now));
+        assertThatThrownBy(() -> repository.saveTableSession(new BarTableSessionRecord(
+                "session_null_merchant", "bar_jdbc", null, LocalDate.parse("2026-06-20"),
+                "table_null_merchant", null, null, 2, 50000L, 2, null, null, "open",
+                now, null, null, 1L, now, now)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
 }
