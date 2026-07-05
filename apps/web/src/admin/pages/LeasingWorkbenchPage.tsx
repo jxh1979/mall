@@ -11,6 +11,7 @@ import { rowMatchesKeyword } from "../components/rowSearch";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
 import type { AdminPageProps } from "../types";
+import { TraceLink } from "../components/TraceLink";
 
 // 招商前漏斗行类型（后端 leasing.* 记录的前端视图，camelCase 由 adminClient 统一转换）。
 interface LeasingLeadRow {
@@ -69,7 +70,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result };
 }
 
-export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, navigateTo }: AdminPageProps) {
   const [leads, setLeads] = React.useState<LeasingLeadRow[]>([]);
   const [intents, setIntents] = React.useState<LeasingIntentRow[]>([]);
   const [brands, setBrands] = React.useState<LeasingBrandRow[]>([]);
@@ -343,7 +344,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: A
                   <td>{row.id}</td>
                   <td>{row.leadId ?? "-"}</td>
                   <td>{row.stage ?? "-"}</td>
-                  <td>{row.intendedSpaceId ?? "-"}</td>
+                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.intendedSpaceId}>{row.intendedSpaceId ?? "-"}</TraceLink></td>
                 </tr>
               ))}
             </tbody>

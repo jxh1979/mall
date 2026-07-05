@@ -10,6 +10,7 @@ import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, AmusementSafetyInspectionRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { TraceLink } from "../components/TraceLink";
 
 const TEXT = {
   title: "安全巡检/事故",
@@ -59,7 +60,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds ?? request.attachmentIds, result };
 }
 
-export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<AmusementSafetyInspectionRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [createTitle, setCreateTitle] = React.useState("开放前护栏检查");
@@ -201,7 +202,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
                 <tr key={row.id}>
                   <td><input type="radio" data-testid={`amusement-safety-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{displayNo(row)}</td>
-                  <td>{row.projectName ?? row.projectId ?? "-"}</td>
+                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectName ?? row.projectId ?? "-"}</TraceLink></td>
                   <td>{row.overallResult ?? row.riskLevel ?? "-"}</td>
                   <td>{formatBusinessStatus(row.inspectionStatus ?? row.status)}</td>
                   <td>{row.rectificationStatus ?? "-"}</td>

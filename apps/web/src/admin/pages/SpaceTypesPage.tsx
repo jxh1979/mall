@@ -21,7 +21,7 @@ const MANAGE = ["governance.space.manage"];
  * 空间类型字典管理页（ADM-GOV-007，条目3b）：平台管理员维护空间类型（楼栋/楼层/区块/铺位/公共区域…），
  * 作为空间建档 space_type 的下拉数据源与硬校验依据。新增/启用后即可用于空间 space_type 校验。
  */
-export function SpaceTypesPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function SpaceTypesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [rows, setRows] = React.useState<SpaceTypeRow[]>([]);
   const [form, setForm] = React.useState({ typeCode: "", typeName: "", sortOrder: "100", status: "active" });
 
@@ -32,6 +32,17 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
     },
     { onError: setGlobalError, fallbackMessage: "空间类型字典读取失败" },
   );
+
+  // 下钻定位:从别的页点空间引用进来(?focus=id)→ 滚动到命中的空间类型行(按 id 或 typeCode 匹配)并高亮;无 focus 或未命中时不动。
+  React.useEffect(() => {
+    if (!focusObjectId || rows.length === 0 || typeof document === "undefined") return;
+    const el = document.querySelector(`[data-focus-space="${focusObjectId}"]`);
+    if (el && typeof (el as HTMLElement).scrollIntoView === "function") {
+      (el as HTMLElement).scrollIntoView({ block: "center" });
+    }
+  }, [focusObjectId, rows.length]);
+
+  const isFocused = (row: SpaceTypeRow) => !!focusObjectId && (focusObjectId === row.id || focusObjectId === row.typeCode);
 
   async function saveType() {
     const code = form.typeCode.trim();
@@ -66,7 +77,9 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.typeCode} data-testid={`space-type-${row.typeCode}`}>
+                <tr key={row.typeCode} data-testid={`space-type-${row.typeCode}`}
+                    data-focus-space={isFocused(row) ? focusObjectId : undefined}
+                    className={isFocused(row) ? "admin-row-selected" : undefined}>
                   <td>{row.typeCode}</td><td>{row.typeName}</td><td>{row.sortOrder}</td><td>{formatBusinessStatus(row.status)}</td>
                 </tr>
               ))}
