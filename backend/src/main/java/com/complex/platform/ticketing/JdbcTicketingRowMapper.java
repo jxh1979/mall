@@ -62,7 +62,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("entitlement_kind"),
                 nullableLong(resultSet, "agreement_price_cent"),
                 resultSet.getString("consumption_window"),
-                resultSet.getString("exclusive_merchant_id")
+                resultSet.getString("exclusive_merchant_id"),
+                resultSet.getBoolean("require_face_photo")
         );
     }
 

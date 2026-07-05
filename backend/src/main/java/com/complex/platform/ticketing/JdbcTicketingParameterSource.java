@@ -52,6 +52,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("agreement_price_cent", template.agreementPriceCent())
                 .addValue("consumption_window", template.consumptionWindow())
                 .addValue("exclusive_merchant_id", template.exclusiveMerchantId())
+                .addValue("require_face_photo", template.requireFacePhoto())
                 .addValue("created_at", timestampWithTimeZone(template.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
     }

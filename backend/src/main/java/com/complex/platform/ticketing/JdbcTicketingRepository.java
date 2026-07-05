@@ -107,12 +107,12 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO entitlement_templates (
                     id, name, entitlement_type, default_total_times, default_value_cent,
                     status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                    agreement_price_cent, consumption_window, exclusive_merchant_id, created_at, updated_at
+                    agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo, created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :entitlement_type, :default_total_times, :default_value_cent,
                     :status, :merchant_id, :venue_id, :point_id, :bar_item_ref, :entitlement_kind,
-                    :agreement_price_cent, :consumption_window, :exclusive_merchant_id, :created_at, :updated_at
+                    :agreement_price_cent, :consumption_window, :exclusive_merchant_id, :require_face_photo, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -128,6 +128,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     agreement_price_cent = EXCLUDED.agreement_price_cent,
                     consumption_window = EXCLUDED.consumption_window,
                     exclusive_merchant_id = EXCLUDED.exclusive_merchant_id,
+                    require_face_photo = EXCLUDED.require_face_photo,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.entitlementTemplateParameters(template));
         return template;
@@ -138,7 +139,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, consumption_window, exclusive_merchant_id, created_at, updated_at
+                       agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo, created_at, updated_at
                   FROM entitlement_templates
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapEntitlementTemplate);
@@ -149,7 +150,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, consumption_window, exclusive_merchant_id, created_at, updated_at
+                       agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo, created_at, updated_at
                   FROM entitlement_templates
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();

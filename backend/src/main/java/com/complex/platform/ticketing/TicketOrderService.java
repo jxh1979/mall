@@ -32,14 +32,26 @@ public class TicketOrderService {
     private final TicketPricingService pricingService;
     private final AuthorizationService authorizationService;
     private final ApplicationEventPublisher eventPublisher;
+    // 批3-6：人脸照存档服务。可为 null=旧构造/兼容测试(不拍照存档)；生产由 Spring 主构造注入。
+    private final TicketFacePhotoService facePhotoService;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
                               AuthorizationService authorizationService,
-                              ApplicationEventPublisher eventPublisher) {
+                              ApplicationEventPublisher eventPublisher,
+                              TicketFacePhotoService facePhotoService) {
         this.repository = repository;
         this.pricingService = pricingService;
         this.authorizationService = authorizationService;
         this.eventPublisher = eventPublisher;
+        this.facePhotoService = facePhotoService;
+    }
+
+    // ponytail: 向后兼容构造——既有单测(InMemory 仓库、无 PiiCipher/DB)不注入 facePhotoService，拍照存档跳过。
+    public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
+                              AuthorizationService authorizationService,
+                              ApplicationEventPublisher eventPublisher) {
+        this(repository, pricingService, authorizationService, eventPublisher, null);
     }
 
     TicketOrderRecord createOrder(TicketOrderRequest request) {
@@ -252,7 +264,9 @@ public class TicketOrderService {
                 request.evidenceAttachmentIds(),
                 order.id(),
                 order.salesChannel(),
-                List.of("dynamic_qr")
+                List.of("dynamic_qr"),
+                // 批3-6：出票请求带来的人脸照转发进发放链，供 require_face_photo 权益捕获存档。
+                request.facePhotos()
         ));
         repository.updateTicketOrder(new TicketOrderRecord(
                 order.id(),
@@ -296,6 +310,9 @@ public class TicketOrderService {
 
     IssuedTicketResponse issueEntitlements(String ticketTypeId, TicketIssueRequest request) {
         String orderId = requireText(request.orderId(), "order_id");
+        // 批3-6：按需拍脸照的权益按发放顺序逐张取用 request.facePhotos()；facePhotoCursor 记已消费张数。
+        List<String> facePhotos = request.facePhotos() == null ? List.of() : request.facePhotos();
+        int[] facePhotoCursor = {0};
         List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketTypeId);
         if (bindings.isEmpty()) {
             throw ApiException.conflict("TICKET_TYPE_ENTITLEMENT_REQUIRED", "ticket type has no entitlement templates");
@@ -365,7 +382,22 @@ public class TicketOrderService {
                             // 结算重构批3-4(PRD §6.4)：发放时把模板专属商户复制到已发权益，供核销双写定格专属归属。
                             template.exclusiveMerchantId()
                     );
+                    // 批3-6：require_face_photo=TRUE 的权益必须带一张人脸照(base64)，逐张按发放顺序取用；
+                    //   缺照 → 拒 FACE_PHOTO_REQUIRED(在建权益行之前拒，不产生无照的孤儿权益)。=FALSE 的票零影响。
+                    String facePhoto = null;
+                    if (Boolean.TRUE.equals(template.requireFacePhoto())) {
+                        if (facePhotoCursor[0] >= facePhotos.size()) {
+                            throw ApiException.badRequest("FACE_PHOTO_REQUIRED",
+                                    "face photo is required for entitlement " + template.id());
+                        }
+                        facePhoto = facePhotos.get(facePhotoCursor[0]);
+                        facePhotoCursor[0]++;
+                    }
                     repository.saveIssuedEntitlement(entitlement);
+                    // facePhotoService 为 null(旧构造/兼容测试)时不落存档；生产注入后加密存库(purge_after=valid_to+30 天)。
+                    if (facePhoto != null && facePhotoService != null) {
+                        facePhotoService.capture(entitlement.id(), facePhoto, null, now, validTo);
+                    }
                     responses.add(new IssuedEntitlementResponse(entitlementCode));
                 }
             }

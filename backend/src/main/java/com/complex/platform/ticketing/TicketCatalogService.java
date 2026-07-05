@@ -123,7 +123,11 @@ public class TicketCatalogService {
                 null,
                 // 结算重构批3-2(PRD §6.2)：新建模板默认逐次扣(per_use，行为同现状)；入场资格「场次规则」(per_session)
                 // 暂无配置入口，待运营后台补 consumption_window 编辑项（判定层对 NULL/per_use 走现状）。
-                "per_use"
+                "per_use",
+                // 批3-4：新建模板非专属(exclusive_merchant_id=null，走池分账)；专属由运营后台后补编辑项。
+                null,
+                // 批3-6(用户2026-07-04)：拍脸照开关由请求透传(可空=false)；游乐模板走 V229 种子回填默认开，新建按请求。
+                Boolean.TRUE.equals(actual.requireFacePhoto())
         ));
     }
 

@@ -32,10 +32,14 @@ public class TicketingController {
 
     private final TicketingService service;
     private final AuthorizationService authorizationService;
+    // 批3-6：人脸照存档服务(取照端点授权+解密+审计在服务内)。
+    private final TicketFacePhotoService facePhotoService;
 
-    public TicketingController(TicketingService service, AuthorizationService authorizationService) {
+    public TicketingController(TicketingService service, AuthorizationService authorizationService,
+                              TicketFacePhotoService facePhotoService) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.facePhotoService = facePhotoService;
     }
 
     @GetMapping("/ticketing/ticket-types")
@@ -266,6 +270,14 @@ public class TicketingController {
     public ApiResponse<PageResponse<VerificationRecord>> listVerifications() {
         authorizationService.requirePermission("verification.view");
         return ApiResponse.ok(service.listVerifications());
+    }
+
+    // 批3-6(用户2026-07-04)：核销页取某权益的人脸照(解密返回 base64)。授权限核销/运营(verification.view)+每次查看写审计,
+    //   均在 facePhotoService.getForVerification 内。核销主链不改,照片仅核销页附带展示。
+    @GetMapping("/ticketing/issued-entitlements/{entitlement_id}/face-photo")
+    public ApiResponse<TicketFacePhotoService.FacePhotoView> getEntitlementFacePhoto(
+            @PathVariable("entitlement_id") String entitlementId) {
+        return ApiResponse.ok(facePhotoService.getForVerification(entitlementId));
     }
 
     @PostMapping("/ticketing/verifications/{id}/reverse")
