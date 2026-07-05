@@ -6,6 +6,7 @@ import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 // ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
 function shortId(id: string | null | undefined): string {
@@ -82,6 +83,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [disputeReason, setDisputeReason] = React.useState("");
   // 商户显名字典（页面级拉取，失败降级回 ID）。
   const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
+  // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。合同/变更/退租结算三张业务表接入。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -246,6 +249,57 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     reload();
   }
 
+  // 合同整行明细：全字段（含生效/到期，抽成模式，商户下钻）。
+  function openContractDetail(row: ContractRow) {
+    setDetail({
+      title: `合同明细 · ${shortId(row.id)}`,
+      fields: [
+        { label: "合同号", value: row.id },
+        {
+          label: "商户",
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{merchantNames[row.merchantId] ?? row.merchantId}</TraceLink>,
+        },
+        { label: "生命周期状态", value: formatBusinessStatus(row.lifecycleStatus) },
+        { label: "生效日期", value: cnDate(row.effectiveDate) },
+        { label: "到期日期", value: cnDate(row.expiryDate) },
+        { label: "抽成模式", value: formatBusinessStatus(row.commissionMode) },
+        { label: "所属综合体", value: row.projectId ?? "—" },
+      ],
+    });
+  }
+
+  // 合同变更整行明细：变更号/类型/审批状态（均中文），并挂本合同下钻。
+  function openChangeDetail(ch: ChangeRow) {
+    setDetail({
+      title: `合同变更明细 · ${shortId(ch.id)}`,
+      fields: [
+        { label: "变更号", value: ch.id },
+        {
+          label: "所属合同",
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={ch.contractId}>{shortId(ch.contractId)}</TraceLink>,
+        },
+        { label: "变更类型", value: formatBusinessStatus(ch.changeType) },
+        { label: "审批状态", value: formatBusinessStatus(ch.approvalStatus) },
+      ],
+    });
+  }
+
+  // 退租结算整行明细：结算单号/触发/状态（均中文），并挂本合同下钻。
+  function openSettlementDetail(st: SettlementRow) {
+    setDetail({
+      title: `退租结算明细 · ${shortId(st.id)}`,
+      fields: [
+        { label: "结算单号", value: st.id },
+        {
+          label: "所属合同",
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={st.contractId}>{shortId(st.contractId)}</TraceLink>,
+        },
+        { label: "触发方式", value: formatBusinessStatus(st.triggerType) },
+        { label: "结算状态", value: formatBusinessStatus(st.status) },
+      ],
+    });
+  }
+
   return (
     <section data-testid="contract-workbench-page">
       <AdminPageHeader
@@ -259,17 +313,21 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>合同号</th><th>商户</th><th>状态</th><th>租期</th><th>抽成</th><th className="admin-op-col">操作</th></tr></thead>
             <tbody>
               {contracts.map((row) => (
-                <tr key={row.id} data-testid={`contract-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}>
+                <tr key={row.id} data-testid={`contract-${row.id}`}
+                  className={["admin-row-clickable", row.id === focusObjectId ? "admin-row-selected" : ""].filter(Boolean).join(" ")}
+                  tabIndex={0}
+                  onClick={() => openContractDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openContractDetail(row); } }}>
                   <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td>
-                  <td title={row.merchantId}>
+                  <td title={row.merchantId} onClick={(event) => event.stopPropagation()}>
                     <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>
                       {merchantNames[row.merchantId] ?? <span className="admin-id-cell">{shortId(row.merchantId)}</span>}
                     </TraceLink>
                   </td>
                   <td>{formatBusinessStatus(row.lifecycleStatus)}</td>
-                  <td>{(row.effectiveDate ?? "-") + " → " + (row.expiryDate ?? "-")}</td>
+                  <td>{cnDate(row.effectiveDate) + " → " + cnDate(row.expiryDate)}</td>
                   <td>{formatBusinessStatus(row.commissionMode)}</td>
-                  <td className="admin-op-col">
+                  <td className="admin-op-col" onClick={(event) => event.stopPropagation()}>
                     {row.lifecycleStatus === "drafting" && (
                       <PermissionButton permissionsState={effectivePermissions} permissions={DRAFT}
                         data-testid={`contract-submit-${row.id}`} onClick={() => void submit(row)}>提交审批</PermissionButton>
@@ -371,9 +429,11 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>变更号</th><th>类型</th><th>审批</th><th className="admin-op-col">操作</th></tr></thead>
             <tbody>
               {changes.map((ch) => (
-                <tr key={ch.id} data-testid={`contract-change-${ch.id}`}>
+                <tr key={ch.id} data-testid={`contract-change-${ch.id}`} className="admin-row-clickable" tabIndex={0}
+                  onClick={() => openChangeDetail(ch)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openChangeDetail(ch); } }}>
                   <td className="admin-id-cell" title={ch.id}>{shortId(ch.id)}</td><td>{formatBusinessStatus(ch.changeType)}</td><td>{formatBusinessStatus(ch.approvalStatus)}</td>
-                  <td className="admin-op-col">{ch.approvalStatus === "pending" && APPROVE_ROLES.map((r) => (
+                  <td className="admin-op-col" onClick={(event) => event.stopPropagation()}>{ch.approvalStatus === "pending" && APPROVE_ROLES.map((r) => (
                     <PermissionButton key={r.code} permissionsState={effectivePermissions} permissions={[r.code]}
                       data-testid={`change-approve-${r.code}-${ch.id}`} onClick={() => void approveChange(ch.id, r.code)}>{r.label}</PermissionButton>
                   ))}</td>
@@ -400,9 +460,11 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>结算单号</th><th>触发</th><th>状态</th><th className="admin-op-col">操作</th></tr></thead>
             <tbody>
               {settlements.map((st) => (
-                <tr key={st.id} data-testid={`contract-settlement-${st.id}`}>
+                <tr key={st.id} data-testid={`contract-settlement-${st.id}`} className="admin-row-clickable" tabIndex={0}
+                  onClick={() => openSettlementDetail(st)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSettlementDetail(st); } }}>
                   <td className="admin-id-cell" title={st.id}>{shortId(st.id)}</td><td>{formatBusinessStatus(st.triggerType)}</td><td>{formatBusinessStatus(st.status)}</td>
-                  <td className="admin-op-col">
+                  <td className="admin-op-col" onClick={(event) => event.stopPropagation()}>
                     {st.status === "disputed" && (
                       <PermissionButton permissionsState={effectivePermissions} permissions={DISPUTE_RESOLVE}
                         data-testid={`settlement-resolve-${st.id}`} onClick={() => void settlementAction(st.id, "resolve-dispute")}>裁决→待结算</PermissionButton>
@@ -436,6 +498,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
           {spaceRental.length === 0 && <span className="admin-muted">暂无铺位</span>}
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
