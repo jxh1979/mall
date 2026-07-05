@@ -10,7 +10,7 @@ import type {
 } from "../types";
 
 const READINESS_ROWS: ReadinessItemRow[] = [
-  { id: "blocker-1", blockerCode: "SEC-P0-OPS-RECOVERY-001", title: "NAS 恢复演练", owner: "IT", status: "open", evidenceRef: null },
+  { id: "blocker-1", blockerCode: "SEC-P0-OPS-RECOVERY-001", title: "NAS 恢复演练", owner: "IT", status: "open", evidenceRef: null, dueAt: "2026-07-05" },
   { id: "blocker-2", blockerCode: "SEC-P0-OPS-DB-002", title: "数据库备份", owner: "DBA", status: "open", evidenceRef: null },
 ];
 
@@ -102,5 +102,28 @@ describe("OpsReadinessPage", () => {
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(api.put).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("OpsReadinessPage 行明细抽屉", () => {
+  it("点 blocker 行 → 抽屉含该行值（状态中文·到期时间中文），Esc 关闭", async () => {
+    renderPage();
+    await screen.findByTestId("ops-readiness-row-blocker-1");
+    fireEvent.click(screen.getByTestId("ops-readiness-row-blocker-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("NAS 恢复演练");
+    expect(drawer.textContent).toContain("进行中");
+    expect(drawer.textContent).toContain("2026年7月5日");
+    expect(drawer.textContent).not.toContain("open");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点行内选择单选框不触发抽屉（stopPropagation）", async () => {
+    renderPage();
+    await screen.findByTestId("ops-readiness-select-blocker-1");
+    fireEvent.click(screen.getByTestId("ops-readiness-select-blocker-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
   });
 });

@@ -14,6 +14,7 @@ const COMPENSATION_MANAGE_PERMISSION = "integration.compensation.manage";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, IntegrationEventRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const ENDPOINTS = [
   { label: "重试任务", source: "retry_task", endpoint: "/api/v1/integration/retry-tasks" },
@@ -98,6 +99,8 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
   const [busyAction, setBusyAction] = React.useState("");
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<string | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该回调/轮询事件完整字段（状态中文·时间中文·任务号可溯源）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -222,6 +225,27 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
     await runAction("integration_compensation_resolved", request, () => api.post(`/api/v1/integration/compensation-tasks/${selectedCompensation.id}/resolve`, request));
   }
 
+  function openEventDetail(row: LoadedEventRow) {
+    setDetail({
+      title: `事件明细 · ${row.taskNo ?? row.orderNo ?? row.verificationNo ?? row.id ?? "-"}`,
+      fields: [
+        { label: TEXT.source, value: row.sourceLabel },
+        {
+          label: TEXT.taskNo,
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={row.orderNo}>{row.taskNo ?? row.orderNo ?? row.verificationNo ?? row.id ?? "-"}</TraceLink>,
+        },
+        { label: TEXT.provider, value: row.providerCode ?? row.channelCode ?? "-" },
+        { label: TEXT.eventType, value: row.eventType ?? row.syncType ?? row.verificationType ?? "-" },
+        { label: TEXT.status, value: formatBusinessStatus(row.status) },
+        { label: TEXT.retryCount, value: row.retryCount ?? "-" },
+        { label: "错误码", value: row.errorCode ?? "-" },
+        { label: "发生时间", value: cnDate(row.occurredAt) },
+        { label: "创建时间", value: cnDate(row.createdAt) },
+        { label: TEXT.updatedAt, value: cnDate(row.updatedAt ?? row.createdAt ?? row.occurredAt) },
+      ],
+    });
+  }
+
   return (
     <section data-testid="integration-events-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -288,14 +312,16 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
           <table className="admin-table" data-testid="integration-events-table">
             <thead><tr><th>{TEXT.source}</th><th>{TEXT.taskNo}</th><th>{TEXT.provider}</th><th>{TEXT.eventType}</th><th>{TEXT.status}</th><th>{TEXT.retryCount}</th><th>{TEXT.updatedAt}</th></tr></thead>
             <tbody>{paged.pageRows.map((row, index) => (
-              <tr key={eventKey(row, index)}>
+              <tr key={eventKey(row, index)} className="admin-row-clickable" tabIndex={0} data-testid={`integration-event-row-${row.id ?? row.taskNo ?? index}`}
+                onClick={() => openEventDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEventDetail(row); } }}>
                 <td>{row.sourceLabel}</td>
-                <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={row.orderNo}>{row.taskNo ?? row.orderNo ?? row.verificationNo ?? row.id ?? "-"}</TraceLink></td>
+                <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={row.orderNo}>{row.taskNo ?? row.orderNo ?? row.verificationNo ?? row.id ?? "-"}</TraceLink></td>
                 <td>{row.providerCode ?? row.channelCode ?? "-"}</td>
                 <td>{row.eventType ?? row.syncType ?? row.verificationType ?? "-"}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
                 <td>{row.retryCount ?? "-"}</td>
-                <td>{row.updatedAt ?? row.createdAt ?? row.occurredAt ?? "-"}</td>
+                <td>{cnDate(row.updatedAt ?? row.createdAt ?? row.occurredAt)}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -303,6 +329,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
         </div>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

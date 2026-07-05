@@ -6,6 +6,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, ReadinessItemRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 // 后端写权限码（ProductionReadinessController：PUT /api/v1/ops/production-readiness/items/{id} requirePermission）。
 const READINESS_MANAGE_PERMISSION = "ops.production_readiness.manage";
@@ -16,6 +17,8 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
   const [evidenceRef, setEvidenceRef] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  // 行明细抽屉：整行可点 → 该生产 blocker 完整字段（状态中文·到期时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -51,6 +54,21 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
     }
   }
 
+  function openBlockerDetail(row: ReadinessItemRow) {
+    setDetail({
+      title: `生产 blocker 明细 · ${row.blockerCode ?? row.title ?? row.id}`,
+      fields: [
+        { label: "Blocker", value: row.blockerCode ?? row.title ?? "—" },
+        { label: "标题", value: row.title ?? "—" },
+        { label: "责任人", value: row.owner ?? "—" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "证据引用", value: row.evidenceRef ?? "—" },
+        { label: "到期时间", value: cnDate(row.dueAt) },
+        { label: "编号", value: row.id },
+      ],
+    });
+  }
+
   return (
     <section data-testid="ops-readiness-page">
       <AdminPageHeader title="生产 blocker 与证据" description="生产账号、NAS、数据库、对象存储、JWT/第三方密钥轮换均以证据引用推进，不保存明文。" />
@@ -70,8 +88,10 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
           <table className="admin-table" data-testid="ops-readiness-table">
             <thead><tr><th>选择</th><th>Blocker</th><th>责任人</th><th>状态</th></tr></thead>
             <tbody>{rows.map((row) => (
-              <tr key={row.id}>
-                <td><input type="radio" data-testid={`ops-readiness-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`ops-readiness-row-${row.id}`}
+                onClick={() => openBlockerDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBlockerDetail(row); } }}>
+                <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`ops-readiness-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                 <td>{row.blockerCode ?? row.title}</td>
                 <td>{row.owner}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
@@ -80,6 +100,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
