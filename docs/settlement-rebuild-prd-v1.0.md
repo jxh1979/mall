@@ -321,9 +321,11 @@
 | 批 1(按核销结算地基) | ✅ 完成 | **V222**(`settlement_transactions` + 对账表)、核销双写(`SettlementSettledEvent`/Consumer,AFTER_COMMIT 不影响核销主流程、金额三段 verified+unverified=allocated 幂等)、`SettlementReconciliationJob` 新旧对账、`SettlementExpiryJob` 未核销归项目(`allocated×未核销次数/总次数`);旧 `allocated_revenue_cent` 保留双写观察、不切口径;测试全绿 |
 | 批 2(分账引擎) | ✅ 完成 | **V223**(6 配置表)、**V224**(`settlement_bills`+`settlement_items`)、月度分账引擎 `settleMonth`(算池/留存/三方式分配/超额待特批)、批 2-4 过账 `ar_ap_items`(`SettlementPostingService`·幂等键 SHA-256 前 20 hex 防明细撞·批2-5 逐家真断言证伪)、批 2-5 端到端全绿;**丢账 bug 已修 main=c6f3623** |
 | 批 3(权益细则 §6.1-6.4+人脸照) | ✅ 完成 | **3-1** 结算价判定(V225·实物内部价/虚拟签约价/回退)、**3-2** 场次入场(V226·consumption_window+营业时间表+场次+入场记录·惰性开场·过场作废)、**3-3** 当天无限(V227·按自然日激活·单人跨日作废/多次跨日保留靠 total_times)、**3-4** 专属不分摊(V228·exclusive_merchant_id 全额直付不进池)、**3-6** 游乐票人脸拍照存档(V229·PiiCipher 加密·授权+审计取照·30 天自清);每片自带证伪测试+回归全绿;main=a545261。**票种细分(单人/多人/多次/新人/学生)→ 批 4** |
-| 迁移号 | — | V222–V229 已用,下一 **V230** |
+| 批 4(票种分类·收缩后小尾巴) | ✅ 完成 | **V230**(`ticket_types` 加 `ticket_category` 资格/定价档标签:standard/new_person/student,仅供后台分类/报表,不碰定价/消耗/作废逻辑;新人票/学生票=完全同酒吧通票靠独立 ticket_type+定价;结构型单人/多人/多次由 num_people+total_times 派生不入本字段);仅加列+回填可独立回滚;4f6eb96。**批 4 原计划的综合服务费/单独门票/套票折扣/退款手续费预扣仍未做,归入批 5 配置中心 + 各票种规则后续实现** |
+| 前端配套(可点击/行明细/中文化/时间戳) | ✅ 完成 | 全链可点击下钻(引用字段 merchant/contract/order/project/space/处理人/审计对象全站可点·统一 `<TraceLink>`)、KPI 数字可点、全站 ~60 表页整行→右侧明细抽屉(`RowDetailDrawer`)、全站零英文(枚举/状态/时间 cnDate/CSV 导出)、原生日期控件→自研 `CnDatePicker`;**下单业务记支付时间 `paid_at`(V231)**、**物流配送到位时间 `bar_order_items.delivered_at`+游乐核销场次展示(V232)**;全部已 push origin/main(tip=7502a08) |
+| 迁移号 | — | V222–V232 已用,下一 **V233** |
 
-> 渠道费明细来源(§5.0 步骤②)现无数据源,引擎暂置 0,待第三方渠道费率接入补。
+> 渠道费明细来源(§5.0 步骤②)现无数据源,引擎暂置 0,待第三方渠道费率接入补(批 6)。
 
 ---
 
