@@ -30,6 +30,9 @@ function display(value: unknown) {
   return JSON.stringify(value);
 }
 
+// KPI 卡可点击下钻的目标表标识（本页三张表）。
+type DrillTarget = "entities" | "merchants" | "projects";
+
 export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
@@ -40,6 +43,27 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [contactPhone, setContactPhone] = React.useState("13800000000");
   const [cooperationForm, setCooperationForm] = React.useState("fixed_rent_plus_commission");
   const [formError, setFormError] = React.useState("");
+
+  // KPI 下钻状态（样板模式，供全站照抄）：
+  // - activeTable：点 KPI 后被定位/高亮的那张表；
+  // - merchantStatusFilter：状态子集 KPI（正常商户 active）点击时对商户表做客户端筛选，
+  //   仅过滤已加载的 merchants 内存数组，不发起后端查询。null=不筛选（全量）。
+  const [activeTable, setActiveTable] = React.useState<DrillTarget | null>(null);
+  const [merchantStatusFilter, setMerchantStatusFilter] = React.useState<string | null>(null);
+  const entitiesTableRef = React.useRef<HTMLDivElement>(null);
+  const merchantsTableRef = React.useRef<HTMLDivElement>(null);
+  const projectsTableRef = React.useRef<HTMLDivElement>(null);
+
+  // 点 KPI 数字 → 定位到对应表 + 高亮该表区块；status 有值时对商户表做状态筛选。
+  function drillToTable(target: DrillTarget, status: string | null = null) {
+    setActiveTable(target);
+    setMerchantStatusFilter(target === "merchants" ? status : null);
+    const ref = target === "entities" ? entitiesTableRef : target === "merchants" ? merchantsTableRef : projectsTableRef;
+    const el = ref.current;
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "center" });
+    }
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -102,6 +126,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     await reload();
   }
 
+  const visibleMerchants = merchantStatusFilter ? merchants.filter((row) => row.status === merchantStatusFilter) : merchants;
+
   return (
     <section data-testid="organization-merchant-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -117,10 +143,26 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         ) : (
           <>
             <div className="admin-kpi-grid" data-testid="organization-merchant-summary">
-              <div className="admin-kpi-card"><span>经营主体</span><strong>{entities.length}</strong><small>组织档案</small></div>
-              <div className="admin-kpi-card"><span>商户档案</span><strong>{merchants.length}</strong><small>merchant profiles</small></div>
-              <div className="admin-kpi-card"><span>项目档案</span><strong>{projects.length}</strong><small>projects</small></div>
-              <div className="admin-kpi-card"><span>正常商户</span><strong>{merchants.filter((row) => row.status === "active").length}</strong><small>active</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable">
+                <span>经营主体</span>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-entities" onClick={() => drillToTable("entities")}>{entities.length}</button>
+                <small>组织档案</small>
+              </div>
+              <div className="admin-kpi-card admin-kpi-card--clickable">
+                <span>商户档案</span>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-merchants" onClick={() => drillToTable("merchants")}>{merchants.length}</button>
+                <small>商户档案数</small>
+              </div>
+              <div className="admin-kpi-card admin-kpi-card--clickable">
+                <span>项目档案</span>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-projects" onClick={() => drillToTable("projects")}>{projects.length}</button>
+                <small>项目数</small>
+              </div>
+              <div className="admin-kpi-card admin-kpi-card--clickable">
+                <span>正常商户</span>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-active-merchants" onClick={() => drillToTable("merchants", "active")}>{merchants.filter((row) => row.status === "active").length}</button>
+                <small>正常商户数</small>
+              </div>
             </div>
 
             <div className="admin-form-grid">
@@ -136,23 +178,23 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             </div>
 
             <div className="admin-section-title">经营主体</div>
-            <div className="admin-table-scroll">
+            <div ref={entitiesTableRef} className={`admin-table-scroll${activeTable === "entities" ? " admin-section-highlight" : ""}`} data-testid="organization-entities-section">
               <table className="admin-table" data-testid="organization-entities-table">
                 <thead><tr><th>主体</th><th>编码</th><th>类型</th><th>状态</th></tr></thead>
                 <tbody>{entities.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.orgType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
               </table>
             </div>
 
-            <div className="admin-section-title">商户档案</div>
-            <div className="admin-table-scroll">
+            <div className="admin-section-title">商户档案{merchantStatusFilter ? <span className="admin-muted-action" data-testid="organization-merchants-filter-hint">（已按“正常商户”筛选）</span> : null}</div>
+            <div ref={merchantsTableRef} className={`admin-table-scroll${activeTable === "merchants" ? " admin-section-highlight" : ""}`} data-testid="organization-merchants-section">
               <table className="admin-table" data-testid="organization-merchants-table">
                 <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
-                <tbody>{merchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
+                <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
               </table>
             </div>
 
             <div className="admin-section-title">项目档案</div>
-            <div className="admin-table-scroll">
+            <div ref={projectsTableRef} className={`admin-table-scroll${activeTable === "projects" ? " admin-section-highlight" : ""}`} data-testid="organization-projects-section">
               <table className="admin-table" data-testid="organization-projects-table">
                 <thead><tr><th>项目</th><th>编码</th><th>商户</th><th>业态</th><th>状态</th></tr></thead>
                 <tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>

@@ -2184,3 +2184,30 @@ body {
   outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
+
+/* === KPI 卡可点击下钻（全站样板，2026-07）===
+   把内联 KPI 卡的数字包成 .admin-kpi-value 按钮：点击→定位/高亮本页对应表(+可选筛选)。
+   全站 38 页照抄此类名即可复用，无需各自造样式。 */
+.admin-kpi-card--clickable { cursor: pointer; }
+.admin-kpi-value {
+  /* 复用 .admin-kpi-card strong 的数字排版，仅去掉 button 默认外观 */
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin-top: 9px;
+  font-family: var(--adm-mono);
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--adm-text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.admin-kpi-value:hover { color: var(--adm-accent, #F59E0B); }
+.admin-kpi-value:focus-visible { outline: 2px solid #F59E0B; outline-offset: 3px; }
+/* KPI 点击后被定位表区块的高亮（区块级，区别于 .admin-row-selected 的行级） */
+.admin-section-highlight { outline: 2px solid #F59E0B; outline-offset: 4px; border-radius: 8px; }
