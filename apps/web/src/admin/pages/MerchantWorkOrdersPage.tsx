@@ -210,8 +210,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
         <div className="admin-form-grid" data-testid="merchant-work-order-create-form">
           <label>{TEXT.workOrderTitle}<input data-testid="merchant-work-order-title" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>{TEXT.descriptionLabel}<input data-testid="merchant-work-order-description" value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-          <label>{TEXT.type}<select data-testid="merchant-work-order-type" value={workOrderType} onChange={(event) => setWorkOrderType(event.target.value)}><option value="repair">repair</option><option value="complaint">complaint</option><option value="rectification">rectification</option><option value="service">service</option></select></label>
-          <label>{TEXT.priority}<select data-testid="merchant-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="critical">critical</option></select></label>
+          <label>{TEXT.type}<select data-testid="merchant-work-order-type" value={workOrderType} onChange={(event) => setWorkOrderType(event.target.value)}><option value="repair">报修</option><option value="complaint">投诉</option><option value="rectification">整改</option><option value="service">服务</option></select></label>
+          <label>{TEXT.priority}<select data-testid="merchant-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="critical">紧急</option></select></label>
         </div>
         <div className="admin-form-row">
           <PermissionButton permissionsState={effectivePermissions} permissions={WO_CREATE} data-testid="merchant-work-order-create" disabled={busyAction !== ""} onClick={() => void createWorkOrder()}>{TEXT.create}</PermissionButton>
@@ -222,7 +222,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
           <label>{TEXT.ownerDepartment}<input data-testid="merchant-work-order-owner-department" value={ownerDepartment} onChange={(event) => setOwnerDepartment(event.target.value)} /></label>
           <label>{TEXT.ownerUser}<input data-testid="merchant-work-order-owner-user" value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)} /></label>
           <label>{TEXT.processNote}<input data-testid="merchant-work-order-process-note" value={processNote} onChange={(event) => setProcessNote(event.target.value)} /></label>
-          <label>{TEXT.targetStatus}<select data-testid="merchant-work-order-target-status" value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)}><option value="assigned">assigned</option><option value="processing">processing</option><option value="pending_merchant">pending_merchant</option><option value="resolved">resolved</option></select></label>
+          <label>{TEXT.targetStatus}<select data-testid="merchant-work-order-target-status" value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)}><option value="assigned">已派单</option><option value="processing">处理中</option><option value="pending_merchant">商户待处理</option><option value="resolved">已解决</option></select></label>
           <label>{TEXT.resolution}<input data-testid="merchant-work-order-resolution" value={resolution} onChange={(event) => setResolution(event.target.value)} /></label>
           <label>{TEXT.satisfaction}<input data-testid="merchant-work-order-satisfaction" value={satisfactionScore} onChange={(event) => setSatisfactionScore(event.target.value)} /></label>
         </div>
@@ -248,8 +248,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                 <tr key={row.id}>
                   <td><input type="radio" data-testid={`merchant-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.title ?? row.id}<br /><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></td>
-                  <td>{row.workOrderType ?? "-"}</td>
-                  <td>{row.priority ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.workOrderType)}</td>
+                  <td>{formatBusinessStatus(row.priority)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.ownerDepartment || "-"}</td>
                   <td>{row.ownerUserId || "-"}</td>

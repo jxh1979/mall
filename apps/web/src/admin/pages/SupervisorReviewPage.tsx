@@ -155,7 +155,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
         </div>
 
         <div className="admin-form-grid" data-testid="supervisor-review-form">
-          <label>{TEXT.actionType}<select data-testid="supervisor-review-action-type" value={actionType} onChange={(event) => { setActionType(event.target.value); resetPendingReview(); }}><option value="contract_violation">contract_violation</option><option value="base_definition_violation">base_definition_violation</option><option value="billing_discount">billing_discount</option><option value="manual_release">manual_release</option></select></label>
+          <label>{TEXT.actionType}<select data-testid="supervisor-review-action-type" value={actionType} onChange={(event) => { setActionType(event.target.value); resetPendingReview(); }}><option value="contract_violation">合同违规</option><option value="base_definition_violation">基础定义违规</option><option value="billing_discount">账单折扣</option><option value="manual_release">人工放行</option></select></label>
           <label>{TEXT.objectType}<input data-testid="supervisor-review-object-type" value={objectType} onChange={(event) => { setObjectType(event.target.value); resetPendingReview(); }} /></label>
           <label>{TEXT.objectId}<input data-testid="supervisor-review-object-id" value={objectId} onChange={(event) => { setObjectId(event.target.value); resetPendingReview(); }} /></label>
           <label>{TEXT.amountCent}<input data-testid="supervisor-review-amount-cent" type="number" value={amountCent} onChange={(event) => { setAmountCent(event.target.value); resetPendingReview(); }} /></label>
@@ -192,7 +192,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
             <tbody>{rows.map((row) => (
               <tr key={row.id}>
                 <td>{row.policyCode ?? row.id}</td>
-                <td>{row.actionType ?? "-"}</td>
+                <td>{formatBusinessStatus(row.actionType)}</td>
                 <td>{displayValue(row.requiredLevel)}</td>
                 <td>{displayValue(row.blocksByDefault)}</td>
                 <td>{displayValue(row.requiredEvidenceTypes)}</td>

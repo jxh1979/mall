@@ -114,7 +114,7 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
                   title={
                     <Space>
                       <span>订单 {order.orderNo}</span>
-                      <Tag color="blue">{order.salesChannel}</Tag>
+                      <Tag color="blue">{formatBusinessStatus(order.salesChannel)}</Tag>
                       <Tag color={order.payStatus === "paid" ? "green" : "orange"}>{formatBusinessStatus(order.payStatus)}</Tag>
                       <Tag color={order.issueStatus === "issued" ? "green" : "default"}>{formatBusinessStatus(order.issueStatus)}</Tag>
                     </Space>

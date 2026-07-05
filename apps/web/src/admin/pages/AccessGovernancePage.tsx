@@ -2,6 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
 import type { AccessUserRow, AdminPageProps } from "../types";
 
@@ -236,7 +237,7 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           <input aria-label="职级 id" placeholder="职级 id" value={templateForm.staffLevelId} onChange={(event) => setTemplateForm({ ...templateForm, staffLevelId: event.target.value })} />
           <select aria-label="角色 id" value={templateForm.roleId} onChange={(event) => setTemplateForm({ ...templateForm, roleId: event.target.value })}><option value="">不绑定角色</option>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select>
           <input aria-label="权限模板 id" placeholder="权限模板 id" value={templateForm.templateId} onChange={(event) => setTemplateForm({ ...templateForm, templateId: event.target.value })} />
-          <select aria-label="模板状态" value={templateForm.status} onChange={(event) => setTemplateForm({ ...templateForm, status: event.target.value })}><option value="active">active</option><option value="inactive">inactive</option></select>
+          <select aria-label="模板状态" value={templateForm.status} onChange={(event) => setTemplateForm({ ...templateForm, status: event.target.value })}><option value="active">启用</option><option value="inactive">停用</option></select>
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-position-role-template-save" onClick={() => void savePositionTemplate()}>保存映射</PermissionButton>
         </div>
 
@@ -286,7 +287,7 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
             <thead><tr><th>申请</th><th>类型</th><th>目标</th><th>角色/岗位</th><th>权限码</th><th>状态</th><th>过期</th><th>操作</th></tr></thead>
             <tbody>{grantRequests.map((row) => (
               <tr key={row.id} data-testid={`access-grant-request-${row.id}`}>
-                <td>{row.id}</td><td>{row.requestType}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {row.positionCode ?? "-"}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status)}</td><td>{row.expiresAt ?? "-"}</td>
+                <td>{row.id}</td><td>{formatBusinessStatus(row.requestType)}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {row.positionCode ?? "-"}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status)}</td><td>{row.expiresAt ?? "-"}</td>
                 <td>{row.status === "pending" ? (
                   <>
                     <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_REVIEW} data-testid={`access-grant-approve-${row.id}`} onClick={() => void reviewGrant(row, "approve")}>approve</PermissionButton>

@@ -6,6 +6,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { TablePager } from "../components/TablePager";
 import type { AdminPageProps, AuditEventRow } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { PagedResult } from "../client/adminClient";
 import { PermissionButton } from "../security/Can";
 
@@ -181,8 +182,8 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                   <td><input type="radio" data-testid={`audit-events-select-${index}`} checked={selected === row} onChange={() => setSelectedIndex(index)} /></td>
                   <td>{row.eventType ?? row.event_type ?? "-"}</td>
                   <td>{row.eventCategory ?? row.event_category ?? "-"}</td>
-                  <td>{row.result ?? "-"}</td>
-                  <td>{row.riskLevel ?? row.risk_level ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.result)}</td>
+                  <td>{formatBusinessStatus(row.riskLevel ?? row.risk_level)}</td>
                   <td>{row.sourceType ?? row.source_type ?? "-"}</td>
                   <td>{eventTrace(row)}</td>
                   <td>{eventObject(row)}</td>

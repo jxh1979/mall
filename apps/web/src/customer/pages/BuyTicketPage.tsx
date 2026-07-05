@@ -87,7 +87,7 @@ export function BuyTicketPage({ service }: { service: CustomerService }): React.
               <Text>支付状态：{formatBusinessStatus(order.payStatus)}</Text>
               {intent ? (
                 <Paragraph type="secondary">
-                  已发起聚合支付意图（id={String(intent.id ?? "—")}，status={String(intent.status ?? "pending")}）。
+                  已发起聚合支付，当前支付状态：{formatBusinessStatus(String(intent.status ?? "pending"))}。
                   真实支付渠道跳转为占位，客人端仅展示支付结果。
                 </Paragraph>
               ) : null}

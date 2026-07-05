@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { AdminPageProps } from "../types";
 
 // T3A_READONLY_ANALYTICS_READY：T3-A 只读经营分析视图——只聚合读取分析域快照(机器人/商户健康/员工服务/客户意向/指标定义/指标快照),
@@ -77,14 +78,14 @@ function renderT3AReadOnlyAnalytics(data: T3AData) {
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="t3a-staff-table">
           <thead><tr><th>员工</th><th>岗位</th><th>服务分</th><th>投诉</th><th>风险</th></tr></thead>
-          <tbody>{data.staff.slice(0, 50).map((row) => (<tr key={row.scoreId}><td>{row.staffName ?? "-"}</td><td>{row.roleCode ?? "-"}</td><td>{row.serviceScore ?? "-"}</td><td>{row.complaintCount ?? 0}</td><td>{row.riskLevel ?? "-"}</td></tr>))}</tbody>
+          <tbody>{data.staff.slice(0, 50).map((row) => (<tr key={row.scoreId}><td>{row.staffName ?? "-"}</td><td>{row.roleCode ?? "-"}</td><td>{row.serviceScore ?? "-"}</td><td>{row.complaintCount ?? 0}</td><td>{formatBusinessStatus(row.riskLevel)}</td></tr>))}</tbody>
         </table>
       </div>
       <h3>客户意向</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="t3a-intent-table">
           <thead><tr><th>客户</th><th>意向类型</th><th>风险</th><th>摘要</th></tr></thead>
-          <tbody>{data.intent.slice(0, 50).map((row) => (<tr key={row.intentId}><td>{row.customerRef ?? "-"}</td><td>{row.intentType ?? "-"}</td><td>{row.riskLevel ?? "-"}</td><td>{row.summary ?? "-"}</td></tr>))}</tbody>
+          <tbody>{data.intent.slice(0, 50).map((row) => (<tr key={row.intentId}><td>{row.customerRef ?? "-"}</td><td>{row.intentType ?? "-"}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{row.summary ?? "-"}</td></tr>))}</tbody>
         </table>
       </div>
       <h3>指标定义</h3>

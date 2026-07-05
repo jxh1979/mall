@@ -152,8 +152,8 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
         </div>
 
         <div className="admin-form-grid" data-testid="risk-alert-form">
-          <label>{TEXT.alertType}<select data-testid="risk-alert-type" value={alertType} onChange={(event) => setAlertType(event.target.value)}><option value="staff_behavior">staff_behavior</option><option value="customer_risk">customer_risk</option><option value="third_party_exception">third_party_exception</option><option value="production_risk">production_risk</option></select></label>
-          <label>{TEXT.riskLevel}<select data-testid="risk-alert-level" value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)}><option value="suspicious">suspicious</option><option value="high">high</option><option value="critical">critical</option></select></label>
+          <label>{TEXT.alertType}<select data-testid="risk-alert-type" value={alertType} onChange={(event) => setAlertType(event.target.value)}><option value="staff_behavior">员工行为</option><option value="customer_risk">客人风险</option><option value="third_party_exception">第三方异常</option><option value="production_risk">出品风险</option></select></label>
+          <label>{TEXT.riskLevel}<select data-testid="risk-alert-level" value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)}><option value="suspicious">可疑</option><option value="high">高</option><option value="critical">紧急</option></select></label>
           <label>{TEXT.objectType}<input data-testid="risk-alert-object-type" value={objectType} onChange={(event) => setObjectType(event.target.value)} /></label>
           <label>{TEXT.objectId}<input data-testid="risk-alert-object-id" value={objectId} onChange={(event) => setObjectId(event.target.value)} /></label>
           <label>{TEXT.summary}<input data-testid="risk-alert-summary-input" value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
@@ -188,8 +188,8 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
             <tbody>{paged.pageRows.map((row) => (
               <tr key={row.id}>
                 <td><button type="button" data-testid={`risk-alert-select-${row.id}`} onClick={() => setSelectedId(row.id)}>{TEXT.select}</button></td>
-                <td>{row.alertType ?? "-"}</td>
-                <td>{row.riskLevel ?? "-"}</td>
+                <td>{formatBusinessStatus(row.alertType)}</td>
+                <td>{formatBusinessStatus(row.riskLevel)}</td>
                 <td>{row.objectType ?? "-"}</td>
                 <td>{row.objectId ?? "-"}</td>
                 <td>{row.summary ?? "-"}</td>

@@ -42,6 +42,18 @@ const WORK_ORDER_TYPES = [
 ];
 const PRIORITIES = [["urgent", "紧急"], ["high", "高"], ["normal", "普通"]];
 const INSPECTION_TYPES = [["security", "安防"], ["fire", "消防"], ["facility", "设施"], ["environment", "环境"]];
+// 本页枚举中文兜底：既服务下拉展示，也服务表格裸字段渲染（value 不变）。
+const LABELS: Record<string, string> = {
+  ...Object.fromEntries(EQUIPMENT_TYPES), ...Object.fromEntries(EQUIPMENT_STATUSES),
+  ...Object.fromEntries(WORK_ORDER_TYPES), ...Object.fromEntries(PRIORITIES),
+  ...Object.fromEntries(INSPECTION_TYPES),
+  manual: "手工", iot: "物联网", // 告警来源
+  handler: "处理人", supervisor: "主管", reporter: "报告人", // 验收方
+  light: "轻度告警", to_work_order: "转工单", // 巡检异常模式
+  template: "按模板", route: "按路线", // 排程模式（manual=手工，见上）
+  normal: "正常", abnormal: "异常", // 巡检结果
+};
+const zh = (v?: string | null) => (v == null || v === "" ? "-" : (LABELS[v] ?? v));
 const DEFAULT_POLICIES: FacilityWorkOrderPolicyRow[] = [
   { id: "fwop_repair_urgent", workOrderType: "repair", priority: "urgent", responseMinutes: 30, handleMinutes: 240, requiresAcceptance: true, acceptanceBy: "supervisor", active: true },
   { id: "fwop_repair_high", workOrderType: "repair", priority: "high", responseMinutes: 60, handleMinutes: 720, requiresAcceptance: true, acceptanceBy: "supervisor", active: true },
@@ -294,9 +306,9 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>id</th><th>名称</th><th>分类</th><th>状态</th><th>品牌/责任人</th><th>维保到期</th><th>告警</th><th>操作</th></tr></thead>
             <tbody>{equipment.map((row) => (
               <tr key={row.id} data-testid={`facility-equipment-${row.id}`}>
-                <td>{row.id}</td><td>{row.name}</td><td>{row.equipmentType}</td><td>{statusBadge(row.status)}</td>
+                <td>{row.id}</td><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{statusBadge(row.status)}</td>
                 <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td><td>{row.nextMaintenanceDue ?? "-"}</td>
-                <td>{row.alarmSource ?? "-"} {row.alarmNote ?? ""}</td>
+                <td>{zh(row.alarmSource)} {row.alarmNote ?? ""}</td>
                 <td>
                   <button type="button" data-testid={`facility-equipment-select-${row.id}`} onClick={() => setStatusForm({ ...statusForm, equipmentId: row.id })}>选中</button>
                   <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-maintenance-done-${row.id}`} onClick={() => void maintenanceDone(row.id)}>维保完成</PermissionButton>
@@ -317,7 +329,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-inline-form" data-testid="facility-equipment-status-form">
           <input data-testid="facility-equipment-status-id" aria-label="状态设备 id" placeholder="设备 id" value={statusForm.equipmentId} onChange={(event) => setStatusForm({ ...statusForm, equipmentId: event.target.value })} />
           <select data-testid="facility-equipment-status" aria-label="设备状态" value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })}>{EQUIPMENT_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <select data-testid="facility-equipment-alarm-source" aria-label="告警源" value={statusForm.alarmSource} onChange={(event) => setStatusForm({ ...statusForm, alarmSource: event.target.value })}><option value="manual">manual</option><option value="iot">iot</option></select>
+          <select data-testid="facility-equipment-alarm-source" aria-label="告警源" value={statusForm.alarmSource} onChange={(event) => setStatusForm({ ...statusForm, alarmSource: event.target.value })}><option value="manual">手工</option><option value="iot">物联网</option></select>
           <input data-testid="facility-equipment-alarm-note" aria-label="告警说明" placeholder="告警说明" value={statusForm.alarmNote} onChange={(event) => setStatusForm({ ...statusForm, alarmNote: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-equipment-status-change" onClick={() => void changeEquipmentStatus()}>状态变更/告警上报</PermissionButton>
         </div>
@@ -325,7 +337,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-maintenance-due-table">
             <thead><tr><th>设备</th><th>分类</th><th>责任人</th><th>到期日</th></tr></thead>
-            <tbody>{maintenanceDue.map((row) => <tr key={row.id} data-testid={`facility-maintenance-due-${row.id}`}><td>{row.name}</td><td>{row.equipmentType}</td><td>{row.responsibleUserId ?? "-"}</td><td>{row.nextMaintenanceDue ?? "-"}</td></tr>)}</tbody>
+            <tbody>{maintenanceDue.map((row) => <tr key={row.id} data-testid={`facility-maintenance-due-${row.id}`}><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{row.responsibleUserId ?? "-"}</td><td>{row.nextMaintenanceDue ?? "-"}</td></tr>)}</tbody>
           </table>
         </div>
 
@@ -349,7 +361,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th><th>满意度</th><th>操作</th></tr></thead>
             <tbody>{workOrders.map((row) => (
               <tr key={row.id} data-testid={`facility-work-order-${row.id}`}>
-                <td>{row.code ?? row.id}</td><td>{row.workOrderType} / {row.priority}</td><td>{row.title}</td><td>{statusBadge(row.status)}{row.overtime ? " · overtime" : ""}</td><td>{row.assigneeId ?? "-"}</td><td>{row.satisfaction ?? "-"}</td>
+                <td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)}{row.overtime ? "（已逾期）" : ""}</td><td>{row.assigneeId ?? "-"}</td><td>{row.satisfaction ?? "-"}</td>
                 <td>
                   {row.status === "pending_assign" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-assign-${row.id}`} onClick={() => void assignWorkOrder(row.id)}>派单</PermissionButton> : null}
                   {row.status === "assigned" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-start-${row.id}`} onClick={() => void workOrderActionPost(row.id, "start")}>开始</PermissionButton> : null}
@@ -370,14 +382,14 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-orders-overdue-table">
             <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th></tr></thead>
-            <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} data-testid={`facility-work-order-overdue-${row.id}`}><td>{row.code ?? row.id}</td><td>{row.workOrderType} / {row.priority}</td><td>{row.title}</td><td>{statusBadge(row.status)} · overtime</td><td>{row.assigneeId ?? "-"}</td></tr>)}</tbody>
+            <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} data-testid={`facility-work-order-overdue-${row.id}`}><td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)} · 已逾期</td><td>{row.assigneeId ?? "-"}</td></tr>)}</tbody>
           </table>
         </div>
         <h3>SLA 策略表</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-order-policies-table">
             <thead><tr><th>类型</th><th>优先级</th><th>响应/处理分钟</th><th>验收</th><th>状态</th></tr></thead>
-            <tbody>{policyRows.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} data-testid={`facility-work-order-policy-${row.workOrderType}-${row.priority}`}><td>{row.workOrderType}</td><td>{row.priority}</td><td>{row.responseMinutes} / {row.handleMinutes}</td><td>{row.requiresAcceptance ? row.acceptanceBy : "无需"}</td><td>{row.active ? "active" : "inactive"}</td></tr>)}</tbody>
+            <tbody>{policyRows.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} data-testid={`facility-work-order-policy-${row.workOrderType}-${row.priority}`}><td>{zh(row.workOrderType)}</td><td>{zh(row.priority)}</td><td>{row.responseMinutes} / {row.handleMinutes}</td><td>{row.requiresAcceptance ? zh(row.acceptanceBy) : "无需"}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-work-order-policy-form">
@@ -386,7 +398,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <input data-testid="facility-policy-response" aria-label="响应分钟" type="number" min="1" value={policyForm.responseMinutes} onChange={(event) => setPolicyForm({ ...policyForm, responseMinutes: event.target.value })} />
           <input data-testid="facility-policy-handle" aria-label="处理分钟" type="number" min="1" value={policyForm.handleMinutes} onChange={(event) => setPolicyForm({ ...policyForm, handleMinutes: event.target.value })} />
           <label><input data-testid="facility-policy-requires-acceptance" type="checkbox" checked={policyForm.requiresAcceptance} onChange={(event) => setPolicyForm({ ...policyForm, requiresAcceptance: event.target.checked })} />需验收</label>
-          <select data-testid="facility-policy-acceptance-by" aria-label="验收方" value={policyForm.acceptanceBy} onChange={(event) => setPolicyForm({ ...policyForm, acceptanceBy: event.target.value })}><option value="handler">handler</option><option value="supervisor">supervisor</option><option value="reporter">reporter</option></select>
+          <select data-testid="facility-policy-acceptance-by" aria-label="验收方" value={policyForm.acceptanceBy} onChange={(event) => setPolicyForm({ ...policyForm, acceptanceBy: event.target.value })}><option value="handler">处理人</option><option value="supervisor">主管</option><option value="reporter">报告人</option></select>
           <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid="facility-policy-save" onClick={() => void savePolicy()}>保存 SLA</PermissionButton>
         </div>
 
@@ -394,14 +406,14 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-templates-table">
             <thead><tr><th>id</th><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>状态</th></tr></thead>
-            <tbody>{inspectionTemplates.map((row) => <tr key={row.id} data-testid={`facility-inspection-template-${row.id}`}><td>{row.id}</td><td>{row.name}</td><td>{row.inspectionType}</td><td>{row.cycleDays ?? "-"}</td><td>{row.abnormalMode}</td><td>{row.active ? "active" : "inactive"}</td></tr>)}</tbody>
+            <tbody>{inspectionTemplates.map((row) => <tr key={row.id} data-testid={`facility-inspection-template-${row.id}`}><td>{row.id}</td><td>{row.name}</td><td>{zh(row.inspectionType)}</td><td>{row.cycleDays ?? "-"}</td><td>{zh(row.abnormalMode)}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-inspection-template-form">
           <input data-testid="facility-inspection-template-name" aria-label="模板名" placeholder="模板名" value={templateForm.name} onChange={(event) => setTemplateForm({ ...templateForm, name: event.target.value })} />
           <select data-testid="facility-inspection-template-type" aria-label="巡检类型" value={templateForm.inspectionType} onChange={(event) => setTemplateForm({ ...templateForm, inspectionType: event.target.value })}>{INSPECTION_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-inspection-template-cycle" aria-label="周期天数" type="number" min="1" value={templateForm.cycleDays} onChange={(event) => setTemplateForm({ ...templateForm, cycleDays: event.target.value })} />
-          <select data-testid="facility-inspection-template-abnormal-mode" aria-label="异常模式" value={templateForm.abnormalMode} onChange={(event) => setTemplateForm({ ...templateForm, abnormalMode: event.target.value })}><option value="light">light</option><option value="to_work_order">to_work_order</option></select>
+          <select data-testid="facility-inspection-template-abnormal-mode" aria-label="异常模式" value={templateForm.abnormalMode} onChange={(event) => setTemplateForm({ ...templateForm, abnormalMode: event.target.value })}><option value="light">轻度告警</option><option value="to_work_order">转工单</option></select>
           <input data-testid="facility-inspection-template-checklist" aria-label="检查项" placeholder="检查项，逗号分隔" value={templateForm.checklist} onChange={(event) => setTemplateForm({ ...templateForm, checklist: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid="facility-inspection-template-create" onClick={() => void createInspectionTemplate()}>新建模板</PermissionButton>
         </div>
@@ -409,7 +421,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <input data-testid="facility-inspection-task-template" aria-label="模板 id" placeholder="模板 id" value={taskForm.templateId} onChange={(event) => setTaskForm({ ...taskForm, templateId: event.target.value })} />
           <select data-testid="facility-inspection-task-type" aria-label="任务类型" value={taskForm.inspectionType} onChange={(event) => setTaskForm({ ...taskForm, inspectionType: event.target.value })}>{INSPECTION_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-inspection-task-title" aria-label="任务标题" placeholder="任务标题" value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} />
-          <select data-testid="facility-inspection-task-schedule-mode" aria-label="排程模式" value={taskForm.scheduleMode} onChange={(event) => setTaskForm({ ...taskForm, scheduleMode: event.target.value })}><option value="manual">manual</option><option value="template">template</option><option value="route">route</option></select>
+          <select data-testid="facility-inspection-task-schedule-mode" aria-label="排程模式" value={taskForm.scheduleMode} onChange={(event) => setTaskForm({ ...taskForm, scheduleMode: event.target.value })}><option value="manual">手工</option><option value="template">按模板</option><option value="route">按路线</option></select>
           <input data-testid="facility-inspection-task-assignee" aria-label="巡检人" placeholder="巡检人 id" value={taskForm.assigneeId} onChange={(event) => setTaskForm({ ...taskForm, assigneeId: event.target.value })} />
           <input data-testid="facility-inspection-task-scheduled-date" aria-label="计划日期" type="date" value={taskForm.scheduledDate} onChange={(event) => setTaskForm({ ...taskForm, scheduledDate: event.target.value })} />
           <input data-testid="facility-inspection-task-due-date" aria-label="到期日期" type="date" value={taskForm.dueDate} onChange={(event) => setTaskForm({ ...taskForm, dueDate: event.target.value })} />
@@ -420,7 +432,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>id</th><th>标题</th><th>类型/排程</th><th>状态</th><th>人员/日期</th><th>工单</th><th>操作</th></tr></thead>
             <tbody>{inspectionTasks.map((row) => (
               <tr key={row.id} data-testid={`facility-inspection-task-${row.id}`}>
-                <td>{row.id}</td><td>{row.title}</td><td>{row.inspectionType} / {row.scheduleMode}</td><td>{statusBadge(row.status)}</td><td>{row.assigneeId ?? "-"} / {row.dueDate ?? row.scheduledDate ?? "-"}</td><td>{row.workOrderId ?? "-"}</td>
+                <td>{row.id}</td><td>{row.title}</td><td>{zh(row.inspectionType)} / {zh(row.scheduleMode)}</td><td>{statusBadge(row.status)}</td><td>{row.assigneeId ?? "-"} / {row.dueDate ?? row.scheduledDate ?? "-"}</td><td>{row.workOrderId ?? "-"}</td>
                 <td>
                   <button type="button" data-testid={`facility-inspection-select-task-${row.id}`} onClick={() => void selectInspectionTask(row.id)}>记录</button>
                   {row.status === "pending" ? <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid={`facility-inspection-start-${row.id}`} onClick={() => void startInspectionTask(row.id)}>开始</PermissionButton> : null}
@@ -442,7 +454,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-records-table">
             <thead><tr><th>记录</th><th>任务</th><th>结果</th><th>巡检人</th><th>异常</th><th>时间</th></tr></thead>
-            <tbody>{inspectionRecords.map((row) => <tr key={row.id} data-testid={`facility-inspection-record-${row.id}`}><td>{row.id}</td><td>{row.taskId}</td><td>{row.result}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{row.recordedAt ?? "-"}</td></tr>)}</tbody>
+            <tbody>{inspectionRecords.map((row) => <tr key={row.id} data-testid={`facility-inspection-record-${row.id}`}><td>{row.id}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{row.recordedAt ?? "-"}</td></tr>)}</tbody>
           </table>
         </div>
       </AdminDataState>

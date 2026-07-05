@@ -183,7 +183,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                   <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={order.ticketTypeId}>{order.ticketTypeId ?? "-"}</TraceLink></td>
                   <td>{order.quantity ?? "-"}</td>
                   <td>{order.visitDate ?? "-"}</td>
-                  <td>{order.salesChannel ?? "-"}</td>
+                  <td>{formatBusinessStatus(order.salesChannel)}</td>
                   <td>{formatAmount(order.amountCent)}</td>
                   <td>{formatBusinessStatus(order.payStatus)}</td>
                   <td>{formatBusinessStatus(order.issueStatus)}</td>

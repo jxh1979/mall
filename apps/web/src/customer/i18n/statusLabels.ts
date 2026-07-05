@@ -103,6 +103,65 @@ const STATUS_LABELS: Record<string, string> = {
   resolved: "已解决",
   // 库存
   normal: "正常",
+  abnormal: "异常",
+  // 工单类型（物业/商户工单共用）
+  repair: "报修",
+  cleaning: "保洁",
+  complaint: "投诉",
+  rectification: "整改",
+  other: "其他",
+  service: "服务",
+  // 工单优先级
+  urgent: "紧急",
+  critical: "紧急",
+  // 巡检类型
+  security: "安防",
+  fire: "消防",
+  facility: "设施",
+  environment: "环境",
+  // 巡检/排程 模式
+  template: "按模板",
+  route: "按路线",
+  // 巡检异常处理模式
+  light: "轻度告警",
+  to_work_order: "转工单",
+  // 设备告警来源
+  iot: "物联网",
+  // 抄表方式
+  remote: "远程抄表",
+  // SLA 验收方
+  handler: "处理人",
+  reporter: "报告人",
+  // 设备状态（台账扩展）
+  alarm: "告警",
+  fault: "故障",
+  maintenance: "维保中",
+  retired: "报废",
+  // 工单流转（商户工单目标状态）
+  pending_merchant: "商户待处理",
+  // 风险预警类型
+  staff_behavior: "员工行为",
+  customer_risk: "客人风险",
+  third_party_exception: "第三方异常",
+  production_risk: "出品风险",
+  // 风险等级
+  suspicious: "可疑",
+  // 主管复核动作类型
+  contract_violation: "合同违规",
+  base_definition_violation: "基础定义违规",
+  billing_discount: "账单折扣",
+  manual_release: "人工放行",
+  // 审计结果
+  success: "成功",
+  failure: "失败",
+  // 授权申请类型
+  temporary_permission: "临时权限",
+  user_role: "用户角色",
+  user_position: "用户职位",
+  // 售票渠道
+  web: "网页端",
+  miniapp: "小程序",
+  channel: "第三方渠道",
 };
 
 export function formatBusinessStatus(code: string | null | undefined): string {

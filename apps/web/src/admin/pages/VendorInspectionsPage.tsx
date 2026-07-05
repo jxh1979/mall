@@ -148,7 +148,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
 
         <div className="admin-form-grid" data-testid="vendor-inspection-record-form">
           <label>巡检人<input data-testid="vendor-inspection-inspector" value={inspectorId} onChange={(event) => setInspectorId(event.target.value)} /></label>
-          <label>结果<select data-testid="vendor-inspection-result" value={result} onChange={(event) => setResult(event.target.value)}><option value="normal">normal</option><option value="abnormal">abnormal</option></select></label>
+          <label>结果<select data-testid="vendor-inspection-result" value={result} onChange={(event) => setResult(event.target.value)}><option value="normal">正常</option><option value="abnormal">异常</option></select></label>
           <label>记录说明<input data-testid="vendor-inspection-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
           <label>异常说明<input data-testid="vendor-inspection-abnormal-note" value={abnormalNote} onChange={(event) => setAbnormalNote(event.target.value)} /></label>
           <label>异常上报说明<input data-testid="vendor-inspection-exception-note" value={exceptionNote} onChange={(event) => setExceptionNote(event.target.value)} /></label>
@@ -168,11 +168,11 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
               {(visibleTemplates.length > 0 ? visibleTemplates : templates).map((row) => (
                 <tr key={row.id}>
                   <td>{row.name ?? row.id}</td>
-                  <td>{row.inspectionType ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.inspectionType)}</td>
                   <td>{row.cycleDays ?? "-"}</td>
-                  <td>{row.abnormalMode ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.abnormalMode)}</td>
                   <td>{checklistText(row.checklist)} {row.scopeNote ?? ""}</td>
-                  <td>{row.active === false ? "inactive" : "active"}</td>
+                  <td>{row.active === false ? "停用" : "启用"}</td>
                 </tr>
               ))}
               {templates.length === 0 ? <tr><td colSpan={6}>暂无巡检模板</td></tr> : null}
@@ -188,9 +188,9 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
                 <tr key={row.id}>
                   <td><input type="radio" data-testid={`vendor-inspection-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.title ?? row.id}</td>
-                  <td>{row.inspectionType ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.inspectionType)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
-                  <td>{row.scheduleMode ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.scheduleMode)}</td>
                   <td>{row.spaceId ?? "-"}</td>
                   <td>{row.assigneeId ?? "-"}</td>
                   <td>{row.scheduledDate ?? "-"} / {row.dueDate ?? "-"}</td>

@@ -123,7 +123,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
               {(visibleEquipmentRows.length > 0 ? visibleEquipmentRows : equipmentRows).map((row) => (
                 <tr key={row.id}>
                   <td>{row.name ?? row.id}</td>
-                  <td>{row.equipmentType ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.equipmentType)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.projectId ?? "-"} / {row.spaceId ?? "-"}</td>
                   <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td>
@@ -144,8 +144,8 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
                   <td><input type="radio" data-testid={`vendor-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.code ?? row.id}</td>
                   <td>{row.title ?? "-"}</td>
-                  <td>{row.workOrderType ?? "-"}</td>
-                  <td>{row.priority ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.workOrderType)}</td>
+                  <td>{formatBusinessStatus(row.priority)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.spaceId ?? "-"} / {row.equipmentId ?? "-"}</td>
                   <td>{row.assigneeId ?? "-"}</td>

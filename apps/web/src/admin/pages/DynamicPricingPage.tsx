@@ -5,6 +5,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, TicketDynamicPricingRuleRow, TicketDynamicPricingSimulationResult } from "../types";
 
@@ -189,7 +190,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
                 <tr key={rule.id}>
                   <td><input type="radio" data-testid={`dynamic-pricing-select-${rule.id}`} checked={(selectedRule?.id ?? "") === rule.id} onChange={() => setSelectedRuleId(rule.id)} /></td>
                   <td>{rule.ruleName ?? rule.id}</td>
-                  <td>{rule.salesChannel ?? "-"}</td>
+                  <td>{formatBusinessStatus(rule.salesChannel)}</td>
                   <td>{rule.priority ?? "-"}</td>
                   <td>{rule.adjustmentType ?? "-"} {rule.adjustmentRate ?? ""}</td>
                   <td>{rule.status ?? "-"}</td>

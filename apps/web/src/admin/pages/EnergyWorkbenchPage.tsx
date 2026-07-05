@@ -32,6 +32,12 @@ const METER_TYPES = [
 const GATHER_OBJECTS = [
   ["public_area", "公区"], ["merchant", "商户"], ["equipment_circuit", "设备回路"],
 ];
+// 本页枚举中文兜底（value 不变）：表计类型/归集对象复用上方元组，读数方式单列。
+const LABELS: Record<string, string> = {
+  ...Object.fromEntries(METER_TYPES), ...Object.fromEntries(GATHER_OBJECTS),
+  remote: "远程", manual: "人工",
+};
+const zh = (v?: string | null) => (v == null || v === "" ? "-" : (LABELS[v] ?? v));
 
 function numberText(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
@@ -180,8 +186,8 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
             <thead><tr><th>id</th><th>名称</th><th>类型</th><th>归集对象</th><th>上级总表</th><th>空间/商户/项目</th><th>读数方式</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>{meters.map((row) => (
               <tr key={row.id} data-testid={`energy-meter-${row.id}`}>
-                <td>{row.id}</td><td>{row.name}</td><td>{row.meterType}</td><td>{row.gatherObject}</td><td>{row.parentMeterId ?? "-"}</td>
-                <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink></td><td>{row.readMode ?? "-"}</td><td>{row.active === false ? "inactive" : "active"}</td>
+                <td>{row.id}</td><td>{row.name}</td><td>{zh(row.meterType)}</td><td>{zh(row.gatherObject)}</td><td>{row.parentMeterId ?? "-"}</td>
+                <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink></td><td>{zh(row.readMode)}</td><td>{row.active === false ? "停用" : "启用"}</td>
                 <td><button type="button" data-testid={`energy-meter-select-${row.id}`} onClick={() => selectMeter(row)}>选中</button></td>
               </tr>
             ))}</tbody>
@@ -196,7 +202,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           <input aria-label="空间 id" placeholder="空间 id" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })} />
           <input aria-label="商户 id" placeholder="商户 id" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })} />
           <input aria-label="项目 id" placeholder="项目 id" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })} />
-          <select aria-label="读数方式" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">remote</option><option value="manual">manual</option></select>
+          <select aria-label="读数方式" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select>
           <label><input type="checkbox" checked={meterForm.active} onChange={(event) => setMeterForm({ ...meterForm, active: event.target.checked })} />启用</label>
           <PermissionButton permissionsState={effectivePermissions} permissions={METER} data-testid="energy-meter-save" onClick={() => void saveMeter()}>保存表计</PermissionButton>
         </div>
@@ -205,7 +211,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
         <div className="admin-inline-form" data-testid="energy-reading-form">
           <input aria-label="读数表计 id" placeholder="表计 id" value={readingForm.meterId} onChange={(event) => setReadingForm({ ...readingForm, meterId: event.target.value })} />
           <input aria-label="本期读数" type="number" placeholder="本期读数" value={readingForm.readingValue} onChange={(event) => setReadingForm({ ...readingForm, readingValue: event.target.value })} />
-          <select aria-label="抄表方式" value={readingForm.readMode} onChange={(event) => setReadingForm({ ...readingForm, readMode: event.target.value })}><option value="manual">manual</option><option value="remote">remote</option></select>
+          <select aria-label="抄表方式" value={readingForm.readMode} onChange={(event) => setReadingForm({ ...readingForm, readMode: event.target.value })}><option value="manual">人工</option><option value="remote">远程</option></select>
           <input aria-label="抄表人" placeholder="抄表人 id" value={readingForm.readerId} onChange={(event) => setReadingForm({ ...readingForm, readerId: event.target.value })} />
           <input aria-label="抄表时间" type="datetime-local" value={readingForm.readAt} onChange={(event) => setReadingForm({ ...readingForm, readAt: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={READING} data-testid="energy-reading-record" onClick={() => void recordReading()}>录入读数</PermissionButton>
