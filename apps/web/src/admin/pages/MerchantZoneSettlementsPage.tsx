@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
+import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps, MerchantZoneSettlementRow } from "../types";
 
 const DISPUTE_PERMS = ["merchant.portal.settlement.dispute"];
@@ -46,7 +47,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result };
 }
 
-export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneSettlementRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [reason, setReason] = React.useState("");
@@ -116,7 +117,7 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
                 <tr key={row.id} className={row.id === selectedId ? "admin-row-selected" : undefined}>
                   <td><input type="radio" name="mz-settlement" data-testid={`merchant-zone-settlement-pick-${row.id}`} checked={row.id === selectedId} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.id}</td>
-                  <td>{row.contractId ?? "-"}</td>
+                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink></td>
                   <td>{TRIGGER_LABELS[row.triggerType ?? ""] ?? row.triggerType ?? "-"}</td>
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
                   <td>{row.disputeReason ?? "-"}</td>

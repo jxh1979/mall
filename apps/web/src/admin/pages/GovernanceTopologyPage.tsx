@@ -23,7 +23,7 @@ function display(value: unknown) {
   return JSON.stringify(value);
 }
 
-export function GovernanceTopologyPage({ api, setGlobalError }: AdminPageProps) {
+export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId }: AdminPageProps) {
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
@@ -47,6 +47,22 @@ export function GovernanceTopologyPage({ api, setGlobalError }: AdminPageProps) 
 
   const projectIds = new Set(projects.map((project) => project.id));
   const attachedSpaces = spaces.filter((space) => space.venueId && projectIds.has(space.venueId)).length;
+
+  // 下钻定位:从别的页点商户/综合体进来(?focus=id)→ 滚动到拓扑中对应节点行(商户或项目)并高亮;无 focus 时不动。
+  React.useEffect(() => {
+    if (!focusObjectId || (merchants.length === 0 && spaces.length === 0)) return;
+    const el = typeof document !== "undefined"
+      ? document.querySelector(`[data-focus-node="${focusObjectId}"]`)
+      : null;
+    if (el && typeof (el as HTMLElement).scrollIntoView === "function") {
+      (el as HTMLElement).scrollIntoView({ block: "center" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusObjectId, merchants.length, projects.length, spaces.length]);
+
+  // 一行是否命中下钻焦点(商户 id 或项目 id)。
+  const isFocused = (merchantId?: string, projectId?: string) =>
+    !!focusObjectId && (focusObjectId === merchantId || focusObjectId === projectId);
 
   return (
     <section data-testid="governance-topology-page">
@@ -76,7 +92,9 @@ export function GovernanceTopologyPage({ api, setGlobalError }: AdminPageProps) 
                   const merchantProjects = projects.filter((project) => project.merchantId === merchant.id);
                   const rows = merchantProjects.length ? merchantProjects : [undefined];
                   return rows.map((project, index) => (
-                    <tr key={`${merchant.id}-${project?.id ?? "no-project"}-${index}`}>
+                    <tr key={`${merchant.id}-${project?.id ?? "no-project"}-${index}`}
+                      data-focus-node={focusObjectId && (focusObjectId === merchant.id || focusObjectId === project?.id) ? focusObjectId : undefined}
+                      className={isFocused(merchant.id, project?.id) ? "admin-row-selected" : undefined}>
                       <td>{display(entity?.name)}</td>
                       <td>{display(entity?.code)}</td>
                       <td>{display(merchant.displayName)}</td>
@@ -97,7 +115,8 @@ export function GovernanceTopologyPage({ api, setGlobalError }: AdminPageProps) 
                 <thead><tr><th>空间</th><th>编码</th><th>所属项目</th><th>区域</th><th>空间类型</th><th>点位类型</th><th>状态</th></tr></thead>
                 <tbody>{spaces.map((space) => {
                   const project = projects.find((item) => item.id === space.venueId);
-                  return <tr key={space.id}><td>{display(space.name)}</td><td>{display(space.code)}</td><td>{display(project?.name ?? space.venueId)}</td><td>{display(space.areaId)}</td><td>{display(space.areaType)}</td><td>{display(space.pointType)}</td><td>{formatBusinessStatus(space.status)}</td></tr>;
+                  const spaceFocused = !!focusObjectId && (focusObjectId === space.id || focusObjectId === space.venueId);
+                  return <tr key={space.id} className={spaceFocused ? "admin-row-selected" : undefined}><td>{display(space.name)}</td><td>{display(space.code)}</td><td>{display(project?.name ?? space.venueId)}</td><td>{display(space.areaId)}</td><td>{display(space.areaType)}</td><td>{display(space.pointType)}</td><td>{formatBusinessStatus(space.status)}</td></tr>;
                 })}</tbody>
               </table>
             </div>

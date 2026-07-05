@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { TraceLink } from "../components/TraceLink";
 
 // ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
 function shortId(id: string | null | undefined): string {
@@ -62,7 +63,7 @@ const ROLE_LABELS: Record<string, string> = {
  * 合同生命周期工作台（ADM-CONT-001，V162 重建）：起草 → 分组并行审批 → 生效固化 → 退租结算 + 审批链/到期着色配置。
  * 覆盖验收 ADM-CONT-001..008：起草/四级并行审批/固化快照/铺位着色配置/变更入口/退租结算/审批链配置。
  */
-export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
   const [flow, setFlow] = React.useState<FlowStep[]>([]);
   const [colorRules, setColorRules] = React.useState<ColorRule[]>([]);
@@ -104,6 +105,18 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     },
     { onError: setGlobalError, fallbackMessage: "合同数据读取失败", onStart: () => setGlobalError(null) },
   );
+
+  // 下钻定位：从别的页点合同号进来（?focus=合同id）→ 选中该合同并滚动高亮其行；无 focus 时行为不变。
+  React.useEffect(() => {
+    if (!focusObjectId || contracts.length === 0) return;
+    if (!contracts.some((row) => row.id === focusObjectId)) return;
+    void selectContract(focusObjectId);
+    const el = typeof document !== "undefined" ? document.querySelector(`[data-testid="contract-${focusObjectId}"]`) : null;
+    if (el && typeof (el as HTMLElement).scrollIntoView === "function") {
+      (el as HTMLElement).scrollIntoView({ block: "center" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusObjectId, contracts.length]);
 
   async function createDraft() {
     if (!draft.merchantId.trim() || !draft.contractSubjectId.trim() || !draft.effectiveDate || !draft.expiryDate) {
@@ -246,9 +259,13 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>合同号</th><th>商户</th><th>状态</th><th>租期</th><th>抽成</th><th className="admin-op-col">操作</th></tr></thead>
             <tbody>
               {contracts.map((row) => (
-                <tr key={row.id} data-testid={`contract-${row.id}`}>
+                <tr key={row.id} data-testid={`contract-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}>
                   <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td>
-                  <td title={row.merchantId}>{merchantNames[row.merchantId] ?? <span className="admin-id-cell">{shortId(row.merchantId)}</span>}</td>
+                  <td title={row.merchantId}>
+                    <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>
+                      {merchantNames[row.merchantId] ?? <span className="admin-id-cell">{shortId(row.merchantId)}</span>}
+                    </TraceLink>
+                  </td>
                   <td>{formatBusinessStatus(row.lifecycleStatus)}</td>
                   <td>{(row.effectiveDate ?? "-") + " → " + (row.expiryDate ?? "-")}</td>
                   <td>{formatBusinessStatus(row.commissionMode)}</td>

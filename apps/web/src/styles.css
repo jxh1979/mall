@@ -2143,6 +2143,9 @@ body {
 .admin-num { font-variant-numeric: tabular-nums; }
 /* ID 类值：等宽字体，配合尾 8 位截断 + title 悬浮全量 */
 .admin-id-cell { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+/* 全链下钻：被 ?focus= 定位命中的行高亮，供 TraceLink 落地页标注来源对象 */
+.admin-row-selected { background: #fff7e6; outline: 2px solid #F59E0B; outline-offset: -2px; }
+
 /* 表格操作列：白名单不换行 + 最小宽度，杜绝按钮文字被挤成竖排（一字一行） */
 .admin-table th.admin-op-col, .admin-table td.admin-op-col { white-space: nowrap; min-width: 220px; }
 .admin-table td.admin-op-col button { white-space: nowrap; margin: 2px 4px 2px 0; }

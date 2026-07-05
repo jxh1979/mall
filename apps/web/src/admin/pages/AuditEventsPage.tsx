@@ -70,8 +70,16 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-export function AuditEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
-  const [query, setQuery] = React.useState("");
+// 下钻定位：focus 可能是 `对象类型:对象id` 或纯 id；取 id 段作为页内筛选关键词（matches 的 haystack 含 `类型:id`）。
+function focusKeyword(focus?: string) {
+  if (!focus) return "";
+  const trimmed = focus.trim();
+  const colon = trimmed.lastIndexOf(":");
+  return colon >= 0 ? trimmed.slice(colon + 1) : trimmed;
+}
+
+export function AuditEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+  const [query, setQuery] = React.useState(() => focusKeyword(focusObjectId));
   const [exportReason, setExportReason] = React.useState("验收导出审计事件");
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [showDetail, setShowDetail] = React.useState(false);
@@ -102,6 +110,11 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
   React.useEffect(() => {
     if (selectedIndex >= filteredRows.length) setSelectedIndex(0);
   }, [filteredRows.length, selectedIndex]);
+
+  // 下钻进入本页（?focus=对象）→ 用对象 id 预填页内筛选，聚焦相关审计事件；无 focus 时不改动查询。
+  React.useEffect(() => {
+    if (focusObjectId) setQuery(focusKeyword(focusObjectId));
+  }, [focusObjectId]);
 
   async function exportAuditEvents() {
     if (!exportReason.trim()) {

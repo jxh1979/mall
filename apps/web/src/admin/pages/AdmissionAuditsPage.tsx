@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, ContractRow, MerchantAdmissionRow, SubjectBindingRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { TraceLink } from "../components/TraceLink";
 
 const EVIDENCE_CREATE = ["evidence.event.create"];
 
@@ -35,7 +36,7 @@ function contractAttachments(row: ContractRow) {
   return row.attachmentIds?.length ? row.attachmentIds.join(" / ") : row.evidenceAttachmentIds?.join(" / ") ?? "-";
 }
 
-export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [bindings, setBindings] = React.useState<SubjectBindingRow[]>([]);
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
@@ -131,7 +132,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
               <table className="admin-table" data-testid="admission-audits-merchants-table">
                 <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
                 <tbody>{merchants.map((row) => (
-                  <tr key={row.id}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+                  <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.displayName)}</TraceLink></td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
                 ))}</tbody>
               </table>
             </div>
@@ -141,7 +142,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
               <table className="admin-table" data-testid="admission-audits-bindings-table">
                 <thead><tr><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>结算主体</th><th>状态</th><th>留痕证据</th></tr></thead>
                 <tbody>{bindings.map((row) => (
-                  <tr key={row.id}><td>{display(row.businessObjectId)}</td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+                  <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink></td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
                 ))}</tbody>
               </table>
             </div>
@@ -151,7 +152,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
               <table className="admin-table" data-testid="admission-audits-contracts-table">
                 <thead><tr><th>商户</th><th>合同主体</th><th>运营主体</th><th>结算主体</th><th>生效日</th><th>到期日</th><th>附件</th><th>状态</th><th>留痕证据</th></tr></thead>
                 <tbody>{contracts.map((row) => (
-                  <tr key={row.id}><td>{display(row.merchantId)}</td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{display(row.effectiveDate)}</td><td>{display(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{display(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+                  <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{display(row.effectiveDate)}</td><td>{display(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{display(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
                 ))}</tbody>
               </table>
             </div>
