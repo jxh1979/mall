@@ -81,7 +81,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     else params.delete("status");
     window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
     setKpiFocus({ table, status });
-    window.scrollTo({ top: 0 });
+    (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
   // 「返回全部」：清掉 kpi/status 参数（保留 focus 等其它参数），恢复完整页面。
@@ -92,7 +92,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     const search = params.toString();
     window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
     setKpiFocus(null);
-    window.scrollTo({ top: 0 });
+    (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
   const { loading, error, reload } = useAdminResource(

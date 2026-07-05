@@ -80,7 +80,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
     else params.delete("subset");
     window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
     setKpiFocus({ subset });
-    window.scrollTo({ top: 0 });
+    (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
   function exitKpiFocus() {
@@ -90,7 +90,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
     const search = params.toString();
     window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
     setKpiFocus(null);
-    window.scrollTo({ top: 0 });
+    (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null;
