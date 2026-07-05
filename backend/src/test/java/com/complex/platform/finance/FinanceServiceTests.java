@@ -106,6 +106,38 @@ class FinanceServiceTests {
     }
 
     @Test
+    void exportArApItemsCsvDataRowsTranslateEnumsToChinese() {
+        // 用户下载的 AR/AP 台账 CSV 数据行里，收付方向/来源类型/状态等枚举必须是中文，不得中英混用泄露英文枚举值。
+        // 应收·待收款
+        service.createArApItem(itemRequest("arap-csv-recv", "receivable", 50000L));
+        // 应付·待付款
+        service.createArApItem(itemRequest("arap-csv-pay", "payable", 60000L));
+        // 应收·全额收款 → 已结清
+        ArApItemRecord full = service.createArApItem(itemRequest("arap-csv-full", "receivable", 70000L));
+        service.registerArApPayment(full.id(), paymentRequest("pay-csv-full", 70000L));
+        // 应收·部分收款 → 部分收付
+        ArApItemRecord partial = service.createArApItem(itemRequest("arap-csv-part", "receivable", 80000L));
+        service.registerArApPayment(partial.id(), paymentRequest("pay-csv-part", 30000L));
+
+        String csv = service.exportArApItems().csvText();
+        String[] lines = csv.split("\n");
+        // 数据行 = 去掉表头行。
+        String body = String.join("\n", java.util.Arrays.copyOfRange(lines, 1, lines.length));
+
+        // 方向中文、来源类型中文、状态中文均出现在数据行。
+        assertThat(body).contains("应收").contains("应付").contains("订单");
+        assertThat(body).contains("待收款").contains("待付款").contains("已结清").contains("部分收付");
+        // 反向守卫：数据行不得再出现英文枚举值（改回英文映射该断言必红）。
+        assertThat(body)
+                .doesNotContain("receivable")
+                .doesNotContain("payable")
+                .doesNotContain("pending_collection")
+                .doesNotContain("pending_payment")
+                .doesNotContain("partial_paid")
+                .doesNotContain("settled");
+    }
+
+    @Test
     void createReceivableItemAcceptsBarBillSourceForOnAccountLedger() {
         ArApItemRecord created = service.createArApItem(new ArApItemRequest(
                 "arap-bar-bill-source",

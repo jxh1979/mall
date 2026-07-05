@@ -66,6 +66,20 @@ public class FinanceService {
     // 取数来源：system=平台侧系统取数；manual=第三方侧未接入手工录入进复核（与 V105 chk_frd_source 一致）。
     private static final Set<String> DIFFERENCE_SOURCES = Set.of("system", "manual");
 
+    // i18n：AR/AP 台账 CSV 数据行的用户可见枚举列（收付方向/来源类型/状态）后端翻中文；未知值原样输出不吞值（ponytail: 就近小映射，非全域枚举表）。
+    private static final Map<String, String> AR_AP_DIRECTION_LABELS = Map.of(
+            "receivable", "应收", "payable", "应付", "internal_accounting", "内部核算");
+    private static final Map<String, String> AR_AP_STATUS_LABELS = Map.of(
+            "pending_collection", "待收款", "pending_payment", "待付款",
+            "partial_paid", "部分收付", "settled", "已结清");
+    private static final Map<String, String> AR_AP_SOURCE_TYPE_LABELS = Map.ofEntries(
+            Map.entry("contract", "合同"), Map.entry("order", "订单"), Map.entry("refund", "退款"),
+            Map.entry("manual", "手工录入"), Map.entry("settlement", "结算"), Map.entry("bar_bill", "酒吧账单"),
+            Map.entry("employee_commission", "员工提成"), Map.entry("inventory_difference", "库存差异"),
+            Map.entry("turnover_rent", "营业额抽成租金"), Map.entry("cam", "公共区域维护费"),
+            Map.entry("deposit", "保证金"), Map.entry("property_fee", "物业费"),
+            Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"));
+
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
@@ -189,9 +203,9 @@ public class FinanceService {
         StringBuilder csv = new StringBuilder("单据编号,收付方向,往来对象编号,来源类型,来源编号,金额(分),已收付金额(分),未收付金额(分),币种,到期日,账期,状态\n");
         for (ArApItemRecord item : items) {
             csv.append(csv(item.itemNo())).append(',')
-                    .append(csv(item.direction())).append(',')
+                    .append(csv(arApLabel(AR_AP_DIRECTION_LABELS, item.direction()))).append(',')
                     .append(csv(item.counterpartyId())).append(',')
-                    .append(csv(item.sourceType())).append(',')
+                    .append(csv(arApLabel(AR_AP_SOURCE_TYPE_LABELS, item.sourceType()))).append(',')
                     .append(csv(item.sourceId())).append(',')
                     .append(item.amountCent()).append(',')
                     .append(item.paidAmountCent()).append(',')
@@ -199,9 +213,14 @@ public class FinanceService {
                     .append(csv(item.currency())).append(',')
                     .append(csv(item.dueDate() == null ? null : item.dueDate().toString())).append(',')
                     .append(csv(item.accountingPeriod())).append(',')
-                    .append(csv(item.status())).append('\n');
+                    .append(csv(arApLabel(AR_AP_STATUS_LABELS, item.status()))).append('\n');
         }
         return csv.toString();
+    }
+
+    /** 枚举列翻中文：命中映射用中文，未知值（含 null）原样返回不吞值。 */
+    private static String arApLabel(Map<String, String> labels, String raw) {
+        return raw == null ? null : labels.getOrDefault(raw, raw);
     }
 
     private String csv(String value) {
