@@ -287,6 +287,19 @@
 
 ---
 
+### 14.1 实施进度(2026-07-04 起,代码/迁移落地持续回写)
+
+| 批 | 状态 | 落地内容 |
+|---|---|---|
+| 批 0 | ✅ 完成 | 术语表 `terminology-canonical-v1.0` + 本 PRD v1.0 定稿 |
+| 批 1(按核销结算地基) | ✅ 完成 | **V222**(`settlement_transactions` + 对账表)、核销双写(`SettlementSettledEvent`/Consumer,AFTER_COMMIT 不影响核销主流程、金额三段 verified+unverified=allocated 幂等)、`SettlementReconciliationJob` 新旧对账、`SettlementExpiryJob` 未核销归项目(`allocated×未核销次数/总次数`);旧 `allocated_revenue_cent` 保留双写观察、不切口径;测试全绿 |
+| 批 2(分账引擎) | 🔄 进行中 | ✅ **V223**(6 配置表:platform_retention_rules/giveaway_cost_configs/ticket_distribution_configs/rank_tiers/merchant_rates/settlement_tax_configs)、✅ **V224**(`settlement_bills` + `settlement_items`)、✅ 月度分账引擎 `TicketDistributionSettlementService.settleMonth`(§5.0 算池/留存/三方式分配/超额待特批、月窗按 `created_at`、`@ConditionalOnProperty` 默认关);⬜ 批 2-4 过账 `ar_ap_items`、⬜ 批 2-5 测试收口 |
+| 迁移号 | — | V222 / V223 / V224 已用,下一 **V225** |
+
+> 渠道费明细来源(§5.0 步骤②)现无数据源,引擎暂置 0,待第三方渠道费率接入补。
+
+---
+
 ## 15. 待决清单
 
 ### 已定(2026-07-04 用户评审)
