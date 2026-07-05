@@ -6,6 +6,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
+import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps } from "../types";
 
 type VendorInspectionTaskRow = {
@@ -49,7 +50,7 @@ function checklistText(checklist?: VendorInspectionTemplateRow["checklist"]) {
   return checklist.map((item) => (typeof item === "string" ? item : item.label ?? item.item ?? "-")).join("、");
 }
 
-export function VendorInspectionsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function VendorInspectionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorInspectionTaskRow[]>([]);
   const [templates, setTemplates] = React.useState<VendorInspectionTemplateRow[]>([]);
   const [selectedId, setSelectedId] = React.useState("");
@@ -192,7 +193,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{formatBusinessStatus(row.scheduleMode)}</td>
                   <td>{row.spaceId ?? "-"}</td>
-                  <td>{row.assigneeId ?? "-"}</td>
+                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
                   <td>{row.scheduledDate ?? "-"} / {row.dueDate ?? "-"}</td>
                   <td>{row.workOrderId ?? "-"}</td>
                 </tr>

@@ -252,7 +252,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                   <td>{formatBusinessStatus(row.priority)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.ownerDepartment || "-"}</td>
-                  <td>{row.ownerUserId || "-"}</td>
+                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink></td>
                   <td>{row.dueAt ?? "-"}</td>
                   <td>{evidenceList(row)}</td>
                 </tr>

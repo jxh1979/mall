@@ -7,6 +7,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
+import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps } from "../types";
 
 type VendorWorkOrderRow = {
@@ -46,7 +47,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result };
 }
 
-export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorWorkOrderRow[]>([]);
   const [equipmentRows, setEquipmentRows] = React.useState<VendorEquipmentRow[]>([]);
   const [selectedId, setSelectedId] = React.useState("");
@@ -148,7 +149,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
                   <td>{formatBusinessStatus(row.priority)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.spaceId ?? "-"} / {row.equipmentId ?? "-"}</td>
-                  <td>{row.assigneeId ?? "-"}</td>
+                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
                   <td>{row.handleDueAt ?? "-"}</td>
                 </tr>
               ))}

@@ -16,7 +16,7 @@ function shortId(id: string | null | undefined): string {
   return id.length > 8 ? `…${id.slice(-8)}` : id;
 }
 
-export function AccessUsersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function AccessUsersPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [rows, setRows] = React.useState<AccessUserRow[]>([]);
   const [templates, setTemplates] = React.useState<PermissionTemplateRow[]>([]);
   const [username, setUsername] = React.useState("");
@@ -124,6 +124,17 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
     }
   }
 
+  // 下钻定位：从工单/巡检页点处理人（?focus=员工账号id）→ 高亮并滚动其行；无 focus 时行为不变。
+  React.useEffect(() => {
+    if (!focusObjectId || rows.length === 0) return;
+    if (!rows.some((row) => row.id === focusObjectId)) return;
+    const el = typeof document !== "undefined" ? document.querySelector(`[data-testid="access-user-row-${focusObjectId}"]`) : null;
+    if (el && typeof (el as HTMLElement).scrollIntoView === "function") {
+      (el as HTMLElement).scrollIntoView({ block: "center" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusObjectId, rows.length]);
+
   return (
     <section data-testid="access-users-page">
       <AdminPageHeader title="员工账号" description="管理员工账号、岗位角色和企业微信同步结果；禁用、手动录入和分配权限模板必须留痕。" />
@@ -161,7 +172,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
             <tbody>{rows.length === 0 ? (
               <tr><td colSpan={6} className="admin-muted-action">暂无员工账号，可通过上方表单手动录入并套用权限模板。</td></tr>
             ) : rows.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.id} data-testid={`access-user-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}>
                 <td>{row.username}</td>
                 <td>{row.phone ?? "-"}</td>
                 <td>{formatBusinessStatus(row.accountType)}</td>

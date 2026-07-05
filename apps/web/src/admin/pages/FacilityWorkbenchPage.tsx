@@ -3,6 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
+import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps } from "../types";
 
 type FacilityEquipmentRow = {
@@ -85,7 +86,7 @@ function statusBadge(status?: string | null) {
   return <span className={`admin-badge ${kind}`}>{value}</span>;
 }
 
-export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [equipment, setEquipment] = React.useState<FacilityEquipmentRow[]>([]);
   const [maintenanceDue, setMaintenanceDue] = React.useState<FacilityEquipmentRow[]>([]);
   const [workOrders, setWorkOrders] = React.useState<FacilityWorkOrderRow[]>([]);
@@ -361,7 +362,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th><th>满意度</th><th>操作</th></tr></thead>
             <tbody>{workOrders.map((row) => (
               <tr key={row.id} data-testid={`facility-work-order-${row.id}`}>
-                <td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)}{row.overtime ? "（已逾期）" : ""}</td><td>{row.assigneeId ?? "-"}</td><td>{row.satisfaction ?? "-"}</td>
+                <td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)}{row.overtime ? "（已逾期）" : ""}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td><td>{row.satisfaction ?? "-"}</td>
                 <td>
                   {row.status === "pending_assign" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-assign-${row.id}`} onClick={() => void assignWorkOrder(row.id)}>派单</PermissionButton> : null}
                   {row.status === "assigned" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-start-${row.id}`} onClick={() => void workOrderActionPost(row.id, "start")}>开始</PermissionButton> : null}
@@ -382,7 +383,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-orders-overdue-table">
             <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th></tr></thead>
-            <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} data-testid={`facility-work-order-overdue-${row.id}`}><td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)} · 已逾期</td><td>{row.assigneeId ?? "-"}</td></tr>)}</tbody>
+            <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} data-testid={`facility-work-order-overdue-${row.id}`}><td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)} · 已逾期</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td></tr>)}</tbody>
           </table>
         </div>
         <h3>SLA 策略表</h3>
@@ -432,7 +433,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <thead><tr><th>id</th><th>标题</th><th>类型/排程</th><th>状态</th><th>人员/日期</th><th>工单</th><th>操作</th></tr></thead>
             <tbody>{inspectionTasks.map((row) => (
               <tr key={row.id} data-testid={`facility-inspection-task-${row.id}`}>
-                <td>{row.id}</td><td>{row.title}</td><td>{zh(row.inspectionType)} / {zh(row.scheduleMode)}</td><td>{statusBadge(row.status)}</td><td>{row.assigneeId ?? "-"} / {row.dueDate ?? row.scheduledDate ?? "-"}</td><td>{row.workOrderId ?? "-"}</td>
+                <td>{row.id}</td><td>{row.title}</td><td>{zh(row.inspectionType)} / {zh(row.scheduleMode)}</td><td>{statusBadge(row.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink> / {row.dueDate ?? row.scheduledDate ?? "-"}</td><td>{row.workOrderId ?? "-"}</td>
                 <td>
                   <button type="button" data-testid={`facility-inspection-select-task-${row.id}`} onClick={() => void selectInspectionTask(row.id)}>记录</button>
                   {row.status === "pending" ? <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid={`facility-inspection-start-${row.id}`} onClick={() => void startInspectionTask(row.id)}>开始</PermissionButton> : null}
