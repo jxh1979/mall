@@ -136,6 +136,19 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
       ? orders.filter((row) => row.status === "completed")
       : orders;
 
+  function openCatalogDetail(row: CatalogRow) {
+    setDetail({
+      title: `服务项目明细 · ${row.name ?? row.id}`,
+      fields: [
+        { label: "服务名", value: row.name ?? "—" },
+        { label: "参考价", value: money(row.priceCent) },
+        { label: "时长", value: row.durationMinutes ? `${row.durationMinutes} 分钟` : "—" },
+        { label: "状态", value: row.active ? "上架" : "下架" },
+        { label: "服务编号", value: row.id },
+      ],
+    });
+  }
+
   function openOrderDetail(row: OrderRow) {
     setDetail({
       title: `服务单明细 · ${row.id}`,
@@ -188,7 +201,9 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
             <thead><tr><th>服务</th><th>参考价</th><th>时长</th><th>状态</th></tr></thead>
             <tbody>
               {catalog.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`service-catalog-row-${row.id}`}
+                  onClick={() => openCatalogDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCatalogDetail(row); } }}>
                   <td>{row.name ?? "—"}</td>
                   <td>{money(row.priceCent)}</td>
                   <td>{row.durationMinutes ? `${row.durationMinutes} 分钟` : "—"}</td>
