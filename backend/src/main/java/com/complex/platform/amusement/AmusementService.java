@@ -25,7 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class AmusementService {
+public class AmusementService implements AmusementVerificationPort {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -1033,6 +1033,71 @@ public class AmusementService {
         }
         // F-OPS-04：核销针对具体设备时传 deviceId，准入闸校验该设备巡检有效期（过期则 SAFETY_INSPECTION_EXPIRED）。
         String deviceId = trimToNull(actual.deviceId());
+        String pointId = trimToNull(textFromMap(actual.businessContext(),
+                "location_point_id", "locationPointId", "point_id", "pointId"));
+        return runAmusementVerification(
+                project, session, credential, pointId, deviceId, staffId, actual.idempotencyKey(), Instant.now());
+    }
+
+    /**
+     * 阶段1（2026-07-05 用户拍板）：票务核销 → 游乐正路分流入口（{@link AmusementVerificationPort}）。
+     *
+     * <p>与 controller 直连路径（{@link #createVerificationInternal} 从 businessContext 取 project/session）不同，
+     * 本路径【从 point/device + now 自动定位项目与当前 open 场次】——ticketing 侧检出游乐类权益后调本方法，
+     * 复用同一份准入+三维容量+消费权益+写 amusement_verifications 的正路核心（{@link #runAmusementVerification}）。
+     *
+     * <p>【调用方事务内】执行（不加 @Transactional/@GuardedAction：核销权限已在 ticketing verify 端点授权，
+     * 本方法仅承接分流，不作为独立高危动作二次门控）。定位不到项目/场次即抛 ApiException，由 ticketing 侧原样上抛。
+     */
+    @Override
+    public Optional<String> verifyAmusementEntry(AmusementEntryRequest request) {
+        AmusementEntryRequest actual = requireRequest(request);
+        String credential = requireText(actual.credentialPayload(), "credential_payload");
+        String pointId = trimToNull(actual.pointId());
+        String deviceId = trimToNull(actual.deviceId());
+        Instant now = actual.now() == null ? Instant.now() : actual.now();
+        // point/device → 项目定位：定位不到=本核销点非游乐闸 → 返回 empty，调用方回退通用旧路（不硬造关联、不报错）。
+        Optional<String> resolved = repository.findProjectIdByPointOrDevice(pointId, deviceId);
+        if (resolved.isEmpty()) {
+            return Optional.empty();
+        }
+        String projectId = resolved.get();
+        AmusementProjectRecord project = repository.findProjectById(projectId)
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+        checkProjectOwnership(projectId);
+        // 已确认为游乐闸：以下任一失败即报错（committed，不再回退）。
+        if (!"open".equals(project.openStatus())) {
+            throw ApiException.conflict("PROJECT_NOT_OPEN", "project is not open");
+        }
+        // 当前场次定位（项目 + now，start_time≤now≤end_time 且 status=open）；无可入场次即报错。
+        AmusementSessionRecord session = repository.resolveOpenSessionForProject(projectId, now)
+                .orElseThrow(() -> ApiException.conflict(
+                        "AMUSEMENT_NO_OPEN_SESSION", "no open amusement session at this time"));
+        String staffId = trimToDefault(actual.staffId(), "staff");
+        AmusementVerificationRecord record = runAmusementVerification(
+                project, session, credential, pointId, deviceId, staffId, actual.idempotencyKey(), now);
+        return Optional.of(record.id());
+    }
+
+    /**
+     * 游乐核销正路核心（controller 直连 & ticketing 分流共用）：项目 open+巡检准入 → 识别/校验权益 →
+     * 先消费票务权益（used_times+1）→ 三维容量原子扣减（任一维度失败补偿回补权益）→ 写 amusement_verifications。
+     */
+    private AmusementVerificationRecord runAmusementVerification(
+            AmusementProjectRecord project,
+            AmusementSessionRecord session,
+            String credential,
+            String pointId,
+            String deviceId,
+            String staffId,
+            String idempotencyKey,
+            Instant now) {
+        if (!project.id().equals(session.projectId())) {
+            throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "session does not belong to project");
+        }
+        if (!"open".equals(session.status())) {
+            throw ApiException.conflict("SESSION_NOT_OPEN", "session is not open");
+        }
         AmusementOpenEligibilityResponse eligibility = evaluateOpenEligibility(project.id(), null, deviceId);
         if (!eligibility.allowed()) {
             throw ApiException.conflict("SAFETY_BLOCKED", "safety gate blocked amusement verification");
@@ -1044,7 +1109,6 @@ public class AmusementService {
         if (!"active".equals(entitlement.status())) {
             throw ApiException.conflict("ENTITLEMENT_USED", "entitlement is not active");
         }
-        Instant now = Instant.now();
         if ((entitlement.validFrom() != null && now.isBefore(entitlement.validFrom()))
                 || (entitlement.validTo() != null && now.isAfter(entitlement.validTo()))) {
             throw ApiException.conflict("ENTITLEMENT_EXPIRED", "entitlement is not within validity window");
@@ -1068,8 +1132,6 @@ public class AmusementService {
         if (!entitlementGateway.consumeEntitlement(entitlement.id())) {
             throw ApiException.conflict("ENTITLEMENT_USED", "entitlement has no remaining times");
         }
-        String pointId = trimToNull(textFromMap(actual.businessContext(),
-                "location_point_id", "locationPointId", "point_id", "pointId"));
         // 清单#6 超容处置策略（§6.4/§7.18 + R6-D10）：硬上限阻断+软上限告警放行，均落
         // amusement.incident.over_capacity 事件；处置模式后台可切换（block_hard 默认/warn_only 仅告警留痕不阻断）。
         AmusementOverCapacityPolicy policy = repository.findOverCapacityPolicy(project.id());
@@ -1108,22 +1170,8 @@ public class AmusementService {
                 }
             });
         }
-        return repository.saveVerification(saveVerificationRecord(project, session, credential,
-                deviceId, staffId, actual, now, peopleCount));
-    }
-
-    private AmusementVerificationRecord saveVerificationRecord(
-            AmusementProjectRecord project,
-            AmusementSessionRecord session,
-            String credential,
-            String deviceId,
-            String staffId,
-            VerificationRequest actual,
-            Instant now,
-            int verifiedPeople
-    ) {
-        return new AmusementVerificationRecord(
-                "verification_" + slug(actual.idempotencyKey()),
+        return repository.saveVerification(new AmusementVerificationRecord(
+                "verification_" + slug(idempotencyKey),
                 project.id(),
                 session.id(),
                 credential,
@@ -1133,8 +1181,7 @@ public class AmusementService {
                 null,
                 List.of(),
                 now,
-                verifiedPeople
-        );
+                peopleCount));
     }
 
     /**

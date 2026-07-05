@@ -285,13 +285,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, verification_no, entitlement_id, entitlement_code, credential_type,
                     credential_payload, device_id, point_id, status, result_reason, source_type,
                     client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
-                    verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent
+                    verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
+                    amusement_verification_id
                 )
                 VALUES (
                     :id, :verification_no, :entitlement_id, :entitlement_code, :credential_type,
                     :credential_payload, :device_id, :point_id, :status, :result_reason, :source_type,
                     :client_task_id, :created_at, :nonce, :staff_id, :merchant_id, :window_valid, :signature_valid,
-                    :verified_people, :reverses_verification_id, :reversed_by, :reversed_at, :settlement_price_cent
+                    :verified_people, :reverses_verification_id, :reversed_by, :reversed_at, :settlement_price_cent,
+                    :amusement_verification_id
                 )
                 """, parameterSource.verificationParameters(verification));
         return verification;
@@ -303,7 +305,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, verification_no, entitlement_id, entitlement_code, credential_type,
                        credential_payload, device_id, point_id, status, result_reason, source_type,
                        client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
-                       verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent
+                       verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
+                       amusement_verification_id
                   FROM ticket_verifications
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapVerification);
@@ -315,7 +318,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, verification_no, entitlement_id, entitlement_code, credential_type,
                        credential_payload, device_id, point_id, status, result_reason, source_type,
                        client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
-                       verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent
+                       verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
+                       amusement_verification_id
                   FROM ticket_verifications
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapVerification).stream().findFirst();

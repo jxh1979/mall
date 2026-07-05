@@ -2334,6 +2334,33 @@ class AmusementServiceTests {
             return Optional.ofNullable(projects.get(id));
         }
 
+        @Override
+        public Optional<String> findProjectIdByPointOrDevice(String pointId, String deviceId) {
+            // 内存夹具：设备优先按 device_code / location_point_id 命中，其次按项目入口点位。
+            for (AmusementDeviceRecord device : devices.values()) {
+                if ((deviceId != null && deviceId.equals(device.deviceCode()))
+                        || (pointId != null && pointId.equals(device.locationPointId()))) {
+                    return Optional.of(device.projectId());
+                }
+            }
+            if (pointId == null) {
+                return Optional.empty();
+            }
+            return projects.values().stream()
+                    .filter(p -> pointId.equals(p.locationPointId()))
+                    .map(AmusementProjectRecord::id)
+                    .findFirst();
+        }
+
+        @Override
+        public Optional<AmusementSessionRecord> resolveOpenSessionForProject(String projectId, java.time.Instant now) {
+            return sessions.values().stream()
+                    .filter(s -> projectId.equals(s.projectId()))
+                    .filter(s -> "open".equals(s.status()))
+                    .filter(s -> !now.isBefore(s.startTime()) && !now.isAfter(s.endTime()))
+                    .reduce((a, b) -> b.startTime().isAfter(a.startTime()) ? b : a);
+        }
+
         // 处理清单 #8：内存版空间映射（spaceId -> merchantId；空串表示无商户/共享空间）。
         private final Map<String, String> spaceMerchants = new LinkedHashMap<>();
         private final Map<String, String> projectSpaceIds = new LinkedHashMap<>();

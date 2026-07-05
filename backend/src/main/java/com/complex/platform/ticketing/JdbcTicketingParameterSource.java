@@ -124,7 +124,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("reverses_verification_id", verification.reversesVerificationId())
                 .addValue("reversed_by", verification.reversedBy())
                 .addValue("reversed_at", timestampWithTimeZone(verification.reversedAt()))
-                .addValue("settlement_price_cent", verification.settlementPriceCent());
+                .addValue("settlement_price_cent", verification.settlementPriceCent())
+                .addValue("amusement_verification_id", verification.amusementVerificationId());
     }
 
     MapSqlParameterSource terminalSyncTaskParameters(TerminalSyncTaskRecord task) {

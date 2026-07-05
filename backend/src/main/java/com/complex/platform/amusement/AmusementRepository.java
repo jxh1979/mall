@@ -21,6 +21,19 @@ public interface AmusementRepository {
 
     Optional<AmusementProjectRecord> findProjectById(String id);
 
+    /**
+     * 阶段1 分流：由核销点位/设备定位游乐项目。优先按设备（amusement_devices.device_code / location_point_id）
+     * 命中其 project_id；否则按项目入口点位（amusement_projects.location_point_id）命中。均定位不到返回 empty
+     * （调用方明确报错，不硬造关联）。
+     */
+    Optional<String> findProjectIdByPointOrDevice(String pointId, String deviceId);
+
+    /**
+     * 阶段1 分流：定位项目在 now 时刻正在进行中的 open 场次（start_time≤now≤end_time 且 status='open'）。
+     * 多条命中取 start_time 最新一条；无则返回 empty（调用方报「当前无进行中场次」）。
+     */
+    Optional<AmusementSessionRecord> resolveOpenSessionForProject(String projectId, Instant now);
+
     /** 处理清单 #8：设置 amusement_projects.space_id（空间指派/回填），返回受影响行数。 */
     int assignProjectSpace(String projectId, String spaceId);
 

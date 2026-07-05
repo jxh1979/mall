@@ -136,7 +136,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("reverses_verification_id"),
                 resultSet.getString("reversed_by"),
                 nullableInstant(resultSet, "reversed_at"),
-                nullableLong(resultSet, "settlement_price_cent")
+                nullableLong(resultSet, "settlement_price_cent"),
+                resultSet.getString("amusement_verification_id")
         );
     }
 

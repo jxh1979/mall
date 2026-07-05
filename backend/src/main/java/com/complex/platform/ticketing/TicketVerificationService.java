@@ -1,6 +1,8 @@
 package com.complex.platform.ticketing;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.amusement.AmusementEntryRequest;
+import com.complex.platform.amusement.AmusementVerificationPort;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.terminal.MdmService;
 import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
@@ -24,6 +26,10 @@ public class TicketVerificationService {
     // R5 T15：赠饮权益类型——核销成功后触发 ticket.gift_verified，由 bar 域生成 0 元单并扣库存。
     private static final String GIFT_DRINK_ENTITLEMENT_TYPE = "gift_drink";
 
+    // 阶段1：游乐类权益前缀（与 amusement 域 AMUSEMENT_ENTITLEMENT_TYPE_PREFIX 同口径；
+    // entitlement_type 以 "amusement" 开头视为游乐类，分流进游乐正路）。
+    private static final String AMUSEMENT_ENTITLEMENT_TYPE_PREFIX = "amusement";
+
     // P1 清单#19：票种未配置 refresh_interval_seconds 时的回退默认刷新窗口（秒），与 V064 默认对齐。
     private static final int DEFAULT_REFRESH_INTERVAL_SECONDS = 60;
 
@@ -41,6 +47,12 @@ public class TicketVerificationService {
     // P0-3/X-01 门票二维码 HMAC 签名器：签发时对凭证关键字段签名、核销时校验。可为 null=旧构造/兼容测试
     // （不签名不校验，沿用 signature_value/signature_valid 占位 NULL 语义）；生产由 Spring 注入 @Component 后一律签名+校验。
     private final TicketCredentialSigner credentialSigner;
+    // 阶段1（2026-07-05 用户拍板）游乐核销分流端口：检出游乐类权益 → 调此端口走游乐正路
+    // （定位项目/当前场次 + 三维容量原子扣减 + 写 amusement_verifications，并在同事务内消费本权益）。
+    // 可为 null=旧构造/兼容测试（不分流，游乐权益走通用逐次扣旧路）；生产由 Spring 注入 @Service AmusementService。
+    // @Lazy 破除潜在初始化环（ticketing→amusement→TicketingAmusementEntitlementGateway→TicketingRepository 本无环，
+    // @Lazy 仅为稳妥）。
+    private final AmusementVerificationPort amusementVerificationPort;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketVerificationService(
@@ -48,12 +60,26 @@ public class TicketVerificationService {
             ApplicationEventPublisher eventPublisher,
             MdmService mdmService,
             AuthorizationService authorizationService,
-            TicketCredentialSigner credentialSigner) {
+            TicketCredentialSigner credentialSigner,
+            @org.springframework.context.annotation.Lazy AmusementVerificationPort amusementVerificationPort) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
         this.mdmService = mdmService;
         this.authorizationService = authorizationService;
         this.credentialSigner = credentialSigner;
+        this.amusementVerificationPort = amusementVerificationPort;
+    }
+
+    /**
+     * 向后兼容构造：未注入 AmusementVerificationPort 时游乐权益不分流（=null），走通用逐次扣旧路。供既有单测构造。
+     */
+    public TicketVerificationService(
+            TicketingRepository repository,
+            ApplicationEventPublisher eventPublisher,
+            MdmService mdmService,
+            AuthorizationService authorizationService,
+            TicketCredentialSigner credentialSigner) {
+        this(repository, eventPublisher, mdmService, authorizationService, credentialSigner, null);
     }
 
     /**
@@ -65,7 +91,7 @@ public class TicketVerificationService {
             ApplicationEventPublisher eventPublisher,
             MdmService mdmService,
             AuthorizationService authorizationService) {
-        this(repository, eventPublisher, mdmService, authorizationService, null);
+        this(repository, eventPublisher, mdmService, authorizationService, null, null);
     }
 
     public TicketVerificationService(
@@ -421,6 +447,19 @@ public class TicketVerificationService {
         if (entitlement.validTo() != null && now.isAfter(entitlement.validTo())) {
             throw ApiException.conflict("ENTITLEMENT_EXPIRED", "entitlement has expired");
         }
+        // 阶段1（2026-07-05 用户拍板）游乐核销走正路：检出游乐类权益（entitlement_type 以 "amusement" 开头，参考
+        // 赠饮 gift_drink 的分流范式）→ 分流进游乐正路（定位项目/当前场次 + 三维容量原子扣减 + 写 amusement_verifications，
+        // 并在同事务内消费本权益）。成功即在本方法内落一条带交叉引用的 ticket_verifications success 记录并短路返回，
+        // 不再走下方通用逐次扣（避免双扣通票）。端口未注入（旧构造/兼容测试）时不分流，游乐权益退回通用旧路（向后兼容）。
+        if (amusementVerificationPort != null && isAmusementEntitlement(entitlement)) {
+            VerificationResponse amusementResponse = verifyAmusementEntitlement(entitlement, request, sourceType,
+                    clientTaskId, windowValid, signatureValid, now);
+            if (amusementResponse != null) {
+                return amusementResponse; // 已分流进游乐正路并落记录 → 短路返回。
+            }
+            // 本核销点非游乐闸（point/device 未定位到游乐项目）→ fall-through 走下方通用逐次扣旧路
+            // （保持 unlimited_in_day 等既有 amusement_type 消耗语义、向后兼容）。
+        }
         // 结算重构批3-2(PRD §6.2)：入场资格「场次规则」——仅 consumption_window=per_session 的权益走场次判定；
         // 其余(NULL/per_use/per_day/unlimited_in_day)零改动、走下方现状逐次扣。若返回非 null 即已在本方法内落 success 记录并返回。
         if (SESSION_WINDOW.equals(entitlement.consumptionWindow())) {
@@ -536,6 +575,123 @@ public class TicketVerificationService {
             ));
         }
         return new VerificationResponse(verification.id(), verification.verificationNo(), verification.status(), verification.resultReason());
+    }
+
+    /** 阶段1：游乐类权益判定——entitlement_type 以 "amusement" 开头（与 amusement 域同口径）。 */
+    private boolean isAmusementEntitlement(IssuedEntitlementRecord entitlement) {
+        String type = entitlement.entitlementType();
+        return type != null && type.trim().toLowerCase(Locale.ROOT).startsWith(AMUSEMENT_ENTITLEMENT_TYPE_PREFIX);
+    }
+
+    /**
+     * 阶段1（2026-07-05 用户拍板）游乐核销分流主体：
+     * <ol>
+     *   <li>调 {@link AmusementVerificationPort#verifyAmusementEntry} 走游乐正路——【同事务内】完成
+     *       point/device→项目定位、当前 open 场次定位、项目 open+巡检准入、三维容量原子扣减、
+     *       消费本票务权益（used_times+1，容量失败补偿回补）、写 amusement_verifications；返回其 id。
+     *       任一步失败（定位不到项目/场次、项目未开、本场满等）即抛 ApiException，本方法原样上抛——
+     *       【通票权益不净扣】（容量失败游乐侧已补偿回补），满足「先游乐成功再扣通票」的顺序铁律。</li>
+     *   <li>成功后重读已消费的权益，落一条带交叉引用（amusement_verification_id）的 ticket_verifications
+     *       success 记录，结算价沿用通票权益 value_amount_cent（D6）；并发既有 PointsConfirm/SettlementSettled 事件，
+     *       与通用成功路径同语义（下游积分/结算对齐本次核销）。</li>
+     * </ol>
+     * ponytail：游乐侧已用同一 atomicUseEntitlement 消费权益（复用 TicketingAmusementEntitlementGateway），
+     * 故本方法【不再】调 atomicUseEntitlement，只补记通票核销记录 + 交叉引用 + 下游事件，杜绝双扣。
+     */
+    private VerificationResponse verifyAmusementEntitlement(
+            IssuedEntitlementRecord entitlement,
+            VerificationRequest request,
+            String sourceType,
+            String clientTaskId,
+            Boolean windowValid,
+            Boolean signatureValid,
+            Instant now) {
+        String staffId = trimToNull(textFromBusinessContext(request, "staff_id", "staffId"));
+        String credentialPayload = requireText(request.credentialPayload(), "credential_payload");
+        // 幂等键：游乐核销记录 id 用「本权益 + 本核销点 + offline_request_id/clientTaskId」稳定生成，
+        // 同一核销重放命中同一 amusement_verifications.id（saveVerification ON CONFLICT DO NOTHING）→ 不重复扣容量。
+        String amusementIdemKey = "amuse-verify:" + entitlement.id() + ":"
+                + requireText(request.pointId(), "point_id") + ":"
+                + (clientTaskId != null ? clientTaskId : "online");
+        Optional<String> amusementResult = amusementVerificationPort.verifyAmusementEntry(new AmusementEntryRequest(
+                credentialPayload,
+                request.pointId(),
+                request.deviceId(),
+                staffId,
+                amusementIdemKey,
+                now));
+        if (amusementResult.isEmpty()) {
+            // 本核销点非游乐闸（未定位到游乐项目）→ 返回 null，调用方回退通用旧路（不分流、不扣容量、不消费）。
+            return null;
+        }
+        String amusementVerificationId = amusementResult.get();
+        // 游乐侧已消费权益（used_times+1）；重读拿最新 used_times 用于积分/结算事件。
+        IssuedEntitlementRecord consumed = repository.findIssuedEntitlementById(entitlement.id()).orElse(entitlement);
+        int verifiedPeople = consumed.numPeople();
+        // D6：结算价沿用通票权益 value_amount_cent（游乐核销不另判物理/虚拟结算价）。
+        Long settlementPriceCent = consumed.valueAmountCent();
+        VerificationRecord verification = repository.saveVerification(new VerificationRecord(
+                "ver_" + UUID.randomUUID().toString().replace("-", ""),
+                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
+                consumed.id(),
+                consumed.entitlementCode(),
+                requireText(request.credentialType(), "credential_type"),
+                verificationPayload(request.credentialPayload(), null),
+                requireText(request.deviceId(), "device_id"),
+                requireText(request.pointId(), "point_id"),
+                "success",
+                "amusement_verified",
+                sourceType,
+                clientTaskId,
+                now,
+                null,
+                staffId,
+                consumed.merchantId(),
+                windowValid,
+                signatureValid,
+                verifiedPeople,
+                null,
+                null,
+                null,
+                settlementPriceCent,
+                // 阶段1 交叉引用（D3）：指向游乐正路核销记录，便于两侧对账。
+                amusementVerificationId
+        ));
+        // 与通用成功路径同：发积分确认（按核销张数 Σused/Σtotal）+ 结算 settled 事件，令下游对齐本次游乐核销。
+        if (consumed.orderId() != null && !consumed.orderId().isBlank()) {
+            long[] units = sumOrderUnits(consumed.orderId());
+            eventPublisher.publishEvent(new PointsConfirmRequestedEvent(consumed.orderId(), units[0], units[1]));
+        }
+        eventPublisher.publishEvent(new SettlementSettledEvent(
+                consumed.id(),
+                consumed.orderId(),
+                consumed.ticketTypeId(),
+                consumed.entitlementType(),
+                consumed.merchantId(),
+                consumed.totalTimes(),
+                consumed.usedTimes(),
+                consumed.numPeople(),
+                consumed.allocatedRevenueCent(),
+                consumed.validTo(),
+                consumed.exclusiveMerchantId()
+        ));
+        return new VerificationResponse(verification.id(), verification.verificationNo(),
+                verification.status(), verification.resultReason());
+    }
+
+    /** 阶段1：从核销请求 businessContext 取文本值（游乐分流需要的 staff_id 等），无则返回 null。 */
+    private String textFromBusinessContext(VerificationRequest request, String... keys) {
+        Map<String, Object> ctx = request == null ? null : request.businessContext();
+        if (ctx == null) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = ctx.get(key);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString();
+            }
+        }
+        return null;
     }
 
     // 结算重构批3-1(PRD §6.1)：结算类别常量。

@@ -132,6 +132,54 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public Optional<String> findProjectIdByPointOrDevice(String pointId, String deviceId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("point_id", pointId)
+                .addValue("device_id", deviceId);
+        // 设备优先（更具体）：命中 amusement_devices 的 device_code 或 location_point_id → 其 project_id。
+        if (deviceId != null || pointId != null) {
+            java.util.List<String> byDevice = jdbcTemplate.query("""
+                    SELECT project_id FROM amusement_devices
+                     WHERE (:device_id IS NOT NULL AND device_code = :device_id)
+                        OR (:point_id IS NOT NULL AND location_point_id = :point_id)
+                     ORDER BY (device_code = :device_id) DESC, updated_at DESC
+                     LIMIT 1
+                    """, params, (rs, n) -> rs.getString("project_id"));
+            if (!byDevice.isEmpty()) {
+                return Optional.of(byDevice.get(0));
+            }
+        }
+        // 退而按项目入口点位（amusement_projects.location_point_id）。
+        if (pointId == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query("""
+                SELECT id FROM amusement_projects
+                 WHERE location_point_id = :point_id
+                 ORDER BY updated_at DESC
+                 LIMIT 1
+                """, params, (rs, n) -> rs.getString("id")).stream().findFirst();
+    }
+
+    @Override
+    public Optional<AmusementSessionRecord> resolveOpenSessionForProject(String projectId, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("now", timestampWithTimeZone(now));
+        return jdbcTemplate.query("""
+                SELECT id, project_id, start_time, end_time, capacity, used_capacity, locked_capacity,
+                       status, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_sessions
+                 WHERE project_id = :project_id
+                   AND status = 'open'
+                   AND start_time <= :now
+                   AND end_time >= :now
+                 ORDER BY start_time DESC
+                 LIMIT 1
+                """, params, rowMapper::mapSession).stream().findFirst();
+    }
+
+    @Override
     public int assignProjectSpace(String projectId, String spaceId) {
         return jdbcTemplate.update("""
                 UPDATE amusement_projects
