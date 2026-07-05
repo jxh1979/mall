@@ -68,6 +68,8 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-MER-006", label: "我的合同", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/contracts", requiredPermissions: ["contract.view"], accountForms: ["merchant"] },
   { pageId: "ADM-MER-007", label: "费用通知", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/fee-recipients", requiredPermissions: ["merchant.portal.fee_recipient.manage"], accountForms: ["merchant"] },
   { pageId: "ADM-FLR-001", label: "商场平面图导入", module: "地产/空间", group: "ops", route: "/admin/space/floor-plans", requiredPermissions: ["floor_plan.view"] },
+  { pageId: "ADM-COMP-001", label: "合规到期提醒台账", module: "合规", group: "compliance", route: "/admin/compliance/reminders", requiredPermissions: ["compliance.reminder.view"] },
+  { pageId: "ADM-COMP-002", label: "企微会话合规监察", module: "合规", group: "compliance", route: "/admin/compliance/wecom", requiredPermissions: ["wecom.risk_hit.view"] },
 ];
 
 // 业务域分组顺序与展示文案（frontend-admin §4.3：8 业务域 + 平台域聚合）。
@@ -85,6 +87,7 @@ export const adminNavGroupOrder: AdminNavGroup[] = [
   "integration",
   "access",
   "risk",
+  "compliance",
   "audit",
   "ops",
 ];
@@ -102,6 +105,7 @@ export const adminNavGroupLabels: Record<AdminNavGroup, string> = {
   integration: "第三方对接",
   access: "账号权限",
   risk: "风控",
+  compliance: "合规",
   audit: "审计",
   ops: "运维",
 };

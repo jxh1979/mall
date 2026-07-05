@@ -15,6 +15,8 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-FAC-001", label: "楼宇运营工作台", route: "/admin/facility/workbench" },
   { pageId: "ADM-ENE-001", label: "能源工作台", route: "/admin/energy/workbench" },
   { pageId: "ADM-FLR-001", label: "商场平面图导入", route: "/admin/space/floor-plans" },
+  { pageId: "ADM-COMP-001", label: "合规到期提醒台账", route: "/admin/compliance/reminders" },
+  { pageId: "ADM-COMP-002", label: "企微会话合规监察", route: "/admin/compliance/wecom" },
   { pageId: "ADM-ACC-003", label: "访问治理工作台", route: "/admin/access/governance" },
   { pageId: "ADM-LEASE-001", label: "招商工作台", route: "/admin/leasing/workbench" },
   { pageId: "ADM-LEASE-002", label: "租赁状态看板", route: "/admin/leasing/rental-status" },
@@ -272,6 +274,20 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("floor-plan-import-page")).toBeVisible();
         await expect(page.getByTestId("floor-plan-evidence")).toContainText("/api/v1/floor-plans");
         await expect(page.getByTestId("floor-plans-table")).toContainText("示例平面图");
+        continue;
+      }
+      if (spec.pageId === "ADM-COMP-001") {
+        await expect(page.getByTestId("compliance-reminders-page")).toBeVisible();
+        await expect(page.getByTestId("compliance-reminders-evidence")).toContainText("/api/v1/compliance");
+        await expect(page.getByTestId("compliance-reminders-summary")).toBeVisible();
+        await expect(page.getByTestId("compliance-reminders-table")).toContainText("续约");
+        continue;
+      }
+      if (spec.pageId === "ADM-COMP-002") {
+        await expect(page.getByTestId("wecom-compliance-review-page")).toBeVisible();
+        await expect(page.getByTestId("wecom-compliance-evidence")).toContainText("/api/v1/compliance/wecom");
+        await expect(page.getByTestId("wecom-review-note")).toContainText("先选中一条命中");
+        await expect(page.getByTestId("wecom-risk-hits-table")).toContainText("PRIVATE_CONTACT");
         continue;
       }
       if (spec.pageId === "ADM-GOV-001") {

@@ -33,6 +33,7 @@ export type AdminNavGroup =
   | "access"
   | "risk"
   | "audit"
+  | "compliance"
   | "ops";
 
 /**
