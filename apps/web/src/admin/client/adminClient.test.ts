@@ -80,7 +80,7 @@ describe("AdminApi", () => {
       [errorResponse(404, { code: "NOT_FOUND", message: "missing" }), "数据不存在或已被删除"],
       [errorResponse(500, { code: "INTERNAL_ERROR", message: "boom" }), "服务暂时不可用，请稍后重试"],
       [new Response("<html>bad gateway</html>", { status: 502 }), "服务暂时不可用，请稍后重试"],
-      [errorResponse(400, { code: "PARAM_INVALID", detail_code: "VALIDATION_FAILED", message: "字段缺失" }), "提交内容有误：字段缺失"],
+      [errorResponse(400, { code: "PARAM_INVALID", detail_code: "VALIDATION_FAILED", message: "字段缺失" }), "字段缺失"],
     ];
     for (const [response, expected] of cases) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));

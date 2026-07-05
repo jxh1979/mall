@@ -164,7 +164,7 @@ export class AdminApi {
       if (response.status === 401) this.notifySessionExpired();
     }
     const text = await response.text();
-    if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
+    if (!response.ok) throw apiErrorFromResponse(path, response.status, text, "GET");
     return text ? JSON.parse(text) : null;
   }
 
@@ -182,7 +182,7 @@ export class AdminApi {
       if (response.status === 401) this.notifySessionExpired();
     }
     const text = await response.text();
-    if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
+    if (!response.ok) throw apiErrorFromResponse(path, response.status, text, method);
     return (text ? unwrap(JSON.parse(text)) : null) as T;
   }
 

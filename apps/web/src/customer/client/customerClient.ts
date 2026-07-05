@@ -124,7 +124,7 @@ export class CustomerApi {
     // 会话失效（401）全局回登录页；真权限不足（403）不登出，仍走下方错误翻译提示。
     if (response.status === 401 && !isSessionProbeOrAuthPath(path)) notifySessionExpired();
     // 错误翻译层：客人只看中文业务话术（err.message），技术信息收进 err.detail 供「详情」折叠展示。
-    if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
+    if (!response.ok) throw apiErrorFromResponse(path, response.status, text, method);
     return (text ? unwrap(JSON.parse(text)) : null) as T;
   }
 }
