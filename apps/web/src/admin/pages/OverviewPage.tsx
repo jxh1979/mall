@@ -30,7 +30,7 @@ const VOLUME_BARS: Array<{ code: string; label: string }> = [
   { code: "risk.pending_review", label: "待复核" },
 ];
 
-export function OverviewPage({ api, setGlobalError }: AdminPageProps) {
+export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [data, setData] = React.useState<OverviewPayload | null>(null);
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
@@ -68,12 +68,12 @@ export function OverviewPage({ api, setGlobalError }: AdminPageProps) {
       </div>
       <AdminDataState loading={loading} error={error} empty={!data} onRetry={reload}>
         <div className="admin-kpi-grid">
-          <div className="admin-kpi-card" data-testid="overview-kpi-ticket"><span>票务收入</span><strong>{metricText(data, "revenue.ticket")}</strong><small>已支付订单实付（分）</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-bar"><span>酒吧收入</span><strong>{metricText(data, "revenue.bar")}</strong><small>已结算账单实收（分）</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-amusement"><span>游乐核销</span><strong>{metricText(data, "traffic.amusement")}</strong><small>成功核销人次</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-verify"><span>票务核销</span><strong>{metricText(data, "verify.done")}</strong><small>成功核销数</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-member"><span>新增会员</span><strong>{metricText(data, "member.new")}</strong><small>当日新建</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-risk"><span>待复核</span><strong>{metricText(data, "risk.pending_review")}</strong><small>复核 + 风险预警</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-ticket"><span>票务收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-ticket-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{metricText(data, "revenue.ticket")}</button><small>已支付订单实付（分），查看出票与核销追踪</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-bar"><span>酒吧收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-bar-value" onClick={() => navigateTo?.("ADM-BAR-002")}>{metricText(data, "revenue.bar")}</button><small>已结算账单实收（分），查看酒吧账单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-amusement"><span>游乐核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-amusement-value" onClick={() => navigateTo?.("ADM-AMU-001")}>{metricText(data, "traffic.amusement")}</button><small>成功核销人次，查看游乐核销</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-verify"><span>票务核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-verify-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{metricText(data, "verify.done")}</button><small>成功核销数，查看出票与核销追踪</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-member"><span>新增会员</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-member-value" onClick={() => navigateTo?.("ADM-CUS-001")}>{metricText(data, "member.new")}</button><small>当日新建，查看客人账号管理</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-risk"><span>待复核</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-risk-value" onClick={() => navigateTo?.("ADM-GOV-006")}>{metricText(data, "risk.pending_review")}</button><small>复核 + 风险预警，查看主管复核</small></div>
         </div>
         {hasRevenue || hasVolume ? (
           <div className="admin-chart-panel" data-testid="overview-charts">

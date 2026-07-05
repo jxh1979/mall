@@ -81,9 +81,9 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-muted-action" data-testid="receivables-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(每日快照,约 5 分钟刷新)</div>
         <div className="admin-kpi-grid" data-testid="receivables-summary">
-          <div className="admin-kpi-card"><span>欠费总额</span><strong data-testid="receivables-balance">{money(balance)}</strong><small>逾期未清(期末时点)</small></div>
-          <div className="admin-kpi-card"><span>坏账预警区</span><strong>{money(aging90p)}</strong><small>逾期 90 天以上</small></div>
-          <div className="admin-kpi-card"><span>本月回款率</span><strong data-testid="receivables-rate">{rate === null ? "—" : `${(rate * 100).toFixed(2)}%`}</strong><small>实收 {money(collected)} / 应收 {money(receivableMtd)}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>欠费总额</span><button type="button" className="admin-kpi-value" data-testid="receivables-balance" onClick={() => navigateTo?.("ADM-FIN-001")}>{money(balance)}</button><small>逾期未清(期末时点)，查看应收应付台账</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>坏账预警区</span><button type="button" className="admin-kpi-value" data-testid="receivables-aging90p" onClick={() => navigateTo?.("ADM-FIN-001")}>{money(aging90p)}</button><small>逾期 90 天以上，查看应收应付台账</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>本月回款率</span><button type="button" className="admin-kpi-value" data-testid="receivables-rate" onClick={() => navigateTo?.("ADM-FIN-001")}>{rate === null ? "—" : `${(rate * 100).toFixed(2)}%`}</button><small>实收 {money(collected)} / 应收 {money(receivableMtd)}，查看应收应付台账</small></div>
         </div>
         <h3>账龄分布</h3>
         <div data-testid="receivables-aging-bars">

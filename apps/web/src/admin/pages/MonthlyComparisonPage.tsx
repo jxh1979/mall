@@ -41,6 +41,18 @@ const TEXT = {
 
 const AGG_LABELS: Record<string, string> = { monthly_sum: "月累计", period_end: "期末时点" };
 
+// 数据孤岛消除:月度对比每个指标按业务域跳到承载该数据的业务页(落到源页即可溯源)。
+const DOMAIN_PAGE: Record<string, string> = {
+  finance: "ADM-FIN-001",
+  ticketing: "ADM-TKT-003",
+  bar: "ADM-BAR-002",
+  customer: "ADM-CUS-001",
+  amusement: "ADM-AMU-001",
+  energy: "ADM-ENE-001",
+  leasing: "ADM-LEASE-002",
+  facility: "ADM-FAC-001",
+};
+
 function fmt(value: number | string | null | undefined, unit?: string) {
   if (value === null || value === undefined) return "积累中";
   const num = Number(value);
@@ -75,7 +87,7 @@ function defaultMonth() {
   return new Date().toISOString().slice(0, 7);
 }
 
-export function MonthlyComparisonPage({ api, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function MonthlyComparisonPage({ api, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [month, setMonth] = React.useState(defaultMonth);
   const [data, setData] = React.useState<ComparisonResponse | null>(null);
   const [exporting, setExporting] = React.useState(false);
@@ -181,7 +193,7 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
             <tbody>
               {rows.map((row) => (
                 <tr key={row.metricKey}>
-                  <td>{row.label ?? row.metricKey}</td>
+                  <td>{DOMAIN_PAGE[row.domain ?? ""] ? <button type="button" className="admin-trace-link" data-testid={`monthly-comparison-metric-${row.metricKey}`} onClick={() => navigateTo?.(DOMAIN_PAGE[row.domain ?? ""]!)}>{row.label ?? row.metricKey}</button> : (row.label ?? row.metricKey)}</td>
                   <td>{AGG_LABELS[row.aggregation ?? ""] ?? row.aggregation ?? "—"}</td>
                   <td>{fmt(row.current, row.unit)}</td>
                   <td>{fmt(row.prevMonth, row.unit)}</td>

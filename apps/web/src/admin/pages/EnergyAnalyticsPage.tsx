@@ -33,7 +33,7 @@ function localTime(value?: string) {
   return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
 }
 
-export function EnergyAnalyticsPage({ api, setGlobalError }: AdminPageProps) {
+export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [dashboard, setDashboard] = React.useState<EnergyDashboard | null>(null);
   const [abnormal, setAbnormal] = React.useState<AbnormalRow[]>([]);
 
@@ -66,12 +66,12 @@ export function EnergyAnalyticsPage({ api, setGlobalError }: AdminPageProps) {
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-muted-action" data-testid="energy-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(快照口径,异常明细为实时同口径;环比/同比随快照逐日积累后自动可比)</div>
         <div className="admin-kpi-grid" data-testid="energy-summary">
-          <div className="admin-kpi-card"><span>用电</span><strong data-testid="energy-total-electricity">{qty(electricity, "kWh")}</strong><small>当日经营窗合计</small></div>
-          <div className="admin-kpi-card"><span>用水</span><strong>{qty(water, "吨")}</strong><small>当日经营窗合计</small></div>
-          <div className="admin-kpi-card"><span>用气</span><strong>{qty(gas, "m³")}</strong><small>当日经营窗合计</small></div>
-          <div className="admin-kpi-card"><span>冷热量</span><strong>{qty(heatCold, "单位")}</strong><small>当日经营窗合计</small></div>
-          <div className="admin-kpi-card"><span>每平米电耗</span><strong data-testid="energy-per-sqm">{qty(perSqm, "kWh/㎡")}</strong><small>分母=可租面积</small></div>
-          <div className="admin-kpi-card"><span>异常读数</span><strong data-testid="energy-abnormal-count">{abnormalCount === null ? "—" : abnormalCount}</strong><small>待核查</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>用电</span><button type="button" className="admin-kpi-value" data-testid="energy-total-electricity" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(electricity, "kWh")}</button><small>当日经营窗合计，查看能源工作台</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>用水</span><button type="button" className="admin-kpi-value" data-testid="energy-total-water" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(water, "吨")}</button><small>当日经营窗合计，查看能源工作台</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>用气</span><button type="button" className="admin-kpi-value" data-testid="energy-total-gas" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(gas, "m³")}</button><small>当日经营窗合计，查看能源工作台</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>冷热量</span><button type="button" className="admin-kpi-value" data-testid="energy-total-heat-cold" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(heatCold, "单位")}</button><small>当日经营窗合计，查看能源工作台</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>每平米电耗</span><button type="button" className="admin-kpi-value" data-testid="energy-per-sqm" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(perSqm, "kWh/㎡")}</button><small>分母=可租面积，查看能源工作台</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>异常读数</span><button type="button" className="admin-kpi-value" data-testid="energy-abnormal-count" onClick={() => navigateTo?.("ADM-ENE-001")}>{abnormalCount === null ? "—" : abnormalCount}</button><small>待核查，查看能源工作台</small></div>
         </div>
         <h3>异常读数明细(实时,与异常计数同口径)</h3>
         <div className="admin-table-scroll">

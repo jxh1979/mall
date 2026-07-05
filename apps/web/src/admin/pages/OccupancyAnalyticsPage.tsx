@@ -164,11 +164,11 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
           <>
             <div className="admin-muted-action" data-testid="occupancy-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(期末时点口径,明细为实时同口径)</div>
             <div className="admin-kpi-grid" data-testid="occupancy-summary">
-              <div className="admin-kpi-card"><span>出租率</span><strong data-testid="occupancy-rate">{pct(rate)}</strong><small>已租 {sqm(leased)} / 可租 {sqm(rentable)}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>出租率</span><button type="button" className="admin-kpi-value" data-testid="occupancy-rate" onClick={() => navigateTo?.("ADM-LEASE-002")}>{pct(rate)}</button><small>已租 {sqm(leased)} / 可租 {sqm(rentable)}，查看租赁状态看板</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>空置面积</span><button type="button" className="admin-kpi-value" data-testid="occupancy-kpi-vacant" onClick={() => enterKpiFocus("vacant")}>{sqm(vacantArea)}</button><small>可招商,查看空置铺位</small></div>
-              <div className="admin-kpi-card"><span>已签待交</span><strong>{sqm(signedPending)}</strong><small>签约未生效,不计已租</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>已签待交</span><button type="button" className="admin-kpi-value" data-testid="occupancy-signed-pending" onClick={() => navigateTo?.("ADM-LEASE-002")}>{sqm(signedPending)}</button><small>签约未生效,不计已租，查看租赁状态看板</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>90 天内到期</span><button type="button" className="admin-kpi-value" data-testid="occupancy-kpi-expiring" onClick={() => enterKpiFocus("expiring")}>{expiring90 === null ? "—" : expiring90}</button><small>生效合同,查看到期预警</small></div>
-              <div className="admin-kpi-card"><span>车位出租率</span><strong>{pct(parkingRate)}</strong><small>单列口径,不与铺位混算</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>车位出租率</span><button type="button" className="admin-kpi-value" data-testid="occupancy-parking-rate" onClick={() => navigateTo?.("ADM-LEASE-002")}>{pct(parkingRate)}</button><small>单列口径,不与铺位混算，查看租赁状态看板</small></div>
             </div>
             {vacantSection}
             {expiringSection}

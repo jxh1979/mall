@@ -65,7 +65,7 @@ function OverdueTable({ testid, rows, completedLabel }: { testid: string; rows: 
   );
 }
 
-export function WorkOrderSlaPage({ api, setGlobalError }: AdminPageProps) {
+export function WorkOrderSlaPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [dashboard, setDashboard] = React.useState<FacilityDashboard | null>(null);
   const [overdue, setOverdue] = React.useState<OverdueRow[]>([]);
   const [merchantOverdue, setMerchantOverdue] = React.useState<OverdueRow[]>([]);
@@ -101,16 +101,16 @@ export function WorkOrderSlaPage({ api, setGlobalError }: AdminPageProps) {
         <div className="admin-muted-action" data-testid="wo-sla-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(快照口径,超时明细为实时同口径)</div>
         <h3>设施工单(物业报修/保洁)</h3>
         <div className="admin-kpi-grid" data-testid="wo-sla-summary">
-          <div className="admin-kpi-card"><span>响应中位数</span><strong data-testid="wo-response-p50">{hours(responseP50)}</strong><small>接单到首次响应</small></div>
-          <div className="admin-kpi-card"><span>处理中位数</span><strong data-testid="wo-handle-p50">{hours(handleP50)}</strong><small>派单到完成</small></div>
-          <div className="admin-kpi-card"><span>超时率</span><strong data-testid="wo-overdue-rate">{pct(overdueRate)}</strong><small>分母=时限落当日窗的单</small></div>
-          <div className="admin-kpi-card"><span>当前积压</span><strong data-testid="wo-backlog">{backlog === null ? "—" : backlog}</strong><small>未完成存量(时点)</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>响应中位数</span><button type="button" className="admin-kpi-value" data-testid="wo-response-p50" onClick={() => navigateTo?.("ADM-FAC-001")}>{hours(responseP50)}</button><small>接单到首次响应，查看楼宇运营工单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>处理中位数</span><button type="button" className="admin-kpi-value" data-testid="wo-handle-p50" onClick={() => navigateTo?.("ADM-FAC-001")}>{hours(handleP50)}</button><small>派单到完成，查看楼宇运营工单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>超时率</span><button type="button" className="admin-kpi-value" data-testid="wo-overdue-rate" onClick={() => navigateTo?.("ADM-FAC-001")}>{pct(overdueRate)}</button><small>分母=时限落当日窗的单，查看楼宇运营工单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>当前积压</span><button type="button" className="admin-kpi-value" data-testid="wo-backlog" onClick={() => navigateTo?.("ADM-FAC-001")}>{backlog === null ? "—" : backlog}</button><small>未完成存量(时点)，查看楼宇运营工单</small></div>
         </div>
         <h3>商户服务工单(商户专区提交)</h3>
         <div className="admin-kpi-grid" data-testid="mwo-sla-summary">
-          <div className="admin-kpi-card"><span>处理中位数</span><strong data-testid="mwo-handle-p50">{hours(mwoHandleP50)}</strong><small>提交到关单</small></div>
-          <div className="admin-kpi-card"><span>超时率</span><strong data-testid="mwo-overdue-rate">{pct(mwoOverdueRate)}</strong><small>含超时升级判定,已取消不计</small></div>
-          <div className="admin-kpi-card"><span>当前积压</span><strong data-testid="mwo-backlog">{mwoBacklog === null ? "—" : mwoBacklog}</strong><small>未完成存量(不含已处理待关闭)</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>处理中位数</span><button type="button" className="admin-kpi-value" data-testid="mwo-handle-p50" onClick={() => navigateTo?.("ADM-MER-001")}>{hours(mwoHandleP50)}</button><small>提交到关单，查看商户服务工单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>超时率</span><button type="button" className="admin-kpi-value" data-testid="mwo-overdue-rate" onClick={() => navigateTo?.("ADM-MER-001")}>{pct(mwoOverdueRate)}</button><small>含超时升级判定,已取消不计，查看商户服务工单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>当前积压</span><button type="button" className="admin-kpi-value" data-testid="mwo-backlog" onClick={() => navigateTo?.("ADM-MER-001")}>{mwoBacklog === null ? "—" : mwoBacklog}</button><small>未完成存量(不含已处理待关闭)，查看商户服务工单</small></div>
         </div>
         <div className="admin-muted-action">商户服务工单流转没有「首次响应」节点,响应中位数不适用(不伪造)。</div>
         <h3>设施工单超时明细(实时,与超时率分子同口径)</h3>
