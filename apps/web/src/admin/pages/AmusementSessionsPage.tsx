@@ -17,10 +17,11 @@ const SESSION_MANAGE = ["amusement.session.manage"];
 const TEXT = {
   title: "项目与场次",
   description: "管理游乐项目与场次容量，后续串联预约、核销和安全规则。",
-  evidence: "接口证据：读取 /api/v1/amusement/projects、/api/v1/amusement/sessions；新增场次调用 /api/v1/amusement/sessions。",
+  evidence: "接口证据：读取 /api/v1/amusement/projects、/api/v1/amusement/sessions；新建项目调用 /api/v1/amusement/projects；新增场次调用 /api/v1/amusement/sessions。",
   boundary: "项目与场次是预约、核销和安全规则的基础资源；本页只维护项目/场次资源，不替代安全巡检和事故闭环。",
   loadFailed: "游乐项目与场次读取失败",
   nameRequired: "场次名称不能为空。",
+  projectNameRequired: "项目名称不能为空。",
   focusClear: "清除筛选，返回全部",
 };
 
@@ -47,8 +48,11 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const [verifications, setVerifications] = React.useState<AmusementVerificationRow[]>([]);
   const [sessionName, setSessionName] = React.useState("验收场次");
   const [capacity, setCapacity] = React.useState("12");
+  const [projectName, setProjectName] = React.useState("新游乐项目");
+  const [projectCapacity, setProjectCapacity] = React.useState("30");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [projectSubmitting, setProjectSubmitting] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 项目/场次完整字段（时间中文·状态中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -90,6 +94,37 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
+
+  async function createProject() {
+    if (!projectName.trim()) {
+      setFormError(TEXT.projectNameRequired);
+      return;
+    }
+    const numericCapacity = Math.max(0, Number(projectCapacity) || 0);
+    setFormError("");
+    setGlobalError(null);
+    setProjectSubmitting(true);
+    const request = {
+      idempotencyKey: `amusement-project-create-${Date.now()}`,
+      operatorNote: "完整后台新建游乐项目",
+      evidenceAttachmentIds: ["att-amusement-project-create"],
+      projectName,
+      capacity: numericCapacity,
+      openStatus: "open",
+    };
+    try {
+      const result = await api.post<unknown>("/api/v1/amusement/projects", request);
+      setActionResult({ action: "amusement_project_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "新建项目失败";
+      setFormError(message);
+      setGlobalError(message);
+      setActionResult({ action: "amusement_project_created", status: "failed", message });
+    } finally {
+      setProjectSubmitting(false);
+    }
+  }
 
   async function createSession() {
     if (!sessionName.trim()) {
@@ -197,7 +232,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
       <AuditTrailHint event="amusement_project.viewed / amusement_session.created" />
       {formError ? <div className="admin-inline-error" data-testid="amusement-sessions-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
-        {projects.length === 0 && sessions.length === 0 ? <div className="admin-state admin-empty" data-testid="amusement-sessions-empty">暂无游乐项目与场次</div> : kpiFocus ? (
+        {kpiFocus ? (
           <>
             <div className="admin-state" data-testid="amusement-sessions-kpi-focus-banner">
               正在查看：{kpiFocus === "projects" ? "项目" : "场次"}（{focusCount}）
@@ -213,6 +248,8 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>总容量</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-capacity" onClick={() => enterKpiFocus("sessions")}>{totalCapacity}</button><small>容量合计</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已锁定</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-locked" onClick={() => enterKpiFocus("sessions")}>{sessions.reduce((sum, row) => sum + Number(row.lockedCapacity ?? 0), 0)}</button><small>已锁定容量</small></div>
             </div>
+            <div className="admin-form-grid"><label>项目名称<input data-testid="amusement-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /></label><label>项目容量<input data-testid="amusement-project-capacity" value={projectCapacity} onChange={(event) => setProjectCapacity(event.target.value)} /></label></div>
+            <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-project-create" disabled={projectSubmitting} onClick={() => void createProject()}>新建项目</PermissionButton></div>
             <div className="admin-form-grid"><label>场次名称<input data-testid="amusement-session-name" value={sessionName} onChange={(event) => setSessionName(event.target.value)} /></label><label>容量<input data-testid="amusement-session-capacity" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label></div>
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-session-create" disabled={submitting} onClick={() => void createSession()}>新增验收场次</PermissionButton><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
             {projectsSection}
