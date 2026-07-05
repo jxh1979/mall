@@ -312,9 +312,15 @@ public class LeasingService {
     // ============ 跟进 ============
     public PageResponse<LeasingFollowUpRecord> listFollowUps(String refType, String refId) {
         authorizationService.requirePlatformScope();
-        String type = requireEnum(refType, FOLLOW_UP_REF_TYPES, "ref_type");
-        List<LeasingFollowUpRecord> items = repository.listFollowUpsByRef(type, requireText(refId, "ref_id"),
-                currentProjectScope());
+        // 招商工作台首屏无参加载=全量跟进；带 ref_type+ref_id=精确下钻（原语义保留）。
+        boolean drillDown = trimToNull(refType) != null || trimToNull(refId) != null;
+        List<LeasingFollowUpRecord> items;
+        if (drillDown) {
+            String type = requireEnum(refType, FOLLOW_UP_REF_TYPES, "ref_type");
+            items = repository.listFollowUpsByRef(type, requireText(refId, "ref_id"), currentProjectScope());
+        } else {
+            items = repository.listAllFollowUps(currentProjectScope());
+        }
         return new PageResponse<>(items, 1, 500, items.size());
     }
 

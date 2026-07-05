@@ -46,4 +46,7 @@ public interface LeasingRepository {
     LeasingFollowUpRecord saveFollowUp(LeasingFollowUpRecord followUp);
 
     List<LeasingFollowUpRecord> listFollowUpsByRef(String refType, String refId, String projectScope);
+
+    /** 招商工作台首屏全量跟进（无 ref 过滤，projectScope 语义同上）。 */
+    List<LeasingFollowUpRecord> listAllFollowUps(String projectScope);
 }

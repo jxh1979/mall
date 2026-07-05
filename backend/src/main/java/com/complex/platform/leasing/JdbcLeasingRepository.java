@@ -219,6 +219,15 @@ class JdbcLeasingRepository implements LeasingRepository {
                         .addValue("project_id", projectScope), this::mapFollowUp);
     }
 
+    @Override
+    public List<LeasingFollowUpRecord> listAllFollowUps(String projectScope) {
+        return jdbcTemplate.query(
+                "SELECT * FROM leasing_follow_ups "
+                        + (projectScope != null ? "WHERE project_id = :project_id " : "")
+                        + "ORDER BY created_at DESC, id LIMIT 500",
+                new MapSqlParameterSource().addValue("project_id", projectScope), this::mapFollowUp);
+    }
+
     // ---------- row mappers ----------
     private LeasingLeadRecord mapLead(ResultSet rs, int n) throws SQLException {
         return new LeasingLeadRecord(

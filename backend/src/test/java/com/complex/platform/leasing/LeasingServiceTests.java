@@ -232,6 +232,18 @@ class LeasingServiceTests {
         assertThat(due).contains("lead_old").doesNotContain("lead_signed");
     }
 
+    // 招商工作台首屏无参加载：跟进列表全量（不传 ref_type/ref_id）返回所有跟进，不再 400。
+    @Test
+    void listFollowUpsWithoutRefReturnsAllScoped() {
+        LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
+                "赵九", null, "outbound", null, null, null, null, "kf1"));
+        service.createFollowUp(new LeasingFollowUpRequest("lead", lead.id(), "phone", "首访", null, "kf2"));
+        service.createFollowUp(new LeasingFollowUpRequest("lead", lead.id(), "visit", "复访", null, "kf3"));
+        assertThat(service.listFollowUps(null, null).items()).hasSize(2);
+        // 带 ref 时仍走精确下钻。
+        assertThat(service.listFollowUps("lead", lead.id()).items()).hasSize(2);
+    }
+
     /** 内存仓储（实现 V161 重建后的 11 个方法）。 */
     private static final class InMemoryLeasingRepository implements LeasingRepository {
         private final Map<String, LeasingLeadRecord> leads = new LinkedHashMap<>();
@@ -302,6 +314,13 @@ class LeasingServiceTests {
         @Override
         public List<LeasingFollowUpRecord> listFollowUpsByRef(String refType, String refId, String projectScope) {
             return followUps.stream().filter(f -> f.refType().equals(refType) && f.refId().equals(refId))
+                    .filter(f -> projectScope == null || projectScope.equals(f.projectId()))
+                    .toList();
+        }
+
+        @Override
+        public List<LeasingFollowUpRecord> listAllFollowUps(String projectScope) {
+            return followUps.stream()
                     .filter(f -> projectScope == null || projectScope.equals(f.projectId()))
                     .toList();
         }

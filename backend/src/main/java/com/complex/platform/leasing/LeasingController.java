@@ -127,7 +127,8 @@ public class LeasingController {
     // ---- 跟进 ----
     @GetMapping("/follow-ups")
     public ApiResponse<PageResponse<LeasingFollowUpRecord>> listFollowUps(
-            @RequestParam("ref_type") String refType, @RequestParam("ref_id") String refId) {
+            @RequestParam(value = "ref_type", required = false) String refType,
+            @RequestParam(value = "ref_id", required = false) String refId) {
         authorizationService.requirePermission("leasing.lead.manage");
         return ApiResponse.ok(service.listFollowUps(refType, refId));
     }
