@@ -27,6 +27,7 @@ const DynamicPricingPage = React.lazy(() => import("./pages/DynamicPricingPage")
 const TicketOrdersPage = React.lazy(() => import("./pages/TicketOrdersPage").then((m) => ({ default: m.TicketOrdersPage })));
 const BarTableSessionsPage = React.lazy(() => import("./pages/BarTableSessionsPage").then((m) => ({ default: m.BarTableSessionsPage })));
 const FinanceArApLedgerPage = React.lazy(() => import("./pages/FinanceArApLedgerPage").then((m) => ({ default: m.FinanceArApLedgerPage })));
+const FinancePropertyFeePage = React.lazy(() => import("./pages/FinancePropertyFeePage").then((m) => ({ default: m.FinancePropertyFeePage })));
 const ReconciliationPage = React.lazy(() => import("./pages/ReconciliationPage").then((m) => ({ default: m.ReconciliationPage })));
 const MerchantWorkOrdersPage = React.lazy(() => import("./pages/MerchantWorkOrdersPage").then((m) => ({ default: m.MerchantWorkOrdersPage })));
 const MerchantScopePage = React.lazy(() => import("./pages/MerchantScopePage").then((m) => ({ default: m.MerchantScopePage })));
@@ -298,6 +299,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <LeasingRentalStatusPage {...props} />;
     case "ADM-FIN-001":
       return <FinanceArApLedgerPage {...props} />;
+    case "ADM-FIN-004":
+      return <FinancePropertyFeePage {...props} />;
     case "ADM-INT-001":
       return <IntegrationAdaptersPage {...props} />;
     case "ADM-INT-003":

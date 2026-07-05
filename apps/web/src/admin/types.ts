@@ -717,6 +717,30 @@ export type MerchantZoneFeeRecipientRow = {
   updatedAt?: string;
 };
 
+// F-OPS-08 物业费费率（项目级、可按期）。effectivePeriod 空=该项目默认费率。
+export type PropertyFeeRateRow = {
+  id: string;
+  projectId?: string;
+  effectivePeriod?: string | null;
+  ratePerSquareMeterCent?: number;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+// F-OPS-08 物业费逐户计费留痕（不退不补；本次生成返回值）。
+export type PropertyFeeBillRow = {
+  id: string;
+  projectId?: string;
+  period?: string;
+  merchantId?: string;
+  areaSquareMeter?: number | string;
+  ratePerSquareMeterCent?: number;
+  amountCent?: number;
+  arApItemId?: string;
+  createdAt?: string;
+};
+
 export type MerchantZoneSettlementRow = {
   id: string;
   contractId?: string;
