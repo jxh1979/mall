@@ -2,6 +2,7 @@ package com.complex.platform.settlement;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -204,6 +205,77 @@ public class JdbcSettlementTransactionRepository {
                 )
                 ON CONFLICT (transaction_no) DO NOTHING
                 """, params);
+    }
+
+    /**
+     * 平台侧结算审阅(2026-07-05 审计断层②):分页只读列出核销结算流水
+     * (transaction_type=verification_settled)。可按 project/merchant 过滤(均可空)。
+     * 供平台操作员查看项目/商户/核销张数/金额/状态——补此前只有 DB+月度 Job、无查看页的缺口。
+     */
+    public List<SettlementTransactionView> listVerificationSettled(
+            String projectId, String merchantId, int limit, int offset) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("merchant_id", merchantId)
+                .addValue("limit", limit)
+                .addValue("offset", offset);
+        return jdbcTemplate.query("""
+                SELECT id, transaction_no, project_id, merchant_id, exclusive_merchant_id,
+                       ticket_type_id, entitlement_type, beneficiary_type,
+                       verified_count, num_people, verified_amount_cent,
+                       settlement_status, created_at
+                  FROM settlement_transactions
+                 WHERE transaction_type = verification_settled
+                   AND (:project_id::text  IS NULL OR project_id  = :project_id)
+                   AND (:merchant_id::text IS NULL OR merchant_id = :merchant_id)
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, i) -> new SettlementTransactionView(
+                        rs.getString("id"),
+                        rs.getString("transaction_no"),
+                        rs.getString("project_id"),
+                        rs.getString("merchant_id"),
+                        rs.getString("exclusive_merchant_id"),
+                        rs.getString("ticket_type_id"),
+                        rs.getString("entitlement_type"),
+                        rs.getString("beneficiary_type"),
+                        rs.getInt("verified_count"),
+                        rs.getInt("num_people"),
+                        rs.getLong("verified_amount_cent"),
+                        rs.getString("settlement_status"),
+                        rs.getTimestamp("created_at").toInstant()));
+    }
+
+    /** 平台侧结算审阅:同筛选条件下的总条数(分页 total)。 */
+    public long countVerificationSettled(String projectId, String merchantId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("merchant_id", merchantId);
+        Long n = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM settlement_transactions
+                 WHERE transaction_type = verification_settled
+                   AND (:project_id::text  IS NULL OR project_id  = :project_id)
+                   AND (:merchant_id::text IS NULL OR merchant_id = :merchant_id)
+                """, params, Long.class);
+        return n == null ? 0L : n;
+    }
+
+    /** 平台侧结算审阅只读投影:列表页展示字段。 */
+    public record SettlementTransactionView(
+            String id,
+            String transactionNo,
+            String projectId,
+            String merchantId,
+            String exclusiveMerchantId,
+            String ticketTypeId,
+            String entitlementType,
+            String beneficiaryType,
+            int verifiedCount,
+            int numPeople,
+            long verifiedAmountCent,
+            String settlementStatus,
+            Instant createdAt
+    ) {
     }
 
     /** 第4步取数投影:已过期未核销权益归项目所需字段。 */

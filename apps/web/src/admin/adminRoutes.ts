@@ -8,6 +8,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-TKT-001", label: "票务策略", module: "票务", group: "ticketing", route: "/admin/ticketing/policies", requiredPermissions: ["ticket.product.view"] },
   { pageId: "ADM-BAR-001", label: "卡座与订台", module: "酒吧", group: "bar", route: "/admin/bar/table-sessions", requiredPermissions: ["bar.table_session.view", "bar.table.view", "bar.reservation.view", "bar.order.view"] },
   { pageId: "ADM-FIN-001", label: "应收应付台账", module: "财务", group: "finance", route: "/admin/finance/ar-ap-ledger", requiredPermissions: ["finance.ar_ap.view"] },
+  { pageId: "ADM-FIN-005", label: "通票结算审阅", module: "财务", group: "finance", route: "/admin/finance/settlement-review", requiredPermissions: ["finance.settlement.view"] },
   { pageId: "ADM-INT-001", label: "供应商适配器", module: "第三方", group: "integration", route: "/admin/integrations/adapters", requiredPermissions: ["integration.provider_adapter.view"] },
   { pageId: "ADM-OPS-001", label: "生产 blocker 与证据", module: "运维", group: "ops", route: "/admin/ops/readiness", requiredPermissions: ["ops.production_readiness.view"] },
   { pageId: "ADM-GOV-001", label: "集团/综合体拓扑", module: "治理", group: "governance", route: "/admin/governance/topology", requiredPermissions: ["governance.project.view", "governance.space.view", "merchant.profile.view"] },

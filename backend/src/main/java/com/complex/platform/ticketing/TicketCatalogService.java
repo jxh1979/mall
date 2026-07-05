@@ -111,9 +111,10 @@ public class TicketCatalogService {
                 positiveOrDefault(actual.defaultTotalTimes(), 1, "default_total_times"),
                 nonNegativeOrDefault(actual.defaultValueCent(), 0L, "default_value_cent"),
                 trimToDefault(actual.status(), "active"),
-                // #3 配置入口：模板归属（merchant/venue/point）由请求透传（各可选）。
-                // 为空时发放回退出票方商户；联合通票各模板可填各自归属。
-                trimToNull(actual.merchantId()),
+                // 审计断层①(2026-07-05):模板必须绑商户。不绑则核销结算款因月度成账 SQL
+                // (JdbcSettlementBillRepository 的 merchant_id IS NOT NULL)永远进不了账单→孤儿。
+                // 从源头强制非空;联合通票各模板可填各自归属(venue/point 仍可选)。
+                requireMerchant(actual.merchantId()),
                 trimToNull(actual.venueId()),
                 trimToNull(actual.pointId()),
                 // #3 配置入口：赠饮→吧台 SKU 映射（bar_item_ref）由请求透传（可选）。
@@ -217,6 +218,15 @@ public class TicketCatalogService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
+    }
+
+    /** 审计断层①:权益模板必须绑商户,否则核销结算款进不了月度账单(成孤儿)。 */
+    private String requireMerchant(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            throw ApiException.badRequest("PARAM_INVALID", "merchant_id is required");
+        }
+        return trimmed;
     }
 
     private String requireText(String value, String fieldName) {

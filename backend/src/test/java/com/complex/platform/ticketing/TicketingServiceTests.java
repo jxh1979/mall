@@ -110,10 +110,10 @@ class TicketingServiceTests {
         TicketTypeRecord pass = createTicketType("multi-pass");
         EntitlementTemplateRecord barTpl = service.createEntitlementTemplate(new EntitlementTemplateRequest(
                 "s6-tpl-bar", "bar", List.of(), "S6 Bar Drink", "bar_drink", 1, 9900L, "active",
-                null, null, null, null));
+                null, "mch_s6_bar", null, null));
         EntitlementTemplateRecord rideTpl = service.createEntitlementTemplate(new EntitlementTemplateRequest(
                 "s6-tpl-ride", "ride", List.of(), "S6 Ride", "amusement_ride", 1, 3000L, "active",
-                null, null, null, null));
+                null, "mch_s6_ride", null, null));
         service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
                 "s6-bind-bar", "bind", List.of(), barTpl.id(), 1, 1, 9900L, "default", 1, 9900L));
         service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
@@ -152,7 +152,7 @@ class TicketingServiceTests {
                 9900L,
                 "active",
                 null,
-                null,
+                "mch_idem",
                 null,
                 null
         );
@@ -165,6 +165,18 @@ class TicketingServiceTests {
         assertThat(auditEventRepository.events)
                 .filteredOn(event -> "ticket_entitlement_template.changed".equals(event.eventName()))
                 .hasSize(1);
+    }
+
+    @Test
+    void createEntitlementTemplateRejectsNullMerchant() {
+        // 审计断层①：模板不绑 merchant_id → 核销结算款因月度成账 SQL(merchant_id IS NOT NULL)成孤儿。
+        // 从源头拒绝:建模板必须绑商户,否则 PARAM_INVALID。
+        EntitlementTemplateRequest noMerchant = new EntitlementTemplateRequest(
+                "tpl-no-merchant", "create", List.of(), "Orphan Entry", "entry", 1, 9900L, "active",
+                null, null, null, null);
+        assertThatThrownBy(() -> service.createEntitlementTemplate(noMerchant))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("merchant_id");
     }
 
     @Test
@@ -2479,20 +2491,12 @@ class TicketingServiceTests {
     }
 
     private EntitlementTemplateRecord createTemplate(String key, int totalTimes, long valueCent) {
-        return service.createEntitlementTemplate(new EntitlementTemplateRequest(
-                key,
-                "create",
-                List.of(),
-                "P0 Entry " + key,
-                "entry",
-                totalTimes,
-                valueCent,
-                "active",
-                null,
-                null,
-                null,
-                null
-        ));
+        // 审计断层①后:建模板经 service 已强制绑商户。本 helper 专为「出票方回退」契约测试直存
+        // 一条 merchant_id=null 的模板(绕过 service 校验),使发放时权益回退到出票方 merchant scope。
+        Instant now = Instant.now();
+        return ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_" + key, "P0 Entry " + key, "entry", totalTimes, valueCent, "active",
+                null, null, null, null, now, now, null, null));
     }
 
     // 1.8 客人端我的票：本人订单列票实例（安全投影含票名/剩余次数）；他人 403；不存在订单 404。
