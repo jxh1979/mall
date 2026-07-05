@@ -18,6 +18,11 @@ public record EntitlementTemplateRecord(
         // 赠饮核销时取此作为 itemRef 发 ticket.gift_verified；为空则下游跳过库存扣减（接 R5 T15）。
         String barItemRef,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        // 结算重构批3-1(PRD §6.1)：权益结算类别 physical(实物,走酒吧内部结算价)/virtual(虚拟,走签约单价)；
+        // 可空=旧数据,判定回退 value_amount。发放时复制到 issued_entitlements。放末位便于既有构造点追加。
+        String entitlementKind,
+        // 虚拟权益签约单价(分)；仅 virtual 结算时取用，可空回退 value_amount。
+        Long agreementPriceCent
 ) {
 }

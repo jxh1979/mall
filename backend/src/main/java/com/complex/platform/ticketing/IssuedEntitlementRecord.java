@@ -25,7 +25,11 @@ public record IssuedEntitlementRecord(
         // 待确认项#1：出票时算得的该权益分配收入（订单实付按各权益分项单价比例拆分；可空，无订单/单价时为 null）。
         // 按 entitlement_type 映射业态（bar/amusement/ticket）+ merchant_id 做业态/商户聚合的基础；
         // 仅作售票收入的业态拆分展示与法律双实体对账，不并入净收入（订单实付全额已计入 official_ticket/revenue.ticket）。
-        Long allocatedRevenueCent
+        Long allocatedRevenueCent,
+        // 结算重构批3-1(PRD §6.1)：发放时从模板复制的结算类别 physical/virtual（可空回退 value_amount）。
+        String entitlementKind,
+        // 虚拟权益签约单价(分)，发放时从模板复制；仅 virtual 结算时取用，可空回退 value_amount。
+        Long agreementPriceCent
 ) {
     public int remainingTimes() {
         return totalTimes - usedTimes;
@@ -51,7 +55,9 @@ public record IssuedEntitlementRecord(
                 createdAt,
                 updatedAt,
                 numPeople,
-                allocatedRevenueCent
+                allocatedRevenueCent,
+                entitlementKind,
+                agreementPriceCent
         );
     }
 }

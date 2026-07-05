@@ -38,7 +38,8 @@ class TicketCredentialSignatureTests {
         return new IssuedEntitlementRecord(
                 ENTITLEMENT_ID, ENTITLEMENT_CODE, "tt_1", "order_1", "tpl_1", "ticket",
                 "merchant_1", "venue_1", "point_1", 2, 0, 9900L, "active",
-                null, null, now, now, 1, null);
+                null, null, now, now, 1, null,
+                null, null);
     }
 
     private VerificationRequest verifyRequest(String credentialPayload) {

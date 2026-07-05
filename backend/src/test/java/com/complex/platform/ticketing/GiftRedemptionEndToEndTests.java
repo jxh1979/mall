@@ -220,7 +220,8 @@ class GiftRedemptionEndToEndTests {
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "gift_drink",
                 merchantId, null, barId, 1, 0, 0L, "active",
-                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null));
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
+                null, null));
     }
 
     private void seedBarTable(String barId) {
@@ -294,6 +295,7 @@ class GiftRedemptionEndToEndTests {
                 now,                  // createdAt
                 now,                  // updatedAt
                 1,                    // numPeople
-                null));               // allocatedRevenueCent
+                null,
+                null, null));               // allocatedRevenueCent
     }
 }

@@ -165,7 +165,8 @@ class SettlementDoubleWriteEndToEndTests {
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "entry",
                 merchantId, null, "point_" + suffix, totalTimes, 0, 0L, "active",
-                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, allocatedCent));
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, allocatedCent,
+                null, null));
         return code;
     }
 }

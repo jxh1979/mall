@@ -356,7 +356,10 @@ public class TicketOrderService {
                             now,
                             // fan-out 后每张为独立单人票：numPeople=1，核销 verified_people=1、游乐占 1 容量。
                             1,
-                            allocatedRevenue
+                            allocatedRevenue,
+                            // 结算重构批3-1(PRD §6.1)：发放时把模板结算类别/签约单价复制到已发权益，供核销结算价判定。
+                            template.entitlementKind(),
+                            template.agreementPriceCent()
                     );
                     repository.saveIssuedEntitlement(entitlement);
                     responses.add(new IssuedEntitlementResponse(entitlementCode));

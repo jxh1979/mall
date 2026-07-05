@@ -112,7 +112,8 @@ class TicketingJdbcIntegrationTests {
                 "active",null,null,null,null,
                 now,
                 now
-        ));
+        ,
+        null, null));
 
         assertThat(repository.listTicketTypes())
                 .extracting(
@@ -158,7 +159,8 @@ class TicketingJdbcIntegrationTests {
                 "active",null,null,null,null,
                 now,
                 now
-        ));
+        ,
+        null, null));
         repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "link_jdbc",
                 "ticket_type_jdbc_issue",
@@ -196,7 +198,8 @@ class TicketingJdbcIntegrationTests {
                 now,
                 3,
                 null
-        ));
+        ,
+        null, null));
         // V159 起 ticket_verifications.device_id 外键引用 terminal_devices，先建父设备避免 FK 违反。
         seedTerminalDevice("dev_jdbc", now);
         repository.saveVerification(new VerificationRecord(
@@ -222,7 +225,8 @@ class TicketingJdbcIntegrationTests {
                 null,
                 null,
                 null
-        ));
+        ,
+        null));
         repository.saveTerminalSyncTask(new TerminalSyncTaskRecord(
                 "sync_jdbc",
                 "P0-ANDROID-JDBC",
@@ -297,7 +301,8 @@ class TicketingJdbcIntegrationTests {
         repository.saveTicketType(new TicketTypeRecord(
                 "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published",null,null, now, now));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
-                "template_chk", "P0 Entry", "entry", 4, 9900L, "active",null,null,null,null, now, now));
+                "template_chk", "P0 Entry", "entry", 4, 9900L, "active",null,null,null,null, now, now,
+                null, null));
         // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
         repository.saveTicketOrder(new TicketOrderRecord(
                 "order_chk", "ON-CHK", "cust_chk", "ticket_type_chk", null, 4,
@@ -305,7 +310,8 @@ class TicketingJdbcIntegrationTests {
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_chk", "P0-CHK", "ticket_type_chk", "order_chk", "template_chk", "entry",
                 "mch_chk", "venue_chk", "gate_chk", 4, 0, 9900L, "active",
-                now, now.plusSeconds(86400), now, now, 4, null));
+                now, now.plusSeconds(86400), now, now, 4, null,
+                null, null));
         // V159 起 ticket_verifications.device_id 外键引用 terminal_devices，先建父设备避免 FK 违反。
         seedTerminalDevice("dev_chk", now);
     }
@@ -324,7 +330,8 @@ class TicketingJdbcIntegrationTests {
         return new VerificationRecord(
                 id, no, "ent_chk", "P0-CHK", "qr", "P0-CHK", "dev_chk", "gate_chk",
                 status, null, "android_terminal_online", null, now,
-                "nonce_" + id, "staff_chk", "mch_chk", Boolean.TRUE, null, 1, null, null, null);
+                "nonce_" + id, "staff_chk", "mch_chk", Boolean.TRUE, null, 1, null, null, null,
+                null);
     }
 
     @Test
@@ -396,7 +403,8 @@ class TicketingJdbcIntegrationTests {
                 "active",null,null,null,null,
                 now,
                 now
-        ));
+        ,
+        null, null));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_order_jdbc",
                 "P0-ORDER-JDBC",
@@ -417,7 +425,8 @@ class TicketingJdbcIntegrationTests {
                 now,
                 1,
                 null
-        ));
+        ,
+        null, null));
         repository.saveTicketCredential(new TicketCredentialRecord(
                 "credential_jdbc",
                 "ent_order_jdbc",
@@ -515,13 +524,16 @@ class TicketingJdbcIntegrationTests {
                 2, java.time.LocalDate.parse("2026-06-20"), "miniapp", "13800138000",
                 19800L, "CNY", "paid", "issued", "paid", now, now));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
-                "tpl_share_live", "Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now));
+                "tpl_share_live", "Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now,
+                null, null));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_share_a", "SHARE-A", "tt_share_live", "o_share_live", "tpl_share_live", "entry",
-                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, null));
+                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, null,
+                null, null));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_share_b", "SHARE-B", "tt_share_live", "o_share_live", "tpl_share_live", "entry",
-                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, null));
+                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, null,
+                null, null));
 
         TicketRefundService refundService = new TicketRefundService(repository, event -> { });
 

@@ -40,6 +40,14 @@ public interface TicketingRepository {
 
     Optional<IssuedEntitlementRecord> findIssuedEntitlementByCode(String entitlementCode);
 
+    /**
+     * 结算重构批3-1(PRD §6.1)：按 bar_products.id 取实物权益的酒吧内部结算价(V152 internal_settlement_price_cent)。
+     * 无此商品或内部价为空 → 空(判定层回退 value_amount)。default 返回空兼容既有测试假实现。
+     */
+    default Optional<Long> findBarProductInternalPrice(String barProductId) {
+        return Optional.empty();
+    }
+
     IssuedEntitlementRecord updateIssuedEntitlement(IssuedEntitlementRecord entitlement);
 
     List<OfflineEntitlementResponse> listOfflineEntitlements(String merchantId, String venueId, int limit);

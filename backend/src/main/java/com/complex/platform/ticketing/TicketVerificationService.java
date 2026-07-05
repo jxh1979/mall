@@ -212,6 +212,8 @@ public class TicketVerificationService {
                 entitlement.numPeople(),
                 null,
                 null,
+                null,
+                // 人工放行非结算核销：不算结算价。
                 null
         ));
         return new VerificationResponse(verification.id(), verification.verificationNo(),
@@ -272,7 +274,9 @@ public class TicketVerificationService {
                 original.verifiedPeople(),
                 original.id(),
                 reversedBy,
-                now
+                now,
+                // 冲正核销记录不落结算价（冲正对账走原 success 记录的 settlement_price 反向）。
+                null
         ));
         // R5 T15 赠饮库存回补联动：若原核销系赠饮权益，发 bar.gift_reversed → bar 域将赠饮单置 reversed 并回补已扣库存。
         // 以原核销 verification_id 关联 bar_gift_redemptions（唯一键），未触发过赠饮兑换则消费者幂等跳过。
@@ -363,6 +367,8 @@ public class TicketVerificationService {
                     entitlement.numPeople(),
                     null,
                     null,
+                    null,
+                    // 失败核销(过窗口)不消费权益、不落结算价。
                     null
             ));
             return new VerificationResponse(expired.id(), expired.verificationNo(), expired.status(), expired.resultReason());
@@ -395,6 +401,8 @@ public class TicketVerificationService {
                     entitlement.numPeople(),
                     null,
                     null,
+                    null,
+                    // 失败核销(签名失配)不消费权益、不落结算价。
                     null
             ));
             return new VerificationResponse(invalid.id(), invalid.verificationNo(), invalid.status(), invalid.resultReason());
@@ -420,6 +428,8 @@ public class TicketVerificationService {
         if (verifiedPeople > updated.numPeople()) {
             throw ApiException.conflict("VERIFIED_PEOPLE_EXCEEDED", "verified people exceeds ticket num_people");
         }
+        // 结算重构批3-1(PRD §6.1)：核销成功 → 判定本次结算价并写入核销记录 settlement_price_cent（供对账/by_entitlement_price 分账）。
+        Long settlementPriceCent = resolveSettlementPrice(updated);
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
                 "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
@@ -444,7 +454,8 @@ public class TicketVerificationService {
                 verifiedPeople,
                 null,
                 null,
-                null
+                null,
+                settlementPriceCent
         ));
         // P0 清单#2 / F-TXN-03 按核销张数：核销成功 → 发积分确认事件，带该订单最新 Σused/Σtotal；
         // customer 域据此把已确认份额对齐 floor(总额 × Σused / Σtotal)（多次/多人票部分核销按张数比例确认）。
@@ -505,6 +516,38 @@ public class TicketVerificationService {
             ));
         }
         return new VerificationResponse(verification.id(), verification.verificationNo(), verification.status(), verification.resultReason());
+    }
+
+    // 结算重构批3-1(PRD §6.1)：结算类别常量。
+    private static final String KIND_PHYSICAL = "physical";
+    private static final String KIND_VIRTUAL = "virtual";
+
+    /**
+     * 结算重构批3-1(PRD §6.1)：核销时判定该次结算价（分，NULL 安全回退）。
+     * <ul>
+     *   <li><b>physical(实物)</b>：经 模板.bar_item_ref → bar_products.internal_settlement_price_cent(V152 内部结算价)；
+     *       查不到商品/内部价为 NULL → 回退 value_amount_cent。</li>
+     *   <li><b>virtual(虚拟)</b>：取 agreement_price_cent(签约单价)；NULL → 回退 value_amount_cent。</li>
+     *   <li><b>kind 为 NULL(旧数据)</b>：回退 value_amount_cent。</li>
+     * </ul>
+     * 回退基准 value_amount_cent 本身可空（返回 null，下游对账/分账按缺价处理）。
+     */
+    private Long resolveSettlementPrice(IssuedEntitlementRecord entitlement) {
+        String kind = entitlement.entitlementKind();
+        if (KIND_PHYSICAL.equals(kind)) {
+            String barItemRef = repository.findEntitlementTemplateById(entitlement.entitlementTemplateId())
+                    .map(EntitlementTemplateRecord::barItemRef)
+                    .orElse(null);
+            Long internalPrice = barItemRef == null ? null
+                    : repository.findBarProductInternalPrice(barItemRef).orElse(null);
+            return internalPrice != null ? internalPrice : entitlement.valueAmountCent();
+        }
+        if (KIND_VIRTUAL.equals(kind)) {
+            return entitlement.agreementPriceCent() != null
+                    ? entitlement.agreementPriceCent() : entitlement.valueAmountCent();
+        }
+        // kind 为 NULL(旧数据)：回退 value_amount。
+        return entitlement.valueAmountCent();
     }
 
     /**

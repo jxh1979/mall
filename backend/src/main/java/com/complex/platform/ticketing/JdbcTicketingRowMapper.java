@@ -58,7 +58,9 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("point_id"),
                 resultSet.getString("bar_item_ref"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("entitlement_kind"),
+                nullableLong(resultSet, "agreement_price_cent")
         );
     }
 
@@ -98,7 +100,9 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
                 resultSet.getInt("num_people"),
-                nullableLong(resultSet, "allocated_revenue_cent")
+                nullableLong(resultSet, "allocated_revenue_cent"),
+                resultSet.getString("entitlement_kind"),
+                nullableLong(resultSet, "agreement_price_cent")
         );
     }
 
@@ -125,7 +129,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getInt("verified_people"),
                 resultSet.getString("reverses_verification_id"),
                 resultSet.getString("reversed_by"),
-                nullableInstant(resultSet, "reversed_at")
+                nullableInstant(resultSet, "reversed_at"),
+                nullableLong(resultSet, "settlement_price_cent")
         );
     }
 
