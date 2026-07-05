@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 // 平面图导入域内枚举中文（全局状态表未含的形状/关联类型，页内映射；状态码走全局表兜底）。
@@ -29,6 +30,8 @@ const PUBLISH_CONFIRM_TITLE = "发布平面图导入候选";
  * P2 平面图导入(商场平面图):上传/导入商场平面布局,解析出候选区域(铺位/摊位/公共区),
  * 人工复核候选与错误后,发布到正式平面图区域。发布=高危动作,经 confirmHighImpactAction 二次确认。
  * 2026-06 改版丢失前端后重建为独立 admin 页(接现有 floorplan 后端)。
+ * 行明细抽屉：候选/错误=业务明细数据行，整行可点看该候选/错误完整字段（形状/关联/状态中文·错误说明）；
+ * 平面图/导入任务两表为主从入口（行内已有「查看导入」「候选明细」下钻按钮），不重复接明细。
  * KPI 说明：本页为向导式主从页(平面图→导入任务→候选/错误),KPI 卡(待发布候选/导入错误)只在选中导入后
  * 的明细上下文出现,直接紧贴其候选/错误表,无「页面级汇总表」可聚焦,故不做 KPI 聚焦重进(与分析页同理)。
  */
@@ -41,6 +44,8 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   const [planForm, setPlanForm] = React.useState({ planName: "", buildingCode: "", floorNo: "" });
   const [importForm, setImportForm] = React.useState({ sourceFormat: "geojson", sourceName: "", sourcePayload: "" });
   const [publishCandidateIds, setPublishCandidateIds] = React.useState("");
+  // 行明细抽屉：候选/错误明细数据行整行可点 → 完整字段（枚举中文·序号/行号原样）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -96,6 +101,32 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
       await loadCandidates(selectedPlanId, selectedImportId);
     } catch (e) { setGlobalError((e as Error).message); }
   };
+
+  function openCandidateDetail(candidate: ImportCandidate) {
+    setDetail({
+      title: `候选明细 · ${candidate.label ?? candidate.id}`,
+      fields: [
+        { label: "序号", value: candidate.candidateNo ?? "—" },
+        { label: "类型", value: fpLabel(SHAPE_TYPE_LABELS, candidate.shapeType) },
+        { label: "关联", value: `${fpLabel(REF_TYPE_LABELS, candidate.refType)}：${candidate.refId ?? "—"}` },
+        { label: "标签", value: candidate.label ?? "—" },
+        { label: "状态", value: formatBusinessStatus(candidate.status) },
+        { label: "候选编号", value: candidate.id },
+      ],
+    });
+  }
+
+  function openErrorDetail(row: ImportError) {
+    setDetail({
+      title: `导入错误明细 · 第 ${row.lineNo ?? "—"} 行`,
+      fields: [
+        { label: "行号", value: row.lineNo ?? "—" },
+        { label: "字段", value: row.fieldName ?? "—" },
+        { label: "错误码", value: row.errorCode ?? "—" },
+        { label: "说明", value: row.errorMessage ?? "—" },
+      ],
+    });
+  }
 
   const pendingCandidates = floorPlanImportDetails?.candidates?.filter((item) => item.status === "pending") ?? [];
 
@@ -157,7 +188,9 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
               <thead><tr><th>序号</th><th>类型</th><th>关联</th><th>标签</th><th>状态</th></tr></thead>
               <tbody>
                 {(floorPlanImportDetails.candidates ?? []).slice(0, 50).map((candidate) => (
-                  <tr key={candidate.id}>
+                  <tr key={candidate.id} className="admin-row-clickable" tabIndex={0} data-testid={`floor-plan-candidate-row-${candidate.id}`}
+                    onClick={() => openCandidateDetail(candidate)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCandidateDetail(candidate); } }}>
                     <td>{candidate.candidateNo ?? "-"}</td><td>{fpLabel(SHAPE_TYPE_LABELS, candidate.shapeType)}</td>
                     <td>{fpLabel(REF_TYPE_LABELS, candidate.refType)}:{candidate.refId ?? "-"}</td><td>{candidate.label ?? "-"}</td><td>{formatBusinessStatus(candidate.status)}</td>
                   </tr>
@@ -169,7 +202,10 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
               <thead><tr><th>行号</th><th>字段</th><th>错误码</th><th>说明</th></tr></thead>
               <tbody>
                 {(floorPlanImportDetails.errors ?? []).slice(0, 50).map((row) => (
-                  <tr key={row.id}><td>{row.lineNo ?? "-"}</td><td>{row.fieldName ?? "-"}</td><td>{row.errorCode ?? "-"}</td><td>{row.errorMessage ?? "-"}</td></tr>
+                  <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`floor-plan-error-row-${row.id}`}
+                    onClick={() => openErrorDetail(row)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openErrorDetail(row); } }}>
+                    <td>{row.lineNo ?? "-"}</td><td>{row.fieldName ?? "-"}</td><td>{row.errorCode ?? "-"}</td><td>{row.errorMessage ?? "-"}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -187,6 +223,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
           </>
         ) : null}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

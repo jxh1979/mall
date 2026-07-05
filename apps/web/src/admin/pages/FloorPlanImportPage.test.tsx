@@ -59,6 +59,16 @@ function renderPage() {
   render(<FloorPlanImportPage {...fullProps} />);
 }
 
+// 打开候选/错误明细上下文（选平面图→选导入任务）后回调，供明细行断言复用。
+async function openDetails() {
+  renderPage();
+  await waitFor(() => expect(screen.getByTestId("floor-plan-select-fp-1")).toBeTruthy());
+  fireEvent.click(screen.getByTestId("floor-plan-select-fp-1"));
+  await waitFor(() => expect(screen.getByTestId("floor-plan-import-select-imp-1")).toBeTruthy());
+  fireEvent.click(screen.getByTestId("floor-plan-import-select-imp-1"));
+  await waitFor(() => expect(screen.getByTestId("floor-plan-candidates-table")).toBeTruthy());
+}
+
 describe("FloorPlanImportPage 英文全清", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -75,17 +85,42 @@ describe("FloorPlanImportPage 英文全清", () => {
   });
 
   it("候选明细表类型/关联/状态渲染中文，不含原始英文码", async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByTestId("floor-plan-select-fp-1")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("floor-plan-select-fp-1"));
-    await waitFor(() => expect(screen.getByTestId("floor-plan-import-select-imp-1")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("floor-plan-import-select-imp-1"));
-    await waitFor(() => expect(screen.getByTestId("floor-plan-candidates-table")).toBeTruthy());
+    await openDetails();
     const table = screen.getByTestId("floor-plan-candidates-table").textContent ?? "";
     expect(table).toContain("商铺"); // shapeType shop
     expect(table).toContain("空间"); // refType space
     expect(table).toContain("待处理"); // status pending
     expect(table).not.toContain("shop");
     expect(table).not.toContain("pending");
+  });
+});
+
+describe("FloorPlanImportPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("点候选行弹出抽屉，含类型/关联/状态中文，无英文枚举", async () => {
+    await openDetails();
+    fireEvent.click(screen.getByTestId("floor-plan-candidate-row-cd-1"));
+    const drawer = await screen.findByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("商铺"); // shape_type shop
+    expect(text).toContain("空间"); // ref_type space
+    expect(text).toContain("待处理"); // status pending
+    expect(text).toContain("A101"); // label
+    expect(text).not.toContain("shop");
+    expect(text).not.toContain("pending");
+  });
+
+  it("点错误行弹出抽屉含行号/说明，Esc 关闭", async () => {
+    await openDetails();
+    fireEvent.click(screen.getByTestId("floor-plan-error-row-er-1"));
+    const drawer = await screen.findByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("geometry");
+    expect(text).toContain("多边形无效");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });

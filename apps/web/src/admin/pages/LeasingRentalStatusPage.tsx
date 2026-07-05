@@ -4,17 +4,22 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 type RentalRow = { spaceId: string; spaceName: string; rentalStatus: string; color: string | null; daysToExpiry: number | null };
 
 const STATUS_LABEL: Record<string, string> = { available: "可租", let: "已租", expiring: "即将到期" };
+const cnStatus = (code: string) => STATUS_LABEL[code] ?? code;
 
 /**
  * 租赁状态看板（ADM-LEASE-002，P2-5）：按铺位展示 可租/已租/即将到期 + 距到期天数 + 出租率汇总。
  * 数据源 GET /api/v1/contracts/space-rental-status（即将到期套用着色分类色）。铺位可下钻到空间页。
+ * 整行可点 → 行明细抽屉（业务表，非配置）：铺位/状态/距到期完整字段可溯源。
  */
 export function LeasingRentalStatusPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<RentalRow[]>([]);
+  // 行明细抽屉：整行可点 → 该铺位租赁状态完整字段（状态中文·距到期天数）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -27,6 +32,21 @@ export function LeasingRentalStatusPage({ api, setGlobalError, navigateTo }: Adm
   const let_ = rows.filter((r) => r.rentalStatus === "let" || r.rentalStatus === "expiring").length;
   const total = rows.length;
   const occupancy = total === 0 ? "—" : `${((let_ / total) * 100).toFixed(1)}%`;
+
+  function openRentalDetail(row: RentalRow) {
+    setDetail({
+      title: `铺位租赁明细 · ${row.spaceName || row.spaceId}`,
+      fields: [
+        {
+          label: "铺位",
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.spaceId}>{row.spaceName || row.spaceId}</TraceLink>,
+        },
+        { label: "状态", value: cnStatus(row.rentalStatus) },
+        { label: "距到期（天）", value: row.daysToExpiry == null ? "—" : `${row.daysToExpiry} 天` },
+        { label: "铺位编号", value: row.spaceId },
+      ],
+    });
+  }
 
   return (
     <section data-testid="leasing-rental-status-page">
@@ -43,10 +63,12 @@ export function LeasingRentalStatusPage({ api, setGlobalError, navigateTo }: Adm
             <thead><tr><th>铺位</th><th>状态</th><th>距到期（天）</th></tr></thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.spaceId} data-testid={`rental-status-${row.spaceId}`}
-                    style={row.color ? { background: row.color + "22" } : undefined}>
-                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.spaceId}>{row.spaceName || row.spaceId}</TraceLink></td>
-                  <td data-testid={`rental-status-state-${row.spaceId}`}>{STATUS_LABEL[row.rentalStatus] ?? row.rentalStatus}</td>
+                <tr key={row.spaceId} className="admin-row-clickable" tabIndex={0} data-testid={`rental-status-${row.spaceId}`}
+                    style={row.color ? { background: row.color + "22" } : undefined}
+                    onClick={() => openRentalDetail(row)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRentalDetail(row); } }}>
+                  <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.spaceId}>{row.spaceName || row.spaceId}</TraceLink></td>
+                  <td data-testid={`rental-status-state-${row.spaceId}`}>{cnStatus(row.rentalStatus)}</td>
                   <td>{row.daysToExpiry == null ? "-" : row.daysToExpiry}</td>
                 </tr>
               ))}
@@ -54,6 +76,7 @@ export function LeasingRentalStatusPage({ api, setGlobalError, navigateTo }: Adm
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
