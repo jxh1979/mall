@@ -176,7 +176,7 @@ class AmusementJdbcIntegrationTests {
                 List.of("att_inspection"),
                 now
         ));
-        repository.saveVerification(new AmusementVerificationRecord(
+        repository.saveVerification(AmusementVerificationRecord.entry(
                 "verification_jdbc",
                 "project_jdbc",
                 "session_jdbc",
@@ -187,7 +187,9 @@ class AmusementJdbcIntegrationTests {
                 null,
                 List.of("att_verification"),
                 now,
-                1
+                1,
+                null,
+                null
         ));
         repository.saveManualOverride(new AmusementManualOverrideRecord(
                 "override_jdbc",

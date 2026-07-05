@@ -924,6 +924,130 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("updated_at", timestampWithTimeZone(now)));
     }
 
+    /** 阶段2 出场/主管释放：按维度键把并发在场 occupied_count -N（下限 0，never negative）。 */
+    private void decrementConcurrentSnapshot(String projectId, String dimension,
+            String pointId, String deviceId, int peopleCount, Instant now) {
+        jdbcTemplate.update("""
+                UPDATE amusement_capacity_snapshot
+                   SET occupied_count = GREATEST(occupied_count - :people_count, 0),
+                       updated_at = :updated_at
+                 WHERE project_id = :project_id
+                   AND dimension = :dimension
+                   AND COALESCE(session_id, '') = ''
+                   AND COALESCE(location_point_id, '') = COALESCE(:point_id, '')
+                   AND COALESCE(device_id, '') = COALESCE(:device_id, '')
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("dimension", dimension)
+                .addValue("point_id", pointId)
+                .addValue("device_id", deviceId)
+                .addValue("people_count", peopleCount)
+                .addValue("updated_at", timestampWithTimeZone(now)));
+    }
+
+    @Override
+    public Optional<AmusementVerificationRecord> findActiveEntryByEntitlement(String entitlementId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, credential_payload, device_id, staff_id,
+                       verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people,
+                       direction, released_at, entry_verification_id, entitlement_id, location_point_id
+                  FROM amusement_verifications
+                 WHERE entitlement_id = :entitlement_id
+                   AND direction = 'entry'
+                   AND verification_result = 'success'
+                   AND released_at IS NULL
+                 ORDER BY created_at DESC, id
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("entitlement_id", entitlementId),
+                rowMapper::mapVerification).stream().findFirst();
+    }
+
+    @Override
+    public Optional<AmusementVerificationRecord> findLatestExitByEntitlement(String entitlementId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, credential_payload, device_id, staff_id,
+                       verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people,
+                       direction, released_at, entry_verification_id, entitlement_id, location_point_id
+                  FROM amusement_verifications
+                 WHERE entitlement_id = :entitlement_id
+                   AND direction = 'exit'
+                 ORDER BY created_at DESC, id
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("entitlement_id", entitlementId),
+                rowMapper::mapVerification).stream().findFirst();
+    }
+
+    @Override
+    public Optional<AmusementVerificationRecord> findExitByEntry(String entryVerificationId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, credential_payload, device_id, staff_id,
+                       verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people,
+                       direction, released_at, entry_verification_id, entitlement_id, location_point_id
+                  FROM amusement_verifications
+                 WHERE entry_verification_id = :entry_id
+                   AND direction = 'exit'
+                 ORDER BY created_at DESC, id
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("entry_id", entryVerificationId),
+                rowMapper::mapVerification).stream().findFirst();
+    }
+
+    /**
+     * 阶段2 出场核销原子释放：
+     * <ol>
+     *   <li>条件 UPDATE 标记入场 released_at（仅当仍未释放）——此条件即幂等/并发赢家判定，rows=0 表示已被释放。</li>
+     *   <li>赢家把该入场占用的并发快照（point_device + project 维度）-N（下限 0）。</li>
+     *   <li>写 direction=exit 记录（entry_verification_id 唯一约束再兜底防重）。</li>
+     * </ol>
+     * 返回 true=本次真实释放；false=入场已释放（幂等跳过，不重复减容量、不新增 exit）。
+     */
+    @Override
+    public boolean releaseEntryConcurrentCapacity(AmusementVerificationRecord entry, AmusementVerificationRecord exitRecord, Instant now) {
+        int marked = jdbcTemplate.update("""
+                UPDATE amusement_verifications
+                   SET released_at = :released_at
+                 WHERE id = :id
+                   AND direction = 'entry'
+                   AND verification_result = 'success'
+                   AND released_at IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("id", entry.id())
+                .addValue("released_at", timestampWithTimeZone(now)));
+        if (marked == 0) {
+            return false;
+        }
+        int people = Math.max(entry.verifiedPeople(), 1);
+        // 与入场 incrementSnapshotIfAvailable 对称：point_device 维（若入场有 point/device）+ project 维各 -N。
+        // 未配置的维度对应 0 行更新，天然幂等（含场次/批次型：无并发快照 → 全 no-op）。
+        decrementConcurrentSnapshot(entry.projectId(), "point_device",
+                entry.locationPointId(), entry.deviceId(), people, now);
+        decrementConcurrentSnapshot(entry.projectId(), "project", null, null, people, now);
+        saveVerification(exitRecord);
+        return true;
+    }
+
+    /**
+     * 阶段2 主管释放（异常清场）：把项目的并发在场快照（point_device + project 维度）occupied_count 清零。
+     * 用于漏扫出场堆积、异常清场。场次/批次型（session 维、amusement_sessions.used_capacity）不受影响。
+     * 返回清零涉及的快照行数（审计留痕参考）。
+     */
+    @Override
+    public int clearProjectConcurrentCapacity(String projectId, Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_capacity_snapshot
+                   SET occupied_count = 0,
+                       updated_at = :updated_at
+                 WHERE project_id = :project_id
+                   AND dimension IN ('point_device', 'project')
+                   AND occupied_count > 0
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("updated_at", timestampWithTimeZone(now)));
+    }
+
     @Override
     public boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock) {
         int updated = jdbcTemplate.update("""
@@ -1067,11 +1191,13 @@ class JdbcAmusementRepository implements AmusementRepository {
         jdbcTemplate.update("""
                 INSERT INTO amusement_verifications (
                     id, project_id, session_id, credential_payload, device_id, staff_id,
-                    verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people
+                    verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people,
+                    direction, released_at, entry_verification_id, entitlement_id, location_point_id
                 )
                 VALUES (
                     :id, :project_id, :session_id, :credential_payload, :device_id, :staff_id,
-                    :verification_result, :failure_reason, CAST(:evidence_attachment_ids AS jsonb), :created_at, :verified_people
+                    :verification_result, :failure_reason, CAST(:evidence_attachment_ids AS jsonb), :created_at, :verified_people,
+                    :direction, :released_at, :entry_verification_id, :entitlement_id, :location_point_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     verification_result = EXCLUDED.verification_result,
@@ -1086,7 +1212,8 @@ class JdbcAmusementRepository implements AmusementRepository {
     public List<AmusementVerificationRecord> listVerifications() {
         return jdbcTemplate.query("""
                 SELECT id, project_id, session_id, credential_payload, device_id, staff_id,
-                       verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people
+                       verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people,
+                       direction, released_at, entry_verification_id, entitlement_id, location_point_id
                   FROM amusement_verifications
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapVerification);
@@ -1096,7 +1223,8 @@ class JdbcAmusementRepository implements AmusementRepository {
     public List<AmusementVerificationRecord> listVerificationsByMerchant(String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, project_id, session_id, credential_payload, device_id, staff_id,
-                       verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people
+                       verification_result, failure_reason, evidence_attachment_ids, created_at, verified_people,
+                       direction, released_at, entry_verification_id, entitlement_id, location_point_id
                   FROM amusement_verifications
                  WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
                  ORDER BY created_at DESC, id
@@ -1641,7 +1769,12 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("failure_reason", verification.failureReason())
                 .addValue("evidence_attachment_ids", writeJson(verification.evidenceAttachmentIds()))
                 .addValue("created_at", timestampWithTimeZone(verification.createdAt()))
-                .addValue("verified_people", verification.verifiedPeople());
+                .addValue("verified_people", verification.verifiedPeople())
+                .addValue("direction", verification.direction() == null ? "entry" : verification.direction())
+                .addValue("released_at", timestampWithTimeZone(verification.releasedAt()))
+                .addValue("entry_verification_id", verification.entryVerificationId())
+                .addValue("entitlement_id", verification.entitlementId())
+                .addValue("location_point_id", verification.locationPointId());
     }
 
     private MapSqlParameterSource manualOverrideParameters(AmusementManualOverrideRecord override) {

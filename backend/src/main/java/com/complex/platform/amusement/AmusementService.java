@@ -31,7 +31,7 @@ public class AmusementService implements AmusementVerificationPort {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> PROJECT_STATUSES = Set.of("open", "paused", "closed", "maintenance");
     private static final Set<String> SESSION_STATUSES = Set.of("scheduled", "open", "closed", "cancelled");
-    private static final Set<String> OVERRIDE_TYPES = Set.of("allow", "deny", "pause", "resume");
+    private static final Set<String> OVERRIDE_TYPES = Set.of("allow", "deny", "pause", "resume", "release");
     private static final Set<String> RULE_TYPES = Set.of("age", "height", "weight", "capacity", "safety_notice", "manual");
     private static final Set<String> DEVICE_STATUSES = Set.of("active", "inactive", "maintenance", "retired");
 
@@ -1170,7 +1170,9 @@ public class AmusementService implements AmusementVerificationPort {
                 }
             });
         }
-        return repository.saveVerification(new AmusementVerificationRecord(
+        // 阶段2：入场记录留痕 entitlementId + locationPointId（出场释放并发容量按同一 point/device 维度键 -N；
+        // entitlementId 参与「同一权益同一场次至多一条未释放入场」并发唯一约束）。direction=entry、未释放。
+        return repository.saveVerification(AmusementVerificationRecord.entry(
                 "verification_" + slug(idempotencyKey),
                 project.id(),
                 session.id(),
@@ -1181,7 +1183,65 @@ public class AmusementService implements AmusementVerificationPort {
                 null,
                 List.of(),
                 now,
-                peopleCount));
+                peopleCount,
+                entitlement.id(),
+                pointId));
+    }
+
+    /**
+     * 阶段2（2026-07-05 用户拍板）出场核销：自由进出型（并发容量）客人/闸机出场扫码 → 并发容量 -N 释放。
+     *
+     * <p>据凭证定位其【未释放的成功入场】记录 → 按入场留痕的 point/device 维度键把
+     * amusement_capacity_snapshot.occupied_count -N（N=入场放行人数，下限 0）→ 标记入场 released_at、落 direction=exit 记录。
+     * 幂等：同一入场重复出场只释放一次（条件 UPDATE 赢家判定 + 唯一约束兜底）。
+     *
+     * <p>场次/批次型（仅场次维、无并发快照）出场无并发容量可释放 → decrement 命中 0 行、天然幂等跳过
+     * （不误减 amusement_sessions.used_capacity）。无未释放入场（未曾入场/已出场）→ ENTITLEMENT_NO_ACTIVE_ENTRY。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.verification.execute")
+    @Transactional
+    public AmusementVerificationRecord exitVerification(AmusementExitRequest request) {
+        AmusementExitRequest actual = requireRequest(request);
+        String idempotencyKey = requireText(actual.idempotencyKey(), "idempotency_key");
+        String credential = requireText(actual.credentialPayload(), "credential_payload");
+        String staffId = trimToDefault(actual.staffId(), "staff");
+        Instant now = Instant.now();
+        // 凭证 → 权益实例 → 未释放入场记录。定位不到入场即报错（出场无通用回退旧路）。
+        AmusementEntitlementView entitlement = entitlementGateway.findEntitlementByCredential(credential)
+                .orElseThrow(() -> ApiException.notFound("TICKET_NOT_FOUND", "ticket entitlement not found"));
+        final String entId = entitlement.id();
+        java.util.Optional<AmusementVerificationRecord> active = repository.findActiveEntryByEntitlement(entId);
+        if (active.isEmpty()) {
+            // 无未释放入场：要么已出场（幂等：返回既有 exit，不重复减容量），要么从未入场（报错）。
+            return repository.findLatestExitByEntitlement(entId)
+                    .orElseThrow(() -> ApiException.conflict(
+                            "ENTITLEMENT_NO_ACTIVE_ENTRY", "no active amusement entry to release for this entitlement"));
+        }
+        AmusementVerificationRecord entry = active.get();
+        AmusementVerificationRecord exitRecord = new AmusementVerificationRecord(
+                "verification_exit_" + slug(idempotencyKey),
+                entry.projectId(),
+                entry.sessionId(),
+                credential,
+                trimToNull(actual.deviceId()),
+                staffId,
+                "success",
+                null,
+                evidence(actual.evidenceAttachmentIds()),
+                now,
+                entry.verifiedPeople(),
+                "exit",
+                now,
+                entry.id(),
+                entitlement.id(),
+                trimToNull(actual.pointId()));
+        // 原子释放：条件标记入场 released_at（并发/幂等赢家）→ 赢家 -N 并发快照 + 写 exit 记录。
+        boolean released = repository.releaseEntryConcurrentCapacity(entry, exitRecord, now);
+        if (!released) {
+            // 入场已被并发/前次出场释放：幂等返回既有 exit 记录，不重复减容量。
+            return repository.findExitByEntry(entry.id()).orElse(exitRecord);
+        }
+        return exitRecord;
     }
 
     /**
@@ -1333,9 +1393,16 @@ public class AmusementService implements AmusementVerificationPort {
         }
         String type = enumOrDefault(actual.overrideType(), null, OVERRIDE_TYPES, "override_type");
         String reason = requireText(actual.reason(), "reason");
+        // 阶段2 主管释放（release）：异常清场——清零本项目并发在场快照（point_device+project 维），
+        // 用于漏扫出场堆积。场次/批次型（session 维、amusement_sessions.used_capacity）不受影响。
+        // 授权已由 @GuardedAction(amusement.verification.override) 限主管+审批留痕；本记录即审计凭据（谁/何时/原因/证据）。
+        if ("release".equals(type)) {
+            repository.clearProjectConcurrentCapacity(projectId, Instant.now());
+        }
         String status = switch (type) {
             case "allow" -> "approved";
             case "deny" -> "denied";
+            case "release" -> "released";
             default -> "recorded";
         };
         return repository.saveManualOverride(new AmusementManualOverrideRecord(

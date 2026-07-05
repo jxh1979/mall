@@ -435,4 +435,13 @@ public class AmusementController {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createVerification(request));
     }
+
+    /** 阶段2：出场核销（自由进出型并发容量 -N 释放；场次/批次型幂等跳过）。 */
+    @PostMapping("/verifications/exit")
+    public ApiResponse<AmusementVerificationRecord> exitVerification(
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementExitRequest request) {
+        authorizationService.requirePermission("amusement.verification.execute");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.exitVerification(request));
+    }
 }

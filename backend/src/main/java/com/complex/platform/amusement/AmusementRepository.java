@@ -206,6 +206,25 @@ public interface AmusementRepository {
 
     AmusementVerificationRecord saveVerification(AmusementVerificationRecord verification);
 
+    /** 阶段2 出场核销：定位某权益实例【未释放的成功入场】记录（direction=entry、released_at IS NULL；含 project/point/device 留痕）。 */
+    Optional<AmusementVerificationRecord> findActiveEntryByEntitlement(String entitlementId);
+
+    /** 阶段2 出场核销幂等：按入场 id 定位已落的 exit 记录（并发/重放判定后回读）。 */
+    Optional<AmusementVerificationRecord> findExitByEntry(String entryVerificationId);
+
+    /** 阶段2 出场核销幂等：某权益最近一条 exit 记录（已出场后再次扫码 → 返回既有 exit，不重复减容量）。 */
+    Optional<AmusementVerificationRecord> findLatestExitByEntitlement(String entitlementId);
+
+    /**
+     * 阶段2 出场核销原子释放：条件标记入场 released_at（并发/幂等赢家判定）→ 赢家把并发快照 -N（point_device+project 维）→
+     * 写 exit 记录。返回 true=真实释放；false=入场已释放（幂等跳过，不重复减容量）。
+     */
+    boolean releaseEntryConcurrentCapacity(
+            AmusementVerificationRecord entry, AmusementVerificationRecord exitRecord, java.time.Instant now);
+
+    /** 阶段2 主管释放（异常清场）：清零项目并发在场快照（point_device+project 维），返回涉及行数。 */
+    int clearProjectConcurrentCapacity(String projectId, java.time.Instant now);
+
     List<AmusementVerificationRecord> listVerifications();
 
     List<AmusementVerificationRecord> listVerificationsByMerchant(String merchantId);

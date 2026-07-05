@@ -181,7 +181,12 @@ final class JdbcAmusementRowMapper {
                 rs.getString("failure_reason"),
                 readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
                 instant(rs, "created_at"),
-                rs.getInt("verified_people")
+                rs.getInt("verified_people"),
+                rs.getString("direction"),
+                instant(rs, "released_at"),
+                rs.getString("entry_verification_id"),
+                rs.getString("entitlement_id"),
+                rs.getString("location_point_id")
         );
     }
 

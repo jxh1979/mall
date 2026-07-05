@@ -366,7 +366,7 @@ class AmusementControllerTests {
     }
 
     private AmusementVerificationRecord verification() {
-        return new AmusementVerificationRecord("verification_1", "project_1", "session_1", "amu-ticket-1", "gate_1", "staff_1", "success", null, List.of(), Instant.parse("2026-06-14T00:00:00Z"), 1);
+        return AmusementVerificationRecord.entry("verification_1", "project_1", "session_1", "amu-ticket-1", "gate_1", "staff_1", "success", null, List.of(), Instant.parse("2026-06-14T00:00:00Z"), 1, null, null);
     }
 
     private AmusementManualOverrideRecord manualOverride() {

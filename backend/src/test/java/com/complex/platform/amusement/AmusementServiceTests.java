@@ -2772,6 +2772,53 @@ class AmusementServiceTests {
         }
 
         @Override
+        public java.util.Optional<AmusementVerificationRecord> findActiveEntryByEntitlement(String entitlementId) {
+            return verifications.values().stream()
+                    .filter(v -> "entry".equals(v.direction()) && "success".equals(v.verificationResult())
+                            && v.releasedAt() == null && entitlementId != null
+                            && entitlementId.equals(v.entitlementId()))
+                    .reduce((a, b) -> b);
+        }
+
+        @Override
+        public java.util.Optional<AmusementVerificationRecord> findExitByEntry(String entryVerificationId) {
+            return verifications.values().stream()
+                    .filter(v -> "exit".equals(v.direction()) && entryVerificationId != null
+                            && entryVerificationId.equals(v.entryVerificationId()))
+                    .reduce((a, b) -> b);
+        }
+
+        @Override
+        public java.util.Optional<AmusementVerificationRecord> findLatestExitByEntitlement(String entitlementId) {
+            return verifications.values().stream()
+                    .filter(v -> "exit".equals(v.direction()) && entitlementId != null
+                            && entitlementId.equals(v.entitlementId()))
+                    .reduce((a, b) -> b);
+        }
+
+        @Override
+        public boolean releaseEntryConcurrentCapacity(
+                AmusementVerificationRecord entry, AmusementVerificationRecord exitRecord, java.time.Instant now) {
+            AmusementVerificationRecord current = verifications.get(entry.id());
+            if (current == null || !"entry".equals(current.direction()) || current.releasedAt() != null) {
+                return false;
+            }
+            verifications.put(current.id(), new AmusementVerificationRecord(
+                    current.id(), current.projectId(), current.sessionId(), current.credentialPayload(),
+                    current.deviceId(), current.staffId(), current.verificationResult(), current.failureReason(),
+                    current.evidenceAttachmentIds(), current.createdAt(), current.verifiedPeople(),
+                    current.direction(), now, current.entryVerificationId(),
+                    current.entitlementId(), current.locationPointId()));
+            saveVerification(exitRecord);
+            return true;
+        }
+
+        @Override
+        public int clearProjectConcurrentCapacity(String projectId, java.time.Instant now) {
+            return 0;
+        }
+
+        @Override
         public List<AmusementVerificationRecord> listVerifications() {
             return new ArrayList<>(verifications.values());
         }
