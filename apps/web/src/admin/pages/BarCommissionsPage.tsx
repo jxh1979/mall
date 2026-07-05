@@ -167,7 +167,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.salesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-sales" onClick={() => enterKpiFocus("sales")}>{salesOrders}</button><small>15% · {salesOrders} 单</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.nonSalesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-non-sales" onClick={() => enterKpiFocus("non_sales")}>{nonSalesOrders}</button><small>10% · {nonSalesOrders} 单</small></div>
           <div className="admin-kpi-card"><span>{TEXT.excludeTickets}</span><strong>是</strong><small>{TEXT.excludeTicketsHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedBill}</span><strong>{billId || "-"}</strong><small>{selectedOrder?.orderNo ?? "-"}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedBill}</span><strong className="admin-kpi-value--text" title={billId || "-"}>{billId || "-"}</strong><small>{selectedOrder?.orderNo ?? "-"}</small></div>
         </div>
 
         <div className="admin-form-row">

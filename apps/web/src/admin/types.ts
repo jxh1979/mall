@@ -750,13 +750,21 @@ export type GovernanceProjectRow = {
 
 export type GovernanceSpaceRow = {
   id: string;
+  projectId?: string;
+  merchantId?: string;
+  parentSpaceId?: string;
+  spaceName?: string;
+  spaceType?: string;
+  floorNo?: string;
+  areaSquareMeter?: number | string;
+  status?: string;
+  // 旧臆造字段（保留 optional 防他页引用报错）
   venueId?: string;
   areaId?: string;
   name?: string;
   code?: string;
   areaType?: string;
   pointType?: string;
-  status?: string;
 };
 
 export type MerchantAdmissionRow = {

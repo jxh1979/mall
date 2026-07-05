@@ -5,7 +5,7 @@ import { AdmissionAuditsPage } from "./AdmissionAuditsPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-const MERCHANTS = [{ id: "m-1", display_name: "商户甲", company_name: "甲公司", cooperation_form: "fixed_rent", risk_level: "low", status: "active" }];
+const MERCHANTS = [{ id: "m-1", merchant_name: "商户甲", contact_name: "张三", contact_phone: "13800000000", mall_block_code: "A-01", cooperation_form: "fixed_rent", status: "active" }];
 const BINDINGS = [{ id: "b-1", business_object_id: "m-1", operator_subject: "运营甲", contract_subject: "合同甲", settlement_subject: "结算甲", status: "active" }];
 const CONTRACTS = [{ id: "c-1", merchant_id: "m-1", contract_subject_id: "cs-1", operation_subject_id: "os-1", settlement_subject_id: "ss-1", lifecycle_status: "effective", status: "effective" }];
 

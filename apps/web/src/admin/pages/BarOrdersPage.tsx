@@ -232,7 +232,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           <div className="admin-kpi-card"><span>{TEXT.bill}</span><strong>{billCount}</strong><small>{TEXT.billHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.commission}</span><strong>{salesCommissionOrders}</strong><small>{TEXT.commissionHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong>{formatAmount(totalAmount)}</strong><small>{TEXT.amountHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong>{selectedOrder?.orderNo ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedOrder?.orderNo ?? "-"}>{selectedOrder?.orderNo ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
         </div>
 
         <div className="admin-form-grid" data-testid="bar-settle-payment-form">

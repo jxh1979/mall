@@ -111,19 +111,18 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
       <div className="admin-section-title">主体 - 商户 - 项目关系</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="governance-topology-table">
-          <thead><tr><th>经营主体</th><th>主体编码</th><th>商户</th><th>公司名</th><th>项目</th><th>项目编码</th><th>业态</th><th>状态</th></tr></thead>
+          <thead><tr><th>经营主体</th><th>统一社会信用代码</th><th>商户</th><th>项目</th><th>项目编码</th><th>业态</th><th>状态</th></tr></thead>
           <tbody>{merchants.map((merchant) => {
-            const entity = entities.find((item) => item.id === merchant.organizationId);
+            const entity = entities.find((item) => item.id === merchant.businessEntityId);
             const merchantProjects = projects.filter((project) => project.merchantId === merchant.id);
             const rows = merchantProjects.length ? merchantProjects : [undefined];
             return rows.map((project, index) => (
               <tr key={`${merchant.id}-${project?.id ?? "no-project"}-${index}`}
                 data-focus-node={focusObjectId && (focusObjectId === merchant.id || focusObjectId === project?.id) ? focusObjectId : undefined}
                 className={isFocused(merchant.id, project?.id) ? "admin-row-selected" : undefined}>
-                <td>{display(entity?.name)}</td>
-                <td>{display(entity?.code)}</td>
-                <td>{merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.displayName)}</TraceLink> : display(merchant.displayName)}</td>
-                <td>{display(merchant.companyName)}</td>
+                <td>{display(entity?.entityName)}</td>
+                <td>{display(entity?.unifiedSocialCreditCode)}</td>
+                <td>{merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.merchantName)}</TraceLink> : display(merchant.merchantName)}</td>
                 <td>{display(project?.name)}</td>
                 <td>{display(project?.code)}</td>
                 <td>{display(project?.venueType)}</td>
@@ -141,11 +140,11 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
       <div className="admin-section-title">空间点位</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="governance-topology-spaces-table">
-          <thead><tr><th>空间</th><th>编码</th><th>所属项目</th><th>区域</th><th>空间类型</th><th>点位类型</th><th>状态</th></tr></thead>
+          <thead><tr><th>空间</th><th>所属项目</th><th>楼层</th><th>面积(㎡)</th><th>空间类型</th><th>状态</th></tr></thead>
           <tbody>{spaces.map((space) => {
-            const project = projects.find((item) => item.id === space.venueId);
-            const spaceFocused = !!focusObjectId && (focusObjectId === space.id || focusObjectId === space.venueId);
-            return <tr key={space.id} className={spaceFocused ? "admin-row-selected" : undefined}><td>{display(space.name)}</td><td>{display(space.code)}</td><td>{display(project?.name ?? space.venueId)}</td><td>{display(space.areaId)}</td><td>{display(space.areaType)}</td><td>{display(space.pointType)}</td><td>{formatBusinessStatus(space.status)}</td></tr>;
+            const project = projects.find((item) => item.id === space.projectId);
+            const spaceFocused = !!focusObjectId && (focusObjectId === space.id || focusObjectId === space.projectId);
+            return <tr key={space.id} className={spaceFocused ? "admin-row-selected" : undefined}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatBusinessStatus(space.spaceType)}</td><td>{formatBusinessStatus(space.status)}</td></tr>;
           })}</tbody>
         </table>
       </div>

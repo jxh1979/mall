@@ -6,13 +6,13 @@ import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 // mock 走真实 AdminApi（stub fetch）→ unwrap 转 camelCase → 组件。platform 域 snake_case 响应。
-const ENTITIES = [{ id: "org-1", name: "平台经营主体", code: "ORG-1", status: "active" }];
+const ENTITIES = [{ id: "org-1", entity_name: "平台经营主体", unified_social_credit_code: "ORG-1", entity_role: "operation", status: "active" }];
 const MERCHANTS = [
-  { id: "m-1", organization_id: "org-1", display_name: "商户甲", company_name: "甲公司", status: "active" },
-  { id: "m-2", organization_id: "org-1", display_name: "商户乙", company_name: "乙公司", status: "suspended" },
+  { id: "m-1", business_entity_id: "org-1", merchant_name: "商户甲", status: "active" },
+  { id: "m-2", business_entity_id: "org-1", merchant_name: "商户乙", status: "suspended" },
 ];
 const PROJECTS = [{ id: "p-1", name: "项目一", code: "PJ-1", merchant_id: "m-1", venue_type: "bar", status: "active" }];
-const SPACES = [{ id: "s-1", name: "空间甲", code: "SP-1", venue_id: "p-1", area_type: "hall", point_type: "gate", status: "active" }];
+const SPACES = [{ id: "s-1", space_name: "空间甲", project_id: "p-1", floor_no: "L1", area_square_meter: 120, space_type: "hall", status: "active" }];
 
 function envelope(items: unknown[]): Response {
   return new Response(

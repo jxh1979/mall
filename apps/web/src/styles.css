@@ -1596,6 +1596,10 @@ body {
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--adm-text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============================================================
@@ -2209,8 +2213,49 @@ body {
   text-align: left;
   cursor: pointer;
   border-radius: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 「选中X/当前X」类值卡：值是文本(摘要/单号/标题)非数字，字号更小+单行省略号，
+   避免长英文/长订单号撑破卡片；与数字 KPI 卡视觉一致(同 .admin-kpi-card 容器)。
+   全站选中态文本卡照抄 .admin-kpi-value--text，配 title= 全量悬浮。 */
+.admin-kpi-card strong.admin-kpi-value--text {
+  font-family: var(--adm-font, inherit);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: normal;
+  line-height: 1.35;
 }
 .admin-kpi-value:hover { color: var(--adm-accent, #F59E0B); }
 .admin-kpi-value:focus-visible { outline: 2px solid #F59E0B; outline-offset: 3px; }
 /* KPI 点击后被定位表区块的高亮（区块级，区别于 .admin-row-selected 的行级） */
 .admin-section-highlight { outline: 2px solid #F59E0B; outline-offset: 4px; border-radius: 8px; }
+
+/* ============================================================
+   横排表单容器兜底(admin-form-grid / admin-toolbar 原先无样式→字段溢出)
+   flex-wrap 让 1440 下自动换行不溢出；label 成列；input 设 min-width 不被压瘪。
+   ============================================================ */
+.admin-form-grid,
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+.admin-form-grid > label,
+.admin-toolbar > label {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--adm-text-2);
+}
+.admin-form-grid > label input,
+.admin-form-grid > label select,
+.admin-toolbar > label input,
+.admin-toolbar > label select {
+  min-width: 180px;
+  max-width: 100%;
+}

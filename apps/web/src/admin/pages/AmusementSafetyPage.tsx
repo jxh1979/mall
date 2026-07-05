@@ -292,7 +292,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.total}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-total" onClick={() => enterKpiFocus()}>{rows.length}</button><small>巡检数</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingRectification}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-pending-rectification" onClick={() => enterKpiFocus("pending_rectification")}>{pendingRectification}</button><small>待整改数</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.recheckPending}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-recheck-pending" onClick={() => enterKpiFocus("recheck_pending")}>{recheckPending}</button><small>待复检审批数</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong>{selected ? displayNo(selected) : "-"}</strong><small>{selected?.rectificationStatus ? rectificationLabel(selected.rectificationStatus) : formatBusinessStatus(selected?.status)}</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected ? displayNo(selected) : "-"}>{selected ? displayNo(selected) : "-"}</strong><small>{selected?.rectificationStatus ? rectificationLabel(selected.rectificationStatus) : formatBusinessStatus(selected?.status)}</small></div>
             </div>
 
             <div className="admin-form-grid" data-testid="amusement-safety-create-form">

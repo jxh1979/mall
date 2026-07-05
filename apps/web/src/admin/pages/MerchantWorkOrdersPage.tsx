@@ -263,7 +263,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.workOrderCount}</span><button type="button" className="admin-kpi-value" data-testid="merchant-work-orders-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>{TEXT.merchant}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pending}</span><button type="button" className="admin-kpi-value" data-testid="merchant-work-orders-kpi-pending" onClick={() => enterKpiFocus("pending")}>{pendingCount}</button><small>{TEXT.status}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.highPriority}</span><button type="button" className="admin-kpi-value" data-testid="merchant-work-orders-kpi-high" onClick={() => enterKpiFocus("high")}>{highPriorityCount}</button><small>{TEXT.priority}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong>{selected?.title ?? "-"}</strong><small>{selected?.status ?? "-"}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected?.title ?? "-"}>{selected?.title ?? "-"}</strong><small>{selected?.status ?? "-"}</small></div>
         </div>
 
         <div className="admin-form-grid" data-testid="merchant-work-order-create-form">

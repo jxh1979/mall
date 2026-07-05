@@ -219,7 +219,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
             <div className="admin-kpi-grid" data-testid="vendor-inspections-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已指派任务</span><button type="button" className="admin-kpi-value" data-testid="vendor-inspections-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>派给本人</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>待记录</span><button type="button" className="admin-kpi-value" data-testid="vendor-inspections-kpi-pending" onClick={() => enterKpiFocus("pending")}>{pendingRows.length}</button><small>未完成</small></div>
-              <div className="admin-kpi-card"><span>当前任务</span><strong>{selected?.title ?? selected?.id ?? "-"}</strong><small>{selected?.dueDate ?? "-"}</small></div>
+              <div className="admin-kpi-card"><span>当前任务</span><strong className="admin-kpi-value--text" title={selected?.title ?? selected?.id ?? "-"}>{selected?.title ?? selected?.id ?? "-"}</strong><small>{selected?.dueDate ?? "-"}</small></div>
             </div>
 
             <div className="admin-form-grid" data-testid="vendor-inspection-record-form">

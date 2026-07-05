@@ -157,7 +157,7 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>团体预约</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-total" onClick={() => enterKpiFocus()}>{bookings.length}</button><small>预约数</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>容量占用</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-reserved" onClick={() => enterKpiFocus()}>{reservedCapacity}</button><small>占用容量</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已审批</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-approved" onClick={() => enterKpiFocus("approved")}>{bookings.filter((row) => row.bookingStatus === "approved").length}</button><small>已审批数</small></div>
-              <div className="admin-kpi-card"><span>选中预约</span><strong>{selected?.customerName ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.bookingStatus)}</small></div>
+              <div className="admin-kpi-card"><span>选中预约</span><strong className="admin-kpi-value--text" title={selected?.customerName ?? selected?.id ?? "-"}>{selected?.customerName ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.bookingStatus)}</small></div>
             </div>
             <div className="admin-form-grid"><label>释放原因<input data-testid="amusement-group-booking-release-reason" value={releaseReason} onChange={(event) => setReleaseReason(event.target.value)} /></label></div>
             <div className="admin-form-row">

@@ -178,7 +178,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
             <div className="admin-kpi-grid" data-testid="vendor-work-orders-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已指派工单</span><button type="button" className="admin-kpi-value" data-testid="vendor-work-orders-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>派给本单位</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>待处理</span><button type="button" className="admin-kpi-value" data-testid="vendor-work-orders-kpi-pending" onClick={() => enterKpiFocus("pending")}>{pendingRows.length}</button><small>未完工</small></div>
-              <div className="admin-kpi-card"><span>当前工单</span><strong>{selected?.code ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.status)}</small></div>
+              <div className="admin-kpi-card"><span>当前工单</span><strong className="admin-kpi-value--text" title={selected?.code ?? selected?.id ?? "-"}>{selected?.code ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.status)}</small></div>
             </div>
 
             <div className="admin-form-grid" data-testid="vendor-work-order-action-form">

@@ -216,7 +216,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
             <div className="admin-kpi-grid" data-testid="vendor-site-entries-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>我的报备</span><button type="button" className="admin-kpi-value" data-testid="vendor-site-entries-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>{user.username}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>可进场</span><button type="button" className="admin-kpi-value" data-testid="vendor-site-entries-kpi-enterable" onClick={() => enterKpiFocus("enterable")}>{enterableRows.length}</button><small>已通过/已提交/施工中</small></div>
-              <div className="admin-kpi-card"><span>当前报备</span><strong>{selected?.workScope ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.status)}</small></div>
+              <div className="admin-kpi-card"><span>当前报备</span><strong className="admin-kpi-value--text" title={selected?.workScope ?? selected?.id ?? "-"}>{selected?.workScope ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.status)}</small></div>
             </div>
 
             <div className="admin-form-grid" data-testid="vendor-site-entry-create-form">

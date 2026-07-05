@@ -222,7 +222,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingIssue}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-not-issued" onClick={() => enterKpiFocus("not_issued")}>{pendingIssueCount}</button><small>{TEXT.pendingIssueHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.entitlements}</span><strong>{entitlements.length}</strong><small>{TEXT.entitlementsHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.verifications}</span><strong>{verifications.length}</strong><small>{TEXT.verificationsHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong>{selectedLabel(selectedOrder)}</strong><small>{formatBusinessStatus(selectedOrder?.issueStatus)}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedLabel(selectedOrder)}>{selectedLabel(selectedOrder)}</strong><small>{formatBusinessStatus(selectedOrder?.issueStatus)}</small></div>
         </div>
 
         <div className="admin-form-row" data-testid="ticket-order-actions">

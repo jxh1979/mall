@@ -149,9 +149,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-section-title">商户档案</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="admission-audits-merchants-table">
-          <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
+          <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th></tr></thead>
           <tbody>{merchants.map((row) => (
-            <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.displayName)}</TraceLink></td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+            <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.merchantName)}</TraceLink></td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td></tr>
           ))}</tbody>
         </table>
       </div>

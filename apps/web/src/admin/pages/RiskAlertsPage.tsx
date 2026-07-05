@@ -234,7 +234,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.total}</span><button type="button" className="admin-kpi-value" data-testid="risk-alerts-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>{TEXT.status}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.highRisk}</span><button type="button" className="admin-kpi-value" data-testid="risk-alerts-kpi-high" onClick={() => enterKpiFocus("high")}>{highRiskCount}</button><small>{TEXT.riskLevel}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.open}</span><button type="button" className="admin-kpi-value" data-testid="risk-alerts-kpi-open" onClick={() => enterKpiFocus("open")}>{openCount}</button><small>{TEXT.status}</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong>{selected?.summary ?? "-"}</strong><small>{formatBusinessStatus(selected?.riskLevel)}</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected?.summary ?? "-"}>{selected?.summary ?? "-"}</strong><small>{formatBusinessStatus(selected?.riskLevel)}</small></div>
             </div>
 
             <div className="admin-form-grid" data-testid="risk-alert-form">

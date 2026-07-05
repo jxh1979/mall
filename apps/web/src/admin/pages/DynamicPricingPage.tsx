@@ -212,7 +212,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
           <div className="admin-kpi-card"><span>{TEXT.ruleCount}</span><strong>{rules.length}</strong><small>{TEXT.ruleCountHelp}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.draftCount}</span><button type="button" className="admin-kpi-value" data-testid="dynamic-pricing-kpi-draft" onClick={() => enterKpiFocus("draft")}>{draftCount}</button><small>{TEXT.draftHelp}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.publishedCount}</span><button type="button" className="admin-kpi-value" data-testid="dynamic-pricing-kpi-published" onClick={() => enterKpiFocus("published")}>{publishedCount}</button><small>{TEXT.publishedHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedRule}</span><strong>{ruleLabel(selectedRule)}</strong><small>{formatBusinessStatus(selectedRule?.salesChannel ?? salesChannel)}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedRule}</span><strong className="admin-kpi-value--text" title={ruleLabel(selectedRule)}>{ruleLabel(selectedRule)}</strong><small>{formatBusinessStatus(selectedRule?.salesChannel ?? salesChannel)}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.finalPrice}</span><strong>{formatAmount(simulation?.finalPriceCent)}</strong><small>{simulation?.matchedRuleId ?? TEXT.noSimulation}</small></div>
         </div>
 

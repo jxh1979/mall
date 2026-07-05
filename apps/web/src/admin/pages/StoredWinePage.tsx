@@ -195,7 +195,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.totalBottles}</span><button type="button" className="admin-kpi-value" data-testid="stored-wine-kpi-bottles" onClick={() => enterKpiFocus("bottles")}>{rows.length}</button><small>{TEXT.totalBottlesHelp}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.storedBottles}</span><button type="button" className="admin-kpi-value" data-testid="stored-wine-kpi-stored" onClick={() => enterKpiFocus("stored")}>{storedCount}</button><small>{TEXT.storedHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.totalQuantity}</span><strong>{totalQuantity}</strong><small>{TEXT.totalQuantityHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedBottle}</span><strong>{selected?.savedNo ?? "-"}</strong><small>{selected?.customerName ?? "-"}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedBottle}</span><strong className="admin-kpi-value--text" title={selected?.savedNo ?? "-"}>{selected?.savedNo ?? "-"}</strong><small>{selected?.customerName ?? "-"}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.onlineCheck}</span><strong>必需</strong><small>{TEXT.onlineCheckHelp}</small></div>
         </div>
 

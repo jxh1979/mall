@@ -235,7 +235,7 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
               {/* 差异金额=聚合金额、正式关闭接口=状态、选中差异=选择态，均无独立承载表→不可点。 */}
               <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong>{formatAmount(totalDifference)}</strong><small>{TEXT.status}</small></div>
               <div className="admin-kpi-card"><span>{TEXT.closeApi}</span><strong>已就绪</strong><small>{TEXT.closeReady}</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong>{selected?.differenceNo ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.status)}</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected?.differenceNo ?? selected?.id ?? "-"}>{selected?.differenceNo ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.status)}</small></div>
             </div>
 
             {differencesSection}
