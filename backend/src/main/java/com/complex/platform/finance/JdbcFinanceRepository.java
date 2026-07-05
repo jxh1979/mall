@@ -33,12 +33,12 @@ class JdbcFinanceRepository implements FinanceRepository {
                 INSERT INTO ar_ap_items (
                     id, item_no, direction, counterparty_id, source_type, source_id,
                     amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                    accounting_period, status, created_at, updated_at, merchant_id
+                    accounting_period, status, created_at, updated_at, merchant_id, project_id
                 )
                 VALUES (
                     :id, :item_no, :direction, :counterparty_id, :source_type, :source_id,
                     :amount_cent, :paid_amount_cent, :unpaid_amount_cent, :currency, :due_date,
-                    :accounting_period, :status, :created_at, :updated_at, :merchant_id
+                    :accounting_period, :status, :created_at, :updated_at, :merchant_id, :project_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     item_no = EXCLUDED.item_no,
@@ -81,7 +81,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id
                   FROM ar_ap_items
                  ORDER BY created_at DESC, id
                 """, this::mapArApItem);
@@ -92,7 +92,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id
                   FROM ar_ap_items
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -120,7 +120,40 @@ class JdbcFinanceRepository implements FinanceRepository {
         List<ArApItemRecord> items = jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                  FROM ar_ap_items
+                """ + where + """
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapArApItem);
+        return new com.complex.platform.common.api.PageResponse<>(
+                items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<ArApItemRecord> listArApItemsPaged(
+            String merchantId, String projectId, String keyword, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 20 : Math.min(size, 200);
+        String trimmed = keyword == null ? "" : keyword.trim();
+        // P1-A 两维并存:merchant_id(商户维) + project_id(综合体维);非空才加谓词,均空=平台全量。
+        // 参数带 SQL 类型,PG 才能推断 :x IS NULL 分支的类型。
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_id", projectId, java.sql.Types.VARCHAR)
+                .addValue("kw", trimmed.isEmpty() ? null : "%" + trimmed + "%", java.sql.Types.VARCHAR);
+        String where = """
+                 WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
+                   AND (:project_id IS NULL OR project_id = :project_id)
+                   AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw)
+                """;
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<ArApItemRecord> items = jdbcTemplate.query("""
+                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
+                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id
                   FROM ar_ap_items
                 """ + where + """
                  ORDER BY created_at DESC, id
@@ -135,7 +168,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id
                   FROM ar_ap_items
                  WHERE id = :id
                 """, Map.of("id", id), this::mapArApItem).stream().findFirst();
@@ -146,7 +179,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id
                   FROM ar_ap_items
                  WHERE id = :id
                    FOR UPDATE
@@ -667,6 +700,129 @@ class JdbcFinanceRepository implements FinanceRepository {
                 """, businessDate, fromInclusive, toExclusive);
     }
 
+    // ── P2-A：六源汇总按 scope 取数(与 lockArApItemsForDailyClose 口径对齐)──────────
+    // 口径:仅 scopeType='merchant' 时按 merchant 维切片(源表有 merchant_id 才能归属,无则归零);
+    //       其余 scopeType(project/bar/ticketing/amusement)与既有锁定口径一致=平台全量(委托无 scope 版)。
+    // 无 merchant 维的源(amusement/supply_cost/thirdparty_reflow)在 merchant scope 下归零,不再渗入全平台。
+    private static final DailyCloseSourceTotals ZERO = DailyCloseSourceTotals.empty();
+
+    private boolean isMerchantScope(String scopeType) {
+        return "merchant".equals(scopeType);
+    }
+
+    private DailyCloseSourceTotals aggregateTotalsScoped(
+            String sql, LocalDate businessDate, Instant from, Instant to, String merchantId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("from", timestampWithTimeZone(from))
+                .addValue("to", timestampWithTimeZone(to))
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+        return jdbcTemplate.query(sql, params, (rs) -> {
+            if (!rs.next()) {
+                return DailyCloseSourceTotals.empty();
+            }
+            return new DailyCloseSourceTotals(
+                    rs.getLong("amount_cent"), rs.getLong("refund_cent"), rs.getInt("order_count"));
+        });
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateOfficialTicket(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        if (!isMerchantScope(scopeType)) {
+            return aggregateOfficialTicket(businessDate, from, to);
+        }
+        // ticket_orders 有 merchant_id:merchant scope 仅归本商户;退款按本商户订单归集。
+        return aggregateTotalsScoped("""
+                SELECT COALESCE(SUM(o.amount_cent), 0) AS amount_cent,
+                       (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
+                          FROM ticket_refunds r
+                         WHERE r.merchant_id = :merchant_id
+                           AND r.created_at >= :from
+                           AND r.created_at < :to) AS refund_cent,
+                       COUNT(*) AS order_count
+                  FROM ticket_orders o
+                 WHERE o.pay_status = 'paid'
+                   AND o.visit_date = :business_date
+                   AND o.merchant_id = :merchant_id
+                """, businessDate, from, to, scopeId);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateChannelTicket(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        if (!isMerchantScope(scopeType)) {
+            return aggregateChannelTicket(businessDate, from, to);
+        }
+        return aggregateTotalsScoped("""
+                SELECT COALESCE(SUM(o.amount_cent), 0) AS amount_cent,
+                       (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
+                          FROM ticket_refunds r
+                          JOIN ticket_orders ro ON ro.id = r.target_id
+                         WHERE ro.sales_channel = 'channel'
+                           AND r.merchant_id = :merchant_id
+                           AND r.created_at >= :from
+                           AND r.created_at < :to) AS refund_cent,
+                       COUNT(*) AS order_count
+                  FROM ticket_orders o
+                 WHERE o.pay_status = 'paid'
+                   AND o.sales_channel = 'channel'
+                   AND o.visit_date = :business_date
+                   AND o.merchant_id = :merchant_id
+                """, businessDate, from, to, scopeId);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateBar(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        if (!isMerchantScope(scopeType)) {
+            return aggregateBar(businessDate, from, to);
+        }
+        // bar_bill_settlements 有 merchant_id:merchant scope 仅归本商户结算;调整(退款)经 bill→settlement 归本商户。
+        return aggregateTotalsScoped("""
+                SELECT (SELECT COALESCE(SUM(settlement_amount_cent), 0)
+                          FROM bar_bill_settlements
+                         WHERE settled_at >= :from
+                           AND settled_at < :to
+                           AND reversed = FALSE
+                           AND merchant_id = :merchant_id) AS amount_cent,
+                       (SELECT COALESCE(SUM(adj.amount_cent), 0)
+                          FROM bar_bill_adjustments adj
+                          JOIN bar_bill_settlements bs ON bs.bill_id = adj.bill_id
+                         WHERE adj.adjustment_type = 'refund'
+                           AND adj.refunded_at >= :from
+                           AND adj.refunded_at < :to
+                           AND bs.merchant_id = :merchant_id) AS refund_cent,
+                       (SELECT COUNT(*)
+                          FROM bar_bill_settlements
+                         WHERE settled_at >= :from
+                           AND settled_at < :to
+                           AND reversed = FALSE
+                           AND merchant_id = :merchant_id) AS order_count
+                """, businessDate, from, to, scopeId);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateAmusement(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        // amusement_verifications 无 merchant 维:merchant scope 归零(不属于任一商户);其余 scope 平台全量。
+        return isMerchantScope(scopeType) ? ZERO : aggregateAmusement(businessDate, from, to);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateSupplyCost(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        // inventory_stock_movements 无 merchant 维:merchant scope 归零;其余 scope 平台全量。
+        return isMerchantScope(scopeType) ? ZERO : aggregateSupplyCost(businessDate, from, to);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateThirdpartyReflow(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        // integration_order_syncs 无 merchant 维:merchant scope 归零;其余 scope 平台全量。
+        return isMerchantScope(scopeType) ? ZERO : aggregateThirdpartyReflow(businessDate, from, to);
+    }
+
     // ── P1#13 库存差异 → AR/AP（V108）─────────────────────────────────────────
 
     @Override
@@ -1171,7 +1327,8 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("status", item.status())
                 .addValue("created_at", timestampWithTimeZone(item.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(item.updatedAt()))
-                .addValue("merchant_id", item.merchantId());
+                .addValue("merchant_id", item.merchantId())
+                .addValue("project_id", item.projectId());
     }
 
     private MapSqlParameterSource arApItemSourceParameters(ArApItemSourceRecord source) {
@@ -1289,7 +1446,8 @@ class JdbcFinanceRepository implements FinanceRepository {
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
-                resultSet.getString("merchant_id")
+                resultSet.getString("merchant_id"),
+                resultSet.getString("project_id")
         );
     }
 

@@ -265,6 +265,89 @@ class FinanceJdbcIntegrationTests {
         assertThat(net).isNotEqualTo(officialAmount + barAmount - refund + 120000L);
     }
 
+    // ─── P1-A：财务补项目级隔离(与储值同范式) FAILING FIRST ─────────────────────
+    @Test
+    void listArApItemsByProjectExcludesOtherProjectsRows() {
+        // 项目 A 的财务角色只应看到本项目应收应付；项目 B 的行必须被 project_id 谓词挡在外面。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveArApItem(projItem("arap_projA", "ARAP-PROJA", "merchant_a", "project_A", now));
+        repository.saveArApItem(projItem("arap_projB", "ARAP-PROJB", "merchant_b", "project_B", now));
+
+        // 项目 A scope(merchantId=null, projectId=project_A) 的真分页列表只含 project_A 行。
+        var page = repository.listArApItemsPaged(null, "project_A", null, 1, 50);
+        assertThat(page.items()).extracting(ArApItemRecord::id)
+                .contains("arap_projA")
+                .doesNotContain("arap_projB");
+    }
+
+    @Test
+    void listArApItemsByProjectRoundTripsProjectIdColumn() {
+        // project_id 列往返：saveArApItem 写入、mapArApItem 读回，非丢字段。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveArApItem(projItem("arap_proj_rt", "ARAP-PROJ-RT", "merchant_a", "project_A", now));
+        assertThat(repository.findArApItemById("arap_proj_rt"))
+                .get().extracting(ArApItemRecord::projectId).isEqualTo("project_A");
+    }
+
+    // ─── P2-A：日结六源汇总必须按 scope 取数 FAILING FIRST ──────────────────────
+    @Test
+    void aggregateOfficialTicketByMerchantScopeSumsOnlyThatMerchant() {
+        LocalDate businessDate = LocalDate.parse("2026-06-18");
+        Instant from = Instant.parse("2026-06-18T04:00:00Z");
+        Instant to = Instant.parse("2026-06-19T04:00:00Z");
+        String tt = seedTicketType();
+        insertTicketOrder("to_m_a", tt, "merchant_scope_a", 30000L, businessDate, "admin");
+        insertTicketOrder("to_m_b", tt, "merchant_scope_b", 70000L, businessDate, "admin");
+
+        // 商户 A 锁定日结:官方售票源金额应=A的30000,而非全平台100000。
+        FinanceRepository.DailyCloseSourceTotals scoped =
+                repository.aggregateOfficialTicket(businessDate, from, to, "merchant", "merchant_scope_a");
+        assertThat(scoped.amountCent()).isEqualTo(30000L);
+        assertThat(scoped.orderCount()).isEqualTo(1);
+    }
+
+    @Test
+    void aggregateThirdpartyReflowByMerchantScopeIsZeroNotPlatformTotal() {
+        // 第三方回流源无 merchant 维度:商户锁定日结时该源应归零(不属于任何单一商户),而非渗入全平台金额。
+        LocalDate businessDate = LocalDate.parse("2026-06-18");
+        Instant from = Instant.parse("2026-06-18T04:00:00Z");
+        Instant to = Instant.parse("2026-06-19T04:00:00Z");
+        insertThirdpartySync("ios_scope_1", 120000L, Instant.parse("2026-06-18T12:00:00Z"));
+
+        // 平台口径能看到 120000;商户口径必须归零。
+        assertThat(repository.aggregateThirdpartyReflow(businessDate, from, to).amountCent()).isEqualTo(120000L);
+        FinanceRepository.DailyCloseSourceTotals scoped =
+                repository.aggregateThirdpartyReflow(businessDate, from, to, "merchant", "merchant_scope_a");
+        assertThat(scoped.amountCent()).isZero();
+    }
+
+    private ArApItemRecord projItem(String id, String no, String merchant, String project, Instant now) {
+        return new ArApItemRecord(id, no, "receivable", merchant, "order", "src_" + id,
+                10000L, 0L, 10000L, "CNY", LocalDate.parse("2026-06-30"), "2026-06",
+                "pending_collection", now, now, merchant, project);
+    }
+
+    private String seedTicketType() {
+        String id = "tt_scope_test";
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required,
+                                          status, created_at, updated_at, sold_quantity)
+                VALUES (?, ?, 'fixed', false, 'active', now(), now(), 0)
+                ON CONFLICT (id) DO NOTHING
+                """, id, "scope-test-type");
+        return id;
+    }
+
+    private void insertTicketOrder(String id, String ticketTypeId, String merchantId,
+                                   long amountCent, LocalDate visitDate, String channel) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, visit_date, sales_channel,
+                                           amount_cent, currency, pay_status, issue_status, status,
+                                           merchant_id, created_at, updated_at)
+                VALUES (?, ?, ?, 1, ?, ?, ?, 'CNY', 'paid', 'issued', 'active', ?, now(), now())
+                """, id, "ORD-" + id, ticketTypeId, visitDate, channel, amountCent, merchantId);
+    }
+
     private void insertTicketRefund(String id, long amountCent, Instant createdAt) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel,

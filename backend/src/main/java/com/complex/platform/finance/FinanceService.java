@@ -156,7 +156,9 @@ public class FinanceService {
                         "finance.ar_ap.view", "ar_ap_item"),
                 () -> {
                     String merchantId = authorizationService.currentMerchantScope().orElse(null);
-                    return repository.listArApItemsPaged(merchantId, keyword, page, size);
+                    // P1-A 两维并存:merchant scope + project scope 谓词同时下推,平台口径两者皆 null=全量。
+                    String projectId = authorizationService.currentProjectScopeQuietly().orElse(null);
+                    return repository.listArApItemsPaged(merchantId, projectId, keyword, page, size);
                 }
         );
     }
@@ -164,9 +166,10 @@ public class FinanceService {
     public ArApLedgerExportRecord exportArApItems() {
         try {
             Optional<String> scope = authorizationService.currentMerchantScope();
-            List<ArApItemRecord> items = scope.isPresent()
-                    ? repository.listArApItemsByMerchant(scope.get())
-                    : repository.listArApItems();
+            // P1-A：导出与列表同口径,两维(merchant + project)谓词并存,避免仅按 merchant 导出泄露他项目行。
+            Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
+            List<ArApItemRecord> items = repository.listArApItemsPaged(
+                    scope.orElse(null), projectScope.orElse(null), null, 1, Integer.MAX_VALUE).items();
             ArApLedgerExportRecord export = new ArApLedgerExportRecord(
                     "arap_export_" + UUID.randomUUID().toString().replace("-", ""),
                     "csv",
@@ -812,6 +815,7 @@ public class FinanceService {
         ArApItemRecord item = repository.findArApItemById(itemId)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
         checkMerchantOwnership(item.merchantId());
+        checkProjectScope(item.projectId());
 
         // 补录只针对已锁定台账（未锁定应直接改账，不走审批）。
         String lockedDayCloseId = repository.findArApItemLockedDayCloseId(itemId)
@@ -843,6 +847,7 @@ public class FinanceService {
         ArApItemRecord item = repository.findArApItemByIdForUpdate(adjustment.arApItemId())
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
         checkMerchantOwnership(item.merchantId());
+        checkProjectScope(item.projectId());
 
         Instant now = Instant.now();
         String approver = authorizationService.currentActor().id();
@@ -927,6 +932,8 @@ public class FinanceService {
         // F-OPS-09：用本条目将落账的 merchant scope 判锁，与下方 ArApItemRecord.merchantId 同口径——
         // 商户 scope 仅受本商户封账约束，平台口径受任一封账约束。
         Optional<String> scope = authorizationService.currentMerchantScope();
+        // P1-A：落账即写入综合体维度(与 merchantId 同来源=创建方 token 的 scope),历史行由 V236 回填。
+        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
         // R5 T7 硬拦截：禁止向已锁定经营日新增/回填台账，必须走补录审批。
         if (repository.lockedDailyCloseExistsForDate(dueDate, scope.orElse(null))) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
@@ -951,7 +958,8 @@ public class FinanceService {
                 "receivable".equals(direction) ? "pending_collection" : "pending_payment",
                 now,
                 now,
-                scope.orElse(null)
+                scope.orElse(null),
+                projectScope.orElse(null)
         );
         ArApItemRecord saved = repository.saveArApItem(item);
         if (saved.sourceId() != null && saved.sourceType() != null) {
@@ -994,6 +1002,8 @@ public class FinanceService {
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
         // 跨商户写入拒绝。
         checkMerchantOwnership(current.merchantId());
+        // P1-A 跨项目写入拒绝(两维并存)。
+        checkProjectScope(current.projectId());
         // R5 T7 硬拦截：已锁定台账禁止直接登记收付款，必须走补录审批。
         requireNotLocked(current.id());
         if (amountCent > current.unpaidAmountCent()) {
@@ -1059,7 +1069,7 @@ public class FinanceService {
         ));
 
         // R5 T7：六源汇总写入 finance_daily_close_summaries（口径见 r5-aggregation-metrics-draft §1.2，待财务复核）。
-        summarizeDailyClose(dailyCloseId, businessDate, now);
+        summarizeDailyClose(dailyCloseId, businessDate, now, scopeType, scopeId);
 
         // R5 T7：把当日属于本 scope 的 ar_ap_items 打上 locked_day_close_id（merchant 角色仅锁本商户行）。
         Optional<String> merchantScope = authorizationService.currentMerchantScope();
@@ -1072,18 +1082,19 @@ public class FinanceService {
      * 六源汇总聚合（official_ticket / channel_ticket / bar / amusement / supply_cost / thirdparty_reflow），
      * 每源一行写入 finance_daily_close_summaries。聚合公式按聚合草案保守取值，口径未定处见草案 §四"待财务复核"。
      */
-    private void summarizeDailyClose(String dailyCloseId, LocalDate businessDate, Instant now) {
+    private void summarizeDailyClose(String dailyCloseId, LocalDate businessDate, Instant now,
+                                    String scopeType, String scopeId) {
         // 经营日窗口按可配日切（默认 04:00）派生，时间戳类源表统一用 [from, to) 分桶；official_ticket 以 visit_date 为经营日。
         Instant from = businessDayResolver.startInstant(businessDate);
         Instant to = businessDayResolver.endInstant(businessDate);
         for (String source : DAILY_CLOSE_SOURCES) {
             FinanceRepository.DailyCloseSourceTotals totals = switch (source) {
-                case "official_ticket" -> repository.aggregateOfficialTicket(businessDate, from, to);
-                case "channel_ticket" -> repository.aggregateChannelTicket(businessDate, from, to);
-                case "bar" -> repository.aggregateBar(businessDate, from, to);
-                case "amusement" -> repository.aggregateAmusement(businessDate, from, to);
-                case "supply_cost" -> repository.aggregateSupplyCost(businessDate, from, to);
-                case "thirdparty_reflow" -> repository.aggregateThirdpartyReflow(businessDate, from, to);
+                case "official_ticket" -> repository.aggregateOfficialTicket(businessDate, from, to, scopeType, scopeId);
+                case "channel_ticket" -> repository.aggregateChannelTicket(businessDate, from, to, scopeType, scopeId);
+                case "bar" -> repository.aggregateBar(businessDate, from, to, scopeType, scopeId);
+                case "amusement" -> repository.aggregateAmusement(businessDate, from, to, scopeType, scopeId);
+                case "supply_cost" -> repository.aggregateSupplyCost(businessDate, from, to, scopeType, scopeId);
+                case "thirdparty_reflow" -> repository.aggregateThirdpartyReflow(businessDate, from, to, scopeType, scopeId);
                 default -> FinanceRepository.DailyCloseSourceTotals.empty();
             };
             repository.saveDailyCloseSummary(new DailyCloseSummaryRecord(
@@ -1233,6 +1244,8 @@ public class FinanceService {
         RefundRequest actual = requireRequest(request);
         String targetId = requireText(actual.targetId(), "target_id");
         long refundAmountCent = requirePositive(actual.refundAmountCent(), "refund_amount_cent");
+        // P3：现场渠道(cash/pos)退款由服务端强制要求设备上下文，缺 deviceId 直接拒（不靠请求体可空绕过设备门控）。
+        requireDeviceContextForOnsiteChannel(actual.refundChannel(), actual.deviceId());
         // 跨模块闭环②a：退款=高价值兑付高风险动作，接入 MDM 门控。
         // 现场/工作机退款时请求携带 deviceId → 触发硬门控；后台台账类退款无设备上下文 → 留空安全跳过。
         requireManagedDeviceForFinanceAction(actual.deviceId(), "finance.refund");
@@ -1247,6 +1260,8 @@ public class FinanceService {
         ArApItemRecord item = repository.findArApItemById(payment.arApItemId())
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
         checkMerchantOwnership(item.merchantId());
+        // P1-A 跨项目退款拒绝(两维并存)。
+        checkProjectScope(item.projectId());
 
         // R5 T7 硬拦截：已锁定台账禁止直接退款（影响金额），必须走补录审批。
         requireNotLocked(item.id());
@@ -1609,6 +1624,36 @@ public class FinanceService {
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                     "access to another merchant's resource is not allowed");
+        }
+    }
+
+    /**
+     * P1-A 财务项目级隔离(与 checkMerchantOwnership 同范式,两维并存):
+     * 项目 scope 调用方(currentProjectScopeQuietly 非空,即带综合体归属的项目财务员)不得读写他项目台账。
+     * 平台/无项目归属调用方返回 empty→不拦(全量);资源 project_id 为 null(历史未回填行)→不拦(不误伤,依赖 merchant 维)。
+     */
+    private void checkProjectScope(String resourceProjectId) {
+        Optional<String> scope = authorizationService.currentProjectScopeQuietly();
+        if (scope.isPresent() && resourceProjectId != null && !scope.get().equals(resourceProjectId)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
+                    "access to another project's finance resource is not allowed");
+        }
+    }
+
+    /**
+     * P3 现场渠道退款设备门控(服务端判定,非请求体可空 deviceId):
+     * 现场终端渠道(cash/pos=线下现金/刷卡,天然发生在现场设备)退款必须携带 deviceId 走 MDM 门控;
+     * 缺设备上下文=fail-closed 拒绝,堵"现场退款不带 deviceId 即绕过设备门控"。
+     * 后台/线上渠道(manual/第三方等)无现场设备语义,不强制。
+     */
+    private static final Set<String> ONSITE_REFUND_CHANNELS = Set.of("cash", "pos");
+
+    private void requireDeviceContextForOnsiteChannel(String refundChannel, String deviceId) {
+        String channel = trimToNull(refundChannel);
+        if (channel != null && ONSITE_REFUND_CHANNELS.contains(channel.toLowerCase())
+                && trimToNull(deviceId) == null) {
+            throw ApiException.forbidden("DEVICE_CONTEXT_REQUIRED",
+                    "on-site channel refund requires an operating device context (deviceId)");
         }
     }
 

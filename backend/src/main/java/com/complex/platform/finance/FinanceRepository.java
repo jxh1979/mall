@@ -166,6 +166,30 @@ public interface FinanceRepository {
         return new PageResponse<>(filtered.subList(from, to), safePage, safeSize, filtered.size());
     }
 
+    /**
+     * P1-A 财务项目级隔离:在 merchant 维之上叠加 project 维谓词(两维并存)。
+     * merchantId 非空→WHERE merchant_id=;projectId 非空→AND project_id=;均空=平台全量。
+     * default 兜底内存 filter,生产 Jdbc @Override 为真 SQL。
+     */
+    default PageResponse<ArApItemRecord> listArApItemsPaged(
+            String merchantId, String projectId, String keyword, int page, int size) {
+        java.util.List<ArApItemRecord> all = merchantId == null
+                ? listArApItems() : listArApItemsByMerchant(merchantId);
+        String kw = keyword == null ? "" : keyword.trim().toLowerCase();
+        java.util.List<ArApItemRecord> filtered = all.stream()
+                .filter(it -> projectId == null || projectId.equals(it.projectId()))
+                .filter(it -> kw.isEmpty()
+                        || (it.itemNo() != null && it.itemNo().toLowerCase().contains(kw))
+                        || (it.direction() != null && it.direction().toLowerCase().contains(kw))
+                        || (it.status() != null && it.status().toLowerCase().contains(kw)))
+                .toList();
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 20 : size;
+        int from = Math.min((safePage - 1) * safeSize, filtered.size());
+        int to = Math.min(from + safeSize, filtered.size());
+        return new PageResponse<>(filtered.subList(from, to), safePage, safeSize, filtered.size());
+    }
+
     Optional<ArApItemRecord> findArApItemById(String id);
 
     /** Same as findArApItemById but holds a row-level write lock for the current transaction. */
@@ -282,6 +306,40 @@ public interface FinanceRepository {
     DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
 
     DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
+
+    // ── P2-A：六源汇总必须按 scope 取数(与 lockArApItemsForDailyClose 口径对齐) ──
+    // scopeType/scopeId 决定源表谓词:merchant scope 只归本商户,无 merchant 维的源(游乐/供应链/第三方)归零;
+    // project scope 只归本综合体;其余 scopeType(bar/ticketing/amusement) 不额外切片(平台口径)。
+    // default 委托无 scope 版=平台全量,生产 Jdbc @Override 下推真谓词。
+    default DailyCloseSourceTotals aggregateOfficialTicket(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        return aggregateOfficialTicket(businessDate, from, to);
+    }
+
+    default DailyCloseSourceTotals aggregateChannelTicket(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        return aggregateChannelTicket(businessDate, from, to);
+    }
+
+    default DailyCloseSourceTotals aggregateBar(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        return aggregateBar(businessDate, from, to);
+    }
+
+    default DailyCloseSourceTotals aggregateAmusement(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        return aggregateAmusement(businessDate, from, to);
+    }
+
+    default DailyCloseSourceTotals aggregateSupplyCost(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        return aggregateSupplyCost(businessDate, from, to);
+    }
+
+    default DailyCloseSourceTotals aggregateThirdpartyReflow(
+            LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
+        return aggregateThirdpartyReflow(businessDate, from, to);
+    }
 
     ArApAdjustmentRecord saveArApAdjustment(ArApAdjustmentRecord adjustment);
 

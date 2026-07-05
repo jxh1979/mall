@@ -649,6 +649,60 @@ class FinanceServiceTests {
                 .isEqualTo("VALIDATION_FAILED");
     }
 
+    // ─── P1-A：财务项目级隔离(与储值同范式) FAILING FIRST ────────────────────
+    @Test
+    void crossProjectSettlementIsForbidden() {
+        // 项目 A 创建的应收,项目 B 的财务员不得登记收款(project_id 越权)。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        when(authorizationService.currentProjectScopeQuietly()).thenReturn(Optional.of("project_A"));
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-cross-proj", "receivable", 50000L));
+
+        // 切到项目 B 调用方。
+        when(authorizationService.currentProjectScopeQuietly()).thenReturn(Optional.of("project_B"));
+        assertThatThrownBy(() -> service.registerArApPayment(item.id(), paymentRequest("pay-cross-proj", 10000L)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("CROSS_PROJECT_FORBIDDEN");
+    }
+
+    @Test
+    void sameProjectSettlementIsAllowed() {
+        // 同项目正常放行(不误伤)。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        when(authorizationService.currentProjectScopeQuietly()).thenReturn(Optional.of("project_A"));
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-same-proj", "receivable", 50000L));
+
+        ArApPaymentResponse resp = service.registerArApPayment(item.id(), paymentRequest("pay-same-proj", 10000L));
+        assertThat(resp.item().paidAmountCent()).isEqualTo(10000L);
+    }
+
+    // ─── P3：现场渠道退款缺设备上下文应拒(服务端判定,非请求体 deviceId) FAILING FIRST ──
+    @Test
+    void onsiteChannelRefundWithoutDeviceIsRejected() {
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-onsite-refund", "receivable", 30000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-onsite", 30000L));
+
+        // 现场渠道(cash/pos)退款但 deviceId 为空 → 服务端 fail-closed 拒绝,不得绕过设备门控。
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-onsite-nodev", "refund", List.of(), payment.payment().id(),
+                10000L, "onsite cash refund", "cash", null, null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("DEVICE_CONTEXT_REQUIRED");
+    }
+
+    @Test
+    void backOfficeChannelRefundWithoutDeviceIsAllowed() {
+        // 后台渠道(manual)退款无需设备上下文,不误伤后台台账类退款。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-backoffice-refund", "receivable", 30000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-backoffice", 30000L));
+
+        FinanceRefundRecord refund = service.createRefund(new RefundRequest(
+                "refund-backoffice", "refund", List.of(), payment.payment().id(),
+                10000L, "manual back-office refund", "manual", null, null));
+        assertThat(refund.status()).isEqualTo("requested");
+    }
+
     @Test
     void validRefundWithinOriginalPaymentAmountSucceeds() {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-valid-refund", "receivable", 30000L));
