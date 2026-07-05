@@ -186,7 +186,7 @@ public class FinanceService {
     }
 
     private String arApCsv(List<ArApItemRecord> items) {
-        StringBuilder csv = new StringBuilder("item_no,direction,counterparty_id,source_type,source_id,amount_cent,paid_amount_cent,unpaid_amount_cent,currency,due_date,accounting_period,status\n");
+        StringBuilder csv = new StringBuilder("单据编号,收付方向,往来对象编号,来源类型,来源编号,金额(分),已收付金额(分),未收付金额(分),币种,到期日,账期,状态\n");
         for (ArApItemRecord item : items) {
             csv.append(csv(item.itemNo())).append(',')
                     .append(csv(item.direction())).append(',')

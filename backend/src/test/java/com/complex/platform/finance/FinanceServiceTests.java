@@ -92,6 +92,20 @@ class FinanceServiceTests {
     }
 
     @Test
+    void exportArApItemsCsvHeaderIsChineseNotEnglish() {
+        // 用户下载的 AR/AP 台账 CSV 表头必须是中文业务标签，不得泄露英文字段名。
+        service.createArApItem(itemRequest("arap-csv-i18n", "receivable", 128800L));
+
+        String csv = service.exportArApItems().csvText();
+        String header = csv.split("\n", 2)[0];
+
+        assertThat(header)
+                .isEqualTo("单据编号,收付方向,往来对象编号,来源类型,来源编号,金额(分),已收付金额(分),未收付金额(分),币种,到期日,账期,状态");
+        // 反向守卫：改回英文表头该断言必红。
+        assertThat(header).doesNotContain("item_no").doesNotContain("direction");
+    }
+
+    @Test
     void createReceivableItemAcceptsBarBillSourceForOnAccountLedger() {
         ArApItemRecord created = service.createArApItem(new ArApItemRequest(
                 "arap-bar-bill-source",
