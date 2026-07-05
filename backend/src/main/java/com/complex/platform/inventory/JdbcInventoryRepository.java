@@ -242,15 +242,15 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
-    public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch) {
+    public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch, String projectId) {
         jdbcTemplate.update("""
                 INSERT INTO inventory_stock_batches (
                     id, item_id, location_id, batch_no, supplier_id, quantity,
-                    expire_at, status, evidence_attachment_ids, created_at, updated_at, merchant_id
+                    expire_at, status, evidence_attachment_ids, created_at, updated_at, merchant_id, project_id
                 )
                 VALUES (
                     :id, :item_id, :location_id, :batch_no, :supplier_id, :quantity,
-                    :expire_at, :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id
+                    :expire_at, :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id, :project_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     item_id = EXCLUDED.item_id,
@@ -261,8 +261,9 @@ class JdbcInventoryRepository implements InventoryRepository {
                     expire_at = EXCLUDED.expire_at,
                     status = EXCLUDED.status,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    updated_at = EXCLUDED.updated_at
-                """, stockBatchParameters(batch));
+                    updated_at = EXCLUDED.updated_at,
+                    project_id = COALESCE(EXCLUDED.project_id, inventory_stock_batches.project_id)
+                """, stockBatchParameters(batch).addValue("project_id", projectId));
         return batch;
     }
 
@@ -384,17 +385,17 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
-    public StockMovementRecord saveStockMovement(StockMovementRecord movement) {
+    public StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId) {
         jdbcTemplate.update("""
                 INSERT INTO inventory_stock_movements (
                     id, movement_type, item_id, source_location_id, target_location_id, quantity,
                     business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                    status, created_at, merchant_id
+                    status, created_at, merchant_id, project_id
                 )
                 VALUES (
                     :id, :movement_type, :item_id, :source_location_id, :target_location_id, :quantity,
                     :business_type, :business_id, :trace_code, :operator_id, CAST(:evidence_attachment_ids AS jsonb),
-                    :status, :created_at, :merchant_id
+                    :status, :created_at, :merchant_id, :project_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     movement_type = EXCLUDED.movement_type,
@@ -407,8 +408,9 @@ class JdbcInventoryRepository implements InventoryRepository {
                     trace_code = EXCLUDED.trace_code,
                     operator_id = EXCLUDED.operator_id,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    status = EXCLUDED.status
-                """, stockMovementParameters(movement));
+                    status = EXCLUDED.status,
+                    project_id = COALESCE(EXCLUDED.project_id, inventory_stock_movements.project_id)
+                """, stockMovementParameters(movement).addValue("project_id", projectId));
         return movement;
     }
 
@@ -834,6 +836,19 @@ class JdbcInventoryRepository implements InventoryRepository {
                 """, Map.of("merchant_id", merchantId), rowMapper::mapStockMovement);
     }
 
+    // C2 read-side: project staff (no merchant scope) only read own-project movements.
+    @Override
+    public List<StockMovementRecord> listStockMovementsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
+                       business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
+                       status, created_at, merchant_id
+                  FROM inventory_stock_movements
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("project_id", projectId), rowMapper::mapStockMovement);
+    }
+
     @Override
     public List<InventoryStockBatchRecord> listStockBatchesByMerchant(String merchantId) {
         return jdbcTemplate.query("""
@@ -843,6 +858,18 @@ class JdbcInventoryRepository implements InventoryRepository {
                  WHERE merchant_id = :merchant_id
                  ORDER BY expire_at ASC NULLS LAST, created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapStockBatch);
+    }
+
+    // C2 read-side: project staff (no merchant scope) only read own-project batches.
+    @Override
+    public List<InventoryStockBatchRecord> listStockBatchesByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, item_id, location_id, batch_no, supplier_id, quantity,
+                       expire_at, status, evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM inventory_stock_batches
+                 WHERE project_id = :project_id
+                 ORDER BY expire_at ASC NULLS LAST, created_at DESC, id
+                """, Map.of("project_id", projectId), rowMapper::mapStockBatch);
     }
 
     @Override

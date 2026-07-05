@@ -923,7 +923,7 @@ public class InventoryService {
                                         List.of(),
                                         "completed",
                                         now,
-                                        variance.merchantId()));
+                                        variance.merchantId()), authorizationService.currentProjectScopeQuietly().orElse(null));
                             } else {
                                 int remaining = -delta;
                                 for (StockBalanceRecord row : rows) {
@@ -951,7 +951,7 @@ public class InventoryService {
                                                 List.of(),
                                                 "completed",
                                                 now,
-                                                variance.merchantId()));
+                                                variance.merchantId()), authorizationService.currentProjectScopeQuietly().orElse(null));
                                     }
                                 }
                                 if (remaining > 0) {
@@ -1163,9 +1163,14 @@ public class InventoryService {
                 "inventory.stock.view",
                 "inventory_stock_batch",
                 () -> {
+                    // C2: merchant staff -> merchant; project staff (no merchant) -> project; platform admin -> all.
                     Optional<String> scope = authorizationService.currentMerchantScope();
-                    return scope.map(repository::listStockBatchesByMerchant)
-                                .orElseGet(repository::listStockBatches);
+                    if (scope.isPresent()) {
+                        return repository.listStockBatchesByMerchant(scope.get());
+                    }
+                    return authorizationService.currentProjectScopeQuietly()
+                            .map(repository::listStockBatchesByProject)
+                            .orElseGet(repository::listStockBatches);
                 }
         );
     }
@@ -1808,7 +1813,7 @@ public class InventoryService {
                 now,
                 now,
                 merchantId
-        ));
+        ), authorizationService.currentProjectScopeQuietly().orElse(null));
     }
 
     private InventoryRiskScanResult scanInventoryRisks(InventoryRiskScanRequest request) {

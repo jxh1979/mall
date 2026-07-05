@@ -125,7 +125,7 @@ class InventoryJdbcIntegrationTests {
                 "completed",
                 now,
                 null
-        ));
+        ), null);
         repository.savePurchaseRequest(new PurchaseRequestRecord(
                 "purchase_jdbc",
                 "PR202606140001",
@@ -421,7 +421,7 @@ class InventoryJdbcIntegrationTests {
                 now,
                 now,
                 null
-        ));
+        ), null);
         repository.saveRiskAlert(new InventoryRiskAlertRecord(
                 "risk_p1_jdbc",
                 "expiry_warning",
@@ -519,6 +519,50 @@ class InventoryJdbcIntegrationTests {
         assertThat(repository.listStockBalancesByProject("proj_b"))
                 .extracting(StockBalanceRecord::id).contains("bal_pb").doesNotContain("bal_pa");
         assertThat(repository.listStockBalancesByProject("proj_nonexistent")).isEmpty();
+    }
+
+    // C2 read-side leftover: movement/batch list channels must also isolate by project.
+    @Test
+    void listStockMovementsAndBatchesByProjectIsolateProjects() {
+        assertThat(columnExists("inventory_stock_movements", "project_id")).isEqualTo(1);
+        assertThat(columnExists("inventory_stock_batches", "project_id")).isEqualTo(1);
+
+        jdbcTemplate.update("""
+                INSERT INTO inventory_items (id, sku_code, item_name, item_type, unit, trace_required, min_quantity, status, created_at, updated_at)
+                VALUES ('item_ma', 'SKU-MA', 'MA Item', 'spirit', 'bottle', false, 0, 'active', now(), now()),
+                       ('item_mb', 'SKU-MB', 'MB Item', 'spirit', 'bottle', false, 0, 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        Instant now = Instant.parse("2026-07-05T00:00:00Z");
+
+        repository.saveStockMovement(new StockMovementRecord(
+                "mv_pa", "inbound", "item_ma", null, "loc_ma", 10,
+                "purchase", null, null, null, List.of(), "completed", now, "m_a"), "proj_a");
+        repository.saveStockMovement(new StockMovementRecord(
+                "mv_pb", "inbound", "item_mb", null, "loc_mb", 20,
+                "purchase", null, null, null, List.of(), "completed", now, "m_b"), "proj_b");
+        repository.saveStockBatch(new InventoryStockBatchRecord(
+                "bt_pa", "item_ma", "loc_ma", "B-PA", null, 10, null, "active", List.of(), now, now, "m_a"), "proj_a");
+        repository.saveStockBatch(new InventoryStockBatchRecord(
+                "bt_pb", "item_mb", "loc_mb", "B-PB", null, 20, null, "active", List.of(), now, now, "m_b"), "proj_b");
+
+        assertThat(repository.listStockMovementsByProject("proj_a"))
+                .extracting(StockMovementRecord::id).contains("mv_pa").doesNotContain("mv_pb");
+        assertThat(repository.listStockMovementsByProject("proj_b"))
+                .extracting(StockMovementRecord::id).contains("mv_pb").doesNotContain("mv_pa");
+        assertThat(repository.listStockMovementsByProject("proj_none")).isEmpty();
+
+        assertThat(repository.listStockBatchesByProject("proj_a"))
+                .extracting(InventoryStockBatchRecord::id).contains("bt_pa").doesNotContain("bt_pb");
+        assertThat(repository.listStockBatchesByProject("proj_b"))
+                .extracting(InventoryStockBatchRecord::id).contains("bt_pb").doesNotContain("bt_pa");
+        assertThat(repository.listStockBatchesByProject("proj_none")).isEmpty();
+    }
+
+    private Integer columnExists(String table, String column) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_name = ? AND column_name = ?",
+                Integer.class, table, column);
     }
 
     // C3【High】高价值复核单归属商户列存在 + 往返（reviewInternal 据此拒绝跨租户翻转）。

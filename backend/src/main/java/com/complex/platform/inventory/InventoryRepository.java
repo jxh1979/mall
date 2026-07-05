@@ -35,7 +35,7 @@ public interface InventoryRepository {
 
     List<StockBalanceRecord> listStockBalances();
 
-    InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch);
+    InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch, String projectId);
 
     // 2e 批次扣减：FEFO 排序的可消费 active 批次（先到期先出）。
     List<InventoryStockBatchRecord> listActiveBatchesForConsumption(String itemId, String locationId);
@@ -53,7 +53,7 @@ public interface InventoryRepository {
 
     List<SupplierReconciliationRecord> listSupplierReconciliations();
 
-    StockMovementRecord saveStockMovement(StockMovementRecord movement);
+    StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId);
 
     List<StockMovementRecord> listStockMovements();
 
@@ -131,7 +131,13 @@ public interface InventoryRepository {
 
     List<StockMovementRecord> listStockMovementsByMerchant(String merchantId);
 
+    // C2 read-side: project-scoped movement list (project staff, no merchant scope).
+    List<StockMovementRecord> listStockMovementsByProject(String projectId);
+
     List<InventoryStockBatchRecord> listStockBatchesByMerchant(String merchantId);
+
+    // C2 read-side: project-scoped batch list (project staff, no merchant scope).
+    List<InventoryStockBatchRecord> listStockBatchesByProject(String projectId);
 
     List<InventoryRiskAlertRecord> listRiskAlertsByMerchant(String merchantId);
 

@@ -245,7 +245,7 @@ public class InventoryHighValueReviewService {
                     "completed",
                     Instant.now(),
                     adjustment.merchantId()
-            ));
+            ), authorizationService.currentProjectScopeQuietly().orElse(null));
             repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "completed"));
         }
     }

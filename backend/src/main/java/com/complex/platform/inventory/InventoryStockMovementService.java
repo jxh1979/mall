@@ -248,9 +248,14 @@ final class InventoryStockMovementService {
                 "inventory.stock.view",
                 "inventory_stock_movement",
                 () -> {
+                    // C2: merchant staff -> merchant; project staff (no merchant) -> project; platform admin -> all.
                     java.util.Optional<String> scope = authorizationService.currentMerchantScope();
-                    return scope.map(repository::listStockMovementsByMerchant)
-                                .orElseGet(repository::listStockMovements);
+                    if (scope.isPresent()) {
+                        return repository.listStockMovementsByMerchant(scope.get());
+                    }
+                    return authorizationService.currentProjectScopeQuietly()
+                            .map(repository::listStockMovementsByProject)
+                            .orElseGet(repository::listStockMovements);
                 }
         );
     }
@@ -379,7 +384,7 @@ final class InventoryStockMovementService {
                 "completed",
                 Instant.now(),
                 merchantId
-        ));
+        ), authorizationService.currentProjectScopeQuietly().orElse(null));
     }
 
     // P0-1: 原子增加余额，消除 read-modify-write 竞态
@@ -423,7 +428,7 @@ final class InventoryStockMovementService {
                 List.of(),
                 now,
                 now,
-                merchantId));
+                merchantId), authorizationService.currentProjectScopeQuietly().orElse(null));
     }
 
     // 从入库 item map 读取可选 expire_at（ISO-8601 instant，如 2026-12-31T00:00:00Z）；缺省/非法 → null（退化 FIFO）。

@@ -39,6 +39,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -110,10 +111,10 @@ class InventoryServiceTests {
                 "item_fefo", null, "FEFO Item", "spirit", "bottle", null, false, 0, "active", now, now, null, null));
         inventoryRepository.saveStockBatch(new InventoryStockBatchRecord(
                 "fefo-A", "item_fefo", "loc_fefo", "BA", null, 5,
-                java.time.Instant.parse("2026-06-10T00:00:00Z"), "active", List.of(), now, now, null));
+                java.time.Instant.parse("2026-06-10T00:00:00Z"), "active", List.of(), now, now, null), null);
         inventoryRepository.saveStockBatch(new InventoryStockBatchRecord(
                 "fefo-B", "item_fefo", "loc_fefo", "BB", null, 5,
-                java.time.Instant.parse("2026-06-05T00:00:00Z"), "active", List.of(), now, now, null));
+                java.time.Instant.parse("2026-06-05T00:00:00Z"), "active", List.of(), now, now, null), null);
         inventoryRepository.saveStockBalance(new StockBalanceRecord(
                 "bal-fefo", "item_fefo", "loc_fefo", 10, 0, 10, now, null, "wh_fefo"));
 
@@ -1985,9 +1986,14 @@ class InventoryServiceTests {
             }
         }
 
+        private final Map<String, String> batchProjects = new HashMap<>();
+
         @Override
-        public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch) {
+        public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch, String projectId) {
             stockBatches.put(batch.id(), batch);
+            if (projectId != null) {
+                batchProjects.put(batch.id(), projectId);
+            }
             return batch;
         }
 
@@ -2032,6 +2038,13 @@ class InventoryServiceTests {
         }
 
         @Override
+        public List<InventoryStockBatchRecord> listStockBatchesByProject(String projectId) {
+            return stockBatches.values().stream()
+                    .filter(b -> projectId.equals(batchProjects.get(b.id())))
+                    .toList();
+        }
+
+        @Override
         public InventoryRiskAlertRecord saveRiskAlert(InventoryRiskAlertRecord alert) {
             riskAlerts.add(alert);
             return alert;
@@ -2067,9 +2080,14 @@ class InventoryServiceTests {
                     .toList();
         }
 
+        private final Map<String, String> movementProjects = new HashMap<>();
+
         @Override
-        public StockMovementRecord saveStockMovement(StockMovementRecord movement) {
+        public StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId) {
             stockMovements.add(movement);
+            if (projectId != null) {
+                movementProjects.put(movement.id(), projectId);
+            }
             return movement;
         }
 
@@ -2082,6 +2100,13 @@ class InventoryServiceTests {
         public List<StockMovementRecord> listStockMovementsByMerchant(String merchantId) {
             return stockMovements.stream()
                     .filter(m -> merchantId.equals(m.merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<StockMovementRecord> listStockMovementsByProject(String projectId) {
+            return stockMovements.stream()
+                    .filter(m -> projectId.equals(movementProjects.get(m.id())))
                     .toList();
         }
 

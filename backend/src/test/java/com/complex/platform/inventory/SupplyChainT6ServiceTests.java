@@ -619,7 +619,7 @@ class SupplyChainT6ServiceTests {
         @Override public List<StockBalanceRecord> listStockBalances() {
             return new ArrayList<>(balances.values());
         }
-        @Override public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord b) { return b; }
+        @Override public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord b, String projectId) { return b; }
         @Override public List<InventoryStockBatchRecord> listActiveBatchesForConsumption(String i, String l) { return List.of(); }
         @Override public int atomicDecreaseBatchQuantity(String b, int q) { return 0; }
         @Override public List<InventoryStockBatchRecord> listStockBatches() { throw nyi(); }
@@ -627,7 +627,7 @@ class SupplyChainT6ServiceTests {
         @Override public List<InventoryRiskAlertRecord> listRiskAlerts() { throw nyi(); }
         @Override public SupplierReconciliationRecord saveSupplierReconciliation(SupplierReconciliationRecord r) { throw nyi(); }
         @Override public List<SupplierReconciliationRecord> listSupplierReconciliations() { throw nyi(); }
-        @Override public StockMovementRecord saveStockMovement(StockMovementRecord m) {
+        @Override public StockMovementRecord saveStockMovement(StockMovementRecord m, String projectId) {
             stockMovements.add(m);
             return m;
         }
@@ -670,7 +670,9 @@ class SupplyChainT6ServiceTests {
         @Override public List<StockBalanceRecord> listStockBalancesByMerchant(String m) { throw nyi(); }
         @Override public List<StockBalanceRecord> listStockBalancesByProject(String p) { throw nyi(); }
         @Override public List<StockMovementRecord> listStockMovementsByMerchant(String m) { throw nyi(); }
+        @Override public List<StockMovementRecord> listStockMovementsByProject(String p) { throw nyi(); }
         @Override public List<InventoryStockBatchRecord> listStockBatchesByMerchant(String m) { throw nyi(); }
+        @Override public List<InventoryStockBatchRecord> listStockBatchesByProject(String p) { throw nyi(); }
         @Override public List<InventoryRiskAlertRecord> listRiskAlertsByMerchant(String m) { throw nyi(); }
         @Override public List<SupplierReconciliationRecord> listSupplierReconciliationsByMerchant(String m) { throw nyi(); }
         @Override public List<SavedBottleRecord> listSavedBottlesByMerchant(String m) { throw nyi(); }
