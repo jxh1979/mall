@@ -341,7 +341,13 @@ public class AuthorizationService implements CallerScopeResolver {
      */
     public Optional<String> currentMerchantIdQuietly() {
         try {
-            String merchantId = currentActor().merchantId();
+            AccessActor actor = currentActor();
+            // 审计主线2 根因：平台管理员即便被 seed 误绑 merchant_id，也必须按平台视角看全量。
+            // 与 currentMerchantScope() 同口径先判平台管理员桥→empty，防止数据层把平台账号当商户过滤成 0。
+            if (isPlatformAdminBridge(actor)) {
+                return Optional.empty();
+            }
+            String merchantId = actor.merchantId();
             if (merchantId != null && !merchantId.isBlank()) {
                 return Optional.of(merchantId);
             }
