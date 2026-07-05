@@ -261,6 +261,59 @@ public class JdbcSettlementBillRepository {
                 """, params);
     }
 
+    // ---- 批2-4 过账读写（供 SettlementPostingService；不改批2-3 引擎算法）----
+
+    /** 读结算单当前 status（过账前判 confirmed）。单不存在返回 null。 */
+    public String findBillStatus(String billId) {
+        return jdbcTemplate.query(
+                "SELECT status FROM settlement_bills WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", billId),
+                rs -> rs.next() ? rs.getString("status") : null);
+    }
+
+    /** 该单待过账明细：status='draft' 且 final_amount_cent>0（final=0 由调用方天然跳过，此处直接不取）。 */
+    public List<PostableItem> findPostableItems(String billId) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_id, final_amount_cent
+                  FROM settlement_items
+                 WHERE bill_id = :bill_id AND status = 'draft' AND final_amount_cent > 0
+                 ORDER BY id
+                """, new MapSqlParameterSource().addValue("bill_id", billId),
+                (rs, i) -> new PostableItem(rs.getString("id"), rs.getString("merchant_id"),
+                        rs.getLong("final_amount_cent")));
+    }
+
+    /** 回写明细 ar_ap_item_id + status='posted'（仅当仍为 draft，防并发重复过账）。返回更新行数。 */
+    public int markItemPosted(String itemId, String arApItemId) {
+        return jdbcTemplate.update("""
+                UPDATE settlement_items
+                   SET ar_ap_item_id = :ar_ap_item_id, status = 'posted', updated_at = now()
+                 WHERE id = :id AND status = 'draft'
+                """, new MapSqlParameterSource()
+                .addValue("id", itemId).addValue("ar_ap_item_id", arApItemId));
+    }
+
+    /** 该单是否仍有未过账（draft 且 final>0）明细；无 → 可置 settled。 */
+    public boolean hasUnpostedItems(String billId) {
+        Integer cnt = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM settlement_items
+                 WHERE bill_id = :bill_id AND status = 'draft' AND final_amount_cent > 0
+                """, new MapSqlParameterSource().addValue("bill_id", billId), Integer.class);
+        return cnt != null && cnt > 0;
+    }
+
+    /** 置结算单 status='settled' + settled_at=now（仅当当前 confirmed，幂等：重复过账不重置已 settled 单）。 */
+    public int markBillSettled(String billId) {
+        return jdbcTemplate.update("""
+                UPDATE settlement_bills
+                   SET status = 'settled', settled_at = now(), updated_at = now()
+                 WHERE id = :id AND status = 'confirmed'
+                """, new MapSqlParameterSource().addValue("id", billId));
+    }
+
+    public record PostableItem(String itemId, String merchantId, long finalAmountCent) {
+    }
+
     // ---- 读投影 ----
 
     public record RankTier(int rankFrom, int rankTo, int shareBps) {
