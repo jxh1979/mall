@@ -145,14 +145,14 @@ class ServiceOrderJdbcIntegrationTests {
                 "SELECT COUNT(*) FROM staff_commission_ledger WHERE source_type='service_order' AND source_id=?",
                 Long.class, oid);
         assertThat(svc).isEqualTo(1L);
-        // manual 来源不进部分索引,同 source_id 仍可多条(手工双录是用户动作,不静默吞)。
+        // manual 提成现由 V239 业务级唯一索引去重(user_id/month/amount_cent/note):同额同月同 note 不再双录(防翻倍套现);service_order 来源提成不受影响。
         String mid = "man_" + key();
         staffRepository.insertCommission("cml_m1_" + mid, "usr_p1b", "2099-01", "manual", mid, 100L, "m", now);
         staffRepository.insertCommission("cml_m2_" + mid, "usr_p1b", "2099-01", "manual", mid, 100L, "m", now);
         Long man = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM staff_commission_ledger WHERE source_type='manual' AND source_id=?",
                 Long.class, mid);
-        assertThat(man).isEqualTo(2L);
+        assertThat(man).isEqualTo(1L);
     }
 
     @Test

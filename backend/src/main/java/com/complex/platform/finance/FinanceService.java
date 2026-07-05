@@ -932,7 +932,7 @@ public class FinanceService {
         // F-OPS-09：用本条目将落账的 merchant scope 判锁，与下方 ArApItemRecord.merchantId 同口径——
         // 商户 scope 仅受本商户封账约束，平台口径受任一封账约束。
         Optional<String> scope = authorizationService.currentMerchantScope();
-        // P1-A：落账即写入综合体维度(与 merchantId 同来源=创建方 token 的 scope),历史行由 V236 回填。
+        // P1-A：落账即写入综合体维度(与 merchantId 同来源=创建方 token 的 scope),历史行由 V243 回填。
         Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
         // R5 T7 硬拦截：禁止向已锁定经营日新增/回填台账，必须走补录审批。
         if (repository.lockedDailyCloseExistsForDate(dueDate, scope.orElse(null))) {
