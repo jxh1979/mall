@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type FacilityEquipmentRow = {
@@ -52,7 +53,13 @@ const LABELS: Record<string, string> = {
   handler: "处理人", supervisor: "主管", reporter: "报告人", // 验收方
   light: "轻度告警", to_work_order: "转工单", // 巡检异常模式
   template: "按模板", route: "按路线", // 排程模式（manual=手工，见上）
-  normal: "正常", abnormal: "异常", // 巡检结果
+  abnormal: "异常", // 巡检结果（normal=正常，已在设备状态里）
+  // 工单/巡检状态枚举中文（statusBadge 与行明细共用；normal/alarm/fault/maintenance/disabled/retired 已在设备状态里）：
+  pending_assign: "待派单", assigned: "已派单", processing: "处理中",
+  pending_acceptance: "待验收", pending_review: "待回访", closed: "已关闭",
+  suspended: "已挂起", overdue: "已逾期",
+  pending: "待巡检", rectifying: "整改中", rechecked: "已复检",
+  confirmed: "已确认", completed: "已完成",
 };
 const zh = (v?: string | null) => (v == null || v === "" ? "-" : (LABELS[v] ?? v));
 const DEFAULT_POLICIES: FacilityWorkOrderPolicyRow[] = [
@@ -83,7 +90,7 @@ function statusBadge(status?: string | null) {
         : ["maintenance", "assigned", "processing", "rechecked"].includes(value) ? "is-info"
           : ["disabled", "retired", "suspended"].includes(value) ? "is-warn"
             : "";
-  return <span className={`admin-badge ${kind}`}>{value}</span>;
+  return <span className={`admin-badge ${kind}`}>{zh(value)}</span>;
 }
 
 export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
@@ -104,6 +111,8 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [taskForm, setTaskForm] = React.useState({ templateId: "", inspectionType: "security", title: "", scheduleMode: "manual", assigneeId: "", scheduledDate: "", dueDate: "", spaceId: "" });
   const [selectedTaskId, setSelectedTaskId] = React.useState("");
   const [recordForm, setRecordForm] = React.useState({ result: "normal", inspectorId: "", note: "", abnormalNote: "" });
+  // 行明细抽屉：本页 8 张业务表整行可点 → 该行完整字段（枚举中文·日期 cnDate·人员 TraceLink）。一个 detail state 复用。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -297,6 +306,134 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
     await reload();
   }
 
+  function userTrace(userId?: string | null) {
+    return <TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={userId}>{userId ?? "-"}</TraceLink>;
+  }
+
+  function openEquipmentDetail(row: FacilityEquipmentRow) {
+    setDetail({
+      title: `设备明细 · ${row.name}`,
+      fields: [
+        { label: "设备编号", value: row.id },
+        { label: "名称", value: row.name },
+        { label: "分类", value: zh(row.equipmentType) },
+        { label: "状态", value: zh(row.status) },
+        { label: "品牌", value: row.brand ?? "-" },
+        { label: "责任人", value: userTrace(row.responsibleUserId) },
+        { label: "所在空间", value: row.spaceId ?? "-" },
+        { label: "维保周期", value: row.maintenanceCycleDays != null ? `${row.maintenanceCycleDays} 天` : "-" },
+        { label: "维保到期", value: cnDate(row.nextMaintenanceDue) },
+        { label: "告警来源", value: zh(row.alarmSource) },
+        { label: "告警说明", value: row.alarmNote ?? "-" },
+      ],
+    });
+  }
+
+  function openMaintenanceDueDetail(row: FacilityEquipmentRow) {
+    setDetail({
+      title: `维保到期明细 · ${row.name}`,
+      fields: [
+        { label: "设备编号", value: row.id },
+        { label: "名称", value: row.name },
+        { label: "分类", value: zh(row.equipmentType) },
+        { label: "责任人", value: userTrace(row.responsibleUserId) },
+        { label: "到期日", value: cnDate(row.nextMaintenanceDue) },
+      ],
+    });
+  }
+
+  function openWorkOrderDetail(row: FacilityWorkOrderRow) {
+    setDetail({
+      title: `工单明细 · ${row.code ?? row.id}`,
+      fields: [
+        { label: "工单编号", value: row.code ?? row.id },
+        { label: "标题", value: row.title },
+        { label: "类型", value: zh(row.workOrderType) },
+        { label: "优先级", value: zh(row.priority) },
+        { label: "状态", value: zh(row.status) },
+        { label: "是否逾期", value: row.overtime ? "已逾期" : "未逾期" },
+        { label: "关联设备", value: row.equipmentId ?? "-" },
+        { label: "处理人", value: userTrace(row.assigneeId) },
+        { label: "满意度", value: row.satisfaction != null ? `${row.satisfaction} 分` : "-" },
+      ],
+    });
+  }
+
+  function openOverdueWorkOrderDetail(row: FacilityWorkOrderRow) {
+    setDetail({
+      title: `逾期工单明细 · ${row.code ?? row.id}`,
+      fields: [
+        { label: "工单编号", value: row.code ?? row.id },
+        { label: "标题", value: row.title },
+        { label: "类型", value: zh(row.workOrderType) },
+        { label: "优先级", value: zh(row.priority) },
+        { label: "状态", value: `${zh(row.status)} · 已逾期` },
+        { label: "处理人", value: userTrace(row.assigneeId) },
+      ],
+    });
+  }
+
+  function openPolicyDetail(row: FacilityWorkOrderPolicyRow) {
+    setDetail({
+      title: `SLA 策略明细 · ${zh(row.workOrderType)}/${zh(row.priority)}`,
+      fields: [
+        { label: "工单类型", value: zh(row.workOrderType) },
+        { label: "优先级", value: zh(row.priority) },
+        { label: "响应时限", value: `${row.responseMinutes} 分钟` },
+        { label: "处理时限", value: `${row.handleMinutes} 分钟` },
+        { label: "是否需验收", value: row.requiresAcceptance ? "需验收" : "无需" },
+        { label: "验收方", value: row.requiresAcceptance ? zh(row.acceptanceBy) : "-" },
+        { label: "状态", value: row.active ? "启用" : "停用" },
+      ],
+    });
+  }
+
+  function openInspectionTemplateDetail(row: InspectionTemplateRow) {
+    setDetail({
+      title: `巡检模板明细 · ${row.name}`,
+      fields: [
+        { label: "模板编号", value: row.id },
+        { label: "模板名", value: row.name },
+        { label: "巡检类型", value: zh(row.inspectionType) },
+        { label: "巡检周期", value: row.cycleDays != null ? `${row.cycleDays} 天` : "-" },
+        { label: "异常模式", value: zh(row.abnormalMode) },
+        { label: "状态", value: row.active ? "启用" : "停用" },
+      ],
+    });
+  }
+
+  function openInspectionTaskDetail(row: InspectionTaskRow) {
+    setDetail({
+      title: `巡检任务明细 · ${row.title}`,
+      fields: [
+        { label: "任务编号", value: row.id },
+        { label: "标题", value: row.title },
+        { label: "巡检类型", value: zh(row.inspectionType) },
+        { label: "排程模式", value: zh(row.scheduleMode) },
+        { label: "状态", value: zh(row.status) },
+        { label: "巡检人", value: userTrace(row.assigneeId) },
+        { label: "计划日期", value: cnDate(row.scheduledDate) },
+        { label: "到期日期", value: cnDate(row.dueDate) },
+        { label: "关联模板", value: row.templateId ?? "-" },
+        { label: "关联工单", value: row.workOrderId ?? "-" },
+      ],
+    });
+  }
+
+  function openInspectionRecordDetail(row: InspectionRecordRow) {
+    setDetail({
+      title: `巡检记录明细 · ${row.id}`,
+      fields: [
+        { label: "记录编号", value: row.id },
+        { label: "关联任务", value: row.taskId },
+        { label: "结果", value: zh(row.result) },
+        { label: "巡检人", value: userTrace(row.inspectorId) },
+        { label: "异常说明", value: row.abnormalNote ?? "-" },
+        { label: "记录时间", value: cnDate(row.recordedAt) },
+      ],
+    });
+  }
+
   return (
     <section data-testid="facility-workbench-page">
       <AdminPageHeader title="楼宇运营工作台" description="设备台账、维保工单、楼宇巡检按后台真实端点闭环；设备告警和巡检异常仍由后端触发工单联动。" />
@@ -306,11 +443,13 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <table className="admin-table" data-testid="facility-equipment-table">
             <thead><tr><th>id</th><th>名称</th><th>分类</th><th>状态</th><th>品牌/责任人</th><th>维保到期</th><th>告警</th><th>操作</th></tr></thead>
             <tbody>{equipment.map((row) => (
-              <tr key={row.id} data-testid={`facility-equipment-${row.id}`}>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-equipment-${row.id}`}
+                onClick={() => openEquipmentDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEquipmentDetail(row); } }}>
                 <td>{row.id}</td><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{statusBadge(row.status)}</td>
-                <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td><td>{row.nextMaintenanceDue ?? "-"}</td>
+                <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td><td>{cnDate(row.nextMaintenanceDue)}</td>
                 <td>{zh(row.alarmSource)} {row.alarmNote ?? ""}</td>
-                <td>
+                <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`facility-equipment-select-${row.id}`} onClick={() => setStatusForm({ ...statusForm, equipmentId: row.id })}>选中</button>
                   <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-maintenance-done-${row.id}`} onClick={() => void maintenanceDone(row.id)}>维保完成</PermissionButton>
                 </td>
@@ -338,7 +477,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-maintenance-due-table">
             <thead><tr><th>设备</th><th>分类</th><th>责任人</th><th>到期日</th></tr></thead>
-            <tbody>{maintenanceDue.map((row) => <tr key={row.id} data-testid={`facility-maintenance-due-${row.id}`}><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{row.responsibleUserId ?? "-"}</td><td>{row.nextMaintenanceDue ?? "-"}</td></tr>)}</tbody>
+            <tbody>{maintenanceDue.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-maintenance-due-${row.id}`} onClick={() => openMaintenanceDueDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMaintenanceDueDetail(row); } }}><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{row.responsibleUserId ?? "-"}</td><td>{cnDate(row.nextMaintenanceDue)}</td></tr>)}</tbody>
           </table>
         </div>
 
@@ -361,9 +500,11 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <table className="admin-table" data-testid="facility-work-orders-table">
             <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th><th>满意度</th><th>操作</th></tr></thead>
             <tbody>{workOrders.map((row) => (
-              <tr key={row.id} data-testid={`facility-work-order-${row.id}`}>
-                <td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)}{row.overtime ? "（已逾期）" : ""}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td><td>{row.satisfaction ?? "-"}</td>
-                <td>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-${row.id}`}
+                onClick={() => openWorkOrderDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
+                <td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)}{row.overtime ? "（已逾期）" : ""}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td><td>{row.satisfaction ?? "-"}</td>
+                <td onClick={(event) => event.stopPropagation()}>
                   {row.status === "pending_assign" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-assign-${row.id}`} onClick={() => void assignWorkOrder(row.id)}>派单</PermissionButton> : null}
                   {row.status === "assigned" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-start-${row.id}`} onClick={() => void workOrderActionPost(row.id, "start")}>开始</PermissionButton> : null}
                   {row.status === "processing" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-complete-${row.id}`} onClick={() => void workOrderActionPost(row.id, "complete")}>完成</PermissionButton> : null}
@@ -383,14 +524,14 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-orders-overdue-table">
             <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th></tr></thead>
-            <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} data-testid={`facility-work-order-overdue-${row.id}`}><td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)} · 已逾期</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td></tr>)}</tbody>
+            <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-overdue-${row.id}`} onClick={() => openOverdueWorkOrderDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOverdueWorkOrderDetail(row); } }}><td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)} · 已逾期</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td></tr>)}</tbody>
           </table>
         </div>
         <h3>SLA 策略表</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-order-policies-table">
             <thead><tr><th>类型</th><th>优先级</th><th>响应/处理分钟</th><th>验收</th><th>状态</th></tr></thead>
-            <tbody>{policyRows.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} data-testid={`facility-work-order-policy-${row.workOrderType}-${row.priority}`}><td>{zh(row.workOrderType)}</td><td>{zh(row.priority)}</td><td>{row.responseMinutes} / {row.handleMinutes}</td><td>{row.requiresAcceptance ? zh(row.acceptanceBy) : "无需"}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
+            <tbody>{policyRows.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-policy-${row.workOrderType}-${row.priority}`} onClick={() => openPolicyDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPolicyDetail(row); } }}><td>{zh(row.workOrderType)}</td><td>{zh(row.priority)}</td><td>{row.responseMinutes} / {row.handleMinutes}</td><td>{row.requiresAcceptance ? zh(row.acceptanceBy) : "无需"}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-work-order-policy-form">
@@ -407,7 +548,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-templates-table">
             <thead><tr><th>id</th><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>状态</th></tr></thead>
-            <tbody>{inspectionTemplates.map((row) => <tr key={row.id} data-testid={`facility-inspection-template-${row.id}`}><td>{row.id}</td><td>{row.name}</td><td>{zh(row.inspectionType)}</td><td>{row.cycleDays ?? "-"}</td><td>{zh(row.abnormalMode)}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
+            <tbody>{inspectionTemplates.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-template-${row.id}`} onClick={() => openInspectionTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionTemplateDetail(row); } }}><td>{row.id}</td><td>{row.name}</td><td>{zh(row.inspectionType)}</td><td>{row.cycleDays ?? "-"}</td><td>{zh(row.abnormalMode)}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-inspection-template-form">
@@ -432,9 +573,11 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <table className="admin-table" data-testid="facility-inspection-tasks-table">
             <thead><tr><th>id</th><th>标题</th><th>类型/排程</th><th>状态</th><th>人员/日期</th><th>工单</th><th>操作</th></tr></thead>
             <tbody>{inspectionTasks.map((row) => (
-              <tr key={row.id} data-testid={`facility-inspection-task-${row.id}`}>
-                <td>{row.id}</td><td>{row.title}</td><td>{zh(row.inspectionType)} / {zh(row.scheduleMode)}</td><td>{statusBadge(row.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink> / {row.dueDate ?? row.scheduledDate ?? "-"}</td><td>{row.workOrderId ?? "-"}</td>
-                <td>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-task-${row.id}`}
+                onClick={() => openInspectionTaskDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionTaskDetail(row); } }}>
+                <td>{row.id}</td><td>{row.title}</td><td>{zh(row.inspectionType)} / {zh(row.scheduleMode)}</td><td>{statusBadge(row.status)}</td><td><span onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></span> / {cnDate(row.dueDate ?? row.scheduledDate)}</td><td>{row.workOrderId ?? "-"}</td>
+                <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`facility-inspection-select-task-${row.id}`} onClick={() => void selectInspectionTask(row.id)}>记录</button>
                   {row.status === "pending" ? <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid={`facility-inspection-start-${row.id}`} onClick={() => void startInspectionTask(row.id)}>开始</PermissionButton> : null}
                   {row.status === "rectifying" ? <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid={`facility-inspection-recheck-${row.id}`} onClick={() => void inspectionAction(row.id, "recheck")}>复检</PermissionButton> : null}
@@ -455,10 +598,11 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-records-table">
             <thead><tr><th>记录</th><th>任务</th><th>结果</th><th>巡检人</th><th>异常</th><th>时间</th></tr></thead>
-            <tbody>{inspectionRecords.map((row) => <tr key={row.id} data-testid={`facility-inspection-record-${row.id}`}><td>{row.id}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{row.recordedAt ?? "-"}</td></tr>)}</tbody>
+            <tbody>{inspectionRecords.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-record-${row.id}`} onClick={() => openInspectionRecordDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionRecordDetail(row); } }}><td>{row.id}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{cnDate(row.recordedAt)}</td></tr>)}</tbody>
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
