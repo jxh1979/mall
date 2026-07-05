@@ -380,6 +380,63 @@ class AmusementJdbcIntegrationTests {
                 .doesNotContain("project_space_8");
     }
 
+    @Test
+    void listVerificationItemsIsolatesByMerchantAndFiltersByDirectionAndDate() {
+        Instant day1 = Instant.parse("2026-07-01T10:00:00Z");
+        Instant day2 = Instant.parse("2026-07-03T10:00:00Z");
+        // 商户 A / B 各一项目（null 安全模板避免 FK 装配）。
+        repository.saveProject(new AmusementProjectRecord(
+                "amu_proj_a", "A Park", 10, "open", null, Map.of(), null, day1, day1, "merchant_amu_a"));
+        repository.saveProject(new AmusementProjectRecord(
+                "amu_proj_b", "B Park", 10, "open", null, Map.of(), null, day1, day1, "merchant_amu_b"));
+        repository.saveSession(new AmusementSessionRecord(
+                "amu_sess_a", "amu_proj_a", day1.plusSeconds(3600), day1.plusSeconds(7200), 10, 0, 0, "open", List.of(), day1, day1));
+        repository.saveSession(new AmusementSessionRecord(
+                "amu_sess_b", "amu_proj_b", day1.plusSeconds(3600), day1.plusSeconds(7200), 10, 0, 0, "open", List.of(), day1, day1));
+        // A 项目：day1 入场、day1 出场、day2 入场；B 项目：day1 入场（隔离对照）。
+        repository.saveVerification(AmusementVerificationRecord.entry(
+                "amv_a_entry1", "amu_proj_a", "amu_sess_a", "cred", "dev_a", "staff_a",
+                "success", null, List.of(), day1, 1, "ent_a1", "pt_a"));
+        repository.saveVerification(new AmusementVerificationRecord(
+                "amv_a_exit1", "amu_proj_a", "amu_sess_a", "cred", "dev_a", "staff_a",
+                "success", null, List.of(), day1, 1, "exit", day1, "amv_a_entry1", "ent_a1", "pt_a"));
+        repository.saveVerification(AmusementVerificationRecord.entry(
+                "amv_a_entry2", "amu_proj_a", "amu_sess_a", "cred", "dev_a", "staff_a",
+                "success", null, List.of(), day2, 1, "ent_a2", "pt_a"));
+        repository.saveVerification(AmusementVerificationRecord.entry(
+                "amv_b_entry1", "amu_proj_b", "amu_sess_b", "cred", "dev_b", "staff_b",
+                "success", null, List.of(), day1, 1, "ent_b1", "pt_b"));
+
+        AmusementVerificationQuery all = new AmusementVerificationQuery(null, null, null, null, null);
+
+        // 租户隔离：merchant_amu_a 只看到 A 项目 3 条，绝不含 B 项目记录。
+        assertThat(repository.listVerificationItems(all, "merchant_amu_a"))
+                .extracting(AmusementVerificationListItem::id)
+                .containsExactlyInAnyOrder("amv_a_entry1", "amv_a_exit1", "amv_a_entry2")
+                .doesNotContain("amv_b_entry1");
+        // 平台视角（merchantId=null）看到全部 4 条含 B。
+        assertThat(repository.listVerificationItems(all, null))
+                .extracting(AmusementVerificationListItem::id)
+                .contains("amv_a_entry1", "amv_a_exit1", "amv_a_entry2", "amv_b_entry1");
+
+        // 方向筛选：exit 只命中出场记录。
+        AmusementVerificationQuery exitOnly = new AmusementVerificationQuery(null, null, "exit", null, null);
+        assertThat(repository.listVerificationItems(exitOnly, "merchant_amu_a"))
+                .extracting(AmusementVerificationListItem::id)
+                .containsExactly("amv_a_exit1");
+
+        // 日期筛选：仅 day2（2026-07-03）当天命中 amv_a_entry2。
+        AmusementVerificationQuery day2Only = new AmusementVerificationQuery(
+                null, null, null, java.time.LocalDate.of(2026, 7, 3), java.time.LocalDate.of(2026, 7, 3));
+        assertThat(repository.listVerificationItems(day2Only, "merchant_amu_a"))
+                .extracting(AmusementVerificationListItem::id)
+                .containsExactly("amv_a_entry2");
+
+        // 关联通票号：无 ticket_verifications 交叉引用时为 null（LEFT JOIN 安全）。
+        assertThat(repository.listVerificationItems(all, "merchant_amu_a"))
+                .allSatisfy(item -> assertThat(item.linkedTicketNo()).isNull());
+    }
+
     private String regclass(String tableName) {
         return namedParameterJdbcTemplate.queryForObject("""
                 SELECT to_regclass(:qualified_name)::text

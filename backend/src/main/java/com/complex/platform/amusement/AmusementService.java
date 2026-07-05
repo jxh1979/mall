@@ -817,6 +817,30 @@ public class AmusementService implements AmusementVerificationPort {
         );
     }
 
+    /** 阶段3 只读：按 项目/场次/方向/日期 筛选核销记录（含关联通票号）。走同域 merchant scope 隔离范式。 */
+    public PageResponse<AmusementVerificationListItem> listVerificationItems(AmusementVerificationQuery query) {
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        return readPage(
+                "amusement.verification.viewed",
+                "amusement.verification.view_failed",
+                "amusement.verification.view",
+                "amusement_verification",
+                () -> repository.listVerificationItems(query, merchantId)
+        );
+    }
+
+    /** 阶段3 只读：并发在场容量快照。走同域 merchant scope 隔离范式。 */
+    public PageResponse<AmusementCapacitySnapshotRecord> listCapacitySnapshots() {
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        return readPage(
+                "amusement.verification.viewed",
+                "amusement.verification.view_failed",
+                "amusement.verification.view",
+                "amusement_capacity_snapshot",
+                () -> repository.listCapacitySnapshots(merchantId)
+        );
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "amusement.verification.execute")
     @Transactional
     public AmusementVerificationRecord createVerification(VerificationRequest request) {

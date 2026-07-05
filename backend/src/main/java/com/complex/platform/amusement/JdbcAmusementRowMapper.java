@@ -287,6 +287,39 @@ final class JdbcAmusementRowMapper {
         );
     }
 
+    AmusementVerificationListItem mapVerificationListItem(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementVerificationListItem(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("session_id"),
+                rs.getString("device_id"),
+                rs.getString("staff_id"),
+                rs.getString("verification_result"),
+                rs.getInt("verified_people"),
+                rs.getString("direction"),
+                instant(rs, "created_at"),
+                instant(rs, "released_at"),
+                rs.getString("entry_verification_id"),
+                rs.getString("entitlement_id"),
+                rs.getString("location_point_id"),
+                rs.getString("linked_ticket_no")
+        );
+    }
+
+    AmusementCapacitySnapshotRecord mapCapacitySnapshot(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementCapacitySnapshotRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("session_id"),
+                rs.getString("location_point_id"),
+                rs.getString("device_id"),
+                rs.getString("dimension"),
+                rs.getInt("capacity_limit"),
+                rs.getInt("occupied_count"),
+                instant(rs, "updated_at")
+        );
+    }
+
     private Instant instant(ResultSet rs, String column) throws SQLException {
         OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
         return value == null ? null : value.toInstant();

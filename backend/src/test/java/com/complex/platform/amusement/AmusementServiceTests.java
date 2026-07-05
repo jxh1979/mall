@@ -2920,6 +2920,26 @@ class AmusementServiceTests {
         }
 
         @Override
+        public List<AmusementVerificationListItem> listVerificationItems(AmusementVerificationQuery query, String merchantId) {
+            return verifications.values().stream()
+                    .filter(v -> merchantId == null
+                            || (projects.containsKey(v.projectId()) && merchantId.equals(projects.get(v.projectId()).merchantId())))
+                    .filter(v -> query.projectId() == null || query.projectId().equals(v.projectId()))
+                    .filter(v -> query.sessionId() == null || query.sessionId().equals(v.sessionId()))
+                    .filter(v -> query.direction() == null || query.direction().equals(v.direction()))
+                    .map(v -> new AmusementVerificationListItem(
+                            v.id(), v.projectId(), v.sessionId(), v.deviceId(), v.staffId(),
+                            v.verificationResult(), v.verifiedPeople(), v.direction(), v.createdAt(),
+                            v.releasedAt(), v.entryVerificationId(), v.entitlementId(), v.locationPointId(), null))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementCapacitySnapshotRecord> listCapacitySnapshots(String merchantId) {
+            return List.of();
+        }
+
+        @Override
         public List<AmusementManualOverrideRecord> listManualOverridesByMerchant(String merchantId) {
             return manualOverrides.values().stream()
                     .filter(o -> projects.containsKey(o.projectId()) && merchantId.equals(projects.get(o.projectId()).merchantId()))

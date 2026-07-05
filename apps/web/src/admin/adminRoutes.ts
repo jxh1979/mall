@@ -29,6 +29,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-AMU-002", label: "团体/包场", module: "游乐", group: "amusement", route: "/admin/amusement/group-bookings", requiredPermissions: ["amusement.group_booking.view"] },
   { pageId: "ADM-AMU-003", label: "安全巡检/事故", module: "游乐", group: "amusement", route: "/admin/amusement/safety-incidents", requiredPermissions: ["amusement.safety_inspection.view"] },
   { pageId: "ADM-AMU-004", label: "巡检到期任务", module: "游乐", group: "amusement", route: "/admin/amusement/inspection-tasks", requiredPermissions: ["amusement.safety_inspection.view"] },
+  { pageId: "ADM-AMU-005", label: "游乐核销记录", module: "游乐", group: "amusement", route: "/admin/amusement/verification-records", requiredPermissions: ["amusement.verification.view"] },
   { pageId: "ADM-INV-001", label: "库存台账", module: "库存", group: "inventory", route: "/admin/inventory/ledger", requiredPermissions: ["inventory.stock.view"] },
   { pageId: "ADM-FIN-002", label: "对账差异", module: "财务", group: "finance", route: "/admin/finance/reconciliation", requiredPermissions: ["finance.reconciliation.view"] },
   { pageId: "ADM-FIN-003", label: "退款分级授权", module: "财务", group: "finance", route: "/admin/finance/refund-authority", requiredPermissions: ["refund.authority.view"] },

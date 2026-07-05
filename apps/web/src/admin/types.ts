@@ -372,6 +372,26 @@ export type AmusementVerificationRow = {
   verificationResult?: string;
   verifiedPeople?: number | string;
   createdAt?: string;
+  // 阶段3：出场/释放语义 + 关联通票号（LEFT JOIN ticket_verifications.verification_no）。
+  direction?: string;
+  releasedAt?: string;
+  entryVerificationId?: string;
+  entitlementId?: string;
+  locationPointId?: string;
+  linkedTicketNo?: string;
+};
+
+// 阶段3：并发在场容量快照（在场容量看板）。
+export type AmusementCapacitySnapshotRow = {
+  id: string;
+  projectId?: string;
+  sessionId?: string;
+  locationPointId?: string;
+  deviceId?: string;
+  dimension?: string;
+  capacityLimit?: number | string;
+  occupiedCount?: number | string;
+  updatedAt?: string;
 };
 
 export type AmusementGroupBookingRow = {

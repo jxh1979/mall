@@ -1232,6 +1232,65 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public List<AmusementVerificationListItem> listVerificationItems(AmusementVerificationQuery query, String merchantId) {
+        // 阶段3 只读：核销记录本体 + 反查关联通票号（LEFT JOIN，未分流记录为 null）。
+        // merchant scope 沿用同域范式：租户视角加 project_id IN (SELECT ... WHERE merchant_id=:merchant_id)。
+        StringBuilder sql = new StringBuilder("""
+                SELECT av.id, av.project_id, av.session_id, av.device_id, av.staff_id,
+                       av.verification_result, av.verified_people, av.direction, av.created_at,
+                       av.released_at, av.entry_verification_id, av.entitlement_id, av.location_point_id,
+                       tv.verification_no AS linked_ticket_no
+                  FROM amusement_verifications av
+                  LEFT JOIN ticket_verifications tv ON tv.amusement_verification_id = av.id
+                 WHERE 1 = 1
+                """);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (merchantId != null && !merchantId.isBlank()) {
+            sql.append(" AND av.project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)");
+            params.addValue("merchant_id", merchantId);
+        }
+        if (query.projectId() != null) {
+            sql.append(" AND av.project_id = :project_id");
+            params.addValue("project_id", query.projectId());
+        }
+        if (query.sessionId() != null) {
+            sql.append(" AND av.session_id = :session_id");
+            params.addValue("session_id", query.sessionId());
+        }
+        if (query.direction() != null) {
+            sql.append(" AND av.direction = :direction");
+            params.addValue("direction", query.direction());
+        }
+        if (query.dateFrom() != null) {
+            sql.append(" AND av.created_at >= :date_from");
+            params.addValue("date_from", timestampWithTimeZone(query.dateFrom().atStartOfDay().toInstant(java.time.ZoneOffset.UTC)));
+        }
+        if (query.dateTo() != null) {
+            sql.append(" AND av.created_at < :date_to");
+            params.addValue("date_to", timestampWithTimeZone(query.dateTo().plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)));
+        }
+        sql.append(" ORDER BY av.created_at DESC, av.id");
+        return jdbcTemplate.query(sql.toString(), params, rowMapper::mapVerificationListItem);
+    }
+
+    @Override
+    public List<AmusementCapacitySnapshotRecord> listCapacitySnapshots(String merchantId) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT id, project_id, session_id, location_point_id, device_id,
+                       dimension, capacity_limit, occupied_count, updated_at
+                  FROM amusement_capacity_snapshot
+                 WHERE 1 = 1
+                """);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (merchantId != null && !merchantId.isBlank()) {
+            sql.append(" AND project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)");
+            params.addValue("merchant_id", merchantId);
+        }
+        sql.append(" ORDER BY dimension, project_id, updated_at DESC, id");
+        return jdbcTemplate.query(sql.toString(), params, rowMapper::mapCapacitySnapshot);
+    }
+
+    @Override
     public AmusementManualOverrideRecord saveManualOverride(AmusementManualOverrideRecord override) {
         jdbcTemplate.update("""
                 INSERT INTO amusement_manual_overrides (

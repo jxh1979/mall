@@ -229,6 +229,12 @@ public interface AmusementRepository {
 
     List<AmusementVerificationRecord> listVerificationsByMerchant(String merchantId);
 
+    /** 阶段3 只读：按 项目/场次/方向/日期 筛选核销记录并反查关联通票号；merchantId=null 为平台视角不加租户谓词。 */
+    List<AmusementVerificationListItem> listVerificationItems(AmusementVerificationQuery query, String merchantId);
+
+    /** 阶段3 只读：并发在场容量快照；merchantId=null 为平台视角不加租户谓词。 */
+    List<AmusementCapacitySnapshotRecord> listCapacitySnapshots(String merchantId);
+
     AmusementManualOverrideRecord saveManualOverride(AmusementManualOverrideRecord override);
 
     List<AmusementManualOverrideRecord> listManualOverrides();

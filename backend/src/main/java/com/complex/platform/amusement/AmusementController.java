@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.LocalDate;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -424,9 +427,23 @@ public class AmusementController {
     }
 
     @GetMapping("/verifications")
-    public ApiResponse<PageResponse<AmusementVerificationRecord>> listVerifications() {
+    public ApiResponse<PageResponse<AmusementVerificationListItem>> listVerifications(
+            @RequestParam(name = "projectId", required = false) String projectId,
+            @RequestParam(name = "sessionId", required = false) String sessionId,
+            @RequestParam(name = "direction", required = false) String direction,
+            @RequestParam(name = "dateFrom", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(name = "dateTo", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo
+    ) {
         authorizationService.requirePermission("amusement.verification.view");
-        return ApiResponse.ok(service.listVerifications());
+        return ApiResponse.ok(service.listVerificationItems(
+                new AmusementVerificationQuery(projectId, sessionId, direction, dateFrom, dateTo)));
+    }
+
+    /** 阶段3 只读：并发在场容量看板数据（occupied/capacity，维度 point_device/project/session）。 */
+    @GetMapping("/capacity-snapshots")
+    public ApiResponse<PageResponse<AmusementCapacitySnapshotRecord>> listCapacitySnapshots() {
+        authorizationService.requirePermission("amusement.verification.view");
+        return ApiResponse.ok(service.listCapacitySnapshots());
     }
 
     @PostMapping("/verifications")

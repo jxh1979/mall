@@ -2269,6 +2269,19 @@ body {
 .admin-row-clickable:hover td { background: var(--adm-accent-soft); }
 .admin-row-clickable:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: -2px; }
 
+/* 游乐核销记录页三视图切换（阶段3）。段式按钮，选中态用强调色反白。 */
+.admin-tabs { display: flex; gap: 6px; margin: 10px 0 14px; flex-wrap: wrap; }
+.admin-tabs > button {
+  padding: 6px 16px; border: 1px solid var(--adm-border-strong); border-radius: 999px;
+  background: #fff; color: var(--adm-text, #23262b); cursor: pointer; font-size: 13px;
+}
+.admin-tabs > button:hover { border-color: var(--adm-accent); }
+.admin-tabs > button.is-active { background: var(--adm-accent); color: #fff; border-color: var(--adm-accent); }
+.admin-tabs > button:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 2px; }
+/* 超容告警行：淡红底强调，配合单元格内红字“超容”。 */
+.admin-row-danger td { background: var(--adm-danger-bg); }
+.admin-row-danger:hover td { background: var(--adm-danger-bg); }
+
 .admin-drawer-overlay {
   position: fixed;
   inset: 0;
