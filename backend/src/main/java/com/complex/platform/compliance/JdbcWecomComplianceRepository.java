@@ -322,8 +322,8 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                 SELECT hit_id, conversation_id, message_id, rule_code, risk_level, matched_snippet,
                        status, reviewer_id, review_note, project_id, alert_id, created_at, updated_at
                   FROM wecom_risk_hits
-                 WHERE (:status IS NULL OR status = :status)
-                   AND (:conversation_id IS NULL OR conversation_id = :conversation_id)
+                 WHERE (CAST(:status AS text) IS NULL OR status = :status)
+                   AND (CAST(:conversation_id AS text) IS NULL OR conversation_id = :conversation_id)
                  ORDER BY created_at DESC, hit_id
                 """, new MapSqlParameterSource()
                 .addValue("status", status)
