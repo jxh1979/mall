@@ -7,7 +7,8 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
-import type { AdminPageProps, AmusementProjectRow, AmusementSessionRow } from "../types";
+import { hasPermissions } from "../security/PermissionGate";
+import type { AdminPageProps, AmusementProjectRow, AmusementSessionRow, AmusementVerificationRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
@@ -43,6 +44,7 @@ function readKpiFocusFromUrl(): KpiTarget | null {
 export function AmusementSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   const [sessions, setSessions] = React.useState<AmusementSessionRow[]>([]);
+  const [verifications, setVerifications] = React.useState<AmusementVerificationRow[]>([]);
   const [sessionName, setSessionName] = React.useState("验收场次");
   const [capacity, setCapacity] = React.useState("12");
   const [formError, setFormError] = React.useState("");
@@ -76,12 +78,15 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [nextProjects, nextSessions] = await Promise.all([
+      const canViewVerifications = hasPermissions(effectivePermissions, ["amusement.verification.view"]);
+      const [nextProjects, nextSessions, nextVerifications] = await Promise.all([
         api.get<AmusementProjectRow[]>("/api/v1/amusement/projects"),
         api.get<AmusementSessionRow[]>("/api/v1/amusement/sessions"),
+        canViewVerifications ? api.get<AmusementVerificationRow[]>("/api/v1/amusement/verifications") : Promise.resolve([]),
       ]);
       setProjects(nextProjects);
       setSessions(nextSessions);
+      setVerifications(nextVerifications);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -163,6 +168,19 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     </>
   );
 
+  // V232 补时间第2批：游乐核销记录展示「核销时间 + 对应场次」（场次以名称呈现，取自本页场次表）。
+  const sessionNameById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of sessions) map.set(row.id, String(row.sessionName ?? row.id));
+    return map;
+  }, [sessions]);
+  const verificationsSection = (
+    <>
+      <div className="admin-section-title">核销记录</div>
+      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-verifications-table"><thead><tr><th>核销时间</th><th>对应场次</th><th>结果</th><th>核销人数</th><th>设备</th></tr></thead><tbody>{verifications.length === 0 ? <tr data-testid="amusement-verifications-empty-row"><td colSpan={5}>暂无核销记录</td></tr> : verifications.map((row) => <tr key={row.id}><td>{display(row.createdAt)}</td><td>{display(sessionNameById.get(String(row.sessionId ?? "")) ?? row.sessionId)}</td><td>{formatBusinessStatus(row.verificationResult)}</td><td>{display(row.verifiedPeople)}</td><td>{display(row.deviceId)}</td></tr>)}</tbody></table></div>
+    </>
+  );
+
   const sessionsSection = (
     <>
       <div className="admin-section-title">场次</div>
@@ -199,6 +217,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-session-create" disabled={submitting} onClick={() => void createSession()}>新增验收场次</PermissionButton><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
             {projectsSection}
             {sessionsSection}
+            {verificationsSection}
           </>
         )}
       </AdminDataState>

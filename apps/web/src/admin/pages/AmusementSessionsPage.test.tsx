@@ -12,6 +12,10 @@ const SESSIONS = [
   { id: "s-1", project_id: "amuse-1", session_name: "上午场", starts_at: "2026-06-20T10:00:00Z", ends_at: "2026-06-20T11:00:00Z", capacity: 12, used_capacity: 3, locked_capacity: 2, status: "open" },
   { id: "s-2", project_id: "amuse-1", session_name: "下午场", starts_at: "2026-06-20T14:00:00Z", ends_at: "2026-06-20T15:00:00Z", capacity: 12, used_capacity: 0, locked_capacity: 4, status: "scheduled" },
 ];
+// V232 补时间第2批：游乐核销记录 fixture（核销时间 + 对应场次）。
+const VERIFICATIONS = [
+  { id: "v-1", project_id: "amuse-1", session_id: "s-1", device_id: "dev-1", verification_result: "success", verified_people: 2, created_at: "2026-06-20T10:15:00Z" },
+];
 
 function envelope(items: unknown[]): Response {
   return new Response(
@@ -26,6 +30,7 @@ function makeApi(): AdminApi {
     vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/amusement/projects")) return Promise.resolve(envelope(PROJECTS));
+      if (url.includes("/amusement/verifications")) return Promise.resolve(envelope(VERIFICATIONS));
       if (url.includes("/amusement/sessions")) return Promise.resolve(envelope(SESSIONS));
       return Promise.resolve(envelope([]));
     }),
@@ -104,6 +109,14 @@ describe("AmusementSessionsPage KPI 聚焦视图", () => {
     expect(text).not.toContain("locked");
     expect(text).toContain("项目数");
     expect(text).toContain("已锁定容量");
+  });
+
+  it("V232：核销记录展示核销时间 + 对应场次（场次以名称呈现）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-verifications-table")).toBeTruthy());
+    const table = screen.getByTestId("amusement-verifications-table");
+    expect(table.textContent).toContain("2026-06-20T10:15:00Z");
+    expect(table.textContent).toContain("上午场");
   });
 });
 

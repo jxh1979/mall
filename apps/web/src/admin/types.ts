@@ -361,6 +361,18 @@ export type AmusementSessionRow = {
   status?: string;
 };
 
+// V232 补时间第2批：游乐核销记录（核销时间 createdAt + 对应场次 sessionId + 核销结果）。
+export type AmusementVerificationRow = {
+  id: string;
+  projectId?: string;
+  sessionId?: string;
+  deviceId?: string;
+  staffId?: string;
+  verificationResult?: string;
+  verifiedPeople?: number | string;
+  createdAt?: string;
+};
+
 export type AmusementGroupBookingRow = {
   id: string;
   projectId?: string;

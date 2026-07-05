@@ -277,6 +277,15 @@ class AmusementJdbcIntegrationTests {
         assertThat(repository.listVerifications())
                 .extracting(AmusementVerificationRecord::id, AmusementVerificationRecord::verificationResult)
                 .contains(tuple("verification_jdbc", "success"));
+        // V232 补时间第2批：游乐核销记录必须持久化「对应场次 session_id + 核销时间 created_at」（正路 amusement_verifications
+        // 已含二者）。round-trip 证伪：迁移/表漏 session_id 或 created_at 不落库则本断言红。
+        assertThat(repository.listVerifications())
+                .filteredOn(v -> "verification_jdbc".equals(v.id()))
+                .singleElement()
+                .satisfies(v -> {
+                    assertThat(v.sessionId()).isEqualTo("session_jdbc");
+                    assertThat(v.createdAt()).isEqualTo(now);
+                });
         assertThat(repository.listManualOverrides())
                 .extracting(AmusementManualOverrideRecord::id, AmusementManualOverrideRecord::status)
                 .contains(tuple("override_jdbc", "approved"));

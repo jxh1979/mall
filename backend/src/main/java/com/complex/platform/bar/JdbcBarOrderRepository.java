@@ -91,14 +91,14 @@ final class JdbcBarOrderRepository {
                     amount_cent, delivery_status, created_at, updated_at,
                     actual_pour_volume, loss_volume,
                     voided, void_reason, voided_at, voided_by_user_id, return_to_stock,
-                    is_gift
+                    is_gift, delivered_at
                 )
                 VALUES (
                     :id, :order_id, :product_id, :product_name, :quantity, :unit_price_cent,
                     :amount_cent, :delivery_status, :created_at, :updated_at,
                     :actual_pour_volume, :loss_volume,
                     :voided, :void_reason, :voided_at, :voided_by_user_id, :return_to_stock,
-                    :is_gift
+                    :is_gift, :delivered_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     product_name = EXCLUDED.product_name,
@@ -114,7 +114,8 @@ final class JdbcBarOrderRepository {
                     voided_at = EXCLUDED.voided_at,
                     voided_by_user_id = EXCLUDED.voided_by_user_id,
                     return_to_stock = EXCLUDED.return_to_stock,
-                    is_gift = EXCLUDED.is_gift
+                    is_gift = EXCLUDED.is_gift,
+                    delivered_at = EXCLUDED.delivered_at
                 """, parameterSource.orderItemParameters(item));
         return item;
     }

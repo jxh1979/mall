@@ -218,7 +218,8 @@ final class JdbcBarRowMapper {
                 nullableInstant(resultSet, "voided_at"),
                 resultSet.getString("voided_by_user_id"),
                 resultSet.getBoolean("return_to_stock"),
-                resultSet.getBoolean("is_gift")
+                resultSet.getBoolean("is_gift"),
+                nullableInstant(resultSet, "delivered_at")
         );
     }
 

@@ -23,7 +23,10 @@ public record BarOrderItemRecord(
         boolean returnToStock,
         // V153 赠菜/赠酒标记（F-TXN-05）：随单赠送项 → amount_cent=0 不计消费额，
         // 但按商品内部结算价 × 数量从该销售提成基数扣除（成本不计提成）。
-        boolean isGift
+        boolean isGift,
+        // V232 补时间第2批：送达/配送到位时刻（deliverOrder 把该明细置 delivered 的当时时刻）；
+        // 未送达(pending)/撤单(voided)/历史无留痕 → null，不冒充。
+        Instant deliveredAt
 ) {
 
     /** 向后兼容构造器（V091 退菜退酒前签名）：既有调用方零改动，新字段默认未撤单、非赠送。 */
@@ -43,7 +46,7 @@ public record BarOrderItemRecord(
     ) {
         this(id, orderId, productId, productName, quantity, unitPriceCent, amountCent, deliveryStatus,
                 createdAt, updatedAt, actualPourVolume, lossVolume,
-                false, null, null, null, false, false);
+                false, null, null, null, false, false, null);
     }
 
     /**
@@ -67,7 +70,7 @@ public record BarOrderItemRecord(
     ) {
         this(id, orderId, productId, productName, quantity, unitPriceCent, amountCent, deliveryStatus,
                 createdAt, updatedAt, actualPourVolume, lossVolume,
-                false, null, null, null, false, isGift);
+                false, null, null, null, false, isGift, null);
     }
 
     /** 向后兼容构造器（V153 赠菜标记前 = V091 退菜退酒签名）：既有调用方零改动，新字段默认非赠送。 */
@@ -92,6 +95,6 @@ public record BarOrderItemRecord(
     ) {
         this(id, orderId, productId, productName, quantity, unitPriceCent, amountCent, deliveryStatus,
                 createdAt, updatedAt, actualPourVolume, lossVolume,
-                voided, voidReason, voidedAt, voidedByUserId, returnToStock, false);
+                voided, voidReason, voidedAt, voidedByUserId, returnToStock, false, null);
     }
 }

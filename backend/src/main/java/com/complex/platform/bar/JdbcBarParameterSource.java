@@ -228,7 +228,8 @@ final class JdbcBarParameterSource {
                 .addValue("voided_at", timestampWithTimeZone(item.voidedAt()))
                 .addValue("voided_by_user_id", item.voidedByUserId())
                 .addValue("return_to_stock", item.returnToStock())
-                .addValue("is_gift", item.isGift());
+                .addValue("is_gift", item.isGift())
+                .addValue("delivered_at", timestampWithTimeZone(item.deliveredAt()));
     }
 
     MapSqlParameterSource orderItemVoidParameters(BarOrderItemVoidRecord voidRecord) {

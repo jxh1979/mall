@@ -292,6 +292,28 @@ class BarJdbcIntegrationTests {
                 null,
                 0L
         ));
+        // V232 补时间第2批：已送达明细带 delivered_at；未送达明细留 null（证伪：service 层不写 delivered_at 或迁移漏列则本断言红）。
+        repository.saveOrderItem(new BarOrderItemRecord(
+                "order_item_delivered_jdbc",
+                "order_jdbc",
+                "product_jdbc",
+                "Whisky",
+                1,
+                128800L,
+                128800L,
+                "delivered",
+                now,
+                now,
+                200,
+                0L,
+                false,
+                null,
+                null,
+                null,
+                false,
+                false,
+                now
+        ));
         repository.saveProductionTicket(new BarProductionTicketRecord(
                 "ticket_jdbc",
                 "order_jdbc",
@@ -359,6 +381,11 @@ class BarJdbcIntegrationTests {
         assertThat(repository.listOrderItems("order_jdbc"))
                 .extracting(BarOrderItemRecord::quantity, BarOrderItemRecord::amountCent, BarOrderItemRecord::deliveryStatus)
                 .contains(tuple(1, 128800L, "pending"));
+        // V232：未送达明细 delivered_at 为空，已送达明细 delivered_at≈送达当时（round-trip 证明列/mapper/param/INSERT 通链）。
+        assertThat(repository.findOrderItemById("order_item_jdbc"))
+                .get().extracting(BarOrderItemRecord::deliveredAt).isNull();
+        assertThat(repository.findOrderItemById("order_item_delivered_jdbc"))
+                .get().extracting(BarOrderItemRecord::deliveredAt).isEqualTo(now);
         assertThat(repository.findBillById("bill_jdbc"))
                 .get()
                 .extracting(BarBillRecord::payableAmountCent, BarBillRecord::salesRoleType)

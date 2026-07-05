@@ -358,7 +358,13 @@ public class BarOrderService {
                     now,
                     actualPourVolume,
                     lossVolume,
-                    item.isGift()
+                    false,
+                    null,
+                    null,
+                    null,
+                    false,
+                    item.isGift(),
+                    now
             ));
         }
         BarOrderRecord deliveredOrder = repository.saveOrder(new BarOrderRecord(
@@ -730,7 +736,8 @@ public class BarOrderService {
                 now,
                 actorId,
                 returnToStock,
-                item.isGift()));
+                item.isGift(),
+                item.deliveredAt()));
 
         // 退菜退酒为高危需审批动作：流水 status 承载审批生命周期。
         // approvalRequired=TRUE → 落 'pending'（待审批，由审批决策回写 approved/rejected）；FALSE → 'applied'（直接生效）。
@@ -969,6 +976,8 @@ public class BarOrderService {
 
         // 4) 明细回滚：清除 voided 标记，恢复 void 前出品状态（已出品→delivered，未出品→pending）。
         String restoredDeliveryStatus = current.wasDelivered() ? "delivered" : "pending";
+        // V232：撤单回滚——恢复 delivered 保留原送达时刻，恢复 pending 清空(未送达)。
+        Instant restoredDeliveredAt = current.wasDelivered() ? item.deliveredAt() : null;
         repository.saveOrderItem(new BarOrderItemRecord(
                 item.id(),
                 item.orderId(),
@@ -987,7 +996,8 @@ public class BarOrderService {
                 null,
                 null,
                 false,
-                item.isGift()));
+                item.isGift(),
+                restoredDeliveredAt));
     }
 
     /** 退菜退酒资金回退：在关联账单上做减项（未结=waiver 减应付；已结=refund 冲正）；无账单则仅明细取消不动资金。 */
