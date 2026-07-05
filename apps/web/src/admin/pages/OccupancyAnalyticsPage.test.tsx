@@ -108,3 +108,70 @@ describe("OccupancyAnalyticsPage KPI 聚焦视图", () => {
     expect(screen.queryByTestId("occupancy-vacant-table")).toBeNull();
   });
 });
+
+describe("OccupancyAnalyticsPage 行明细抽屉（整行可点·日期中文·零英文枚举）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/analytics/occupancy");
+  });
+
+  it("点空置铺位行 → 抽屉含中文类型/状态+面积，无英文枚举", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("occupancy-vacant-row-sp-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("occupancy-vacant-row-sp-1"));
+    const text = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(text).toContain("A101");
+    expect(text).toContain("商铺");
+    expect(text).toContain("空置");
+    expect(text).not.toContain("shop");
+    expect(text).not.toContain("vacant");
+  });
+
+  it("点到期合同行 → 抽屉含中文到期日+合同 TraceLink，不直出 ISO", async () => {
+    const navigateTo = vi.fn();
+    const props: AdminPageProps = {
+      api: makeApi(),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+      navigateTo,
+    };
+    render(<OccupancyAnalyticsPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("occupancy-expiring-row-c-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("occupancy-expiring-row-c-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("商户甲");
+    expect(text).toContain("2026年8月1日");
+    expect(text).not.toContain("2026-08-01");
+    // 抽屉内合同引用为可点 TraceLink（navigateTo 存在时才渲染为链接）。
+    expect(drawer.querySelector('[data-testid="trace-link-ADM-CONT-001-c-1"]')).toBeTruthy();
+  });
+
+  it("点到期合同 TraceLink → 下钻、不弹抽屉（stopPropagation）", async () => {
+    const navigateTo = vi.fn();
+    const props: AdminPageProps = {
+      api: makeApi(),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+      navigateTo,
+    };
+    render(<OccupancyAnalyticsPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("trace-link-ADM-CONT-001-c-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("trace-link-ADM-CONT-001-c-1"));
+    expect(navigateTo).toHaveBeenCalled();
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点空置铺位行 → Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("occupancy-vacant-row-sp-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("occupancy-vacant-row-sp-2"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+});

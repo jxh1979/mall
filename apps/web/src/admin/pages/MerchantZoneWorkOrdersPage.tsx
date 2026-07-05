@@ -6,6 +6,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 
 const WO_CREATE = ["merchant.service_work_order.create"];
@@ -80,6 +81,25 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   const [workOrderType, setWorkOrderType] = React.useState("repair");
   const [priority, setPriority] = React.useState("medium");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该工单完整字段（类型/优先级/状态中文·时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openWorkOrderDetail(row: MerchantWorkOrderRow) {
+    setDetail({
+      title: `工单明细 · ${row.title ?? row.id}`,
+      fields: [
+        { label: "标题", value: row.title ?? "—" },
+        { label: "类型", value: TYPE_LABELS[row.workOrderType ?? ""] ?? row.workOrderType ?? "—" },
+        { label: "优先级", value: PRIORITY_LABELS[row.priority ?? ""] ?? row.priority ?? "—" },
+        { label: "状态", value: STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—" },
+        { label: "问题描述", value: row.description ?? "—" },
+        { label: "截止时间", value: cnDate(row.dueAt) },
+        { label: "处理结论", value: row.resolution ?? "—" },
+        { label: "提交时间", value: cnDate(row.createdAt) },
+        { label: "工单编号", value: row.id },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -188,14 +208,16 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
             </thead>
             <tbody>
               {paged.pageRows.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-zone-work-order-row-${row.id}`}
+                  onClick={() => openWorkOrderDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
                   <td>{row.title ?? row.id}</td>
                   <td>{TYPE_LABELS[row.workOrderType ?? ""] ?? row.workOrderType ?? "-"}</td>
                   <td>{PRIORITY_LABELS[row.priority ?? ""] ?? row.priority ?? "-"}</td>
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
-                  <td>{row.dueAt ?? "-"}</td>
+                  <td>{cnDate(row.dueAt)}</td>
                   <td>{row.resolution ?? "-"}</td>
-                  <td>{row.createdAt ?? "-"}</td>
+                  <td>{cnDate(row.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -203,6 +225,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
           <TablePager testid="merchant-zone-work-orders-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

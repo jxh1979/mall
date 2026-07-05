@@ -7,7 +7,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 // 3 行：2 未关闭 + 1 已关闭 → 总数3、进行中(未终结)2。
 const ROWS = [
-  { id: "wo-1", work_order_type: "repair", title: "工单甲", priority: "high", status: "processing" },
+  { id: "wo-1", work_order_type: "repair", title: "工单甲", priority: "high", status: "processing", due_at: "2026-07-10T09:00:00Z", resolution: "更换密封圈", created_at: "2026-07-05T08:30:00Z" },
   { id: "wo-2", work_order_type: "service", title: "工单乙", priority: "low", status: "closed" },
   { id: "wo-3", work_order_type: "complaint", title: "工单丙", priority: "medium", status: "created" },
 ];
@@ -78,5 +78,44 @@ describe("MerchantZoneWorkOrdersPage KPI 聚焦视图", () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-zone-work-orders-kpi-focus-banner")).toBeTruthy());
     expect(screen.queryByTestId("merchant-zone-work-orders-summary")).toBeNull();
+  });
+});
+
+describe("MerchantZoneWorkOrdersPage 行明细抽屉（整行可点·日期中文·零英文枚举）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/merchant-zone/work-orders");
+  });
+
+  it("点工单行 → 抽屉含标题+中文类型/优先级/状态+中文时间，无英文枚举与 ISO 原文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-work-order-row-wo-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-row-wo-1"));
+    const text = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(text).toContain("工单甲");
+    expect(text).toContain("报修");
+    expect(text).toContain("处理中");
+    expect(text).toContain("2026年7月10日");
+    expect(text).toContain("2026年7月5日");
+    expect(text).not.toContain("repair");
+    expect(text).not.toContain("processing");
+    expect(text).not.toContain("2026-07-10T");
+  });
+
+  it("列内截止/提交时间为中文，不直出 ISO 原文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-work-orders-table")).toBeTruthy());
+    const table = screen.getByTestId("merchant-zone-work-orders-table").textContent ?? "";
+    expect(table).toContain("2026年7月10日");
+    expect(table).not.toContain("2026-07-10T");
+  });
+
+  it("点工单行 → Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-work-order-row-wo-3")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-row-wo-3"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });

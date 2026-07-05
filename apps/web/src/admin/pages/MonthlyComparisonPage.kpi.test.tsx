@@ -51,3 +51,34 @@ describe("MonthlyComparisonPage 指标按业务域跳源页", () => {
     expect(nav).toHaveBeenCalledWith(target);
   });
 });
+
+describe("MonthlyComparisonPage 行明细抽屉（整行可点·口径中文·金额率格式化）", () => {
+  it("点指标行 → 抽屉含中文口径+格式化本月/环比，无英文口径码", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("monthly-comparison-row-revenue.ticket")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("monthly-comparison-row-revenue.ticket"));
+    const text = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(text).toContain("售票收入");
+    expect(text).toContain("月累计");
+    expect(text).toContain("¥1"); // cent=100 → ¥1
+    expect(text).toContain("+10.00%"); // momPct=0.1
+    expect(text).not.toContain("monthly_sum");
+  });
+
+  it("点指标域跳转按钮 → navigateTo、不弹抽屉（stopPropagation）", async () => {
+    const nav = renderPage();
+    await waitFor(() => expect(screen.getByTestId("monthly-comparison-metric-revenue.ticket")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("monthly-comparison-metric-revenue.ticket"));
+    expect(nav).toHaveBeenCalledWith("ADM-TKT-003");
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点指标行 → Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("monthly-comparison-row-occupancy.rate")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("monthly-comparison-row-occupancy.rate"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+});

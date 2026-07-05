@@ -5,6 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, MerchantZoneFeeRecipientRow } from "../types";
 
 const MANAGE_PERMS = ["merchant.portal.fee_recipient.manage"];
@@ -53,6 +54,21 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
   const [name, setName] = React.useState("");
   const [phone, setPhone] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该接收人完整字段（费用事件/状态中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openRecipientDetail(row: MerchantZoneFeeRecipientRow) {
+    setDetail({
+      title: `费用接收人明细 · ${row.recipientName ?? row.id}`,
+      fields: [
+        { label: "费用事件", value: FEE_EVENT_LABELS[row.feeEvent ?? ""] ?? row.feeEvent ?? "—" },
+        { label: "接收人", value: row.recipientName ?? "—" },
+        { label: "手机号", value: row.recipientPhone ?? "—" },
+        { label: "状态", value: row.status === "active" ? "生效" : "已停用" },
+        { label: "接收人编号", value: row.id },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -128,12 +144,14 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
         </thead>
         <tbody>
           {(kpiFocus ? focusRows : rows).map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-zone-fee-recipient-row-${row.id}`}
+              onClick={() => openRecipientDetail(row)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRecipientDetail(row); } }}>
               <td>{FEE_EVENT_LABELS[row.feeEvent ?? ""] ?? row.feeEvent ?? "-"}</td>
               <td>{row.recipientName ?? "-"}</td>
               <td>{row.recipientPhone ?? "-"}</td>
               <td>{row.status === "active" ? "生效" : "已停用"}</td>
-              <td>
+              <td onClick={(event) => event.stopPropagation()}>
                 {row.status === "active" ? (
                   <PermissionButton
                     permissionsState={effectivePermissions}
@@ -189,6 +207,7 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

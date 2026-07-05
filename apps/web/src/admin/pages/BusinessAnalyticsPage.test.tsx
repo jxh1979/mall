@@ -96,3 +96,63 @@ describe("BusinessAnalyticsPage 分组列英文枚举业务化", () => {
     expect(table).not.toContain("project:pj-1");
   });
 });
+
+describe("BusinessAnalyticsPage 行明细抽屉（整行可点·域/趋势/风险/状态中文）", () => {
+  function richResolver() {
+    return vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/analytics/review-locks")) return Promise.resolve([]);
+      if (path.includes("/analytics/business-metric-snapshots")) return Promise.resolve(SNAPSHOTS);
+      if (path.includes("/analytics/traffic-hourly")) return Promise.resolve({ buckets: [] });
+      if (path.includes("/analytics/metric-definitions")) {
+        return Promise.resolve([{ metricKey: "revenue.bar", domain: "bar", unit: "元", calculationNote: "酒水实收合计", status: "active" }]);
+      }
+      if (path.includes("/analytics/metric-anomalies")) {
+        return Promise.resolve([{ id: "an-1", metricKey: "revenue.bar", riskLevel: "high", observedValue: 100, expectedValue: 200, summary: "环比骤降", status: "open", detectedAt: "2026-07-02T10:00:00Z" }]);
+      }
+      return Promise.resolve([]);
+    });
+  }
+
+  it("点指标快照行 → 抽屉含中文域/趋势/口径快照值，无英文枚举", async () => {
+    renderPage(makeApi(richResolver()));
+    await waitFor(() => expect(screen.getByTestId("business-analytics-row-s1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("business-analytics-row-s1"));
+    const text = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(text).toContain("上升"); // trendDirection up
+    expect(text).toContain("平台"); // segmentType platform
+    expect(text).not.toContain("up");
+    expect(text).not.toContain("platform");
+  });
+
+  it("点指标定义行 → 抽屉含中文状态（启用），无 active 原码", async () => {
+    renderPage(makeApi(richResolver()));
+    await waitFor(() => expect(screen.getByTestId("business-analytics-definition-row-revenue.bar")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("business-analytics-definition-row-revenue.bar"));
+    const text = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(text).toContain("酒水实收合计");
+    expect(text).toContain("启用");
+    expect(text).not.toContain("active");
+  });
+
+  it("点异常指标行 → 抽屉含中文风险（高）/状态（待处置）+中文时间，无英文枚举与 ISO", async () => {
+    renderPage(makeApi(richResolver()));
+    await waitFor(() => expect(screen.getByTestId("business-analytics-anomaly-row-an-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("business-analytics-anomaly-row-an-1"));
+    const text = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(text).toContain("高");
+    expect(text).toContain("待处置");
+    expect(text).toContain("环比骤降");
+    expect(text).not.toContain("high");
+    expect(text).not.toContain("open");
+    expect(text).not.toContain("2026-07-02T");
+  });
+
+  it("点异常指标行 → Esc 关闭抽屉", async () => {
+    renderPage(makeApi(richResolver()));
+    await waitFor(() => expect(screen.getByTestId("business-analytics-anomaly-row-an-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("business-analytics-anomaly-row-an-1"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+});

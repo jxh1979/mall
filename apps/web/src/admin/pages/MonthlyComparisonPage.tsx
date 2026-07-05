@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type ComparisonRow = {
@@ -96,6 +97,38 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
   const [holidayData, setHolidayData] = React.useState<HolidayComparison | null>(null);
   const [holidayError, setHolidayError] = React.useState<string | null>(null);
   const canExport = hasPermissions(effectivePermissions, ["analytics.report.export"]);
+  // 行明细抽屉：整行可点 → 该指标对比完整字段（口径中文·金额/率格式化）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openComparisonDetail(row: ComparisonRow) {
+    setDetail({
+      title: `月度对比明细 · ${row.label ?? row.metricKey}`,
+      fields: [
+        { label: "指标", value: row.label ?? row.metricKey },
+        { label: "口径", value: AGG_LABELS[row.aggregation ?? ""] ?? row.aggregation ?? "—" },
+        { label: "本月", value: fmt(row.current, row.unit) },
+        { label: "上月", value: fmt(row.prevMonth, row.unit) },
+        { label: "环比", value: pct(row.momPct) },
+        { label: "去年同月", value: fmt(row.yoySameMonth, row.unit) },
+        { label: "同比", value: pct(row.yoyPct) },
+      ],
+    });
+  }
+
+  function openHolidayDetail(row: HolidayRow) {
+    setDetail({
+      title: `节假日对比明细 · ${row.label ?? row.metricKey}`,
+      fields: [
+        { label: "指标", value: row.label ?? row.metricKey },
+        { label: "口径", value: row.aggregation === "monthly_sum" ? "区间累计" : "期末时点" },
+        { label: "今年合计", value: fmt(row.currentTotal, row.unit) },
+        { label: "今年日均", value: row.aggregation === "monthly_sum" ? fmt(row.currentDailyAvg, row.unit) : "—" },
+        { label: "去年合计", value: fmt(row.previousTotal, row.unit) },
+        { label: "去年日均", value: row.aggregation === "monthly_sum" ? fmt(row.previousDailyAvg, row.unit) : "—" },
+        { label: "同比", value: pct(row.yoyPct) },
+      ],
+    });
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -192,8 +225,10 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
             <thead><tr><th>指标</th><th>口径</th><th>本月</th><th>上月</th><th>环比</th><th>去年同月</th><th>同比</th></tr></thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.metricKey}>
-                  <td>{DOMAIN_PAGE[row.domain ?? ""] ? <button type="button" className="admin-trace-link" data-testid={`monthly-comparison-metric-${row.metricKey}`} onClick={() => navigateTo?.(DOMAIN_PAGE[row.domain ?? ""]!)}>{row.label ?? row.metricKey}</button> : (row.label ?? row.metricKey)}</td>
+                <tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`monthly-comparison-row-${row.metricKey}`}
+                  onClick={() => openComparisonDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openComparisonDetail(row); } }}>
+                  <td onClick={(event) => { if (DOMAIN_PAGE[row.domain ?? ""]) event.stopPropagation(); }}>{DOMAIN_PAGE[row.domain ?? ""] ? <button type="button" className="admin-trace-link" data-testid={`monthly-comparison-metric-${row.metricKey}`} onClick={() => navigateTo?.(DOMAIN_PAGE[row.domain ?? ""]!)}>{row.label ?? row.metricKey}</button> : (row.label ?? row.metricKey)}</td>
                   <td>{AGG_LABELS[row.aggregation ?? ""] ?? row.aggregation ?? "—"}</td>
                   <td>{fmt(row.current, row.unit)}</td>
                   <td>{fmt(row.prevMonth, row.unit)}</td>
@@ -234,7 +269,9 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
             <thead><tr><th>指标</th><th>口径</th><th>今年合计</th><th>今年日均</th><th>去年合计</th><th>去年日均</th><th>同比</th></tr></thead>
             <tbody>
               {(holidayData.rows ?? []).map((row) => (
-                <tr key={row.metricKey}>
+                <tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`holiday-comparison-row-${row.metricKey}`}
+                  onClick={() => openHolidayDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openHolidayDetail(row); } }}>
                   <td>{row.label ?? row.metricKey}</td>
                   <td>{row.aggregation === "monthly_sum" ? "区间累计" : "期末时点"}</td>
                   <td>{fmt(row.currentTotal, row.unit)}</td>
@@ -248,6 +285,7 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
           </table>
         </div>
       ) : null}
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

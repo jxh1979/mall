@@ -77,3 +77,38 @@ describe("MerchantZoneFeeRecipientsPage KPI 聚焦视图", () => {
     expect(table).not.toContain("utilities");
   });
 });
+
+describe("MerchantZoneFeeRecipientsPage 行明细抽屉（整行可点·零英文枚举）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant-zone/fee-recipients");
+  });
+
+  it("点接收人行 → 抽屉含中文费用事件+接收人+中文状态，无英文枚举", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-fee-recipient-row-fr-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-fee-recipient-row-fr-1"));
+    const text = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(text).toContain("租金");
+    expect(text).toContain("王店长");
+    expect(text).toContain("生效");
+    expect(text).not.toContain("rent");
+    expect(text).not.toContain("active");
+  });
+
+  it("点停用按钮触发停用、不弹抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-fee-recipient-off-fr-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-fee-recipient-off-fr-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点接收人行 → Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-fee-recipient-row-fr-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-fee-recipient-row-fr-2"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+});

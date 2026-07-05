@@ -3,6 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type ShiftRow = { id: string; userId?: string; workDate?: string; startAt?: string; endAt?: string; pointSpaceIds?: string[]; note?: string };
@@ -35,6 +36,38 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
   const [end, setEnd] = React.useState("");
   const [points, setPoints] = React.useState("");
   const [note, setNote] = React.useState("");
+  // 行明细抽屉：整行可点 → 该排班/考勤完整字段（枚举中文·时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openShiftDetail(row: ShiftRow) {
+    setDetail({
+      title: `排班明细 · ${row.userId ?? row.id}`,
+      fields: [
+        { label: "员工", value: row.userId ?? "—" },
+        { label: "开始", value: localTime(row.startAt) },
+        { label: "结束", value: localTime(row.endAt) },
+        { label: "点位", value: row.pointSpaceIds?.length ? row.pointSpaceIds.join("、") : "未指定" },
+        { label: "备注", value: row.note ?? "—" },
+        { label: "排班编号", value: row.id },
+      ],
+    });
+  }
+
+  function openAttendanceDetail(row: AttendanceRow) {
+    setDetail({
+      title: `考勤明细 · ${row.userId ?? row.id}`,
+      fields: [
+        { label: "员工", value: row.userId ?? "—" },
+        { label: "类型", value: TYPE_LABELS[row.punchType ?? ""] ?? row.punchType ?? "—" },
+        { label: "打卡时间(服务器)", value: localTime(row.punchedAt) },
+        { label: "方式", value: METHOD_LABELS[row.method ?? ""] ?? row.method ?? "—" },
+        { label: "判定", value: JUDGE_LABELS[row.judgement ?? ""] ?? row.judgement ?? "—" },
+        { label: "点位", value: row.spaceId ?? "—" },
+        { label: "设备指纹", value: row.deviceFingerprint ?? "—" },
+        { label: "考勤编号", value: row.id },
+      ],
+    });
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -97,7 +130,9 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
             <thead><tr><th>员工</th><th>开始</th><th>结束</th><th>点位</th><th>备注</th></tr></thead>
             <tbody>
               {shifts.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`shift-row-${row.id}`}
+                  onClick={() => openShiftDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openShiftDetail(row); } }}>
                   <td>{row.userId ?? "—"}</td>
                   <td>{localTime(row.startAt)}</td>
                   <td>{localTime(row.endAt)}</td>
@@ -114,7 +149,9 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
             <thead><tr><th>员工</th><th>类型</th><th>打卡时间(服务器)</th><th>方式</th><th>判定</th><th>点位</th></tr></thead>
             <tbody>
               {attendance.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`attendance-row-${row.id}`}
+                  onClick={() => openAttendanceDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAttendanceDetail(row); } }}>
                   <td>{row.userId ?? "—"}</td>
                   <td>{TYPE_LABELS[row.punchType ?? ""] ?? row.punchType ?? "—"}</td>
                   <td>{localTime(row.punchedAt)}</td>
@@ -127,6 +164,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

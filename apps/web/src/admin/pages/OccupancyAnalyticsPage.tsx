@@ -5,6 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type MetricValue = { value?: number | string | null; unit?: string | null; note?: string | null };
@@ -51,6 +52,8 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
   const [vacant, setVacant] = React.useState<VacantRow[]>([]);
   const [expiring, setExpiring] = React.useState<ExpiringRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTable | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该空置铺位/到期合同完整字段（类型/状态中文·面积·日期中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -101,6 +104,36 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
   const pagedVacant = usePagedRows(vacant, 10);
   const pagedExpiring = usePagedRows(expiring, 10);
 
+  function openVacantDetail(row: VacantRow) {
+    setDetail({
+      title: `空置铺位明细 · ${row.spaceName ?? row.spaceId}`,
+      fields: [
+        { label: "铺位", value: row.spaceName ?? row.spaceId },
+        { label: "类型", value: TYPE_LABELS[row.spaceType ?? ""] ?? row.spaceType ?? "—" },
+        { label: "楼层", value: row.floorNo ?? "—" },
+        { label: "面积", value: sqm(row.areaSqm === undefined ? null : Number(row.areaSqm)) },
+        { label: "状态", value: RENTAL_LABELS[row.rentalStatus ?? ""] ?? row.rentalStatus ?? "—" },
+        { label: "铺位编号", value: row.spaceId },
+      ],
+    });
+  }
+
+  function openExpiringDetail(row: ExpiringRow) {
+    setDetail({
+      title: `到期预警明细 · ${row.merchantName ?? row.merchantId ?? row.contractId}`,
+      fields: [
+        {
+          label: "合同",
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId}</TraceLink>,
+        },
+        { label: "商户", value: row.merchantName ?? row.merchantId ?? "—" },
+        { label: "到期日", value: cnDate(row.expiryDate) },
+        { label: "剩余天数", value: row.daysLeft === undefined ? "—" : `${row.daysLeft} 天` },
+        { label: "绑定面积", value: sqm(row.boundArea === undefined ? null : Number(row.boundArea)) },
+      ],
+    });
+  }
+
   const vacantSection = (
     <>
       <h3>空置铺位明细(实时,与出租率同口径)</h3>
@@ -109,7 +142,9 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
           <thead><tr><th>铺位</th><th>类型</th><th>楼层</th><th>面积</th><th>状态</th></tr></thead>
           <tbody>
             {pagedVacant.pageRows.map((row) => (
-              <tr key={row.spaceId}>
+              <tr key={row.spaceId} className="admin-row-clickable" tabIndex={0} data-testid={`occupancy-vacant-row-${row.spaceId}`}
+                onClick={() => openVacantDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openVacantDetail(row); } }}>
                 <td>{row.spaceName ?? row.spaceId}</td>
                 <td>{TYPE_LABELS[row.spaceType ?? ""] ?? row.spaceType ?? "—"}</td>
                 <td>{row.floorNo ?? "—"}</td>
@@ -132,10 +167,12 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
           <thead><tr><th>合同</th><th>商户</th><th>到期日</th><th>剩余天数</th><th>绑定面积</th></tr></thead>
           <tbody>
             {pagedExpiring.pageRows.map((row) => (
-              <tr key={row.contractId}>
-                <td><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId}</TraceLink></td>
+              <tr key={row.contractId} className="admin-row-clickable" tabIndex={0} data-testid={`occupancy-expiring-row-${row.contractId}`}
+                onClick={() => openExpiringDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openExpiringDetail(row); } }}>
+                <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId}</TraceLink></td>
                 <td>{row.merchantName ?? row.merchantId ?? "—"}</td>
-                <td>{row.expiryDate ?? "—"}</td>
+                <td>{cnDate(row.expiryDate)}</td>
                 <td>{row.daysLeft ?? "—"}</td>
                 <td>{sqm(row.boundArea === undefined ? null : Number(row.boundArea))}</td>
               </tr>
@@ -175,6 +212,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

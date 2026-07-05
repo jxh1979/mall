@@ -5,6 +5,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { Sparkline, MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, BusinessMetricSnapshotRow, BusinessReviewLockRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
 import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -95,6 +96,56 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
   const [reviewLocks, setReviewLocks] = React.useState<BusinessReviewLockRow[]>([]);
   const [locking, setLocking] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 指标快照/定义/异常完整字段（域/趋势/风险/状态中文·时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function segmentLabel(row: BusinessMetricSnapshotRow) {
+    return row.segmentType === "platform" || !row.segmentType ? "平台" : `${formatBusinessStatus(row.segmentType)}:${row.segmentId ?? "-"}`;
+  }
+
+  function openSnapshotDetail(row: BusinessMetricSnapshotRow) {
+    setDetail({
+      title: `指标快照明细 · ${formatMetricName(row.metricKey)}`,
+      fields: [
+        { label: TEXT.businessDate, value: row.businessDate ?? "—" },
+        { label: TEXT.metricKey, value: formatMetricName(row.metricKey) },
+        { label: TEXT.domain, value: formatMetricDomain(row.domain) },
+        { label: TEXT.actualValue, value: formatNumber(row.actualValue) },
+        { label: TEXT.baselineValue, value: formatNumber(row.baselineValue) },
+        { label: TEXT.varianceRate, value: formatPercent(row.varianceRate) },
+        { label: TEXT.trend, value: trendLabel(row.trendDirection) },
+        { label: TEXT.segment, value: segmentLabel(row) },
+      ],
+    });
+  }
+
+  function openDefinitionDetail(row: MetricDefinitionRow) {
+    setDetail({
+      title: `指标定义明细 · ${formatMetricName(row.metricKey)}`,
+      fields: [
+        { label: TEXT.metricKey, value: formatMetricName(row.metricKey) },
+        { label: TEXT.domain, value: formatMetricDomain(row.domain) },
+        { label: "单位", value: row.unit ?? "—" },
+        { label: "口径说明", value: row.calculationNote ?? "—" },
+        { label: "状态", value: row.status === "active" ? "启用" : "停用(数据源未就绪)" },
+      ],
+    });
+  }
+
+  function openAnomalyDetail(row: MetricAnomalyRow) {
+    setDetail({
+      title: `异常指标明细 · ${formatMetricName(row.metricKey)}`,
+      fields: [
+        { label: TEXT.metricKey, value: formatMetricName(row.metricKey) },
+        { label: TEXT.riskLevel, value: row.riskLevel === "high" ? "高" : row.riskLevel === "suspicious" ? "可疑" : formatBusinessStatus(row.riskLevel) },
+        { label: TEXT.observed, value: formatNumber(row.observedValue) },
+        { label: TEXT.expected, value: formatNumber(row.expectedValue) },
+        { label: TEXT.summary, value: row.summary ?? "—" },
+        { label: "状态", value: row.status === "open" ? "待处置" : formatBusinessStatus(row.status) },
+        { label: "发现时间", value: row.detectedAt ? new Date(row.detectedAt).toLocaleString("zh-CN", { hour12: false }) : "—" },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -313,7 +364,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-table">
                 <thead><tr><th>{TEXT.businessDate}</th><th>{TEXT.metricKey}</th><th>{TEXT.domain}</th><th>{TEXT.actualValue}</th><th>{TEXT.baselineValue}</th><th>{TEXT.varianceRate}</th><th>{TEXT.trend}</th><th>{TEXT.segment}</th></tr></thead>
-                <tbody>{(kpiFocus === "upward" ? filteredSnapshots.filter((r) => r.trendDirection === "up") : filteredSnapshots).map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{row.segmentType === "platform" || !row.segmentType ? "平台" : `${formatBusinessStatus(row.segmentType)}:${row.segmentId ?? "-"}`}</td></tr>)}</tbody>
+                <tbody>{(kpiFocus === "upward" ? filteredSnapshots.filter((r) => r.trendDirection === "up") : filteredSnapshots).map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`} className="admin-row-clickable" tabIndex={0} data-testid={`business-analytics-row-${row.snapshotId ?? row.metricKey}`} onClick={() => openSnapshotDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSnapshotDetail(row); } }}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{segmentLabel(row)}</td></tr>)}</tbody>
               </table>
             </div>
             )}
@@ -324,7 +375,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
               <table className="admin-table" data-testid="business-analytics-definitions-table">
                 <thead><tr><th>指标</th><th>业务域</th><th>单位</th><th>口径说明</th><th>状态</th></tr></thead>
                 <tbody>{definitions.map((row) => (
-                  <tr key={row.metricKey}>
+                  <tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`business-analytics-definition-row-${row.metricKey}`}
+                    onClick={() => openDefinitionDetail(row)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDefinitionDetail(row); } }}>
                     <td title={row.metricKey}>{formatMetricName(row.metricKey)}</td>
                     <td>{formatMetricDomain(row.domain)}</td>
                     <td>{row.unit ?? "—"}</td>
@@ -342,7 +395,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
               <table className="admin-table" data-testid="business-analytics-anomalies-table">
                 <thead><tr><th>指标</th><th>风险</th><th>观测值</th><th>基准值</th><th>说明</th><th>状态</th><th>发现时间</th></tr></thead>
                 <tbody>{anomalies.map((row) => (
-                  <tr key={row.id}>
+                  <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`business-analytics-anomaly-row-${row.id}`}
+                    onClick={() => openAnomalyDetail(row)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAnomalyDetail(row); } }}>
                     <td title={row.metricKey}>{formatMetricName(row.metricKey)}</td>
                     <td>{row.riskLevel === "high" ? "高" : row.riskLevel === "suspicious" ? "可疑" : formatBusinessStatus(row.riskLevel)}</td>
                     <td>{formatNumber(row.observedValue)}</td>
@@ -358,6 +413,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
