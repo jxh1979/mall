@@ -45,6 +45,27 @@ const METRIC_LABELS: Record<string, string> = {
   "supply.low_stock": "缺货预警",
   "contract.expiring_90d": "90 天内到期合同",
   "mwo.backlog": "商户工单积压",
+  // 财务应收（账龄 / 余额 / 回款）
+  "ar.balance": "欠费总额",
+  "ar.aging_31_60": "应收账龄 31-60 天",
+  "ar.aging_61_90": "应收账龄 61-90 天",
+  "ar.aging_90p": "应收账龄 90 天以上",
+  "ar.collected_mtd": "本月已收",
+  "ar.receivable_mtd": "本月应收",
+  "ar.collection_rate_mtd": "本月回款率",
+  // 能耗异常
+  "energy.abnormal_count": "能耗异常数",
+  // 供应链
+  "supply.balance": "库存结余",
+  "supply.received": "入库数量",
+  // 物业工单时效
+  "wo.response_hours_p50": "工单响应时长中位",
+  "wo.handle_hours_p50": "工单处理时长中位",
+  "wo.overdue_rate": "工单超时率",
+  "wo.backlog": "工单积压",
+  // 商户服务工单时效
+  "mwo.handle_hours_p50": "商户工单处理时长中位",
+  "mwo.overdue_rate": "商户工单逾期率",
 };
 
 // 业务域码 → 业务域名（经营分析筛选与表格列用）。
@@ -61,6 +82,10 @@ const DOMAIN_LABELS: Record<string, string> = {
   energy: "能耗",
   leasing: "租赁",
   occupancy: "出租",
+  customer: "客户",
+  inventory: "库存",
+  governance: "治理",
+  facility: "设施",
   unknown: "未分域",
 };
 
