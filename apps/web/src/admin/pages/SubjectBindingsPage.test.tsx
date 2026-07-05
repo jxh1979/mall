@@ -93,3 +93,29 @@ describe("SubjectBindingsPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("subject-bindings-table").textContent).toContain("有效");
   });
 });
+
+describe("SubjectBindingsPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/subject-bindings");
+  });
+
+  it("点绑定行 → 抽屉含该行字段（状态中文），Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("subject-bindings-row-b-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("subject-bindings-row-b-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("运营甲");
+    expect(drawer.textContent).toContain("有效");
+    expect(drawer.textContent).not.toContain("active");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点行内单选按钮不触发抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("subject-bindings-select-b-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("subject-bindings-select-b-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});

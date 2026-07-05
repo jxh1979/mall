@@ -81,3 +81,30 @@ describe("RiskAlertsPage KPI 聚焦视图", () => {
     expect(table).not.toContain("open");
   });
 });
+
+describe("RiskAlertsPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/risk/alerts");
+  });
+
+  it("点预警行 → 抽屉含该行字段（类型/状态中文），Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("risk-alert-row-ra-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("risk-alert-row-ra-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("异常折扣");
+    expect(drawer.textContent).toContain("员工行为");
+    expect(drawer.textContent).toContain("进行中");
+    expect(drawer.textContent).not.toContain("staff_behavior");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点行内“选择”按钮不触发抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("risk-alert-select-ra-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("risk-alert-select-ra-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});

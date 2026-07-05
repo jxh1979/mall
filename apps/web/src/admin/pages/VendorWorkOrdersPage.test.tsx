@@ -84,3 +84,33 @@ describe("VendorWorkOrdersPage KPI 聚焦视图", () => {
     expect(table).not.toContain("completed");
   });
 });
+
+describe("VendorWorkOrdersPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/vendor/work-orders");
+  });
+
+  it("点工单行 → 抽屉含该行字段（类型中文），Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("vendor-work-order-row-wo-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("vendor-work-order-row-wo-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("WO-1");
+    expect(drawer.textContent).toContain("空调报修");
+    expect(drawer.textContent).toContain("报修");
+    expect(drawer.textContent).not.toContain("repair");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点设备行 → 抽屉含设备字段，状态中文无英文枚举", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("vendor-work-order-equipment-row-eq-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("vendor-work-order-equipment-row-eq-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("中央空调");
+    expect(drawer.textContent).toContain("正常");
+    expect(drawer.textContent).not.toContain("normal");
+  });
+});

@@ -8,6 +8,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, SubjectBindingRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 // 后端写权限码（PlatformController：/business-entity-bindings/{id}/change）
 const BINDING_MANAGE_PERMISSION = "entity.binding.manage";
@@ -48,6 +49,25 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该主体绑定完整字段（状态中文·四类主体展开·留痕证据）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openBindingDetail(row: SubjectBindingRow) {
+    setDetail({
+      title: `主体绑定明细 · ${display(row.businessObjectId)}`,
+      fields: [
+        { label: "业务对象", value: display(row.businessObjectId) },
+        { label: "运营主体", value: display(row.operatorSubject) },
+        { label: "合同主体", value: display(row.contractSubject) },
+        { label: "合同主体编号", value: display(row.contractSubjectId) },
+        { label: "结算主体", value: display(row.settlementSubject) },
+        { label: "结算主体编号", value: display(row.settlementSubjectId) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "留痕证据", value: display(row.auditEvidenceRef) },
+        { label: "绑定编号", value: display(row.id) },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -175,8 +195,10 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
               <table className="admin-table" data-testid="subject-bindings-table">
                 <thead><tr><th>{TEXT.select}</th><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>合同主体 ID</th><th>结算主体</th><th>结算主体 ID</th><th>状态</th><th>留痕证据</th></tr></thead>
                 <tbody>{visibleBindings.map((row) => (
-                  <tr key={row.id}>
-                    <td><input type="radio" data-testid={`subject-bindings-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                  <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`subject-bindings-row-${row.id}`}
+                    onClick={() => openBindingDetail(row)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBindingDetail(row); } }}>
+                    <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`subject-bindings-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                     <td>{display(row.businessObjectId)}</td>
                     <td>{display(row.operatorSubject)}</td>
                     <td>{display(row.contractSubject)}</td>
@@ -192,6 +214,7 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 type SubordinateRow = { id: string; username: string; partnerOrgId: string; accountType: string; status: string };
 type CompletionRow = { subordinateId: string; username: string; status: string; workOrderTotal: number; workOrderCompleted: number; inspectionTotal: number; inspectionCompleted: number };
@@ -19,6 +20,34 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
   const [rows, setRows] = React.useState<SubordinateRow[]>([]);
   const [completion, setCompletion] = React.useState<CompletionRow[]>([]);
   const [username, setUsername] = React.useState("");
+  // 行明细抽屉：整行可点 → 该下属账号/完成情况完整字段（状态中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openSubordinateDetail(row: SubordinateRow) {
+    setDetail({
+      title: `下属账号明细 · ${row.username}`,
+      fields: [
+        { label: "登录名", value: row.username },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "所属机构", value: row.partnerOrgId ?? "—" },
+        { label: "账号类型", value: formatBusinessStatus(row.accountType) },
+        { label: "账号编号", value: row.id },
+      ],
+    });
+  }
+
+  function openCompletionDetail(row: CompletionRow) {
+    setDetail({
+      title: `下属工作完成情况 · ${row.username}`,
+      fields: [
+        { label: "登录名", value: row.username },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "工单完成", value: `${row.workOrderCompleted}/${row.workOrderTotal}` },
+        { label: "巡检完成", value: `${row.inspectionCompleted}/${row.inspectionTotal}` },
+        { label: "账号编号", value: row.subordinateId },
+      ],
+    });
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -59,9 +88,11 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
               {rows.length === 0 ? (
                 <tr><td colSpan={4} className="admin-empty" data-testid="vendor-subordinates-empty">暂无下属账号</td></tr>
               ) : rows.map((row) => (
-                <tr key={row.id} data-testid={`vendor-subordinate-${row.id}`}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-subordinate-${row.id}`}
+                  onClick={() => openSubordinateDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSubordinateDetail(row); } }}>
                   <td>{row.id}</td><td>{row.username}</td><td>{formatBusinessStatus(row.status)}</td>
-                  <td>{row.status === "active" && (
+                  <td onClick={(event) => event.stopPropagation()}>{row.status === "active" && (
                     <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
                       data-testid={`vendor-subordinate-disable-${row.id}`} onClick={() => void disableSubordinate(row.id)}>停用</PermissionButton>
                   )}</td>
@@ -84,7 +115,9 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
               {completion.length === 0 ? (
                 <tr><td colSpan={4} className="admin-empty" data-testid="vendor-subordinate-completion-empty">暂无数据</td></tr>
               ) : completion.map((row) => (
-                <tr key={row.subordinateId} data-testid={`vendor-subordinate-completion-${row.subordinateId}`}>
+                <tr key={row.subordinateId} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-subordinate-completion-${row.subordinateId}`}
+                  onClick={() => openCompletionDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCompletionDetail(row); } }}>
                   <td>{row.username}</td><td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.workOrderCompleted}/{row.workOrderTotal}</td>
                   <td>{row.inspectionCompleted}/{row.inspectionTotal}</td>
@@ -94,6 +127,7 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

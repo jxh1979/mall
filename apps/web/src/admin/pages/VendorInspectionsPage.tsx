@@ -7,6 +7,7 @@ import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type VendorInspectionTaskRow = {
@@ -72,6 +73,8 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
   const [exceptionNote, setExceptionNote] = React.useState("巡检发现异常，待物业跟进");
   const [inspectorId, setInspectorId] = React.useState("vendor-user");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该巡检任务/模板完整字段（枚举中文·时间中文·处理人可溯源）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -178,21 +181,58 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
   const pendingRows = rows.filter((row) => !DONE_STATUSES.includes(row.status ?? ""));
   const focusRows = kpiFocus?.subset === "pending" ? pendingRows : rows;
 
+  function openTaskDetail(row: VendorInspectionTaskRow) {
+    setDetail({
+      title: `巡检任务明细 · ${row.title ?? row.id}`,
+      fields: [
+        { label: "任务", value: row.title ?? row.id },
+        { label: "类型", value: formatBusinessStatus(row.inspectionType) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "排程", value: formatBusinessStatus(row.scheduleMode) },
+        { label: "空间", value: row.spaceId ?? "—" },
+        { label: "处理人", value: <TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "—"}</TraceLink> },
+        { label: "计划日期", value: cnDate(row.scheduledDate) },
+        { label: "到期日期", value: cnDate(row.dueDate) },
+        { label: "关联工单", value: row.workOrderId ?? "—" },
+        { label: "使用模板", value: row.templateId ?? "—" },
+        { label: "任务编号", value: row.id },
+      ],
+    });
+  }
+
+  function openTemplateDetail(row: VendorInspectionTemplateRow) {
+    setDetail({
+      title: `巡检模板明细 · ${row.name ?? row.id}`,
+      fields: [
+        { label: "模板", value: row.name ?? row.id },
+        { label: "类型", value: formatBusinessStatus(row.inspectionType) },
+        { label: "周期", value: row.cycleDays ? `${row.cycleDays} 天` : "—" },
+        { label: "异常模式", value: formatBusinessStatus(row.abnormalMode) },
+        { label: "检查要求", value: checklistText(row.checklist) },
+        { label: "范围说明", value: row.scopeNote ?? "—" },
+        { label: "状态", value: row.active === false ? "停用" : "启用" },
+        { label: "模板编号", value: row.id },
+      ],
+    });
+  }
+
   const tasksTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="vendor-inspections-table">
         <thead><tr><th>选择</th><th>任务</th><th>类型</th><th>状态</th><th>排程</th><th>空间</th><th>处理人</th><th>计划/到期</th><th>关联工单</th></tr></thead>
         <tbody>
           {(kpiFocus ? focusRows : rows).map((row) => (
-            <tr key={row.id}>
-              <td><input type="radio" data-testid={`vendor-inspection-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-inspection-row-${row.id}`}
+              onClick={() => openTaskDetail(row)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTaskDetail(row); } }}>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`vendor-inspection-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
               <td>{row.title ?? row.id}</td>
               <td>{formatBusinessStatus(row.inspectionType)}</td>
               <td>{formatBusinessStatus(row.status)}</td>
               <td>{formatBusinessStatus(row.scheduleMode)}</td>
               <td>{row.spaceId ?? "-"}</td>
-              <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
-              <td>{row.scheduledDate ?? "-"} / {row.dueDate ?? "-"}</td>
+              <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
+              <td>{cnDate(row.scheduledDate)} / {cnDate(row.dueDate)}</td>
               <td>{row.workOrderId ?? "-"}</td>
             </tr>
           ))}
@@ -242,7 +282,9 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
                 <thead><tr><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>检查要求</th><th>状态</th></tr></thead>
                 <tbody>
                   {(visibleTemplates.length > 0 ? visibleTemplates : templates).map((row) => (
-                    <tr key={row.id}>
+                    <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-inspection-template-row-${row.id}`}
+                      onClick={() => openTemplateDetail(row)}
+                      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
                       <td>{row.name ?? row.id}</td>
                       <td>{formatBusinessStatus(row.inspectionType)}</td>
                       <td>{row.cycleDays ?? "-"}</td>
@@ -260,6 +302,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

@@ -78,3 +78,22 @@ describe("VendorSiteEntriesPage KPI 聚焦视图", () => {
     expect(table).not.toContain("in_progress");
   });
 });
+
+describe("VendorSiteEntriesPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/vendor/site-entries");
+  });
+
+  it("点报备行 → 抽屉含该报备字段（状态中文），Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("vendor-site-entry-row-se-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("vendor-site-entry-row-se-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("围挡施工");
+    expect(drawer.textContent).toContain("进行中");
+    expect(drawer.textContent).not.toContain("in_progress");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});

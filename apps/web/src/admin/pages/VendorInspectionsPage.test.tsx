@@ -83,3 +83,32 @@ describe("VendorInspectionsPage KPI 聚焦视图", () => {
     expect(table).not.toContain("scheduled");
   });
 });
+
+describe("VendorInspectionsPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/vendor/inspections");
+  });
+
+  it("点巡检任务行 → 抽屉含该任务字段（类型中文），Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("vendor-inspection-row-it-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("vendor-inspection-row-it-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("夜间安防巡检");
+    expect(drawer.textContent).toContain("安防");
+    expect(drawer.textContent).not.toContain("security");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点模板行 → 抽屉含模板字段，异常模式中文无英文枚举", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("vendor-inspection-template-row-tpl-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("vendor-inspection-template-row-tpl-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("安防模板");
+    expect(drawer.textContent).toContain("转工单");
+    expect(drawer.textContent).not.toContain("to_work_order");
+  });
+});

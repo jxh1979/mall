@@ -6,6 +6,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type VendorSiteEntryRow = {
@@ -71,6 +72,8 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
   const [completionNote, setCompletionNote] = React.useState("施工已完工，材料已上传");
   const [completionAttachments, setCompletionAttachments] = React.useState("att-site-completion");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该进场报备完整字段（枚举中文·计划日期中文·完工材料展开）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -174,17 +177,42 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
   const enterableRows = rows.filter((row) => ENTERABLE_STATUSES.includes(row.status ?? ""));
   const focusRows = kpiFocus?.subset === "enterable" ? enterableRows : rows;
 
+  function openEntryDetail(row: VendorSiteEntryRow) {
+    setDetail({
+      title: `进场报备明细 · ${row.workScope ?? row.id}`,
+      fields: [
+        { label: "施工范围", value: row.workScope ?? row.id },
+        { label: "项目", value: row.projectId ?? "—" },
+        { label: "空间", value: row.spaceId ?? "—" },
+        { label: "计划开始", value: cnDate(row.plannedStartDate) },
+        { label: "计划结束", value: cnDate(row.plannedEndDate) },
+        { label: "施工人数", value: row.crewCount ?? "—" },
+        { label: "联系人", value: row.contactName ?? "—" },
+        { label: "联系电话", value: row.contactPhone ?? "—" },
+        { label: "外包账号", value: row.vendorUserId ?? "—" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "审核意见", value: row.reviewComment ?? "—" },
+        { label: "验收意见", value: row.acceptanceComment ?? "—" },
+        { label: "完工说明", value: row.completionNote ?? "—" },
+        { label: "完工材料", value: (row.completionAttachmentIds ?? []).join("、") || "—" },
+        { label: "报备编号", value: row.id },
+      ],
+    });
+  }
+
   const entriesTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="vendor-site-entries-table">
         <thead><tr><th>选择</th><th>施工范围</th><th>项目/空间</th><th>计划日期</th><th>人数</th><th>联系人</th><th>外包账号</th><th>状态</th><th>审核/验收</th><th>完工材料</th></tr></thead>
         <tbody>
           {(kpiFocus ? focusRows : rows).map((row) => (
-            <tr key={row.id}>
-              <td><input type="radio" data-testid={`vendor-site-entry-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-site-entry-row-${row.id}`}
+              onClick={() => openEntryDetail(row)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEntryDetail(row); } }}>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`vendor-site-entry-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
               <td>{row.workScope ?? row.id}</td>
               <td>{row.projectId ?? "-"} / {row.spaceId ?? "-"}</td>
-              <td>{row.plannedStartDate ?? "-"} ~ {row.plannedEndDate ?? "-"}</td>
+              <td>{cnDate(row.plannedStartDate)} ~ {cnDate(row.plannedEndDate)}</td>
               <td>{row.crewCount ?? "-"}</td>
               <td>{row.contactName ?? "-"} / {row.contactPhone ?? "-"}</td>
               <td>{row.vendorUserId ?? "-"}</td>
@@ -243,6 +271,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

@@ -13,6 +13,7 @@ import { rowMatchesKeyword } from "../components/rowSearch";
 // 后端写权限码（AnalyticsController：/risk-alerts/{id}/resolve）
 const RISK_RESOLVE_PERMISSION = "analytics.risk_alert.manage";
 import { usePagedRows, TablePager } from "../components/TablePager";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, RiskAlertRow } from "../types";
 
 const HIGH_LEVELS = ["high", "critical"];
@@ -89,6 +90,26 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
   const [resolutionReason, setResolutionReason] = React.useState("已复核订单、员工和支付证据，确认关闭");
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该预警完整字段（枚举中文·时间中文·证据附件展开）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openAlertDetail(row: RiskAlertRow) {
+    setDetail({
+      title: `风控预警明细 · ${row.summary ?? row.id}`,
+      fields: [
+        { label: TEXT.alertType, value: formatBusinessStatus(row.alertType) },
+        { label: TEXT.riskLevel, value: formatBusinessStatus(row.riskLevel) },
+        { label: TEXT.objectType, value: row.objectType ?? "—" },
+        { label: TEXT.objectId, value: row.objectId ?? "—" },
+        { label: TEXT.summary, value: row.summary ?? "—" },
+        { label: TEXT.owner, value: row.ownerUserId ?? "—" },
+        { label: TEXT.status, value: formatBusinessStatus(row.status) },
+        { label: TEXT.evidenceLabel, value: evidenceList(row) },
+        { label: TEXT.createdAt, value: cnDate(row.createdAt) },
+        { label: "预警编号", value: row.id },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -196,8 +217,10 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
       <table className="admin-table" data-testid="risk-alerts-table">
         <thead><tr><th>{TEXT.select}</th><th>{TEXT.alertType}</th><th>{TEXT.riskLevel}</th><th>{TEXT.objectType}</th><th>{TEXT.objectId}</th><th>{TEXT.summary}</th><th>{TEXT.owner}</th><th>{TEXT.status}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.createdAt}</th></tr></thead>
         <tbody>{paged.pageRows.map((row) => (
-          <tr key={row.id}>
-            <td><button type="button" data-testid={`risk-alert-select-${row.id}`} onClick={() => setSelectedId(row.id)}>{TEXT.select}</button></td>
+          <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`risk-alert-row-${row.id}`}
+            onClick={() => openAlertDetail(row)}
+            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAlertDetail(row); } }}>
+            <td onClick={(event) => event.stopPropagation()}><button type="button" data-testid={`risk-alert-select-${row.id}`} onClick={() => setSelectedId(row.id)}>{TEXT.select}</button></td>
             <td>{formatBusinessStatus(row.alertType)}</td>
             <td>{formatBusinessStatus(row.riskLevel)}</td>
             <td>{row.objectType ?? "-"}</td>
@@ -206,7 +229,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
             <td>{row.ownerUserId ?? "-"}</td>
             <td>{formatBusinessStatus(row.status)}</td>
             <td>{evidenceList(row)}</td>
-            <td>{row.createdAt ?? "-"}</td>
+            <td>{cnDate(row.createdAt)}</td>
           </tr>
         ))}</tbody>
       </table>
@@ -271,6 +294,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

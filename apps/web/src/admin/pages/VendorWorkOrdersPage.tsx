@@ -8,6 +8,7 @@ import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type VendorWorkOrderRow = {
@@ -66,6 +67,8 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
   const [note, setNote] = React.useState("外包维保现场处理");
   const [resolution, setResolution] = React.useState("已完成维保并上传现场记录");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该工单/设备完整字段（枚举中文·时间中文·处理人可溯源）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -136,22 +139,60 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
   const focusRows = kpiFocus?.subset === "pending" ? pendingRows : rows;
   const pagedRows = usePagedRows(kpiFocus ? focusRows : rows, 10, kpiFocus?.subset ?? "");
 
+  function openWorkOrderDetail(row: VendorWorkOrderRow) {
+    setDetail({
+      title: `工单明细 · ${row.code ?? row.id}`,
+      fields: [
+        { label: "工单号", value: row.code ?? row.id },
+        { label: "标题", value: row.title ?? "—" },
+        { label: "类型", value: formatBusinessStatus(row.workOrderType) },
+        { label: "优先级", value: formatBusinessStatus(row.priority) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "空间", value: row.spaceId ?? "—" },
+        { label: "设备", value: row.equipmentId ?? "—" },
+        { label: "处理人", value: <TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "—"}</TraceLink> },
+        { label: "处理时限", value: cnDate(row.handleDueAt) },
+        { label: "处理结果", value: row.resolution ?? "—" },
+        { label: "所属项目", value: row.projectId ?? "—" },
+      ],
+    });
+  }
+
+  function openEquipmentDetail(row: VendorEquipmentRow) {
+    setDetail({
+      title: `设备明细 · ${row.name ?? row.id}`,
+      fields: [
+        { label: "设备", value: row.name ?? row.id },
+        { label: "类型", value: formatBusinessStatus(row.equipmentType) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "所属项目", value: row.projectId ?? "—" },
+        { label: "空间", value: row.spaceId ?? "—" },
+        { label: "品牌", value: row.brand ?? "—" },
+        { label: "责任人", value: <TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.responsibleUserId}>{row.responsibleUserId ?? "—"}</TraceLink> },
+        { label: "下次维保", value: cnDate(row.nextMaintenanceDue) },
+        { label: "设备编号", value: row.id },
+      ],
+    });
+  }
+
   const workOrdersTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="vendor-work-orders-table">
         <thead><tr><th>选择</th><th>工单号</th><th>标题</th><th>类型</th><th>优先级</th><th>状态</th><th>空间/设备</th><th>处理人</th><th>处理时限</th></tr></thead>
         <tbody>
           {pagedRows.pageRows.map((row) => (
-            <tr key={row.id}>
-              <td><input type="radio" data-testid={`vendor-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-work-order-row-${row.id}`}
+              onClick={() => openWorkOrderDetail(row)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`vendor-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
               <td>{row.code ?? row.id}</td>
               <td>{row.title ?? "-"}</td>
               <td>{formatBusinessStatus(row.workOrderType)}</td>
               <td>{formatBusinessStatus(row.priority)}</td>
               <td>{formatBusinessStatus(row.status)}</td>
               <td>{row.spaceId ?? "-"} / {row.equipmentId ?? "-"}</td>
-              <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
-              <td>{row.handleDueAt ?? "-"}</td>
+              <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
+              <td>{cnDate(row.handleDueAt)}</td>
             </tr>
           ))}
         </tbody>
@@ -197,13 +238,15 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
                 <thead><tr><th>设备</th><th>类型</th><th>状态</th><th>项目/空间</th><th>品牌/责任人</th><th>下次维保</th></tr></thead>
                 <tbody>
                   {(visibleEquipmentRows.length > 0 ? visibleEquipmentRows : equipmentRows).map((row) => (
-                    <tr key={row.id}>
+                    <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-work-order-equipment-row-${row.id}`}
+                      onClick={() => openEquipmentDetail(row)}
+                      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEquipmentDetail(row); } }}>
                       <td>{row.name ?? row.id}</td>
                       <td>{formatBusinessStatus(row.equipmentType)}</td>
                       <td>{formatBusinessStatus(row.status)}</td>
                       <td>{row.projectId ?? "-"} / {row.spaceId ?? "-"}</td>
                       <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td>
-                      <td>{row.nextMaintenanceDue ?? "-"}</td>
+                      <td>{cnDate(row.nextMaintenanceDue)}</td>
                     </tr>
                   ))}
                   {equipmentRows.length === 0 ? <tr><td colSpan={6}>暂无关联设备</td></tr> : null}
@@ -215,6 +258,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
