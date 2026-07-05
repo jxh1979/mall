@@ -153,6 +153,14 @@ public class StaffController {
         return ApiResponse.ok(service.closePayroll(request));
     }
 
+    /** 资金安全①:发放某员工某月已定格薪资单(此后重结不覆盖)。 */
+    @PostMapping("/payroll/pay")
+    public ApiResponse<java.util.Map<String, Object>> markPayrollPaid(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffPayrollPayRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markPayrollPaid(request));
+    }
+
     @GetMapping("/payroll")
     public ApiResponse<PageResponse<StaffPayrollStatementRecord>> listPayroll(
             @org.springframework.web.bind.annotation.RequestParam("month") String month) {

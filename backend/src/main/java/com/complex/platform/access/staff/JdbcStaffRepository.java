@@ -50,6 +50,7 @@ class JdbcStaffRepository implements StaffRepository {
                 VALUES (:id, :user_id, :month, :adj_type, :amount, :reason, :created_by, :now, """
                 + STAFF_PROJECT_SUBSELECT + """
                 )
+                ON CONFLICT DO NOTHING
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", id).addValue("user_id", userId).addValue("month", month)
                 .addValue("adj_type", adjType).addValue("amount", amountCent).addValue("reason", reason)
@@ -64,7 +65,8 @@ class JdbcStaffRepository implements StaffRepository {
                 VALUES (:id, :user_id, :month, :source_type, :source_id, :amount, :note, :now, """
                 + STAFF_PROJECT_SUBSELECT + """
                 )
-                ON CONFLICT (source_type, source_id) WHERE source_type = 'service_order' DO NOTHING
+                -- 无目标 DO NOTHING:同时覆盖 V215(service_order 部分唯一)与 V239(manual 业务级唯一)两索引。
+                ON CONFLICT DO NOTHING
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", id).addValue("user_id", userId).addValue("month", month)
                 .addValue("source_type", sourceType).addValue("source_id", sourceId)
@@ -83,10 +85,12 @@ class JdbcStaffRepository implements StaffRepository {
     @Override
     public int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope) {
         // 月结重算:固定档案 + 台账提成 + 酒吧提成(bar_commission_calculations 按月/非作废) + 奖 - 罚;
-        // 有任一薪资要素的员工都出单;幂等覆盖(uq user+month)。
+        // 有任一薪资要素的员工都出单;未发放月幂等覆盖(uq user+month)。
+        // 资金安全①:已发放(status='paid')的行既不重算 INSERT(WHERE NOT EXISTS 排除),
+        //   也不被 ON CONFLICT 覆盖(DO UPDATE WHERE status <> 'paid' 兜底并发)。重结新单显式置 'closed'。
         return jdbcTemplate.update("""
                 INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, commission_cent,
-                        bonus_cent, penalty_cent, tax_cent, total_cent, closed_by, closed_at, project_id)
+                        bonus_cent, penalty_cent, tax_cent, total_cent, status, closed_by, closed_at, project_id)
                 SELECT 'pay_' || gen_random_uuid(), u.user_id, :month,
                        COALESCE(b.monthly_salary_cent, 0),
                        COALESCE(c.total, 0) + COALESCE(bc.total, 0),
@@ -96,7 +100,7 @@ class JdbcStaffRepository implements StaffRepository {
                        COALESCE(tax.tax_cent, 0),
                        COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
                            + COALESCE(adj.bonus, 0) - COALESCE(adj.penalty, 0) - COALESCE(tax.tax_cent, 0),
-                       :closed_by, :now, sp.project_id
+                       'closed', :closed_by, :now, sp.project_id
                   FROM (SELECT user_id FROM staff_base_salaries
                         UNION SELECT user_id FROM staff_commission_ledger WHERE month = :month
                         UNION SELECT user_id FROM staff_payroll_adjustments WHERE month = :month
@@ -136,6 +140,10 @@ class JdbcStaffRepository implements StaffRepository {
                  -- P0 项目级月结(V214):平台口径(scope=null)重算全量;项目口径仅本综合体员工,
                  -- 绝不 INSERT/覆盖其他项目的薪资单。无档案员工(sp.project_id 为 NULL)只在平台口径纳入。
                  WHERE (:project_scope::text IS NULL OR sp.project_id = :project_scope)
+                   -- 资金安全①:已发放的员工月份不参与重算(不 INSERT 冲突、不覆盖)。
+                   AND NOT EXISTS (SELECT 1 FROM staff_payroll_statements paid
+                                    WHERE paid.user_id = u.user_id AND paid.month = :month
+                                      AND paid.status = 'paid')
                 ON CONFLICT (user_id, month) DO UPDATE SET
                     project_id = EXCLUDED.project_id,
                     base_cent = EXCLUDED.base_cent,
@@ -146,10 +154,36 @@ class JdbcStaffRepository implements StaffRepository {
                     total_cent = EXCLUDED.total_cent,
                     closed_by = EXCLUDED.closed_by,
                     closed_at = EXCLUDED.closed_at
+                  WHERE staff_payroll_statements.status <> 'paid'
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("month", month).addValue("closed_by", closedBy)
                 .addValue("now", java.sql.Timestamp.from(now))
                 .addValue("project_scope", projectScope));
+    }
+
+    @Override
+    public int markPayrollPaid(String payoutId, String userId, String month, String payMethod,
+            String payRef, String paidBy, java.time.Instant now) {
+        // 资金安全①:发放动作。仅 status='closed' 的已定格单可发放;落发放台账 + 置 paid。
+        // 幂等:staff_payroll_payouts uq(user,month) 防重复发放;状态置换只对 closed 生效。
+        var params = new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("payout_id", payoutId).addValue("user_id", userId).addValue("month", month)
+                .addValue("pay_method", payMethod).addValue("pay_ref", payRef).addValue("paid_by", paidBy)
+                .addValue("now", java.sql.Timestamp.from(now));
+        int inserted = jdbcTemplate.update("""
+                INSERT INTO staff_payroll_payouts (id, statement_id, user_id, month, paid_total_cent,
+                        pay_method, pay_ref, paid_by, paid_at, project_id)
+                SELECT :payout_id, s.id, s.user_id, s.month, s.total_cent,
+                       :pay_method, :pay_ref, :paid_by, :now, s.project_id
+                  FROM staff_payroll_statements s
+                 WHERE s.user_id = :user_id AND s.month = :month AND s.status = 'closed'
+                ON CONFLICT (user_id, month) DO NOTHING
+                """, params);
+        jdbcTemplate.update("""
+                UPDATE staff_payroll_statements SET status = 'paid'
+                 WHERE user_id = :user_id AND month = :month AND status = 'closed'
+                """, params);
+        return inserted;
     }
 
     @Override

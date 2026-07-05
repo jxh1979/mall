@@ -26,8 +26,12 @@ public interface StaffRepository {
     void insertCommission(String id, String userId, String month, String sourceType,
             String sourceId, long amountCent, String note, java.time.Instant now);
 
-    /** 月结:对有薪资要素的员工重算定格(base+Σledger提成+Σ酒吧提成+Σbonus-Σpenalty);幂等覆盖。返回生成单数。 */
+    /** 月结:对有薪资要素的员工重算定格(base+Σledger提成+Σ酒吧提成+Σbonus-Σpenalty);未发放月幂等覆盖。返回生成单数。 */
     int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope);
+
+    /** 资金安全①:发放某员工某月已定格薪资单——落发放台账 + 状态置 paid(此后重结不覆盖)。返回落台账行数。 */
+    int markPayrollPaid(String payoutId, String userId, String month, String payMethod,
+            String payRef, String paidBy, java.time.Instant now);
 
     /** P0 租户隔离(V214):projectScope=null 见全量;非空仅见 project_id=该值的行(下同)。 */
     java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId,

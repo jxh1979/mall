@@ -740,6 +740,45 @@ public class StaffService {
         }
     }
 
+    /** 资金安全①(fix/payroll-safety):发放某员工某月已定格薪资单——落发放台账 + 状态置 paid,
+     * 此后重结不覆盖(套现被封)。幂等:重复发放命中重放,不重复落台账。 */
+    public java.util.Map<String, Object> markPayrollPaid(
+            com.complex.platform.access.staff.dto.StaffPayrollPayRequest request) {
+        try {
+            authorizationService.requirePermission("staff.payroll.manage");
+            if (request == null || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
+                    || request.userId() == null || request.userId().isBlank()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) and user_id are required");
+            }
+            requireUserInScope(request.userId().trim());
+            return idempotencyService.execute("markStaffPayrollPaid",
+                    request.idempotencyKey(), request,
+                    () -> doMarkPayrollPaid(request), java.util.Map.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.payroll.pay_failed", "staff.payroll.manage",
+                    "staff_payroll_payout", request == null ? null : request.userId(), null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.Map<String, Object> doMarkPayrollPaid(
+            com.complex.platform.access.staff.dto.StaffPayrollPayRequest request) {
+        var actor = authorizationService.currentActor();
+        int paid = repository.markPayrollPaid("payout_" + UUID.randomUUID(), request.userId().trim(),
+                request.month(), trimToNull(request.payMethod()), trimToNull(request.payRef()),
+                actor == null ? null : actor.id(), Instant.now());
+        if (paid == 0) {
+            throw ApiException.conflict("PAYROLL_NOT_PAYABLE",
+                    "no closed payroll statement to pay for this user/month (already paid or not closed)");
+        }
+        auditEventService.recordSuccess("staff.payroll.paid", "staff.payroll.manage",
+                "staff_payroll_payout", request.userId().trim(), null, request.idempotencyKey(),
+                java.util.Map.of("user_id", request.userId().trim(), "month", request.month()));
+        return java.util.Map.of("user_id", request.userId().trim(), "month", request.month(), "paid", paid);
+    }
+
     /** 个税税表(V217):后台查劳务报酬预扣税表全档位(读复用 payroll.manage)。 */
     public java.util.List<PayrollTaxBracketRecord> listTaxBrackets(String category) {
         authorizationService.requirePermission("staff.payroll.manage");
