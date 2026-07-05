@@ -80,4 +80,24 @@ describe("BarOrdersPage KPI 聚焦视图", () => {
     expect(text).not.toContain("open");
     expect(text).not.toContain("orders");
   });
+
+  it("进入 KPI 聚焦 → 窗口滚动复位到顶(断头修复)", async () => {
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("bar-orders-kpi-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("bar-orders-kpi-open"));
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0 });
+    scrollSpy.mockRestore();
+  });
+
+  it("退出 KPI 聚焦(返回全部) → 窗口滚动复位到顶", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("bar-orders-kpi-orders")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("bar-orders-kpi-orders"));
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    fireEvent.click(screen.getByTestId("bar-orders-kpi-focus-clear"));
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0 });
+    scrollSpy.mockRestore();
+  });
+
 });

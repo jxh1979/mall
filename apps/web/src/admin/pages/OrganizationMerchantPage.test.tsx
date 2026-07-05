@@ -162,4 +162,24 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     expect(coopText).not.toContain("fixed_rent");
     expect(coopText).not.toContain("revenue_share");
   });
+
+  it("进入 KPI 聚焦 → 窗口滚动复位到顶(断头修复)", async () => {
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-kpi-active-merchants")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-kpi-active-merchants"));
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0 });
+    scrollSpy.mockRestore();
+  });
+
+  it("退出 KPI 聚焦(返回全部) → 窗口滚动复位到顶", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-kpi-active-merchants")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-kpi-active-merchants"));
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    fireEvent.click(screen.getByTestId("organization-kpi-focus-clear"));
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0 });
+    scrollSpy.mockRestore();
+  });
+
 });

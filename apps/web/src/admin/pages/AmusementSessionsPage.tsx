@@ -59,6 +59,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     params.set("kpi", table);
     window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
     setKpiFocus(table);
+    window.scrollTo({ top: 0 });
   }
 
   function exitKpiFocus() {
@@ -67,6 +68,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     const search = params.toString();
     window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
     setKpiFocus(null);
+    window.scrollTo({ top: 0 });
   }
 
   const { loading, error, reload } = useAdminResource(

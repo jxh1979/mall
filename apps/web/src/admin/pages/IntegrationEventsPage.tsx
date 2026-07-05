@@ -110,6 +110,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
     params.set("kpi", source);
     window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
     setKpiFocus(source);
+    window.scrollTo({ top: 0 });
   }
 
   function exitKpiFocus() {
@@ -118,6 +119,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
     const search = params.toString();
     window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
     setKpiFocus(null);
+    window.scrollTo({ top: 0 });
   }
 
   const { loading, error, reload } = useAdminResource(

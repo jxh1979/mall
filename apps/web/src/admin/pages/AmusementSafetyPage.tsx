@@ -121,6 +121,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     else params.delete("subset");
     window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
     setKpiFocus({ subset });
+    window.scrollTo({ top: 0 });
   }
 
   function exitKpiFocus() {
@@ -130,6 +131,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     const search = params.toString();
     window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
     setKpiFocus(null);
+    window.scrollTo({ top: 0 });
   }
 
   const { loading, error, reload } = useAdminResource(
