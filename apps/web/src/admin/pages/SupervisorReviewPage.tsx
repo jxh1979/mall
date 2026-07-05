@@ -33,6 +33,7 @@ const TEXT = {
   policy: "策略",
   requiredEvidence: "所需证据",
   status: "状态",
+  focusClear: "清除筛选，返回全部",
 };
 
 function nextKey(prefix: string) {
@@ -57,6 +58,24 @@ function reviewIdFrom(result: unknown) {
 
 const SUPERVISOR_REVIEW_PERMISSION = "governance.supervisor_review.manage";
 
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染策略表对应子集。
+// URL 约定：?kpi=policies[&subset=blocked|active]。
+type KpiFocus = { subset: "all" | "blocked" | "active" };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("kpi") !== "policies") return null;
+  const subset = params.get("subset");
+  return { subset: subset === "blocked" || subset === "active" ? subset : "all" };
+}
+
+function focusTitle(subset: KpiFocus["subset"]): string {
+  if (subset === "blocked") return TEXT.defaultBlocked;
+  if (subset === "active") return TEXT.active;
+  return TEXT.total;
+}
+
 export function SupervisorReviewPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<SupervisorReviewPolicyRow[]>([]);
   const [latestReviewId, setLatestReviewId] = React.useState("");
@@ -67,6 +86,31 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
   const [violationSummary, setViolationSummary] = React.useState("合同主体与基础定义不一致");
   const [reviewerLevel, setReviewerLevel] = React.useState("3");
   const [approvalComment, setApprovalComment] = React.useState("证据齐备，同意放行");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(subset: KpiFocus["subset"]) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", "policies");
+    if (subset !== "all") params.set("subset", subset);
+    else params.delete("subset");
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ subset });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    params.delete("subset");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -75,10 +119,14 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
 
-  const blockedCount = rows.filter((row) => row.blocksByDefault).length;
-  const activeCount = rows.filter((row) => (row.status ?? "active") === "active").length;
+  const blockedRows = rows.filter((row) => row.blocksByDefault);
+  const activeRows = rows.filter((row) => (row.status ?? "active") === "active");
+  const blockedCount = blockedRows.length;
+  const activeCount = activeRows.length;
   const maxRequiredLevel = rows.reduce((max, row) => Math.max(max, row.requiredLevel ?? 0), 0);
   const hasPendingReview = latestReviewId.trim().length > 0;
+
+  const focusRows = kpiFocus?.subset === "blocked" ? blockedRows : kpiFocus?.subset === "active" ? activeRows : rows;
 
   function resetPendingReview() {
     if (latestReviewId) setLatestReviewId("");
@@ -141,66 +189,82 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
     await runAction("supervisor_review_approved", request, () => api.post(`/api/v1/platform/supervisor-review/${latestReviewId}/approve`, request));
   }
 
+  const policyTable = (
+    <div className="admin-table-scroll">
+      <table className="admin-table" data-testid="supervisor-review-table">
+        <thead><tr><th>{TEXT.policy}</th><th>{TEXT.actionType}</th><th>{TEXT.reviewerLevel}</th><th>{TEXT.defaultBlocked}</th><th>{TEXT.requiredEvidence}</th><th>{TEXT.status}</th></tr></thead>
+        <tbody>{(kpiFocus ? focusRows : rows).map((row) => (
+          <tr key={row.id}>
+            <td>{row.policyCode ?? row.id}</td>
+            <td>{formatBusinessStatus(row.actionType)}</td>
+            <td>{displayValue(row.requiredLevel)}</td>
+            <td>{displayValue(row.blocksByDefault)}</td>
+            <td>{displayValue(row.requiredEvidenceTypes)}</td>
+            <td>{formatBusinessStatus(row.status)}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>
+  );
+
   return (
     <section data-testid="supervisor-review-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="supervisor-review-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="governance.supervisor_review.policy_read / evaluated / approved" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
-        <div className="admin-kpi-grid" data-testid="supervisor-review-summary">
-          <div className="admin-kpi-card"><span>{TEXT.total}</span><strong>{rows.length}</strong><small>{TEXT.policy}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.defaultBlocked}</span><strong>{blockedCount}</strong><small>blocksByDefault</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.active}</span><strong>{activeCount}</strong><small>{TEXT.status}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.maxLevel}</span><strong>{maxRequiredLevel}</strong><small>{TEXT.reviewerLevel}</small></div>
-        </div>
+        {kpiFocus ? (
+          <>
+            <div className="admin-state" data-testid="supervisor-review-kpi-focus-banner">
+              正在查看：{focusTitle(kpiFocus.subset)}（{focusRows.length}）
+              <button type="button" data-testid="supervisor-review-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+            </div>
+            {policyTable}
+          </>
+        ) : (
+          <>
+            <div className="admin-kpi-grid" data-testid="supervisor-review-summary">
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.total}</span><button type="button" className="admin-kpi-value" data-testid="supervisor-review-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>{TEXT.policy}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.defaultBlocked}</span><button type="button" className="admin-kpi-value" data-testid="supervisor-review-kpi-blocked" onClick={() => enterKpiFocus("blocked")}>{blockedCount}</button><small>默认拦截</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.active}</span><button type="button" className="admin-kpi-value" data-testid="supervisor-review-kpi-active" onClick={() => enterKpiFocus("active")}>{activeCount}</button><small>{TEXT.status}</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.maxLevel}</span><strong>{maxRequiredLevel}</strong><small>{TEXT.reviewerLevel}</small></div>
+            </div>
 
-        <div className="admin-form-grid" data-testid="supervisor-review-form">
-          <label>{TEXT.actionType}<select data-testid="supervisor-review-action-type" value={actionType} onChange={(event) => { setActionType(event.target.value); resetPendingReview(); }}><option value="contract_violation">合同违规</option><option value="base_definition_violation">基础定义违规</option><option value="billing_discount">账单折扣</option><option value="manual_release">人工放行</option></select></label>
-          <label>{TEXT.objectType}<input data-testid="supervisor-review-object-type" value={objectType} onChange={(event) => { setObjectType(event.target.value); resetPendingReview(); }} /></label>
-          <label>{TEXT.objectId}<input data-testid="supervisor-review-object-id" value={objectId} onChange={(event) => { setObjectId(event.target.value); resetPendingReview(); }} /></label>
-          <label>{TEXT.amountCent}<input data-testid="supervisor-review-amount-cent" type="number" value={amountCent} onChange={(event) => { setAmountCent(event.target.value); resetPendingReview(); }} /></label>
-          <label>{TEXT.violationSummary}<input data-testid="supervisor-review-violation-summary" value={violationSummary} onChange={(event) => { setViolationSummary(event.target.value); resetPendingReview(); }} /></label>
-          <label>{TEXT.reviewerLevel}<input data-testid="supervisor-review-reviewer-level" type="number" value={reviewerLevel} onChange={(event) => setReviewerLevel(event.target.value)} /></label>
-          <label>{TEXT.approvalComment}<input data-testid="supervisor-review-approval-comment" value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} /></label>
-        </div>
-        <div className="admin-form-row" data-testid="supervisor-review-actions">
-          <PermissionButton
-            permissionsState={effectivePermissions}
-            permissions={[SUPERVISOR_REVIEW_PERMISSION]}
-            disabled={busyAction !== ""}
-            data-testid="supervisor-review-evaluate"
-            onClick={() => void evaluateViolation()}
-          >{TEXT.evaluate}</PermissionButton>
-          <HighRiskConfirm
-            label={TEXT.approve}
-            impact={`将放行复核记录 ${latestReviewId || "未生成"}，被阻断的高风险动作随即生效并写入主管审批留痕。`}
-            disabled={busyAction !== "" || !hasPendingReview}
-            precheck={validateApprove}
-            onConfirm={() => void approveReview()}
-            permissionsState={effectivePermissions}
-            permissions={[SUPERVISOR_REVIEW_PERMISSION]}
-            data-testid="supervisor-review-approve"
-          />
-        </div>
-        <div className="admin-muted-action" data-testid="supervisor-review-current-review">当前待审批 review_id：{latestReviewId || "未生成"}</div>
-        <div className="admin-muted-action" data-testid="supervisor-review-boundary">{TEXT.boundary}</div>
-        {formError ? <div data-testid="supervisor-review-error" className="admin-inline-error">{formError}</div> : null}
+            <div className="admin-form-grid" data-testid="supervisor-review-form">
+              <label>{TEXT.actionType}<select data-testid="supervisor-review-action-type" value={actionType} onChange={(event) => { setActionType(event.target.value); resetPendingReview(); }}><option value="contract_violation">合同违规</option><option value="base_definition_violation">基础定义违规</option><option value="billing_discount">账单折扣</option><option value="manual_release">人工放行</option></select></label>
+              <label>{TEXT.objectType}<input data-testid="supervisor-review-object-type" value={objectType} onChange={(event) => { setObjectType(event.target.value); resetPendingReview(); }} /></label>
+              <label>{TEXT.objectId}<input data-testid="supervisor-review-object-id" value={objectId} onChange={(event) => { setObjectId(event.target.value); resetPendingReview(); }} /></label>
+              <label>{TEXT.amountCent}<input data-testid="supervisor-review-amount-cent" type="number" value={amountCent} onChange={(event) => { setAmountCent(event.target.value); resetPendingReview(); }} /></label>
+              <label>{TEXT.violationSummary}<input data-testid="supervisor-review-violation-summary" value={violationSummary} onChange={(event) => { setViolationSummary(event.target.value); resetPendingReview(); }} /></label>
+              <label>{TEXT.reviewerLevel}<input data-testid="supervisor-review-reviewer-level" type="number" value={reviewerLevel} onChange={(event) => setReviewerLevel(event.target.value)} /></label>
+              <label>{TEXT.approvalComment}<input data-testid="supervisor-review-approval-comment" value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} /></label>
+            </div>
+            <div className="admin-form-row" data-testid="supervisor-review-actions">
+              <PermissionButton
+                permissionsState={effectivePermissions}
+                permissions={[SUPERVISOR_REVIEW_PERMISSION]}
+                disabled={busyAction !== ""}
+                data-testid="supervisor-review-evaluate"
+                onClick={() => void evaluateViolation()}
+              >{TEXT.evaluate}</PermissionButton>
+              <HighRiskConfirm
+                label={TEXT.approve}
+                impact={`将放行复核记录 ${latestReviewId || "未生成"}，被阻断的高风险动作随即生效并写入主管审批留痕。`}
+                disabled={busyAction !== "" || !hasPendingReview}
+                precheck={validateApprove}
+                onConfirm={() => void approveReview()}
+                permissionsState={effectivePermissions}
+                permissions={[SUPERVISOR_REVIEW_PERMISSION]}
+                data-testid="supervisor-review-approve"
+              />
+            </div>
+            <div className="admin-muted-action" data-testid="supervisor-review-current-review">当前待审批 review_id：{latestReviewId || "未生成"}</div>
+            <div className="admin-muted-action" data-testid="supervisor-review-boundary">{TEXT.boundary}</div>
+            {formError ? <div data-testid="supervisor-review-error" className="admin-inline-error">{formError}</div> : null}
 
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="supervisor-review-table">
-            <thead><tr><th>{TEXT.policy}</th><th>{TEXT.actionType}</th><th>{TEXT.reviewerLevel}</th><th>{TEXT.defaultBlocked}</th><th>{TEXT.requiredEvidence}</th><th>{TEXT.status}</th></tr></thead>
-            <tbody>{rows.map((row) => (
-              <tr key={row.id}>
-                <td>{row.policyCode ?? row.id}</td>
-                <td>{formatBusinessStatus(row.actionType)}</td>
-                <td>{displayValue(row.requiredLevel)}</td>
-                <td>{displayValue(row.blocksByDefault)}</td>
-                <td>{displayValue(row.requiredEvidenceTypes)}</td>
-                <td>{formatBusinessStatus(row.status)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
+            {policyTable}
+          </>
+        )}
       </AdminDataState>
     </section>
   );

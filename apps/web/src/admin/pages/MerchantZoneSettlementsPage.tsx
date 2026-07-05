@@ -20,6 +20,7 @@ const TEXT = {
   reasonRequired: "提交异议必须填写理由。",
   noSelection: "请先选择要提异议的结算单。",
   submit: "提交异议",
+  focusClear: "清除筛选，返回全部",
 };
 
 const TRIGGER_LABELS: Record<string, string> = {
@@ -47,10 +48,53 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result };
 }
 
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染结算单表对应子集。
+// URL 约定：?kpi=settlements[&subset=open|disputed]。TraceLink（合同下钻）在聚焦表内保留。
+type KpiFocus = { subset: "all" | "open" | "disputed" };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("kpi") !== "settlements") return null;
+  const subset = params.get("subset");
+  return { subset: subset === "open" || subset === "disputed" ? subset : "all" };
+}
+
+function focusTitle(subset: KpiFocus["subset"]): string {
+  if (subset === "open") return "未结清";
+  if (subset === "disputed") return "有异议";
+  return "结算单";
+}
+
 export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneSettlementRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [reason, setReason] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(subset: KpiFocus["subset"]) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", "settlements");
+    if (subset !== "all") params.set("subset", subset);
+    else params.delete("subset");
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ subset });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    params.delete("subset");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -82,52 +126,71 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
     setReason("");
   }
 
-  const openCount = rows.filter((row) => row.status !== "settled").length;
-  const disputedCount = rows.filter((row) => row.status === "disputed").length;
-  const paged = usePagedRows(rows, 10);
+  const openRows = rows.filter((row) => row.status !== "settled");
+  const disputedRows = rows.filter((row) => row.status === "disputed");
+  const openCount = openRows.length;
+  const disputedCount = disputedRows.length;
+  const focusRows = kpiFocus?.subset === "open" ? openRows : kpiFocus?.subset === "disputed" ? disputedRows : rows;
+  const paged = usePagedRows(kpiFocus ? focusRows : rows, 10, kpiFocus ? kpiFocus.subset : "");
+
+  const settlementsTable = (
+    <div className="admin-table-scroll">
+      <table className="admin-table" data-testid="merchant-zone-settlements-table">
+        <thead>
+          <tr><th>选择</th><th>结算单</th><th>合同</th><th>触发</th><th>状态</th><th>异议理由</th><th>开账时间</th></tr>
+        </thead>
+        <tbody>
+          {paged.pageRows.map((row) => (
+            <tr key={row.id} className={row.id === selectedId ? "admin-row-selected" : undefined}>
+              <td><input type="radio" name="mz-settlement" data-testid={`merchant-zone-settlement-pick-${row.id}`} checked={row.id === selectedId} onChange={() => setSelectedId(row.id)} /></td>
+              <td>{row.id}</td>
+              <td><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink></td>
+              <td>{TRIGGER_LABELS[row.triggerType ?? ""] ?? row.triggerType ?? "-"}</td>
+              <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
+              <td>{row.disputeReason ?? "-"}</td>
+              <td>{row.createdAt ?? "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <TablePager testid="merchant-zone-settlements-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
+    </div>
+  );
 
   return (
     <section data-testid="merchant-zone-settlements-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="merchant_portal.settlement.viewed / merchant_portal.settlement.disputed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
-        <div className="admin-kpi-grid" data-testid="merchant-zone-settlements-summary">
-          <div className="admin-kpi-card"><span>结算单</span><strong>{rows.length}</strong><small>本商户</small></div>
-          <div className="admin-kpi-card"><span>未结清</span><strong>{openCount}</strong><small>进行中/待结算</small></div>
-          <div className="admin-kpi-card"><span>有异议</span><strong>{disputedCount}</strong><small>待平台裁决</small></div>
-        </div>
-        <div className="admin-form-row" data-testid="merchant-zone-settlement-dispute-form">
-          <label>异议理由<input data-testid="merchant-zone-settlement-dispute-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="如:金额与合同约定不符" /></label>
-          <PermissionButton
-            permissionsState={effectivePermissions}
-            permissions={DISPUTE_PERMS}
-            data-testid="merchant-zone-settlement-dispute-submit"
-            disabled={busyAction === "merchant_zone_settlement_disputed" || !selected || !DISPUTABLE.has(selected.status ?? "")}
-            onClick={submitDispute}
-          >{TEXT.submit}</PermissionButton>
-        </div>
-        {formError ? <div className="admin-form-error" data-testid="merchant-zone-settlement-form-error">{formError}</div> : null}
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="merchant-zone-settlements-table">
-            <thead>
-              <tr><th>选择</th><th>结算单</th><th>合同</th><th>触发</th><th>状态</th><th>异议理由</th><th>开账时间</th></tr>
-            </thead>
-            <tbody>
-              {paged.pageRows.map((row) => (
-                <tr key={row.id} className={row.id === selectedId ? "admin-row-selected" : undefined}>
-                  <td><input type="radio" name="mz-settlement" data-testid={`merchant-zone-settlement-pick-${row.id}`} checked={row.id === selectedId} onChange={() => setSelectedId(row.id)} /></td>
-                  <td>{row.id}</td>
-                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink></td>
-                  <td>{TRIGGER_LABELS[row.triggerType ?? ""] ?? row.triggerType ?? "-"}</td>
-                  <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
-                  <td>{row.disputeReason ?? "-"}</td>
-                  <td>{row.createdAt ?? "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <TablePager testid="merchant-zone-settlements-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
-        </div>
+        {kpiFocus ? (
+          <>
+            <div className="admin-state" data-testid="merchant-zone-settlements-kpi-focus-banner">
+              正在查看：{focusTitle(kpiFocus.subset)}（{focusRows.length}）
+              <button type="button" data-testid="merchant-zone-settlements-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+            </div>
+            {settlementsTable}
+          </>
+        ) : (
+          <>
+            <div className="admin-kpi-grid" data-testid="merchant-zone-settlements-summary">
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>结算单</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-settlements-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>本商户</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>未结清</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-settlements-kpi-open" onClick={() => enterKpiFocus("open")}>{openCount}</button><small>进行中/待结算</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>有异议</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-settlements-kpi-disputed" onClick={() => enterKpiFocus("disputed")}>{disputedCount}</button><small>待平台裁决</small></div>
+            </div>
+            <div className="admin-form-row" data-testid="merchant-zone-settlement-dispute-form">
+              <label>异议理由<input data-testid="merchant-zone-settlement-dispute-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="如:金额与合同约定不符" /></label>
+              <PermissionButton
+                permissionsState={effectivePermissions}
+                permissions={DISPUTE_PERMS}
+                data-testid="merchant-zone-settlement-dispute-submit"
+                disabled={busyAction === "merchant_zone_settlement_disputed" || !selected || !DISPUTABLE.has(selected.status ?? "")}
+                onClick={submitDispute}
+              >{TEXT.submit}</PermissionButton>
+            </div>
+            {formError ? <div className="admin-form-error" data-testid="merchant-zone-settlement-form-error">{formError}</div> : null}
+            {settlementsTable}
+          </>
+        )}
       </AdminDataState>
     </section>
   );

@@ -36,6 +36,7 @@ type VendorInspectionTemplateRow = {
 
 const RECORD = ["facility.inspection.record_assigned"];
 const REPORT_EXCEPTION = ["facility.inspection.report_exception_assigned"];
+const DONE_STATUSES = ["completed", "closed"];
 
 function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -50,6 +51,17 @@ function checklistText(checklist?: VendorInspectionTemplateRow["checklist"]) {
   return checklist.map((item) => (typeof item === "string" ? item : item.label ?? item.item ?? "-")).join("、");
 }
 
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染巡检任务表。
+// URL 约定：?kpi=inspection-tasks[&subset=pending]。
+type KpiFocus = { subset: "all" | "pending" };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("kpi") !== "inspection-tasks") return null;
+  return { subset: params.get("subset") === "pending" ? "pending" : "all" };
+}
+
 export function VendorInspectionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorInspectionTaskRow[]>([]);
   const [templates, setTemplates] = React.useState<VendorInspectionTemplateRow[]>([]);
@@ -59,6 +71,31 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
   const [abnormalNote, setAbnormalNote] = React.useState("");
   const [exceptionNote, setExceptionNote] = React.useState("巡检发现异常，待物业跟进");
   const [inspectorId, setInspectorId] = React.useState("vendor-user");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(subset: "all" | "pending") {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", "inspection-tasks");
+    if (subset === "pending") params.set("subset", "pending");
+    else params.delete("subset");
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ subset });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    params.delete("subset");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null;
   const visibleTemplates = templates.filter((row) => row.id === selected?.templateId);
@@ -136,71 +173,90 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
     await runAction("vendor_inspection_exception_reported", request, () => api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selected.id)}/report-exception`, request));
   }
 
+  const pendingRows = rows.filter((row) => !DONE_STATUSES.includes(row.status ?? ""));
+  const focusRows = kpiFocus?.subset === "pending" ? pendingRows : rows;
+
+  const tasksTable = (
+    <div className="admin-table-scroll">
+      <table className="admin-table" data-testid="vendor-inspections-table">
+        <thead><tr><th>选择</th><th>任务</th><th>类型</th><th>状态</th><th>排程</th><th>空间</th><th>处理人</th><th>计划/到期</th><th>关联工单</th></tr></thead>
+        <tbody>
+          {(kpiFocus ? focusRows : rows).map((row) => (
+            <tr key={row.id}>
+              <td><input type="radio" data-testid={`vendor-inspection-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <td>{row.title ?? row.id}</td>
+              <td>{formatBusinessStatus(row.inspectionType)}</td>
+              <td>{formatBusinessStatus(row.status)}</td>
+              <td>{formatBusinessStatus(row.scheduleMode)}</td>
+              <td>{row.spaceId ?? "-"}</td>
+              <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
+              <td>{row.scheduledDate ?? "-"} / {row.dueDate ?? "-"}</td>
+              <td>{row.workOrderId ?? "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <section data-testid="vendor-inspections-page">
       <AdminPageHeader title="外包巡检任务" description="安保/保洁外包人员只能查看派给自己的巡检任务、模板要求，并提交现场开始、记录与异常上报。" />
       <TechDetails><div className="admin-generic-evidence" data-testid="vendor-inspections-evidence">接口证据：GET /api/v1/facility/inspections/tasks；GET /api/v1/facility/inspections/templates；POST /api/v1/facility/inspections/tasks/{"{task_id}"}/start；POST /records；POST /report-exception。</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
-        <div className="admin-kpi-grid" data-testid="vendor-inspections-summary">
-          <div className="admin-kpi-card"><span>已指派任务</span><strong>{rows.length}</strong><small>assignee</small></div>
-          <div className="admin-kpi-card"><span>待记录</span><strong>{rows.filter((row) => !["completed", "closed"].includes(row.status ?? "")).length}</strong><small>status</small></div>
-          <div className="admin-kpi-card"><span>当前任务</span><strong>{selected?.title ?? selected?.id ?? "-"}</strong><small>{selected?.dueDate ?? "-"}</small></div>
-        </div>
+        {kpiFocus ? (
+          <>
+            <div className="admin-state" data-testid="vendor-inspections-kpi-focus-banner">
+              正在查看：{kpiFocus.subset === "pending" ? "待记录任务" : "已指派任务"}（{focusRows.length}）
+              <button type="button" data-testid="vendor-inspections-kpi-focus-clear" onClick={exitKpiFocus}>清除筛选，返回全部</button>
+            </div>
+            {tasksTable}
+          </>
+        ) : (
+          <>
+            <div className="admin-kpi-grid" data-testid="vendor-inspections-summary">
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>已指派任务</span><button type="button" className="admin-kpi-value" data-testid="vendor-inspections-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>派给本人</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>待记录</span><button type="button" className="admin-kpi-value" data-testid="vendor-inspections-kpi-pending" onClick={() => enterKpiFocus("pending")}>{pendingRows.length}</button><small>未完成</small></div>
+              <div className="admin-kpi-card"><span>当前任务</span><strong>{selected?.title ?? selected?.id ?? "-"}</strong><small>{selected?.dueDate ?? "-"}</small></div>
+            </div>
 
-        <div className="admin-form-grid" data-testid="vendor-inspection-record-form">
-          <label>巡检人<input data-testid="vendor-inspection-inspector" value={inspectorId} onChange={(event) => setInspectorId(event.target.value)} /></label>
-          <label>结果<select data-testid="vendor-inspection-result" value={result} onChange={(event) => setResult(event.target.value)}><option value="normal">正常</option><option value="abnormal">异常</option></select></label>
-          <label>记录说明<input data-testid="vendor-inspection-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
-          <label>异常说明<input data-testid="vendor-inspection-abnormal-note" value={abnormalNote} onChange={(event) => setAbnormalNote(event.target.value)} /></label>
-          <label>异常上报说明<input data-testid="vendor-inspection-exception-note" value={exceptionNote} onChange={(event) => setExceptionNote(event.target.value)} /></label>
-        </div>
-        <div className="admin-form-row" data-testid="vendor-inspection-actions">
-          <PermissionButton permissionsState={effectivePermissions} permissions={RECORD} data-testid="vendor-inspection-start" disabled={busyAction !== ""} onClick={() => void startTask()}>开始</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={RECORD} data-testid="vendor-inspection-record" disabled={busyAction !== ""} onClick={() => void submitRecord()}>记录</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={REPORT_EXCEPTION} data-testid="vendor-inspection-report-exception" disabled={busyAction !== ""} onClick={() => void reportException()}>上报异常</PermissionButton>
-        </div>
-        {formError ? <div data-testid="vendor-inspection-error" className="admin-inline-error">{formError}</div> : null}
+            <div className="admin-form-grid" data-testid="vendor-inspection-record-form">
+              <label>巡检人<input data-testid="vendor-inspection-inspector" value={inspectorId} onChange={(event) => setInspectorId(event.target.value)} /></label>
+              <label>结果<select data-testid="vendor-inspection-result" value={result} onChange={(event) => setResult(event.target.value)}><option value="normal">正常</option><option value="abnormal">异常</option></select></label>
+              <label>记录说明<input data-testid="vendor-inspection-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
+              <label>异常说明<input data-testid="vendor-inspection-abnormal-note" value={abnormalNote} onChange={(event) => setAbnormalNote(event.target.value)} /></label>
+              <label>异常上报说明<input data-testid="vendor-inspection-exception-note" value={exceptionNote} onChange={(event) => setExceptionNote(event.target.value)} /></label>
+            </div>
+            <div className="admin-form-row" data-testid="vendor-inspection-actions">
+              <PermissionButton permissionsState={effectivePermissions} permissions={RECORD} data-testid="vendor-inspection-start" disabled={busyAction !== ""} onClick={() => void startTask()}>开始</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={RECORD} data-testid="vendor-inspection-record" disabled={busyAction !== ""} onClick={() => void submitRecord()}>记录</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={REPORT_EXCEPTION} data-testid="vendor-inspection-report-exception" disabled={busyAction !== ""} onClick={() => void reportException()}>上报异常</PermissionButton>
+            </div>
+            {formError ? <div data-testid="vendor-inspection-error" className="admin-inline-error">{formError}</div> : null}
 
-        <h3>巡检模板/要求（只读）</h3>
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="vendor-inspection-templates-table">
-            <thead><tr><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>检查要求</th><th>状态</th></tr></thead>
-            <tbody>
-              {(visibleTemplates.length > 0 ? visibleTemplates : templates).map((row) => (
-                <tr key={row.id}>
-                  <td>{row.name ?? row.id}</td>
-                  <td>{formatBusinessStatus(row.inspectionType)}</td>
-                  <td>{row.cycleDays ?? "-"}</td>
-                  <td>{formatBusinessStatus(row.abnormalMode)}</td>
-                  <td>{checklistText(row.checklist)} {row.scopeNote ?? ""}</td>
-                  <td>{row.active === false ? "停用" : "启用"}</td>
-                </tr>
-              ))}
-              {templates.length === 0 ? <tr><td colSpan={6}>暂无巡检模板</td></tr> : null}
-            </tbody>
-          </table>
-        </div>
+            <h3>巡检模板/要求（只读）</h3>
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="vendor-inspection-templates-table">
+                <thead><tr><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>检查要求</th><th>状态</th></tr></thead>
+                <tbody>
+                  {(visibleTemplates.length > 0 ? visibleTemplates : templates).map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.name ?? row.id}</td>
+                      <td>{formatBusinessStatus(row.inspectionType)}</td>
+                      <td>{row.cycleDays ?? "-"}</td>
+                      <td>{formatBusinessStatus(row.abnormalMode)}</td>
+                      <td>{checklistText(row.checklist)} {row.scopeNote ?? ""}</td>
+                      <td>{row.active === false ? "停用" : "启用"}</td>
+                    </tr>
+                  ))}
+                  {templates.length === 0 ? <tr><td colSpan={6}>暂无巡检模板</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
 
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="vendor-inspections-table">
-            <thead><tr><th>选择</th><th>任务</th><th>类型</th><th>状态</th><th>排程</th><th>空间</th><th>处理人</th><th>计划/到期</th><th>关联工单</th></tr></thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td><input type="radio" data-testid={`vendor-inspection-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
-                  <td>{row.title ?? row.id}</td>
-                  <td>{formatBusinessStatus(row.inspectionType)}</td>
-                  <td>{formatBusinessStatus(row.status)}</td>
-                  <td>{formatBusinessStatus(row.scheduleMode)}</td>
-                  <td>{row.spaceId ?? "-"}</td>
-                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
-                  <td>{row.scheduledDate ?? "-"} / {row.dueDate ?? "-"}</td>
-                  <td>{row.workOrderId ?? "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            {tasksTable}
+          </>
+        )}
       </AdminDataState>
     </section>
   );

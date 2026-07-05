@@ -1,0 +1,85 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { MerchantZoneSettlementsPage } from "./MerchantZoneSettlementsPage";
+import { AdminApi } from "../client/adminClient";
+import type { AdminPageProps, EffectivePermissionsState } from "../types";
+
+const SETTLEMENTS = [
+  { id: "st-1", contract_id: "c-1", trigger_type: "move_out", status: "pending_settlement", dispute_reason: null },
+  { id: "st-2", contract_id: "c-2", trigger_type: "expiry", status: "disputed", dispute_reason: "金额不符" },
+  { id: "st-3", contract_id: "c-3", trigger_type: "expiry", status: "settled", dispute_reason: null },
+];
+
+function envelope(items: unknown[]): Response {
+  return new Response(
+    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page: 1, page_size: 50, total: items.length } }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
+function makeApi(): AdminApi {
+  vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/settlements")) return Promise.resolve(envelope(SETTLEMENTS));
+    return Promise.resolve(envelope([]));
+  }));
+  return new AdminApi("test-token");
+}
+
+const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
+
+function renderPage() {
+  const props: AdminPageProps = {
+    api: makeApi(),
+    user: { id: "u1", username: "merchant", accountType: "merchant_admin" },
+    setActionResult: vi.fn(),
+    setGlobalError: vi.fn(),
+    effectivePermissions: ADMIN_PERMS,
+    navigateTo: vi.fn(),
+  };
+  render(<MerchantZoneSettlementsPage {...props} />);
+}
+
+describe("MerchantZoneSettlementsPage KPI 聚焦视图", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant-zone/settlements");
+  });
+
+  it("点“有异议” → URL 带 ?kpi=settlements&subset=disputed，聚焦只剩有异议单，合同下钻 TraceLink 保留", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlements-kpi-disputed")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-settlements-kpi-disputed"));
+    expect(window.location.search).toContain("kpi=settlements");
+    expect(window.location.search).toContain("subset=disputed");
+    expect(screen.getByTestId("merchant-zone-settlements-kpi-focus-banner").textContent).toContain("正在查看：有异议（1）");
+    expect(screen.getByTestId("merchant-zone-settlement-pick-st-2")).toBeTruthy();
+    expect(screen.queryByTestId("merchant-zone-settlement-pick-st-1")).toBeNull();
+    expect(screen.queryByTestId("merchant-zone-settlements-summary")).toBeNull();
+    // 合同下钻链接（P1/P2 TraceLink）在聚焦表内保留。
+    expect(screen.getByTestId("trace-link-ADM-CONT-001-c-2")).toBeTruthy();
+  });
+
+  it("点“未结清” → 聚焦排除已结清，点「返回全部」恢复完整页面", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlements-kpi-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-settlements-kpi-open"));
+    expect(screen.getByTestId("merchant-zone-settlements-kpi-focus-banner").textContent).toContain("正在查看：未结清（2）");
+    expect(screen.queryByTestId("merchant-zone-settlement-pick-st-3")).toBeNull();
+    fireEvent.click(screen.getByTestId("merchant-zone-settlements-kpi-focus-clear"));
+    expect(window.location.search).not.toContain("kpi=");
+    expect(screen.getByTestId("merchant-zone-settlements-summary")).toBeTruthy();
+    expect(screen.getByTestId("merchant-zone-settlement-pick-st-3")).toBeTruthy();
+  });
+
+  it("触发/状态列为中文，不含英文枚举码", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlements-table")).toBeTruthy());
+    const table = screen.getByTestId("merchant-zone-settlements-table").textContent ?? "";
+    expect(table).toContain("退租");
+    expect(table).toContain("有异议");
+    expect(table).not.toContain("move_out");
+    expect(table).not.toContain("disputed");
+  });
+});
