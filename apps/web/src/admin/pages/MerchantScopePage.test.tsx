@@ -93,3 +93,29 @@ describe("MerchantScopePage KPI 聚焦视图", () => {
     expect(text).not.toContain("repair");
   });
 });
+
+describe("MerchantScopePage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant/scope");
+  });
+
+  it("点工单行 → 抽屉含该行类型（中文）与状态，无英文枚举，Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-work-order-row-wo-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-scope-work-order-row-wo-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("报修");
+    expect(drawer.textContent).toContain("处理中");
+    expect(drawer.textContent).not.toContain("repair");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点账单行 → 抽屉含该行账单号", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-bill-row-bl-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-scope-bill-row-bl-1"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("B-1");
+  });
+});

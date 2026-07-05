@@ -80,3 +80,23 @@ describe("SupervisorReviewPage KPI 聚焦视图", () => {
     expect(table).not.toContain("contract_violation");
   });
 });
+
+describe("SupervisorReviewPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/supervisor-review");
+  });
+
+  it("点策略行 → 抽屉含该行动作类型（中文）与默认阻断（是/否），无英文枚举，Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-row-sp-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("supervisor-review-row-sp-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("合同违规");
+    expect(drawer.textContent).toContain("是");
+    expect(drawer.textContent).not.toContain("contract_violation");
+    expect(drawer.textContent).not.toContain("blocksByDefault");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+});

@@ -9,6 +9,7 @@ import type { AdminPageProps, AuditEventRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { PagedResult } from "../client/adminClient";
 import { PermissionButton } from "../security/Can";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const PAGE_SIZE = 10;
 
@@ -107,6 +108,8 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该审计事件完整字段（枚举中文·发生时间中文；trace/对象为机读标识保留原文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -210,6 +213,23 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     }
   }
 
+  function openEventDetail(row: AuditEventRow) {
+    setDetail({
+      title: `${TEXT.title}明细 · ${eventTrace(row)}`,
+      fields: [
+        { label: TEXT.eventType, value: row.eventType ?? row.event_type ?? "-" },
+        { label: TEXT.category, value: formatBusinessStatus(row.eventCategory ?? row.event_category) },
+        { label: TEXT.result, value: formatBusinessStatus(row.result) },
+        { label: TEXT.risk, value: formatBusinessStatus(row.riskLevel ?? row.risk_level) },
+        { label: TEXT.source, value: formatBusinessStatus(row.sourceType ?? row.source_type) },
+        { label: TEXT.trace, value: eventTrace(row) },
+        { label: TEXT.object, value: eventObject(row) },
+        { label: TEXT.summary, value: row.summary ?? "-" },
+        { label: TEXT.occurredAt, value: cnDate(row.occurredAt ?? row.occurred_at ?? row.receivedAt ?? row.received_at) },
+      ],
+    });
+  }
+
   return (
     <section data-testid="audit-events-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -250,8 +270,10 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
               <tbody>{filteredRows.map((row) => {
                 const index = filteredRows.indexOf(row);
                 return (
-                <tr key={eventKey(row, index)}>
-                  <td><input type="radio" data-testid={`audit-events-select-${index}`} checked={selected === row} onChange={() => setSelectedIndex(index)} /></td>
+                <tr key={eventKey(row, index)} className="admin-row-clickable" tabIndex={0} data-testid={`audit-events-row-${index}`}
+                  onClick={() => openEventDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEventDetail(row); } }}>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`audit-events-select-${index}`} checked={selected === row} onChange={() => setSelectedIndex(index)} /></td>
                   <td>{row.eventType ?? row.event_type ?? "-"}</td>
                   <td>{formatBusinessStatus(row.eventCategory ?? row.event_category)}</td>
                   <td>{formatBusinessStatus(row.result)}</td>
@@ -260,7 +282,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                   <td>{eventTrace(row)}</td>
                   <td>{eventObject(row)}</td>
                   <td>{row.summary ?? "-"}</td>
-                  <td>{row.occurredAt ?? row.occurred_at ?? row.receivedAt ?? row.received_at ?? "-"}</td>
+                  <td>{cnDate(row.occurredAt ?? row.occurred_at ?? row.receivedAt ?? row.received_at)}</td>
                 </tr>
                 );
               })}</tbody>
@@ -271,6 +293,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
 
         {showDetail && selected ? <pre className="admin-result" data-testid="audit-events-detail">{JSON.stringify({ beforeAfter: selected.beforeAfter ?? selected.before_after ?? selected.payload ?? {}, event: selected }, null, 2)}</pre> : null}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

@@ -86,3 +86,30 @@ describe("MerchantWorkOrdersPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("merchant-work-orders-table")).toBeTruthy();
   });
 });
+
+describe("MerchantWorkOrdersPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant/work-orders");
+  });
+
+  it("点工单行 → 抽屉含该行标题/类型（中文）/状态，无英文枚举，Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-row-wo-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-work-order-row-wo-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("工单甲");
+    expect(drawer.textContent).toContain("报修");
+    expect(drawer.textContent).toContain("处理中");
+    expect(drawer.textContent).not.toContain("repair");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点行内单选按钮不打开抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-select-wo-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-work-order-select-wo-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});

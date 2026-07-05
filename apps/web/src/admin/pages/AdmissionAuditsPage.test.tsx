@@ -5,7 +5,7 @@ import { AdmissionAuditsPage } from "./AdmissionAuditsPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-const MERCHANTS = [{ id: "m-1", merchant_name: "商户甲", contact_name: "张三", contact_phone: "13800000000", mall_block_code: "A-01", cooperation_form: "fixed_rent", status: "active" }];
+const MERCHANTS = [{ id: "m-1", display_name: "商户甲", company_name: "甲公司", cooperation_form: "fixed_rent", risk_level: "low", status: "active" }];
 const BINDINGS = [{ id: "b-1", business_object_id: "m-1", operator_subject: "运营甲", contract_subject: "合同甲", settlement_subject: "结算甲", status: "active" }];
 const CONTRACTS = [{ id: "c-1", merchant_id: "m-1", contract_subject_id: "cs-1", operation_subject_id: "os-1", settlement_subject_id: "ss-1", lifecycle_status: "effective", status: "effective" }];
 
@@ -96,5 +96,31 @@ describe("AdmissionAuditsPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("admission-audits-merchants-table").textContent).not.toContain("fixed_rent");
     expect(screen.getByTestId("admission-audits-contracts-table").textContent).toContain("生效中");
     expect(screen.getByTestId("admission-audits-contracts-table").textContent).not.toContain("effective");
+  });
+});
+
+describe("AdmissionAuditsPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/admission-audits");
+  });
+
+  it("点合同行 → 抽屉含该行状态（中文）与商户，Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("admission-audits-contract-row-c-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("admission-audits-contract-row-c-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("生效中");
+    expect(drawer.textContent).toContain("m-1");
+    expect(drawer.textContent).not.toContain("effective");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点主体绑定行 → 抽屉含该行绑定主体", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("admission-audits-binding-row-b-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("admission-audits-binding-row-b-1"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("运营甲");
   });
 });

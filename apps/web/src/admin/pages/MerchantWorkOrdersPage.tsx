@@ -13,6 +13,7 @@ import { useSortedRows } from "../components/useSortedRows";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const WO_CREATE = ["merchant.service_work_order.create"];
 const WO_ASSIGN = ["merchant.service_work_order.assign"];
@@ -112,6 +113,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [satisfactionScore, setSatisfactionScore] = React.useState("5");
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该工单完整字段（枚举中文·截止时间中文·引用 TraceLink）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -246,6 +249,23 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     await runAction("merchant_work_order_closed", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/close`, request));
   }
 
+  function openWorkOrderDetail(row: MerchantWorkOrderRow) {
+    setDetail({
+      title: `工单明细 · ${row.title ?? row.id}`,
+      fields: [
+        { label: TEXT.workOrderTitle, value: row.title ?? row.id },
+        { label: TEXT.merchant, value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> },
+        { label: TEXT.type, value: formatBusinessStatus(row.workOrderType) },
+        { label: TEXT.priority, value: formatBusinessStatus(row.priority) },
+        { label: TEXT.status, value: formatBusinessStatus(row.status) },
+        { label: TEXT.ownerDepartment, value: row.ownerDepartment || "-" },
+        { label: TEXT.ownerUser, value: <TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink> },
+        { label: TEXT.dueAt, value: cnDate(row.dueAt) },
+        { label: TEXT.evidenceLabel, value: evidenceList(row) },
+      ],
+    });
+  }
+
   return (
     <section data-testid="merchant-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -306,15 +326,17 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
             <thead><tr><th>{TEXT.select}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-title" onClick={() => sort.toggle("title")} {...sort.thProps("title")}>{TEXT.workOrderTitle}{sort.indicator("title")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-type" onClick={() => sort.toggle("type")} {...sort.thProps("type")}>{TEXT.type}{sort.indicator("type")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-priority" onClick={() => sort.toggle("priority")} {...sort.thProps("priority")}>{TEXT.priority}{sort.indicator("priority")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>{TEXT.status}{sort.indicator("status")}</th><th>{TEXT.ownerDepartment}</th><th>{TEXT.ownerUser}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-dueAt" onClick={() => sort.toggle("dueAt")} {...sort.thProps("dueAt")}>{TEXT.dueAt}{sort.indicator("dueAt")}</th><th>{TEXT.evidenceLabel}</th></tr></thead>
             <tbody>
               {paged.pageRows.map((row) => (
-                <tr key={row.id}>
-                  <td><input type="radio" data-testid={`merchant-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
-                  <td>{row.title ?? row.id}<br /><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></td>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-work-order-row-${row.id}`}
+                  onClick={() => openWorkOrderDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`merchant-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                  <td>{row.title ?? row.id}<br /><span onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></span></td>
                   <td>{formatBusinessStatus(row.workOrderType)}</td>
                   <td>{formatBusinessStatus(row.priority)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.ownerDepartment || "-"}</td>
-                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink></td>
-                  <td>{row.dueAt ?? "-"}</td>
+                  <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink></td>
+                  <td>{cnDate(row.dueAt)}</td>
                   <td>{evidenceList(row)}</td>
                 </tr>
               ))}
@@ -324,6 +346,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
         </div>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

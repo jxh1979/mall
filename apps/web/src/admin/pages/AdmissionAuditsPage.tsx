@@ -8,6 +8,7 @@ import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, ContractRow, MerchantAdmissionRow, SubjectBindingRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const EVIDENCE_CREATE = ["evidence.event.create"];
 
@@ -62,6 +63,8 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
   const [exportReason, setExportReason] = React.useState("完整后台准入流水导出");
   const [formError, setFormError] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -144,6 +147,53 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
     });
   }
 
+  function openMerchantDetail(row: MerchantAdmissionRow) {
+    setDetail({
+      title: `商户档案明细 · ${display(row.merchantName)}`,
+      fields: [
+        { label: "商户", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.merchantName)}</TraceLink> },
+        { label: "联系人", value: display(row.contactName) },
+        { label: "联系电话", value: display(row.contactPhone) },
+        { label: "区块", value: display(row.mallBlockCode) },
+        { label: "面积", value: display(row.areaSquareMeter) },
+        { label: "合作形式", value: formatBusinessStatus(row.cooperationForm) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "商户编号", value: display(row.id) },
+      ],
+    });
+  }
+
+  function openBindingDetail(row: SubjectBindingRow) {
+    setDetail({
+      title: `主体绑定明细 · ${display(row.businessObjectId)}`,
+      fields: [
+        { label: "业务对象", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink> },
+        { label: "运营主体", value: display(row.operatorSubject) },
+        { label: "合同主体", value: display(row.contractSubject) },
+        { label: "结算主体", value: display(row.settlementSubject) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "留痕证据", value: display(row.auditEvidenceRef) },
+      ],
+    });
+  }
+
+  function openContractDetail(row: ContractRow) {
+    setDetail({
+      title: `合同草稿/审批明细 · ${display(row.merchantId)}`,
+      fields: [
+        { label: "商户", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> },
+        { label: "合同主体", value: display(row.contractSubjectId) },
+        { label: "运营主体", value: display(row.operationSubjectId) },
+        { label: "结算主体", value: display(row.settlementSubjectId) },
+        { label: "生效日", value: cnDate(row.effectiveDate) },
+        { label: "到期日", value: cnDate(row.expiryDate) },
+        { label: "附件", value: contractAttachments(row) },
+        { label: "状态", value: formatBusinessStatus(row.lifecycleStatus ?? row.status) },
+        { label: "留痕证据", value: display(row.auditEvidenceRef) },
+      ],
+    });
+  }
+
   const merchantsSection = (
     <>
       <div className="admin-section-title">商户档案</div>
@@ -151,7 +201,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         <table className="admin-table" data-testid="admission-audits-merchants-table">
           <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th></tr></thead>
           <tbody>{merchants.map((row) => (
-            <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.merchantName)}</TraceLink></td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td></tr>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-merchant-row-${row.id}`} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.merchantName)}</TraceLink></td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td></tr>
           ))}</tbody>
         </table>
       </div>
@@ -165,7 +215,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         <table className="admin-table" data-testid="admission-audits-bindings-table">
           <thead><tr><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>结算主体</th><th>状态</th><th>留痕证据</th></tr></thead>
           <tbody>{bindings.map((row) => (
-            <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink></td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-binding-row-${row.id}`} onClick={() => openBindingDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBindingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink></td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
           ))}</tbody>
         </table>
       </div>
@@ -179,7 +229,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         <table className="admin-table" data-testid="admission-audits-contracts-table">
           <thead><tr><th>商户</th><th>合同主体</th><th>运营主体</th><th>结算主体</th><th>生效日</th><th>到期日</th><th>附件</th><th>状态</th><th>留痕证据</th></tr></thead>
           <tbody>{contracts.map((row) => (
-            <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{display(row.effectiveDate)}</td><td>{display(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{formatBusinessStatus(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-contract-row-${row.id}`} onClick={() => openContractDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openContractDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{cnDate(row.effectiveDate)}</td><td>{cnDate(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{formatBusinessStatus(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
           ))}</tbody>
         </table>
       </div>
@@ -232,6 +282,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

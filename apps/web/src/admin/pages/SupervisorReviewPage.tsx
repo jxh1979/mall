@@ -9,6 +9,7 @@ import { PermissionButton } from "../security/Can";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, SupervisorReviewPolicyRow } from "../types";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEXT = {
   title: "主管复核与违规阻断",
@@ -87,6 +88,8 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
   const [reviewerLevel, setReviewerLevel] = React.useState("3");
   const [approvalComment, setApprovalComment] = React.useState("证据齐备，同意放行");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该复核策略完整字段（枚举中文·布尔中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -191,12 +194,28 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
     await runAction("supervisor_review_approved", request, () => api.post(`/api/v1/platform/supervisor-review/${latestReviewId}/approve`, request));
   }
 
+  function openPolicyDetail(row: SupervisorReviewPolicyRow) {
+    setDetail({
+      title: `${TEXT.policy}明细 · ${row.policyCode ?? row.id}`,
+      fields: [
+        { label: TEXT.policy, value: row.policyCode ?? row.id },
+        { label: TEXT.actionType, value: formatBusinessStatus(row.actionType) },
+        { label: TEXT.reviewerLevel, value: displayValue(row.requiredLevel) },
+        { label: TEXT.defaultBlocked, value: displayValue(row.blocksByDefault) },
+        { label: TEXT.requiredEvidence, value: displayValue(row.requiredEvidenceTypes) },
+        { label: TEXT.status, value: formatBusinessStatus(row.status) },
+      ],
+    });
+  }
+
   const policyTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="supervisor-review-table">
         <thead><tr><th>{TEXT.policy}</th><th>{TEXT.actionType}</th><th>{TEXT.reviewerLevel}</th><th>{TEXT.defaultBlocked}</th><th>{TEXT.requiredEvidence}</th><th>{TEXT.status}</th></tr></thead>
         <tbody>{(kpiFocus ? focusRows : rows).map((row) => (
-          <tr key={row.id}>
+          <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`supervisor-review-row-${row.id}`}
+            onClick={() => openPolicyDetail(row)}
+            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPolicyDetail(row); } }}>
             <td>{row.policyCode ?? row.id}</td>
             <td>{formatBusinessStatus(row.actionType)}</td>
             <td>{displayValue(row.requiredLevel)}</td>
@@ -268,6 +287,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

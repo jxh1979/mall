@@ -110,3 +110,28 @@ describe("AuditEventsPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("audit-events-table").textContent).toContain("安防");
   });
 });
+
+describe("AuditEventsPage 行明细抽屉", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/admin/audit/events");
+  });
+
+  it("点事件行 → 抽屉含该行分类（中文）与摘要，无英文枚举，Esc 关闭", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("audit-events-row-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("audit-events-row-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("安防");
+    expect(drawer.textContent).toContain("越权阻断");
+    expect(drawer.textContent).not.toContain("security");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点行内单选按钮不打开抽屉（stopPropagation）", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("audit-events-select-0")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("audit-events-select-0"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});
