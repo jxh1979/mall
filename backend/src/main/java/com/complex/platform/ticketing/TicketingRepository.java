@@ -48,6 +48,33 @@ public interface TicketingRepository {
         return Optional.empty();
     }
 
+    /**
+     * 结算重构批3-2(PRD §6.2)：按 venue 营业时间表惰性解析当前场次。
+     * 当前营业 → 取/开当日 open 场次并返回 session_id；非营业时段 → 空(调用方报 VENUE_NOT_IN_SESSION)。
+     * default 返回空兼容既有测试假实现（无 per_session 权益的测试不受影响）。
+     */
+    default Optional<String> resolveOpenSessionForVenue(String venueId, java.time.Instant now) {
+        return Optional.empty();
+    }
+
+    /**
+     * 结算重构批3-2：记录该权益在该场次的首次入场(唯一键 entitlement_id+session_id)。
+     * 返回 true=本次真插入(本场次首入,应消耗一次)；false=本场次已入过(放行不消耗)。default 恒 true 兼容假实现。
+     */
+    default boolean recordEntitlementEntry(String entitlementId, String sessionId, java.time.Instant now) {
+        return true;
+    }
+
+    /** 结算重构批3-2：该权益在该场次是否已有入场记录。default false。 */
+    default boolean hasEntitlementEntryInSession(String entitlementId, String sessionId) {
+        return false;
+    }
+
+    /** 结算重构批3-2：该权益是否曾在别的场次入过场(session_id != 当前) → 过场作废判定。default false。 */
+    default boolean hasEntitlementEntryInOtherSession(String entitlementId, String sessionId) {
+        return false;
+    }
+
     IssuedEntitlementRecord updateIssuedEntitlement(IssuedEntitlementRecord entitlement);
 
     List<OfflineEntitlementResponse> listOfflineEntitlements(String merchantId, String venueId, int limit);

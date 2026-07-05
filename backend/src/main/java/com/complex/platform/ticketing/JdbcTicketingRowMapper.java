@@ -60,7 +60,8 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
                 resultSet.getString("entitlement_kind"),
-                nullableLong(resultSet, "agreement_price_cent")
+                nullableLong(resultSet, "agreement_price_cent"),
+                resultSet.getString("consumption_window")
         );
     }
 
@@ -102,7 +103,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getInt("num_people"),
                 nullableLong(resultSet, "allocated_revenue_cent"),
                 resultSet.getString("entitlement_kind"),
-                nullableLong(resultSet, "agreement_price_cent")
+                nullableLong(resultSet, "agreement_price_cent"),
+                resultSet.getString("consumption_window")
         );
     }
 

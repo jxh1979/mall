@@ -120,7 +120,10 @@ public class TicketCatalogService {
                 // 结算重构批3-1(PRD §6.1)：新建模板结算类别与 V225 回填口径一致——gift_drink=实物(走内部结算价)，
                 // 其余=虚拟(走签约单价)。签约单价暂无配置入口，留空(判定层回退 value_amount)，待运营后台补录。
                 "gift_drink".equals(entitlementType) ? "physical" : "virtual",
-                null
+                null,
+                // 结算重构批3-2(PRD §6.2)：新建模板默认逐次扣(per_use，行为同现状)；入场资格「场次规则」(per_session)
+                // 暂无配置入口，待运营后台补 consumption_window 编辑项（判定层对 NULL/per_use 走现状）。
+                "per_use"
         ));
     }
 

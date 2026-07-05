@@ -39,7 +39,7 @@ final class JdbcTicketingSql {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window
                   FROM issued_entitlements
                 """;
     }

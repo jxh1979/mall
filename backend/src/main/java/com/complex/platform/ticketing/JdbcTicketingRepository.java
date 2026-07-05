@@ -107,12 +107,12 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO entitlement_templates (
                     id, name, entitlement_type, default_total_times, default_value_cent,
                     status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                    agreement_price_cent, created_at, updated_at
+                    agreement_price_cent, consumption_window, created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :entitlement_type, :default_total_times, :default_value_cent,
                     :status, :merchant_id, :venue_id, :point_id, :bar_item_ref, :entitlement_kind,
-                    :agreement_price_cent, :created_at, :updated_at
+                    :agreement_price_cent, :consumption_window, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -126,6 +126,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     bar_item_ref = EXCLUDED.bar_item_ref,
                     entitlement_kind = EXCLUDED.entitlement_kind,
                     agreement_price_cent = EXCLUDED.agreement_price_cent,
+                    consumption_window = EXCLUDED.consumption_window,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.entitlementTemplateParameters(template));
         return template;
@@ -136,7 +137,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, created_at, updated_at
+                       agreement_price_cent, consumption_window, created_at, updated_at
                   FROM entitlement_templates
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapEntitlementTemplate);
@@ -147,7 +148,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, created_at, updated_at
+                       agreement_price_cent, consumption_window, created_at, updated_at
                   FROM entitlement_templates
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();
@@ -196,13 +197,13 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                     entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                     value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                    allocated_revenue_cent, entitlement_kind, agreement_price_cent
+                    allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window
                 )
                 VALUES (
                     :id, :ticket_type_id, :order_id, :entitlement_template_id, :entitlement_code,
                     :entitlement_type, :merchant_id, :venue_id, :point_id, :total_times, :used_times,
                     :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people,
-                    :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent
+                    :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -223,7 +224,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                     num_people = EXCLUDED.num_people,
                     allocated_revenue_cent = EXCLUDED.allocated_revenue_cent,
                     entitlement_kind = EXCLUDED.entitlement_kind,
-                    agreement_price_cent = EXCLUDED.agreement_price_cent
+                    agreement_price_cent = EXCLUDED.agreement_price_cent,
+                    consumption_window = EXCLUDED.consumption_window
                 """, parameterSource.issuedEntitlementParameters(entitlement));
         return entitlement;
     }
@@ -234,7 +236,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
@@ -258,7 +260,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)
@@ -639,6 +641,117 @@ class JdbcTicketingRepository implements TicketingRepository {
                     long value = resultSet.getLong("internal_settlement_price_cent");
                     return resultSet.wasNull() ? null : value;
                 }).stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    // ===== 结算重构批3-2(PRD §6.2) 酒吧入场资格「场次规则」：营业时间表/场次/入场记录裸查询（不引 bar/venue 域类型）=====
+
+    @Override
+    public Optional<String> resolveOpenSessionForVenue(String venueId, java.time.Instant now) {
+        // 惰性开场：按 venue 营业时间表判定「当前是否营业」→ 取/开当日 open 场次；非营业时段返回空（调用方报 VENUE_NOT_IN_SESSION）。
+        // ponytail: 用系统默认时区把 Instant 落到墙钟本地时间判营业窗口（营业时间是本地墙钟语义）；
+        //           若日后要按各 venue 独立时区，营业表加 zone_id 列在此换算，接口不变。
+        java.time.ZonedDateTime local = now.atZone(java.time.ZoneId.systemDefault());
+        java.time.LocalDate today = local.toLocalDate();
+        java.time.LocalTime nowTime = local.toLocalTime();
+        // Java DayOfWeek: 周一=1..周日=7；库存 day_of_week: 周日=0..周六=6（V226 注释）→ 归一 %7。
+        int todayDow = today.getDayOfWeek().getValue() % 7;              // 周日=0
+        java.time.LocalDate yesterday = today.minusDays(1);
+        int yesterdayDow = yesterday.getDayOfWeek().getValue() % 7;
+
+        // ① 今日窗口：open<=now<=close（同日窗口）；或 close<open（跨零点）且 now>=open（今日晚场，session_date=今日）。
+        java.util.Optional<int[]> todayHours = findBusinessHours(venueId, todayDow);
+        if (todayHours.isPresent()) {
+            java.time.LocalTime open = java.time.LocalTime.ofSecondOfDay(todayHours.get()[0]);
+            java.time.LocalTime close = java.time.LocalTime.ofSecondOfDay(todayHours.get()[1]);
+            boolean sameDayOpen = !close.isBefore(open) && !nowTime.isBefore(open) && !nowTime.isAfter(close);
+            boolean crossMidnightEvening = close.isBefore(open) && !nowTime.isBefore(open); // 今晚开、次日凌晨歇
+            if (sameDayOpen || crossMidnightEvening) {
+                return Optional.of(getOrOpenSession(venueId, today, now));
+            }
+        }
+        // ② 昨日跨零点窗口延续到今日凌晨：昨日 close<open 且 now<=close（凌晨仍在昨日那场）→ session_date=昨日。
+        java.util.Optional<int[]> yHours = findBusinessHours(venueId, yesterdayDow);
+        if (yHours.isPresent()) {
+            java.time.LocalTime yOpen = java.time.LocalTime.ofSecondOfDay(yHours.get()[0]);
+            java.time.LocalTime yClose = java.time.LocalTime.ofSecondOfDay(yHours.get()[1]);
+            if (yClose.isBefore(yOpen) && !nowTime.isAfter(yClose)) {
+                return Optional.of(getOrOpenSession(venueId, yesterday, now));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** 取某 venue 某星期几的非草稿营业时段 [open_seconds, close_seconds]；无配置返回空。 */
+    private java.util.Optional<int[]> findBusinessHours(String venueId, int dayOfWeek) {
+        return jdbcTemplate.query("""
+                SELECT EXTRACT(EPOCH FROM open_time)::int AS open_s,
+                       EXTRACT(EPOCH FROM close_time)::int AS close_s
+                  FROM venue_business_hours
+                 WHERE venue_id = :venue_id
+                   AND day_of_week = :dow
+                   AND is_draft = FALSE
+                """, new MapSqlParameterSource()
+                .addValue("venue_id", venueId)
+                .addValue("dow", dayOfWeek),
+                (rs, n) -> new int[]{rs.getInt("open_s"), rs.getInt("close_s")}).stream().findFirst();
+    }
+
+    /** 惰性开场：唯一键(venue_id,session_date) ON CONFLICT DO NOTHING，再读回 id。并发只一路真插，都拿同一 open 场次。 */
+    private String getOrOpenSession(String venueId, java.time.LocalDate sessionDate, java.time.Instant now) {
+        String id = "vses_" + java.util.UUID.randomUUID().toString().replace("-", "");
+        jdbcTemplate.update("""
+                INSERT INTO venue_sessions (id, venue_id, session_date, opened_at, status, created_at)
+                VALUES (:id, :venue_id, :session_date, :opened_at, 'open', :opened_at)
+                ON CONFLICT (venue_id, session_date) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("venue_id", venueId)
+                .addValue("session_date", sessionDate)
+                .addValue("opened_at", now.atOffset(java.time.ZoneOffset.UTC)));
+        return jdbcTemplate.queryForObject("""
+                SELECT id FROM venue_sessions WHERE venue_id = :venue_id AND session_date = :session_date
+                """, new MapSqlParameterSource()
+                .addValue("venue_id", venueId)
+                .addValue("session_date", sessionDate), String.class);
+    }
+
+    @Override
+    public boolean recordEntitlementEntry(String entitlementId, String sessionId, java.time.Instant now) {
+        // 首入场留痕：唯一键(entitlement_id,session_id) ON CONFLICT DO NOTHING。返回 true=本次真插入（该权益本场次首入）。
+        // 并发同权益同场次多路核销只一路得 true（真消耗一次），其余得 false（放行不消耗），杜绝重复扣次。
+        int rows = jdbcTemplate.update("""
+                INSERT INTO entitlement_entry_records (id, entitlement_id, session_id, first_entry_at)
+                VALUES (:id, :entitlement_id, :session_id, :first_entry_at)
+                ON CONFLICT (entitlement_id, session_id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", "eer_" + java.util.UUID.randomUUID().toString().replace("-", ""))
+                .addValue("entitlement_id", entitlementId)
+                .addValue("session_id", sessionId)
+                .addValue("first_entry_at", now.atOffset(java.time.ZoneOffset.UTC)));
+        return rows > 0;
+    }
+
+    @Override
+    public boolean hasEntitlementEntryInSession(String entitlementId, String sessionId) {
+        Integer c = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1) FROM entitlement_entry_records
+                 WHERE entitlement_id = :entitlement_id AND session_id = :session_id
+                """, new MapSqlParameterSource()
+                .addValue("entitlement_id", entitlementId)
+                .addValue("session_id", sessionId), Integer.class);
+        return c != null && c > 0;
+    }
+
+    @Override
+    public boolean hasEntitlementEntryInOtherSession(String entitlementId, String sessionId) {
+        // 该权益曾在别的场次入过场（session_id != 当前）→ 过了首入场场次，本场次核销入场资格应作废拒绝。
+        Integer c = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1) FROM entitlement_entry_records
+                 WHERE entitlement_id = :entitlement_id AND session_id <> :session_id
+                """, new MapSqlParameterSource()
+                .addValue("entitlement_id", entitlementId)
+                .addValue("session_id", sessionId), Integer.class);
+        return c != null && c > 0;
     }
 
     @Override

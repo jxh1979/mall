@@ -421,6 +421,15 @@ public class TicketVerificationService {
         if (entitlement.validTo() != null && now.isAfter(entitlement.validTo())) {
             throw ApiException.conflict("ENTITLEMENT_EXPIRED", "entitlement has expired");
         }
+        // 结算重构批3-2(PRD §6.2)：入场资格「场次规则」——仅 consumption_window=per_session 的权益走场次判定；
+        // 其余(NULL/per_use/per_day/unlimited_in_day)零改动、走下方现状逐次扣。若返回非 null 即已在本方法内落 success 记录并返回。
+        if (SESSION_WINDOW.equals(entitlement.consumptionWindow())) {
+            VerificationResponse sessionResponse =
+                    verifyPerSessionEntry(entitlement, request, credential, sourceType, clientTaskId, windowValid, signatureValid, now);
+            if (sessionResponse != null) {
+                return sessionResponse; // 放行不消耗(本场次二次入场) → 直接返回；首入场则 fall-through 走下方正常消耗。
+            }
+        }
         IssuedEntitlementRecord updated = repository.atomicUseEntitlement(entitlement.id(), now)
                 .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "entitlement has no remaining times"));
         // R5 T5 多人票：本次核销人数 = 票面 num_people（同场次集中核销），不可超 num_people。
@@ -521,6 +530,94 @@ public class TicketVerificationService {
     // 结算重构批3-1(PRD §6.1)：结算类别常量。
     private static final String KIND_PHYSICAL = "physical";
     private static final String KIND_VIRTUAL = "virtual";
+
+    // 结算重构批3-2(PRD §6.2)：入场资格消耗单位——按场次核销(入过场当场次持续进出不重复消耗、过场作废)。
+    private static final String SESSION_WINDOW = "per_session";
+
+    /**
+     * 结算重构批3-2(PRD §6.2)：入场资格「场次规则」核销判定（consumption_window=per_session）。
+     * <ul>
+     *   <li>非营业时段（无当前 open 场次）→ 抛 {@code VENUE_NOT_IN_SESSION}。</li>
+     *   <li>本场次已入过场 → 放行【不消耗】：落一条 success/session_reentry 记录(不 atomicUseEntitlement、不落结算价、
+     *       不发积分/结算事件)，返回该 response（调用方据此短路返回）。</li>
+     *   <li>曾在别的场次入过场（过了首入场场次）→ 抛 {@code ENTRY_PASS_PAST_SESSION_VOID}。</li>
+     *   <li>本场次首入（且从未入过任何场次）→ 建入场记录(唯一键防并发重复)，返回 null → 调用方 fall-through 走
+     *       正常消耗一次(atomicUseEntitlement + 批3-1 settlement_price + 积分/结算事件)。</li>
+     * </ul>
+     * ponytail：惰性开场——核销时按营业时间表判当前是否营业并取/开当日场次，不做后台定时开歇场 job。
+     * 若日后要精确歇业关场（把过场作废落到墙钟歇业时刻而非"下一场次开启前不再判过场"），再加定时 job 置 closed。
+     */
+    private VerificationResponse verifyPerSessionEntry(
+            IssuedEntitlementRecord entitlement,
+            com.complex.platform.ticketing.dto.VerificationRequest request,
+            TicketCredentialRecord credential,
+            String sourceType,
+            String clientTaskId,
+            Boolean windowValid,
+            Boolean signatureValid,
+            Instant now) {
+        String sessionId = repository.resolveOpenSessionForVenue(entitlement.venueId(), now)
+                .orElseThrow(() -> ApiException.conflict(
+                        "VENUE_NOT_IN_SESSION", "venue is not currently in an open business session"));
+        // 本场次已入过场 → 放行不消耗（持续进出）。
+        if (repository.hasEntitlementEntryInSession(entitlement.id(), sessionId)) {
+            VerificationRecord reentry = repository.saveVerification(sessionVerificationRecord(
+                    entitlement, request, credential, sourceType, clientTaskId, windowValid, signatureValid, now,
+                    "session_reentry"));
+            return new VerificationResponse(reentry.id(), reentry.verificationNo(), reentry.status(), reentry.resultReason());
+        }
+        // 曾在别的场次入过场 → 过了首入场场次，本场次作废拒绝。
+        if (repository.hasEntitlementEntryInOtherSession(entitlement.id(), sessionId)) {
+            throw ApiException.conflict(
+                    "ENTRY_PASS_PAST_SESSION_VOID", "entry pass voided: entered a previous session already");
+        }
+        // 本场次首入（且从未入过任何场次）→ 建入场记录（并发唯一键：若并发另一路抢先插入本场次记录，本路得 false=改判二次入场放行）。
+        if (!repository.recordEntitlementEntry(entitlement.id(), sessionId, now)) {
+            VerificationRecord reentry = repository.saveVerification(sessionVerificationRecord(
+                    entitlement, request, credential, sourceType, clientTaskId, windowValid, signatureValid, now,
+                    "session_reentry"));
+            return new VerificationResponse(reentry.id(), reentry.verificationNo(), reentry.status(), reentry.resultReason());
+        }
+        return null; // 首入 → 调用方 fall-through 正常消耗一次。
+    }
+
+    /** 批3-2：场次入场"放行不消耗"的 success 核销记录（settlement_price 为 null，不落新结算收入）。 */
+    private VerificationRecord sessionVerificationRecord(
+            IssuedEntitlementRecord entitlement,
+            com.complex.platform.ticketing.dto.VerificationRequest request,
+            TicketCredentialRecord credential,
+            String sourceType,
+            String clientTaskId,
+            Boolean windowValid,
+            Boolean signatureValid,
+            Instant now,
+            String resultReason) {
+        return new VerificationRecord(
+                "ver_" + UUID.randomUUID().toString().replace("-", ""),
+                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
+                entitlement.id(),
+                entitlement.entitlementCode(),
+                requireText(request.credentialType(), "credential_type"),
+                verificationPayload(request.credentialPayload(), credential),
+                requireText(request.deviceId(), "device_id"),
+                requireText(request.pointId(), "point_id"),
+                "success",
+                resultReason,
+                sourceType,
+                clientTaskId,
+                now,
+                credential == null ? null : credential.nonce(),
+                null,
+                entitlement.merchantId(),
+                windowValid,
+                signatureValid,
+                entitlement.numPeople(),
+                null,
+                null,
+                null,
+                // 放行不消耗：不落结算价（本场次首入已在正常消耗路径落过一次，二次进出不再重复计收入）。
+                null);
+    }
 
     /**
      * 结算重构批3-1(PRD §6.1)：核销时判定该次结算价（分，NULL 安全回退）。
