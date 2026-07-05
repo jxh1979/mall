@@ -150,6 +150,8 @@
 | **虚拟权益**(入场资格/服务) | **签约权益单价** `agreement_price_cent` | ❌ 新增字段 + 配置 |
 - 权益模板增标记 `entitlement_kind ∈ {physical, virtual}` 决定取哪个价。
 
+> ✅ **已落地(批3-1,V225,main=eb5cba5)**:`entitlement_templates`/`issued_entitlements` 加 `entitlement_kind`+`agreement_price_cent`,`ticket_verifications` 加 `settlement_price_cent`;核销时 `TicketVerificationService.resolveSettlementPrice` 判定——实物经 `bar_item_ref`→`bar_products.internal_settlement_price_cent`(V152)回退 value,虚拟取 `agreement_price_cent` 回退 value,NULL 回退 value;落该次核销记录。
+
 ### 6.2 酒吧入场资格——场次规则(用户口径 4,全新)
 - 入场资格权益的核销单位是**场次**(一个"开业→歇业"周期):
   - 客人当场次**入过场**后,该场次内可**持续进出**(不重复消耗);
@@ -157,14 +159,38 @@
 - 新建 `venue_sessions`(场次/营业周期)+ `entitlement_entry_records`(入场记录);核销校验按场次状态机。
 - **场次自动触发(2026-07-04 定)**:系统按各酒吧**营业时间表**(新增 `venue_business_hours` 配置)自动划场次——开业开场、歇业关场;入场资格权益随场次结束自动作废,无需人工开关。
 
-### 6.3 游乐——当天无限(用户口径 5,全新)
-- 游乐权益核销单位为**自然日**:当天首次核销后,当天内**无限游玩不再消耗**;跨日作废(或按票面规则);
-- 权益模板增 `consumption_window ∈ {per_use, per_session, per_day, unlimited_in_day}`。
-- **结算幂等**:首次核销即确认权益消耗、收入计入当天;同一权益当天内再刷卡/扫码,系统判"已消耗"拒绝重复结算(不重复计费);跨日或权益失效后作废。
+> ✅ **已落地(批3-2,V226,main=98a7c50)**:新引入 `consumption_window`(per_use/per_session/per_day/unlimited_in_day)判别位,`per_session`=入场资格;建 `venue_business_hours`(营业时间表)+`venue_sessions`(场次实例)+`entitlement_entry_records`(入场记录);核销惰性开场(按营业时间表判当前是否营业·跨零点延续归同场次·非营业时段拒 `VENUE_NOT_IN_SESSION`);同场次二次核销放行不消耗、跨场次已入过场 `ENTRY_PASS_PAST_SESSION_VOID` 作废、唯一键防并发重扣。
+
+### 6.3 游乐——当天无限 + 票种规则(用户口径 5,2026-07-04 扩)
+- **当天无限核心机制**:游乐权益按**自然日**核销——每次核销激活「一个整天无限」:当天首刷即消耗一次、当天内再刷卡/扫码/多人再进=放行**不重复消耗不重复计费**;跨自然日=新的一天从剩余次数再消耗一次。
+- 权益模板增 `consumption_window ∈ {per_use, per_session, per_day, unlimited_in_day}`(`unlimited_in_day`=当天无限)。
+- **票种规则(2026-07-04 用户拍板,游乐票同酒吧通票:有有效期、期内可用)**:
+  - **单人票**:有效期内任选一天首刷→当天无限玩→**跨日作废**(即使有效期未到,次日票即废)。靠 `total_times=1`(次日核销即 `ENTITLEMENT_USED_UP`)。
+  - **多人票(N 人)**:规则同单人票,唯一差异=**当天可核销 N 次**(N 人当天各入场随便玩);同天用不完的额度**跨日作废剩余**。(单日型+跨日废剩余标记 → **批 4 票种**。)
+  - **多次票(N 次)**:有效期内 N 次、**每次核销=一整天无限**、**跨日保留剩余**(买 3 次,第 1 次核销完,有效期内第 2/3 天还能各核销一次)。靠 `total_times=N`(天天各扣一次)。
+  - **新人票/学生票**:规则+作废规则**同酒吧通票**。
+  - 票种细分(单人/多人/新人/学生)、多人票「同天 N 次+跨日废剩余」、`num_people` 语义 → **批 4 票种**集中实现。
+
+> ✅ **已落地(批3-3,V227,main=d36d0a5)**:`unlimited_in_day` 的「按自然日激活」——建 `entitlement_day_activations`(唯一键 entitlement_id+usage_date);
+> 当天已激活放行不消耗、当天首刷且剩余>0 才扣次(唯一键防并发重扣)、剩余=0 不插激活让其走 `ENTITLEMENT_USED_UP`;
+> **复用现有 `total_times`**——单人票 total=1 天然跨日作废、多次票 total=N 天然跨日保留,不重造次数模型。
 
 ### 6.4 专属某商户不分摊(用户口径 9)
 - 权益标记 `exclusive_merchant_id` 非空时:该权益核销收入**全额归该商户**,不进 SPV 分账池、不平均分;
 - 适用"仅限某酒吧的酒水/服务"单点消费(酒吧内或第三方购买)。
+
+> ✅ **已落地(批3-4,V228,main=d0e0e60)**:`entitlement_templates`/`issued_entitlements`/`settlement_transactions` 加 `exclusive_merchant_id`(核销双写定格结算源真相);月度引擎 split——池基/排名/客数聚合加 `exclusive_merchant_id IS NULL` 过滤(专属不进池不稀释),专属核销按 `exclusive_merchant_id` 分组**全额直付**明细(`method=exclusive_full`·不扣留存·不进 spvPool·明细 id 加 `_excl` 后缀防撞);越池校验只算池分账。
+
+### 6.5 游乐票购买人脸拍照存档(用户口径,2026-07-04 新增)
+- **游乐票购买时做人脸校验、拍一张照片加密存档;核销时后台显示该照片**,核销员据此确认核销的是本人(防转票/人票一致)。区别于 `entry/` 人脸入场闸(判 18+ 年龄闸·不存照)。
+- **适用范围**:全票种**可配**·游乐票(`entitlement_type='amusement'`)**默认开**——权益模板级开关 `require_face_photo`(禁硬编码,游乐默认开是种子回填)。
+- **保留期**:票核销完/失效后**短期自清(valid_to+30 天)**——生物识别敏感信息(PIPL),越短越安全。
+- **存储/访问**:复用 `PiiCipher`(AES-GCM)+`KeyVault` **加密存库**(密文,禁明文);取照限核销/运营角色(`verification.view`,无权 403)+**每次查看留审计**(`ticket_face_photo.viewed`)。
+
+> ✅ **后端已落地(批3-6,V229,main=a545261)**:建 `ticket_face_photos`(entitlement_id 唯一·密文 BYTEA·purge_after);
+> 发放时 `require_face_photo=TRUE` 缺照拒 `FACE_PHOTO_REQUIRED`(建权益行前拒·两发放入口 `@Transactional` 无孤儿)、有照 PiiCipher 加密存;
+> `GET /ticketing/issued-entitlements/{id}/face-photo` 授权+审计取照;`TicketFacePhotoPurgeJob` 按 purge_after 硬删(默认关)。
+> **前端待办**:①H5 购票拍照 ②后台核销页显示脸照 ③模板编辑 `require_face_photo` 勾选。
 
 ---
 
@@ -293,8 +319,9 @@
 |---|---|---|
 | 批 0 | ✅ 完成 | 术语表 `terminology-canonical-v1.0` + 本 PRD v1.0 定稿 |
 | 批 1(按核销结算地基) | ✅ 完成 | **V222**(`settlement_transactions` + 对账表)、核销双写(`SettlementSettledEvent`/Consumer,AFTER_COMMIT 不影响核销主流程、金额三段 verified+unverified=allocated 幂等)、`SettlementReconciliationJob` 新旧对账、`SettlementExpiryJob` 未核销归项目(`allocated×未核销次数/总次数`);旧 `allocated_revenue_cent` 保留双写观察、不切口径;测试全绿 |
-| 批 2(分账引擎) | 🔄 进行中 | ✅ **V223**(6 配置表:platform_retention_rules/giveaway_cost_configs/ticket_distribution_configs/rank_tiers/merchant_rates/settlement_tax_configs)、✅ **V224**(`settlement_bills` + `settlement_items`)、✅ 月度分账引擎 `TicketDistributionSettlementService.settleMonth`(§5.0 算池/留存/三方式分配/超额待特批、月窗按 `created_at`、`@ConditionalOnProperty` 默认关);⬜ 批 2-4 过账 `ar_ap_items`、⬜ 批 2-5 测试收口 |
-| 迁移号 | — | V222 / V223 / V224 已用,下一 **V225** |
+| 批 2(分账引擎) | ✅ 完成 | **V223**(6 配置表)、**V224**(`settlement_bills`+`settlement_items`)、月度分账引擎 `settleMonth`(算池/留存/三方式分配/超额待特批)、批 2-4 过账 `ar_ap_items`(`SettlementPostingService`·幂等键 SHA-256 前 20 hex 防明细撞·批2-5 逐家真断言证伪)、批 2-5 端到端全绿;**丢账 bug 已修 main=c6f3623** |
+| 批 3(权益细则 §6.1-6.4+人脸照) | ✅ 完成 | **3-1** 结算价判定(V225·实物内部价/虚拟签约价/回退)、**3-2** 场次入场(V226·consumption_window+营业时间表+场次+入场记录·惰性开场·过场作废)、**3-3** 当天无限(V227·按自然日激活·单人跨日作废/多次跨日保留靠 total_times)、**3-4** 专属不分摊(V228·exclusive_merchant_id 全额直付不进池)、**3-6** 游乐票人脸拍照存档(V229·PiiCipher 加密·授权+审计取照·30 天自清);每片自带证伪测试+回归全绿;main=a545261。**票种细分(单人/多人/多次/新人/学生)→ 批 4** |
+| 迁移号 | — | V222–V229 已用,下一 **V230** |
 
 > 渠道费明细来源(§5.0 步骤②)现无数据源,引擎暂置 0,待第三方渠道费率接入补。
 
