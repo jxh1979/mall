@@ -2,7 +2,7 @@ import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
+import { AuditTrailHint, auditTraceField } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
 import { PermissionButton } from "../security/Can";
@@ -188,6 +188,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         { label: "面积", value: display(row.leasedAreaSquareMeter ?? row.areaSquareMeter) },
         { label: "合作形式", value: formatBusinessStatus(row.cooperationForm) },
         { label: "状态", value: formatBusinessStatus(row.status) },
+        auditTraceField(navigateTo, "merchant", row.id),
       ],
     });
   }

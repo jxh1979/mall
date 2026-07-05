@@ -5,7 +5,7 @@ import { ContractWorkbenchPage } from "./ContractWorkbenchPage";
 import { MerchantZoneSettlementsPage } from "./MerchantZoneSettlementsPage";
 import { AuditEventsPage } from "./AuditEventsPage";
 import { GovernanceTopologyPage } from "./GovernanceTopologyPage";
-import type { AdminApiClient, AdminPageProps, AuditEventRow, EffectivePermissionsState } from "../types";
+import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
@@ -92,21 +92,22 @@ describe("全链下钻 P1-A：目标页按 ?focus= 定位", () => {
     expect(screen.getByTestId("contract-c-1").className ?? "").not.toContain("admin-row-selected");
   });
 
-  it("审计事件页带 focusObjectId(类型:id) → 预填筛选为 id 段", async () => {
-    const rows: AuditEventRow[] = [
-      { id: "e1", eventType: "login", eventCategory: "auth", result: "success", traceId: "t1", objectType: "merchant", objectId: "m-42", summary: "x" },
-    ];
+  it("审计事件页带 focusObjectId(类型:id) → 切操作日志视图并按业务类型/对象服务端反查", async () => {
+    // 反查升级：对象引用(类型:id)不再只做证据视图页内筛选，而是切到操作日志视图按 business_type/business_id 服务端过滤真 audit_events。
     const api = {
-      get: vi.fn().mockResolvedValue([]),
-      getPaged: vi.fn().mockResolvedValue({ items: rows, total: 1, page: 1, size: 10 }),
+      get: vi.fn().mockResolvedValue([
+        { id: "a1", occurredAt: "2026-07-05T10:00:00Z", eventName: "merchant.updated", eventResult: "success", actorType: "staff", actorId: "u1", terminal: "web", businessType: "merchant", businessId: "m-42" },
+      ]),
+      getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
       post: vi.fn().mockResolvedValue({}),
       put: vi.fn(), patch: vi.fn(), delete: vi.fn(),
     } as unknown as AdminApiClient;
     render(<AuditEventsPage {...baseProps(api, { focusObjectId: "merchant:m-42" })} />);
-    await waitFor(() => {
-      const search = screen.getByTestId("audit-events-search") as HTMLInputElement;
-      expect(search.value).toBe("m-42");
-    });
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(expect.stringContaining("/api/v1/audit/operation-events")));
+    const calledWith = String((api.get as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] ?? "");
+    expect(calledWith).toContain("business_type=merchant");
+    expect(calledWith).toContain("business_id=m-42");
+    expect(screen.getByTestId("audit-events-operations-table").textContent).toContain("merchant.updated");
   });
 
   it("治理拓扑带 focusObjectId(merchantId) → 高亮该商户行", async () => {

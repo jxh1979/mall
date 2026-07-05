@@ -135,3 +135,68 @@ describe("AuditEventsPage 行明细抽屉", () => {
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
   });
 });
+
+describe("AuditEventsPage 操作日志反查（audit_events）", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/admin/audit/events");
+  });
+
+  const OP_ROWS = [
+    {
+      id: "a1",
+      occurredAt: "2026-07-05T10:00:00Z",
+      eventName: "contract.activated",
+      eventResult: "success",
+      actorType: "staff",
+      actorId: "u9",
+      terminal: "web",
+      businessType: "contract",
+      businessId: "c1",
+    },
+  ];
+
+  function renderWithFocus(api: AdminApiClient, focusObjectId?: string) {
+    const fullProps: AdminPageProps = {
+      api,
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+      navigateTo: vi.fn(),
+      focusObjectId,
+    };
+    render(<AuditEventsPage {...fullProps} />);
+  }
+
+  it("对象反查（focus=contract:c1）→ 切操作日志视图并按 business_type/business_id 服务端过滤", async () => {
+    const api = makeApi();
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue(OP_ROWS);
+    renderWithFocus(api, "contract:c1");
+    // 关键逻辑：对象引用 → 操作日志服务端过滤参数传递。
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/audit/operation-events"),
+      ),
+    );
+    const calls = (api.get as ReturnType<typeof vi.fn>).mock.calls;
+    const calledWith = String(calls[0]?.[0] ?? "");
+    expect(calledWith).toContain("business_type=contract");
+    expect(calledWith).toContain("business_id=c1");
+    // 呈现真操作留痕行（谁/做了什么/对象）。
+    expect(screen.getByTestId("audit-events-operations-table").textContent).toContain("contract.activated");
+    expect(screen.getByTestId("audit-events-operations-focus-banner").textContent).toContain("contract:c1");
+  });
+
+  it("无对象反查时默认证据视图，可手动切到操作日志视图", async () => {
+    const api = makeApi();
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    renderWithFocus(api);
+    await waitFor(() => expect(screen.getByTestId("audit-events-summary")).toBeTruthy());
+    // 证据视图不调用 operation-events。
+    expect(api.get).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("audit-events-view-operations"));
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith(expect.stringContaining("/api/v1/audit/operation-events")),
+    );
+  });
+});

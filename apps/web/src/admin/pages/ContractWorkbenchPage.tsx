@@ -8,6 +8,7 @@ import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { auditTraceField } from "../components/AuditTrailHint";
 
 // ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
 function shortId(id: string | null | undefined): string {
@@ -265,6 +266,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         { label: "到期日期", value: cnDate(row.expiryDate) },
         { label: "抽成模式", value: formatBusinessStatus(row.commissionMode) },
         { label: "所属综合体", value: row.projectId ?? "—" },
+        auditTraceField(navigateTo, "contract", row.id),
       ],
     });
   }

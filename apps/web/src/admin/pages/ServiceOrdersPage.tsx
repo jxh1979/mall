@@ -2,7 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
+import { AuditTrailHint, auditTraceField } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -169,6 +169,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
         { label: "取消原因", value: row.cancelReason ?? "—" },
         { label: "下单时间", value: cnDate(row.createdAt) },
         { label: "收款时间", value: cnDate(row.paidAt) },
+        auditTraceField(navigateTo, "service_order", row.id),
       ],
     });
   }

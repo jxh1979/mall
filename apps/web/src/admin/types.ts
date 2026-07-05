@@ -853,3 +853,22 @@ export type ReadinessItemRow = {
   evidenceRef?: string | null;
   dueAt?: string | null;
 };
+
+// 真操作留痕行（audit_events 表；对应后端 AuditEvent record 的 JSON 字段）。
+// 与 AuditEventRow（证据表 evidence.events）不同：这是「谁/何时/对什么对象/做了什么/结果」的操作日志。
+export type AuditOperationEventRow = {
+  id?: string;
+  occurredAt?: string;
+  eventName?: string;
+  eventResult?: string;
+  actorType?: string;
+  actorId?: string;
+  terminal?: string;
+  permissionCode?: string;
+  businessType?: string;
+  businessId?: string;
+  requestId?: string;
+  eventCategory?: string;
+  subjectType?: string;
+  metadata?: Record<string, unknown>;
+};

@@ -5,13 +5,14 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { TablePager } from "../components/TablePager";
-import type { AdminPageProps, AuditEventRow } from "../types";
+import type { AdminPageProps, AuditEventRow, AuditOperationEventRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { PagedResult } from "../client/adminClient";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const PAGE_SIZE = 10;
+const OPERATION_LIMIT = 200;
 
 const TEXT = {
   title: "审计事件",
@@ -39,6 +40,21 @@ const TEXT = {
   summary: "摘要",
   occurredAt: "发生时间",
   focusClear: "清除筛选，返回全部",
+  // 操作日志视图（真 audit_events）
+  viewEvidence: "证据事件",
+  viewOperations: "操作日志",
+  opsEvidence: "接口证据：读取 /api/v1/audit/operation-events（服务端按业务类型/业务对象/操作人过滤真操作留痕 audit_events）。",
+  opsLoadFailed: "操作日志读取失败",
+  opsBusinessType: "业务类型",
+  opsBusinessId: "业务对象",
+  opsActor: "操作人",
+  opsQuery: "查询",
+  opsFocusHint: "正在按对象反查操作日志",
+  opsEventName: "操作",
+  opsActorCol: "操作人",
+  opsTerminal: "终端",
+  opsPermission: "权限码",
+  opsRequestId: "请求 ID",
 };
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=events[&status=<success|failed>]；点 KPI 数字=带参重进本页只渲染事件表（对应子集，本页内）。
@@ -100,7 +116,20 @@ function focusKeyword(focus?: string) {
   return colon >= 0 ? trimmed.slice(colon + 1) : trimmed;
 }
 
+// 反查焦点解析：AuditTrailHint 传来的 `业务类型:业务id` 拆成操作日志的服务端过滤参数。
+// 含冒号才认定为对象反查（切到操作日志视图并预填 business_type/business_id）；纯 id 仍走证据视图页内筛选。
+function parseFocusObject(focus?: string): { businessType: string; businessId: string } | null {
+  if (!focus) return null;
+  const trimmed = focus.trim();
+  const colon = trimmed.indexOf(":");
+  if (colon <= 0 || colon >= trimmed.length - 1) return null;
+  return { businessType: trimmed.slice(0, colon), businessId: trimmed.slice(colon + 1) };
+}
+
 export function AuditEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+  const focusObject = React.useMemo(() => parseFocusObject(focusObjectId), [focusObjectId]);
+  // 反查（对象带 类型:id）默认进操作日志视图；否则保持证据事件视图。
+  const [view, setView] = React.useState<"evidence" | "operations">(focusObject ? "operations" : "evidence");
   const [query, setQuery] = React.useState(() => focusKeyword(focusObjectId));
   const [exportReason, setExportReason] = React.useState("验收导出审计事件");
   const [selectedIndex, setSelectedIndex] = React.useState(0);
@@ -110,6 +139,14 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该审计事件完整字段（枚举中文·发生时间中文；trace/对象为机读标识保留原文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  // 操作日志视图（真 audit_events）状态：过滤条件 + 拉取结果。
+  const [opBusinessType, setOpBusinessType] = React.useState(focusObject?.businessType ?? "");
+  const [opBusinessId, setOpBusinessId] = React.useState(focusObject?.businessId ?? "");
+  const [opActorId, setOpActorId] = React.useState("");
+  const [opRows, setOpRows] = React.useState<AuditOperationEventRow[]>([]);
+  const [opLoading, setOpLoading] = React.useState(false);
+  const [opError, setOpError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -149,6 +186,41 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     onError: setGlobalError,
     fallbackMessage: TEXT.loadFailed,
   });
+
+  // 操作日志拉取：按 business_type/business_id/actor_id 服务端过滤 audit_events。
+  const loadOperations = React.useCallback(async () => {
+    setOpLoading(true);
+    setOpError(null);
+    try {
+      const params = new URLSearchParams({ limit: String(OPERATION_LIMIT) });
+      if (opBusinessType.trim()) params.set("business_type", opBusinessType.trim());
+      if (opBusinessId.trim()) params.set("business_id", opBusinessId.trim());
+      if (opActorId.trim()) params.set("actor_id", opActorId.trim());
+      const rows = await api.get<AuditOperationEventRow[]>(`/api/v1/audit/operation-events?${params.toString()}`);
+      setOpRows(Array.isArray(rows) ? rows : []);
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : TEXT.opsLoadFailed;
+      setOpError(message);
+      setGlobalError(message);
+    } finally {
+      setOpLoading(false);
+    }
+  }, [api, opBusinessType, opBusinessId, opActorId, setGlobalError]);
+
+  // 进入操作日志视图（含对象反查跳入）即自动拉取一次；后续手动改条件点「查询」。
+  React.useEffect(() => {
+    if (view === "operations") void loadOperations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  // 反查跳入（focus 带 类型:id）：切到操作日志视图并预填对象过滤。
+  React.useEffect(() => {
+    if (focusObject) {
+      setView("operations");
+      setOpBusinessType(focusObject.businessType);
+      setOpBusinessId(focusObject.businessId);
+    }
+  }, [focusObject]);
 
   // 当前服务端页的行；筛选/KPI 均只作用于本页（后端未提供关键词与全量聚合）。
   const pageRows = events.rows;
@@ -230,9 +302,73 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     });
   }
 
+  function openOperationDetail(row: AuditOperationEventRow) {
+    setDetail({
+      title: `操作日志明细 · ${row.eventName ?? row.id ?? "-"}`,
+      fields: [
+        { label: TEXT.opsEventName, value: row.eventName ?? "-" },
+        { label: TEXT.result, value: formatBusinessStatus(row.eventResult) },
+        { label: TEXT.opsActorCol, value: `${formatBusinessStatus(row.actorType)} / ${row.actorId ?? "-"}` },
+        { label: TEXT.opsBusinessType, value: formatBusinessStatus(row.businessType) },
+        { label: TEXT.opsBusinessId, value: row.businessId ?? "-" },
+        { label: TEXT.opsTerminal, value: formatBusinessStatus(row.terminal) },
+        { label: TEXT.opsPermission, value: row.permissionCode ?? "-" },
+        { label: TEXT.opsRequestId, value: row.requestId ?? "-" },
+        { label: TEXT.category, value: formatBusinessStatus(row.eventCategory) },
+        { label: TEXT.occurredAt, value: cnDate(row.occurredAt) },
+      ],
+    });
+  }
+
+  const focusObjectLabel = focusObject ? `${focusObject.businessType}:${focusObject.businessId}` : "";
+
   return (
     <section data-testid="audit-events-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
+      <div className="admin-form-row" data-testid="audit-events-view-switch">
+        <button type="button" data-testid="audit-events-view-evidence" className={view === "evidence" ? "admin-tab admin-tab--active" : "admin-tab"} onClick={() => setView("evidence")}>{TEXT.viewEvidence}</button>
+        <button type="button" data-testid="audit-events-view-operations" className={view === "operations" ? "admin-tab admin-tab--active" : "admin-tab"} onClick={() => setView("operations")}>{TEXT.viewOperations}</button>
+      </div>
+
+      {view === "operations" ? (
+        <div data-testid="audit-events-operations">
+          <TechDetails><div className="admin-generic-evidence" data-testid="audit-events-operations-evidence">{TEXT.opsEvidence}</div></TechDetails>
+          {focusObject ? (
+            <div className="admin-state" data-testid="audit-events-operations-focus-banner">
+              {TEXT.opsFocusHint}：{focusObjectLabel}（{opRows.length}）
+            </div>
+          ) : null}
+          <div className="admin-form-grid" data-testid="audit-events-operations-controls">
+            <label>{TEXT.opsBusinessType}<input data-testid="audit-events-op-business-type" value={opBusinessType} onChange={(event) => setOpBusinessType(event.target.value)} /></label>
+            <label>{TEXT.opsBusinessId}<input data-testid="audit-events-op-business-id" value={opBusinessId} onChange={(event) => setOpBusinessId(event.target.value)} /></label>
+            <label>{TEXT.opsActor}<input data-testid="audit-events-op-actor-id" value={opActorId} onChange={(event) => setOpActorId(event.target.value)} /></label>
+          </div>
+          <div className="admin-form-row">
+            <button type="button" data-testid="audit-events-op-query" disabled={opLoading} onClick={() => void loadOperations()}>{TEXT.opsQuery}</button>
+          </div>
+          <AdminDataState loading={opLoading} error={opError} empty={opRows.length === 0} onRetry={loadOperations}>
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="audit-events-operations-table">
+                <thead><tr><th>{TEXT.opsEventName}</th><th>{TEXT.result}</th><th>{TEXT.opsActorCol}</th><th>{TEXT.opsBusinessType}</th><th>{TEXT.opsBusinessId}</th><th>{TEXT.opsTerminal}</th><th>{TEXT.occurredAt}</th></tr></thead>
+                <tbody>{opRows.map((row, index) => (
+                  <tr key={`${row.id ?? row.requestId ?? "op"}-${index}`} className="admin-row-clickable" tabIndex={0} data-testid={`audit-events-op-row-${index}`}
+                    onClick={() => openOperationDetail(row)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOperationDetail(row); } }}>
+                    <td>{row.eventName ?? "-"}</td>
+                    <td>{formatBusinessStatus(row.eventResult)}</td>
+                    <td>{row.actorId ?? "-"}</td>
+                    <td>{formatBusinessStatus(row.businessType)}</td>
+                    <td>{row.businessId ?? "-"}</td>
+                    <td>{formatBusinessStatus(row.terminal)}</td>
+                    <td>{cnDate(row.occurredAt)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </AdminDataState>
+        </div>
+      ) : (
+      <>
       <TechDetails><div className="admin-generic-evidence" data-testid="audit-events-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="evidence.event_viewed / evidence.events_reported" />
       <AdminDataState loading={events.loading} error={events.error} empty={events.total === 0} onRetry={events.reload}>
@@ -293,6 +429,8 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
 
         {showDetail && selected ? <pre className="admin-result" data-testid="audit-events-detail">{JSON.stringify({ beforeAfter: selected.beforeAfter ?? selected.before_after ?? selected.payload ?? {}, event: selected }, null, 2)}</pre> : null}
       </AdminDataState>
+      </>
+      )}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
