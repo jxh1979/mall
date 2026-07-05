@@ -62,6 +62,33 @@ export function normalizeRequestBody(body: JsonBody, idempotencyKey: string): Js
   return mapKeys({ ...body, idempotencyKey: body.idempotencyKey ?? idempotencyKey }, toSnakeCaseKey);
 }
 
+// 会话过期全局回登录：CustomerApp 注册回调（清会话+回登录页），任何页面任何请求 401 都走这里。
+// 客人端凭证是 httpOnly cookie（无 refresh 机制），401 即会话失效，直接回登录。
+let sessionExpiredHandler: (() => void) | null = null;
+let sessionExpiredNotified = false;
+
+export function setCustomerSessionExpiredHandler(handler: (() => void) | null): void {
+  sessionExpiredHandler = handler;
+  sessionExpiredNotified = false;
+}
+
+/** 重新登录成功后复位防抖标记，下次会话再过期仍能触发回登录。 */
+export function resetCustomerSessionExpiredNotice(): void {
+  sessionExpiredNotified = false;
+}
+
+function notifySessionExpired(): void {
+  // 并发多个 401 只触发一次（防跳转风暴）。
+  if (sessionExpiredNotified) return;
+  sessionExpiredNotified = true;
+  sessionExpiredHandler?.();
+}
+
+/** 登录/登出/会话探测自身的 401 不算"会话过期"（登录失败要在登录页原地报错，探测本就允许未登录）。 */
+function isSessionProbeOrAuthPath(path: string): boolean {
+  return path.includes("/auth/") || path.endsWith("/customer/session");
+}
+
 export class CustomerApi {
   private readonly apiBaseUrl = getApiBaseUrl();
 
@@ -94,6 +121,8 @@ export class CustomerApi {
     }
     const response = await fetch(`${this.apiBaseUrl}${path}`, init);
     const text = await response.text();
+    // 会话失效（401）全局回登录页；真权限不足（403）不登出，仍走下方错误翻译提示。
+    if (response.status === 401 && !isSessionProbeOrAuthPath(path)) notifySessionExpired();
     // 错误翻译层：客人只看中文业务话术（err.message），技术信息收进 err.detail 供「详情」折叠展示。
     if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
     return (text ? unwrap(JSON.parse(text)) : null) as T;

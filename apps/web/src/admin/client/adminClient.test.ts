@@ -126,4 +126,59 @@ describe("AdminApi", () => {
     expect(expired).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("expires the session on 401 even without a refresh token", async () => {
+    // 会话失效全局回登录：无 refresh_token（老会话/被吊销）时 401 也必须触发回登录，不能卡死在页面。
+    const fetchMock = vi.fn().mockResolvedValue(errorResponse(401, { code: "UNAUTHORIZED", message: "expired" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const api = new AdminApi("stale-token");
+    const expired = vi.fn();
+    api.onSessionExpired = expired;
+
+    await expect(api.get("/api/v1/ticketing/orders")).rejects.toThrow("登录已过期，请重新登录");
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expire the session on 403 (real permission denial stays on page)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      errorResponse(403, { code: "FORBIDDEN", detail_code: "PERMISSION_DENIED", message: "denied" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const api = new AdminApi("valid-token");
+    const expired = vi.fn();
+    api.onSessionExpired = expired;
+
+    await expect(api.get("/api/v1/ticketing/orders")).rejects.toThrow("当前账号无权进行此操作");
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it("notifies session expiry only once for concurrent 401s", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(errorResponse(401, { code: "UNAUTHORIZED", message: "expired" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const api = new AdminApi("stale-token");
+    const expired = vi.fn();
+    api.onSessionExpired = expired;
+
+    const results = await Promise.allSettled([api.get("/api/v1/a"), api.get("/api/v1/b"), api.post("/api/v1/c")]);
+    expect(results.every((r) => r.status === "rejected")).toBe(true);
+    expect(expired).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not treat login failure as session expiry", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      errorResponse(401, { code: "UNAUTHORIZED", detail_code: "INVALID_CREDENTIALS", message: "bad credentials" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const api = new AdminApi("");
+    const expired = vi.fn();
+    api.onSessionExpired = expired;
+
+    await expect(api.post("/api/v1/auth/login", { loginName: "admin" })).rejects.toThrow();
+    expect(expired).not.toHaveBeenCalled();
+  });
 });

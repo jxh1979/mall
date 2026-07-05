@@ -3,7 +3,14 @@ package com.complex.platform.config;
 import com.complex.platform.auth.BearerAuthenticationFilter;
 import com.complex.platform.auth.CustomerTokenAuthenticationFilter;
 import com.complex.platform.auth.ProductionBearerAuthenticationFilter;
+import com.complex.platform.common.api.ApiResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -17,6 +24,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 public class SecurityConfig {
+
+    // 入口点自建 mapper（不依赖容器 ObjectMapper，测试切片未必装配 Jackson）：与全局 Jackson 配置对齐
+    // （SNAKE_CASE + ISO 时间），保证 401 信封字段名与业务响应一致（detail_code/request_id/...）。
+    private static final ObjectMapper UNAUTHORIZED_ENVELOPE_MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
 
     private final ObjectProvider<BearerAuthenticationFilter> bearerAuthenticationFilter;
     private final ObjectProvider<ProductionBearerAuthenticationFilter> productionBearerAuthenticationFilter;
@@ -39,6 +53,18 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                // 会话失效统一 401：无 token / token 伪造 / token 过期一律 UNAUTHORIZED（此前无入口点时
+                // Spring 默认回 403 空 body，前端误译为"当前账号无权进行此操作"且无法触发重新登录）。
+                // 真权限不足（已认证账号越权）仍由应用层 ApiException.forbidden 返回 403 FORBIDDEN，不受影响。
+                .exceptionHandling(handling -> handling.authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    response.setCharacterEncoding("UTF-8");
+                    UNAUTHORIZED_ENVELOPE_MAPPER.writeValue(response.getWriter(), ApiResponse.error(
+                            "UNAUTHORIZED",
+                            "AUTH_SESSION_INVALID",
+                            "authentication required: token is missing, invalid or expired"));
+                }))
                 .authorizeHttpRequests(authorize -> {
                     authorize.requestMatchers(publicApiPaths()).permitAll();
                     if (!environment.acceptsProfiles(Profiles.of("prod"))) {

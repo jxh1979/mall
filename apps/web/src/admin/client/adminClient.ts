@@ -105,6 +105,9 @@ export class AdminApi {
   /** 并发 401 只发一次刷新请求。 */
   private refreshing: Promise<boolean> | null = null;
 
+  /** 并发多个 401 只广播一次会话失效（防跳转风暴）；重新登录会新建 AdminApi 实例，标记自然复位。 */
+  private sessionExpiredNotified = false;
+
   constructor(accessToken: string) {
     this.accessToken = accessToken;
   }
@@ -153,12 +156,12 @@ export class AdminApi {
   private async requestRaw(path: string): Promise<unknown> {
     const isAuthEndpoint = path.includes("/auth/");
     let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
-    if (response.status === 401 && this.refreshToken && !isAuthEndpoint) {
-      if (await this.tryRefresh()) {
+    if (response.status === 401 && !isAuthEndpoint) {
+      // 先静默续期重放一次；无 refresh_token / 刷新失败 / 重放仍 401 → 会话失效回登录页。
+      if (this.refreshToken && (await this.tryRefresh())) {
         response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
-      } else {
-        this.onSessionExpired?.();
       }
+      if (response.status === 401) this.notifySessionExpired();
     }
     const text = await response.text();
     if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
@@ -171,16 +174,22 @@ export class AdminApi {
     // 认证域自身（登录/刷新/登出）失败不再走刷新，避免自递归。
     const isAuthEndpoint = path.includes("/auth/");
     let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
-    if (response.status === 401 && this.refreshToken && !isAuthEndpoint) {
-      if (await this.tryRefresh()) {
+    if (response.status === 401 && !isAuthEndpoint) {
+      // 先静默续期重放一次；无 refresh_token / 刷新失败 / 重放仍 401 → 会话失效回登录页。
+      if (this.refreshToken && (await this.tryRefresh())) {
         response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
-      } else {
-        this.onSessionExpired?.();
       }
+      if (response.status === 401) this.notifySessionExpired();
     }
     const text = await response.text();
     if (!response.ok) throw apiErrorFromResponse(path, response.status, text);
     return (text ? unwrap(JSON.parse(text)) : null) as T;
+  }
+
+  private notifySessionExpired(): void {
+    if (this.sessionExpiredNotified) return;
+    this.sessionExpiredNotified = true;
+    this.onSessionExpired?.();
   }
 
   private tryRefresh(): Promise<boolean> {

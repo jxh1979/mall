@@ -6,6 +6,7 @@ import {
   customerRestoreSession,
   deriveRefreshIntervalSeconds,
   normalizeRequestBody,
+  setCustomerSessionExpiredHandler,
   unwrap,
 } from "./customerClient";
 import { ApiError } from "../../shared/apiError";
@@ -135,5 +136,63 @@ describe("CustomerApi requests", () => {
 
     // 有凭证但失效：仍不抛给调用方，回登录页（try/catch 兜底）。
     await expect(customerRestoreSession()).resolves.toBeNull();
+  });
+});
+
+describe("customer session expiry redirect", () => {
+  afterEach(() => {
+    setCustomerSessionExpiredHandler(null);
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function response401(): Response {
+    return new Response(JSON.stringify({ code: "UNAUTHORIZED", detail_code: "CUSTOMER_UNAUTHENTICATED", message: "expired" }), { status: 401 });
+  }
+
+  it("fires the session-expired handler on 401 from any business endpoint", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response401()));
+    const expired = vi.fn();
+    setCustomerSessionExpiredHandler(expired);
+
+    await expect(new CustomerApi("stale").get("/api/v1/customer/orders")).rejects.toThrow("登录已过期，请重新登录");
+    expect(expired).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires only once for concurrent 401s", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response401()));
+    const expired = vi.fn();
+    setCustomerSessionExpiredHandler(expired);
+
+    const api = new CustomerApi("stale");
+    const results = await Promise.allSettled([
+      api.get("/api/v1/customer/orders"),
+      api.get("/api/v1/customer/points"),
+      api.post("/api/v1/customer/ticket-orders", { ticketTypeId: "t-1" }),
+    ]);
+    expect(results.every((r) => r.status === "rejected")).toBe(true);
+    expect(expired).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire on 403 (real permission denial stays on page)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "FORBIDDEN", message: "denied" }), { status: 403 })),
+    );
+    const expired = vi.fn();
+    setCustomerSessionExpiredHandler(expired);
+
+    await expect(new CustomerApi("tok").get("/api/v1/customer/orders")).rejects.toThrow("当前账号无权进行此操作");
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it("does not fire for login failure or session probe", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response401()));
+    const expired = vi.fn();
+    setCustomerSessionExpiredHandler(expired);
+
+    await expect(customerPhoneLogin({ phone: "13800000000", smsCode: "0000" })).rejects.toThrow();
+    await expect(customerRestoreSession()).resolves.toBeNull();
+    expect(expired).not.toHaveBeenCalled();
   });
 });

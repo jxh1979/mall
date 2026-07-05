@@ -15,7 +15,13 @@ import { useEffect, useMemo, useState } from "react";
 import { stripBase, withBase } from "../basePath";
 import { CustomerAuthShell } from "./components/CustomerAuthShell";
 import { CustomerService } from "./client/customerService";
-import { customerLogout, customerPhoneLogin, customerRestoreSession } from "./client/customerClient";
+import {
+  customerLogout,
+  customerPhoneLogin,
+  customerRestoreSession,
+  resetCustomerSessionExpiredNotice,
+  setCustomerSessionExpiredHandler,
+} from "./client/customerClient";
 import { formatApiErrorDetail } from "../shared/apiError";
 import { BarInvitationPage } from "./pages/BarInvitationPage";
 import { BarReservationPage } from "./pages/BarReservationPage";
@@ -87,6 +93,21 @@ export default function CustomerApp(): React.ReactElement {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  // 会话过期全局回登录页：任何页面任何请求 401 → 清会话（回登录视图）+ 顶部提示；真 403 权限不足不登出。
+  useEffect(() => {
+    setCustomerSessionExpiredHandler(() => {
+      setSession(null);
+      setError("登录已过期，请重新登录");
+      setErrorDetail(null);
+    });
+    return () => setCustomerSessionExpiredHandler(null);
+  }, []);
+
+  // 重新登录成功后复位一次性防抖标记，下次会话再过期仍能触发回登录。
+  useEffect(() => {
+    if (session) resetCustomerSessionExpiredNotice();
+  }, [session]);
 
   useEffect(() => {
     let cancelled = false;

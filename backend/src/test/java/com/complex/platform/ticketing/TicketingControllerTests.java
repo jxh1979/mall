@@ -67,13 +67,13 @@ class TicketingControllerTests {
     }
 
     @Test
-    void unauthenticatedTicketTypeListReturnsUnauthorizedOrForbidden() throws Exception {
-        int status = mockMvc.perform(get("/api/v1/ticketing/ticket-types"))
-                .andReturn()
-                .getResponse()
-                .getStatus();
-
-        org.assertj.core.api.Assertions.assertThat(status).isIn(401, 403);
+    void unauthenticatedRequestReturns401UnauthorizedEnvelope() throws Exception {
+        // 会话失效全局回登录页：无 token / token 过期必须 401（此前 Spring 默认 403 空 body，
+        // 前端误译"当前账号无权进行此操作"且无法触发重新登录）。真权限不足仍 403（下方 PERMISSION_DENIED 测试）。
+        mockMvc.perform(get("/api/v1/ticketing/ticket-types"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.detail_code").value("AUTH_SESSION_INVALID"));
     }
 
     @Test
@@ -553,6 +553,12 @@ class TicketingControllerTests {
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
+        }
+
+        @Bean
+        TicketFacePhotoService ticketFacePhotoService() {
+            // 修既有基线断裂：控制器构造器新增 facePhotoService 后本切片未同步，12 条测试全数上下文加载失败。
+            return Mockito.mock(TicketFacePhotoService.class);
         }
 
         @Bean
