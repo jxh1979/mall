@@ -283,6 +283,21 @@
               <span>既能从源头看到它产生的全部下游记录，也能从任一结果反查回它的源头。</span>
             </div>
           </div>
+          <p class="lead" style="margin-top:1.2rem"><strong>全局原则 · 界面全中文（所有终端零英文）</strong>：平台所有终端——后台管理端、客人手机端、现场平板与设备端、安卓终端——展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错、导出文件表头与内容、短信与通知、日期时间等，<strong>必须全部为中文，不得出现任何英文</strong>（如 active/draft 英文状态、mm/dd/yyyy 英文日期格式、英文按钮或提示）。仅供机器识别的技术标识（编码、ID、单据号等非展示语义的标识符）可保留原样。<strong>此为强制规则，适用平台全部终端与模块，新增页面与功能一并遵守。</strong></p>
+          <div class="summary-grid">
+            <div class="summary-box">
+              <strong>零英文展示</strong>
+              <span>用户看到的每一处文字都是中文，含状态、枚举、日期、按钮、提示、报错、导出与短信。</span>
+            </div>
+            <div class="summary-box">
+              <strong>全终端覆盖</strong>
+              <span>后台、客人端、现场设备、安卓端一视同仁，任一终端不得出现英文。</span>
+            </div>
+            <div class="summary-box">
+              <strong>标识可留原文</strong>
+              <span>仅编码、ID、单据号等机读标识符可保留原样，其余展示文字一律中文。</span>
+            </div>
+          </div>
         </section>
 
         <section id="flow">
@@ -829,6 +844,7 @@
             <div class="question confirmed">已拍板：留痕优先自动生成，依赖账号、设备、点位、班次、扫码、支付、机器人、企业微信和第三方回流，人工只补原因和证据。</div>
             <div class="question confirmed">已拍板：所有端都必须有后台开关，关闭后该端或模块不可用，打开后仍受权限和数据范围控制。</div>
             <div class="question confirmed">已拍板：数据可溯源、全链可点击（无孤岛数据）——前端展示的所有数据、单据、对象和涉及人员/角色都必须可点击追溯到来源、可上下钻取、可正查反查，不允许孤立显示；适用平台全部模块。</div>
+            <div class="question confirmed">已拍板：界面全中文（所有终端零英文）——后台/客人端/现场设备/安卓端展示给用户的一切文字（菜单、字段、状态、枚举、按钮、提示、报错、导出、短信、日期时间）必须全中文，不得出现英文；仅机读技术标识（编码/ID/单据号）可保留原样；强制规则，适用全部终端与模块。</div>
             <div class="question confirmed">已确认：集团视图预留项目归属和跨项目汇总口径，不阻塞单综合体运营。</div>
             <div class="question confirmed">已拍板：权限点首批由平台统一预置，实施阶段允许边配置边补充。</div>
             <div class="question confirmed">已拍板：企业微信后台配置由管理员一次性完成授权和安全凭据配置，系统自动做账号对应、同步、失败告警、基础规则质检和留存策略。</div>
