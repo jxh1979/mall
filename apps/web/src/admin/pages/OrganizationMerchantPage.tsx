@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { TraceLink } from "../components/TraceLink";
 
 const TEXT = {
   title: "组织与商户档案",
@@ -29,7 +30,7 @@ function display(value: unknown) {
   return JSON.stringify(value);
 }
 
-export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
@@ -53,6 +54,17 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
+
+  // 下钻定位：从别的页点商户进来（?focus=商户id）→ 滚动高亮该商户档案行；无 focus 或未命中时行为不变。
+  React.useEffect(() => {
+    if (!focusObjectId || merchants.length === 0) return;
+    if (!merchants.some((row) => row.id === focusObjectId)) return;
+    const el = typeof document !== "undefined" ? document.querySelector(`[data-testid="organization-merchant-row-${focusObjectId}"]`) : null;
+    if (el && typeof (el as HTMLElement).scrollIntoView === "function") {
+      (el as HTMLElement).scrollIntoView({ block: "center" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusObjectId, merchants.length]);
 
   async function createMerchant() {
     if (!merchantName.trim()) {
@@ -135,7 +147,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="organization-merchants-table">
                 <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
-                <tbody>{merchants.map((row) => <tr key={row.id}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
+                <tbody>{merchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
               </table>
             </div>
 
@@ -143,7 +155,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="organization-projects-table">
                 <thead><tr><th>项目</th><th>编码</th><th>商户</th><th>业态</th><th>状态</th></tr></thead>
-                <tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+                <tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
               </table>
             </div>
           </>

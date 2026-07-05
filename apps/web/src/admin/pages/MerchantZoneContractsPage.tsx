@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps, MerchantZoneContractRow } from "../types";
 
 const TEXT = {
@@ -34,7 +35,7 @@ function money(cent: number | null | undefined) {
   return `${new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cent / 100)} CNY`;
 }
 
-export function MerchantZoneContractsPage({ api, setGlobalError }: AdminPageProps) {
+export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneContractRow[]>([]);
 
   const { loading, error, reload } = useAdminResource(
@@ -64,12 +65,20 @@ export function MerchantZoneContractsPage({ api, setGlobalError }: AdminPageProp
             <tbody>
               {paged.pageRows.map((row) => (
                 <tr key={row.id}>
-                  <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td>
+                  <td className="admin-id-cell" title={row.id}>
+                    <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.id}>{shortId(row.id)}</TraceLink>
+                  </td>
                   <td>{row.effectiveDate ?? "-"} ~ {row.expiryDate ?? "-"}</td>
-                  <td>{(row.spaceIds ?? []).join(", ") || "-"}</td>
+                  <td>{(row.spaceIds ?? []).length > 0
+                    ? (row.spaceIds ?? []).map((sid, i) => <React.Fragment key={sid}>{i > 0 ? ", " : ""}<TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={sid}>{sid}</TraceLink></React.Fragment>)
+                    : "-"}</td>
                   <td>{STATUS_LABELS[row.lifecycleStatus ?? ""] ?? row.lifecycleStatus ?? "-"}</td>
                   <td className="admin-num">{money(row.depositCent)}</td>
-                  <td className="admin-id-cell" title={row.renewedFromContractId ?? undefined}>{shortId(row.renewedFromContractId)}</td>
+                  <td className="admin-id-cell" title={row.renewedFromContractId ?? undefined}>
+                    {row.renewedFromContractId
+                      ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.renewedFromContractId}>{shortId(row.renewedFromContractId)}</TraceLink>
+                      : shortId(row.renewedFromContractId)}
+                  </td>
                 </tr>
               ))}
             </tbody>

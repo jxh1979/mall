@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps, MerchantZoneBillRow } from "../types";
 
 const TEXT = {
@@ -41,7 +42,7 @@ function lineSummary(row: MerchantZoneBillRow) {
   return row.lines.map((line) => `${FEE_TYPE_LABELS[line.feeType ?? ""] ?? line.feeType ?? "-"} ${money(line.amountCent, line.currency)}`).join("；");
 }
 
-export function MerchantZoneBillsPage({ api, setGlobalError }: AdminPageProps) {
+export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneBillRow[]>([]);
 
   const { loading, error, reload } = useAdminResource(
@@ -70,7 +71,7 @@ export function MerchantZoneBillsPage({ api, setGlobalError }: AdminPageProps) {
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="merchant-zone-bills-table">
             <thead>
-              <tr><th>账单号</th><th>账期</th><th>到期日</th><th>金额</th><th>状态</th><th>账龄(天)</th><th>费用构成</th></tr>
+              <tr><th>账单号</th><th>账期</th><th>到期日</th><th>金额</th><th>状态</th><th>账龄(天)</th><th>费用构成</th><th>来源合同</th></tr>
             </thead>
             <tbody>
               {paged.pageRows.map((row) => (
@@ -82,6 +83,9 @@ export function MerchantZoneBillsPage({ api, setGlobalError }: AdminPageProps) {
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
                   <td>{row.agingDays ?? 0}</td>
                   <td>{lineSummary(row)}</td>
+                  <td className="admin-id-cell">{row.sourceType === "contract" && row.sourceId
+                    ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.sourceId}>{row.sourceId}</TraceLink>
+                    : "-"}</td>
                 </tr>
               ))}
             </tbody>

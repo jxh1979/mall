@@ -663,6 +663,7 @@ export type MerchantZoneBillRow = {
   status?: string;
   agingDays?: number;
   sourceType?: string;
+  sourceId?: string;
   lines?: MerchantZoneBillLineRow[];
   createdAt?: string;
   updatedAt?: string;
