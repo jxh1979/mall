@@ -51,6 +51,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("entitlement_kind", template.entitlementKind())
                 .addValue("agreement_price_cent", template.agreementPriceCent())
                 .addValue("consumption_window", template.consumptionWindow())
+                .addValue("exclusive_merchant_id", template.exclusiveMerchantId())
                 .addValue("created_at", timestampWithTimeZone(template.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
     }
@@ -93,7 +94,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("allocated_revenue_cent", entitlement.allocatedRevenueCent())
                 .addValue("entitlement_kind", entitlement.entitlementKind())
                 .addValue("agreement_price_cent", entitlement.agreementPriceCent())
-                .addValue("consumption_window", entitlement.consumptionWindow());
+                .addValue("consumption_window", entitlement.consumptionWindow())
+                .addValue("exclusive_merchant_id", entitlement.exclusiveMerchantId());
     }
 
     MapSqlParameterSource verificationParameters(VerificationRecord verification) {

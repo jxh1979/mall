@@ -25,8 +25,11 @@ public record EntitlementTemplateRecord(
         // 虚拟权益签约单价(分)；仅 virtual 结算时取用，可空回退 value_amount。
         Long agreementPriceCent,
         // 结算重构批3-2(PRD §6.2)：消耗单位 per_use|per_session|per_day|unlimited_in_day；发放时复制到 issued_entitlements。
-        // 仅 per_session 走场次逻辑；NULL/其余=现状逐次扣(per_use)。放末位便于既有构造点追加。
-        String consumptionWindow
+        // 仅 per_session 走场次逻辑；NULL/其余=现状逐次扣(per_use)。
+        String consumptionWindow,
+        // 结算重构批3-4(PRD §6.4)：专属某商户「不分摊」——非空=该权益核销收入全额归该商户，不进池不扣留存不稀释他家。
+        // 发放时复制到 issued_entitlements。放末位便于既有构造点追加。
+        String exclusiveMerchantId
 ) {
     // ponytail: 向后兼容构造——批3-2 前的调用点(测试)不带 consumptionWindow，默认 null(=判定层走现状 per_use)。
     //           避免为 1 个可空字段改既有构造点；日后默认语义要变则删本构造让编译逼出所有点。
@@ -35,6 +38,15 @@ public record EntitlementTemplateRecord(
             String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt,
             String entitlementKind, Long agreementPriceCent) {
         this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
-                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, null);
+                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, null, null);
+    }
+
+    // ponytail: 批3-4 前带 consumptionWindow 但不带 exclusiveMerchantId 的调用点默认 null(=非专属分池)。
+    public EntitlementTemplateRecord(
+            String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status,
+            String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt,
+            String entitlementKind, Long agreementPriceCent, String consumptionWindow) {
+        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
+                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow, null);
     }
 }

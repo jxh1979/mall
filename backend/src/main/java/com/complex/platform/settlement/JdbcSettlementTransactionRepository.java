@@ -49,20 +49,23 @@ public class JdbcSettlementTransactionRepository {
                 .addValue("merchant_id", record.merchantId())
                 .addValue("project_id", record.projectId())
                 .addValue("settlement_status", record.settlementStatus())
-                .addValue("entitlement_valid_to", Timestamp.from(record.entitlementValidTo()));
+                .addValue("entitlement_valid_to", Timestamp.from(record.entitlementValidTo()))
+                .addValue("exclusive_merchant_id", record.exclusiveMerchantId());
 
         jdbcTemplate.update("""
                 INSERT INTO settlement_transactions (
                     id, transaction_no, transaction_type, entitlement_id, order_id, ticket_type_id,
                     verification_id, entitlement_type, verified_count, total_times, num_people,
                     allocated_revenue_cent, verified_amount_cent, unverified_amount_cent,
-                    beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to
+                    beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to,
+                    exclusive_merchant_id
                 )
                 VALUES (
                     :id, :transaction_no, :transaction_type, :entitlement_id, :order_id, :ticket_type_id,
                     :verification_id, :entitlement_type, :verified_count, :total_times, :num_people,
                     :allocated_revenue_cent, :verified_amount_cent, :unverified_amount_cent,
-                    :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to
+                    :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to,
+                    :exclusive_merchant_id
                 )
                 ON CONFLICT (entitlement_id) WHERE transaction_type = 'verification_settled'
                 DO UPDATE SET
@@ -182,19 +185,22 @@ public class JdbcSettlementTransactionRepository {
                 .addValue("merchant_id", record.merchantId())
                 .addValue("project_id", record.projectId())
                 .addValue("settlement_status", record.settlementStatus())
-                .addValue("entitlement_valid_to", Timestamp.from(record.entitlementValidTo()));
+                .addValue("entitlement_valid_to", Timestamp.from(record.entitlementValidTo()))
+                .addValue("exclusive_merchant_id", record.exclusiveMerchantId());
         jdbcTemplate.update("""
                 INSERT INTO settlement_transactions (
                     id, transaction_no, transaction_type, entitlement_id, order_id, ticket_type_id,
                     verification_id, entitlement_type, verified_count, total_times, num_people,
                     allocated_revenue_cent, verified_amount_cent, unverified_amount_cent,
-                    beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to
+                    beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to,
+                    exclusive_merchant_id
                 )
                 VALUES (
                     :id, :transaction_no, :transaction_type, :entitlement_id, :order_id, :ticket_type_id,
                     :verification_id, :entitlement_type, :verified_count, :total_times, :num_people,
                     :allocated_revenue_cent, :verified_amount_cent, :unverified_amount_cent,
-                    :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to
+                    :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to,
+                    :exclusive_merchant_id
                 )
                 ON CONFLICT (transaction_no) DO NOTHING
                 """, params);

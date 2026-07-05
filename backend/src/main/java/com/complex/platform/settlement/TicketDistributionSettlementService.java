@@ -28,6 +28,8 @@ public class TicketDistributionSettlementService {
     static final String METHOD_BY_RANK_TIER = "by_rank_tier";
     static final String METHOD_BY_VENUE_PER_GUEST = "by_venue_per_guest";
     static final String METHOD_BY_FIXED_AMOUNT = "by_fixed_amount";
+    // 批3-4(§6.4)：专属某商户「不分摊」直付明细方式——全额归该商户，不扣留存、不进 spvPool、不参与排名。
+    static final String METHOD_EXCLUSIVE_FULL = "exclusive_full";
 
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_CONFIRMED = "confirmed";
@@ -76,16 +78,29 @@ public class TicketDistributionSettlementService {
         List<JdbcSettlementBillRepository.MerchantMonthlyStat> stats =
                 repository.aggregateMerchantStats(projectId, windowStart, windowEnd);
 
-        // ⑦ 按 method 分账
+        // ⑦ 按 method 分账（仅非专属进池；池基/排名/客数聚合已在仓储层排除专属）
         String method = repository.findDistributionMethod(projectId);
         List<ItemCalc> items = distribute(projectId, method, spvPool, stats);
 
+        // ⑦b 批3-4(§6.4)：专属某商户「不分摊」→ 每个专属商户一条全额直付明细（method=exclusive_full，
+        //     不扣留存、不进 spvPool、不参与他家分池排名/客数聚合）。金额=该商户专属核销 Σverified 全额。
+        List<JdbcSettlementBillRepository.ExclusiveMerchantRevenue> exclusives =
+                repository.aggregateExclusiveRevenue(projectId, windowStart, windowEnd);
+        for (var ex : exclusives) {
+            items.add(new ItemCalc(ex.merchantId(), ex.verifiedCount(), ex.guestCount(), null,
+                    ex.revenueCent(), METHOD_EXCLUSIVE_FULL));
+        }
+
+        // distributed = 池分账 + 专属直付（两口径并列写入同一结算单明细）。
         long distributed = items.stream().mapToLong(ItemCalc::amount).sum();
 
-        // ⑧ 校验 Σ分账 ≤ 各酒吧总池(§5.0 步骤⑧):
+        // ⑧ 校验 Σ<b>池分账</b> ≤ 各酒吧总池(§5.0 步骤⑧);专属直付不占池、单独全额，故不纳入越池判定。
         //    超出 → status 保持 draft 待人工特批(special_approval_ref=null 待填),不自动确认;
         //    未超 → status=confirmed(可确认;过账仍在批2-4,confirmed 只表引擎校验通过)。
-        boolean overPool = distributed > spvPool;
+        long pooledDistributed = items.stream()
+                .filter(i -> !METHOD_EXCLUSIVE_FULL.equals(i.method()))
+                .mapToLong(ItemCalc::amount).sum();
+        boolean overPool = pooledDistributed > spvPool;
         String status = overPool ? STATUS_DRAFT : STATUS_CONFIRMED;
         String specialApprovalRef = null; // 越池时留 null 待人工填;未越池时也 null(无需特批)
 
@@ -100,11 +115,15 @@ public class TicketDistributionSettlementService {
         String actualBillId = repository.findBillId(projectId, periodStart, periodEnd);
         repository.deleteItemsByBill(actualBillId);
         for (ItemCalc item : items) {
+            // 专属直付明细 id 加 method 后缀,与该家池分账明细 id 区分(否则 PK/唯一键相撞被覆盖丢账)。
+            String itemId = METHOD_EXCLUSIVE_FULL.equals(item.method())
+                    ? "si_" + actualBillId + "_" + item.merchantId() + "_excl"
+                    : "si_" + actualBillId + "_" + item.merchantId();
             repository.upsertItem(new SettlementItemRecord(
-                    "si_" + actualBillId + "_" + item.merchantId(),
+                    itemId,
                     actualBillId, item.merchantId(),
                     item.verifiedCount(), item.guestCount(), item.rankNo(),
-                    method, item.amount(), item.amount(), ITEM_STATUS_DRAFT));
+                    item.method(), item.amount(), item.amount(), ITEM_STATUS_DRAFT));
         }
         return actualBillId;
     }
@@ -122,7 +141,7 @@ public class TicketDistributionSettlementService {
                     rank++;
                     int shareBps = shareBpsForRank(tiers, rank);
                     long amount = spvPool * shareBps / 10000;
-                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), rank, amount));
+                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), rank, amount, method));
                 }
             }
             case METHOD_BY_VENUE_PER_GUEST -> {
@@ -130,14 +149,14 @@ public class TicketDistributionSettlementService {
                     var rate = repository.findMerchantRate(projectId, s.merchantId());
                     long perGuest = rate != null && rate.perGuestCent() != null ? rate.perGuestCent() : 0L;
                     long amount = (long) s.guestCount() * perGuest;
-                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, amount));
+                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, amount, method));
                 }
             }
             case METHOD_BY_FIXED_AMOUNT -> {
                 for (var s : stats) {
                     var rate = repository.findMerchantRate(projectId, s.merchantId());
                     long fixed = rate != null && rate.fixedAmountCent() != null ? rate.fixedAmountCent() : 0L;
-                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, fixed));
+                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, fixed, method));
                 }
             }
             default -> {
@@ -161,7 +180,8 @@ public class TicketDistributionSettlementService {
         return "sb_" + (projectId == null ? "default" : projectId) + "_" + month;
     }
 
-    /** 分账中间结果。 */
-    private record ItemCalc(String merchantId, int verifiedCount, int guestCount, Integer rankNo, long amount) {
+    /** 分账中间结果（method：池分账=当月分配方式，专属直付=exclusive_full）。 */
+    private record ItemCalc(String merchantId, int verifiedCount, int guestCount, Integer rankNo, long amount,
+                            String method) {
     }
 }

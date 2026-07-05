@@ -107,7 +107,8 @@ public class JdbcSettlementBillRepository {
     // ---- 读当月核销聚合（批1 settlement_transactions，verification_settled，按 created_at 落窗）----
 
     /**
-     * 当月通票总收入（已核销）= Σ verified_amount_cent，全部权益类型。
+     * 当月<b>进池</b>通票收入（已核销）= Σ verified_amount_cent，<b>仅非专属</b>（exclusive_merchant_id IS NULL）。
+     * 专属某商户核销全额直付该商户，不进池（批3-4 §6.4）。
      * 月窗 [monthStart, nextMonthStart) 按 created_at（批1 双写时已填=核销记录创建≈核销日，语义正确；
      * confirmed_at 是结算确认时间、双写时本应 NULL 故不用）；仅 verification_settled。
      */
@@ -116,6 +117,7 @@ public class JdbcSettlementBillRepository {
                 SELECT COALESCE(SUM(verified_amount_cent), 0)
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
+                   AND exclusive_merchant_id IS NULL
                    AND created_at >= :start AND created_at < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                 """, monthWindow(projectId, monthStart, nextMonthStart), Long.class);
@@ -145,12 +147,36 @@ public class JdbcSettlementBillRepository {
                  WHERE transaction_type = 'verification_settled'
                    AND beneficiary_type = 'merchant'
                    AND merchant_id IS NOT NULL
+                   AND exclusive_merchant_id IS NULL
                    AND created_at >= :start AND created_at < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                  GROUP BY merchant_id
                  ORDER BY verified_count DESC, merchant_id
                 """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
                 new MerchantMonthlyStat(rs.getString("merchant_id"),
+                        rs.getInt("verified_count"), rs.getInt("guest_count")));
+    }
+
+    /**
+     * 结算重构批3-4(§6.4)：当月<b>专属</b>核销按 exclusive_merchant_id 分组 Σ verified_amount_cent。
+     * 每个专属商户一条 → 全额直付明细（method=exclusive_full，不扣留存、不进 spvPool、不稀释他家分池）。
+     * 按落定在 settlement_transactions 的 exclusive_merchant_id 过滤（非 join 活模板，历史结算不受改模板影响）。
+     */
+    public List<ExclusiveMerchantRevenue> aggregateExclusiveRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return jdbcTemplate.query("""
+                SELECT exclusive_merchant_id AS merchant_id,
+                       COALESCE(SUM(verified_amount_cent), 0) AS revenue_cent,
+                       COALESCE(SUM(verified_count), 0)       AS verified_count,
+                       COALESCE(SUM(num_people), 0)           AS guest_count
+                  FROM settlement_transactions
+                 WHERE transaction_type = 'verification_settled'
+                   AND exclusive_merchant_id IS NOT NULL
+                   AND created_at >= :start AND created_at < :end
+                   AND (:project_id::text IS NULL OR project_id = :project_id)
+                 GROUP BY exclusive_merchant_id
+                 ORDER BY exclusive_merchant_id
+                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                new ExclusiveMerchantRevenue(rs.getString("merchant_id"), rs.getLong("revenue_cent"),
                         rs.getInt("verified_count"), rs.getInt("guest_count")));
     }
 
@@ -249,7 +275,7 @@ public class JdbcSettlementBillRepository {
                     :id, :bill_id, :merchant_id, :verified_count, :guest_count, :rank_no, :distribution_method,
                     :calculated_amount_cent, :final_amount_cent, :status, now()
                 )
-                ON CONFLICT (bill_id, merchant_id) DO UPDATE SET
+                ON CONFLICT (bill_id, merchant_id, distribution_method) DO UPDATE SET
                     verified_count         = EXCLUDED.verified_count,
                     guest_count            = EXCLUDED.guest_count,
                     rank_no                = EXCLUDED.rank_no,
@@ -323,5 +349,9 @@ public class JdbcSettlementBillRepository {
     }
 
     public record MerchantMonthlyStat(String merchantId, int verifiedCount, int guestCount) {
+    }
+
+    /** 批3-4 专属核销直付投影：某专属商户当月全额收入 + 核销数/客数（仅供明细展示，不进池排名）。 */
+    public record ExclusiveMerchantRevenue(String merchantId, long revenueCent, int verifiedCount, int guestCount) {
     }
 }

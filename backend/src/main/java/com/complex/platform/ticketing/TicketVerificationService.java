@@ -494,7 +494,9 @@ public class TicketVerificationService {
                 updated.usedTimes(),
                 updated.numPeople(),
                 updated.allocatedRevenueCent(),
-                updated.validTo()
+                updated.validTo(),
+                // 批3-4：把该权益专属商户带入结算事件，双写时定格进 settlement_transactions（空=非专属分池）。
+                updated.exclusiveMerchantId()
         ));
         if (credential != null) {
             repository.saveTicketCredential(new TicketCredentialRecord(

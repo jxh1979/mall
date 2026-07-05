@@ -71,7 +71,9 @@ public class SettlementSettledConsumer {
                 event.merchantId(),
                 null, // project_id：批1暂留 NULL
                 STATUS_DRAFT,
-                event.validTo()
+                event.validTo(),
+                // 批3-4：专属商户随核销定格进 settlement_transactions（空=非专属分池）。
+                event.exclusiveMerchantId()
         ));
     }
 }

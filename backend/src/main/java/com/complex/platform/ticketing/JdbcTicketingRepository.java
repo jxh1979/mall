@@ -107,12 +107,12 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO entitlement_templates (
                     id, name, entitlement_type, default_total_times, default_value_cent,
                     status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                    agreement_price_cent, consumption_window, created_at, updated_at
+                    agreement_price_cent, consumption_window, exclusive_merchant_id, created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :entitlement_type, :default_total_times, :default_value_cent,
                     :status, :merchant_id, :venue_id, :point_id, :bar_item_ref, :entitlement_kind,
-                    :agreement_price_cent, :consumption_window, :created_at, :updated_at
+                    :agreement_price_cent, :consumption_window, :exclusive_merchant_id, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -127,6 +127,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     entitlement_kind = EXCLUDED.entitlement_kind,
                     agreement_price_cent = EXCLUDED.agreement_price_cent,
                     consumption_window = EXCLUDED.consumption_window,
+                    exclusive_merchant_id = EXCLUDED.exclusive_merchant_id,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.entitlementTemplateParameters(template));
         return template;
@@ -137,7 +138,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, consumption_window, created_at, updated_at
+                       agreement_price_cent, consumption_window, exclusive_merchant_id, created_at, updated_at
                   FROM entitlement_templates
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapEntitlementTemplate);
@@ -148,7 +149,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, consumption_window, created_at, updated_at
+                       agreement_price_cent, consumption_window, exclusive_merchant_id, created_at, updated_at
                   FROM entitlement_templates
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();
@@ -197,13 +198,13 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                     entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                     value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                    allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window
+                    allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
                 )
                 VALUES (
                     :id, :ticket_type_id, :order_id, :entitlement_template_id, :entitlement_code,
                     :entitlement_type, :merchant_id, :venue_id, :point_id, :total_times, :used_times,
                     :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people,
-                    :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window
+                    :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window, :exclusive_merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -225,7 +226,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                     allocated_revenue_cent = EXCLUDED.allocated_revenue_cent,
                     entitlement_kind = EXCLUDED.entitlement_kind,
                     agreement_price_cent = EXCLUDED.agreement_price_cent,
-                    consumption_window = EXCLUDED.consumption_window
+                    consumption_window = EXCLUDED.consumption_window,
+                    exclusive_merchant_id = EXCLUDED.exclusive_merchant_id
                 """, parameterSource.issuedEntitlementParameters(entitlement));
         return entitlement;
     }
@@ -236,7 +238,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
@@ -260,7 +262,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)

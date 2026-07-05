@@ -25,6 +25,8 @@ public record SettlementTransactionRecord(
         String merchantId,
         String projectId,
         String settlementStatus,
-        Instant entitlementValidTo
+        Instant entitlementValidTo,
+        // 结算重构批3-4(PRD §6.4)：专属某商户「不分摊」，核销双写时从权益带上定格；非空=该笔核销全额归该商户不进池。
+        String exclusiveMerchantId
 ) {
 }

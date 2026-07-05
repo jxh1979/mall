@@ -85,7 +85,8 @@ public class SettlementExpiryJob {
                     row.merchantId(), // 保留溯源商户(归属方是 project,merchant 仅溯源)
                     null, // project_id:批1 从 entitlement 不可得,置 NULL
                     STATUS_CONFIRMED,
-                    row.validTo()));
+                    row.validTo(),
+                    null)); // exclusive_merchant_id：过期未核销归项目，非专属直付，置 NULL
             count++;
         }
         return count;

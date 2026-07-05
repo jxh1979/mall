@@ -361,7 +361,9 @@ public class TicketOrderService {
                             template.entitlementKind(),
                             template.agreementPriceCent(),
                             // 结算重构批3-2(PRD §6.2)：发放时把模板消耗单位复制到已发权益，供核销场次判定。
-                            template.consumptionWindow()
+                            template.consumptionWindow(),
+                            // 结算重构批3-4(PRD §6.4)：发放时把模板专属商户复制到已发权益，供核销双写定格专属归属。
+                            template.exclusiveMerchantId()
                     );
                     repository.saveIssuedEntitlement(entitlement);
                     responses.add(new IssuedEntitlementResponse(entitlementCode));

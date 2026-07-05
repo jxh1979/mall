@@ -22,6 +22,7 @@ import java.time.Instant;
  * @param numPeople            核销人数
  * @param allocatedRevenueCent 权益总分配收入快照（可空：direct 出票为 null → 消费者跳过不写）
  * @param validTo              权益有效期截止（过期判定基线，写入 entitlement_valid_to）
+ * @param exclusiveMerchantId  结算重构批3-4(PRD §6.4)：专属某商户「不分摊」，非空=该权益核销收入全额归该商户（不进池）；空=非专属分池
  */
 public record SettlementSettledEvent(
         String entitlementId,
@@ -33,6 +34,7 @@ public record SettlementSettledEvent(
         int usedTimes,
         int numPeople,
         Long allocatedRevenueCent,
-        Instant validTo
+        Instant validTo,
+        String exclusiveMerchantId
 ) {
 }
