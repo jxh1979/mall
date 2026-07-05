@@ -42,7 +42,26 @@ const TEXT = {
   reopenStatus: "重开状态",
   evidenceLabel: "附件证据",
   time: "时间",
+  focusClear: "清除筛选，返回全部",
 };
+
+// 整体结果口径（本页专有：巡检整体判定，非全局状态码，页内映射）。
+const OVERALL_RESULT_LABELS: Record<string, string> = {
+  pass: "通过",
+  fail: "不通过",
+  pending_rectification: "待整改",
+};
+function overallLabel(row: AmusementSafetyInspectionRow): string {
+  const code = row.overallResult ?? row.riskLevel;
+  if (!code) return "-";
+  return OVERALL_RESULT_LABELS[code] ?? formatBusinessStatus(code);
+}
+
+// 整改状态 pending_rectification=待整改 为本页域内码（全局表未含），页内映射后再交全局表兜底。
+function rectificationLabel(code: string | null | undefined): string {
+  if (!code) return "-";
+  return code === "pending_rectification" ? "待整改" : formatBusinessStatus(code);
+}
 
 function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -60,11 +79,58 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds ?? request.attachmentIds, result };
 }
 
+// 待整改子集判定（与 KPI 计数同口径，聚焦时复用同一 predicate）。
+function isPendingRectification(row: AmusementSafetyInspectionRow) {
+  return ["pending", "rectification_pending", "pending_rectification"].includes(row.rectificationStatus ?? row.overallResult ?? "");
+}
+// 待复检/审批子集判定。
+function isRecheckPending(row: AmusementSafetyInspectionRow) {
+  return ["rectification_submitted", "rechecked"].includes(row.rectificationStatus ?? "") || row.reopenStatus === "pending";
+}
+
+// KPI 聚焦（照样板，单表页）：?kpi=inspections[&subset=pending_rectification|recheck_pending]。
+// 巡检总数卡→全部，待整改/待复检卡→对应子集客户端过滤。选中巡检卡无计数、不可点。
+type KpiSubset = "pending_rectification" | "recheck_pending";
+type KpiFocus = { subset: KpiSubset | null };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("kpi") !== "inspections") return null;
+  const subset = params.get("subset");
+  return { subset: subset === "pending_rectification" || subset === "recheck_pending" ? subset : null };
+}
+
 export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<AmusementSafetyInspectionRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [createTitle, setCreateTitle] = React.useState("开放前护栏检查");
   const [rectifyNote, setRectifyNote] = React.useState("已更换防护垫并上传照片");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(subset: KpiSubset | null = null) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", "inspections");
+    if (subset) params.set("subset", subset);
+    else params.delete("subset");
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ subset });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    params.delete("subset");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -73,10 +139,17 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
 
+  const pendingRectification = rows.filter(isPendingRectification).length;
+  const recheckPending = rows.filter(isRecheckPending).length;
 
-  const pagedRows = usePagedRows(rows, 10);
-  const pendingRectification = rows.filter((row) => ["pending", "rectification_pending", "pending_rectification"].includes(row.rectificationStatus ?? row.overallResult ?? "")).length;
-  const recheckPending = rows.filter((row) => ["rectification_submitted", "rechecked"].includes(row.rectificationStatus ?? "") || row.reopenStatus === "pending").length;
+  const visibleRows = kpiFocus
+    ? kpiFocus.subset === "pending_rectification"
+      ? rows.filter(isPendingRectification)
+      : kpiFocus.subset === "recheck_pending"
+        ? rows.filter(isRecheckPending)
+        : rows
+    : rows;
+  const pagedRows = usePagedRows(visibleRows, 10, `${kpiFocus?.subset ?? ""}`);
 
   const { busyAction, formError, setFormError, runAction } = useAdminAction({
     reload,
@@ -167,54 +240,76 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     await runAction("amusement_safety_reopen_approved", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/approve-reopen`, request));
   }
 
+  function kpiFocusTitle(): string {
+    if (kpiFocus?.subset === "pending_rectification") return TEXT.pendingRectification;
+    if (kpiFocus?.subset === "recheck_pending") return TEXT.recheckPending;
+    return TEXT.total;
+  }
+
+  const inspectionsTable = (
+    <div className="admin-table-scroll">
+      <table className="admin-table" data-testid="amusement-safety-table">
+        <thead><tr><th>{TEXT.select}</th><th>{TEXT.inspectionNo}</th><th>{TEXT.project}</th><th>{TEXT.overall}</th><th>{TEXT.inspectionStatus}</th><th>{TEXT.rectificationStatus}</th><th>{TEXT.reopenStatus}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.time}</th></tr></thead>
+        <tbody>
+          {pagedRows.pageRows.map((row) => (
+            <tr key={row.id}>
+              <td><input type="radio" data-testid={`amusement-safety-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <td>{displayNo(row)}</td>
+              <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectName ?? row.projectId ?? "-"}</TraceLink></td>
+              <td>{overallLabel(row)}</td>
+              <td>{formatBusinessStatus(row.inspectionStatus ?? row.status)}</td>
+              <td>{rectificationLabel(row.rectificationStatus)}</td>
+              <td>{row.reopenStatus ? formatBusinessStatus(row.reopenStatus) : "-"}</td>
+              <td>{evidenceList(row)}</td>
+              <td>{row.inspectedAt ?? row.createdAt ?? "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <TablePager testid="amusement-safety-pager" page={pagedRows.page} pageCount={pagedRows.pageCount} total={pagedRows.total} onPrev={pagedRows.prev} onNext={pagedRows.next} />
+    </div>
+  );
+
   return (
     <section data-testid="amusement-safety-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="amusement-safety-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="amusement.safety_inspection.viewed / created / submitted / rectification_submitted / rechecked / reopened" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
-        <div className="admin-kpi-grid" data-testid="amusement-safety-summary">
-          <div className="admin-kpi-card"><span>{TEXT.total}</span><strong>{rows.length}</strong><small>{TEXT.project}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.pendingRectification}</span><strong>{pendingRectification}</strong><small>{TEXT.rectificationStatus}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.recheckPending}</span><strong>{recheckPending}</strong><small>{TEXT.reopenStatus}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong>{selected ? displayNo(selected) : "-"}</strong><small>{selected?.rectificationStatus ?? selected?.status ?? "-"}</small></div>
-        </div>
+        {kpiFocus ? (
+          <>
+            <div className="admin-state" data-testid="amusement-safety-kpi-focus-banner">
+              正在查看：{kpiFocusTitle()}（{visibleRows.length}）
+              <button type="button" data-testid="amusement-safety-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+            </div>
+            {inspectionsTable}
+          </>
+        ) : (
+          <>
+            <div className="admin-kpi-grid" data-testid="amusement-safety-summary">
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.total}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-total" onClick={() => enterKpiFocus()}>{rows.length}</button><small>巡检数</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingRectification}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-pending-rectification" onClick={() => enterKpiFocus("pending_rectification")}>{pendingRectification}</button><small>待整改数</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.recheckPending}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-recheck-pending" onClick={() => enterKpiFocus("recheck_pending")}>{recheckPending}</button><small>待复检审批数</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong>{selected ? displayNo(selected) : "-"}</strong><small>{selected?.rectificationStatus ? rectificationLabel(selected.rectificationStatus) : formatBusinessStatus(selected?.status)}</small></div>
+            </div>
 
-        <div className="admin-form-grid" data-testid="amusement-safety-create-form">
-          <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
-          <label>{TEXT.rectifyNote}<input data-testid="amusement-safety-rectify-note" value={rectifyNote} onChange={(event) => setRectifyNote(event.target.value)} /></label>
-        </div>
-        <div className="admin-form-row" data-testid="amusement-safety-actions">
-          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.create"]} data-testid="amusement-safety-create" disabled={busyAction !== ""} onClick={() => void createInspection()}>{TEXT.create}</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.submit"]} data-testid="amusement-safety-submit" disabled={busyAction !== ""} onClick={() => void submitInspection()}>{TEXT.submit}</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.rectify"]} data-testid="amusement-safety-rectify" disabled={busyAction !== ""} onClick={() => void rectifyInspection()}>{TEXT.rectify}</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.recheck"]} data-testid="amusement-safety-recheck" disabled={busyAction !== ""} onClick={() => void recheckInspection()}>{TEXT.recheck}</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.approve_reopen"]} data-testid="amusement-safety-approve-reopen" disabled={busyAction !== ""} onClick={() => void approveReopen()}>{TEXT.approveReopen}</PermissionButton>
-        </div>
-        <div className="admin-muted-action" data-testid="amusement-safety-boundary">{TEXT.boundary}</div>
-        {formError ? <div data-testid="amusement-safety-error" className="admin-inline-error">{formError}</div> : null}
+            <div className="admin-form-grid" data-testid="amusement-safety-create-form">
+              <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
+              <label>{TEXT.rectifyNote}<input data-testid="amusement-safety-rectify-note" value={rectifyNote} onChange={(event) => setRectifyNote(event.target.value)} /></label>
+            </div>
+            <div className="admin-form-row" data-testid="amusement-safety-actions">
+              <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.create"]} data-testid="amusement-safety-create" disabled={busyAction !== ""} onClick={() => void createInspection()}>{TEXT.create}</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.submit"]} data-testid="amusement-safety-submit" disabled={busyAction !== ""} onClick={() => void submitInspection()}>{TEXT.submit}</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.rectify"]} data-testid="amusement-safety-rectify" disabled={busyAction !== ""} onClick={() => void rectifyInspection()}>{TEXT.rectify}</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.recheck"]} data-testid="amusement-safety-recheck" disabled={busyAction !== ""} onClick={() => void recheckInspection()}>{TEXT.recheck}</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.approve_reopen"]} data-testid="amusement-safety-approve-reopen" disabled={busyAction !== ""} onClick={() => void approveReopen()}>{TEXT.approveReopen}</PermissionButton>
+            </div>
+            <div className="admin-muted-action" data-testid="amusement-safety-boundary">{TEXT.boundary}</div>
+            {formError ? <div data-testid="amusement-safety-error" className="admin-inline-error">{formError}</div> : null}
 
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="amusement-safety-table">
-            <thead><tr><th>{TEXT.select}</th><th>{TEXT.inspectionNo}</th><th>{TEXT.project}</th><th>{TEXT.overall}</th><th>{TEXT.inspectionStatus}</th><th>{TEXT.rectificationStatus}</th><th>{TEXT.reopenStatus}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.time}</th></tr></thead>
-            <tbody>
-              {pagedRows.pageRows.map((row) => (
-                <tr key={row.id}>
-                  <td><input type="radio" data-testid={`amusement-safety-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
-                  <td>{displayNo(row)}</td>
-                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectName ?? row.projectId ?? "-"}</TraceLink></td>
-                  <td>{row.overallResult ?? row.riskLevel ?? "-"}</td>
-                  <td>{formatBusinessStatus(row.inspectionStatus ?? row.status)}</td>
-                  <td>{row.rectificationStatus ?? "-"}</td>
-                  <td>{row.reopenStatus ?? "-"}</td>
-                  <td>{evidenceList(row)}</td>
-                  <td>{row.inspectedAt ?? row.createdAt ?? "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <TablePager testid="amusement-safety-pager" page={pagedRows.page} pageCount={pagedRows.pageCount} total={pagedRows.total} onPrev={pagedRows.prev} onNext={pagedRows.next} />
-        </div>
+            {inspectionsTable}
+          </>
+        )}
       </AdminDataState>
     </section>
   );
