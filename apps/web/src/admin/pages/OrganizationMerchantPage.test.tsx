@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OrganizationMerchantPage } from "./OrganizationMerchantPage";
 import { AdminApi } from "../client/adminClient";
@@ -52,37 +52,65 @@ function renderPage() {
   render(<OrganizationMerchantPage {...fullProps} />);
 }
 
-describe("OrganizationMerchantPage KPI 可点击下钻", () => {
-  let scrollSpy: ReturnType<typeof vi.fn>;
-  beforeEach(() => {
-    // jsdom 不实现 scrollIntoView，直接挂桩并断言被调用。
-    scrollSpy = vi.fn();
-    // @ts-expect-error jsdom 缺省无此方法，测试内补桩
-    HTMLElement.prototype.scrollIntoView = scrollSpy;
-  });
+// 聚焦视图断言：只剩商户表（active 行），其余表/表单/KPI 卡全隐藏，横幅在场。
+function expectActiveMerchantsFocusView() {
+  expect(screen.getByTestId("organization-kpi-focus-banner").textContent).toContain("正在查看：正常商户（1）");
+  expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy();
+  expect(screen.queryByTestId("organization-merchant-row-m-2")).toBeNull();
+  expect(screen.queryByTestId("organization-entities-table")).toBeNull();
+  expect(screen.queryByTestId("organization-projects-table")).toBeNull();
+  expect(screen.queryByTestId("organization-merchant-summary")).toBeNull();
+  expect(screen.queryByTestId("organization-merchant-name")).toBeNull();
+}
 
+describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    // pushState 会跨用例残留 URL，逐例复位。
+    window.history.replaceState({}, "", "/admin/governance/organizations");
   });
 
-  it("点“商户档案”数字 → 定位商户表并高亮该区块", async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByTestId("organization-kpi-merchants")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("organization-kpi-merchants"));
-    expect(scrollSpy).toHaveBeenCalled();
-    expect(screen.getByTestId("organization-merchants-section").className).toContain("admin-section-highlight");
-    // 全量计数不筛选：两行商户都在。
-    expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy();
-    expect(screen.getByTestId("organization-merchant-row-m-2")).toBeTruthy();
-  });
-
-  it("点“正常商户”数字 → 商户表按 active 筛选（仅正常商户可见）", async () => {
+  it("点“正常商户”数字 → URL 带 ?kpi=merchants&status=active，页面进入聚焦视图", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("organization-kpi-active-merchants")).toBeTruthy());
     fireEvent.click(screen.getByTestId("organization-kpi-active-merchants"));
-    expect(screen.getByTestId("organization-merchants-filter-hint")).toBeTruthy();
+    expect(window.location.search).toContain("kpi=merchants");
+    expect(window.location.search).toContain("status=active");
+    expectActiveMerchantsFocusView();
+  });
+
+  it("聚焦视图点「返回全部」→ 参数清除，恢复完整页面（三表+表单+KPI 卡都在）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-kpi-active-merchants")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-kpi-active-merchants"));
+    fireEvent.click(screen.getByTestId("organization-kpi-focus-clear"));
+    expect(window.location.search).not.toContain("kpi=");
+    expect(screen.queryByTestId("organization-kpi-focus-banner")).toBeNull();
+    expect(screen.getByTestId("organization-entities-table")).toBeTruthy();
+    expect(screen.getByTestId("organization-projects-table")).toBeTruthy();
     expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy();
-    expect(screen.queryByTestId("organization-merchant-row-m-2")).toBeNull();
+    expect(screen.getByTestId("organization-merchant-row-m-2")).toBeTruthy();
+    expect(screen.getByTestId("organization-merchant-summary")).toBeTruthy();
+    expect(screen.getByTestId("organization-merchant-name")).toBeTruthy();
+  });
+
+  it("带参刷新/直链进入 → 直接呈现聚焦视图（参数从 URL 重建）", async () => {
+    window.history.replaceState({}, "", "/admin/governance/organizations?kpi=merchants&status=active");
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-kpi-focus-banner")).toBeTruthy());
+    expectActiveMerchantsFocusView();
+  });
+
+  it("浏览器后退（popstate）→ 退出聚焦视图回完整页面", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-kpi-active-merchants")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-kpi-active-merchants"));
+    expect(screen.getByTestId("organization-kpi-focus-banner")).toBeTruthy();
+    // jsdom 的 history.back 异步且不稳，直接模拟浏览器后退的效果：URL 回退+popstate 事件。
+    window.history.replaceState({}, "", "/admin/governance/organizations");
+    fireEvent.popState(window);
+    await waitFor(() => expect(screen.queryByTestId("organization-kpi-focus-banner")).toBeNull());
+    expect(screen.getByTestId("organization-merchant-summary")).toBeTruthy();
   });
 
   it("三表按后端真实字段渲染出真实值（字段错位时单元格是“-”，本用例必红）", async () => {

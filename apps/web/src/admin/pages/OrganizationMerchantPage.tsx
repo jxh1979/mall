@@ -17,6 +17,7 @@ const TEXT = {
   loadFailed: "组织与商户档案读取失败",
   merchantNameRequired: "商户名称不能为空。",
   contactPhoneInvalid: "联系电话必须是 11 位中国大陆手机号。",
+  focusClear: "清除筛选，返回全部",
 };
 
 const MERCHANT_TYPES = ["tenant", "retail", "catering", "entertainment", "service"];
@@ -30,8 +31,26 @@ function display(value: unknown) {
   return JSON.stringify(value);
 }
 
-// KPI 卡可点击下钻的目标表标识（本页三张表）。
-type DrillTarget = "entities" | "merchants" | "projects";
+// KPI 聚焦视图（用户终裁：点 KPI 数字=带筛选参数重新进入本页，URL 变化+只渲染对应表，感知上进入新页面）。
+// URL 约定（全站铺开照抄）：?kpi=<entities|merchants|projects>[&status=<状态子集>]；刷新/直链带参直接进聚焦视图。
+type KpiTarget = "entities" | "merchants" | "projects";
+type KpiFocus = { table: KpiTarget; status: string | null };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const table = params.get("kpi");
+  if (table !== "entities" && table !== "merchants" && table !== "projects") return null;
+  return { table, status: params.get("status") };
+}
+
+// 聚焦横幅标题：与被点的 KPI 卡名一致。
+function kpiFocusTitle(focus: KpiFocus): string {
+  if (focus.table === "entities") return "经营主体";
+  if (focus.table === "projects") return "项目档案";
+  if (focus.status === "active") return "正常商户";
+  return focus.status ? `商户档案（${formatBusinessStatus(focus.status)}）` : "商户档案";
+}
 
 export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
@@ -43,26 +62,35 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [contactPhone, setContactPhone] = React.useState("13800000000");
   const [cooperationForm, setCooperationForm] = React.useState("fixed_rent_plus_commission");
   const [formError, setFormError] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
 
-  // KPI 下钻状态（样板模式，供全站照抄）：
-  // - activeTable：点 KPI 后被定位/高亮的那张表；
-  // - merchantStatusFilter：状态子集 KPI（正常商户 active）点击时对商户表做客户端筛选，
-  //   仅过滤已加载的 merchants 内存数组，不发起后端查询。null=不筛选（全量）。
-  const [activeTable, setActiveTable] = React.useState<DrillTarget | null>(null);
-  const [merchantStatusFilter, setMerchantStatusFilter] = React.useState<string | null>(null);
-  const entitiesTableRef = React.useRef<HTMLDivElement>(null);
-  const merchantsTableRef = React.useRef<HTMLDivElement>(null);
-  const projectsTableRef = React.useRef<HTMLDivElement>(null);
+  // 浏览器后退/前进也能进出聚焦视图：pushState 配合页面级 popstate 监听。
+  // AdminApp 的 popstate 只重建 route/focus，本页的 ?kpi= 参数由本页自理，互不干扰。
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
-  // 点 KPI 数字 → 定位到对应表 + 高亮该表区块；status 有值时对商户表做状态筛选。
-  function drillToTable(target: DrillTarget, status: string | null = null) {
-    setActiveTable(target);
-    setMerchantStatusFilter(target === "merchants" ? status : null);
-    const ref = target === "entities" ? entitiesTableRef : target === "merchants" ? merchantsTableRef : projectsTableRef;
-    const el = ref.current;
-    if (el && typeof el.scrollIntoView === "function") {
-      el.scrollIntoView({ block: "center" });
-    }
+  // 点 KPI 数字 → 带参重新进入本页。pathname 原样保留（生产=/complex/admin/…，子路径前缀由门户
+  // rewrite+withBase 链路负责，本页不动 pathname 就不会破坏 /complex），只改查询串。
+  function enterKpiFocus(table: KpiTarget, status: string | null = null) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", table);
+    if (status) params.set("status", status);
+    else params.delete("status");
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ table, status });
+  }
+
+  // 「返回全部」：清掉 kpi/status 参数（保留 focus 等其它参数），恢复完整页面。
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    params.delete("status");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
   }
 
   const { loading, error, reload } = useAdminResource(
@@ -126,7 +154,48 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     await reload();
   }
 
+  // 状态子集 KPI（正常商户）聚焦时对商户表做客户端筛选：仅过滤已加载的内存数组，不发起后端查询。
+  const merchantStatusFilter = kpiFocus?.table === "merchants" ? kpiFocus.status : null;
   const visibleMerchants = merchantStatusFilter ? merchants.filter((row) => row.status === merchantStatusFilter) : merchants;
+
+  const entitiesSection = (
+    <>
+      <div className="admin-section-title">经营主体</div>
+      <div className="admin-table-scroll" data-testid="organization-entities-section">
+        <table className="admin-table" data-testid="organization-entities-table">
+          <thead><tr><th>主体</th><th>统一社会信用代码</th><th>主体角色</th><th>状态</th></tr></thead>
+          <tbody>{entities.map((row) => <tr key={row.id}><td>{display(row.entityName)}</td><td>{display(row.unifiedSocialCreditCode)}</td><td>{formatBusinessStatus(row.entityRole)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </>
+  );
+
+  const merchantsSection = (
+    <>
+      <div className="admin-section-title">商户档案</div>
+      <div className="admin-table-scroll" data-testid="organization-merchants-section">
+        <table className="admin-table" data-testid="organization-merchants-table">
+          {/* 后端无“公司名/风险/留痕证据”字段（原按臆造字段读致整表“-”），列对齐真实字段：联系人/联系电话替换。 */}
+          <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th></tr></thead>
+          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}><td>{display(row.merchantName)}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </>
+  );
+
+  const projectsSection = (
+    <>
+      <div className="admin-section-title">项目档案</div>
+      <div className="admin-table-scroll" data-testid="organization-projects-section">
+        <table className="admin-table" data-testid="organization-projects-table">
+          <thead><tr><th>项目</th><th>编码</th><th>商户</th><th>业态</th><th>状态</th></tr></thead>
+          <tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </>
+  );
+
+  const focusCount = kpiFocus ? (kpiFocus.table === "entities" ? entities.length : kpiFocus.table === "projects" ? projects.length : visibleMerchants.length) : 0;
 
   return (
     <section data-testid="organization-merchant-page">
@@ -140,27 +209,36 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {entities.length === 0 && merchants.length === 0 && projects.length === 0 ? (
           <div className="admin-state admin-empty" data-testid="organization-merchant-empty">暂无组织与商户档案</div>
+        ) : kpiFocus ? (
+          <>
+            {/* 聚焦视图：只渲染 KPI 对应那张表，其余表/表单/KPI 卡全部隐藏，感知上=新页面。 */}
+            <div className="admin-state" data-testid="organization-kpi-focus-banner">
+              正在查看：{kpiFocusTitle(kpiFocus)}（{focusCount}）
+              <button type="button" data-testid="organization-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+            </div>
+            {kpiFocus.table === "entities" ? entitiesSection : kpiFocus.table === "merchants" ? merchantsSection : projectsSection}
+          </>
         ) : (
           <>
             <div className="admin-kpi-grid" data-testid="organization-merchant-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable">
                 <span>经营主体</span>
-                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-entities" onClick={() => drillToTable("entities")}>{entities.length}</button>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-entities" onClick={() => enterKpiFocus("entities")}>{entities.length}</button>
                 <small>组织档案</small>
               </div>
               <div className="admin-kpi-card admin-kpi-card--clickable">
                 <span>商户档案</span>
-                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-merchants" onClick={() => drillToTable("merchants")}>{merchants.length}</button>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{merchants.length}</button>
                 <small>商户档案数</small>
               </div>
               <div className="admin-kpi-card admin-kpi-card--clickable">
                 <span>项目档案</span>
-                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-projects" onClick={() => drillToTable("projects")}>{projects.length}</button>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-projects" onClick={() => enterKpiFocus("projects")}>{projects.length}</button>
                 <small>项目数</small>
               </div>
               <div className="admin-kpi-card admin-kpi-card--clickable">
                 <span>正常商户</span>
-                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-active-merchants" onClick={() => drillToTable("merchants", "active")}>{merchants.filter((row) => row.status === "active").length}</button>
+                <button type="button" className="admin-kpi-value" data-testid="organization-kpi-active-merchants" onClick={() => enterKpiFocus("merchants", "active")}>{merchants.filter((row) => row.status === "active").length}</button>
                 <small>正常商户数</small>
               </div>
             </div>
@@ -177,30 +255,9 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
               <span className="admin-muted-action" data-testid="organization-merchant-boundary">{TEXT.boundary}</span>
             </div>
 
-            <div className="admin-section-title">经营主体</div>
-            <div ref={entitiesTableRef} className={`admin-table-scroll${activeTable === "entities" ? " admin-section-highlight" : ""}`} data-testid="organization-entities-section">
-              <table className="admin-table" data-testid="organization-entities-table">
-                <thead><tr><th>主体</th><th>统一社会信用代码</th><th>主体角色</th><th>状态</th></tr></thead>
-                <tbody>{entities.map((row) => <tr key={row.id}><td>{display(row.entityName)}</td><td>{display(row.unifiedSocialCreditCode)}</td><td>{formatBusinessStatus(row.entityRole)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
-              </table>
-            </div>
-
-            <div className="admin-section-title">商户档案{merchantStatusFilter ? <span className="admin-muted-action" data-testid="organization-merchants-filter-hint">（已按“正常商户”筛选）</span> : null}</div>
-            <div ref={merchantsTableRef} className={`admin-table-scroll${activeTable === "merchants" ? " admin-section-highlight" : ""}`} data-testid="organization-merchants-section">
-              <table className="admin-table" data-testid="organization-merchants-table">
-                {/* 后端无“公司名/风险/留痕证据”字段（原按臆造字段读致整表“-”），列对齐真实字段：联系人/联系电话替换。 */}
-                <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th></tr></thead>
-                <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}><td>{display(row.merchantName)}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
-              </table>
-            </div>
-
-            <div className="admin-section-title">项目档案</div>
-            <div ref={projectsTableRef} className={`admin-table-scroll${activeTable === "projects" ? " admin-section-highlight" : ""}`} data-testid="organization-projects-section">
-              <table className="admin-table" data-testid="organization-projects-table">
-                <thead><tr><th>项目</th><th>编码</th><th>商户</th><th>业态</th><th>状态</th></tr></thead>
-                <tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{row.merchantId ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink> : display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
-              </table>
-            </div>
+            {entitiesSection}
+            {merchantsSection}
+            {projectsSection}
           </>
         )}
       </AdminDataState>
