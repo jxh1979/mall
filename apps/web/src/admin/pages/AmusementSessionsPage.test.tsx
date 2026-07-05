@@ -106,3 +106,48 @@ describe("AmusementSessionsPage KPI 聚焦视图", () => {
     expect(text).toContain("已锁定容量");
   });
 });
+
+describe("AmusementSessionsPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/amusement/sessions");
+  });
+
+  it("点场次整行 → 抽屉含该行值（时间中文·状态中文）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-session-row-s-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-session-row-s-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("上午场");
+    expect(drawer.textContent).toContain("2026年6月20日 10:00");
+    expect(drawer.textContent).not.toContain("2026-06-20T10:00:00Z");
+    expect(drawer.textContent).not.toContain("open");
+  });
+
+  it("点项目整行 → 抽屉含该行值（状态中文）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-project-row-amuse-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-project-row-amuse-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("旋转木马");
+    expect(drawer.textContent).toContain("AM-1");
+    expect(drawer.textContent).not.toContain("active");
+  });
+
+  it("Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-session-row-s-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-session-row-s-1"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("场次表时间列零英文 ISO", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-sessions-table")).toBeTruthy());
+    const table = screen.getByTestId("amusement-sessions-table").textContent ?? "";
+    expect(table).not.toContain("2026-06-20T10:00:00Z");
+    expect(table).toContain("2026年6月20日");
+  });
+});

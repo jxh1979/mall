@@ -11,6 +11,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, AmusementSafetyInspectionRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEXT = {
   title: "安全巡检/事故",
@@ -106,6 +107,8 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [createTitle, setCreateTitle] = React.useState("开放前护栏检查");
   const [rectifyNote, setRectifyNote] = React.useState("已更换防护垫并上传照片");
+  // 行明细抽屉：整行可点 → 该巡检完整字段（结果/状态中文·时间中文·引用可溯源）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
 
   React.useEffect(() => {
@@ -248,22 +251,43 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     return TEXT.total;
   }
 
+  function openInspectionDetail(row: AmusementSafetyInspectionRow) {
+    setDetail({
+      title: `安全巡检明细 · ${displayNo(row)}`,
+      fields: [
+        { label: TEXT.inspectionNo, value: displayNo(row) },
+        {
+          label: TEXT.project,
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectName ?? row.projectId ?? "-"}</TraceLink>,
+        },
+        { label: TEXT.overall, value: overallLabel(row) },
+        { label: TEXT.inspectionStatus, value: formatBusinessStatus(row.inspectionStatus ?? row.status) },
+        { label: TEXT.rectificationStatus, value: rectificationLabel(row.rectificationStatus) },
+        { label: TEXT.reopenStatus, value: row.reopenStatus ? formatBusinessStatus(row.reopenStatus) : "-" },
+        { label: TEXT.evidenceLabel, value: evidenceList(row) },
+        { label: TEXT.time, value: cnDate(row.inspectedAt ?? row.createdAt) },
+      ],
+    });
+  }
+
   const inspectionsTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="amusement-safety-table">
         <thead><tr><th>{TEXT.select}</th><th>{TEXT.inspectionNo}</th><th>{TEXT.project}</th><th>{TEXT.overall}</th><th>{TEXT.inspectionStatus}</th><th>{TEXT.rectificationStatus}</th><th>{TEXT.reopenStatus}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.time}</th></tr></thead>
         <tbody>
           {pagedRows.pageRows.map((row) => (
-            <tr key={row.id}>
-              <td><input type="radio" data-testid={`amusement-safety-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-safety-row-${row.id}`}
+              onClick={() => openInspectionDetail(row)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionDetail(row); } }}>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`amusement-safety-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
               <td>{displayNo(row)}</td>
-              <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectName ?? row.projectId ?? "-"}</TraceLink></td>
+              <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectName ?? row.projectId ?? "-"}</TraceLink></td>
               <td>{overallLabel(row)}</td>
               <td>{formatBusinessStatus(row.inspectionStatus ?? row.status)}</td>
               <td>{rectificationLabel(row.rectificationStatus)}</td>
               <td>{row.reopenStatus ? formatBusinessStatus(row.reopenStatus) : "-"}</td>
               <td>{evidenceList(row)}</td>
-              <td>{row.inspectedAt ?? row.createdAt ?? "-"}</td>
+              <td>{cnDate(row.inspectedAt ?? row.createdAt)}</td>
             </tr>
           ))}
         </tbody>
@@ -313,6 +337,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

@@ -6,7 +6,7 @@ import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 const BOOKINGS = [
-  { id: "b-1", project_id: "amuse-1", session_id: "s-1", booking_type: "reserved", customer_name: "团体甲", party_size: 20, reserved_capacity: 20, booking_status: "approved" },
+  { id: "b-1", project_id: "amuse-1", session_id: "s-1", booking_type: "reserved", customer_name: "团体甲", party_size: 20, reserved_capacity: 20, booking_status: "approved", created_at: "2026-06-18T09:15:00Z", paid_at: "2026-06-18T10:00:00Z" },
   { id: "b-2", project_id: "amuse-1", session_id: "s-2", booking_type: "reserved", customer_name: "团体乙", party_size: 10, reserved_capacity: 10, booking_status: "pending" },
 ];
 
@@ -100,5 +100,41 @@ describe("AmusementGroupBookingsPage KPI 聚焦视图", () => {
     // 表格状态列中文（approved→已通过，reserved→已预订）
     const table = screen.getByTestId("amusement-group-bookings-table").textContent ?? "";
     expect(table).toContain("已通过");
+  });
+});
+
+describe("AmusementGroupBookingsPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/amusement/group-bookings");
+  });
+
+  it("点整行 → 抽屉含该行值（类型/状态中文·时间中文）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-group-booking-row-b-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-group-booking-row-b-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("b-1");
+    expect(drawer.textContent).toContain("团体甲");
+    expect(drawer.textContent).toContain("已通过");
+    expect(drawer.textContent).toContain("2026年6月18日");
+    expect(drawer.textContent).not.toContain("approved");
+    expect(drawer.textContent).not.toContain("2026-06-18T09:15:00Z");
+  });
+
+  it("点行内单选按钮 → 只选中不弹抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-group-booking-select-b-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-group-booking-select-b-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-group-booking-row-b-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-group-booking-row-b-2"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });

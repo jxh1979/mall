@@ -9,6 +9,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, AmusementProjectRow, AmusementSessionRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const SESSION_MANAGE = ["amusement.session.manage"];
 
@@ -47,6 +48,8 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 项目/场次完整字段（时间中文·状态中文·引用可溯源）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -120,17 +123,50 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
 
   const pagedSessions = usePagedRows(sessions, 10);
 
+  function openProjectDetail(row: AmusementProjectRow) {
+    setDetail({
+      title: `项目明细 · ${row.projectName ?? row.id}`,
+      fields: [
+        { label: "项目", value: display(row.projectName) },
+        { label: "编码", value: display(row.projectCode) },
+        { label: "容量", value: display(row.capacity) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "项目编号", value: row.id },
+      ],
+    });
+  }
+
+  function openSessionDetail(row: AmusementSessionRow) {
+    setDetail({
+      title: `场次明细 · ${row.sessionName ?? row.id}`,
+      fields: [
+        { label: "场次", value: display(row.sessionName) },
+        {
+          label: "项目",
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink>,
+        },
+        { label: "开始", value: cnDate(row.startsAt) },
+        { label: "结束", value: cnDate(row.endsAt) },
+        { label: "容量", value: display(row.capacity) },
+        { label: "已用", value: display(row.usedCapacity) },
+        { label: "锁定", value: display(row.lockedCapacity) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "场次编号", value: row.id },
+      ],
+    });
+  }
+
   const projectsSection = (
     <>
       <div className="admin-section-title">项目</div>
-      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-projects-table"><thead><tr><th>项目</th><th>编码</th><th>容量</th><th>状态</th></tr></thead><tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.projectName)}</td><td>{display(row.projectCode)}</td><td>{display(row.capacity)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody></table></div>
+      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-projects-table"><thead><tr><th>项目</th><th>编码</th><th>容量</th><th>状态</th></tr></thead><tbody>{projects.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-project-row-${row.id}`} onClick={() => openProjectDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProjectDetail(row); } }}><td>{display(row.projectName)}</td><td>{display(row.projectCode)}</td><td>{display(row.capacity)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody></table></div>
     </>
   );
 
   const sessionsSection = (
     <>
       <div className="admin-section-title">场次</div>
-      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-sessions-table"><thead><tr><th>场次</th><th>项目</th><th>开始</th><th>结束</th><th>容量</th><th>已用</th><th>锁定</th><th>状态</th></tr></thead><tbody>{pagedSessions.pageRows.map((row) => <tr key={row.id}><td>{display(row.sessionName)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{display(row.startsAt)}</td><td>{display(row.endsAt)}</td><td>{display(row.capacity)}</td><td>{display(row.usedCapacity)}</td><td>{display(row.lockedCapacity)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody></table><TablePager testid="amusement-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} /></div>
+      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-sessions-table"><thead><tr><th>场次</th><th>项目</th><th>开始</th><th>结束</th><th>容量</th><th>已用</th><th>锁定</th><th>状态</th></tr></thead><tbody>{pagedSessions.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-session-row-${row.id}`} onClick={() => openSessionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSessionDetail(row); } }}><td>{display(row.sessionName)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{cnDate(row.startsAt)}</td><td>{cnDate(row.endsAt)}</td><td>{display(row.capacity)}</td><td>{display(row.usedCapacity)}</td><td>{display(row.lockedCapacity)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody></table><TablePager testid="amusement-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} /></div>
     </>
   );
 
@@ -166,6 +202,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

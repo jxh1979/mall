@@ -107,5 +107,44 @@ describe("AmusementSafetyPage KPI 聚焦视图", () => {
     expect(table).toContain("已复查"); // rechecked
     expect(table).not.toContain("pending_rectification");
     expect(table).not.toContain("rechecked");
+    // 时间列中文化，不得出现 ISO 原文
+    expect(table).toContain("2026年6月16日");
+    expect(table).not.toContain("2026-06-16T10:00:00Z");
+  });
+});
+
+describe("AmusementSafetyPage 行明细抽屉", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/amusement/safety");
+  });
+
+  it("点整行 → 抽屉含该行值（结果/状态中文·时间中文）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-safety-row-i-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-safety-row-i-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("INS-1");
+    expect(drawer.textContent).toContain("旋转木马");
+    expect(drawer.textContent).toContain("待整改");
+    expect(drawer.textContent).toContain("2026年6月16日");
+    expect(drawer.textContent).not.toContain("pending_rectification");
+    expect(drawer.textContent).not.toContain("2026-06-16T10:00:00Z");
+  });
+
+  it("点行内单选按钮 → 只选中不弹抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-safety-select-i-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-safety-select-i-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("amusement-safety-row-i-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("amusement-safety-row-i-2"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });
