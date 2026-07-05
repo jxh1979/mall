@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type CatalogRow = { id: string; name?: string; priceCent?: number; durationMinutes?: number; active?: boolean };
@@ -56,6 +57,8 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
   const [feeValue, setFeeValue] = React.useState("");
   const [companyQr, setCompanyQr] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该服务单完整字段（枚举中文·金额¥·时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -133,6 +136,29 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
       ? orders.filter((row) => row.status === "completed")
       : orders;
 
+  function openOrderDetail(row: OrderRow) {
+    setDetail({
+      title: `服务单明细 · ${row.id}`,
+      fields: [
+        { label: "服务单号", value: row.id },
+        { label: "服务项目", value: row.itemName ?? "—" },
+        { label: "价格", value: money(row.priceCent) },
+        { label: "桌台", value: row.tableId ?? "—" },
+        {
+          label: "履约人",
+          value: <TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.performerUserId}>{row.performerUserId ?? "—"}</TraceLink>,
+        },
+        { label: "下单人", value: row.orderedBy ?? "—" },
+        { label: "管理费", value: money(row.mgmtFeeCent) },
+        { label: "舞者应得", value: money(row.dancerShareCent) },
+        { label: "状态", value: STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—" },
+        { label: "取消原因", value: row.cancelReason ?? "—" },
+        { label: "下单时间", value: cnDate(row.createdAt) },
+        { label: "收款时间", value: cnDate(row.paidAt) },
+      ],
+    });
+  }
+
   return (
     <section data-testid="service-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -193,16 +219,18 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
             <thead><tr><th>单号</th><th>服务</th><th>价格</th><th>桌台</th><th>履约人</th><th>管理费</th><th>舞者应得</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
               {visibleOrders.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`service-order-row-${row.id}`}
+                  onClick={() => openOrderDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOrderDetail(row); } }}>
                   <td>{row.id}</td>
                   <td>{row.itemName ?? "—"}</td>
                   <td>{money(row.priceCent)}</td>
                   <td>{row.tableId ?? "—"}</td>
-                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.performerUserId}>{row.performerUserId ?? "—"}</TraceLink></td>
+                  <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.performerUserId}>{row.performerUserId ?? "—"}</TraceLink></td>
                   <td>{money(row.mgmtFeeCent)}</td>
                   <td>{money(row.dancerShareCent)}</td>
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}{row.cancelReason ? `(${row.cancelReason})` : ""}</td>
-                  <td>
+                  <td onClick={(event) => event.stopPropagation()}>
                     {row.status === "created" || row.status === "paid" || row.status === "pending_accept" || row.status === "accepted" ? (
                       <button type="button" data-testid={`svc-cancel-${row.id}`} onClick={() => void cancelOrder(row.id)}>取消</button>
                     ) : "—"}
@@ -213,6 +241,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

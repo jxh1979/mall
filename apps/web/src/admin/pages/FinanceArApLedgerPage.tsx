@@ -9,6 +9,7 @@ import { useSortedRows } from "../components/useSortedRows";
 import type { AdminPageProps, FinanceLedgerRow } from "../types";
 import type { PagedResult } from "../client/adminClient";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 // 后端写权限码（与 FinanceController.requirePermission 对齐）
 const PAYMENT_PERMISSION = "finance.payment.register";
@@ -36,6 +37,8 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
   const [exporting, setExporting] = React.useState(false);
   // 搜索输入草稿（即时搜索降级：输入不触发请求，回车/点查询才 search() 提交跳回第 1 页）。
   const [draft, setDraft] = React.useState("");
+  // 行明细抽屉：整行可点 → 该单据完整字段（方向/金额/来源/状态/日期，枚举中文·金额¥·日期中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const fetchPage = React.useCallback(
     (page: number, size: number, keyword: string): Promise<PagedResult<FinanceLedgerRow>> => {
@@ -127,6 +130,24 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
     }
   }
 
+  function openLedgerDetail(row: FinanceLedgerRow) {
+    setDetail({
+      title: `台账单据明细 · ${voucherNo(row)}`,
+      fields: [
+        { label: "凭证", value: voucherNo(row) },
+        { label: "方向", value: formatBusinessStatus(row.direction ?? "receivable") },
+        { label: "往来单位", value: row.counterparty ?? "—" },
+        { label: "来源单据", value: row.sourceDoc ?? "—" },
+        { label: "总额", value: `¥${centToYuan(row.amountCent)}` },
+        { label: "已收/已付", value: `¥${centToYuan(row.paidAmountCent)}` },
+        { label: "未收/未付", value: `¥${centToYuan(row.unpaidAmountCent)}` },
+        { label: "到期日", value: cnDate(row.dueDate) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "单据号", value: row.id },
+      ],
+    });
+  }
+
   const empty = !ledger.loading && ledger.total === 0 && ledger.keyword === "";
 
   return (
@@ -167,8 +188,10 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
           <table className="admin-table" data-testid="finance-ledger-table">
             <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sort.indicator("dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th></tr></thead>
             <tbody>{sort.sorted.map((row) => (
-              <tr key={row.id}>
-                <td><input type="radio" aria-label={`选择凭证 ${voucherNo(row)}`} data-testid={`finance-ledger-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`finance-ledger-row-${row.id}`}
+                onClick={() => openLedgerDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openLedgerDetail(row); } }}>
+                <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择凭证 ${voucherNo(row)}`} data-testid={`finance-ledger-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                 <td>{voucherNo(row)}</td>
                 <td>{formatBusinessStatus(row.direction ?? "receivable")}</td>
                 <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.unpaidAmountCent)} / {centToYuan(row.amountCent)}</td>
@@ -181,6 +204,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         </div>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

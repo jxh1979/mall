@@ -2,6 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 
@@ -25,6 +26,13 @@ function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
 
+// 月份 "2026-07" → 中文 "2026年7月"（不把 ISO 原文直出）。
+function cnMonth(value?: string) {
+  if (!value) return "—";
+  const m = /^(\d{4})-(\d{2})/.exec(value);
+  return m ? `${m[1]}年${Number(m[2])}月` : value;
+}
+
 export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: AdminPageProps) {
   const [month, setMonth] = React.useState(currentMonth);
   const [payroll, setPayroll] = React.useState<PayrollRow[]>([]);
@@ -35,6 +43,8 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
   const [adjType, setAdjType] = React.useState("bonus");
   const [adjAmount, setAdjAmount] = React.useState("");
   const [adjReason, setAdjReason] = React.useState("");
+  // 行明细抽屉：整行可点 → 展示该行完整字段（全部中文 label + ¥ 金额 + 中文日期/枚举）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -93,6 +103,41 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
     await reload();
   };
 
+  // 薪资单行 → 该员工该月全部字段（label 用表头中文，金额带 ¥）。
+  function openPayrollDetail(row: PayrollRow) {
+    setDetail({
+      title: `薪资单明细 · ${row.userId ?? "—"}`,
+      fields: [
+        { label: "员工", value: row.userId ?? "—" },
+        { label: "所属月份", value: cnMonth(row.month ?? month) },
+        { label: "固定工资", value: money(row.baseCent) },
+        { label: "提成", value: money(row.commissionCent) },
+        { label: "奖金", value: money(row.bonusCent) },
+        { label: "处罚", value: money(row.penaltyCent) },
+        { label: "代扣个税", value: money(row.taxCent) },
+        { label: "实发合计", value: money(row.totalCent) },
+        { label: "薪资单号", value: row.id },
+      ],
+    });
+  }
+
+  // 请假行 → 该申请完整字段（类型/状态枚举中文、起止日期中文）。
+  function openLeaveDetail(row: LeaveRow) {
+    setDetail({
+      title: `请假申请明细 · ${row.userId ?? "—"}`,
+      fields: [
+        { label: "员工", value: row.userId ?? "—" },
+        { label: "请假类型", value: LEAVE_LABELS[row.leaveType ?? ""] ?? row.leaveType ?? "—" },
+        { label: "开始日期", value: cnDate(row.startDate) },
+        { label: "结束日期", value: cnDate(row.endDate) },
+        { label: "事由", value: row.reason ?? "—" },
+        { label: "审批状态", value: STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—" },
+        { label: "审批意见", value: row.reviewNote ?? "—" },
+        { label: "申请单号", value: row.id },
+      ],
+    });
+  }
+
   return (
     <section data-testid="staff-payroll-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -122,7 +167,9 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
             <thead><tr><th>员工</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>代扣个税</th><th>实发合计</th></tr></thead>
             <tbody>
               {payroll.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`payroll-row-${row.id}`}
+                  onClick={() => openPayrollDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPayrollDetail(row); } }}>
                   <td>{row.userId ?? "—"}</td>
                   <td>{money(row.baseCent)}</td>
                   <td>{money(row.commissionCent)}</td>
@@ -141,13 +188,15 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
             <thead><tr><th>员工</th><th>类型</th><th>起止</th><th>事由</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
               {leaves.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leave-row-${row.id}`}
+                  onClick={() => openLeaveDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openLeaveDetail(row); } }}>
                   <td>{row.userId ?? "—"}</td>
                   <td>{LEAVE_LABELS[row.leaveType ?? ""] ?? row.leaveType ?? "—"}</td>
-                  <td>{row.startDate} ~ {row.endDate}</td>
+                  <td>{cnDate(row.startDate)} ~ {cnDate(row.endDate)}</td>
                   <td>{row.reason ?? "—"}</td>
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}</td>
-                  <td>
+                  <td onClick={(event) => event.stopPropagation()}>
                     <button type="button" data-testid={`leave-approve-${row.id}`} onClick={() => void review(row.id, "approve")}>通过</button>
                     <button type="button" data-testid={`leave-reject-${row.id}`} onClick={() => void review(row.id, "reject")}>驳回</button>
                   </td>
@@ -157,6 +206,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

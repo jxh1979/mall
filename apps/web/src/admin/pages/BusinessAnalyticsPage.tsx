@@ -67,6 +67,21 @@ function rowDomain(row: BusinessMetricSnapshotRow | MetricDefinitionRow | Metric
   return row.domain ?? "unknown";
 }
 
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带 ?kpi= 参数重进本页，
+// 只渲染对应明细表并按需过滤。snapshots=指标快照表；upward=指标快照表(仅上升)；anomalies=异常指标表。
+// 平均偏离是派生统计、本页无承载明细表 → 保留为纯数字不可点（见报告说明）。
+type KpiTarget = "snapshots" | "upward" | "anomalies";
+function readKpiFocusFromUrl(): KpiTarget | null {
+  if (typeof window === "undefined") return null;
+  const target = new URLSearchParams(window.location.search).get("kpi");
+  return target === "snapshots" || target === "upward" || target === "anomalies" ? target : null;
+}
+function kpiFocusTitle(target: KpiTarget): string {
+  if (target === "upward") return "上升趋势指标";
+  if (target === "anomalies") return "异常指标";
+  return "指标快照";
+}
+
 export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
   const [snapshots, setSnapshots] = React.useState<BusinessMetricSnapshotRow[]>([]);
   const [definitions, setDefinitions] = React.useState<MetricDefinitionRow[]>([]);
@@ -79,6 +94,30 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
   // V216 真落库：加载时读回已锁定复盘（刷新/换人后仍可见），锁定按钮走后端接口。
   const [reviewLocks, setReviewLocks] = React.useState<BusinessReviewLockRow[]>([]);
   const [locking, setLocking] = React.useState(false);
+  const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(target: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", target);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus(target);
+    (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+    (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -187,13 +226,21 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {snapshots.length === 0 ? <div className="admin-state admin-empty" data-testid="business-analytics-empty">{TEXT.empty}</div> : (
           <>
+            {kpiFocus ? (
+              <div className="admin-state" data-testid="business-analytics-kpi-focus-banner">
+                正在查看：{kpiFocusTitle(kpiFocus)}
+                <button type="button" data-testid="business-analytics-kpi-focus-clear" onClick={exitKpiFocus}>清除筛选，返回全部</button>
+              </div>
+            ) : (
             <div className="admin-kpi-grid" data-testid="business-analytics-summary">
-              <div className="admin-kpi-card"><span>{TEXT.totalMetrics}</span><strong>{filteredSnapshots.length}</strong><small>{domainFilter === "all" ? TEXT.allDomains : formatMetricDomain(domainFilter)}</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.upward}</span><strong>{upwardCount}</strong><small>上升</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.anomalies}</span><strong data-testid="business-analytics-anomaly-count">{anomalies.filter((row) => row.status === "open").length}</strong><small>待处置</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.avgVariance}</span><strong>{formatPercent(averageVariance)}</strong><small>{TEXT.varianceRate}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.totalMetrics}</span><button type="button" className="admin-kpi-value" data-testid="business-analytics-kpi-snapshots" onClick={() => enterKpiFocus("snapshots")}>{filteredSnapshots.length}</button><small>{domainFilter === "all" ? TEXT.allDomains : formatMetricDomain(domainFilter)}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.upward}</span><button type="button" className="admin-kpi-value" data-testid="business-analytics-kpi-upward" onClick={() => enterKpiFocus("upward")}>{upwardCount}</button><small>上升</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.anomalies}</span><button type="button" className="admin-kpi-value" data-testid="business-analytics-kpi-anomalies" onClick={() => enterKpiFocus("anomalies")}>{anomalies.filter((row) => row.status === "open").length}</button><small>待处置</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.avgVariance}</span><strong data-testid="business-analytics-anomaly-count" style={{ display: "none" }}>{anomalies.filter((row) => row.status === "open").length}</strong><strong>{formatPercent(averageVariance)}</strong><small>{TEXT.varianceRate}</small></div>
             </div>
+            )}
 
+            {!kpiFocus && (<>
             <div className="admin-form-grid" data-testid="business-analytics-controls">
               <label>{TEXT.domain}<select data-testid="business-analytics-domain-filter" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}><option value="all">{TEXT.allDomains}</option>{domains.map((domain) => <option key={domain} value={domain}>{formatMetricDomain(domain)}</option>)}</select></label>
               <label>{TEXT.lockNote}<input data-testid="business-analytics-lock-note" value={lockNote} onChange={(event) => setLockNote(event.target.value)} /></label>
@@ -260,13 +307,18 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
               </div>
             </div>
 
+            </>)}
+
+            {(!kpiFocus || kpiFocus === "snapshots" || kpiFocus === "upward") && (
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-table">
                 <thead><tr><th>{TEXT.businessDate}</th><th>{TEXT.metricKey}</th><th>{TEXT.domain}</th><th>{TEXT.actualValue}</th><th>{TEXT.baselineValue}</th><th>{TEXT.varianceRate}</th><th>{TEXT.trend}</th><th>{TEXT.segment}</th></tr></thead>
-                <tbody>{filteredSnapshots.map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{row.segmentType === "platform" || !row.segmentType ? "平台" : `${formatBusinessStatus(row.segmentType)}:${row.segmentId ?? "-"}`}</td></tr>)}</tbody>
+                <tbody>{(kpiFocus === "upward" ? filteredSnapshots.filter((r) => r.trendDirection === "up") : filteredSnapshots).map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{row.segmentType === "platform" || !row.segmentType ? "平台" : `${formatBusinessStatus(row.segmentType)}:${row.segmentId ?? "-"}`}</td></tr>)}</tbody>
               </table>
             </div>
+            )}
 
+            {!kpiFocus && (<>
             <h3>{TEXT.definition}</h3>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-definitions-table">
@@ -282,7 +334,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
                 ))}</tbody>
               </table>
             </div>
+            </>)}
 
+            {(!kpiFocus || kpiFocus === "anomalies") && (<>
             <h3>{TEXT.anomalies}</h3>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-anomalies-table">
@@ -300,6 +354,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
                 ))}</tbody>
               </table>
             </div>
+            </>)}
           </>
         )}
       </AdminDataState>

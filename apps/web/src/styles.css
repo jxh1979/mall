@@ -2259,3 +2259,65 @@ body {
   min-width: 180px;
   max-width: 100%;
 }
+
+/* ============================================================
+   整行可点 → 行明细抽屉（全站样板，复用 --adm- 配色变量）。
+   别的表格页照抄：<tr className="admin-row-clickable" onClick={打开抽屉}>，
+   行内 TraceLink 等已有可点元素外层套 stopPropagation，避免误触发行抽屉。
+   ============================================================ */
+.admin-row-clickable { cursor: pointer; }
+.admin-row-clickable:hover td { background: var(--adm-accent-soft); }
+.admin-row-clickable:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: -2px; }
+
+.admin-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 22, 26, 0.38);
+  display: flex;
+  justify-content: flex-end;
+}
+.admin-drawer {
+  width: min(440px, 92vw);
+  max-height: 100vh;
+  overflow-y: auto;
+  background: var(--adm-surface);
+  box-shadow: var(--adm-shadow-md);
+  border-left: 1px solid var(--adm-border);
+  padding: 20px 22px 28px;
+}
+.admin-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--adm-border);
+}
+.admin-drawer-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--adm-text); }
+.admin-drawer-close {
+  appearance: none;
+  border: none;
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--adm-text-2);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.admin-drawer-close:hover { color: var(--adm-text); background: var(--adm-surface-3); }
+.admin-drawer-close:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 2px; }
+.admin-drawer-fields { margin: 0; }
+.admin-drawer-field {
+  display: grid;
+  grid-template-columns: 116px 1fr;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--adm-border);
+  font-size: 13.5px;
+}
+.admin-drawer-field:last-child { border-bottom: none; }
+.admin-drawer-label { margin: 0; color: var(--adm-text-3); font-weight: 600; }
+.admin-drawer-value { margin: 0; color: var(--adm-text); word-break: break-word; font-variant-numeric: tabular-nums; }
