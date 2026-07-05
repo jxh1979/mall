@@ -18,7 +18,26 @@ const TEXT = {
   boundary: "商户准入必须同时核验商户档案、四类主体绑定、合同审批与附件归档；任何一段缺失都不能视为准入闭环完成。",
   loadFailed: "准入流水读取失败",
   exportReasonRequired: "导出原因不能为空。",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=<merchants|bindings|contracts>；点 KPI 数字=带参重进本页只渲染对应表。
+// 准入闭环（closedLoopCount）是跨档案/绑定/合同交叉计数，无独立承载表，其 KPI 数字保持纯文本不可点。
+type KpiTarget = "merchants" | "bindings" | "contracts";
+type KpiFocus = { table: KpiTarget };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const table = new URLSearchParams(window.location.search).get("kpi");
+  if (table !== "merchants" && table !== "bindings" && table !== "contracts") return null;
+  return { table };
+}
+
+function kpiFocusTitle(focus: KpiFocus): string {
+  if (focus.table === "bindings") return "主体绑定";
+  if (focus.table === "contracts") return "合同审批";
+  return "商户档案";
+}
 
 function display(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
@@ -42,6 +61,28 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
   const [exportReason, setExportReason] = React.useState("完整后台准入流水导出");
   const [formError, setFormError] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(table: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", table);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ table });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -101,6 +142,50 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
     });
   }
 
+  const merchantsSection = (
+    <>
+      <div className="admin-section-title">商户档案</div>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="admission-audits-merchants-table">
+          <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
+          <tbody>{merchants.map((row) => (
+            <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.displayName)}</TraceLink></td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </>
+  );
+
+  const bindingsSection = (
+    <>
+      <div className="admin-section-title">主体绑定</div>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="admission-audits-bindings-table">
+          <thead><tr><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>结算主体</th><th>状态</th><th>留痕证据</th></tr></thead>
+          <tbody>{bindings.map((row) => (
+            <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink></td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </>
+  );
+
+  const contractsSection = (
+    <>
+      <div className="admin-section-title">合同草稿/审批</div>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="admission-audits-contracts-table">
+          <thead><tr><th>商户</th><th>合同主体</th><th>运营主体</th><th>结算主体</th><th>生效日</th><th>到期日</th><th>附件</th><th>状态</th><th>留痕证据</th></tr></thead>
+          <tbody>{contracts.map((row) => (
+            <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{display(row.effectiveDate)}</td><td>{display(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{formatBusinessStatus(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </>
+  );
+
+  const focusCount = kpiFocus ? (kpiFocus.table === "bindings" ? bindings.length : kpiFocus.table === "contracts" ? contracts.length : merchants.length) : 0;
+
   return (
     <section data-testid="admission-audits-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -110,12 +195,20 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {merchants.length === 0 && bindings.length === 0 && contracts.length === 0 ? (
           <div className="admin-state admin-empty" data-testid="admission-audits-empty">暂无商户准入流水</div>
+        ) : kpiFocus ? (
+          <>
+            <div className="admin-state" data-testid="admission-audits-kpi-focus-banner">
+              正在查看：{kpiFocusTitle(kpiFocus)}（{focusCount}）
+              <button type="button" data-testid="admission-audits-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+            </div>
+            {kpiFocus.table === "bindings" ? bindingsSection : kpiFocus.table === "contracts" ? contractsSection : merchantsSection}
+          </>
         ) : (
           <>
             <div className="admin-kpi-grid" data-testid="admission-audits-summary">
-              <div className="admin-kpi-card"><span>商户档案</span><strong>{merchants.length}</strong><small>档案证据</small></div>
-              <div className="admin-kpi-card"><span>主体绑定</span><strong>{bindings.length}</strong><small>四类主体</small></div>
-              <div className="admin-kpi-card"><span>合同审批</span><strong>{contracts.length}</strong><small>{draftCount} 个草稿</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户档案</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{merchants.length}</button><small>档案证据</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>主体绑定</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-bindings" onClick={() => enterKpiFocus("bindings")}>{bindings.length}</button><small>四类主体</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>合同审批</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-contracts" onClick={() => enterKpiFocus("contracts")}>{contracts.length}</button><small>{draftCount} 个草稿</small></div>
               <div className="admin-kpi-card"><span>准入闭环</span><strong>{closedLoopCount}</strong><small>档案+绑定+合同</small></div>
             </div>
 
@@ -127,35 +220,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
               <span className="admin-muted-action" data-testid="admission-audits-boundary">{TEXT.boundary}</span>
             </div>
 
-            <div className="admin-section-title">商户档案</div>
-            <div className="admin-table-scroll">
-              <table className="admin-table" data-testid="admission-audits-merchants-table">
-                <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
-                <tbody>{merchants.map((row) => (
-                  <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.displayName)}</TraceLink></td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
-                ))}</tbody>
-              </table>
-            </div>
-
-            <div className="admin-section-title">主体绑定</div>
-            <div className="admin-table-scroll">
-              <table className="admin-table" data-testid="admission-audits-bindings-table">
-                <thead><tr><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>结算主体</th><th>状态</th><th>留痕证据</th></tr></thead>
-                <tbody>{bindings.map((row) => (
-                  <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink></td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
-                ))}</tbody>
-              </table>
-            </div>
-
-            <div className="admin-section-title">合同草稿/审批</div>
-            <div className="admin-table-scroll">
-              <table className="admin-table" data-testid="admission-audits-contracts-table">
-                <thead><tr><th>商户</th><th>合同主体</th><th>运营主体</th><th>结算主体</th><th>生效日</th><th>到期日</th><th>附件</th><th>状态</th><th>留痕证据</th></tr></thead>
-                <tbody>{contracts.map((row) => (
-                  <tr key={row.id}><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{display(row.effectiveDate)}</td><td>{display(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{display(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
-                ))}</tbody>
-              </table>
-            </div>
+            {merchantsSection}
+            {bindingsSection}
+            {contractsSection}
 
             <div className="admin-muted-action" data-testid="admission-audits-cross-check">
               已核验商户 {merchants.map((row) => `${row.id}:${byMerchant(contracts, row.id).length} 份合同`).join("；") || "-"}

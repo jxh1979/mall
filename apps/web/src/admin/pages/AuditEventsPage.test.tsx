@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuditEventsPage } from "./AuditEventsPage";
 import type { AdminApiClient, AdminPageProps, AuditEventRow, EffectivePermissionsState } from "../types";
@@ -53,5 +53,60 @@ describe("AuditEventsPage 服务端分页", () => {
     await waitFor(() => expect(getPaged).toHaveBeenCalled());
     fireEvent.click(screen.getByTestId("audit-events-pager-next"));
     await waitFor(() => expect(getPaged).toHaveBeenCalledWith(expect.stringContaining("page=2")));
+  });
+});
+
+describe("AuditEventsPage KPI 聚焦视图", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/admin/audit/events");
+  });
+
+  it("点“本页成功”数字 → ?kpi=events&status=success，横幅+表只剩成功子集，KPI 卡/控件隐藏", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("audit-events-kpi-success")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("audit-events-kpi-success"));
+    expect(window.location.search).toContain("kpi=events");
+    expect(window.location.search).toContain("status=success");
+    expect(screen.getByTestId("audit-events-kpi-focus-banner").textContent).toContain("正在查看：本页成功事件（1）");
+    expect(screen.queryByTestId("audit-events-summary")).toBeNull();
+    expect(screen.queryByTestId("audit-events-controls")).toBeNull();
+    const text = screen.getByTestId("audit-events-table").textContent ?? "";
+    expect(text).toContain("登录成功");
+    expect(text).not.toContain("越权阻断");
+  });
+
+  it("点“本页失败/阻断”数字 → 失败子集(1)", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("audit-events-kpi-failed")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("audit-events-kpi-failed"));
+    expect(screen.getByTestId("audit-events-kpi-focus-banner").textContent).toContain("（1）");
+    const text = screen.getByTestId("audit-events-table").textContent ?? "";
+    expect(text).toContain("越权阻断");
+    expect(text).not.toContain("登录成功");
+  });
+
+  it("「返回全部」→ 恢复 KPI 卡+控件+全量表", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("audit-events-kpi-success")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("audit-events-kpi-success"));
+    fireEvent.click(screen.getByTestId("audit-events-kpi-focus-clear"));
+    expect(window.location.search).not.toContain("kpi=");
+    expect(screen.getByTestId("audit-events-summary")).toBeTruthy();
+    expect(screen.getByTestId("audit-events-controls")).toBeTruthy();
+    expect(screen.getByTestId("audit-events-table").textContent).toContain("越权阻断");
+  });
+
+  it("带参直链进入 → 直接呈现聚焦视图", async () => {
+    window.history.replaceState({}, "", "/admin/audit/events?kpi=events&status=failed");
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("audit-events-kpi-focus-banner")).toBeTruthy());
+    expect(screen.queryByTestId("audit-events-summary")).toBeNull();
+    expect(screen.getByTestId("audit-events-table").textContent).not.toContain("登录成功");
+  });
+
+  it("分类/来源渲染为中文映射（eventCategory security→安防）", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("audit-events-table")).toBeTruthy());
+    expect(screen.getByTestId("audit-events-table").textContent).toContain("安防");
   });
 });

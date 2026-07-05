@@ -53,7 +53,33 @@ const TEXT = {
   status: "状态",
   dueAt: "截止时间",
   evidenceLabel: "附件证据",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=<all|pending|high>；点 KPI 数字=带参重进本页只渲染工单表（对应子集）。
+// 本页单表：工单总数=全量、待处理=未终结子集、高优先级=high/critical 子集；选中工单=交互态无子集，KPI 数字保持纯文本不可点。
+type KpiTarget = "all" | "pending" | "high";
+type KpiFocus = { table: KpiTarget };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const table = new URLSearchParams(window.location.search).get("kpi");
+  if (table !== "all" && table !== "pending" && table !== "high") return null;
+  return { table };
+}
+
+function kpiFocusTitle(focus: KpiFocus): string {
+  if (focus.table === "pending") return "待处理工单";
+  if (focus.table === "high") return "高优先级工单";
+  return "全部工单";
+}
+
+// KPI 子集过滤：聚焦时先按被点 KPI 把 rows 收窄，再进搜索/排序/分页管线。
+function kpiSubset(rows: MerchantWorkOrderRow[], focus: KpiFocus | null): MerchantWorkOrderRow[] {
+  if (!focus || focus.table === "all") return rows;
+  if (focus.table === "pending") return rows.filter(nonTerminal);
+  return rows.filter((row) => ["high", "critical"].includes(row.priority ?? ""));
+}
 
 function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -85,6 +111,28 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [resolution, setResolution] = React.useState("已维修完成并确认关闭");
   const [satisfactionScore, setSatisfactionScore] = React.useState("5");
   const [query, setQuery] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(table: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", table);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ table });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -98,7 +146,9 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const pendingCount = rows.filter(nonTerminal).length;
   const highPriorityCount = rows.filter((row) => ["high", "critical"].includes(row.priority ?? "")).length;
 
-  const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
+  // 聚焦时先按 KPI 子集收窄，再进搜索/排序/分页；非聚焦=全量。
+  const baseRows = kpiSubset(rows, kpiFocus);
+  const filteredRows = baseRows.filter((row) => rowMatchesKeyword(row, query));
   const sort = useSortedRows(filteredRows, {
     title: (row) => row.title ?? row.id,
     type: (row) => row.workOrderType,
@@ -106,7 +156,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     status: (row) => row.status,
     dueAt: (row) => row.dueAt,
   });
-  const paged = usePagedRows(sort.sorted, 10, `${query}:${sort.key}:${sort.direction}`);
+  const paged = usePagedRows(sort.sorted, 10, `${kpiFocus?.table ?? "none"}:${query}:${sort.key}:${sort.direction}`);
 
   const { busyAction, formError, setFormError, runAction } = useAdminAction({
     reload,
@@ -200,10 +250,17 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       <TechDetails><div className="admin-generic-evidence" data-testid="merchant-work-orders-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="merchant_service.work_order.viewed / created / assigned / action_added / closed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
+        {kpiFocus ? (
+        <div className="admin-state" data-testid="merchant-work-orders-kpi-focus-banner">
+          正在查看：{kpiFocusTitle(kpiFocus)}（{baseRows.length}）
+          <button type="button" data-testid="merchant-work-orders-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+        </div>
+        ) : (
+        <>
         <div className="admin-kpi-grid" data-testid="merchant-work-orders-summary">
-          <div className="admin-kpi-card"><span>{TEXT.workOrderCount}</span><strong>{rows.length}</strong><small>{TEXT.merchant}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.pending}</span><strong>{pendingCount}</strong><small>{TEXT.status}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.highPriority}</span><strong>{highPriorityCount}</strong><small>{TEXT.priority}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.workOrderCount}</span><button type="button" className="admin-kpi-value" data-testid="merchant-work-orders-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>{TEXT.merchant}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pending}</span><button type="button" className="admin-kpi-value" data-testid="merchant-work-orders-kpi-pending" onClick={() => enterKpiFocus("pending")}>{pendingCount}</button><small>{TEXT.status}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.highPriority}</span><button type="button" className="admin-kpi-value" data-testid="merchant-work-orders-kpi-high" onClick={() => enterKpiFocus("high")}>{highPriorityCount}</button><small>{TEXT.priority}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong>{selected?.title ?? "-"}</strong><small>{selected?.status ?? "-"}</small></div>
         </div>
 
@@ -232,10 +289,12 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
           <PermissionButton permissionsState={effectivePermissions} permissions={WO_CLOSE} data-testid="merchant-work-order-close" disabled={busyAction !== ""} onClick={() => void closeWorkOrder()}>{TEXT.close}</PermissionButton>
         </div>
         {formError ? <div data-testid="merchant-work-order-error" className="admin-inline-error">{formError}</div> : null}
+        </>
+        )}
 
         <div className="admin-list-toolbar" data-testid="merchant-work-orders-filter">
           <input data-testid="merchant-work-orders-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题 / 类型 / 优先级 / 状态 / 负责人" />
-          <span className="admin-muted-action" data-testid="merchant-work-orders-filter-count">匹配 {filteredRows.length} / {rows.length} 条</span>
+          <span className="admin-muted-action" data-testid="merchant-work-orders-filter-count">匹配 {filteredRows.length} / {baseRows.length} 条</span>
         </div>
         {filteredRows.length === 0 ? (
           <div className="admin-state admin-empty" data-testid="merchant-work-orders-filter-empty">无匹配工单</div>

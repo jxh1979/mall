@@ -18,7 +18,24 @@ const TEXT = {
   titleRequired: "提交工单必须填写标题。",
   descriptionRequired: "提交工单必须填写问题描述。",
   submit: "提交工单",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=<all|open>；点 KPI 数字=带参重进本页只渲染工单表（对应子集）。
+// 本页单表：工单总数=全量、进行中=未终结子集。
+type KpiTarget = "all" | "open";
+type KpiFocus = { table: KpiTarget };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const table = new URLSearchParams(window.location.search).get("kpi");
+  if (table !== "all" && table !== "open") return null;
+  return { table };
+}
+
+function kpiFocusTitle(focus: KpiFocus): string {
+  return focus.table === "open" ? "进行中工单" : "全部工单";
+}
 
 const TYPE_LABELS: Record<string, string> = {
   repair: "报修",
@@ -62,6 +79,28 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   const [description, setDescription] = React.useState("");
   const [workOrderType, setWorkOrderType] = React.useState("repair");
   const [priority, setPriority] = React.useState("medium");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(table: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", table);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ table });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -102,7 +141,9 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   }
 
   const openCount = rows.filter(nonTerminal).length;
-  const paged = usePagedRows(rows, 10);
+  // 聚焦时按 KPI 子集收窄再分页；非聚焦=全量。
+  const baseRows = kpiFocus?.table === "open" ? rows.filter(nonTerminal) : rows;
+  const paged = usePagedRows(baseRows, 10, kpiFocus?.table ?? "none");
 
   return (
     <section data-testid="merchant-zone-work-orders-page">
@@ -127,10 +168,17 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
       </div>
       {formError ? <div className="admin-form-error" data-testid="merchant-zone-work-order-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
-        <div className="admin-kpi-grid" data-testid="merchant-zone-work-orders-summary">
-          <div className="admin-kpi-card"><span>工单总数</span><strong>{rows.length}</strong><small>本商户</small></div>
-          <div className="admin-kpi-card"><span>进行中</span><strong>{openCount}</strong><small>未关闭</small></div>
+        {kpiFocus ? (
+        <div className="admin-state" data-testid="merchant-zone-work-orders-kpi-focus-banner">
+          正在查看：{kpiFocusTitle(kpiFocus)}（{baseRows.length}）
+          <button type="button" data-testid="merchant-zone-work-orders-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
         </div>
+        ) : (
+        <div className="admin-kpi-grid" data-testid="merchant-zone-work-orders-summary">
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>工单总数</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-work-orders-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>本商户</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>进行中</span><button type="button" className="admin-kpi-value" data-testid="merchant-zone-work-orders-kpi-open" onClick={() => enterKpiFocus("open")}>{openCount}</button><small>未关闭</small></div>
+        </div>
+        )}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="merchant-zone-work-orders-table">
             <thead>

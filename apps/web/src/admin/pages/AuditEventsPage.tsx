@@ -37,7 +37,28 @@ const TEXT = {
   object: "对象",
   summary: "摘要",
   occurredAt: "发生时间",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=events[&status=<success|failed>]；点 KPI 数字=带参重进本页只渲染事件表（对应子集，本页内）。
+// 事件总数=本页事件表（服务端 total 跨页，聚焦仅呈现当前页表）；本页成功/失败=result 子集；本页分类=计数无行子集，KPI 数字保持纯文本不可点。
+type KpiFocus = { status: "success" | "failed" | null };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("kpi") !== "events") return null;
+  const status = params.get("status");
+  return { status: status === "success" || status === "failed" ? status : null };
+}
+
+// KPI result 子集：success=success/succeeded，failed=failed/blocked（与 KPI 计数口径一致）。
+function matchesKpiStatus(row: AuditEventRow, status: KpiFocus["status"]): boolean {
+  const result = String(row.result ?? "");
+  if (status === "success") return ["success", "succeeded"].includes(result);
+  if (status === "failed") return ["failed", "blocked"].includes(result);
+  return true;
+}
 
 function textValue(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
@@ -85,6 +106,31 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
   const [showDetail, setShowDetail] = React.useState(false);
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(status: KpiFocus["status"] = null) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", "events");
+    if (status) params.set("status", status);
+    else params.delete("status");
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ status });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    params.delete("status");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const fetchPage = React.useCallback(
     (page: number, size: number): Promise<PagedResult<AuditEventRow>> => {
@@ -101,7 +147,9 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
 
   // 当前服务端页的行；筛选/KPI 均只作用于本页（后端未提供关键词与全量聚合）。
   const pageRows = events.rows;
-  const filteredRows = pageRows.filter((row) => matches(row, query));
+  // 聚焦时叠加 KPI result 子集过滤（与关键词筛选并行，均限当前服务端页）。
+  const filteredRows = pageRows.filter((row) => matches(row, query) && matchesKpiStatus(row, kpiFocus?.status ?? null));
+  const kpiFocusTitle = kpiFocus?.status === "success" ? "本页成功事件" : kpiFocus?.status === "failed" ? "本页失败/阻断事件" : "本页全部事件";
   const selected = filteredRows[selectedIndex] ?? filteredRows[0] ?? pageRows[0];
   const successCount = pageRows.filter((row) => ["success", "succeeded"].includes(String(row.result ?? ""))).length;
   const failedCount = pageRows.filter((row) => ["failed", "blocked"].includes(String(row.result ?? ""))).length;
@@ -166,10 +214,17 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
       <TechDetails><div className="admin-generic-evidence" data-testid="audit-events-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="evidence.event_viewed / evidence.events_reported" />
       <AdminDataState loading={events.loading} error={events.error} empty={events.total === 0} onRetry={events.reload}>
+        {kpiFocus ? (
+        <div className="admin-state" data-testid="audit-events-kpi-focus-banner">
+          正在查看：{kpiFocusTitle}（{filteredRows.length}）
+          <button type="button" data-testid="audit-events-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+        </div>
+        ) : (
+        <>
         <div className="admin-kpi-grid" data-testid="audit-events-summary">
-          <div className="admin-kpi-card"><span>{TEXT.total}</span><strong>{events.total}</strong><small>{TEXT.eventType}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.success}</span><strong>{successCount}</strong><small>{TEXT.result}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.failed}</span><strong>{failedCount}</strong><small>{TEXT.risk}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.total}</span><button type="button" className="admin-kpi-value" data-testid="audit-events-kpi-total" onClick={() => enterKpiFocus()}>{events.total}</button><small>{TEXT.eventType}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.success}</span><button type="button" className="admin-kpi-value" data-testid="audit-events-kpi-success" onClick={() => enterKpiFocus("success")}>{successCount}</button><small>{TEXT.result}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.failed}</span><button type="button" className="admin-kpi-value" data-testid="audit-events-kpi-failed" onClick={() => enterKpiFocus("failed")}>{failedCount}</button><small>{TEXT.risk}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.categories}</span><strong>{categoryCount}</strong><small>{TEXT.category}</small></div>
         </div>
 
@@ -183,6 +238,8 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
           <span className="admin-muted-action" data-testid="audit-events-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="audit-events-form-error" className="admin-inline-error">{formError}</div> : null}
+        </>
+        )}
 
         {filteredRows.length === 0 ? <div className="admin-state admin-empty" data-testid="audit-events-filter-empty">{TEXT.noMatch}</div> : (
           <div className="admin-table-scroll">
@@ -194,10 +251,10 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                 <tr key={eventKey(row, index)}>
                   <td><input type="radio" data-testid={`audit-events-select-${index}`} checked={selected === row} onChange={() => setSelectedIndex(index)} /></td>
                   <td>{row.eventType ?? row.event_type ?? "-"}</td>
-                  <td>{row.eventCategory ?? row.event_category ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.eventCategory ?? row.event_category)}</td>
                   <td>{formatBusinessStatus(row.result)}</td>
                   <td>{formatBusinessStatus(row.riskLevel ?? row.risk_level)}</td>
-                  <td>{row.sourceType ?? row.source_type ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.sourceType ?? row.source_type)}</td>
                   <td>{eventTrace(row)}</td>
                   <td>{eventObject(row)}</td>
                   <td>{row.summary ?? "-"}</td>

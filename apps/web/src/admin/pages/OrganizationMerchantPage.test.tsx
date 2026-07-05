@@ -148,4 +148,18 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     expect(text).toContain("项目数");
     expect(text).toContain("正常商户数");
   });
+
+  it("创建表单商户类型/合作形式下拉显示中文，不含英文枚举", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-type")).toBeTruthy());
+    const typeText = screen.getByTestId("organization-merchant-type").textContent ?? "";
+    expect(typeText).toContain("租赁商户");
+    expect(typeText).toContain("餐饮");
+    expect(typeText).not.toContain("tenant");
+    expect(typeText).not.toContain("catering");
+    const coopText = screen.getByTestId("organization-merchant-cooperation").textContent ?? "";
+    expect(coopText).toContain("固定租金");
+    expect(coopText).not.toContain("fixed_rent");
+    expect(coopText).not.toContain("revenue_share");
+  });
 });

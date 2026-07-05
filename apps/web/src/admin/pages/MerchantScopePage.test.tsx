@@ -1,0 +1,95 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { MerchantScopePage } from "./MerchantScopePage";
+import { AdminApi } from "../client/adminClient";
+import type { AdminPageProps, EffectivePermissionsState } from "../types";
+
+const WORK_ORDERS = [{ id: "wo-1", merchant_id: "m-1", work_order_type: "repair", title: "工单甲", priority: "high", status: "processing", authorized_scope: "工单" }];
+const BILLS = [{ id: "bl-1", merchant_id: "m-1", bill_no: "B-1", title: "账单甲", total_amount: 100, status: "unpaid", authorized_scope: "账单" }];
+
+function envelope(items: unknown[]): Response {
+  return new Response(
+    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page: 1, page_size: 50, total: items.length } }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
+function makeApi(): AdminApi {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("work-orders")) return Promise.resolve(envelope(WORK_ORDERS));
+      if (url.includes("bills")) return Promise.resolve(envelope(BILLS));
+      return Promise.resolve(envelope([]));
+    }),
+  );
+  return new AdminApi("test-token");
+}
+
+const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
+
+function renderPage() {
+  const fullProps: AdminPageProps = {
+    api: makeApi(),
+    user: { id: "u1", username: "admin", accountType: "platform_admin" },
+    setActionResult: vi.fn(),
+    setGlobalError: vi.fn(),
+    effectivePermissions: ADMIN_PERMS,
+  };
+  render(<MerchantScopePage {...fullProps} />);
+}
+
+describe("MerchantScopePage KPI 聚焦视图", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant/scope");
+  });
+
+  it("点“商户账单”数字 → ?kpi=bills，只剩账单表+横幅", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-kpi-bills")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-scope-kpi-bills"));
+    expect(window.location.search).toContain("kpi=bills");
+    expect(screen.getByTestId("merchant-scope-kpi-focus-banner").textContent).toContain("正在查看：商户账单（1）");
+    expect(screen.getByTestId("merchant-scope-bills-table")).toBeTruthy();
+    expect(screen.queryByTestId("merchant-scope-work-orders-table")).toBeNull();
+    expect(screen.queryByTestId("merchant-scope-summary")).toBeNull();
+  });
+
+  it("点“商户工单”数字 → 只剩工单表", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-kpi-work-orders")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-scope-kpi-work-orders"));
+    expect(screen.getByTestId("merchant-scope-work-orders-table")).toBeTruthy();
+    expect(screen.queryByTestId("merchant-scope-bills-table")).toBeNull();
+  });
+
+  it("「返回全部」→ 恢复两表+KPI 卡", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-kpi-bills")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-scope-kpi-bills"));
+    fireEvent.click(screen.getByTestId("merchant-scope-kpi-focus-clear"));
+    expect(window.location.search).not.toContain("kpi=");
+    expect(screen.getByTestId("merchant-scope-work-orders-table")).toBeTruthy();
+    expect(screen.getByTestId("merchant-scope-bills-table")).toBeTruthy();
+    expect(screen.getByTestId("merchant-scope-summary")).toBeTruthy();
+  });
+
+  it("带参直链进入 → 直接呈现聚焦视图", async () => {
+    window.history.replaceState({}, "", "/admin/merchant/scope?kpi=workOrders");
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-kpi-focus-banner")).toBeTruthy());
+    expect(screen.getByTestId("merchant-scope-work-orders-table")).toBeTruthy();
+    expect(screen.queryByTestId("merchant-scope-bills-table")).toBeNull();
+  });
+
+  it("工单类型渲染为中文，不含英文枚举 repair", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-work-orders-table")).toBeTruthy());
+    const text = screen.getByTestId("merchant-scope-work-orders-table").textContent ?? "";
+    expect(text).toContain("报修");
+    expect(text).not.toContain("repair");
+  });
+});

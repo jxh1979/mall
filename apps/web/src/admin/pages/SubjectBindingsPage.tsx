@@ -21,7 +21,19 @@ const TEXT = {
   loadFailed: "主体绑定读取失败",
   submitChange: "提交绑定变更",
   select: "选择",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=bindings[&status=active]；点 KPI 数字=带参重进本页只渲染绑定表（对应子集）。
+// 唯一绑定对象=全量绑定表；生效绑定=status=active 子集。合同主体/选中绑定无独立行子集，KPI 数字保持纯文本不可点。
+type KpiFocus = { status: string | null };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("kpi") !== "bindings") return null;
+  return { status: params.get("status") };
+}
 
 function display(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
@@ -35,6 +47,31 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
   const [reason, setReason] = React.useState("完整后台验收变更");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(status: string | null = null) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", "bindings");
+    if (status) params.set("status", status);
+    else params.delete("status");
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ status });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    params.delete("status");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -45,6 +82,9 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
 
   const activeCount = bindings.filter((row) => row.status === "active").length;
   const uniqueObjects = new Set(bindings.map((row) => row.businessObjectId).filter(Boolean)).size;
+  // 聚焦时按状态子集过滤内存数组；无子集=全量。
+  const visibleBindings = kpiFocus?.status ? bindings.filter((row) => row.status === kpiFocus.status) : bindings;
+  const focusTitle = kpiFocus?.status === "active" ? "生效绑定" : "主体绑定";
 
   function validateChange() {
     if (!selected?.id) {
@@ -95,35 +135,44 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {bindings.length === 0 ? <div className="admin-state admin-empty" data-testid="subject-bindings-empty">{TEXT.empty}</div> : (
           <>
-            <div className="admin-kpi-grid" data-testid="subject-bindings-summary">
-              <div className="admin-kpi-card"><span>唯一绑定对象</span><strong>{uniqueObjects}</strong><small>唯一绑定</small></div>
-              <div className="admin-kpi-card"><span>生效绑定</span><strong>{activeCount}</strong><small>active</small></div>
-              <div className="admin-kpi-card"><span>合同主体</span><strong>{bindings.filter((row) => row.contractSubject).length}</strong><small>合同口径</small></div>
-              <div className="admin-kpi-card"><span>选中绑定</span><strong>{selected?.businessObjectId ?? "-"}</strong><small>{selected?.status ?? "-"}</small></div>
-            </div>
+            {kpiFocus ? (
+              <div className="admin-state" data-testid="subject-bindings-kpi-focus-banner">
+                正在查看：{focusTitle}（{visibleBindings.length}）
+                <button type="button" data-testid="subject-bindings-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+              </div>
+            ) : (
+              <>
+                <div className="admin-kpi-grid" data-testid="subject-bindings-summary">
+                  <div className="admin-kpi-card admin-kpi-card--clickable"><span>唯一绑定对象</span><button type="button" className="admin-kpi-value" data-testid="subject-bindings-kpi-unique" onClick={() => enterKpiFocus()}>{uniqueObjects}</button><small>唯一绑定</small></div>
+                  <div className="admin-kpi-card admin-kpi-card--clickable"><span>生效绑定</span><button type="button" className="admin-kpi-value" data-testid="subject-bindings-kpi-active" onClick={() => enterKpiFocus("active")}>{activeCount}</button><small>生效中</small></div>
+                  <div className="admin-kpi-card"><span>合同主体</span><strong>{bindings.filter((row) => row.contractSubject).length}</strong><small>合同口径</small></div>
+                  <div className="admin-kpi-card"><span>选中绑定</span><strong>{selected?.businessObjectId ?? "-"}</strong><small>{selected?.status ? formatBusinessStatus(selected.status) : "-"}</small></div>
+                </div>
 
-            <div className="admin-form-grid">
-              <label>变更原因<input data-testid="subject-bindings-change-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-            </div>
-            <div className="admin-form-row">
-              <HighRiskConfirm
-                label={TEXT.submitChange}
-                impact="将变更选中业务对象的四类主体绑定并落库留痕，影响合同、结算与利润报表口径，历史绑定不可被静默覆盖。"
-                disabled={submitting}
-                precheck={validateChange}
-                onConfirm={() => void submitChange()}
-                permissionsState={effectivePermissions}
-                permissions={[BINDING_MANAGE_PERMISSION]}
-                data-testid="subject-bindings-submit-change"
-              />
-              <span className="admin-muted-action" data-testid="subject-bindings-boundary">{TEXT.boundary}</span>
-            </div>
-            {formError ? <div className="admin-inline-error" data-testid="subject-bindings-form-error">{formError}</div> : null}
+                <div className="admin-form-grid">
+                  <label>变更原因<input data-testid="subject-bindings-change-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+                </div>
+                <div className="admin-form-row">
+                  <HighRiskConfirm
+                    label={TEXT.submitChange}
+                    impact="将变更选中业务对象的四类主体绑定并落库留痕，影响合同、结算与利润报表口径，历史绑定不可被静默覆盖。"
+                    disabled={submitting}
+                    precheck={validateChange}
+                    onConfirm={() => void submitChange()}
+                    permissionsState={effectivePermissions}
+                    permissions={[BINDING_MANAGE_PERMISSION]}
+                    data-testid="subject-bindings-submit-change"
+                  />
+                  <span className="admin-muted-action" data-testid="subject-bindings-boundary">{TEXT.boundary}</span>
+                </div>
+                {formError ? <div className="admin-inline-error" data-testid="subject-bindings-form-error">{formError}</div> : null}
+              </>
+            )}
 
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="subject-bindings-table">
                 <thead><tr><th>{TEXT.select}</th><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>合同主体 ID</th><th>结算主体</th><th>结算主体 ID</th><th>状态</th><th>留痕证据</th></tr></thead>
-                <tbody>{bindings.map((row) => (
+                <tbody>{visibleBindings.map((row) => (
                   <tr key={row.id}>
                     <td><input type="radio" data-testid={`subject-bindings-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                     <td>{display(row.businessObjectId)}</td>

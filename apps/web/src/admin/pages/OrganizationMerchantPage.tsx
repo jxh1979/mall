@@ -245,10 +245,10 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
 
             <div className="admin-form-grid">
               <label>商户名称<input data-testid="organization-merchant-name" value={merchantName} onChange={(event) => setMerchantName(event.target.value)} /></label>
-              <label>商户类型<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+              <label>商户类型<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}</select></label>
               <label>联系人<input data-testid="organization-merchant-contact-name" value={contactName} onChange={(event) => setContactName(event.target.value)} /></label>
               <label>联系电话<input data-testid="organization-merchant-contact-phone" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></label>
-              <label>合作形式<select data-testid="organization-merchant-cooperation" value={cooperationForm} onChange={(event) => setCooperationForm(event.target.value)}>{COOPERATION_FORMS.map((form) => <option key={form} value={form}>{form}</option>)}</select></label>
+              <label>合作形式<select data-testid="organization-merchant-cooperation" value={cooperationForm} onChange={(event) => setCooperationForm(event.target.value)}>{COOPERATION_FORMS.map((form) => <option key={form} value={form}>{formatBusinessStatus(form)}</option>)}</select></label>
             </div>
             <div className="admin-form-row">
               <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid="organization-merchant-create" onClick={() => void createMerchant()}>创建商户档案</PermissionButton>
