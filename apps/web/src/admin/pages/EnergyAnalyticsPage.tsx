@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type MetricValue = { value?: number | string | null; unit?: string | null; note?: string | null };
@@ -33,9 +34,15 @@ function localTime(value?: string) {
   return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
 }
 
+function consumptionText(value?: number | string) {
+  return value === undefined || value === null ? "—" : new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(Number(value));
+}
+
 export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [dashboard, setDashboard] = React.useState<EnergyDashboard | null>(null);
   const [abnormal, setAbnormal] = React.useState<AbnormalRow[]>([]);
+  // 行明细抽屉：整行可点 → 该异常读数完整字段（类型/原因中文·时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -59,6 +66,21 @@ export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPa
 
   const paged = usePagedRows(abnormal, 10);
 
+  function openAbnormalDetail(row: AbnormalRow) {
+    setDetail({
+      title: `异常读数明细 · ${row.meterName ?? row.meterId ?? "—"}`,
+      fields: [
+        { label: "表计", value: row.meterName ?? row.meterId ?? "—" },
+        { label: "类型", value: TYPE_LABELS[row.meterType ?? ""] ?? row.meterType ?? "—" },
+        { label: "抄表期", value: row.period ?? "—" },
+        { label: "用量", value: consumptionText(row.consumption) },
+        { label: "异常原因", value: REASON_LABELS[row.abnormalReason ?? ""] ?? row.abnormalReason ?? "—" },
+        { label: "抄表时间", value: localTime(row.readAt) },
+        { label: "读数编号", value: row.readingId },
+      ],
+    });
+  }
+
   return (
     <section data-testid="energy-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -79,11 +101,13 @@ export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPa
             <thead><tr><th>表计</th><th>类型</th><th>抄表期</th><th>用量</th><th>异常原因</th><th>抄表时间</th></tr></thead>
             <tbody>
               {paged.pageRows.map((row) => (
-                <tr key={row.readingId}>
+                <tr key={row.readingId} className="admin-row-clickable" tabIndex={0} data-testid={`energy-abnormal-row-${row.readingId}`}
+                  onClick={() => openAbnormalDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAbnormalDetail(row); } }}>
                   <td>{row.meterName ?? row.meterId ?? "—"}</td>
                   <td>{TYPE_LABELS[row.meterType ?? ""] ?? row.meterType ?? "—"}</td>
                   <td>{row.period ?? "—"}</td>
-                  <td>{row.consumption === undefined ? "—" : new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(Number(row.consumption))}</td>
+                  <td>{consumptionText(row.consumption)}</td>
                   <td>{REASON_LABELS[row.abnormalReason ?? ""] ?? row.abnormalReason ?? "—"}</td>
                   <td>{localTime(row.readAt)}</td>
                 </tr>
@@ -93,6 +117,7 @@ export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPa
           <TablePager testid="energy-abnormal-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

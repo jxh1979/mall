@@ -5,6 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 type MetricValue = { value?: number | string | null; unit?: string | null; note?: string | null };
@@ -47,6 +48,8 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
   const [dashboard, setDashboard] = React.useState<FinanceDashboard | null>(null);
   const [debtors, setDebtors] = React.useState<DebtorRow[]>([]);
   const [bucketFilter, setBucketFilter] = React.useState<string>("all");
+  // 行明细抽屉：整行可点 → 该欠费商户完整字段（账龄段中文·金额元·应收日中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -73,6 +76,24 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
 
   const filteredDebtors = bucketFilter === "all" ? debtors : debtors.filter((row) => row.bucket === bucketFilter);
   const paged = usePagedRows(filteredDebtors, 10, bucketFilter);
+
+  function openDebtorDetail(row: DebtorRow) {
+    setDetail({
+      title: `欠费商户明细 · ${row.merchantName ?? row.merchantId ?? "未挂商户(散项)"}`,
+      fields: [
+        {
+          label: "商户",
+          value: row.merchantId
+            ? <TraceLink navigateTo={navigateTo} pageId="ADM-FIN-001" objectId={row.merchantId}>{row.merchantName ?? row.merchantId}</TraceLink>
+            : "未挂商户(散项)",
+        },
+        { label: "未清金额", value: money(row.outstandingCent === undefined ? null : Number(row.outstandingCent)) },
+        { label: "最早应收日", value: cnDate(row.oldestDueDate) },
+        { label: "逾期天数", value: row.overdueDays ?? "—" },
+        { label: "账龄段", value: BUCKET_LABELS[row.bucket ?? ""] ?? row.bucket ?? "—" },
+      ],
+    });
+  }
 
   return (
     <section data-testid="receivables-analytics-page">
@@ -114,12 +135,14 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
             </thead>
             <tbody>
               {paged.pageRows.map((row, index) => (
-                <tr key={row.merchantId ?? `row-${index}`}>
-                  <td>{row.merchantId
+                <tr key={row.merchantId ?? `row-${index}`} className="admin-row-clickable" tabIndex={0} data-testid={`receivables-debtor-row-${row.merchantId ?? index}`}
+                  onClick={() => openDebtorDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDebtorDetail(row); } }}>
+                  <td onClick={(event) => { if (row.merchantId) event.stopPropagation(); }}>{row.merchantId
                     ? <TraceLink navigateTo={navigateTo} pageId="ADM-FIN-001" objectId={row.merchantId}>{row.merchantName ?? row.merchantId}</TraceLink>
                     : "未挂商户(散项)"}</td>
                   <td>{money(row.outstandingCent === undefined ? null : Number(row.outstandingCent))}</td>
-                  <td>{row.oldestDueDate ?? "—"}</td>
+                  <td>{cnDate(row.oldestDueDate)}</td>
                   <td>{row.overdueDays ?? "—"}</td>
                   <td>{BUCKET_LABELS[row.bucket ?? ""] ?? row.bucket ?? "—"}</td>
                 </tr>
@@ -129,6 +152,7 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
           <TablePager testid="receivables-debtors-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

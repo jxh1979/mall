@@ -2,6 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, GroupOverviewPayload, GroupProjectRollup } from "../types";
 
 // P2 集团/跨项目汇总（R6-D13）：按 project 维 rollup 关键指标（收入/客流/核销/风险/商户数）。
@@ -37,6 +38,8 @@ function belowBenchmark(project: GroupProjectRollup, code: string): boolean {
 export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
   const [data, setData] = React.useState<GroupOverviewPayload | null>(null);
   const [groupBy, setGroupBy] = React.useState<"project" | "entity">("project");
+  // 行明细抽屉：整行可点 → 该项目全部汇总指标（列名中文·低于基准标注·商户数）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -46,6 +49,20 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
   );
 
   const projects = data?.projects ?? [];
+
+  function openProjectDetail(project: GroupProjectRollup) {
+    setDetail({
+      title: `项目汇总明细 · ${project.projectName}`,
+      fields: [
+        { label: "项目（综合体）", value: project.projectName },
+        { label: "商户数", value: project.merchantCount },
+        ...METRIC_COLUMNS.map((col) => ({
+          label: col.label,
+          value: `${metricText(project, col.code)}${belowBenchmark(project, col.code) ? "（低于集团基准）" : ""}`,
+        })),
+      ],
+    });
+  }
 
   return (
     <section data-testid="admin-group-overview">
@@ -75,7 +92,9 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
           </thead>
           <tbody>
             {projects.map((project) => (
-              <tr key={project.projectId} data-testid={`group-overview-row-${project.projectId}`}>
+              <tr key={project.projectId} className="admin-row-clickable" tabIndex={0} data-testid={`group-overview-row-${project.projectId}`}
+                onClick={() => openProjectDetail(project)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProjectDetail(project); } }}>
                 <td>{project.projectName}</td>
                 <td data-testid={`group-overview-merchants-${project.projectId}`}>{project.merchantCount}</td>
                 {METRIC_COLUMNS.map((col) => {
@@ -92,6 +111,7 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
           </tbody>
         </table>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
