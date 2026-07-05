@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 type EnergyMeterRow = {
   id: string; name: string; meterType: string; parentMeterId?: string | null; gatherObject: string;
@@ -32,10 +33,14 @@ const METER_TYPES = [
 const GATHER_OBJECTS = [
   ["public_area", "公区"], ["merchant", "商户"], ["equipment_circuit", "设备回路"],
 ];
-// 本页枚举中文兜底（value 不变）：表计类型/归集对象复用上方元组，读数方式单列。
+// 本页枚举中文兜底（value 不变）：表计类型/归集对象复用上方元组，读数方式单列，
+// 能源费分摊口径（合同 4 模式）在全局码表外，页内单列。
+const ENERGY_FEE_BASIS_LABELS: Record<string, string> = {
+  none: "无能源费", by_contract: "合同包干", by_area: "按面积分摊", by_usage: "按用量分摊",
+};
 const LABELS: Record<string, string> = {
   ...Object.fromEntries(METER_TYPES), ...Object.fromEntries(GATHER_OBJECTS),
-  remote: "远程", manual: "人工",
+  remote: "远程", manual: "人工", ...ENERGY_FEE_BASIS_LABELS,
 };
 const zh = (v?: string | null) => (v == null || v === "" ? "-" : (LABELS[v] ?? v));
 
@@ -56,10 +61,11 @@ function yuanFromCent(value?: number | null) {
   return (value / 100).toFixed(2);
 }
 
+// 读数状态徽标：颜色照旧，文案零英文（abnormal/recorded/reviewed 已在全局码表）。
 function statusBadge(status?: string | null) {
   const value = status || "-";
   const kind = value === "abnormal" ? "is-danger" : value === "reviewed" ? "is-ok" : value === "recorded" ? "is-info" : "";
-  return <span className={`admin-badge ${kind}`}>{value}</span>;
+  return <span className={`admin-badge ${kind}`}>{value === "-" ? "-" : formatBusinessStatus(value)}</span>;
 }
 
 export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
@@ -75,6 +81,8 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
   const [readingForm, setReadingForm] = React.useState({ meterId: "", readingValue: "", readMode: "manual", readerId: "", readAt: "" });
   const [reviewedBy, setReviewedBy] = React.useState("");
   const [differenceMeterId, setDifferenceMeterId] = React.useState("");
+  // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·金额¥·时间中文·引用 TraceLink）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -98,6 +106,61 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
     });
     setReadingForm((current) => ({ ...current, meterId: row.id }));
     setDifferenceMeterId(row.id);
+  }
+
+  function openMeterDetail(row: EnergyMeterRow) {
+    setDetail({
+      title: `表计明细 · ${row.name || row.id}`,
+      fields: [
+        { label: "表计码", value: row.id },
+        { label: "名称", value: row.name || "-" },
+        { label: "类型", value: zh(row.meterType) },
+        { label: "归集对象", value: zh(row.gatherObject) },
+        { label: "上级总表", value: row.parentMeterId ?? "-" },
+        { label: "空间", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> },
+        { label: "商户", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> },
+        { label: "项目", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink> },
+        { label: "读数方式", value: zh(row.readMode) },
+        { label: "状态", value: row.active === false ? "停用" : "启用" },
+      ],
+    });
+  }
+
+  function openReadingDetail(row: EnergyReadingRow) {
+    setDetail({
+      title: `抄表明细 · ${row.id}`,
+      fields: [
+        { label: "读数码", value: row.id },
+        { label: "表计", value: row.meterId },
+        { label: "期间", value: row.period },
+        { label: "本期读数", value: numberText(row.readingValue) },
+        { label: "上期读数", value: numberText(row.prevReadingValue) },
+        { label: "本期用量", value: numberText(row.consumption) },
+        { label: "状态", value: row.status ? formatBusinessStatus(row.status) : "-" },
+        { label: "异常原因", value: row.abnormalReason ?? "-" },
+        { label: "抄表方式", value: zh(row.readMode) },
+        { label: "抄表人", value: row.readerId ?? "-" },
+        { label: "抄表时间", value: cnDate(row.readAt) },
+        { label: "复核人", value: row.reviewedBy ?? "-" },
+        { label: "复核时间", value: cnDate(row.reviewedAt) },
+      ],
+    });
+  }
+
+  function openSettlementDetail(row: EnergySettlementRow) {
+    setDetail({
+      title: `能源费结算明细 · ${row.id}`,
+      fields: [
+        { label: "结算码", value: row.id },
+        { label: "合同", value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink> },
+        { label: "商户", value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> },
+        { label: "期间", value: row.period },
+        { label: "分摊口径", value: zh(row.energyFeeBasis) },
+        { label: "金额", value: `¥${yuanFromCent(row.amountCent)}` },
+        { label: "应收单", value: row.arApItemId ?? "-" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+      ],
+    });
   }
 
   async function saveMeter() {
@@ -183,12 +246,14 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
         <h3>表计台账（4 类 / 总分表）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-meters-table">
-            <thead><tr><th>id</th><th>名称</th><th>类型</th><th>归集对象</th><th>上级总表</th><th>空间/商户/项目</th><th>读数方式</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>表计码</th><th>名称</th><th>类型</th><th>归集对象</th><th>上级总表</th><th>空间/商户/项目</th><th>读数方式</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>{meters.map((row) => (
-              <tr key={row.id} data-testid={`energy-meter-${row.id}`}>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-meter-${row.id}`}
+                onClick={() => openMeterDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMeterDetail(row); } }}>
                 <td>{row.id}</td><td>{row.name}</td><td>{zh(row.meterType)}</td><td>{zh(row.gatherObject)}</td><td>{row.parentMeterId ?? "-"}</td>
-                <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink></td><td>{zh(row.readMode)}</td><td>{row.active === false ? "停用" : "启用"}</td>
-                <td><button type="button" data-testid={`energy-meter-select-${row.id}`} onClick={() => selectMeter(row)}>选中</button></td>
+                <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink></td><td>{zh(row.readMode)}</td><td>{row.active === false ? "停用" : "启用"}</td>
+                <td onClick={(event) => event.stopPropagation()}><button type="button" data-testid={`energy-meter-select-${row.id}`} onClick={() => selectMeter(row)}>选中</button></td>
               </tr>
             ))}</tbody>
           </table>
@@ -221,14 +286,16 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-readings-table">
-            <thead><tr><th>id</th><th>表计</th><th>期间</th><th>读数/上期/用量</th><th>状态</th><th>异常</th><th>抄表/复核</th><th>操作</th></tr></thead>
+            <thead><tr><th>读数码</th><th>表计</th><th>期间</th><th>读数/上期/用量</th><th>状态</th><th>异常</th><th>抄表/复核</th><th>操作</th></tr></thead>
             <tbody>{readings.map((row) => (
-              <tr key={row.id} data-testid={`energy-reading-${row.id}`}>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-reading-${row.id}`}
+                onClick={() => openReadingDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openReadingDetail(row); } }}>
                 <td>{row.id}</td><td>{row.meterId}</td><td>{row.period}</td>
                 <td>{numberText(row.readingValue)} / {numberText(row.prevReadingValue)} / {numberText(row.consumption)}</td>
                 <td>{statusBadge(row.status)}</td><td>{row.abnormalReason ?? "-"}</td>
                 <td>{row.readerId ?? "-"} / {row.reviewedBy ?? "-"}</td>
-                <td>{row.status === "abnormal" ? <PermissionButton permissionsState={effectivePermissions} permissions={READING} data-testid={`energy-reading-review-${row.id}`} onClick={() => void reviewReading(row)}>复核</PermissionButton> : null}</td>
+                <td onClick={(event) => event.stopPropagation()}>{row.status === "abnormal" ? <PermissionButton permissionsState={effectivePermissions} permissions={READING} data-testid={`energy-reading-review-${row.id}`} onClick={() => void reviewReading(row)}>复核</PermissionButton> : null}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -250,15 +317,24 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
 
         <h3>能源费结算</h3>
         <div className="admin-inline-form" data-testid="energy-settlement-form">
-          <PermissionButton permissionsState={effectivePermissions} permissions={READING} data-testid="energy-fee-settle" onClick={() => void settleEnergyFee()}>settle-energy-fee</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={READING} data-testid="energy-fee-settle" onClick={() => void settleEnergyFee()}>结算本期能源费</PermissionButton>
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-settlements-table">
-            <thead><tr><th>结算</th><th>合同/商户</th><th>期间</th><th>分摊口径</th><th>金额(元)</th><th>应收</th><th>状态</th></tr></thead>
-            <tbody>{settlements.map((row) => <tr key={row.id} data-testid={`energy-settlement-${row.id}`}><td>{row.id}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink></td><td>{row.period}</td><td>{row.energyFeeBasis ?? "-"}</td><td>{yuanFromCent(row.amountCent)}</td><td>{row.arApItemId ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+            <thead><tr><th>结算码</th><th>合同/商户</th><th>期间</th><th>分摊口径</th><th>金额(元)</th><th>应收</th><th>状态</th></tr></thead>
+            <tbody>{settlements.map((row) => (
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-settlement-${row.id}`}
+                onClick={() => openSettlementDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSettlementDetail(row); } }}>
+                <td>{row.id}</td>
+                <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink></td>
+                <td>{row.period}</td><td>{zh(row.energyFeeBasis)}</td><td>{yuanFromCent(row.amountCent)}</td><td>{row.arApItemId ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td>
+              </tr>
+            ))}</tbody>
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

@@ -6,11 +6,11 @@ import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 const LEADS = [
-  { id: "l-1", contact_name: "张经理", contact_phone: "13800000001", source: "exhibition", intended_business_type: "retail", owner_user_id: "staff_sales", status: "following_up" },
+  { id: "l-1", contact_name: "张经理", contact_phone: "13800000001", source: "exhibition", intended_business_type: "retail", intended_space_id: "space-1", owner_user_id: "staff_sales", status: "following_up", last_follow_up_at: "2026-06-20T09:15:00Z" },
   { id: "l-2", contact_name: "李经理", contact_phone: "13800000002", source: "referral", intended_business_type: "catering", owner_user_id: "staff_sales", status: "signed" },
 ];
 const INTENTS = [
-  { id: "in-1", lead_id: "l-1", stage: "negotiation", intended_space_id: "space-1" },
+  { id: "in-1", lead_id: "l-1", stage: "negotiation", intended_space_id: "space-1", last_stage_change_at: "2026-06-25T10:00:00Z" },
 ];
 const BRANDS = [
   { id: "br-1", brand_name: "示例品牌", brand_type: "chain", business_type: "retail", blacklist_reason: "" },
@@ -114,5 +114,66 @@ describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("leasing-brands-table").textContent).toContain("连锁"); // brandType chain
     expect(screen.getByTestId("leasing-follow-ups-table").textContent).toContain("电话"); // method phone
     expect(screen.getByTestId("leasing-follow-ups-table").textContent).toContain("线索"); // refType lead
+  });
+});
+
+describe("LeasingWorkbenchPage 行明细抽屉 + 零英文", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/leasing/workbench");
+  });
+
+  it("点线索行 → 抽屉含该行值（来源中文、状态中文、最近跟进时间中文），Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-row-l-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-lead-row-l-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("张经理");
+    expect(drawer.textContent).toContain("展会"); // source exhibition
+    expect(drawer.textContent).toContain("零售"); // business retail
+    expect(drawer.textContent).toContain("2026年6月20日"); // lastFollowUpAt ISO → 中文
+    expect(drawer.textContent).not.toContain("exhibition");
+    expect(drawer.textContent).not.toContain("following_up");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点线索行的单选框不触发抽屉（stopPropagation），只切换选中", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-select-l-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-lead-select-l-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+    expect((screen.getByTestId("leasing-lead-select-l-1") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("点意向行 → 抽屉阶段中文、阶段变更时间中文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("leasing-intent-row-in-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-intent-row-in-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("商务谈判"); // stage negotiation
+    expect(drawer.textContent).toContain("2026年6月25日");
+    expect(drawer.textContent).not.toContain("negotiation");
+  });
+
+  it("点品牌行 → 抽屉类型/业态中文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("leasing-brand-row-br-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-brand-row-br-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("连锁"); // brandType chain
+    expect(drawer.textContent).toContain("零售"); // businessType retail
+    expect(drawer.textContent).not.toContain("chain");
+  });
+
+  it("点跟进行 → 抽屉方式/对象类型中文、下次计划时间中文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("leasing-follow-up-row-fu-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-follow-up-row-fu-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("电话"); // method phone
+    expect(drawer.textContent).toContain("线索"); // refType lead
+    expect(drawer.textContent).toContain("2026年7月10日"); // nextPlanAt → 中文
+    expect(drawer.textContent).not.toContain("phone");
   });
 });
