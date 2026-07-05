@@ -138,10 +138,13 @@ export function findAdminRoute(pathname: string) {
 /**
  * 账号形态判定（登录响应 user 字段）：
  * 外包机构账号 accountType=outsourced_vendor（后端 AuthorizationService 同口径）；
- * 商户归属账号看 merchantId（与 AdminApp merchant_portal 终端上报同口径）；其余为平台/员工形态。
+ * 平台/员工账号 accountType=platform_admin：即便种子数据挂了 merchantId 也归平台形态，
+ *   否则会误当商户放行商户专区自助页（后端仍以登录主体判权 → 400 merchant_id is required）；
+ * 其余带 merchantId 的账号看 merchantId（真实商户归属账号，与 merchant_portal 终端上报同口径）。
  */
 export function accountFormOf(user: { accountType?: string | null; merchantId?: string | null } | null | undefined): AdminAccountForm {
   if (user?.accountType === "outsourced_vendor") return "vendor";
+  if (user?.accountType === "platform_admin") return "platform";
   if (user?.merchantId) return "merchant";
   return "platform";
 }

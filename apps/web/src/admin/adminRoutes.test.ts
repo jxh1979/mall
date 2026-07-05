@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { adminRoutes } from "./adminRoutes";
+import { accountFormOf, adminRoutes } from "./adminRoutes";
 
 const permissionsByPage = Object.fromEntries(
   adminRoutes.map((route) => [route.pageId, route.requiredPermissions]),
@@ -29,5 +29,23 @@ describe("adminRoutes canonical permissions", () => {
       "finance.ledger.read",
       "integration.adapter.read",
     ]));
+  });
+});
+
+describe("accountFormOf 账号形态判定", () => {
+  it("平台账号(platform_admin)即便种子挂了 merchantId 也归平台形态，避免误放行商户专区自助页", () => {
+    expect(accountFormOf({ accountType: "platform_admin", merchantId: "seed-merchant" })).toBe("platform");
+  });
+
+  it("真实商户账号(带 merchantId、非平台/外包)归商户形态", () => {
+    expect(accountFormOf({ accountType: "merchant_admin", merchantId: "m-1" })).toBe("merchant");
+  });
+
+  it("外包机构账号归外包形态", () => {
+    expect(accountFormOf({ accountType: "outsourced_vendor", merchantId: null })).toBe("vendor");
+  });
+
+  it("无归属账号归平台形态", () => {
+    expect(accountFormOf({ accountType: "staff", merchantId: null })).toBe("platform");
   });
 });

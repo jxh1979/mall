@@ -5,7 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { formatMetricDomain } from "../i18n/metricLabels";
+import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
@@ -180,7 +180,7 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
     setDetail({
       title: `指标定义明细 · ${row.metricKey ?? "—"}`,
       fields: [
-        { label: "指标", value: row.metricKey ?? "—" },
+        { label: "指标", value: formatMetricName(row.metricKey) },
         { label: "名称", value: row.name ?? "—" },
         { label: "业务域", value: row.domain ? formatMetricDomain(row.domain) : "—" },
         { label: "单位", value: row.unit ?? "—" },
@@ -255,7 +255,7 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="t3a-definition-table">
                   <thead><tr><th>指标</th><th>名称</th><th>业务域</th><th>单位</th><th>状态</th></tr></thead>
-                  <tbody>{data.definition.slice(0, 50).map((row) => (<tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-definition-row-${row.metricKey}`} onClick={() => openDefinitionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDefinitionDetail(row); } }}><td>{row.metricKey ?? "-"}</td><td>{row.name ?? "-"}</td><td>{row.domain ? formatMetricDomain(row.domain) : "-"}</td><td>{row.unit ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td></tr>))}</tbody>
+                  <tbody>{data.definition.slice(0, 50).map((row) => (<tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-definition-row-${row.metricKey}`} onClick={() => openDefinitionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDefinitionDetail(row); } }}><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{row.name ?? "-"}</td><td>{row.domain ? formatMetricDomain(row.domain) : "-"}</td><td>{row.unit ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td></tr>))}</tbody>
                 </table>
               </div>
             </>)}

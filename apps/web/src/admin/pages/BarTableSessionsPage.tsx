@@ -188,6 +188,15 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
+  // 邀请函签发/吊销前置校验：未选订台则不弹二次确认、不发请求（与 runInvitationAction 内守卫同口径）。
+  function requireSelectedReservation(): boolean {
+    if (!selectedReservation?.id) {
+      setBarError("请先在预定列表中选择订台。");
+      return false;
+    }
+    return true;
+  }
+
   // V155 订卡邀请函：签发 / 吊销（staff）+ 门口入场核验（复用 guest_checkin 权限）。
   async function runInvitationAction(kind: "issue" | "revoke" | "entry") {
     if (!selectedReservation?.id) {
@@ -261,8 +270,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <h3>订卡邀请函</h3>
         <p className="admin-muted-action">对选中订台签发邀请函（持函人转发给朋友，朋友客人端确认占名额）；门口扫码核验成员入场，总人数受卡座可进人数约束。</p>
         <div className="admin-form-row">
-          <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} disabled={submitting} onClick={() => void runInvitationAction("issue")} data-testid="bar-invitation-issue">签发邀请函</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} disabled={submitting} onClick={() => void runInvitationAction("revoke")} data-testid="bar-invitation-revoke">吊销邀请函</PermissionButton>
+          <HighRiskConfirm label="签发邀请函" impact="将对选中订台签发订卡邀请函，持函人可转发给朋友占用入场名额。" disabled={submitting} precheck={() => requireSelectedReservation()} onConfirm={() => void runInvitationAction("issue")} permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} irreversible={false} data-testid="bar-invitation-issue" />
+          <HighRiskConfirm label="吊销邀请函" impact="将吊销选中订台的邀请函，已转发链接立即失效、未入场的朋友名额被收回。" disabled={submitting} precheck={() => requireSelectedReservation()} onConfirm={() => void runInvitationAction("revoke")} permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} data-testid="bar-invitation-revoke" />
           <input data-testid="bar-invitation-member" value={invitationMemberId} onChange={(event) => setInvitationMemberId(event.target.value)} placeholder="入场成员标识（朋友客人ID/持函人标识）" />
           <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_CHECKIN_PERMISSION]} disabled={submitting} onClick={() => void runInvitationAction("entry")} data-testid="bar-invitation-entry">门口入场核验</PermissionButton>
         </div>

@@ -39,6 +39,12 @@ const METRIC_LABELS: Record<string, string> = {
   "energy.total_water": "总用水量",
   "energy.total_gas": "总用气量",
   "energy.total_heat_cold": "总冷热量",
+  "energy.electricity_per_sqm": "单位面积用电量",
+  // 财务应收账龄 / 供应链 / 合同 / 工单积压（T3-A、经营分析实际出现的机读键）
+  "ar.aging_0_30": "应收账龄 0-30 天",
+  "supply.low_stock": "缺货预警",
+  "contract.expiring_90d": "90 天内到期合同",
+  "mwo.backlog": "商户工单积压",
 };
 
 // 业务域码 → 业务域名（经营分析筛选与表格列用）。
