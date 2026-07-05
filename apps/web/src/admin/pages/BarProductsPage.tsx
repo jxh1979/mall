@@ -1,9 +1,27 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, BarProductRow } from "../types";
 import { PermissionButton } from "../security/Can";
+
+// 商品类别码 → 中文（零英文强制；不进共享码表，就近页级映射）。未知码原样返回。
+const CATEGORY_LABELS: Record<string, string> = {
+  spirit: "烈酒",
+  wine: "葡萄酒",
+  beer: "啤酒",
+  cocktail: "鸡尾酒",
+  soft_drink: "软饮",
+  mixer: "调饮",
+  tea: "茶饮",
+  snack: "小吃",
+};
+function categoryLabel(code: string | null | undefined): string {
+  if (!code) return "—";
+  return CATEGORY_LABELS[code] ?? code;
+}
 
 /** 分 → 元展示（两位小数）；空/未录入显示占位。 */
 function yuan(cent: number | null | undefined): string {
@@ -40,6 +58,23 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
   const [rows, setRows] = React.useState<BarProductRow[]>([]);
   const [form, setForm] = React.useState<ProductForm>(EMPTY_FORM);
   const [formError, setFormError] = React.useState<string | null>(null);
+  // 行明细抽屉：整行可点 → 该商品完整字段（类别/状态中文·金额¥·内部结算价）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openProductDetail(row: BarProductRow) {
+    setDetail({
+      title: `商品明细 · ${row.productName ?? row.id}`,
+      fields: [
+        { label: "商品编号", value: row.id },
+        { label: "商品", value: row.productName ?? "—" },
+        { label: "所属酒吧", value: row.barId ?? "—" },
+        { label: "类别", value: categoryLabel(row.productType) },
+        { label: "售价（元）", value: `¥${yuan(row.priceCent)}` },
+        { label: "内部结算价（元）", value: row.internalSettlementPriceCent === null || row.internalSettlementPriceCent === undefined ? "未录入" : `¥${yuan(row.internalSettlementPriceCent)}` },
+        { label: "状态", value: row.soldOut ? "沽清" : formatBusinessStatus(row.status) },
+      ],
+    });
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -129,22 +164,25 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} data-testid={`bar-product-row-${row.id}`}>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-product-row-${row.id}`}
+                  onClick={() => openProductDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProductDetail(row); } }}>
                   <td>
                     {row.productName ?? row.id}
                     <br />
                     <small>{row.id}</small>
                   </td>
-                  <td>{row.productType ?? "—"}</td>
+                  <td>{categoryLabel(row.productType)}</td>
                   <td>{yuan(row.priceCent)}</td>
                   <td data-testid={`bar-product-internal-price-${row.id}`}>{yuan(row.internalSettlementPriceCent)}</td>
-                  <td>{row.soldOut ? "沽清" : row.status ?? "—"}</td>
+                  <td>{row.soldOut ? "沽清" : formatBusinessStatus(row.status)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

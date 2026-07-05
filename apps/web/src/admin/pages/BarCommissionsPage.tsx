@@ -7,6 +7,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
 
 const CALC_PERM = ["bar.table_commission.calculate"];
@@ -77,6 +78,25 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该提成单完整字段（角色/比例/状态中文·金额¥·时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openCommissionDetail(order: BarOrderRow) {
+    const rowBill = firstBill(order);
+    setDetail({
+      title: `提成单明细 · ${order.orderNo ?? order.id}`,
+      fields: [
+        { label: "订单号", value: order.orderNo ?? order.id },
+        { label: "卡座", value: order.tableId ?? "—" },
+        { label: "账单", value: rowBill?.id ?? order.billId ?? "—" },
+        { label: "消费额", value: formatAmount(order.totalAmount) },
+        { label: "销售角色", value: sellerLabel(order) },
+        { label: "计提比例", value: commissionRate(order) },
+        { label: "状态", value: formatBusinessStatus(rowBill?.status ?? order.status) },
+        { label: "时间", value: cnDate(order.createdAt) },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -187,8 +207,10 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
               {visibleOrders.map((order) => {
                 const rowBill = firstBill(order);
                 return (
-                  <tr key={order.id}>
-                    <td><input type="radio" data-testid={`bar-commission-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
+                  <tr key={order.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-commission-row-${order.id}`}
+                    onClick={() => openCommissionDetail(order)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCommissionDetail(order); } }}>
+                    <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`bar-commission-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                     <td>{order.orderNo ?? order.id}</td>
                     <td>{order.tableId ?? "-"}</td>
                     <td>{rowBill?.id ?? order.billId ?? "-"}</td>
@@ -196,7 +218,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
                     <td>{sellerLabel(order)}</td>
                     <td>{commissionRate(order)}</td>
                     <td>{formatBusinessStatus(rowBill?.status ?? order.status)}</td>
-                    <td>{order.createdAt ?? "-"}</td>
+                    <td>{cnDate(order.createdAt)}</td>
                   </tr>
                 );
               })}
@@ -204,6 +226,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

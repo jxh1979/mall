@@ -10,7 +10,18 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, StoredWineRow } from "../types";
+
+// 后端 /saved-bottles 还返回到期/更新/剩余数量等（StoredWineRow 未全量声明），
+// 行明细抽屉就近读取这些字段，不改共享 types.ts。
+type StoredWineDetailRow = StoredWineRow & {
+  expireAt?: string;
+  updatedAt?: string;
+  remainingQuantity?: number;
+  initialQuantity?: number;
+  unit?: string;
+};
 
 // 后端写权限码（InventoryController：/saved-bottles/{id}/claim）
 const STORED_WINE_CLAIM_PERMISSION = "bar.saved_bottle.manage";
@@ -73,6 +84,25 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
   const [submitting, setSubmitting] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该存酒完整字段（状态中文·存/取/到期时间中文·数量）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openBottleDetail(row: StoredWineRow) {
+    const full = row as StoredWineDetailRow;
+    setDetail({
+      title: `存酒明细 · ${row.savedNo ?? row.id}`,
+      fields: [
+        { label: TEXT.savedNo, value: row.savedNo ?? row.id },
+        { label: TEXT.customer, value: row.customerName ?? row.customerId ?? "—" },
+        { label: TEXT.item, value: row.itemName ?? row.itemId ?? "—" },
+        { label: TEXT.quantity, value: full.remainingQuantity !== undefined ? `${full.remainingQuantity}${full.unit ? ` ${full.unit}` : ""}` : (row.quantity ?? "—") },
+        { label: TEXT.status, value: formatBusinessStatus(row.status) },
+        { label: "存酒时间", value: cnDate(row.createdAt) },
+        { label: "取酒/更新时间", value: cnDate(full.updatedAt) },
+        { label: "到期时间", value: cnDate(full.expireAt) },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -236,14 +266,16 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
             </thead>
             <tbody>
               {paged.pageRows.map((row) => (
-                <tr key={row.id}>
-                  <td><input type="radio" data-testid={`stored-wine-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`stored-wine-row-${row.id}`}
+                  onClick={() => openBottleDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBottleDetail(row); } }}>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`stored-wine-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.savedNo ?? row.id}</td>
                   <td>{row.customerName ?? row.customerId ?? "-"}</td>
                   <td>{row.itemName ?? row.itemId ?? "-"}</td>
                   <td>{row.quantity ?? "-"}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
-                  <td>{row.createdAt ?? "-"}</td>
+                  <td>{cnDate(row.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -252,6 +284,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
         </div>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

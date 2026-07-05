@@ -7,6 +7,7 @@ import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, BarReservationRow, BarTableRow, BarTableSessionRow } from "../types";
 
 const BAR_CHECKIN_PERMISSION = "bar.table.guest_checkin";
@@ -34,6 +35,58 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
   const [barError, setBarError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  // 行明细抽屉：三张业务表整行可点 → 完整字段（状态中文·开台/关台/预定时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openSessionDetail(row: BarTableSessionRow) {
+    setDetail({
+      title: `开台会话明细 · ${row.id}`,
+      fields: [
+        { label: "会话", value: row.id },
+        { label: "卡座", value: row.tableId ?? "—" },
+        { label: "所属酒吧", value: row.barId ?? "—" },
+        { label: "营业日", value: cnDate(row.businessDate) },
+        { label: "人数", value: row.guestCount ?? "—" },
+        { label: "销售", value: row.salesStaffId ?? "—" },
+        { label: "服务员", value: row.serviceStaffId ?? "—" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "版本", value: row.sessionVersion ?? "—" },
+        { label: "开台时间", value: cnDate(row.openedAt) },
+        { label: "关台时间", value: cnDate(row.closedAt) },
+      ],
+    });
+  }
+
+  function openReservationDetail(row: BarReservationRow) {
+    setDetail({
+      title: `订台预定明细 · ${row.id}`,
+      fields: [
+        { label: "预定号", value: row.id },
+        { label: "卡座", value: row.tableId ?? "—" },
+        { label: "所属酒吧", value: row.barId ?? "—" },
+        { label: "客户", value: row.customerId ?? "—" },
+        { label: "人数", value: row.guestCount ?? "—" },
+        { label: "免通票入场人数", value: row.allowedPassFreeGuestCount ?? "—" },
+        { label: "定金状态", value: formatBusinessStatus(row.depositStatus) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "预定时间", value: cnDate(row.reservedAt) },
+        { label: "创建时间", value: cnDate(row.createdAt) },
+      ],
+    });
+  }
+
+  function openTableDetail(row: BarTableRow) {
+    setDetail({
+      title: `卡座明细 · ${row.tableCode ?? row.tableName ?? row.id}`,
+      fields: [
+        { label: "卡座编号", value: row.id },
+        { label: "卡座", value: row.tableCode ?? row.tableName ?? "—" },
+        { label: "所属酒吧", value: row.barId ?? "—" },
+        { label: "容量", value: row.capacity ?? row.guestLimit ? `${row.capacity ?? row.guestLimit} 人` : "—" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+      ],
+    });
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -221,8 +274,10 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
             <tbody>{sessions.length === 0 ? (
               <tr><td colSpan={6} className="admin-muted-action">暂无开台会话</td></tr>
             ) : pagedSessions.pageRows.map((row) => (
-              <tr key={row.id}>
-                <td><input type="radio" aria-label={`选择会话 ${row.id}`} data-testid={`bar-session-select-${row.id}`} checked={(selectedSession?.id ?? "") === row.id} onChange={() => setSelectedSessionId(row.id)} /></td>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-session-row-${row.id}`}
+                onClick={() => openSessionDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSessionDetail(row); } }}>
+                <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择会话 ${row.id}`} data-testid={`bar-session-select-${row.id}`} checked={(selectedSession?.id ?? "") === row.id} onChange={() => setSelectedSessionId(row.id)} /></td>
                 <td>{row.id}</td>
                 <td>{row.tableId ?? "-"}</td>
                 <td>{row.guestCount ?? "-"}</td>
@@ -241,8 +296,10 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
             <tbody>{reservations.length === 0 ? (
               <tr><td colSpan={6} className="admin-muted-action">暂无订台预定</td></tr>
             ) : pagedReservations.pageRows.map((row) => (
-              <tr key={row.id}>
-                <td><input type="radio" aria-label={`选择预定 ${row.id}`} data-testid={`bar-reservation-select-${row.id}`} checked={(selectedReservation?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-reservation-row-${row.id}`}
+                onClick={() => openReservationDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openReservationDetail(row); } }}>
+                <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择预定 ${row.id}`} data-testid={`bar-reservation-select-${row.id}`} checked={(selectedReservation?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                 <td>{row.id}</td>
                 <td>{row.tableId ?? "-"}</td>
                 <td>{row.guestCount ?? "-"}</td>
@@ -258,10 +315,11 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-tables-table">
             <thead><tr><th>卡座</th><th>容量</th><th>状态</th></tr></thead>
-            <tbody>{tables.map((row) => <tr key={row.id}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+            <tbody>{tables.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-table-row-${row.id}`} onClick={() => openTableDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTableDetail(row); } }}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

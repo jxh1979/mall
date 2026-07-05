@@ -10,7 +10,7 @@ import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import { cnDate } from "../components/RowDetailDrawer";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEXT = {
   ordered: "\u5df2\u70b9\u5355",
@@ -109,6 +109,25 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const [paymentChannel, setPaymentChannel] = React.useState("aggregate_pay");
   const [cashierStaffId, setCashierStaffId] = React.useState("");
   const [posTransactionNo, setPosTransactionNo] = React.useState("");
+  // 行明细抽屉：整行可点 → 该订单完整字段（状态/提成口径中文·金额¥·下单/支付时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openOrderDetail(order: BarOrderRow) {
+    const bill = firstBill(order);
+    setDetail({
+      title: `订单明细 · ${order.orderNo ?? order.id}`,
+      fields: [
+        { label: TEXT.orderNo, value: order.orderNo ?? order.id },
+        { label: TEXT.table, value: order.tableId ?? "—" },
+        { label: TEXT.orderStatus, value: displayStatus(order.status) },
+        { label: TEXT.billStatus, value: bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill },
+        { label: TEXT.amount, value: formatAmount(order.totalAmount) },
+        { label: TEXT.commissionBasis, value: order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}` },
+        { label: TEXT.createdAt, value: cnDate(order.createdAt) },
+        { label: TEXT.paidAt, value: cnDate(bill?.paidAt ?? order.paidAt) },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -283,10 +302,12 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
               {pagedOrders.pageRows.map((order) => {
                 const bill = firstBill(order);
                 return (
-                  <tr key={order.id}>
-                    <td><input type="radio" data-testid={`bar-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
-                    <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={order.id}>{order.orderNo ?? order.id}</TraceLink></td>
-                    <td><TraceLink navigateTo={navigateTo} pageId="ADM-BAR-001" objectId={order.tableId}>{order.tableId ?? "-"}</TraceLink></td>
+                  <tr key={order.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-order-row-${order.id}`}
+                    onClick={() => openOrderDetail(order)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOrderDetail(order); } }}>
+                    <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`bar-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
+                    <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={order.id}>{order.orderNo ?? order.id}</TraceLink></td>
+                    <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-BAR-001" objectId={order.tableId}>{order.tableId ?? "-"}</TraceLink></td>
                     <td>{displayStatus(order.status)}</td>
                     <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>
                     <td>{formatAmount(order.totalAmount)}</td>
@@ -301,6 +322,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
             <TablePager testid="bar-orders-pager" page={pagedOrders.page} pageCount={pagedOrders.pageCount} total={pagedOrders.total} onPrev={pagedOrders.prev} onNext={pagedOrders.next} />
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
