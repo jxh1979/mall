@@ -14,6 +14,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, TicketVerificationRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { cnDate } from "../components/RowDetailDrawer";
 
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
@@ -43,6 +44,8 @@ const TEXT = {
   payStatus: "\u652f\u4ed8",
   issueStatus: "\u51fa\u7968",
   status: "\u72b6\u6001",
+  createdAt: "\u4e0b\u5355\u65f6\u95f4",
+  paidAt: "\u652f\u4ed8\u65f6\u95f4",
   issueNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u7968",
   previewNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u6838\u9500\u9884\u68c0",
   ordersHelp: "\u8ba2\u5355\u603b\u6570",
@@ -254,7 +257,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="ticket-orders-table">
             <thead>
-              <tr><th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.ticketType}</th><th>{TEXT.quantity}</th><th>{TEXT.visitDate}</th><th>{TEXT.channel}</th><th>{TEXT.amount}</th><th>{TEXT.payStatus}</th><th>{TEXT.issueStatus}</th><th>{TEXT.status}</th></tr>
+              <tr><th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.ticketType}</th><th>{TEXT.quantity}</th><th>{TEXT.visitDate}</th><th>{TEXT.channel}</th><th>{TEXT.amount}</th><th>{TEXT.payStatus}</th><th>{TEXT.issueStatus}</th><th>{TEXT.status}</th><th>{TEXT.createdAt}</th><th>{TEXT.paidAt}</th></tr>
             </thead>
             <tbody>
               {paged.pageRows.map((order) => (
@@ -269,6 +272,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                   <td>{formatBusinessStatus(order.payStatus)}</td>
                   <td>{formatBusinessStatus(order.issueStatus)}</td>
                   <td>{formatBusinessStatus(order.status)}</td>
+                  <td>{cnDate(order.createdAt)}</td>
+                  <td data-testid={`ticket-order-paid-at-${order.id}`}>{cnDate(order.paidAt)}</td>
                 </tr>
               ))}
             </tbody>

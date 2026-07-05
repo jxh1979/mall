@@ -205,7 +205,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("status", order.status())
                 .addValue("created_at", timestampWithTimeZone(order.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(order.updatedAt()))
-                .addValue("merchant_id", order.merchantId());
+                .addValue("merchant_id", order.merchantId())
+                .addValue("paid_at", timestampWithTimeZone(order.paidAt()));
     }
 
     MapSqlParameterSource ticketPaymentIntentParameters(TicketPaymentIntentRecord intent) {

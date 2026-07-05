@@ -496,13 +496,13 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
                     sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id, base_amount_cent,
                     dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at,
-                    merchant_id
+                    merchant_id, paid_at
                 )
                 VALUES (
                     :id, :order_no, :customer_id, :ticket_type_id, :price_rule_id, :quantity, :visit_date,
                     :sales_channel, :buyer_phone, :amount_cent, :dynamic_pricing_rule_id, :base_amount_cent,
                     :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at,
-                    :merchant_id
+                    :merchant_id, :paid_at
                 )
                 -- merchant_id（下单受理商户）下单时定，后续 update（出票/置 paid）不覆盖。
                 ON CONFLICT (id) DO UPDATE SET
@@ -521,7 +521,9 @@ class JdbcTicketingRepository implements TicketingRepository {
                     pay_status = EXCLUDED.pay_status,
                     issue_status = EXCLUDED.issue_status,
                     status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    -- V231：支付确认写入的 paid_at 随 upsert 落库；出票等后续 update 携带原值不丢。
+                    paid_at = EXCLUDED.paid_at
                 """, parameterSource.ticketOrderParameters(order));
         return order;
     }

@@ -191,11 +191,12 @@ public class TicketOrderService {
         if ("paid".equals(order.payStatus())) {
             return order;
         }
+        // V231：支付确认成功即支付时刻，写 paid_at=now（与 pay_status→paid 同事务）。
         return repository.updateTicketOrder(new TicketOrderRecord(
                 order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
                 order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
                 order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
-                "paid", order.issueStatus(), order.status(), order.createdAt(), now, order.merchantId()));
+                "paid", order.issueStatus(), order.status(), order.createdAt(), now, order.merchantId(), now));
     }
 
     /**
@@ -268,6 +269,7 @@ public class TicketOrderService {
                 // 批3-6：出票请求带来的人脸照转发进发放链，供 require_face_photo 权益捕获存档。
                 request.facePhotos()
         ));
+        Instant issuedAt = Instant.now();
         repository.updateTicketOrder(new TicketOrderRecord(
                 order.id(),
                 order.orderNo(),
@@ -287,8 +289,10 @@ public class TicketOrderService {
                 "issued",
                 order.status(),
                 order.createdAt(),
-                Instant.now(),
-                order.merchantId()
+                issuedAt,
+                order.merchantId(),
+                // V231：已通过支付确认置 paid 的订单保留原 paid_at；admin 渠道免确认直接出票（转 paid）则以出票时刻为支付时刻。
+                order.paidAt() != null ? order.paidAt() : issuedAt
         ));
         // P0 清单#2：支付成功（订单转 paid）→ 发积分入账事件，customer 域写 pending（幂等 source_doc=ticket_order/orderId）。
         // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额折算（每元 1 分）。

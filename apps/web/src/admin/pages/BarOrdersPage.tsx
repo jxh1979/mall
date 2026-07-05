@@ -10,6 +10,7 @@ import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { usePagedRows, TablePager } from "../components/TablePager";
+import { cnDate } from "../components/RowDetailDrawer";
 
 const TEXT = {
   ordered: "\u5df2\u70b9\u5355",
@@ -48,6 +49,8 @@ const TEXT = {
   billStatus: "\u8d26\u5355",
   commissionBasis: "\u63d0\u6210\u53e3\u5f84",
   time: "\u65f6\u95f4",
+  createdAt: "\u4e0b\u5355\u65f6\u95f4",
+  paidAt: "\u652f\u4ed8\u65f6\u95f4",
   noBill: "\u672a\u751f\u6210",
   sales15: "\u9500\u552e\u4eba\u5458 15%",
   nonSales: "\u975e\u9500\u552e",
@@ -273,7 +276,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           <table className="admin-table" data-testid="bar-orders-table">
             <thead>
               <tr>
-                <th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.orderStatus}</th><th>{TEXT.billStatus}</th><th>{TEXT.amount}</th><th>{TEXT.commissionBasis}</th><th>{TEXT.time}</th>
+                <th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.orderStatus}</th><th>{TEXT.billStatus}</th><th>{TEXT.amount}</th><th>{TEXT.commissionBasis}</th><th>{TEXT.createdAt}</th><th>{TEXT.paidAt}</th>
               </tr>
             </thead>
             <tbody>
@@ -288,7 +291,8 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                     <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>
                     <td>{formatAmount(order.totalAmount)}</td>
                     <td>{order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}`}</td>
-                    <td>{order.createdAt ?? "-"}</td>
+                    <td>{cnDate(order.createdAt)}</td>
+                    <td data-testid={`bar-order-paid-at-${order.id}`}>{cnDate(bill?.paidAt ?? order.paidAt)}</td>
                   </tr>
                 );
               })}

@@ -172,6 +172,7 @@ export type TicketOrderRow = {
   issueStatus?: string;
   status?: string;
   createdAt?: string;
+  paidAt?: string;
 };
 
 export type TicketIssuedEntitlementRow = {
@@ -266,6 +267,7 @@ export type BarBillRow = {
   status?: string;
   paidAmount?: number;
   totalAmount?: number;
+  paidAt?: string;
 };
 
 export type BarOrderRow = {
@@ -278,6 +280,7 @@ export type BarOrderRow = {
   status?: string;
   totalAmount?: number;
   createdAt?: string;
+  paidAt?: string;
   bills?: BarBillRow[];
 };
 
@@ -370,6 +373,7 @@ export type AmusementGroupBookingRow = {
   evidenceAttachmentIds?: string[];
   createdAt?: string;
   updatedAt?: string;
+  paidAt?: string;
 };
 
 export type AmusementSafetyInspectionRow = {

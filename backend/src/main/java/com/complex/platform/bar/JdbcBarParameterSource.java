@@ -165,7 +165,8 @@ final class JdbcBarParameterSource {
                 .addValue("sales_staff_id", order.salesStaffId())
                 .addValue("created_at", timestampWithTimeZone(order.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(order.updatedAt()))
-                .addValue("order_type", order.orderType() == null ? "standard" : order.orderType());
+                .addValue("order_type", order.orderType() == null ? "standard" : order.orderType())
+                .addValue("paid_at", timestampWithTimeZone(order.paidAt()));
     }
 
     MapSqlParameterSource billSettlementParameters(BarBillSettlementRecord settlement) {
@@ -312,7 +313,8 @@ final class JdbcBarParameterSource {
                 .addValue("reopened_at", timestampWithTimeZone(bill.reopenedAt()))
                 .addValue("reopen_reason", bill.reopenReason())
                 .addValue("reopen_count", bill.reopenCount())
-                .addValue("tip_amount_cent", bill.tipAmountCent());
+                .addValue("tip_amount_cent", bill.tipAmountCent())
+                .addValue("paid_at", timestampWithTimeZone(bill.paidAt()));
     }
 
     MapSqlParameterSource billAdjustmentParameters(BarBillAdjustmentRecord adjustment) {

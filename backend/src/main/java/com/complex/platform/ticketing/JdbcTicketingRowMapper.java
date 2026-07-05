@@ -220,7 +220,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
-                resultSet.getString("merchant_id")
+                resultSet.getString("merchant_id"),
+                nullableInstant(resultSet, "paid_at")
         );
     }
 

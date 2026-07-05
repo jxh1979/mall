@@ -1319,12 +1319,12 @@ class JdbcAmusementRepository implements AmusementRepository {
                 INSERT INTO amusement_group_bookings (
                     id, project_id, session_id, booking_type, customer_name, contact_phone,
                     party_size, reserved_capacity, booking_status, approval_note, operator_note,
-                    evidence_attachment_ids, approved_at, released_at, created_at, updated_at
+                    evidence_attachment_ids, approved_at, released_at, created_at, updated_at, paid_at
                 )
                 VALUES (
                     :id, :project_id, :session_id, :booking_type, :customer_name, :contact_phone,
                     :party_size, :reserved_capacity, :booking_status, :approval_note, :operator_note,
-                    CAST(:evidence_attachment_ids AS jsonb), :approved_at, :released_at, :created_at, :updated_at
+                    CAST(:evidence_attachment_ids AS jsonb), :approved_at, :released_at, :created_at, :updated_at, :paid_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     booking_status = EXCLUDED.booking_status,
@@ -1333,7 +1333,8 @@ class JdbcAmusementRepository implements AmusementRepository {
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
                     approved_at = EXCLUDED.approved_at,
                     released_at = EXCLUDED.released_at,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    paid_at = EXCLUDED.paid_at
                 """, groupBookingParameters(booking));
         return booking;
     }
@@ -1343,7 +1344,7 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, session_id, booking_type, customer_name, contact_phone,
                        party_size, reserved_capacity, booking_status, approval_note, operator_note,
-                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at
+                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at, paid_at
                   FROM amusement_group_bookings
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapGroupBooking);
@@ -1354,7 +1355,7 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, session_id, booking_type, customer_name, contact_phone,
                        party_size, reserved_capacity, booking_status, approval_note, operator_note,
-                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at
+                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at, paid_at
                   FROM amusement_group_bookings
                  WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
                  ORDER BY created_at DESC, id
@@ -1366,7 +1367,7 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, session_id, booking_type, customer_name, contact_phone,
                        party_size, reserved_capacity, booking_status, approval_note, operator_note,
-                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at
+                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at, paid_at
                   FROM amusement_group_bookings
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapGroupBooking).stream().findFirst();
@@ -1401,6 +1402,8 @@ class JdbcAmusementRepository implements AmusementRepository {
                            approval_note = :approval_note,
                            evidence_attachment_ids = CAST(:evidence_attachment_ids AS jsonb),
                            approved_at = :approved_at,
+                           -- V231：本域无独立支付步，审批确认即预定确认落点，paid_at=approved_at。
+                           paid_at = :approved_at,
                            updated_at = :updated_at
                       FROM candidate, locked_session
                      WHERE booking.id = candidate.id
@@ -1408,7 +1411,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                                booking.customer_name, booking.contact_phone, booking.party_size,
                                booking.reserved_capacity, booking.booking_status, booking.approval_note,
                                booking.operator_note, booking.evidence_attachment_ids, booking.approved_at,
-                               booking.released_at, booking.created_at, booking.updated_at
+                               booking.released_at, booking.created_at, booking.updated_at, booking.paid_at
                 )
                 SELECT * FROM updated_booking
                 """, new MapSqlParameterSource()
@@ -1453,7 +1456,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                                booking.customer_name, booking.contact_phone, booking.party_size,
                                booking.reserved_capacity, booking.booking_status, booking.approval_note,
                                booking.operator_note, booking.evidence_attachment_ids, booking.approved_at,
-                               booking.released_at, booking.created_at, booking.updated_at
+                               booking.released_at, booking.created_at, booking.updated_at, booking.paid_at
                 )
                 SELECT * FROM updated_booking
                 """, new MapSqlParameterSource()
@@ -1659,7 +1662,8 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("approved_at", timestampWithTimeZone(booking.approvedAt()))
                 .addValue("released_at", timestampWithTimeZone(booking.releasedAt()))
                 .addValue("created_at", timestampWithTimeZone(booking.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(booking.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(booking.updatedAt()))
+                .addValue("paid_at", timestampWithTimeZone(booking.paidAt()));
     }
 
 

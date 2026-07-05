@@ -255,7 +255,8 @@ final class JdbcAmusementRowMapper {
                 instant(rs, "approved_at"),
                 instant(rs, "released_at"),
                 instant(rs, "created_at"),
-                instant(rs, "updated_at")
+                instant(rs, "updated_at"),
+                instant(rs, "paid_at")
         );
     }
 

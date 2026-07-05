@@ -1260,11 +1260,11 @@ class JdbcCustomerRepository implements CustomerRepository {
         jdbcTemplate.update("""
                 INSERT INTO customer_stored_value_transactions (
                     id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                    payment_intent_id, reason, idempotency_key, created_at
+                    payment_intent_id, reason, idempotency_key, created_at, paid_at
                 )
                 VALUES (
                     :id, :account_id, :customer_id, :txn_type, :amount_cent, :balance_after_cent,
-                    :payment_intent_id, :reason, :idempotency_key, :created_at
+                    :payment_intent_id, :reason, :idempotency_key, :created_at, :paid_at
                 )
                 """, new MapSqlParameterSource()
                 .addValue("id", txn.id())
@@ -1276,7 +1276,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("payment_intent_id", txn.paymentIntentId())
                 .addValue("reason", txn.reason())
                 .addValue("idempotency_key", txn.idempotencyKey())
-                .addValue("created_at", timestampWithTimeZone(txn.createdAt())));
+                .addValue("created_at", timestampWithTimeZone(txn.createdAt()))
+                .addValue("paid_at", timestampWithTimeZone(txn.paidAt())));
         return txn;
     }
 
@@ -1287,7 +1288,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         }
         return jdbcTemplate.query("""
                 SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                       payment_intent_id, reason, idempotency_key, created_at
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at
                   FROM customer_stored_value_transactions
                  WHERE idempotency_key = :key
                 """, Map.of("key", key), this::mapStoredValueTransaction).stream().findFirst();
@@ -1309,7 +1310,7 @@ class JdbcCustomerRepository implements CustomerRepository {
     public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accountId) {
         return jdbcTemplate.query("""
                 SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                       payment_intent_id, reason, idempotency_key, created_at
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at
                   FROM customer_stored_value_transactions
                  WHERE account_id = :account_id
                  ORDER BY created_at DESC, id DESC
@@ -1494,7 +1495,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("payment_intent_id"),
                 rs.getString("reason"),
                 rs.getString("idempotency_key"),
-                nullableInstant(rs, "created_at"));
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "paid_at"));
     }
 
     private CustomerMembershipPlanRecord mapMembershipPlan(ResultSet rs, int rowNumber) throws SQLException {

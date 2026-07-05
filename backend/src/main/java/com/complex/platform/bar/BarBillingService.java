@@ -189,7 +189,7 @@ public class BarBillingService {
                     Map.of("amount_cent", settlementAmount, "pos_transaction_no",
                             String.valueOf(actual.posTransactionNo())));
         }
-        return repository.saveBill(billWithAmounts(
+        BarBillRecord settledBill = repository.saveBill(billWithAmounts(
                 bill,
                 bill.subtotalAmountCent(),
                 bill.discountAmountCent(),
@@ -200,6 +200,16 @@ public class BarBillingService {
                 settlementAmount >= settleTotal ? "settled" : "partial_settled",
                 now
         ));
+        // V231：酒吧订单本身无支付生命周期，支付走账单结算；结账成功即回填链上订单 paid_at（首次为空才写，与账单同事务）。
+        if (bill.orderId() != null) {
+            repository.findOrderById(bill.orderId())
+                    .filter(o -> o.paidAt() == null)
+                    .ifPresent(o -> repository.saveOrder(new BarOrderRecord(
+                            o.id(), o.barId(), o.merchantId(), o.tableId(), o.reservationId(), o.customerId(),
+                            o.orderSource(), o.status(), o.totalAmountCent(), o.currency(), o.createdTerminal(),
+                            o.deviceId(), o.salesStaffId(), o.createdAt(), o.updatedAt(), o.orderType(), now)));
+        }
+        return settledBill;
     }
 
     BarBillAdjustmentRecord applyBillAdjustment(String billId, BarBillAdjustmentRequest request) {

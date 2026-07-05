@@ -194,7 +194,8 @@ final class JdbcBarRowMapper {
                 resultSet.getString("sales_staff_id"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
-                resultSet.getString("order_type")
+                resultSet.getString("order_type"),
+                nullableInstant(resultSet, "paid_at")
         );
     }
 
@@ -323,7 +324,8 @@ final class JdbcBarRowMapper {
                 nullableInstant(resultSet, "reopened_at"),
                 resultSet.getString("reopen_reason"),
                 resultSet.getInt("reopen_count"),
-                resultSet.getLong("tip_amount_cent")
+                resultSet.getLong("tip_amount_cent"),
+                nullableInstant(resultSet, "paid_at")
         );
     }
 

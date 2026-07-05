@@ -63,6 +63,15 @@ class StoredValueNotificationIntegrationTest {
         assertThat(logParam("topup", phone, "amount_cent")).isEqualTo("5000");
         assertThat(logParam("topup", phone, "balance_after_cent")).isEqualTo("5000");
         assertThat(logParam("topup", phone, "card_type")).isEqualTo("project");
+
+        // V231 资金/时间铁律：充值即支付，topup 流水 paid_at 落库(append-only 表 INSERT 携带)，非 null 且 ≈ 交易时刻。
+        java.sql.Timestamp paidAt = jdbcTemplate.queryForObject(
+                "SELECT paid_at FROM customer_stored_value_transactions WHERE id = ?",
+                java.sql.Timestamp.class, txn.id());
+        assertThat(paidAt).isNotNull();
+        assertThat(paidAt.toInstant())
+                .isCloseTo(java.time.Instant.now(),
+                        org.assertj.core.api.Assertions.within(2, java.time.temporal.ChronoUnit.MINUTES));
     }
 
     @Test

@@ -50,7 +50,11 @@ final class BarBillRecords {
                 bill.reopenedAt(),
                 bill.reopenReason(),
                 bill.reopenCount(),
-                bill.tipAmountCent()
+                bill.tipAmountCent(),
+                // V231：账单首次转 paid/partial_paid（结账成功）时记支付时刻=本次 updatedAt；已有 paid_at 保持不覆盖。
+                //   反结 billReopened 走 26 参兼容构造器（paid_at=null）会清空，重结账再记，符合语义。
+                bill.paidAt() != null ? bill.paidAt()
+                        : (("paid".equals(paymentStatus) || "partial_paid".equals(paymentStatus)) ? updatedAt : null)
         );
     }
 

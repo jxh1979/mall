@@ -21,7 +21,7 @@ final class JdbcTicketingSql {
                        sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id,
                        COALESCE(base_amount_cent, amount_cent) AS base_amount_cent,
                        COALESCE(dynamic_adjustment_cent, 0) AS dynamic_adjustment_cent,
-                       currency, pay_status, issue_status, status, created_at, updated_at, merchant_id
+                       currency, pay_status, issue_status, status, created_at, updated_at, merchant_id, paid_at
                   FROM ticket_orders
                 """;
     }

@@ -32,14 +32,16 @@ final class JdbcBarBillingRepository {
                     subtotal_amount_cent, discount_amount_cent, deposit_deduct_amount_cent,
                     payable_amount_cent, paid_amount_cent, currency, payment_status,
                     settlement_status, sales_staff_id, sales_role_type, created_at, updated_at,
-                    reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent
+                    reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent,
+                    paid_at
                 )
                 VALUES (
                     :id, :bill_no, :order_id, :bar_id, :merchant_id, :table_id, :reservation_id,
                     :subtotal_amount_cent, :discount_amount_cent, :deposit_deduct_amount_cent,
                     :payable_amount_cent, :paid_amount_cent, :currency, :payment_status,
                     :settlement_status, :sales_staff_id, :sales_role_type, :created_at, :updated_at,
-                    :reopened, :reopened_by_user_id, :reopened_at, :reopen_reason, :reopen_count, :tip_amount_cent
+                    :reopened, :reopened_by_user_id, :reopened_at, :reopen_reason, :reopen_count, :tip_amount_cent,
+                    :paid_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     merchant_id = EXCLUDED.merchant_id,
@@ -58,7 +60,9 @@ final class JdbcBarBillingRepository {
                     reopened_at = EXCLUDED.reopened_at,
                     reopen_reason = EXCLUDED.reopen_reason,
                     reopen_count = EXCLUDED.reopen_count,
-                    tip_amount_cent = EXCLUDED.tip_amount_cent
+                    tip_amount_cent = EXCLUDED.tip_amount_cent,
+                    -- V231：结账成功写入的 paid_at 随 upsert 落库（billWithAmounts 已保证已 paid 不覆盖、反结清空）。
+                    paid_at = EXCLUDED.paid_at
                 """, parameterSource.billParameters(bill));
         return bill;
     }
@@ -90,7 +94,8 @@ final class JdbcBarBillingRepository {
                        subtotal_amount_cent, discount_amount_cent, deposit_deduct_amount_cent,
                        payable_amount_cent, paid_amount_cent, currency, payment_status,
                        settlement_status, sales_staff_id, sales_role_type, created_at, updated_at,
-                       reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent
+                       reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent,
+                       paid_at
                   FROM bar_bills
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapBill).stream().findFirst();
@@ -103,7 +108,8 @@ final class JdbcBarBillingRepository {
                        subtotal_amount_cent, discount_amount_cent, deposit_deduct_amount_cent,
                        payable_amount_cent, paid_amount_cent, currency, payment_status,
                        settlement_status, sales_staff_id, sales_role_type, created_at, updated_at,
-                       reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent
+                       reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent,
+                       paid_at
                   FROM bar_bills
                  WHERE id = :id
                  FOR UPDATE

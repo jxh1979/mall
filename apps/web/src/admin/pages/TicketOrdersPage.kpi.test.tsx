@@ -7,8 +7,8 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState, TicketO
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 const ORDERS: TicketOrderRow[] = [
-  { id: "o-1", orderNo: "TKT-0001", ticketTypeId: "tt-1", quantity: 1, payStatus: "paid", issueStatus: "issued", status: "paid", amountCent: 9900 },
-  { id: "o-2", orderNo: "TKT-0002", ticketTypeId: "tt-2", quantity: 2, payStatus: "unpaid", issueStatus: "not_issued", status: "created", amountCent: 19800 },
+  { id: "o-1", orderNo: "TKT-0001", ticketTypeId: "tt-1", quantity: 1, payStatus: "paid", issueStatus: "issued", status: "paid", amountCent: 9900, createdAt: "2026-07-05T09:00:00Z", paidAt: "2026-07-05T10:30:00Z" },
+  { id: "o-2", orderNo: "TKT-0002", ticketTypeId: "tt-2", quantity: 2, payStatus: "unpaid", issueStatus: "not_issued", status: "created", amountCent: 19800, createdAt: "2026-07-05T09:15:00Z" },
 ];
 
 function makeApi(): AdminApiClient {
@@ -101,5 +101,19 @@ describe("TicketOrdersPage KPI 聚焦视图", () => {
     const table = screen.getByTestId("ticket-orders-table").textContent ?? "";
     expect(table).toContain("已支付");
     expect(table).toContain("未出票");
+  });
+
+  it("V231：表格展示「下单时间/支付时间」两列，中文格式；未支付支付时间显「—」", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("ticket-orders-table")).toBeTruthy());
+    const head = screen.getByTestId("ticket-orders-table").querySelector("thead")?.textContent ?? "";
+    expect(head).toContain("下单时间");
+    expect(head).toContain("支付时间");
+    // 已支付订单：支付时间为中文格式（含 年/月/日），非 ISO 原文。
+    const paidCell = screen.getByTestId("ticket-order-paid-at-o-1").textContent ?? "";
+    expect(paidCell).toContain("2026年7月5日");
+    expect(paidCell).not.toContain("T10:30");
+    // 未支付订单：支付时间显「—」。
+    expect(screen.getByTestId("ticket-order-paid-at-o-2").textContent).toBe("—");
   });
 });

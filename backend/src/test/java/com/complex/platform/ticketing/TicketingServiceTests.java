@@ -704,6 +704,8 @@ class TicketingServiceTests {
                 "confirm-pay-create", "create", List.of(), ticketType.id(), null, 1,
                 LocalDate.parse("2026-06-20"), "web", "13800138000", "customer_confirm"));
         assertThat(order.payStatus()).isEqualTo("unpaid");
+        // V231 资金/时间铁律：未支付订单 paid_at 必须为 null（不得拿下单时间冒充）。
+        assertThat(order.paidAt()).isNull();
 
         // 闭环前置：非 admin 渠道未支付不可出票。
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.issueTicketOrder(order.id(),
@@ -717,6 +719,12 @@ class TicketingServiceTests {
         TicketOrderRecord paid = service.confirmTicketOrderPayment(order.id(), new ConfirmTicketOrderPaymentRequest(
                 "confirm-pay-do", intent.id(), "gw-ref-1"));
         assertThat(paid.payStatus()).isEqualTo("paid");
+        // V231 资金/时间铁律：支付确认写入 paid_at，且 ≈支付时刻、≠下单时间(createdAt)。
+        assertThat(paid.paidAt()).isNotNull();
+        assertThat(paid.paidAt()).isAfterOrEqualTo(paid.createdAt());
+        assertThat(paid.paidAt()).isNotEqualTo(paid.createdAt());
+        assertThat(paid.paidAt()).isCloseTo(java.time.Instant.now(),
+                org.assertj.core.api.Assertions.within(1, java.time.temporal.ChronoUnit.MINUTES));
         assertThat(ticketingRepository.findTicketPaymentIntentById(intent.id()))
                 .get().extracting(TicketPaymentIntentRecord::status).isEqualTo("succeeded");
 

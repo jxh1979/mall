@@ -10,6 +10,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { AdminPageProps, AmusementGroupBookingRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { cnDate } from "../components/RowDetailDrawer";
 
 // 后端写权限码（AmusementController：/group-bookings/{id}/release）
 const GROUP_BOOKING_MANAGE_PERMISSION = "amusement.group_booking.manage";
@@ -133,7 +134,7 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
   }
 
   const bookingsSection = (
-    <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-group-bookings-table"><thead><tr><th>{TEXT.select}</th><th>类型</th><th>客户</th><th>人数</th><th>容量占用</th><th>项目</th><th>场次</th><th>状态</th></tr></thead><tbody>{pagedBookings.pageRows.map((row) => <tr key={row.id}><td><input type="radio" data-testid={`amusement-group-booking-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td><td>{formatBusinessStatus(row.bookingType)}</td><td>{display(row.customerName)}</td><td>{display(row.partySize)}</td><td>{display(row.reservedCapacity)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{display(row.sessionId)}</td><td>{formatBusinessStatus(row.bookingStatus)}</td></tr>)}</tbody></table><TablePager testid="amusement-group-bookings-pager" page={pagedBookings.page} pageCount={pagedBookings.pageCount} total={pagedBookings.total} onPrev={pagedBookings.prev} onNext={pagedBookings.next} /></div>
+    <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-group-bookings-table"><thead><tr><th>{TEXT.select}</th><th>类型</th><th>客户</th><th>人数</th><th>容量占用</th><th>项目</th><th>场次</th><th>状态</th><th>下单时间</th><th>确认时间</th></tr></thead><tbody>{pagedBookings.pageRows.map((row) => <tr key={row.id}><td><input type="radio" data-testid={`amusement-group-booking-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td><td>{formatBusinessStatus(row.bookingType)}</td><td>{display(row.customerName)}</td><td>{display(row.partySize)}</td><td>{display(row.reservedCapacity)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{display(row.sessionId)}</td><td>{formatBusinessStatus(row.bookingStatus)}</td><td>{cnDate(row.createdAt)}</td><td data-testid={`amusement-group-booking-paid-at-${row.id}`}>{cnDate(row.paidAt)}</td></tr>)}</tbody></table><TablePager testid="amusement-group-bookings-pager" page={pagedBookings.page} pageCount={pagedBookings.pageCount} total={pagedBookings.total} onPrev={pagedBookings.prev} onNext={pagedBookings.next} /></div>
   );
 
   return (

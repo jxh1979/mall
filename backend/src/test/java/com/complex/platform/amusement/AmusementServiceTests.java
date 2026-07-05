@@ -1591,6 +1591,10 @@ class AmusementServiceTests {
         );
 
         assertThat(approved.bookingStatus()).isEqualTo("approved");
+        // V231 资金/时间铁律：本域无独立支付步，审批确认即预定确认落点，paid_at=approved_at，非 null。
+        assertThat(approved.paidAt()).isNotNull();
+        assertThat(approved.paidAt()).isEqualTo(approved.approvedAt());
+        assertThat(booking.paidAt()).as("审批前预定 paid_at 为 null").isNull();
         assertThat(amusementRepository.findSessionById(session.id()))
                 .get()
                 .extracting(AmusementSessionRecord::lockedCapacity)
@@ -2663,6 +2667,8 @@ class AmusementServiceTests {
                     approvedAt,
                     existing.releasedAt(),
                     existing.createdAt(),
+                    approvedAt,
+                    // V231：与真实 SQL 一致——审批确认即预定确认落点，paid_at=approved_at。
                     approvedAt
             );
             groupBookings.put(id, approved);

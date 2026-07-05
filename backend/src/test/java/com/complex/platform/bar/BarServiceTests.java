@@ -1580,6 +1580,10 @@ class BarServiceTests {
                         BarBillRecord::settlementStatus
                 )
                 .containsExactly(128800L, 40000L, "partial_paid", "partial_settled");
+        // V231 资金/时间铁律：账单转 partial_paid（结账成功）即记支付时刻 paid_at，非 null 且 ≥开单时间 createdAt。
+        assertThat(settled.paidAt()).isNotNull();
+        assertThat(settled.paidAt()).isAfterOrEqualTo(settled.createdAt());
+        assertThat(bill.paidAt()).as("结账前账单 paid_at 为 null").isNull();
         assertThat(barRepository.findBillById(bill.id()))
                 .get()
                 .extracting(BarBillRecord::payableAmountCent, BarBillRecord::paidAmountCent)

@@ -59,6 +59,8 @@ class MemberWalletServiceTests {
         CustomerStoredValueTransactionRecord txn = service.settleTopup("c1", null, null, intent.id());
         assertThat(txn.txnType()).isEqualTo("topup");
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(10_000L);
+        // V231 资金/时间铁律：充值即支付，topup 流水 paid_at=交易完成时刻（本用例固定时钟 T0），非 null。
+        assertThat(txn.paidAt()).isEqualTo(T0);
 
         // 重复入账同一支付意图：不重复加余额。
         CustomerStoredValueTransactionRecord again = service.settleTopup("c1", null, null, intent.id());
@@ -104,6 +106,8 @@ class MemberWalletServiceTests {
         assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("active");
         CustomerStoredValueTransactionRecord txn = service.consume("c1", null, null, 1_000L, "buy", "c-ok");
         assertThat(txn.balanceAfterCent()).isEqualTo(4_000L);
+        // V231：消费非充值支付，paid_at 必须为 null（仅 topup 记支付时刻）。
+        assertThat(txn.paidAt()).isNull();
     }
 
     @Test

@@ -26,12 +26,12 @@ final class JdbcBarOrderRepository {
                 INSERT INTO bar_orders (
                     id, bar_id, merchant_id, table_id, reservation_id, customer_id, order_source,
                     status, total_amount_cent, currency, created_terminal, device_id,
-                    sales_staff_id, created_at, updated_at, order_type
+                    sales_staff_id, created_at, updated_at, order_type, paid_at
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_id, :reservation_id, :customer_id, :order_source,
                     :status, :total_amount_cent, :currency, :created_terminal, :device_id,
-                    :sales_staff_id, :created_at, :updated_at, :order_type
+                    :sales_staff_id, :created_at, :updated_at, :order_type, :paid_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -47,7 +47,9 @@ final class JdbcBarOrderRepository {
                     device_id = EXCLUDED.device_id,
                     sales_staff_id = EXCLUDED.sales_staff_id,
                     updated_at = EXCLUDED.updated_at,
-                    order_type = EXCLUDED.order_type
+                    order_type = EXCLUDED.order_type,
+                    -- V231：结账回填的订单 paid_at 随 upsert 落库；stampOrderPaidAt 只在为空时首次写。
+                    paid_at = EXCLUDED.paid_at
                 """, parameterSource.orderParameters(order));
         return order;
     }
@@ -57,7 +59,7 @@ final class JdbcBarOrderRepository {
             return jdbcTemplate.query("""
                     SELECT id, bar_id, merchant_id, table_id, reservation_id, customer_id, order_source,
                            status, total_amount_cent, currency, created_terminal, device_id,
-                           sales_staff_id, created_at, updated_at, order_type
+                           sales_staff_id, created_at, updated_at, order_type, paid_at
                       FROM bar_orders
                      ORDER BY created_at DESC, id
                     """, rowMapper::mapOrder);
@@ -65,7 +67,7 @@ final class JdbcBarOrderRepository {
         return jdbcTemplate.query("""
                 SELECT id, bar_id, merchant_id, table_id, reservation_id, customer_id, order_source,
                        status, total_amount_cent, currency, created_terminal, device_id,
-                       sales_staff_id, created_at, updated_at, order_type
+                       sales_staff_id, created_at, updated_at, order_type, paid_at
                   FROM bar_orders
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -76,7 +78,7 @@ final class JdbcBarOrderRepository {
         return jdbcTemplate.query("""
                 SELECT id, bar_id, merchant_id, table_id, reservation_id, customer_id, order_source,
                        status, total_amount_cent, currency, created_terminal, device_id,
-                       sales_staff_id, created_at, updated_at, order_type
+                       sales_staff_id, created_at, updated_at, order_type, paid_at
                   FROM bar_orders
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapOrder).stream().findFirst();

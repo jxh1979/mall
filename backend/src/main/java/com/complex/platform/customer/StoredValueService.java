@@ -179,7 +179,8 @@ public class StoredValueService {
                 new CustomerStoredValueTransactionRecord(
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
                         account.id(), customerId, "topup", intent.amountCent(), balanceAfter,
-                        paymentIntentId, "top-up settled", "sv_settle_" + paymentIntentId, now));
+                        // V231：充值即支付，paid_at=交易完成时刻 now（与写流水同事务）。
+                        paymentIntentId, "top-up settled", "sv_settle_" + paymentIntentId, now, now));
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("amount_cent", intent.amountCent());
         detail.put("balance_after_cent", balanceAfter);
