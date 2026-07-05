@@ -15,10 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>算池 → 留存 → 各酒吧三方式分配 → 校验 → 写 draft 结算单/明细。
  * <b>不过账 ar_ap_items</b>（批2-4）；只落 settlement_bills / settlement_items（status=draft）。
  *
- * <p>月窗 = [月首 00:00 UTC, 次月首 00:00 UTC) 按 settlement_transactions.confirmed_at。
- * <b>与摸底不符（据实报告）</b>：批1 写 verification_settled 时未落 confirmed_at（NULL），
- * 故当前生产按 confirmed_at 过滤取不到已核销行——需批1 补写 confirmed_at 才有真实数据；
- * 本引擎按 PRD §5.0 指定口径（confirmed_at）实现，测试自造 confirmed_at 的种子行验证算法。
+ * <p>月窗 = [月首 00:00 UTC, 次月首 00:00 UTC) 按 settlement_transactions.created_at
+ * （批1 双写时 created_at 已填=核销记录创建≈核销日，语义正确；confirmed_at 是结算确认时间、
+ * 双写时本应 NULL 故不用作月窗）。
  *
  * <p><b>金额整数分无漂移</b>：所有比例乘除用 long 整数运算；分配后余数（因整除截断）保留在
  * 「各酒吧总池 − Σ分账」里，不强行补给某家（余数天然沉淀为项目未分配，符合「Σ分账≤总池」校验）。

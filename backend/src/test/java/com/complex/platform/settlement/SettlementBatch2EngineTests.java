@@ -208,23 +208,23 @@ class SettlementBatch2EngineTests {
         return pid;
     }
 
-    /** 直插一条 verification_settled(confirmed_at 落 MONTH 月中,归商户)。 */
+    /** 直插一条 verification_settled(created_at 落 MONTH 月中=月窗驱动,归商户;confirmed_at 留 NULL 同批1双写)。 */
     private void seedVerified(String projectId, String merchantId, String entType,
                               int verifiedCount, int numPeople, long verifiedCent) {
-        Instant confirmedAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
-        java.sql.Timestamp ts = java.sql.Timestamp.from(confirmedAt);
+        Instant createdAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
+        java.sql.Timestamp ts = java.sql.Timestamp.from(createdAt);
         String id = "st_b2e_" + System.nanoTime();
         jdbcTemplate.update("""
                 INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
-                    settlement_status, entitlement_valid_to, confirmed_at, created_at, updated_at)
+                    settlement_status, entitlement_valid_to, created_at, updated_at)
                 VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?,
-                    'confirmed', ?, ?, ?, ?)
+                    'draft', ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, ts, ts, ts, ts);
+                merchantId, projectId, ts, ts, ts);
     }
 
     private void setMethod(String projectId, String method) {

@@ -104,20 +104,19 @@ public class JdbcSettlementBillRepository {
                 : null);
     }
 
-    // ---- 读当月核销聚合（批1 settlement_transactions，verification_settled，按 confirmed_at 落窗）----
+    // ---- 读当月核销聚合（批1 settlement_transactions，verification_settled，按 created_at 落窗）----
 
     /**
      * 当月通票总收入（已核销）= Σ verified_amount_cent，全部权益类型。
-     * 月窗 [monthStart, nextMonthStart) 按 confirmed_at；仅 verification_settled。
-     * <b>注</b>：批1 写 verification_settled 时未落 confirmed_at（NULL），生产口径需批1 补齐 confirmed_at 才有数据；
-     * 见服务类 settleMonth 头注与报告「与摸底不符处」。
+     * 月窗 [monthStart, nextMonthStart) 按 created_at（批1 双写时已填=核销记录创建≈核销日，语义正确；
+     * confirmed_at 是结算确认时间、双写时本应 NULL 故不用）；仅 verification_settled。
      */
     public long sumVerifiedRevenueCent(String projectId, Instant monthStart, Instant nextMonthStart) {
         Long sum = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(verified_amount_cent), 0)
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
-                   AND confirmed_at >= :start AND confirmed_at < :end
+                   AND created_at >= :start AND created_at < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                 """, monthWindow(projectId, monthStart, nextMonthStart), Long.class);
         return sum == null ? 0L : sum;
@@ -130,7 +129,7 @@ public class JdbcSettlementBillRepository {
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
                    AND entitlement_type = 'gift_drink'
-                   AND confirmed_at >= :start AND confirmed_at < :end
+                   AND created_at >= :start AND created_at < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                 """, monthWindow(projectId, monthStart, nextMonthStart), Long.class);
         return sum == null ? 0L : sum;
@@ -146,7 +145,7 @@ public class JdbcSettlementBillRepository {
                  WHERE transaction_type = 'verification_settled'
                    AND beneficiary_type = 'merchant'
                    AND merchant_id IS NOT NULL
-                   AND confirmed_at >= :start AND confirmed_at < :end
+                   AND created_at >= :start AND created_at < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                  GROUP BY merchant_id
                  ORDER BY verified_count DESC, merchant_id
