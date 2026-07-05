@@ -3,6 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps } from "../types";
 
 type CatalogRow = { id: string; name?: string; priceCent?: number; durationMinutes?: number; active?: boolean };
@@ -12,9 +13,29 @@ const TEXT = {
   title: "服务点单",
   description: "公司统一账户代收(2026-07-02最终拍板):客人扫公司收款码付款→服务员确认收款→舞者上台→完成时分账(管理费归公司,余额进舞者薪资提成,月结代扣个税)。履约前可取消(已收款的标待退款),完成后不可退。",
   loadFailed: "服务点单读取失败",
+  orderCount: "服务单数",
+  paidCount: "已收款",
+  completedCount: "已完成",
+  orderCountHelp: "当日服务单总数",
+  paidHelp: "已收款待履约",
+  completedHelp: "已完成分账",
+  focusClear: "清除筛选，返回全部",
 };
 
 const STATUS_LABELS: Record<string, string> = { created: "待收款", paid: "已收款", pending_accept: "待接单(旧)", accepted: "已接单(旧)", completed: "已完成", cancelled: "已取消" };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带 ?kpi= 参数重进本页，只渲染服务单表并按状态子集过滤。
+type KpiTarget = "orders" | "paid" | "completed";
+function readKpiFocusFromUrl(): KpiTarget | null {
+  if (typeof window === "undefined") return null;
+  const target = new URLSearchParams(window.location.search).get("kpi");
+  return target === "orders" || target === "paid" || target === "completed" ? target : null;
+}
+function kpiTitle(target: KpiTarget): string {
+  if (target === "paid") return TEXT.paidCount;
+  if (target === "completed") return TEXT.completedCount;
+  return TEXT.orderCount;
+}
 
 function money(cent?: number) {
   return cent === undefined || cent === null ? "—" : `¥${(cent / 100).toLocaleString("zh-CN")}`;
@@ -24,7 +45,7 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function ServiceOrdersPage({ api, setGlobalError, setActionResult }: AdminPageProps) {
+export function ServiceOrdersPage({ api, setGlobalError, setActionResult, navigateTo }: AdminPageProps) {
   const [date, setDate] = React.useState(today);
   const [catalog, setCatalog] = React.useState<CatalogRow[]>([]);
   const [orders, setOrders] = React.useState<OrderRow[]>([]);
@@ -34,6 +55,28 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult }: Admi
   const [feeMode, setFeeMode] = React.useState("none");
   const [feeValue, setFeeValue] = React.useState("");
   const [companyQr, setCompanyQr] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(target: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", target);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus(target);
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -79,6 +122,15 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult }: Admi
     await reload();
   };
 
+  const paidCount = orders.filter((row) => row.status === "paid").length;
+  const completedCount = orders.filter((row) => row.status === "completed").length;
+  // 聚焦时对服务单表做客户端筛选：仅过滤已加载内存数组，不发起后端查询。
+  const visibleOrders = kpiFocus === "paid"
+    ? orders.filter((row) => row.status === "paid")
+    : kpiFocus === "completed"
+      ? orders.filter((row) => row.status === "completed")
+      : orders;
+
   return (
     <section data-testid="service-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -122,17 +174,29 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult }: Admi
           <label>服务单日期:<input data-testid="svc-date" type="date" value={date} onChange={(event) => setDate(event.target.value || today())} /></label>
         </div>
         <h3>服务单(公司代收;完成时分账)</h3>
+        {kpiFocus ? (
+          <div className="admin-state" data-testid="service-orders-kpi-focus-banner">
+            正在查看：{kpiTitle(kpiFocus)}（{visibleOrders.length}）
+            <button type="button" data-testid="service-orders-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+          </div>
+        ) : (
+          <div className="admin-kpi-grid" data-testid="service-orders-summary">
+            <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orderCount}</span><button type="button" className="admin-kpi-value" data-testid="service-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orders.length}</button><small>{TEXT.orderCountHelp}</small></div>
+            <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.paidCount}</span><button type="button" className="admin-kpi-value" data-testid="service-orders-kpi-paid" onClick={() => enterKpiFocus("paid")}>{paidCount}</button><small>{TEXT.paidHelp}</small></div>
+            <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.completedCount}</span><button type="button" className="admin-kpi-value" data-testid="service-orders-kpi-completed" onClick={() => enterKpiFocus("completed")}>{completedCount}</button><small>{TEXT.completedHelp}</small></div>
+          </div>
+        )}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="service-orders-table">
             <thead><tr><th>单号</th><th>服务</th><th>价格</th><th>桌台</th><th>履约人</th><th>管理费</th><th>舞者应得</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
-              {orders.map((row) => (
+              {visibleOrders.map((row) => (
                 <tr key={row.id}>
                   <td>{row.id}</td>
                   <td>{row.itemName ?? "—"}</td>
                   <td>{money(row.priceCent)}</td>
                   <td>{row.tableId ?? "—"}</td>
-                  <td>{row.performerUserId ?? "—"}</td>
+                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.performerUserId}>{row.performerUserId ?? "—"}</TraceLink></td>
                   <td>{money(row.mgmtFeeCent)}</td>
                   <td>{money(row.dancerShareCent)}</td>
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}{row.cancelReason ? `(${row.cancelReason})` : ""}</td>

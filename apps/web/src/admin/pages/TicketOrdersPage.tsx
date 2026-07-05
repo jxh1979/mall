@@ -45,7 +45,32 @@ const TEXT = {
   status: "\u72b6\u6001",
   issueNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u7968",
   previewNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u6838\u9500\u9884\u68c0",
+  ordersHelp: "\u8ba2\u5355\u603b\u6570",
+  paidHelp: "\u5df2\u652f\u4ed8\u8ba2\u5355",
+  pendingIssueHelp: "\u672a\u51fa\u7968\u8ba2\u5355",
+  entitlementsHelp: "\u5df2\u53d1\u6743\u76ca",
+  verificationsHelp: "\u6838\u9500\u8bb0\u5f55",
+  selectedOrderHelp: "\u5f53\u524d\u9009\u4e2d",
+  focusClear: "\u6e05\u9664\u7b5b\u9009\uff0c\u8fd4\u56de\u5168\u90e8",
 };
+
+// KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u8ba2\u5355\u8868\u5e76\u6309\u5b50\u96c6\u8fc7\u6ee4\u3002
+// \u26a0\ufe0f\u4e0e\u5df2\u6709\u7684 ?focus=<\u8ba2\u5355\u5b9a\u4f4d>\uff08P1-B\uff09\u8bfb\u4e0d\u540c\u53c2\u6570\uff0c\u4e92\u4e0d\u5e72\u6270\uff1akpi \u805a\u7126\u8bfb ?kpi\uff0c\u8ba2\u5355\u5b9a\u4f4d\u8bfb focusObjectId\u3002
+type KpiTarget = "orders" | "paid" | "not_issued";
+type KpiFocus = { target: KpiTarget };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const target = new URLSearchParams(window.location.search).get("kpi");
+  if (target !== "orders" && target !== "paid" && target !== "not_issued") return null;
+  return { target };
+}
+
+function kpiFocusTitle(target: KpiTarget): string {
+  if (target === "paid") return TEXT.paid;
+  if (target === "not_issued") return TEXT.pendingIssue;
+  return TEXT.orders;
+}
 
 function formatAmount(amountCent: number | undefined) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(Number(amountCent ?? 0) / 100);
@@ -64,6 +89,31 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
   const [query, setQuery] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  // 浏览器后退/前进也能进出聚焦视图。AdminApp 的 popstate 只重建 route/focus，本页 ?kpi= 参数自理，互不干扰。
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // 点 KPI 数字 → 带 ?kpi= 参数重进本页（pathname 原样保留，子路径前缀由门户链路负责，只改查询串）。
+  function enterKpiFocus(target: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", target);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ target });
+  }
+
+  // 「返回全部」：清掉 kpi 参数（保留 focus 等其它参数），恢复完整页面。
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload: reloadResource } = useAdminResource(
     async () => {
@@ -83,15 +133,21 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
 
   const paidCount = orders.filter((order) => order.payStatus === "paid").length;
   const pendingIssueCount = orders.filter((order) => order.issueStatus !== "issued").length;
+  // KPI 聚焦子集：paid=已支付订单、not_issued=未出票订单、orders=全部。聚焦只客户端过滤已加载内存数组，不发后端查询。
+  const kpiOrders = kpiFocus?.target === "paid"
+    ? orders.filter((order) => order.payStatus === "paid")
+    : kpiFocus?.target === "not_issued"
+      ? orders.filter((order) => order.issueStatus !== "issued")
+      : orders;
   // 作下钻目标：focusObjectId 可能是订单 id 或订单号，两者都匹配
   const focusMatches = (order: TicketOrderRow) => !!focusObjectId && (order.id === focusObjectId || order.orderNo === focusObjectId);
-  const focusedOrder = focusObjectId ? orders.find(focusMatches) : undefined;
-  const keywordOrders = orders.filter((order) => rowMatchesKeyword(order, query));
+  const focusedOrder = focusObjectId ? kpiOrders.find(focusMatches) : undefined;
+  const keywordOrders = kpiOrders.filter((order) => rowMatchesKeyword(order, query));
   // 命中下钻订单时置顶，确保落在第 1 页可见并高亮；无 focus 时顺序完全不变
   const filteredOrders = focusedOrder
     ? [focusedOrder, ...keywordOrders.filter((order) => order.id !== focusedOrder.id)]
     : keywordOrders;
-  const paged = usePagedRows(filteredOrders, 10, query + "|" + (focusObjectId || ""));
+  const paged = usePagedRows(filteredOrders, 10, query + "|" + (focusObjectId || "") + "|" + (kpiFocus?.target || ""));
 
   React.useEffect(() => {
     if (focusedOrder) setSelectedOrderId(focusedOrder.id);
@@ -151,13 +207,20 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
         <div className="admin-state" data-testid="ticket-orders-focus">已从下钻定位到订单：{focusObjectId}{focusedOrder ? "（下表已置顶并高亮）" : "（未在当前订单列表中）"}</div>
       ) : null}
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reloadResource}>
+        {kpiFocus ? (
+          <div className="admin-state" data-testid="ticket-orders-kpi-focus-banner">
+            正在查看：{kpiFocusTitle(kpiFocus.target)}（{filteredOrders.length}）
+            <button type="button" data-testid="ticket-orders-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+          </div>
+        ) : (
+        <>
         <div className="admin-kpi-grid" data-testid="ticket-orders-summary">
-          <div className="admin-kpi-card"><span>{TEXT.orders}</span><strong>{orders.length}</strong><small>{TEXT.boundary}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.paid}</span><strong>{paidCount}</strong><small>paid</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.pendingIssue}</span><strong>{pendingIssueCount}</strong><small>not_issued</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.entitlements}</span><strong>{entitlements.length}</strong><small>{entitlements[0]?.entitlementCode ?? "-"}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.verifications}</span><strong>{verifications.length}</strong><small>{verifications[0]?.status ?? "-"}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong>{selectedLabel(selectedOrder)}</strong><small>{selectedOrder?.issueStatus ?? "-"}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orders}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orders.length}</button><small>{TEXT.ordersHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.paid}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-paid" onClick={() => enterKpiFocus("paid")}>{paidCount}</button><small>{TEXT.paidHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingIssue}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-not-issued" onClick={() => enterKpiFocus("not_issued")}>{pendingIssueCount}</button><small>{TEXT.pendingIssueHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.entitlements}</span><strong>{entitlements.length}</strong><small>{TEXT.entitlementsHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.verifications}</span><strong>{verifications.length}</strong><small>{TEXT.verificationsHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong>{selectedLabel(selectedOrder)}</strong><small>{formatBusinessStatus(selectedOrder?.issueStatus)}</small></div>
         </div>
 
         <div className="admin-form-row" data-testid="ticket-order-actions">
@@ -176,6 +239,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
           <span className="admin-muted-action" data-testid="ticket-order-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="ticket-orders-error" className="admin-inline-error">{formError}</div> : null}
+        </>
+        )}
 
         <div className="admin-form-row" data-testid="ticket-orders-filter">
           <input data-testid="ticket-orders-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索订单号 / 票种 / 渠道 / 支付/出票状态" />

@@ -47,7 +47,23 @@ const TEXT = {
   status: "状态",
   retryCount: "重试次数",
   updatedAt: "更新时间",
+  totalHelp: "四类读取接口",
+  pendingHelp: "待处理事件",
+  providersHelp: "涉及供应商",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点某一来源数字=带 ?kpi=<source> 参数重进本页，只渲染该来源的事件表。
+// 合法值取自 ENDPOINTS.source：retry_task / compensation_task / order_sync / voucher_verification。
+const KPI_SOURCES = ENDPOINTS.map((e) => e.source) as readonly string[];
+function readKpiFocusFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const target = new URLSearchParams(window.location.search).get("kpi");
+  return target && KPI_SOURCES.includes(target) ? target : null;
+}
+function sourceLabelOf(source: string): string {
+  return ENDPOINTS.find((e) => e.source === source)?.label ?? source;
+}
 
 type Endpoint = typeof ENDPOINTS[number];
 
@@ -81,6 +97,28 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
   const [query, setQuery] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<string | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(source: string) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", source);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus(source);
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -96,10 +134,13 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
   const pendingCount = rows.filter((row) => isPending(row.status)).length;
   const providerCount = new Set(rows.map((row) => row.providerCode ?? row.channelCode).filter(Boolean)).size;
   const representedSources = new Set(rows.map((row) => row.source)).size;
+  const sourceCount = (source: string) => rows.filter((row) => row.source === source).length;
   const selectedRetry = rows.find((row) => row.source === "retry_task");
   const selectedCompensation = rows.find((row) => row.source === "compensation_task");
-  const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
-  const paged = usePagedRows(filteredRows, 10, query);
+  // 聚焦时先按来源过滤内存数组，再叠加关键词过滤；不发起后端查询。
+  const kpiRows = kpiFocus ? rows.filter((row) => row.source === kpiFocus) : rows;
+  const filteredRows = kpiRows.filter((row) => rowMatchesKeyword(row, query));
+  const paged = usePagedRows(filteredRows, 10, query + "|" + (kpiFocus || ""));
 
   async function runAction(action: string, request: Record<string, unknown>, call: () => Promise<unknown>) {
     setBusyAction(action);
@@ -185,11 +226,20 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
       <TechDetails><div className="admin-generic-evidence" data-testid="integration-events-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="integration.retry_task.viewed / integration.compensation_task.viewed / integration.order_sync.viewed / integration.voucher_verification.viewed / local.integration_polling_checked" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
+        {kpiFocus ? (
+          <div className="admin-state" data-testid="integration-events-kpi-focus-banner">
+            正在查看：{sourceLabelOf(kpiFocus)}（{kpiRows.length}）
+            <button type="button" data-testid="integration-events-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+          </div>
+        ) : (
+        <>
         <div className="admin-kpi-grid" data-testid="integration-events-summary">
-          <div className="admin-kpi-card"><span>{TEXT.total}</span><strong>{rows.length}</strong><small>四类读取接口</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.pending}</span><strong>{pendingCount}</strong><small>{TEXT.status}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.providers}</span><strong>{providerCount}</strong><small>{TEXT.provider}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.sources}</span><strong>{representedSources}/{ENDPOINTS.length}</strong><small>retry / compensation / sync / voucher</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.total}</span><strong>{rows.length}</strong><small>{TEXT.totalHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.pending}</span><strong>{pendingCount}</strong><small>{TEXT.pendingHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.providers}</span><strong>{providerCount}</strong><small>{TEXT.providersHelp}</small></div>
+          {ENDPOINTS.map((endpoint) => (
+            <div key={endpoint.source} className="admin-kpi-card admin-kpi-card--clickable"><span>{endpoint.label}</span><button type="button" className="admin-kpi-value" data-testid={`integration-events-kpi-${endpoint.source}`} onClick={() => enterKpiFocus(endpoint.source)}>{sourceCount(endpoint.source)}</button><small>{TEXT.source}</small></div>
+          ))}
         </div>
 
         <div className="admin-form-grid" data-testid="integration-events-form">
@@ -222,6 +272,8 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
           <span className="admin-muted-action" data-testid="integration-events-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="integration-events-error" className="admin-inline-error">{formError}</div> : null}
+        </>
+        )}
 
         <div className="admin-form-row" data-testid="integration-events-filter">
           <input data-testid="integration-events-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索来源 / 任务号 / 供应商 / 状态" />

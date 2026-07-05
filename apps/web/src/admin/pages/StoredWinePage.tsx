@@ -43,7 +43,19 @@ const TEXT = {
   status: "状态",
   createdAt: "时间",
   auditNote: "完整后台验收领取",
+  totalBottlesHelp: "存酒记录总数",
+  storedHelp: "在线可领取",
+  totalQuantityHelp: "剩余可领数量",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带 ?kpi= 参数重进本页，只渲染存酒表并按子集过滤。
+type KpiTarget = "bottles" | "stored";
+function readKpiFocusFromUrl(): KpiTarget | null {
+  if (typeof window === "undefined") return null;
+  const target = new URLSearchParams(window.location.search).get("kpi");
+  return target === "bottles" || target === "stored" ? target : null;
+}
 
 function numberValue(value: unknown, fallback = 0) {
   const parsed = Number(value);
@@ -60,6 +72,28 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(target: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", target);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus(target);
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -73,7 +107,9 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
   const storedCount = rows.filter((row) => (row.status ?? "") === "stored").length;
   const totalQuantity = rows.reduce((sum, row) => sum + numberValue(row.quantity), 0);
 
-  const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
+  // 聚焦时先按子集过滤内存数组（stored=在线可领取），再叠加关键词与排序；不发起后端查询。
+  const kpiRows = kpiFocus === "stored" ? rows.filter((row) => (row.status ?? "") === "stored") : rows;
+  const filteredRows = kpiRows.filter((row) => rowMatchesKeyword(row, query));
   const sort = useSortedRows(filteredRows, {
     savedNo: (row) => row.savedNo ?? row.id,
     customer: (row) => row.customerName ?? row.customerId,
@@ -82,7 +118,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     status: (row) => row.status,
     createdAt: (row) => row.createdAt,
   });
-  const paged = usePagedRows(sort.sorted, 10, `${query}:${sort.key}:${sort.direction}`);
+  const paged = usePagedRows(sort.sorted, 10, `${query}:${sort.key}:${sort.direction}:${kpiFocus ?? ""}`);
 
   function validateClaim() {
     if (!selected) {
@@ -146,10 +182,17 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
       <TechDetails><div className="admin-generic-evidence" data-testid="stored-wine-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="bar.saved_bottle.viewed / bar.saved_bottle_picked_up" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
+        {kpiFocus ? (
+          <div className="admin-state" data-testid="stored-wine-kpi-focus-banner">
+            正在查看：{kpiFocus === "stored" ? TEXT.storedBottles : TEXT.totalBottles}（{kpiRows.length}）
+            <button type="button" data-testid="stored-wine-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+          </div>
+        ) : (
+        <>
         <div className="admin-kpi-grid" data-testid="stored-wine-summary">
-          <div className="admin-kpi-card"><span>{TEXT.totalBottles}</span><strong>{rows.length}</strong><small>{TEXT.totalBottles}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.storedBottles}</span><strong>{storedCount}</strong><small>{TEXT.onlineCheck}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.totalQuantity}</span><strong>{totalQuantity}</strong><small>{TEXT.quantity}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.totalBottles}</span><button type="button" className="admin-kpi-value" data-testid="stored-wine-kpi-bottles" onClick={() => enterKpiFocus("bottles")}>{rows.length}</button><small>{TEXT.totalBottlesHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.storedBottles}</span><button type="button" className="admin-kpi-value" data-testid="stored-wine-kpi-stored" onClick={() => enterKpiFocus("stored")}>{storedCount}</button><small>{TEXT.storedHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.totalQuantity}</span><strong>{totalQuantity}</strong><small>{TEXT.totalQuantityHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selectedBottle}</span><strong>{selected?.savedNo ?? "-"}</strong><small>{selected?.customerName ?? "-"}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.onlineCheck}</span><strong>必需</strong><small>{TEXT.onlineCheckHelp}</small></div>
         </div>
@@ -174,6 +217,8 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
           <span className="admin-muted-action" data-testid="stored-wine-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="stored-wine-error" className="admin-inline-error">{formError}</div> : null}
+        </>
+        )}
 
         <div className="admin-list-toolbar" data-testid="stored-wine-filter">
           <input data-testid="stored-wine-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索存酒号 / 客户 / 酒水 / 状态" />

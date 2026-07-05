@@ -41,7 +41,20 @@ const TEXT = {
   effective: "\u751f\u6548\u671f",
   createNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u52a8\u6001\u5b9a\u4ef7\u8349\u7a3f",
   publishReason: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u53d1\u5e03",
+  ruleCountHelp: "\u89c4\u5219\u603b\u6570",
+  draftHelp: "\u8349\u7a3f\u89c4\u5219",
+  publishedHelp: "\u5df2\u53d1\u5e03\u89c4\u5219",
+  focusClear: "\u6e05\u9664\u7b5b\u9009\uff0c\u8fd4\u56de\u5168\u90e8",
 };
+
+// KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u89c4\u5219\u8868\u5e76\u6309\u72b6\u6001\u5b50\u96c6\u8fc7\u6ee4\u3002
+type KpiTarget = "draft" | "published";
+
+function readKpiFocusFromUrl(): KpiTarget | null {
+  if (typeof window === "undefined") return null;
+  const target = new URLSearchParams(window.location.search).get("kpi");
+  return target === "draft" || target === "published" ? target : null;
+}
 
 function formatAmount(amountCent: number | undefined) {
   if (amountCent === undefined) return TEXT.noSimulation;
@@ -50,6 +63,16 @@ function formatAmount(amountCent: number | undefined) {
 
 function ruleLabel(rule: TicketDynamicPricingRuleRow | undefined) {
   return rule?.ruleName ?? rule?.id ?? "-";
+}
+
+// 调价方式页内映射（percent_delta/absolute_delta 属定价域专有词，不进全局码表）。
+const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
+  percent_delta: "百分比调整",
+  absolute_delta: "定额调整",
+};
+function adjustmentTypeLabel(type: string | undefined): string {
+  if (!type) return "-";
+  return ADJUSTMENT_TYPE_LABELS[type] ?? type;
 }
 
 export function DynamicPricingPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
@@ -62,6 +85,28 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
   const [simulation, setSimulation] = React.useState<TicketDynamicPricingSimulationResult | null>(null);
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
+  const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(target: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", target);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus(target);
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload: reloadResource } = useAdminResource(
     async () => {
@@ -73,6 +118,8 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
 
   const draftCount = rules.filter((rule) => rule.status === "draft").length;
   const publishedCount = rules.filter((rule) => rule.status === "published").length;
+  // 聚焦时对规则表做客户端筛选：仅过滤已加载的内存数组，不发起后端查询。
+  const visibleRules = kpiFocus ? rules.filter((rule) => rule.status === kpiFocus) : rules;
 
   async function runAction(action: string, request: () => Promise<unknown>, reload = true) {
     setBusyAction(action);
@@ -152,11 +199,18 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
       <TechDetails><div className="admin-generic-evidence" data-testid="dynamic-pricing-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="ticket_dynamic_pricing.viewed / created / simulated / published" />
       <AdminDataState loading={loading} error={error} empty={rules.length === 0} onRetry={reloadResource}>
+        {kpiFocus ? (
+          <div className="admin-state" data-testid="dynamic-pricing-kpi-focus-banner">
+            正在查看：{formatBusinessStatus(kpiFocus)}（{visibleRules.length}）
+            <button type="button" data-testid="dynamic-pricing-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+          </div>
+        ) : (
+        <>
         <div className="admin-kpi-grid" data-testid="dynamic-pricing-summary">
-          <div className="admin-kpi-card"><span>{TEXT.ruleCount}</span><strong>{rules.length}</strong><small>{TEXT.boundary}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.draftCount}</span><strong>{draftCount}</strong><small>draft</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.publishedCount}</span><strong>{publishedCount}</strong><small>published</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedRule}</span><strong>{ruleLabel(selectedRule)}</strong><small>{selectedRule?.salesChannel ?? salesChannel}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.ruleCount}</span><strong>{rules.length}</strong><small>{TEXT.ruleCountHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.draftCount}</span><button type="button" className="admin-kpi-value" data-testid="dynamic-pricing-kpi-draft" onClick={() => enterKpiFocus("draft")}>{draftCount}</button><small>{TEXT.draftHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.publishedCount}</span><button type="button" className="admin-kpi-value" data-testid="dynamic-pricing-kpi-published" onClick={() => enterKpiFocus("published")}>{publishedCount}</button><small>{TEXT.publishedHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedRule}</span><strong>{ruleLabel(selectedRule)}</strong><small>{formatBusinessStatus(selectedRule?.salesChannel ?? salesChannel)}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.finalPrice}</span><strong>{formatAmount(simulation?.finalPriceCent)}</strong><small>{simulation?.matchedRuleId ?? TEXT.noSimulation}</small></div>
         </div>
 
@@ -179,6 +233,8 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
           />
         </div>
         {formError ? <div data-testid="dynamic-pricing-error" className="admin-inline-error">{formError}</div> : null}
+        </>
+        )}
 
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="dynamic-pricing-table">
@@ -186,14 +242,14 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
               <tr><th>{TEXT.select}</th><th>{TEXT.ruleName}</th><th>{TEXT.channel}</th><th>{TEXT.priority}</th><th>{TEXT.adjustment}</th><th>{TEXT.status}</th><th>{TEXT.effective}</th></tr>
             </thead>
             <tbody>
-              {rules.map((rule) => (
+              {visibleRules.map((rule) => (
                 <tr key={rule.id}>
                   <td><input type="radio" data-testid={`dynamic-pricing-select-${rule.id}`} checked={(selectedRule?.id ?? "") === rule.id} onChange={() => setSelectedRuleId(rule.id)} /></td>
                   <td>{rule.ruleName ?? rule.id}</td>
                   <td>{formatBusinessStatus(rule.salesChannel)}</td>
                   <td>{rule.priority ?? "-"}</td>
-                  <td>{rule.adjustmentType ?? "-"} {rule.adjustmentRate ?? ""}</td>
-                  <td>{rule.status ?? "-"}</td>
+                  <td>{adjustmentTypeLabel(rule.adjustmentType)} {rule.adjustmentRate ?? ""}</td>
+                  <td>{formatBusinessStatus(rule.status)}</td>
                   <td>{rule.effectiveFrom ?? "-"} / {rule.effectiveTo ?? "-"}</td>
                 </tr>
               ))}

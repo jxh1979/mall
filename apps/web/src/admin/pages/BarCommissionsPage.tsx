@@ -36,7 +36,17 @@ const TEXT = {
   time: "时间",
   sales: "销售人员 15%",
   nonSales: "非销售人员 10%",
+  excludeTicketsHelp: "提成不计通票金额",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带 ?kpi= 参数重进本页，只渲染提成表并按销售/非销售子集过滤。
+type KpiTarget = "sales" | "non_sales";
+function readKpiFocusFromUrl(): KpiTarget | null {
+  if (typeof window === "undefined") return null;
+  const target = new URLSearchParams(window.location.search).get("kpi");
+  return target === "sales" || target === "non_sales" ? target : null;
+}
 
 function firstBill(order: BarOrderRow | undefined): BarBillRow | undefined {
   return order?.bills?.[0] ?? (order?.billId ? { id: order.billId, status: "created" } : undefined);
@@ -66,6 +76,28 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(target: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", target);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus(target);
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -80,6 +112,12 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   const salesOrders = orders.filter((order) => commissionRate(order) === "15%").length;
   const nonSalesOrders = orders.length - salesOrders;
   const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0);
+  // 聚焦时对提成表做客户端筛选：sales=15%口径、non_sales=其余；仅过滤已加载内存数组，不发后端查询。
+  const visibleOrders = kpiFocus === "sales"
+    ? orders.filter((order) => commissionRate(order) === "15%")
+    : kpiFocus === "non_sales"
+      ? orders.filter((order) => commissionRate(order) !== "15%")
+      : orders;
 
   async function calculateCommission() {
     if (!selectedOrder || !billId) {
@@ -115,11 +153,18 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
       <TechDetails><div className="admin-generic-evidence" data-testid="bar-commissions-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="bar.commission.read / bar.commission.calculated" />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
+        {kpiFocus ? (
+          <div className="admin-state" data-testid="bar-commissions-kpi-focus-banner">
+            正在查看：{kpiFocus === "sales" ? TEXT.salesRate : TEXT.nonSalesRate}（{visibleOrders.length}）
+            <button type="button" data-testid="bar-commissions-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+          </div>
+        ) : (
+        <>
         <div className="admin-kpi-grid" data-testid="bar-commissions-summary">
           <div className="admin-kpi-card"><span>{TEXT.orderCount}</span><strong>{orders.length}</strong><small>{formatAmount(totalAmount)}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.salesRate}</span><strong>15%</strong><small>{salesOrders} 单</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.nonSalesRate}</span><strong>10%</strong><small>{nonSalesOrders} 单</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.excludeTickets}</span><strong>是</strong><small>includeTicketAmount=false</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.salesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-sales" onClick={() => enterKpiFocus("sales")}>{salesOrders}</button><small>15% · {salesOrders} 单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.nonSalesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-non-sales" onClick={() => enterKpiFocus("non_sales")}>{nonSalesOrders}</button><small>10% · {nonSalesOrders} 单</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.excludeTickets}</span><strong>是</strong><small>{TEXT.excludeTicketsHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selectedBill}</span><strong>{billId || "-"}</strong><small>{selectedOrder?.orderNo ?? "-"}</small></div>
         </div>
 
@@ -128,6 +173,8 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
           <span className="admin-muted-action" data-testid="bar-commissions-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="bar-commissions-error" className="admin-inline-error">{formError}</div> : null}
+        </>
+        )}
 
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-commissions-table">
@@ -135,7 +182,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
               <tr><th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.bill}</th><th>{TEXT.amount}</th><th>{TEXT.sellerRole}</th><th>{TEXT.rate}</th><th>{TEXT.status}</th><th>{TEXT.time}</th></tr>
             </thead>
             <tbody>
-              {orders.map((order) => {
+              {visibleOrders.map((order) => {
                 const rowBill = firstBill(order);
                 return (
                   <tr key={order.id}>

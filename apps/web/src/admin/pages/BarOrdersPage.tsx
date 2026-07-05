@@ -54,7 +54,19 @@ const TEXT = {
   billNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u8d26\u5355",
   deliverNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u54c1",
   settleNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u7ed3\u7b97",
+  focusClear: "\u6e05\u9664\u7b5b\u9009\uff0c\u8fd4\u56de\u5168\u90e8",
 };
+
+// KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u8ba2\u5355\u8868\u5e76\u6309\u5b50\u96c6\u8fc7\u6ee4\u3002
+type KpiTarget = "orders" | "open";
+function readKpiFocusFromUrl(): KpiTarget | null {
+  if (typeof window === "undefined") return null;
+  const target = new URLSearchParams(window.location.search).get("kpi");
+  return target === "orders" || target === "open" ? target : null;
+}
+function isOpenOrder(order: BarOrderRow) {
+  return !["paid", "cancelled"].includes(order.status ?? "");
+}
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
   ordered: TEXT.ordered,
@@ -84,13 +96,37 @@ function firstBillId(order: BarOrderRow | undefined) {
 
 export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
-  const pagedOrders = usePagedRows(orders, 10, orders.length);
+  const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+  // 聚焦时对订单表做客户端筛选：仅过滤已加载的内存数组，不发起后端查询。
+  const visibleOrders = kpiFocus === "open" ? orders.filter(isOpenOrder) : orders;
+  const pagedOrders = usePagedRows(visibleOrders, 10, `${visibleOrders.length}|${kpiFocus ?? ""}`);
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
   const [paymentChannel, setPaymentChannel] = React.useState("aggregate_pay");
   const [cashierStaffId, setCashierStaffId] = React.useState("");
   const [posTransactionNo, setPosTransactionNo] = React.useState("");
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(target: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", target);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus(target);
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -181,9 +217,16 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       <TechDetails><div className="admin-generic-evidence" data-testid="bar-orders-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="bar.order.read / bar.order.bill / bar.order.deliver / bar.bill.settle" />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
+        {kpiFocus ? (
+          <div className="admin-state" data-testid="bar-orders-kpi-focus-banner">
+            正在查看：{kpiFocus === "open" ? TEXT.openOrders : TEXT.orderCount}（{visibleOrders.length}）
+            <button type="button" data-testid="bar-orders-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+          </div>
+        ) : (
+        <>
         <div className="admin-kpi-grid" data-testid="bar-orders-summary">
-          <div className="admin-kpi-card"><span>{TEXT.orderCount}</span><strong>{orders.length}</strong><small>{TEXT.currentRows}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.openOrders}</span><strong>{openOrders}</strong><small>{TEXT.openOrdersHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orderCount}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orders.length}</button><small>{TEXT.currentRows}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.openOrders}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-open" onClick={() => enterKpiFocus("open")}>{openOrders}</button><small>{TEXT.openOrdersHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.bill}</span><strong>{billCount}</strong><small>{TEXT.billHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.commission}</span><strong>{salesCommissionOrders}</strong><small>{TEXT.commissionHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong>{formatAmount(totalAmount)}</strong><small>{TEXT.amountHelp}</small></div>
@@ -221,6 +264,8 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           <span className="admin-muted-action" data-testid="bar-order-pos-boundary">{TEXT.posBoundary}</span>
         </div>
         {formError ? <div data-testid="bar-orders-error" className="admin-inline-error">{formError}</div> : null}
+        </>
+        )}
 
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-orders-table">

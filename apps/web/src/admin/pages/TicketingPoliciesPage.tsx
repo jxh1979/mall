@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { TraceLink } from "../components/TraceLink";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -54,7 +55,7 @@ function yuan(cent: number | null): string {
   return cent == null ? "—" : (cent / 100).toFixed(2);
 }
 
-export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo }: AdminPageProps) {
   const [tickets, setTickets] = React.useState<TicketTypeRow[]>([]);
   const [templates, setTemplates] = React.useState<EntitlementTemplateRow[]>([]);
   const [rules, setRules] = React.useState<PriceRuleRow[]>([]);
@@ -253,7 +254,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
             {templates.map((row) => (
               <tr key={row.id}>
                 <td>{row.name}</td>
-                <td>{row.entitlementType}</td>
+                <td>{formatBusinessStatus(row.entitlementType)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
               </tr>
             ))}
@@ -264,7 +265,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <input aria-label="模板名称" placeholder="模板名称（如 入园1次）" value={tplForm.name} onChange={(event) => setTplForm({ ...tplForm, name: event.target.value })} />
         <select aria-label="权益类型" value={tplForm.entitlementType} onChange={(event) => setTplForm({ ...tplForm, entitlementType: event.target.value })}>
           {ENTITLEMENT_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
+            <option key={t} value={t}>{formatBusinessStatus(t)}</option>
           ))}
         </select>
         <input aria-label="默认次数" type="number" min={1} value={tplForm.totalTimes} onChange={(event) => setTplForm({ ...tplForm, totalTimes: event.target.value })} placeholder="默认次数" />
@@ -311,7 +312,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           <tbody>
             {rules.map((row) => (
               <tr key={row.id}>
-                <td>{tickets.find((t) => t.id === row.ticketTypeId)?.ticketName ?? row.ticketTypeId}</td>
+                <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={row.ticketTypeId}>{tickets.find((t) => t.id === row.ticketTypeId)?.ticketName ?? row.ticketTypeId}</TraceLink></td>
                 <td>{VARIANT_LABELS[row.variantType] ?? row.variantType}</td>
                 <td>{row.priceMode === "fixed_price" ? "固定价" : "按基础价折扣"}</td>
                 <td>{row.priceMode === "fixed_price" ? `¥${yuan(row.weekdayPriceCent)}` : row.discountRate != null ? `${Math.round(Number(row.discountRate) * 100)}%` : "—"}</td>
