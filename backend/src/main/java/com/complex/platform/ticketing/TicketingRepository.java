@@ -75,6 +75,20 @@ public interface TicketingRepository {
         return false;
     }
 
+    /**
+     * 结算重构批3-3(PRD §6.3)：游乐「当天无限」——记录该权益在该自然日的首次激活
+     * (唯一键 entitlement_id+usage_date)。返回 true=本次真插入(当天首刷,调用方应消耗一次)；
+     * false=当天已激活/并发抢输(放行不消耗)。default 恒 true 兼容假实现。
+     */
+    default boolean recordEntitlementDayActivation(String entitlementId, java.time.LocalDate usageDate, java.time.Instant now) {
+        return true;
+    }
+
+    /** 结算重构批3-3：该权益在该自然日是否已有激活记录(当天已激活→放行不消耗)。default false。 */
+    default boolean hasEntitlementDayActivation(String entitlementId, java.time.LocalDate usageDate) {
+        return false;
+    }
+
     IssuedEntitlementRecord updateIssuedEntitlement(IssuedEntitlementRecord entitlement);
 
     List<OfflineEntitlementResponse> listOfflineEntitlements(String merchantId, String venueId, int limit);

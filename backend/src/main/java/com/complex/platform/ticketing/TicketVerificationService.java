@@ -430,6 +430,16 @@ public class TicketVerificationService {
                 return sessionResponse; // 放行不消耗(本场次二次入场) → 直接返回；首入场则 fall-through 走下方正常消耗。
             }
         }
+        // 结算重构批3-3(PRD §6.3)：游乐「当天无限」——仅 consumption_window=unlimited_in_day 走按自然日激活判定；
+        // 其余零改动。返回非 null=当天已激活放行不消耗(短路)；null=当天首刷/剩余为 0 fall-through 走下方正常消耗
+        // (剩余为 0 时 atomicUseEntitlement 失败 → ENTITLEMENT_USED_UP,即单人票跨日作废/多次票天天各扣尽后作废)。
+        if (DAY_WINDOW.equals(entitlement.consumptionWindow())) {
+            VerificationResponse dayResponse =
+                    verifyUnlimitedInDay(entitlement, request, credential, sourceType, clientTaskId, windowValid, signatureValid, now);
+            if (dayResponse != null) {
+                return dayResponse; // 当天已激活/并发抢输 → 放行不消耗直接返回；当天首刷则 fall-through 正常消耗。
+            }
+        }
         IssuedEntitlementRecord updated = repository.atomicUseEntitlement(entitlement.id(), now)
                 .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "entitlement has no remaining times"));
         // R5 T5 多人票：本次核销人数 = 票面 num_people（同场次集中核销），不可超 num_people。
@@ -534,6 +544,10 @@ public class TicketVerificationService {
     // 结算重构批3-2(PRD §6.2)：入场资格消耗单位——按场次核销(入过场当场次持续进出不重复消耗、过场作废)。
     private static final String SESSION_WINDOW = "per_session";
 
+    // 结算重构批3-3(PRD §6.3)：游乐消耗单位——按自然日激活(每自然日首刷消耗一次、当天无限、跨日新扣一次)。
+    private static final String DAY_WINDOW = "unlimited_in_day";
+    private static final String DAY_REPLAY_REASON = "day_replay";
+
     /**
      * 结算重构批3-2(PRD §6.2)：入场资格「场次规则」核销判定（consumption_window=per_session）。
      * <ul>
@@ -617,6 +631,63 @@ public class TicketVerificationService {
                 null,
                 // 放行不消耗：不落结算价（本场次首入已在正常消耗路径落过一次，二次进出不再重复计收入）。
                 null);
+    }
+
+    /**
+     * 结算重构批3-3(PRD §6.3)：游乐「当天无限」核销判定(consumption_window=unlimited_in_day)。
+     * 口径(2026-07-04 用户拍板)：每次核销激活「一个整天无限」——每自然日首刷消耗一次(扣次+落当天结算价+积分/结算事件);
+     * 同一权益当天再刷判「已激活」放行、不重复扣次不重复计费;跨自然日=新的一天再消耗一次(从剩余次数再扣)。
+     * <ul>
+     *   <li>当天已激活(day_activations 有本权益本 usage_date 记录) → 放行【不消耗】：落 success/day_replay 记录
+     *       (不 atomicUseEntitlement、不落结算价、不发积分/结算事件),返回 response(调用方短路)。</li>
+     *   <li>当天未激活且剩余 > 0 → INSERT ON CONFLICT DO NOTHING：真插(rows>0)→ 返回 null → 调用方 fall-through 正常消耗一次;
+     *       并发抢输(rows=0)→ 放行不消耗(落 day_replay)。</li>
+     *   <li>当天未激活且剩余 = 0 → 不插激活(不留孤儿放行位)、返回 null → fall-through → atomicUseEntitlement 失败
+     *       → ENTITLEMENT_USED_UP。单人票 total=1 次日即此路(跨日作废);多次票 total=N 天天各扣一次、扣尽后此路。</li>
+     * </ul>
+     * ponytail：不做跨日作废报错——跨日=新自然日再消耗,单人靠 total=1 自然 used_up、多次靠 total=N 保留,复用现有次数模型。
+     * 自然日用系统默认时区落墙钟本地日(与批3-2 一致);若日后按各 venue 独立时区,在此换算即可,接口不变。
+     */
+    private VerificationResponse verifyUnlimitedInDay(
+            IssuedEntitlementRecord entitlement,
+            com.complex.platform.ticketing.dto.VerificationRequest request,
+            TicketCredentialRecord credential,
+            String sourceType,
+            String clientTaskId,
+            Boolean windowValid,
+            Boolean signatureValid,
+            Instant now) {
+        java.time.LocalDate usageDate = now.atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+        // 当天已激活 → 放行不消耗。
+        if (repository.hasEntitlementDayActivation(entitlement.id(), usageDate)) {
+            return saveDayReplay(entitlement, request, credential, sourceType, clientTaskId, windowValid, signatureValid, now);
+        }
+        // 当天未激活但剩余为 0 → 不插激活(避免落孤儿放行位使已尽权益当天再被放行),fall-through 让 atomicUseEntitlement 报 used_up。
+        if (entitlement.remainingTimes() <= 0) {
+            return null;
+        }
+        // 当天首刷:唯一键(entitlement_id,usage_date)防并发。真插=本自然日首刷 → fall-through 正常消耗一次;
+        // 并发另一路抢先插=本路 false → 放行不消耗(与"当天已激活"同)。
+        if (!repository.recordEntitlementDayActivation(entitlement.id(), usageDate, now)) {
+            return saveDayReplay(entitlement, request, credential, sourceType, clientTaskId, windowValid, signatureValid, now);
+        }
+        return null; // 当天首刷 → 调用方 fall-through 正常消耗一次。
+    }
+
+    /** 批3-3：当天无限"放行不消耗"的 success 核销记录(settlement_price 为 null,不落新结算收入)。 */
+    private VerificationResponse saveDayReplay(
+            IssuedEntitlementRecord entitlement,
+            com.complex.platform.ticketing.dto.VerificationRequest request,
+            TicketCredentialRecord credential,
+            String sourceType,
+            String clientTaskId,
+            Boolean windowValid,
+            Boolean signatureValid,
+            Instant now) {
+        VerificationRecord replay = repository.saveVerification(sessionVerificationRecord(
+                entitlement, request, credential, sourceType, clientTaskId, windowValid, signatureValid, now,
+                DAY_REPLAY_REASON));
+        return new VerificationResponse(replay.id(), replay.verificationNo(), replay.status(), replay.resultReason());
     }
 
     /**

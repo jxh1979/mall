@@ -754,6 +754,35 @@ class JdbcTicketingRepository implements TicketingRepository {
         return c != null && c > 0;
     }
 
+    // ===== 结算重构批3-3(PRD §6.3) 游乐「当天无限」：按自然日激活留痕(不引 bar/venue 域类型) =====
+
+    @Override
+    public boolean recordEntitlementDayActivation(String entitlementId, java.time.LocalDate usageDate, java.time.Instant now) {
+        // 当天首刷留痕：唯一键(entitlement_id,usage_date) ON CONFLICT DO NOTHING。返回 true=本次真插入(当天首刷)。
+        // 并发同权益同自然日多路核销只一路得 true(真消耗一次),其余得 false(放行不消耗),杜绝当天重复扣次。
+        int rows = jdbcTemplate.update("""
+                INSERT INTO entitlement_day_activations (id, entitlement_id, usage_date, first_activated_at)
+                VALUES (:id, :entitlement_id, :usage_date, :first_activated_at)
+                ON CONFLICT (entitlement_id, usage_date) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", "eda_" + java.util.UUID.randomUUID().toString().replace("-", ""))
+                .addValue("entitlement_id", entitlementId)
+                .addValue("usage_date", usageDate)
+                .addValue("first_activated_at", now.atOffset(java.time.ZoneOffset.UTC)));
+        return rows > 0;
+    }
+
+    @Override
+    public boolean hasEntitlementDayActivation(String entitlementId, java.time.LocalDate usageDate) {
+        Integer c = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1) FROM entitlement_day_activations
+                 WHERE entitlement_id = :entitlement_id AND usage_date = :usage_date
+                """, new MapSqlParameterSource()
+                .addValue("entitlement_id", entitlementId)
+                .addValue("usage_date", usageDate), Integer.class);
+        return c != null && c > 0;
+    }
+
     @Override
     public TicketCredentialRecord saveTicketCredential(TicketCredentialRecord credential) {
         jdbcTemplate.update("""
