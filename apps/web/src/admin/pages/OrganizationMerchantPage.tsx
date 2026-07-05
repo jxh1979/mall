@@ -180,16 +180,17 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             <div className="admin-section-title">经营主体</div>
             <div ref={entitiesTableRef} className={`admin-table-scroll${activeTable === "entities" ? " admin-section-highlight" : ""}`} data-testid="organization-entities-section">
               <table className="admin-table" data-testid="organization-entities-table">
-                <thead><tr><th>主体</th><th>编码</th><th>类型</th><th>状态</th></tr></thead>
-                <tbody>{entities.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.orgType)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+                <thead><tr><th>主体</th><th>统一社会信用代码</th><th>主体角色</th><th>状态</th></tr></thead>
+                <tbody>{entities.map((row) => <tr key={row.id}><td>{display(row.entityName)}</td><td>{display(row.unifiedSocialCreditCode)}</td><td>{formatBusinessStatus(row.entityRole)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
               </table>
             </div>
 
             <div className="admin-section-title">商户档案{merchantStatusFilter ? <span className="admin-muted-action" data-testid="organization-merchants-filter-hint">（已按“正常商户”筛选）</span> : null}</div>
             <div ref={merchantsTableRef} className={`admin-table-scroll${activeTable === "merchants" ? " admin-section-highlight" : ""}`} data-testid="organization-merchants-section">
               <table className="admin-table" data-testid="organization-merchants-table">
-                <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
-                <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
+                {/* 后端无“公司名/风险/留痕证据”字段（原按臆造字段读致整表“-”），列对齐真实字段：联系人/联系电话替换。 */}
+                <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th></tr></thead>
+                <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}><td>{display(row.merchantName)}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
               </table>
             </div>
 

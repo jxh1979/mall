@@ -720,21 +720,31 @@ export type MerchantScopeBillRow = {
 
 
 
+// 平台域（platform）后端 JSON 为 snake_case（application.yml 全局 SNAKE_CASE），
+// adminClient.unwrap 已把响应键统一转 camelCase——前端按「后端真实字段的 camel 形」读。
+// 旧的臆造字段（name/code/orgType、displayName/companyName 等）后端不存在，保留 optional 供他页过渡，勿再新增读取。
 export type BusinessEntityRow = {
   id: string;
+  entityName?: string;
+  entityRole?: string;
+  unifiedSocialCreditCode?: string;
+  legalRepresentative?: string;
+  bankAccountRef?: string;
+  status?: string;
+  createdAt?: string;
   name?: string;
   code?: string;
   orgType?: string;
-  status?: string;
-  createdAt?: string;
 };
 
 export type GovernanceProjectRow = {
   id: string;
   merchantId?: string;
+  venueType?: string;
   name?: string;
   code?: string;
-  venueType?: string;
+  floor?: string;
+  capacity?: number;
   status?: string;
 };
 
@@ -751,17 +761,27 @@ export type GovernanceSpaceRow = {
 
 export type MerchantAdmissionRow = {
   id: string;
-  admissionStep?: string;
-  organizationId?: string;
-  displayName?: string;
-  companyName?: string;
+  merchantName?: string;
+  merchantType?: string;
+  businessEntityId?: string;
+  contractEntityId?: string;
+  settlementEntityId?: string;
+  contactName?: string;
+  contactPhone?: string;
+  ownerPerson?: string;
   mallBlockCode?: string;
   areaSquareMeter?: number | string;
   leasedAreaSquareMeter?: number | string;
   secondaryContactName?: string;
+  secondaryContactPhone?: string;
   rentPerSquareMeter?: number | string;
   cooperationForm?: string;
   status?: string;
+  createdAt?: string;
+  admissionStep?: string;
+  organizationId?: string;
+  displayName?: string;
+  companyName?: string;
   riskLevel?: string;
   auditEvidenceRef?: string;
 };

@@ -162,6 +162,12 @@ const STATUS_LABELS: Record<string, string> = {
   web: "网页端",
   miniapp: "小程序",
   channel: "第三方渠道",
+  // 经营主体角色（platform 域 entity_role）
+  operation: "运营主体",
+  // 商户合作形式（platform 域 cooperation_form）
+  fixed_rent_plus_commission: "固定租金+抽成",
+  revenue_share: "收入分成",
+  fixed_rent: "固定租金",
 };
 
 export function formatBusinessStatus(code: string | null | undefined): string {
