@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AccessUserRow, AdminPageProps, PermissionTemplateRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 function templateLabel(template: PermissionTemplateRow) {
   return template.templateName ?? template.name ?? template.id;
@@ -34,6 +35,8 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  // 行明细抽屉：整行可点 → 该员工账号完整字段（账号类型/状态中文·组织商户显名）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -135,6 +138,30 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusObjectId, rows.length]);
 
+  function orgDisplay(id?: string | null) {
+    return id ? (orgNames[id] ?? id) : "—";
+  }
+  function merchantDisplay(id?: string | null) {
+    return id ? (merchantNames[id] ?? id) : "—";
+  }
+
+  function openUserDetail(row: AccessUserRow) {
+    setDetail({
+      title: `员工账号 · ${row.username}`,
+      fields: [
+        { label: "员工账号", value: row.username },
+        { label: "手机号", value: row.phone ?? "—" },
+        { label: "账号类型", value: formatBusinessStatus(row.accountType) },
+        { label: "组织", value: orgDisplay(row.organizationId) },
+        { label: "商户", value: merchantDisplay(row.merchantId) },
+        { label: "状态", value: formatBusinessStatus(row.status ?? "active") },
+        { label: "开通方式", value: row.createdVia ? formatBusinessStatus(row.createdVia) : "—" },
+        { label: "授权凭据", value: row.consentReference ?? "—" },
+        { label: "证据附件", value: row.evidenceAttachmentIds?.length ? row.evidenceAttachmentIds.join("、") : "—" },
+      ],
+    });
+  }
+
   return (
     <section data-testid="access-users-page">
       <AdminPageHeader title="员工账号" description="管理员工账号、岗位角色和企业微信同步结果；禁用、手动录入和分配权限模板必须留痕。" />
@@ -172,7 +199,11 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
             <tbody>{rows.length === 0 ? (
               <tr><td colSpan={6} className="admin-muted-action">暂无员工账号，可通过上方表单手动录入并套用权限模板。</td></tr>
             ) : rows.map((row) => (
-              <tr key={row.id} data-testid={`access-user-row-${row.id}`} className={row.id === focusObjectId ? "admin-row-selected" : undefined}>
+              <tr key={row.id} data-testid={`access-user-row-${row.id}`}
+                className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`}
+                tabIndex={0}
+                onClick={() => openUserDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openUserDetail(row); } }}>
                 <td>{row.username}</td>
                 <td>{row.phone ?? "-"}</td>
                 <td>{formatBusinessStatus(row.accountType)}</td>
@@ -184,6 +215,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

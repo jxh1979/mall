@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, GovernanceSpaceRow, MerchantAdmissionRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEXT = {
   title: "集团/综合体拓扑",
@@ -47,6 +48,8 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
   const [spaces, setSpaces] = React.useState<GovernanceSpaceRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：拓扑关系表 / 空间点位表整行可点 → 该行完整字段（枚举中文·商户可溯源）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -106,6 +109,35 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
   const isFocused = (merchantId?: string, projectId?: string) =>
     !!focusObjectId && (focusObjectId === merchantId || focusObjectId === projectId);
 
+  function openTopologyDetail(entity: BusinessEntityRow | undefined, merchant: MerchantAdmissionRow, project: GovernanceProjectRow | undefined) {
+    setDetail({
+      title: `拓扑关系 · ${display(merchant.merchantName)}`,
+      fields: [
+        { label: "经营主体", value: display(entity?.entityName) },
+        { label: "统一社会信用代码", value: display(entity?.unifiedSocialCreditCode) },
+        { label: "商户", value: merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.merchantName)}</TraceLink> : display(merchant.merchantName) },
+        { label: "项目", value: display(project?.name) },
+        { label: "项目编码", value: display(project?.code) },
+        { label: "业态", value: display(project?.venueType) },
+        { label: "状态", value: formatBusinessStatus(project?.status ?? merchant.status) },
+      ],
+    });
+  }
+
+  function openSpaceDetail(space: GovernanceSpaceRow, project: GovernanceProjectRow | undefined) {
+    setDetail({
+      title: `空间点位 · ${display(space.spaceName)}`,
+      fields: [
+        { label: "空间", value: display(space.spaceName) },
+        { label: "所属项目", value: display(project?.name ?? space.projectId) },
+        { label: "楼层", value: display(space.floorNo) },
+        { label: "面积(㎡)", value: display(space.areaSquareMeter) },
+        { label: "空间类型", value: formatBusinessStatus(space.spaceType) },
+        { label: "状态", value: formatBusinessStatus(space.status) },
+      ],
+    });
+  }
+
   const topologySection = (
     <>
       <div className="admin-section-title">主体 - 商户 - 项目关系</div>
@@ -118,11 +150,15 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
             const rows = merchantProjects.length ? merchantProjects : [undefined];
             return rows.map((project, index) => (
               <tr key={`${merchant.id}-${project?.id ?? "no-project"}-${index}`}
+                data-testid={`governance-topology-row-${merchant.id}-${project?.id ?? "none"}`}
                 data-focus-node={focusObjectId && (focusObjectId === merchant.id || focusObjectId === project?.id) ? focusObjectId : undefined}
-                className={isFocused(merchant.id, project?.id) ? "admin-row-selected" : undefined}>
+                className={`admin-row-clickable${isFocused(merchant.id, project?.id) ? " admin-row-selected" : ""}`}
+                tabIndex={0}
+                onClick={() => openTopologyDetail(entity, merchant, project)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTopologyDetail(entity, merchant, project); } }}>
                 <td>{display(entity?.entityName)}</td>
                 <td>{display(entity?.unifiedSocialCreditCode)}</td>
-                <td>{merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.merchantName)}</TraceLink> : display(merchant.merchantName)}</td>
+                <td onClick={(event) => event.stopPropagation()}>{merchant.id ? <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={merchant.id}>{display(merchant.merchantName)}</TraceLink> : display(merchant.merchantName)}</td>
                 <td>{display(project?.name)}</td>
                 <td>{display(project?.code)}</td>
                 <td>{display(project?.venueType)}</td>
@@ -144,7 +180,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
           <tbody>{spaces.map((space) => {
             const project = projects.find((item) => item.id === space.projectId);
             const spaceFocused = !!focusObjectId && (focusObjectId === space.id || focusObjectId === space.projectId);
-            return <tr key={space.id} className={spaceFocused ? "admin-row-selected" : undefined}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatBusinessStatus(space.spaceType)}</td><td>{formatBusinessStatus(space.status)}</td></tr>;
+            return <tr key={space.id} data-testid={`governance-space-row-${space.id}`} className={`admin-row-clickable${spaceFocused ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openSpaceDetail(space, project)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSpaceDetail(space, project); } }}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatBusinessStatus(space.spaceType)}</td><td>{formatBusinessStatus(space.status)}</td></tr>;
           })}</tbody>
         </table>
       </div>
@@ -185,6 +221,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

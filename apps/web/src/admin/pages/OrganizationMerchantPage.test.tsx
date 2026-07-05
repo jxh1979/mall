@@ -162,24 +162,53 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     expect(coopText).not.toContain("fixed_rent");
     expect(coopText).not.toContain("revenue_share");
   });
+});
 
-  it("进入 KPI 聚焦 → 窗口滚动复位到顶(断头修复)", async () => {
-    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    renderPage();
-    await waitFor(() => expect(screen.getByTestId("organization-kpi-active-merchants")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("organization-kpi-active-merchants"));
-    expect(scrollSpy).toHaveBeenCalledWith({ top: 0 });
-    scrollSpy.mockRestore();
+describe("OrganizationMerchantPage 行明细抽屉（三业务表整行可点）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/organizations");
   });
 
-  it("退出 KPI 聚焦(返回全部) → 窗口滚动复位到顶", async () => {
+  it("点经营主体行 → 抽屉含主体名/信用代码/角色中文", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("organization-kpi-active-merchants")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("organization-kpi-active-merchants"));
-    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    fireEvent.click(screen.getByTestId("organization-kpi-focus-clear"));
-    expect(scrollSpy).toHaveBeenCalledWith({ top: 0 });
-    scrollSpy.mockRestore();
+    await waitFor(() => expect(screen.getByTestId("organization-entity-row-org-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-entity-row-org-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("平台经营主体");
+    expect(drawer.textContent).toContain("91330100MA27XW8H");
+    expect(drawer.textContent).toContain("运营主体");
   });
 
+  it("点商户行 → 抽屉含商户名/联系人/合作形式中文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-merchant-row-m-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("正常商户甲");
+    expect(drawer.textContent).toContain("联系人甲");
+    expect(drawer.textContent).toContain("固定租金");
+    expect(drawer.textContent).not.toContain("fixed_rent");
+  });
+
+  it("点项目行 → 抽屉含项目名/编码；抽屉零英文枚举", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-project-row-p-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-project-row-p-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("项目一");
+    expect(drawer.textContent).toContain("PJ-1");
+  });
+
+  it("Esc 关闭抽屉 + 点遮罩关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-merchant-row-m-1"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+    fireEvent.click(screen.getByTestId("organization-entity-row-org-1"));
+    fireEvent.click(screen.getByTestId("row-detail-overlay"));
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
 });

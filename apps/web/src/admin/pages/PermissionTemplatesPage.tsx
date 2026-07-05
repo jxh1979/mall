@@ -6,9 +6,21 @@ import { PermissionButton } from "../security/Can";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AccessUserRow, AdminPageProps, PermissionDefinitionRow, PermissionTemplateRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEMPLATE_MANAGE_PERMISSION = "access.permission_template.manage";
 const TEMPLATE_APPLY_PERMISSION = "access.permission_template.apply";
+
+// 模板类型枚举中文化（base/temporary/copy 不进全局表：base 全局义为“普通会员”会串味，页内小映射）。
+const TEMPLATE_TYPE_LABELS: Record<string, string> = { base: "基础模板", temporary: "临时模板", copy: "复制模板" };
+function templateTypeLabel(type?: string | null) {
+  const value = type ?? "base";
+  return TEMPLATE_TYPE_LABELS[value] ?? value;
+}
+// 有效性口径（单次/限时/长期），抽屉与表格共用一处。
+function validityLabel(row: PermissionTemplateRow) {
+  return row.singleUse ? "单次有效" : row.validUntil ? "限时" : "长期";
+}
 
 type Mode = "existing" | "new";
 
@@ -60,6 +72,8 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
   const [copyName, setCopyName] = React.useState("普通员工01");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  // 行明细抽屉：模板表整行可点 → 该模板完整字段（类型/状态/有效性中文·权限点列全）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const selected = mode === "existing" ? rows.find((row) => row.id === selectedId) : undefined;
 
@@ -238,6 +252,21 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
     }
   }
 
+  function openTemplateDetail(row: PermissionTemplateRow) {
+    const codes = templatePermissionCodes(row);
+    setDetail({
+      title: `权限模板 · ${displayTemplateName(row)}`,
+      fields: [
+        { label: "模板名称", value: displayTemplateName(row) },
+        { label: "类型", value: templateTypeLabel(row.templateType) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "有效性", value: validityLabel(row) },
+        { label: "权限数", value: codes.length || "—" },
+        { label: "权限点", value: codes.length ? codes.join("、") : "—" },
+      ],
+    });
+  }
+
   return (
     <section data-testid="permission-templates-page">
       <AdminPageHeader title="权限模板" description="支持基础模板、复制模板、临时模板、时效和单次有效；复制不能影响原模板。" />
@@ -332,18 +361,19 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
             <tbody>{rows.length === 0 ? (
               <tr><td colSpan={6} className="admin-muted-action">暂无权限模板，可先新建基础模板或临时模板。</td></tr>
             ) : rows.map((row) => (
-              <tr key={row.id}>
-                <td><input type="radio" data-testid={`permission-template-select-${row.id}`} checked={mode === "existing" && selectedId === row.id} onChange={() => { setMode("existing"); setSelectedId(row.id); }} /></td>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`permission-template-row-${row.id}`} onClick={() => openTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
+                <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`permission-template-select-${row.id}`} checked={mode === "existing" && selectedId === row.id} onChange={() => { setMode("existing"); setSelectedId(row.id); }} /></td>
                 <td>{displayTemplateName(row)}</td>
-                <td>{row.templateType ?? "base"}</td>
+                <td>{templateTypeLabel(row.templateType)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
-                <td>{row.singleUse ? "单次" : row.validUntil ? "限时" : "长期"}</td>
+                <td>{validityLabel(row)}</td>
                 <td>{templatePermissionCodes(row).length || "-"}</td>
               </tr>
             ))}</tbody>
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

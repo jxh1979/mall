@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AccessUserRow, AdminPageProps } from "../types";
 
 type RoleRow = { id: string; roleName?: string | null; roleCode?: string | null; status?: string | null; permissionCodes?: string[] };
@@ -52,9 +53,10 @@ function roleLabel(row: RoleRow | undefined) {
 }
 
 function statusBadge(status?: string | null) {
-  const value = status || "-";
+  const value = status || "";
   const kind = value === "approved" || value === "active" ? "is-ok" : value === "rejected" ? "is-danger" : value === "pending" ? "is-warn" : "is-info";
-  return <span className={`admin-badge ${kind}`}>{value}</span>;
+  // 徽标文字中文化（业务HTML零英文规则）；颜色仍按原始码判定。
+  return <span className={`admin-badge ${kind}`}>{value ? formatBusinessStatus(value) : "—"}</span>;
 }
 
 export function AccessGovernancePage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
@@ -71,6 +73,8 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
     permissionCodes: "access.role.assign", expiresAt: "", singleUse: true, reason: "",
   });
   const [reviewForm, setReviewForm] = React.useState({ comment: "", evidenceAttachmentIds: "" });
+  // 行明细抽屉：三张业务表（岗位模板/授权申请/智能总结）整行可点 → 该行完整字段（枚举中文·时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -212,6 +216,69 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
     await reload();
   }
 
+  function openTemplateDetail(row: PositionRoleTemplateRow) {
+    const role = roles.find((item) => item.id === row.roleId);
+    setDetail({
+      title: `岗位角色模板 · ${row.positionCode}`,
+      fields: [
+        { label: "岗位", value: row.positionCode },
+        { label: "职级", value: row.staffLevelId },
+        { label: "角色", value: role ? roleLabel(role) : (row.roleId ?? "—") },
+        { label: "权限模板", value: row.templateId ?? "—" },
+        { label: "组织", value: row.organizationId ?? "—" },
+        { label: "状态", value: formatBusinessStatus(row.status ?? "active") },
+        { label: "模板编号", value: row.id },
+      ],
+    });
+  }
+
+  function openGrantDetail(row: AccessGrantRequestRow) {
+    setDetail({
+      title: `授权申请 · ${row.id}`,
+      fields: [
+        { label: "申请编号", value: row.id },
+        { label: "类型", value: formatBusinessStatus(row.requestType) },
+        { label: "目标用户", value: row.targetUserId },
+        { label: "角色", value: row.targetRoleId ?? "—" },
+        { label: "岗位", value: row.positionCode ? `${row.positionCode} / ${row.staffLevelId ?? "—"}` : "—" },
+        { label: "权限码", value: row.permissionCodes?.length ? row.permissionCodes.join("、") : "—" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "单次有效", value: row.singleUse ? "是" : "否" },
+        { label: "过期时间", value: cnDate(row.expiresAt) },
+        { label: "申请原因", value: row.reason ?? "—" },
+        { label: "申请人", value: row.requestedBy ?? "—" },
+        { label: "审批人", value: row.decidedBy ?? "—" },
+        { label: "审批时间", value: cnDate(row.decidedAt) },
+        { label: "申请时间", value: cnDate(row.createdAt) },
+      ],
+    });
+  }
+
+  function openSummaryPositionDetail(row: AccessGrantPositionSummaryRow) {
+    setDetail({
+      title: `岗位授权建议 · ${row.positionCode}`,
+      fields: [
+        { label: "类型", value: "岗位" },
+        { label: "岗位", value: `${row.positionCode} / ${row.staffLevelId ?? "—"}` },
+        { label: "权限", value: row.permissionCode ?? "—" },
+        { label: "次数", value: row.requestCount },
+        { label: "建议", value: row.recommendation ?? "—" },
+      ],
+    });
+  }
+
+  function openSummaryUserDetail(row: AccessGrantUserSummaryRow) {
+    setDetail({
+      title: `用户授权异常 · ${row.userId}`,
+      fields: [
+        { label: "类型", value: "用户" },
+        { label: "用户", value: row.userId },
+        { label: "次数", value: row.requestCount },
+        { label: "说明", value: row.summary ?? "—" },
+      ],
+    });
+  }
+
   return (
     <section data-testid="access-governance-page">
       <AdminPageHeader title="访问治理工作台" description="岗位角色模板、用户定岗自动适配、直接角色装配和高危授权审批；审批总结用于发现频繁临时授权。" />
@@ -219,11 +286,11 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
         <h3>职位 ↔ 模板映射</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-position-role-templates-table">
-            <thead><tr><th>id</th><th>岗位</th><th>职级</th><th>角色</th><th>权限模板</th><th>组织</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>编号</th><th>岗位</th><th>职级</th><th>角色</th><th>权限模板</th><th>组织</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>{positionTemplates.map((row) => (
-              <tr key={row.id} data-testid={`access-position-role-template-${row.id}`}>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`access-position-role-template-${row.id}`} onClick={() => openTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
                 <td>{row.id}</td><td>{row.positionCode}</td><td>{row.staffLevelId}</td><td>{row.roleId ?? "-"}</td><td>{row.templateId ?? "-"}</td><td>{row.organizationId ?? "-"}</td><td>{statusBadge(row.status)}</td>
-                <td>
+                <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`access-position-role-template-select-${row.id}`} onClick={() => selectTemplate(row)}>选中</button>
                   <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid={`access-position-role-template-delete-${row.id}`} onClick={() => void deletePositionTemplate(row.id)}>删除</PermissionButton>
                 </td>
@@ -286,12 +353,12 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           <table className="admin-table" data-testid="access-grant-requests-table">
             <thead><tr><th>申请</th><th>类型</th><th>目标</th><th>角色/岗位</th><th>权限码</th><th>状态</th><th>过期</th><th>操作</th></tr></thead>
             <tbody>{grantRequests.map((row) => (
-              <tr key={row.id} data-testid={`access-grant-request-${row.id}`}>
-                <td>{row.id}</td><td>{formatBusinessStatus(row.requestType)}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {row.positionCode ?? "-"}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status)}</td><td>{row.expiresAt ?? "-"}</td>
-                <td>{row.status === "pending" ? (
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-request-${row.id}`} onClick={() => openGrantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openGrantDetail(row); } }}>
+                <td>{row.id}</td><td>{formatBusinessStatus(row.requestType)}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {row.positionCode ?? "-"}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status)}</td><td>{cnDate(row.expiresAt)}</td>
+                <td onClick={(event) => event.stopPropagation()}>{row.status === "pending" ? (
                   <>
-                    <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_REVIEW} data-testid={`access-grant-approve-${row.id}`} onClick={() => void reviewGrant(row, "approve")}>approve</PermissionButton>
-                    <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_REVIEW} data-testid={`access-grant-reject-${row.id}`} onClick={() => void reviewGrant(row, "reject")}>reject</PermissionButton>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_REVIEW} data-testid={`access-grant-approve-${row.id}`} onClick={() => void reviewGrant(row, "approve")}>通过</PermissionButton>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_REVIEW} data-testid={`access-grant-reject-${row.id}`} onClick={() => void reviewGrant(row, "reject")}>驳回</PermissionButton>
                   </>
                 ) : null}</td>
               </tr>
@@ -299,18 +366,19 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           </table>
         </div>
 
-        <h3>智能总结 summary</h3>
+        <h3>智能总结</h3>
         <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_VIEW} data-testid="access-grant-summary-refresh" onClick={() => void reload()}>刷新总结</PermissionButton>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-grant-summary-table">
             <thead><tr><th>类型</th><th>对象</th><th>权限</th><th>次数</th><th>建议</th></tr></thead>
             <tbody>
-              {(summary?.positionRecommendations ?? []).map((row) => <tr key={`position-${row.positionCode}-${row.permissionCode}`} data-testid={`access-grant-summary-position-${row.positionCode}`}><td>position</td><td>{row.positionCode} / {row.staffLevelId ?? "-"}</td><td>{row.permissionCode ?? "-"}</td><td>{row.requestCount}</td><td>{row.recommendation ?? "-"}</td></tr>)}
-              {(summary?.userAnomalies ?? []).map((row) => <tr key={`user-${row.userId}`} data-testid={`access-grant-summary-user-${row.userId}`}><td>user</td><td>{row.userId}</td><td>-</td><td>{row.requestCount}</td><td>{row.summary ?? "-"}</td></tr>)}
+              {(summary?.positionRecommendations ?? []).map((row) => <tr key={`position-${row.positionCode}-${row.permissionCode}`} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-summary-position-${row.positionCode}`} onClick={() => openSummaryPositionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSummaryPositionDetail(row); } }}><td>岗位</td><td>{row.positionCode} / {row.staffLevelId ?? "-"}</td><td>{row.permissionCode ?? "-"}</td><td>{row.requestCount}</td><td>{row.recommendation ?? "-"}</td></tr>)}
+              {(summary?.userAnomalies ?? []).map((row) => <tr key={`user-${row.userId}`} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-summary-user-${row.userId}`} onClick={() => openSummaryUserDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSummaryUserDetail(row); } }}><td>用户</td><td>{row.userId}</td><td>-</td><td>{row.requestCount}</td><td>{row.summary ?? "-"}</td></tr>)}
             </tbody>
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

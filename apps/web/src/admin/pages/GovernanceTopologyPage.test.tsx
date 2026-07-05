@@ -104,3 +104,44 @@ describe("GovernanceTopologyPage KPI 聚焦视图", () => {
     expect(text).not.toContain("suspended");
   });
 });
+
+describe("GovernanceTopologyPage 行明细抽屉（拓扑表 / 空间表整行可点）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/topology");
+  });
+
+  it("点拓扑关系行 → 抽屉含主体/商户/项目与中文状态", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("governance-topology-row-m-1-p-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("governance-topology-row-m-1-p-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("平台经营主体");
+    expect(drawer.textContent).toContain("商户甲");
+    expect(drawer.textContent).toContain("项目一");
+    expect(drawer.textContent).toContain("有效");
+    expect(drawer.textContent).not.toContain("active");
+  });
+
+  it("点空间点位行 → 抽屉含空间名/所属项目/面积", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("governance-space-row-s-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("governance-space-row-s-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("空间甲");
+    expect(drawer.textContent).toContain("项目一");
+    expect(drawer.textContent).toContain("120");
+  });
+
+  it("Esc 关闭抽屉 + 点遮罩关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("governance-space-row-s-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("governance-space-row-s-1"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+    fireEvent.click(screen.getByTestId("governance-topology-row-m-1-p-1"));
+    fireEvent.click(screen.getByTestId("row-detail-overlay"));
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+});
