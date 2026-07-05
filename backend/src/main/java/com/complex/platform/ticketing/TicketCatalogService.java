@@ -22,6 +22,8 @@ public class TicketCatalogService {
     private static final BigDecimal MAX_DISCOUNT_RATE = BigDecimal.valueOf(100);
     private static final Set<String> PRICE_VARIANTS = Set.of("group", "new_customer", "student", "channel", "member");
     private static final Set<String> PRICE_MODES = Set.of("derive_from_calendar_price", "fixed_price");
+    // 结算重构批4（V230）：票种资格/定价档分类；null/standard=标准（与 DB CHECK 一致）。
+    private static final Set<String> TICKET_CATEGORIES = Set.of("standard", "new_person", "student");
 
     private final TicketingRepository repository;
 
@@ -51,7 +53,9 @@ public class TicketCatalogService {
                 now,
                 // P0 修复（V133）：库存上限取自请求（可空=不限量）；已售从 0 起。
                 actual.stockQuantity(),
-                0
+                0,
+                // 结算重构批4（V230）：资格/定价档分类标签（可空=标准；非空校验取值，DB 另有 CHECK 兜底）。
+                normalizeTicketCategory(actual.ticketCategory())
         ));
     }
 
@@ -177,7 +181,9 @@ public class TicketCatalogService {
                 now,
                 // P0 修复（V133）：发布时保留既有库存上限与已售数，避免被置空/清零。
                 current.stockQuantity(),
-                current.soldQuantity()
+                current.soldQuantity(),
+                // 结算重构批4（V230）：发布时保留既有分类标签，避免被置空。
+                current.ticketCategory()
         ));
     }
 
@@ -225,6 +231,18 @@ public class TicketCatalogService {
         String trimmed = requireText(value, fieldName);
         if (!allowed.contains(trimmed)) {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is invalid");
+        }
+        return trimmed;
+    }
+
+    /** 分类可空（null=标准，直接落 null）；非空必须为合法枚举，否则 400（DB CHECK 兜底）。 */
+    private String normalizeTicketCategory(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (!TICKET_CATEGORIES.contains(trimmed)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "ticket_category is invalid");
         }
         return trimmed;
     }

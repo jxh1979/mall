@@ -442,11 +442,10 @@ public class TicketVerificationService {
         }
         IssuedEntitlementRecord updated = repository.atomicUseEntitlement(entitlement.id(), now)
                 .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "entitlement has no remaining times"));
-        // R5 T5 多人票：本次核销人数 = 票面 num_people（同场次集中核销），不可超 num_people。
+        // 发放已 fan-out 成单人权益（TicketOrderService：每张 num_people=1），每次核销一人；
+        // 故本次核销人数恒 = 该权益 num_people(=1)，落 verified_people 记录。
+        // （批4：原「verifiedPeople > num_people」是 fan-out 前的恒假死检查，已移除，核销语义不变。）
         int verifiedPeople = updated.numPeople();
-        if (verifiedPeople > updated.numPeople()) {
-            throw ApiException.conflict("VERIFIED_PEOPLE_EXCEEDED", "verified people exceeds ticket num_people");
-        }
         // 结算重构批3-1(PRD §6.1)：核销成功 → 判定本次结算价并写入核销记录 settlement_price_cent（供对账/by_entitlement_price 分账）。
         Long settlementPriceCent = resolveSettlementPrice(updated);
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(

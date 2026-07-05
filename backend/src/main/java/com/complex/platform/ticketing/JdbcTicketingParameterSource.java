@@ -32,6 +32,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("refresh_interval_seconds", ticketType.refreshIntervalSeconds())
                 .addValue("stock_quantity", ticketType.stockQuantity())
                 .addValue("sold_quantity", ticketType.soldQuantity())
+                .addValue("ticket_category", ticketType.ticketCategory())
                 .addValue("created_at", timestampWithTimeZone(ticketType.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()));
     }

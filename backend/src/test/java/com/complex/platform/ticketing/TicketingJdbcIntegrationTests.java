@@ -717,6 +717,34 @@ class TicketingJdbcIntegrationTests {
         )).isEqualTo(dynamicAdjustmentCent);
     }
 
+    @Test
+    void ticketCategoryPersistsReadsBackAndRejectsIllegalValue() {
+        Instant now = Instant.parse("2026-07-04T00:00:00Z");
+        // 带分类=student → 读回 student。
+        repository.saveTicketType(new TicketTypeRecord(
+                "ticket_type_cat_student", "学生票", "weekday_weekend_holiday",
+                4900L, 5900L, 6900L, false, "active", null, null,
+                now, now, null, 0, "student"));
+        // 不带分类（14 参兼容构造）→ NULL（标准，回归）。
+        repository.saveTicketType(new TicketTypeRecord(
+                "ticket_type_cat_default", "标准票", "weekday_weekend_holiday",
+                9900L, 11900L, 12900L, false, "active", null, null,
+                now, now, null, 0));
+
+        assertThat(repository.findTicketTypeById("ticket_type_cat_student"))
+                .get().extracting(TicketTypeRecord::ticketCategory).isEqualTo("student");
+        assertThat(repository.findTicketTypeById("ticket_type_cat_default"))
+                .get().extracting(TicketTypeRecord::ticketCategory).isNull();
+
+        // CHECK 拒非法值。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                repository.saveTicketType(new TicketTypeRecord(
+                        "ticket_type_cat_bad", "非法", "weekday_weekend_holiday",
+                        1L, 1L, 1L, false, "active", null, null,
+                        now, now, null, 0, "vip")))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

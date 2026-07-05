@@ -41,7 +41,8 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
                 nullableInteger(resultSet, "stock_quantity"),
-                resultSet.getInt("sold_quantity")
+                resultSet.getInt("sold_quantity"),
+                resultSet.getString("ticket_category")
         );
     }
 
