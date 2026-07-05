@@ -42,7 +42,24 @@ const TEXT = {
   location: "位置",
   itemId: "物料",
   time: "时间",
+  focusClear: "清除筛选，返回全部",
 };
+
+// KPI 聚焦视图（照 OrganizationMerchantPage 样板）：物料/余额/流水三卡各对一张承载台账，点数字=带
+// ?kpi= 参数重进本页只渲染该表。负库存禁止/高价值酒水在线核销两卡为策略/状态说明，无承载表→不可点。
+type KpiTarget = "items" | "balances" | "movements";
+type KpiFocus = { table: KpiTarget };
+
+function readKpiFocusFromUrl(): KpiFocus | null {
+  if (typeof window === "undefined") return null;
+  const table = new URLSearchParams(window.location.search).get("kpi");
+  if (table !== "items" && table !== "balances" && table !== "movements") return null;
+  return { table };
+}
+
+function kpiFocusTitle(focus: KpiFocus): string {
+  return focus.table === "items" ? TEXT.items : focus.table === "balances" ? TEXT.balances : TEXT.movements;
+}
 
 function asNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
@@ -63,6 +80,28 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const [operatorNote, setOperatorNote] = React.useState("完整后台验收库存移动");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+
+  React.useEffect(() => {
+    const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  function enterKpiFocus(table: KpiTarget) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("kpi", table);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}?${params.toString()}`);
+    setKpiFocus({ table });
+  }
+
+  function exitKpiFocus() {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("kpi");
+    const search = params.toString();
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+    setKpiFocus(null);
+  }
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -130,65 +169,111 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
     }
   }
 
+  // 物料区：登记表单（对选中物料操作）+ 物料承载表。聚焦「物料」时表单一起呈现，登记不断。
+  const itemsSection = (
+    <>
+      <div className="admin-form-grid" data-testid="inventory-movement-form">
+        <label>{TEXT.fromLocation}<input data-testid="inventory-movement-from" value={fromLocation} onChange={(event) => setFromLocation(event.target.value)} /></label>
+        <label>{TEXT.toLocation}<input data-testid="inventory-movement-to" value={toLocation} onChange={(event) => setToLocation(event.target.value)} /></label>
+        <label>{TEXT.quantity}<input data-testid="inventory-movement-quantity" type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
+        <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
+        <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
+      </div>
+      <div className="admin-form-row">
+        <HighRiskConfirm
+          label={TEXT.submit}
+          impact="将按选中物料登记库存移动并落库，影响库存余额；禁止负库存，高价值酒水保持在线核销。"
+          disabled={submitting}
+          precheck={validateMovement}
+          onConfirm={() => void submitMovement()}
+          permissionsState={effectivePermissions}
+          permissions={[STOCK_MOVE_PERMISSION]}
+          data-testid="inventory-movement-submit"
+        />
+        <span className="admin-muted-action" data-testid="inventory-ledger-boundary">{TEXT.boundary}</span>
+      </div>
+      {formError ? <div data-testid="inventory-ledger-error" className="admin-inline-error">{formError}</div> : null}
+      <h3>{TEXT.items}</h3>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="inventory-ledger-items-table">
+          <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th></tr></thead>
+          <tbody>{items.map((item) => <tr key={item.id} onClick={() => setSelectedItemId(item.id)}><td>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </>
+  );
+
+  const balancesSection = (
+    <>
+      <h3>{TEXT.balances}</h3>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="inventory-ledger-balances-table">
+          <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.location}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th></tr></thead>
+          <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td></tr>)}</tbody>
+        </table>
+        <TablePager testid="inventory-balances-pager" page={pagedBalances.page} pageCount={pagedBalances.pageCount} total={pagedBalances.total} onPrev={pagedBalances.prev} onNext={pagedBalances.next} />
+      </div>
+    </>
+  );
+
+  const movementsSection = (
+    <>
+      <h3>{TEXT.movements}</h3>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="inventory-ledger-movements-table">
+          <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>{TEXT.time}</th></tr></thead>
+          <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td><td>{row.createdAt ?? "-"}</td></tr>)}</tbody>
+        </table>
+        <TablePager testid="inventory-movements-pager" page={pagedMovements.page} pageCount={pagedMovements.pageCount} total={pagedMovements.total} onPrev={pagedMovements.prev} onNext={pagedMovements.next} />
+      </div>
+    </>
+  );
+
+  const focusCount = kpiFocus ? (kpiFocus.table === "items" ? items.length : kpiFocus.table === "balances" ? balances.length : movements.length) : 0;
+
   return (
     <section data-testid="inventory-ledger-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="inventory-ledger-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="inventory.item.viewed / inventory.stock_balance.viewed / inventory.outbound_verified" />
       <AdminDataState loading={loading} error={error} empty={items.length === 0 && balances.length === 0 && movements.length === 0} onRetry={reload}>
-        <div className="admin-kpi-grid" data-testid="inventory-ledger-summary">
-          <div className="admin-kpi-card"><span>{TEXT.items}</span><strong>{items.length}</strong><small>{TEXT.itemName}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.balances}</span><strong>{balances.length}</strong><small>{TEXT.totalQuantity}: {totalQuantity}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.movements}</span><strong>{movements.length}</strong><small>{TEXT.time}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.noNegative}</span><strong>必需</strong><small>{TEXT.quantityInvalid}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.highValueOnline}</span><strong>在线</strong><small>{selectedItem?.itemName ?? selectedItem?.itemCode ?? "-"}</small></div>
-        </div>
+        {kpiFocus ? (
+          <>
+            {/* 聚焦视图：只渲染被点 KPI 对应那张承载台账，其余表/表单/KPI 卡全隐藏，感知上=新页面。 */}
+            <div className="admin-state" data-testid="inventory-kpi-focus-banner">
+              正在查看：{kpiFocusTitle(kpiFocus)}（{focusCount}）
+              <button type="button" data-testid="inventory-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+            </div>
+            {kpiFocus.table === "items" ? itemsSection : kpiFocus.table === "balances" ? balancesSection : movementsSection}
+          </>
+        ) : (
+          <>
+            <div className="admin-kpi-grid" data-testid="inventory-ledger-summary">
+              <div className="admin-kpi-card admin-kpi-card--clickable">
+                <span>{TEXT.items}</span>
+                <button type="button" className="admin-kpi-value" data-testid="inventory-kpi-items" onClick={() => enterKpiFocus("items")}>{items.length}</button>
+                <small>{TEXT.itemName}</small>
+              </div>
+              <div className="admin-kpi-card admin-kpi-card--clickable">
+                <span>{TEXT.balances}</span>
+                <button type="button" className="admin-kpi-value" data-testid="inventory-kpi-balances" onClick={() => enterKpiFocus("balances")}>{balances.length}</button>
+                <small>{TEXT.totalQuantity}: {totalQuantity}</small>
+              </div>
+              <div className="admin-kpi-card admin-kpi-card--clickable">
+                <span>{TEXT.movements}</span>
+                <button type="button" className="admin-kpi-value" data-testid="inventory-kpi-movements" onClick={() => enterKpiFocus("movements")}>{movements.length}</button>
+                <small>{TEXT.time}</small>
+              </div>
+              {/* 负库存禁止/高价值酒水在线核销=策略与状态说明，无独立承载表→不可点。 */}
+              <div className="admin-kpi-card"><span>{TEXT.noNegative}</span><strong>必需</strong><small>{TEXT.quantityInvalid}</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.highValueOnline}</span><strong>在线</strong><small>{selectedItem?.itemName ?? selectedItem?.itemCode ?? "-"}</small></div>
+            </div>
 
-        <div className="admin-form-grid" data-testid="inventory-movement-form">
-          <label>{TEXT.fromLocation}<input data-testid="inventory-movement-from" value={fromLocation} onChange={(event) => setFromLocation(event.target.value)} /></label>
-          <label>{TEXT.toLocation}<input data-testid="inventory-movement-to" value={toLocation} onChange={(event) => setToLocation(event.target.value)} /></label>
-          <label>{TEXT.quantity}<input data-testid="inventory-movement-quantity" type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-          <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
-          <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
-        </div>
-        <div className="admin-form-row">
-          <HighRiskConfirm
-            label={TEXT.submit}
-            impact="将按选中物料登记库存移动并落库，影响库存余额；禁止负库存，高价值酒水保持在线核销。"
-            disabled={submitting}
-            precheck={validateMovement}
-            onConfirm={() => void submitMovement()}
-            permissionsState={effectivePermissions}
-            permissions={[STOCK_MOVE_PERMISSION]}
-            data-testid="inventory-movement-submit"
-          />
-          <span className="admin-muted-action" data-testid="inventory-ledger-boundary">{TEXT.boundary}</span>
-        </div>
-        {formError ? <div data-testid="inventory-ledger-error" className="admin-inline-error">{formError}</div> : null}
-
-        <h3>{TEXT.items}</h3>
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="inventory-ledger-items-table">
-            <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th></tr></thead>
-            <tbody>{items.map((item) => <tr key={item.id} onClick={() => setSelectedItemId(item.id)}><td>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td></tr>)}</tbody>
-          </table>
-        </div>
-        <h3>{TEXT.balances}</h3>
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="inventory-ledger-balances-table">
-            <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.location}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th></tr></thead>
-            <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td></tr>)}</tbody>
-          </table>
-            <TablePager testid="inventory-balances-pager" page={pagedBalances.page} pageCount={pagedBalances.pageCount} total={pagedBalances.total} onPrev={pagedBalances.prev} onNext={pagedBalances.next} />
-        </div>
-        <h3>{TEXT.movements}</h3>
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="inventory-ledger-movements-table">
-            <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>{TEXT.time}</th></tr></thead>
-            <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td><td>{row.createdAt ?? "-"}</td></tr>)}</tbody>
-          </table>
-            <TablePager testid="inventory-movements-pager" page={pagedMovements.page} pageCount={pagedMovements.pageCount} total={pagedMovements.total} onPrev={pagedMovements.prev} onNext={pagedMovements.next} />
-        </div>
+            {itemsSection}
+            {balancesSection}
+            {movementsSection}
+          </>
+        )}
       </AdminDataState>
     </section>
   );

@@ -5,6 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { formatMetricDomain } from "../i18n/metricLabels";
 import type { AdminPageProps } from "../types";
 
 // T3A_READONLY_ANALYTICS_READY：T3-A 只读经营分析视图——只聚合读取分析域快照(机器人/商户健康/员工服务/客户意向/指标定义/指标快照),
@@ -71,14 +72,14 @@ function renderT3AReadOnlyAnalytics(data: T3AData) {
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="t3a-merchant-table">
           <thead><tr><th>商户</th><th>分数</th><th>等级</th><th>风险数</th><th>逾期应收(分)</th></tr></thead>
-          <tbody>{data.merchant.slice(0, 50).map((row) => (<tr key={row.merchantId}><td>{row.merchantId ?? "-"}</td><td>{row.score ?? "-"}</td><td>{row.scoreLevel ?? "-"}</td><td>{row.riskCount ?? 0}</td><td>{row.overdueArAmountCents ?? 0}</td></tr>))}</tbody>
+          <tbody>{data.merchant.slice(0, 50).map((row) => (<tr key={row.merchantId}><td>{row.merchantId ?? "-"}</td><td>{row.score ?? "-"}</td><td>{formatBusinessStatus(row.scoreLevel)}</td><td>{row.riskCount ?? 0}</td><td>{row.overdueArAmountCents ?? 0}</td></tr>))}</tbody>
         </table>
       </div>
       <h3>员工服务分</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="t3a-staff-table">
           <thead><tr><th>员工</th><th>岗位</th><th>服务分</th><th>投诉</th><th>风险</th></tr></thead>
-          <tbody>{data.staff.slice(0, 50).map((row) => (<tr key={row.scoreId}><td>{row.staffName ?? "-"}</td><td>{row.roleCode ?? "-"}</td><td>{row.serviceScore ?? "-"}</td><td>{row.complaintCount ?? 0}</td><td>{formatBusinessStatus(row.riskLevel)}</td></tr>))}</tbody>
+          <tbody>{data.staff.slice(0, 50).map((row) => (<tr key={row.scoreId}><td>{row.staffName ?? "-"}</td><td>{formatBusinessStatus(row.roleCode)}</td><td>{row.serviceScore ?? "-"}</td><td>{row.complaintCount ?? 0}</td><td>{formatBusinessStatus(row.riskLevel)}</td></tr>))}</tbody>
         </table>
       </div>
       <h3>客户意向</h3>
@@ -92,7 +93,7 @@ function renderT3AReadOnlyAnalytics(data: T3AData) {
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="t3a-definition-table">
           <thead><tr><th>指标</th><th>名称</th><th>业务域</th><th>单位</th><th>状态</th></tr></thead>
-          <tbody>{data.definition.slice(0, 50).map((row) => (<tr key={row.metricKey}><td>{row.metricKey ?? "-"}</td><td>{row.name ?? "-"}</td><td>{row.domain ?? "-"}</td><td>{row.unit ?? "-"}</td><td>{row.status ?? "-"}</td></tr>))}</tbody>
+          <tbody>{data.definition.slice(0, 50).map((row) => (<tr key={row.metricKey}><td>{row.metricKey ?? "-"}</td><td>{row.name ?? "-"}</td><td>{row.domain ? formatMetricDomain(row.domain) : "-"}</td><td>{row.unit ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td></tr>))}</tbody>
         </table>
       </div>
     </div>

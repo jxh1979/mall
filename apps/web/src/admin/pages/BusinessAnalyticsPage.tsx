@@ -263,7 +263,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-table">
                 <thead><tr><th>{TEXT.businessDate}</th><th>{TEXT.metricKey}</th><th>{TEXT.domain}</th><th>{TEXT.actualValue}</th><th>{TEXT.baselineValue}</th><th>{TEXT.varianceRate}</th><th>{TEXT.trend}</th><th>{TEXT.segment}</th></tr></thead>
-                <tbody>{filteredSnapshots.map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{row.segmentType === "platform" || !row.segmentType ? "平台" : `${row.segmentType}:${row.segmentId ?? "-"}`}</td></tr>)}</tbody>
+                <tbody>{filteredSnapshots.map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{row.segmentType === "platform" || !row.segmentType ? "平台" : `${formatBusinessStatus(row.segmentType)}:${row.segmentId ?? "-"}`}</td></tr>)}</tbody>
               </table>
             </div>
 

@@ -76,3 +76,23 @@ describe("BusinessAnalyticsPage 复盘锁定真落库(V216)", () => {
     expect(post).not.toHaveBeenCalled();
   });
 });
+
+describe("BusinessAnalyticsPage 分组列英文枚举业务化", () => {
+  it("非平台口径分组的 segmentType 渲染为中文（project→项目），不直出英文码", async () => {
+    const get = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/analytics/review-locks")) return Promise.resolve([]);
+      if (path.includes("/analytics/business-metric-snapshots")) {
+        return Promise.resolve([
+          { snapshotId: "s2", metricKey: "revenue.bar", domain: "bar", businessDate: "2026-07-01", actualValue: 100, baselineValue: 90, varianceRate: 0.1, trendDirection: "up", segmentType: "project", segmentId: "pj-1" },
+        ]);
+      }
+      if (path.includes("/analytics/traffic-hourly")) return Promise.resolve({ buckets: [] });
+      return Promise.resolve([]);
+    });
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.getByTestId("business-analytics-table")).toBeTruthy());
+    const table = screen.getByTestId("business-analytics-table").textContent ?? "";
+    expect(table).toContain("项目:pj-1");
+    expect(table).not.toContain("project:pj-1");
+  });
+});
