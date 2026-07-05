@@ -6,7 +6,13 @@ import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { AdminPageProps } from "../types";
+
+// 平面图导入域内枚举中文（全局状态表未含的形状/关联类型，页内映射；状态码走全局表兜底）。
+const SHAPE_TYPE_LABELS: Record<string, string> = { shop: "商铺", booth: "摊位", public_area: "公共区", corridor: "走道", facility: "设施" };
+const REF_TYPE_LABELS: Record<string, string> = { space: "空间", merchant: "商户", facility: "设施" };
+const fpLabel = (map: Record<string, string>, code: string | null | undefined) => (code ? map[code] ?? code : "-");
 
 // 后端 floorplan 域记录映射(接现有 /api/v1/floor-plans/* 契约)。
 type FloorPlan = { id: string; projectId?: string; buildingCode?: string; floorNo?: string; planName?: string; versionNo?: string; status?: string };
@@ -23,6 +29,8 @@ const PUBLISH_CONFIRM_TITLE = "发布平面图导入候选";
  * P2 平面图导入(商场平面图):上传/导入商场平面布局,解析出候选区域(铺位/摊位/公共区),
  * 人工复核候选与错误后,发布到正式平面图区域。发布=高危动作,经 confirmHighImpactAction 二次确认。
  * 2026-06 改版丢失前端后重建为独立 admin 页(接现有 floorplan 后端)。
+ * KPI 说明：本页为向导式主从页(平面图→导入任务→候选/错误),KPI 卡(待发布候选/导入错误)只在选中导入后
+ * 的明细上下文出现,直接紧贴其候选/错误表,无「页面级汇总表」可聚焦,故不做 KPI 聚焦重进(与分析页同理)。
  */
 export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [floorPlans, setFloorPlans] = React.useState<FloorPlan[]>([]);
@@ -109,7 +117,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             {floorPlans.map((plan) => (
               <tr key={plan.id}>
                 <td>{plan.planName ?? plan.id}</td><td>{plan.buildingCode ?? "-"}/{plan.floorNo ?? "-"}</td>
-                <td>{plan.versionNo ?? "-"}</td><td>{plan.status ?? "-"}</td>
+                <td>{plan.versionNo ?? "-"}</td><td>{formatBusinessStatus(plan.status)}</td>
                 <td><button type="button" data-testid={`floor-plan-select-${plan.id}`} onClick={() => void loadImports(plan.id)}>查看导入</button></td>
               </tr>
             ))}
@@ -129,7 +137,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
               <tbody>
                 {imports.map((task) => (
                   <tr key={task.id}>
-                    <td>{task.sourceName ?? task.id}</td><td>{task.status ?? "-"}</td>
+                    <td>{task.sourceName ?? task.id}</td><td>{formatBusinessStatus(task.status)}</td>
                     <td>{task.candidateCount ?? 0}</td><td>{task.errorCount ?? 0}</td>
                     <td><button type="button" data-testid={`floor-plan-import-select-${task.id}`} onClick={() => void loadCandidates(selectedPlanId, task.id)}>候选明细</button></td>
                   </tr>
@@ -141,8 +149,8 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
         {floorPlanImportDetails ? (
           <>
             <div className="admin-kpi-grid" data-testid="floor-plan-import-summary">
-              <div className="admin-kpi-card"><span>待发布候选</span><strong data-testid="floor-plan-pending-count">{pendingCandidates.length}</strong></div>
-              <div className="admin-kpi-card"><span>导入错误</span><strong>{floorPlanImportDetails.errors?.length ?? 0}</strong></div>
+              <div className="admin-kpi-card"><span>待发布候选</span><strong data-testid="floor-plan-pending-count">{pendingCandidates.length}</strong><small>候选数</small></div>
+              <div className="admin-kpi-card"><span>导入错误</span><strong>{floorPlanImportDetails.errors?.length ?? 0}</strong><small>错误数</small></div>
             </div>
             <h3>候选明细</h3>
             <table className="admin-table" data-testid="floor-plan-candidates-table">
@@ -150,8 +158,8 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
               <tbody>
                 {(floorPlanImportDetails.candidates ?? []).slice(0, 50).map((candidate) => (
                   <tr key={candidate.id}>
-                    <td>{candidate.candidateNo ?? "-"}</td><td>{candidate.shapeType ?? "-"}</td>
-                    <td>{candidate.refType ?? "-"}:{candidate.refId ?? "-"}</td><td>{candidate.label ?? "-"}</td><td>{candidate.status ?? "-"}</td>
+                    <td>{candidate.candidateNo ?? "-"}</td><td>{fpLabel(SHAPE_TYPE_LABELS, candidate.shapeType)}</td>
+                    <td>{fpLabel(REF_TYPE_LABELS, candidate.refType)}:{candidate.refId ?? "-"}</td><td>{candidate.label ?? "-"}</td><td>{formatBusinessStatus(candidate.status)}</td>
                   </tr>
                 ))}
               </tbody>
