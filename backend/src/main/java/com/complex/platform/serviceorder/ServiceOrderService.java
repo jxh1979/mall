@@ -142,7 +142,8 @@ public class ServiceOrderService {
                 "svo_" + UUID.randomUUID(), item.id(), item.name(), item.priceCent(),
                 trimToNull(request.barId()), trimToNull(request.tableId()), request.performerUserId().trim(),
                 actor == null ? null : actor.id(), trimToNull(request.customerNote()),
-                "created", null, null, null, null, null, 0, 0, now, now, null));
+                "created", null, null, null, null, null, 0, 0, now, now, null,
+                item.mgmtFeeMode(), item.mgmtFeeValue()));
         auditEventService.recordSuccess("service.order.created", "service.order.create",
                 "service_order", saved.id(), null, request.idempotencyKey(),
                 Map.of("item", saved.itemName(), "performer", saved.performerUserId(),
@@ -204,7 +205,13 @@ public class ServiceOrderService {
                 now, actor == null ? null : actor.id(),
                 request == null || request.payMethod() == null ? "company_qr" : request.payMethod(),
                 current.refundNote(), current.mgmtFeeCent(), current.dancerShareCent(),
-                current.createdAt(), now, current.completedAt()));
+                current.createdAt(), now, current.completedAt(),
+                current.snapMgmtFeeMode(), current.snapMgmtFeeValue()));
+        // P1 收款对账:落一条公司应收/已收流水到复用的 ar_ap_items(带订单号+金额+时间;确认人=paid_by)。
+        // ponytail: 价为 0 的单不生成应收行(ar_ap_items.amount_cent>0 CHECK);正价单幂等一单一条。
+        if (saved.priceCent() > 0) {
+            repository.insertReceivableForOrder(saved.id(), saved.priceCent(), now);
+        }
         auditEventService.recordSuccess("service.order.paid", "service.order.create",
                 "service_order", saved.id(), null,
                 request == null ? null : request.idempotencyKey(),
@@ -228,30 +235,44 @@ public class ServiceOrderService {
     private ServiceOrderRecord doComplete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
         ServiceOrderRecord current = require(id);
         requirePerformerInScope(current.performerUserId());
-        if (!current.status().equals("paid") && !current.status().equals("accepted")) {
+        // P2-#4:仅 paid 可完成(移除 accepted 绕过路径;paid 蕴含 paid_at!=null,无收款不得完成)。
+        if (!current.status().equals("paid")) {
             throw ApiException.badRequest("NOT_PAID_YET",
                     "order must be paid (company account) before completion; status=" + current.status());
         }
-        long mgmtFee = repository.findCatalogItem(current.catalogItemId())
-                .map(item -> switch (item.mgmtFeeMode()) {
-                    case "percent" -> current.priceCent() * item.mgmtFeeValue() / 10000;
-                    case "fixed" -> Math.min(item.mgmtFeeValue(), current.priceCent());
-                    default -> 0L;
-                }).orElse(0L);
+        // P2-#3:分账费率取下单快照(非完成时活目录);存量无快照的历史单回退活目录。
+        String feeMode = current.snapMgmtFeeMode();
+        Long feeValue = current.snapMgmtFeeValue();
+        if (feeMode == null || feeValue == null) {
+            var live = repository.findCatalogItem(current.catalogItemId());
+            feeMode = live.map(ServiceCatalogItemRecord::mgmtFeeMode).orElse("none");
+            feeValue = live.map(ServiceCatalogItemRecord::mgmtFeeValue).orElse(0L);
+        }
+        final long feeValueFinal = feeValue;
+        long mgmtFee = switch (feeMode) {
+            case "percent" -> current.priceCent() * feeValueFinal / 10000;
+            case "fixed" -> Math.min(feeValueFinal, current.priceCent());
+            default -> 0L;
+        };
         long dancerShare = current.priceCent() - mgmtFee;
         Instant now = Instant.now();
-        // 清单 P1-2:提成先入台账(幂等唯一键 + ON CONFLICT DO NOTHING),再落完成态。
-        // ponytail: 无 @Transactional 下靠"提成幂等 + 提成先于完成态"保证资金正确——并发双 key 完成→提成至多一条;
-        // 崩在两写之间可重放自愈(status 守卫仍为 paid → 再入账幂等 → 落完成态);提成绝不双记进薪资月结代扣个税。
+        // P1 并发守卫:paid→completed 原子转移作为唯一进入凭据。受影响行数!=1 → 已被其它并发/重放拿走 → 拒。
+        // ponytail: 用 DB 行级 CAS 取代应用层 read-then-write,彻底消除多 key 并发多完成/多分账。
+        if (repository.markCompletedIfPaid(current.id(), mgmtFee, dancerShare, now, now) != 1) {
+            throw ApiException.badRequest("ALREADY_COMPLETED",
+                    "service order already completed or no longer payable; status changed concurrently");
+        }
+        // 赢得 CAS 后再入提成(部分唯一索引 + ON CONFLICT DO NOTHING,双保险幂等);再落审计。
         String month = java.time.YearMonth.from(java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)).toString();
         staffRepository.insertCommission("cml_" + UUID.randomUUID(), current.performerUserId(), month,
                 "service_order", current.id(), dancerShare, current.itemName(), now);
-        ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
+        ServiceOrderRecord saved = new ServiceOrderRecord(
                 current.id(), current.catalogItemId(), current.itemName(), current.priceCent(),
                 current.barId(), current.tableId(), current.performerUserId(), current.orderedBy(),
                 current.customerNote(), "completed", current.cancelReason(),
                 current.paidAt(), current.paidBy(), current.payMethod(), current.refundNote(),
-                mgmtFee, dancerShare, current.createdAt(), now, now));
+                mgmtFee, dancerShare, current.createdAt(), now, now,
+                current.snapMgmtFeeMode(), current.snapMgmtFeeValue());
         auditEventService.recordSuccess("service.order.completed", "service.order.create",
                 "service_order", saved.id(), null,
                 request == null ? null : request.idempotencyKey(),
@@ -285,7 +306,8 @@ public class ServiceOrderService {
                 current.customerNote(), toStatus, current.cancelReason(),
                 current.paidAt(), current.paidBy(), current.payMethod(), current.refundNote(),
                 current.mgmtFeeCent(), current.dancerShareCent(), current.createdAt(), now,
-                completedAt == null ? current.completedAt() : completedAt));
+                completedAt == null ? current.completedAt() : completedAt,
+                current.snapMgmtFeeMode(), current.snapMgmtFeeValue()));
         auditEventService.recordSuccess(event, "service.order.perform", "service_order", saved.id(), null,
                 idempotencyKey, Map.of("status", toStatus));
         return saved;
@@ -323,7 +345,8 @@ public class ServiceOrderService {
                 current.customerNote(), "cancelled", request.reason().trim(),
                 current.paidAt(), current.paidBy(), current.payMethod(), refundNote,
                 current.mgmtFeeCent(), current.dancerShareCent(), current.createdAt(), now,
-                current.completedAt()));
+                current.completedAt(),
+                current.snapMgmtFeeMode(), current.snapMgmtFeeValue()));
         auditEventService.recordSuccess("service.order.cancelled", "service.order.create",
                 "service_order", saved.id(), null, request.idempotencyKey(),
                 Map.of("reason", request.reason().trim()));

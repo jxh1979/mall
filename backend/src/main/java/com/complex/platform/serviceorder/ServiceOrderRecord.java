@@ -23,6 +23,8 @@ public record ServiceOrderRecord(
         long dancerShareCent,
         Instant createdAt,
         Instant updatedAt,
-        Instant completedAt
+        Instant completedAt,
+        String snapMgmtFeeMode,
+        Long snapMgmtFeeValue
 ) {
 }

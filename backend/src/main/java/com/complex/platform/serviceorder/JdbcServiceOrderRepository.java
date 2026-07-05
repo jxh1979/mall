@@ -89,11 +89,11 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 INSERT INTO service_orders (id, catalog_item_id, item_name, price_cent, bar_id, table_id,
                         performer_user_id, ordered_by, customer_note, status, cancel_reason,
                         paid_at, paid_by, pay_method, refund_note, mgmt_fee_cent, dancer_share_cent,
-                        created_at, updated_at, completed_at, project_id)
+                        created_at, updated_at, completed_at, snap_mgmt_fee_mode, snap_mgmt_fee_value, project_id)
                 VALUES (:id, :catalog_item_id, :item_name, :price, :bar_id, :table_id,
                         :performer, :ordered_by, :note, :status, :cancel_reason,
                         :paid_at, :paid_by, :pay_method, :refund_note, :mgmt_fee, :dancer_share,
-                        :created_at, :updated_at, :completed_at,
+                        :created_at, :updated_at, :completed_at, :snap_fee_mode, :snap_fee_value,
                         (SELECT p.project_id FROM staff_profiles p WHERE p.user_id = :performer
                           ORDER BY p.created_at DESC LIMIT 1))
                 ON CONFLICT (id) DO UPDATE SET
@@ -120,7 +120,9 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 .addValue("mgmt_fee", order.mgmtFeeCent()).addValue("dancer_share", order.dancerShareCent())
                 .addValue("created_at", java.sql.Timestamp.from(order.createdAt()))
                 .addValue("updated_at", java.sql.Timestamp.from(order.updatedAt()))
-                .addValue("completed_at", order.completedAt() == null ? null : java.sql.Timestamp.from(order.completedAt())));
+                .addValue("completed_at", order.completedAt() == null ? null : java.sql.Timestamp.from(order.completedAt()))
+                .addValue("snap_fee_mode", order.snapMgmtFeeMode())
+                .addValue("snap_fee_value", order.snapMgmtFeeValue()));
         return order;
     }
 
@@ -130,10 +132,49 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 new MapSqlParameterSource().addValue("id", id), this::mapOrder).stream().findFirst();
     }
 
+    @Override
+    public int markCompletedIfPaid(String id, long mgmtFeeCent, long dancerShareCent, Instant completedAt, Instant now) {
+        // P1 并发守卫:paid->completed 原子转移。WHERE status='paid' 使受影响行数=1 成为唯一进入凭据。
+        return jdbcTemplate.update("""
+                UPDATE service_orders
+                   SET status = 'completed', mgmt_fee_cent = :mgmt_fee, dancer_share_cent = :dancer_share,
+                       completed_at = :completed_at, updated_at = :now
+                 WHERE id = :id AND status = 'paid'
+                """, new MapSqlParameterSource().addValue("id", id)
+                .addValue("mgmt_fee", mgmtFeeCent).addValue("dancer_share", dancerShareCent)
+                .addValue("completed_at", java.sql.Timestamp.from(completedAt))
+                .addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    @Override
+    public boolean insertReceivableForOrder(String orderId, long amountCent, Instant now) {
+        // P1 收款对账:复用 ar_ap_items 应收台账。source 唯一索引保证一单一条(幂等)。
+        // 公司代收即时到账 -> paid=amount、unpaid=0(满足账平 CHECK);counterparty='company'。
+        int rows = jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
+                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
+                        accounting_period, status, created_at, updated_at)
+                VALUES (:id, :item_no, 'receivable', 'company', 'service_order', :order_id,
+                        :amount, :amount, 0, 'CNY', :due_date,
+                        :period, 'paid', :now, :now)
+                ON CONFLICT (direction, source_type, source_id) WHERE source_id IS NOT NULL DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", "arap_svo_" + orderId)
+                .addValue("item_no", "SVO-" + orderId)
+                .addValue("order_id", orderId).addValue("amount", amountCent)
+                .addValue("due_date", java.sql.Date.valueOf(
+                        java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)))
+                .addValue("period", java.time.YearMonth.from(
+                        java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)).toString())
+                .addValue("now", java.sql.Timestamp.from(now)));
+        return rows == 1;
+    }
+
     private static final String SELECT_ORDER = """
             SELECT id, catalog_item_id, item_name, price_cent, bar_id, table_id, performer_user_id,
                    ordered_by, customer_note, status, cancel_reason, paid_at, paid_by, pay_method,
-                   refund_note, mgmt_fee_cent, dancer_share_cent, created_at, updated_at, completed_at
+                   refund_note, mgmt_fee_cent, dancer_share_cent, created_at, updated_at, completed_at,
+                   snap_mgmt_fee_mode, snap_mgmt_fee_value
               FROM service_orders""";
 
     @Override
@@ -194,6 +235,7 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 paid == null ? null : paid.toInstant(), rs.getString("paid_by"), rs.getString("pay_method"),
                 rs.getString("refund_note"), rs.getLong("mgmt_fee_cent"), rs.getLong("dancer_share_cent"),
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
-                completed == null ? null : completed.toInstant());
+                completed == null ? null : completed.toInstant(),
+                rs.getString("snap_mgmt_fee_mode"), (Long) rs.getObject("snap_mgmt_fee_value"));
     }
 }

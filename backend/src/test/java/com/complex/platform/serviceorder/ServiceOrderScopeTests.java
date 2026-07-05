@@ -37,7 +37,7 @@ class ServiceOrderScopeTests {
 
     private ServiceOrderRecord orderFor(String performer, String status) {
         return new ServiceOrderRecord("svo_x", "svc1", "点舞", 30000L, null, null, performer, "usr_op",
-                null, status, null, null, null, null, null, 0, 0, Instant.now(), Instant.now(), null);
+                null, status, null, null, null, null, null, 0, 0, Instant.now(), Instant.now(), null, null, null);
     }
 
     @Test
