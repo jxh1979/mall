@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -143,7 +144,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="staff.payroll.month_closed / staff.payroll.adjustment_added / staff.leave.reviewed" />
       <div className="admin-toolbar">
-        <label>月份:<input data-testid="payroll-month" type="month" value={month} onChange={(event) => setMonth(event.target.value || currentMonth())} /></label>
+        <label>月份:<CnDatePicker mode="month" data-testid="payroll-month" value={month} onChange={(v) => setMonth(v || currentMonth())} /></label>
         <button type="button" data-testid="payroll-close" onClick={() => void closeMonth()}>执行月结(重结=覆盖)</button>
       </div>
       <h3>固定工资设定(员工档案)</h3>

@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { CnDatePicker } from "../components/CnDatePicker";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -143,11 +144,10 @@ export function CustomerAccountsPage({ api, setActionResult, setGlobalError, eff
 
           <h3>封禁（临时）</h3>
           <div className="admin-inline-form" data-testid="customer-account-suspend-form">
-            <input
+            <CnDatePicker
               aria-label="封禁到期日"
-              type="date"
               value={suspendForm.until}
-              onChange={(event) => setSuspendForm({ ...suspendForm, until: event.target.value })}
+              onChange={(v) => setSuspendForm({ ...suspendForm, until: v })}
             />
             <input
               aria-label="封禁原因"

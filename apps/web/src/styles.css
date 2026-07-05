@@ -2321,3 +2321,93 @@ body {
 .admin-drawer-field:last-child { border-bottom: none; }
 .admin-drawer-label { margin: 0; color: var(--adm-text-3); font-weight: 600; }
 .admin-drawer-value { margin: 0; color: var(--adm-text); word-break: break-word; font-variant-numeric: tabular-nums; }
+
+/* 自定义中文日期选择器（CnDatePicker）——替换原生 <input type=date/month>，落实零英文。
+   复用 --adm 变量，视觉贴齐既有表单控件。 */
+.cn-date { position: relative; display: inline-block; }
+.cn-date-trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 140px;
+  padding: 6px 10px;
+  font-size: 13.5px;
+  color: var(--adm-text);
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.cn-date-trigger:hover:not(:disabled) { border-color: var(--adm-accent); }
+.cn-date-trigger:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+.cn-date-trigger:disabled { opacity: 0.55; cursor: not-allowed; }
+.cn-date-placeholder { color: var(--adm-text-3); }
+.cn-date-caret { color: var(--adm-text-3); font-size: 11px; }
+.cn-date-pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  padding: 10px;
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius);
+  box-shadow: var(--adm-shadow-md);
+}
+.cn-date-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.cn-date-title { font-size: 13.5px; font-weight: 700; color: var(--adm-text); }
+.cn-date-nav {
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--adm-text-2);
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.cn-date-nav:hover { background: var(--adm-surface-3); color: var(--adm-text); }
+.cn-date-nav:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+.cn-date-week {
+  display: grid;
+  grid-template-columns: repeat(7, 32px);
+  margin-bottom: 2px;
+}
+.cn-date-wd {
+  text-align: center;
+  font-size: 12px;
+  color: var(--adm-text-3);
+  line-height: 26px;
+}
+.cn-date-grid { display: grid; grid-template-columns: repeat(7, 32px); }
+.cn-date-months { display: grid; grid-template-columns: repeat(4, 56px); gap: 4px; }
+.cn-date-blank { width: 32px; height: 30px; }
+.cn-date-cell {
+  appearance: none;
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--adm-text);
+  font-variant-numeric: tabular-nums;
+}
+.cn-date-months .cn-date-cell { height: 34px; }
+.cn-date-cell:hover { background: var(--adm-surface-3); }
+.cn-date-cell:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+.cn-date-cell.is-today { border-color: var(--adm-border-strong); }
+.cn-date-cell.is-selected {
+  background: var(--adm-accent);
+  color: #fff;
+  border-color: var(--adm-accent);
+}
+.cn-date-cell.is-selected:hover { background: var(--adm-accent); }

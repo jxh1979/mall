@@ -88,4 +88,18 @@ describe("StaffShiftAttendancePage 行明细抽屉（整行可点·枚举中文�
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
+
+  it("日期控件为中文 CnDatePicker，无原生 type=date / mm-dd-yyyy 残留", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("shift-date")).toBeTruthy());
+    const trigger = screen.getByTestId("shift-date");
+    // 组件渲染为按钮触发器（非原生 input）
+    expect(trigger.tagName).toBe("BUTTON");
+    // 显示中文日期，且不含英文/斜杠格式
+    expect(trigger.textContent ?? "").toMatch(/年.*月.*日/);
+    expect(trigger.textContent ?? "").not.toMatch(/[A-Za-z]/);
+    // 全页无原生 type="date"
+    expect(document.querySelector('input[type="date"]')).toBeNull();
+    expect(document.querySelector('input[type="month"]')).toBeNull();
+  });
 });

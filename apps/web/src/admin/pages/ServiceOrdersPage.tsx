@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -214,7 +215,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
           </table>
         </div>
         <div className="admin-toolbar">
-          <label>服务单日期:<input data-testid="svc-date" type="date" value={date} onChange={(event) => setDate(event.target.value || today())} /></label>
+          <label>服务单日期:<CnDatePicker data-testid="svc-date" value={date} onChange={(v) => setDate(v || today())} /></label>
         </div>
         <h3>服务单(公司代收;完成时分账)</h3>
         {kpiFocus ? (

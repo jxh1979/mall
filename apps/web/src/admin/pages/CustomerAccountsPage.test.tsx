@@ -74,7 +74,8 @@ describe("CustomerAccountsPage", () => {
     expect(setGlobalError).toHaveBeenCalledWith(expect.stringContaining("封禁到期日"));
     expect(api.post).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("封禁到期日"), { target: { value: "2026-07-15" } });
+    fireEvent.click(screen.getByLabelText("封禁到期日")); // 打开中文日期选择器
+    fireEvent.click(screen.getByRole("button", { name: "15" })); // 选一天 → 回填 YYYY-MM-DD
     fireEvent.change(screen.getByLabelText("封禁原因"), { target: { value: "risk" } });
     fireEvent.click(screen.getByTestId("customer-account-suspend"));
 

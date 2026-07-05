@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
@@ -565,8 +566,8 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <input data-testid="facility-inspection-task-title" aria-label="任务标题" placeholder="任务标题" value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} />
           <select data-testid="facility-inspection-task-schedule-mode" aria-label="排程模式" value={taskForm.scheduleMode} onChange={(event) => setTaskForm({ ...taskForm, scheduleMode: event.target.value })}><option value="manual">手工</option><option value="template">按模板</option><option value="route">按路线</option></select>
           <input data-testid="facility-inspection-task-assignee" aria-label="巡检人" placeholder="巡检人 id" value={taskForm.assigneeId} onChange={(event) => setTaskForm({ ...taskForm, assigneeId: event.target.value })} />
-          <input data-testid="facility-inspection-task-scheduled-date" aria-label="计划日期" type="date" value={taskForm.scheduledDate} onChange={(event) => setTaskForm({ ...taskForm, scheduledDate: event.target.value })} />
-          <input data-testid="facility-inspection-task-due-date" aria-label="到期日期" type="date" value={taskForm.dueDate} onChange={(event) => setTaskForm({ ...taskForm, dueDate: event.target.value })} />
+          <CnDatePicker data-testid="facility-inspection-task-scheduled-date" aria-label="计划日期" value={taskForm.scheduledDate} onChange={(v) => setTaskForm({ ...taskForm, scheduledDate: v })} />
+          <CnDatePicker data-testid="facility-inspection-task-due-date" aria-label="到期日期" value={taskForm.dueDate} onChange={(v) => setTaskForm({ ...taskForm, dueDate: v })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid="facility-inspection-task-create" onClick={() => void createInspectionTask()}>新建任务</PermissionButton>
         </div>
         <div className="admin-table-scroll">

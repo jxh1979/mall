@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
@@ -234,8 +235,8 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
         <div className="admin-form-grid" data-testid="holiday-manual-editor">
           <label>名称<input data-testid="holiday-name-input" value={holidayName} onChange={(e) => setHolidayName(e.target.value)} placeholder="春节" /></label>
           <label>年份<input data-testid="holiday-year-input" value={holidayYear} onChange={(e) => setHolidayYear(e.target.value)} placeholder="2026" /></label>
-          <label>起<input data-testid="holiday-start-input" type="date" value={holidayStart} onChange={(e) => setHolidayStart(e.target.value)} /></label>
-          <label>止<input data-testid="holiday-end-input" type="date" value={holidayEnd} onChange={(e) => setHolidayEnd(e.target.value)} /></label>
+          <label>起<CnDatePicker data-testid="holiday-start-input" value={holidayStart} onChange={setHolidayStart} /></label>
+          <label>止<CnDatePicker data-testid="holiday-end-input" value={holidayEnd} onChange={setHolidayEnd} /></label>
           <button type="button" data-testid="holiday-save" onClick={saveHoliday}>手动录入</button>
         </div>
         <div className="admin-form-grid" data-testid="holiday-fetch-editor">

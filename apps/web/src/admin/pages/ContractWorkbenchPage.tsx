@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
@@ -359,8 +360,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <input aria-label="商户 id" placeholder="商户 id" value={draft.merchantId} onChange={(e) => setDraft({ ...draft, merchantId: e.target.value })} />
           <input aria-label="合同主体 id" placeholder="合同主体 id" value={draft.contractSubjectId} onChange={(e) => setDraft({ ...draft, contractSubjectId: e.target.value })} />
           <input aria-label="结算主体 id" placeholder="结算主体 id(缺省=合同主体)" value={draft.settlementSubjectId} onChange={(e) => setDraft({ ...draft, settlementSubjectId: e.target.value })} />
-          <input aria-label="生效日期" type="date" value={draft.effectiveDate} onChange={(e) => setDraft({ ...draft, effectiveDate: e.target.value })} />
-          <input aria-label="到期日期" type="date" value={draft.expiryDate} onChange={(e) => setDraft({ ...draft, expiryDate: e.target.value })} />
+          <CnDatePicker aria-label="生效日期" value={draft.effectiveDate} onChange={(v) => setDraft({ ...draft, effectiveDate: v })} />
+          <CnDatePicker aria-label="到期日期" value={draft.expiryDate} onChange={(v) => setDraft({ ...draft, expiryDate: v })} />
           <input aria-label="月租金（元）" type="number" min="0" placeholder="月租金（元）" value={draft.baseRentYuan} onChange={(e) => setDraft({ ...draft, baseRentYuan: e.target.value })} />
           <select aria-label="抽成模式" value={draft.commissionMode} onChange={(e) => setDraft({ ...draft, commissionMode: e.target.value })}>
             <option value="fixed_ratio">固定比例</option>
@@ -379,7 +380,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         </div>
         <div className="admin-inline-form" data-testid="contract-activate-form">
           <input aria-label="生效绑定空间 id" placeholder="生效绑定空间 id" value={spaceId} onChange={(e) => setSpaceId(e.target.value)} />
-          <input aria-label="排租金AR账期" type="month" data-testid="contract-bill-period" value={billPeriod} onChange={(e) => setBillPeriod(e.target.value)} />
+          <CnDatePicker mode="month" aria-label="排租金AR账期" data-testid="contract-bill-period" value={billPeriod} onChange={setBillPeriod} />
         </div>
 
         <h3>审批链（分组并行，按综合体可配）</h3>

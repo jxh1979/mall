@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -61,8 +62,8 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
     <section data-testid="admin-overview">
       <AdminPageHeader title="总控驾驶舱" description="汇总票务、酒吧、游乐、财务、第三方和审计异常，支持部分失败可见。" />
       <div className="admin-form-row" data-testid="overview-date-filter">
-        <label>起始<input type="date" data-testid="overview-date-from" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
-        <label>结束<input type="date" data-testid="overview-date-to" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+        <label>起始<CnDatePicker data-testid="overview-date-from" value={dateFrom} onChange={setDateFrom} /></label>
+        <label>结束<CnDatePicker data-testid="overview-date-to" value={dateTo} onChange={setDateTo} /></label>
         <button type="button" data-testid="overview-date-apply" onClick={applyDateRange}>筛选时间</button>
         {appliedRange ? <span className="admin-muted-action" data-testid="overview-date-applied">已筛选：{appliedRange}</span> : null}
       </div>

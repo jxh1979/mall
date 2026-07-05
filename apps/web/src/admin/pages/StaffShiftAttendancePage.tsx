@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -113,7 +114,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="staff.shift.saved / staff.attendance.punched" />
       <div className="admin-toolbar">
-        <label>日期:<input data-testid="shift-date" type="date" value={date} onChange={(event) => setDate(event.target.value || today())} /></label>
+        <label>日期:<CnDatePicker data-testid="shift-date" value={date} onChange={(v) => setDate(v || today())} /></label>
       </div>
       <h3>排班(同员工同开始时刻重复保存=覆盖修改)</h3>
       <div className="admin-form-grid" data-testid="shift-editor">

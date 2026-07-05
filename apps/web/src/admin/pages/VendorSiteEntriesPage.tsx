@@ -1,6 +1,7 @@
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminAction } from "../hooks/useAdminAction";
@@ -251,8 +252,8 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
               <label>项目 id<input data-testid="vendor-site-entry-project" value={form.projectId} onChange={(event) => setField("projectId", event.target.value)} /></label>
               <label>空间 id<input data-testid="vendor-site-entry-space" value={form.spaceId} onChange={(event) => setField("spaceId", event.target.value)} /></label>
               <label>施工范围<input data-testid="vendor-site-entry-scope" value={form.workScope} onChange={(event) => setField("workScope", event.target.value)} /></label>
-              <label>开始日期<input data-testid="vendor-site-entry-start" type="date" value={form.plannedStartDate} onChange={(event) => setField("plannedStartDate", event.target.value)} /></label>
-              <label>结束日期<input data-testid="vendor-site-entry-end" type="date" value={form.plannedEndDate} onChange={(event) => setField("plannedEndDate", event.target.value)} /></label>
+              <label>开始日期<CnDatePicker data-testid="vendor-site-entry-start" value={form.plannedStartDate} onChange={(v) => setField("plannedStartDate", v)} /></label>
+              <label>结束日期<CnDatePicker data-testid="vendor-site-entry-end" value={form.plannedEndDate} onChange={(v) => setField("plannedEndDate", v)} /></label>
               <label>人数<input data-testid="vendor-site-entry-crew" value={form.crewCount} onChange={(event) => setField("crewCount", event.target.value)} /></label>
               <label>联系人<input data-testid="vendor-site-entry-contact" value={form.contactName} onChange={(event) => setField("contactName", event.target.value)} /></label>
               <label>电话<input data-testid="vendor-site-entry-phone" value={form.contactPhone} onChange={(event) => setField("contactPhone", event.target.value)} /></label>

@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -202,11 +203,11 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
       <div className="admin-toolbar">
         <label>
           月份:
-          <input
+          <CnDatePicker
+            mode="month"
             data-testid="monthly-comparison-month"
-            type="month"
             value={month}
-            onChange={(event) => setMonth(event.target.value || defaultMonth())}
+            onChange={(v) => setMonth(v || defaultMonth())}
           />
         </label>
         <button

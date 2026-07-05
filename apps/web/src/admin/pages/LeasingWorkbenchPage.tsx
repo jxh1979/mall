@@ -1,5 +1,6 @@
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -503,8 +504,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <label>意向空间<input data-testid="leasing-intent-space" value={intentSpaceId} onChange={(e) => setIntentSpaceId(e.target.value)} /></label>
               <label>推进阶段<select data-testid="leasing-intent-stage" value={targetStage} onChange={(e) => setTargetStage(e.target.value)}><option value="requirement_confirmed">需求确认</option><option value="proposal_quoted">方案报价</option><option value="negotiation">商务谈判</option><option value="pending_signing">待签约</option></select></label>
               <label>签约商户<input data-testid="leasing-sign-merchant" value={signMerchantId} onChange={(e) => setSignMerchantId(e.target.value)} /></label>
-              <label>合同生效日<input type="date" data-testid="leasing-sign-effective-date" value={signEffectiveDate} onChange={(e) => setSignEffectiveDate(e.target.value)} /></label>
-              <label>合同到期日<input type="date" data-testid="leasing-sign-expiry-date" value={signExpiryDate} onChange={(e) => setSignExpiryDate(e.target.value)} /></label>
+              <label>合同生效日<CnDatePicker data-testid="leasing-sign-effective-date" value={signEffectiveDate} onChange={setSignEffectiveDate} /></label>
+              <label>合同到期日<CnDatePicker data-testid="leasing-sign-expiry-date" value={signExpiryDate} onChange={setSignExpiryDate} /></label>
             </div>
             <div className="admin-form-row" data-testid="leasing-intent-actions">
               <button type="button" data-testid="leasing-intent-create" disabled={busyAction !== ""} onClick={() => void createIntent()}>从线索建意向</button>
