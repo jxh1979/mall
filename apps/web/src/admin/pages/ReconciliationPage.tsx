@@ -10,6 +10,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, ReconciliationBatchRow, ReconciliationDifferenceRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 const RESOLVE_PERM = ["finance.reconciliation.resolve"];
 
@@ -72,6 +73,8 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
   const [attachmentRef, setAttachmentRef] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 -> 该批次/差异完整字段（金额¥·渠道 TraceLink·状态中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -157,6 +160,32 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
     }
   }
 
+  function openBatchDetail(batch: ReconciliationBatchRow) {
+    setDetail({
+      title: `${TEXT.batches} · ${batch.batchNo ?? batch.id}`,
+      fields: [
+        { label: TEXT.batchNo, value: batch.batchNo ?? batch.id },
+        { label: TEXT.amount, value: formatAmount(batch.amount ?? batch.totalAmount) },
+        { label: TEXT.status, value: formatBusinessStatus(batch.status) },
+        { label: TEXT.provider, value: <TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={batch.providerCode}>{batch.providerCode ?? "-"}</TraceLink> },
+        { label: TEXT.batchNo, value: batch.id },
+      ],
+    });
+  }
+
+  function openDifferenceDetail(item: ReconciliationDifferenceRow) {
+    setDetail({
+      title: `${TEXT.differences} · ${item.differenceNo ?? item.id}`,
+      fields: [
+        { label: TEXT.differenceNo, value: item.differenceNo ?? item.id },
+        { label: TEXT.amount, value: formatAmount(item.amount ?? item.differenceAmount ?? item.diffAmount) },
+        { label: TEXT.status, value: formatBusinessStatus(item.status) },
+        { label: TEXT.provider, value: <TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={item.providerCode}>{item.providerCode ?? "-"}</TraceLink> },
+        { label: TEXT.differenceNo, value: item.id },
+      ],
+    });
+  }
+
   const pagedBatches = usePagedRows(batches, 10);
   const pagedDifferences = usePagedRows(differences, 10);
 
@@ -166,7 +195,7 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="reconciliation-batches-table">
           <thead><tr><th>{TEXT.batchNo}</th><th>{TEXT.amount}</th><th>{TEXT.status}</th><th>{TEXT.provider}</th></tr></thead>
-          <tbody>{pagedBatches.pageRows.map((batch) => <tr key={batch.id}><td>{batch.batchNo ?? batch.id}</td><td>{formatAmount(batch.amount ?? batch.totalAmount)}</td><td>{formatBusinessStatus(batch.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={batch.providerCode}>{batch.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
+          <tbody>{pagedBatches.pageRows.map((batch) => <tr key={batch.id} className="admin-row-clickable" tabIndex={0} data-testid={`reconciliation-batch-row-${batch.id}`} onClick={() => openBatchDetail(batch)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBatchDetail(batch); } }}><td>{batch.batchNo ?? batch.id}</td><td>{formatAmount(batch.amount ?? batch.totalAmount)}</td><td>{formatBusinessStatus(batch.status)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={batch.providerCode}>{batch.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
         </table>
         <TablePager testid="reconciliation-batches-pager" page={pagedBatches.page} pageCount={pagedBatches.pageCount} total={pagedBatches.total} onPrev={pagedBatches.prev} onNext={pagedBatches.next} />
       </div>
@@ -197,7 +226,7 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="reconciliation-differences-table">
           <thead><tr><th>{TEXT.selected}</th><th>{TEXT.differenceNo}</th><th>{TEXT.amount}</th><th>{TEXT.status}</th><th>{TEXT.provider}</th></tr></thead>
-          <tbody>{pagedDifferences.pageRows.map((item) => <tr key={item.id}><td><input type="radio" data-testid={`reconciliation-select-${item.id}`} checked={(selected?.id ?? "") === item.id} onChange={() => setSelectedId(item.id)} /></td><td>{item.differenceNo ?? item.id}</td><td>{formatAmount(item.amount ?? item.differenceAmount ?? item.diffAmount)}</td><td>{formatBusinessStatus(item.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={item.providerCode}>{item.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
+          <tbody>{pagedDifferences.pageRows.map((item) => <tr key={item.id} className="admin-row-clickable" tabIndex={0} data-testid={`reconciliation-difference-row-${item.id}`} onClick={() => openDifferenceDetail(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDifferenceDetail(item); } }}><td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`reconciliation-select-${item.id}`} checked={(selected?.id ?? "") === item.id} onChange={() => setSelectedId(item.id)} /></td><td>{item.differenceNo ?? item.id}</td><td>{formatAmount(item.amount ?? item.differenceAmount ?? item.diffAmount)}</td><td>{formatBusinessStatus(item.status)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={item.providerCode}>{item.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
         </table>
         <TablePager testid="reconciliation-differences-pager" page={pagedDifferences.page} pageCount={pagedDifferences.pageCount} total={pagedDifferences.total} onPrev={pagedDifferences.prev} onNext={pagedDifferences.next} />
       </div>
@@ -243,6 +272,7 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

@@ -9,6 +9,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps, MerchantZoneSettlementRow } from "../types";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const DISPUTE_PERMS = ["merchant.portal.settlement.dispute"];
 
@@ -70,6 +71,8 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
   const [rows, setRows] = React.useState<MerchantZoneSettlementRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [reason, setReason] = React.useState("");
+  // 行明细抽屉：整行可点 -> 该结算单完整字段（合同 TraceLink·触发/状态中文·开账时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
 
   React.useEffect(() => {
@@ -135,6 +138,20 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
   const focusRows = kpiFocus?.subset === "open" ? openRows : kpiFocus?.subset === "disputed" ? disputedRows : rows;
   const paged = usePagedRows(kpiFocus ? focusRows : rows, 10, kpiFocus ? kpiFocus.subset : "");
 
+  function openSettlementDetail(row: MerchantZoneSettlementRow) {
+    setDetail({
+      title: `结算单明细 · ${row.id}`,
+      fields: [
+        { label: "结算单", value: row.id },
+        { label: "合同", value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink> },
+        { label: "触发", value: TRIGGER_LABELS[row.triggerType ?? ""] ?? row.triggerType ?? "-" },
+        { label: "状态", value: STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-" },
+        { label: "异议理由", value: row.disputeReason ?? "-" },
+        { label: "开账时间", value: cnDate(row.createdAt) },
+      ],
+    });
+  }
+
   const settlementsTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="merchant-zone-settlements-table">
@@ -143,14 +160,16 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
         </thead>
         <tbody>
           {paged.pageRows.map((row) => (
-            <tr key={row.id} className={row.id === selectedId ? "admin-row-selected" : undefined}>
-              <td><input type="radio" name="mz-settlement" data-testid={`merchant-zone-settlement-pick-${row.id}`} checked={row.id === selectedId} onChange={() => setSelectedId(row.id)} /></td>
+            <tr key={row.id} className={`admin-row-clickable${row.id === selectedId ? " admin-row-selected" : ""}`} tabIndex={0} data-testid={`merchant-zone-settlement-row-${row.id}`}
+              onClick={() => openSettlementDetail(row)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSettlementDetail(row); } }}>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" name="mz-settlement" data-testid={`merchant-zone-settlement-pick-${row.id}`} checked={row.id === selectedId} onChange={() => setSelectedId(row.id)} /></td>
               <td>{row.id}</td>
-              <td><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink></td>
+              <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink></td>
               <td>{TRIGGER_LABELS[row.triggerType ?? ""] ?? row.triggerType ?? "-"}</td>
               <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
               <td>{row.disputeReason ?? "-"}</td>
-              <td>{row.createdAt ?? "-"}</td>
+              <td>{cnDate(row.createdAt)}</td>
             </tr>
           ))}
         </tbody>
@@ -194,6 +213,7 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

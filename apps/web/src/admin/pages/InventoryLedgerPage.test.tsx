@@ -116,3 +116,41 @@ describe("InventoryLedgerPage KPI 聚焦视图（带参重进本页）", () => {
     expect(movements).not.toContain("processed");
   });
 });
+
+describe("InventoryLedgerPage 行明细抽屉（整行可点·时间中文）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin/inventory/ledger");
+  });
+
+  it("点物料行 -> 抽屉含名称+编码+中文状态，无英文枚举", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("inventory-item-row-i-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("inventory-item-row-i-1"));
+    const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(drawer).toContain("威士忌");
+    expect(drawer).toContain("SKU-1");
+    expect(drawer).toContain("有效");
+    expect(drawer).not.toContain("active");
+  });
+
+  it("点流水行 -> 抽屉时间为中文（非 ISO），状态中文；Esc 关闭", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("inventory-movement-row-sm-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("inventory-movement-row-sm-1"));
+    const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(drawer).toContain("2026年7月1日");
+    expect(drawer).toContain("已处理");
+    expect(drawer).not.toContain("2026-07-01T");
+    expect(drawer).not.toContain("processed");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("物料行点单选框仅选中、不弹抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("inventory-item-row-i-1")).toBeTruthy());
+    fireEvent.click(screen.getByLabelText("选择物料 SKU-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});

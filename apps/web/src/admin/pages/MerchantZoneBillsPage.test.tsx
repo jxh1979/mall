@@ -82,3 +82,48 @@ describe("MerchantZoneBillsPage KPI 聚焦视图", () => {
     expect(table).not.toContain("closed");
   });
 });
+
+describe("MerchantZoneBillsPage 行明细抽屉（整行可点·日期中文）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant-zone/bills");
+  });
+
+  it("点账单行 -> 抽屉含账单号+金额+中文状态，来源合同 TraceLink 保留", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-bill-row-b-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-bill-row-b-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("B-1");
+    expect(text).toContain("已出账");
+    expect(text).not.toContain("issued");
+    expect(drawer.querySelector('[data-testid="trace-link-ADM-CONT-001-c-1"]')).toBeTruthy();
+  });
+
+  it("点账单行 -> Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-bill-row-b-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-bill-row-b-2"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点来源合同 TraceLink 触发下钻、不弹抽屉（stopPropagation）", async () => {
+    const navigateTo = vi.fn();
+    const props: AdminPageProps = {
+      api: makeApi(),
+      user: { id: "u1", username: "merchant", accountType: "merchant_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+      navigateTo,
+    };
+    render(<MerchantZoneBillsPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("trace-link-ADM-CONT-001-c-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("trace-link-ADM-CONT-001-c-1"));
+    expect(navigateTo).toHaveBeenCalled();
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});

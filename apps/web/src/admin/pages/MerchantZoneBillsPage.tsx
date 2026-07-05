@@ -6,6 +6,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps, MerchantZoneBillRow } from "../types";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEXT = {
   title: "我的账单",
@@ -64,6 +65,8 @@ function focusTitle(subset: KpiFocus["subset"]): string {
 export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneBillRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 -> 该账单完整字段（账期/到期中文·金额¥·费用构成·来源合同 TraceLink）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -105,6 +108,25 @@ export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: Admin
   const focusRows = kpiFocus?.subset === "open" ? openBills : kpiFocus?.subset === "overdue" ? overdueBills : rows;
   const paged = usePagedRows(kpiFocus ? focusRows : rows, 10, kpiFocus ? kpiFocus.subset : "");
 
+  function openBillDetail(row: MerchantZoneBillRow) {
+    setDetail({
+      title: `账单明细 · ${row.billNo ?? row.id}`,
+      fields: [
+        { label: "账单号", value: row.billNo ?? row.id },
+        { label: "账期", value: `${cnDate(row.billPeriodStart)} ~ ${cnDate(row.billPeriodEnd)}` },
+        { label: "到期日", value: cnDate(row.dueDate) },
+        { label: "金额", value: money(row.totalAmountCent, row.currency) },
+        { label: "状态", value: STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-" },
+        { label: "账龄(天)", value: row.agingDays ?? 0 },
+        { label: "费用构成", value: lineSummary(row) },
+        { label: "来源合同", value: row.sourceType === "contract" && row.sourceId
+            ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.sourceId}>{row.sourceId}</TraceLink>
+            : "-" },
+        { label: "账单号", value: row.id },
+      ],
+    });
+  }
+
   const billsTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="merchant-zone-bills-table">
@@ -113,15 +135,17 @@ export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: Admin
         </thead>
         <tbody>
           {paged.pageRows.map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-zone-bill-row-${row.id}`}
+              onClick={() => openBillDetail(row)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBillDetail(row); } }}>
               <td>{row.billNo ?? row.id}</td>
-              <td>{row.billPeriodStart ?? "-"} ~ {row.billPeriodEnd ?? "-"}</td>
-              <td>{row.dueDate ?? "-"}</td>
+              <td>{cnDate(row.billPeriodStart)} ~ {cnDate(row.billPeriodEnd)}</td>
+              <td>{cnDate(row.dueDate)}</td>
               <td>{money(row.totalAmountCent, row.currency)}</td>
               <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
               <td>{row.agingDays ?? 0}</td>
               <td>{lineSummary(row)}</td>
-              <td className="admin-id-cell">{row.sourceType === "contract" && row.sourceId
+              <td className="admin-id-cell" onClick={(event) => event.stopPropagation()}>{row.sourceType === "contract" && row.sourceId
                 ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.sourceId}>{row.sourceId}</TraceLink>
                 : "-"}</td>
             </tr>
@@ -156,6 +180,7 @@ export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: Admin
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

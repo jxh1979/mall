@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 // 退款分级授权配置行（后端 RefundAuthorityLimitRecord / RefundAutoRuleRecord，客户端 unwrap 已 camel 化）。
 type RefundLimitRow = {
@@ -34,6 +35,8 @@ const MANAGE = ["refund.authority.manage"];
 export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [limits, setLimits] = React.useState<RefundLimitRow[]>([]);
   const [rules, setRules] = React.useState<RefundRuleRow[]>([]);
+  // 行明细抽屉：整行可点 -> 该额度/规则完整字段（主体/退款域/规则类型均中文·金额¥）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   const [limitForm, setLimitForm] = React.useState({ subjectId: "", refundDomain: "all", limitYuan: "" });
   const [ruleForm, setRuleForm] = React.useState({ refundDomain: "all", ruleType: "expired_unused" });
 
@@ -82,6 +85,33 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
     reload();
   }
 
+  function openLimitDetail(row: RefundLimitRow) {
+    setDetail({
+      title: `员工自助退款额度 · ${row.subjectId}`,
+      fields: [
+        { label: "主体", value: formatBusinessStatus(row.subjectType) },
+        { label: "员工 id", value: row.subjectId },
+        { label: "退款域", value: formatBusinessStatus(row.refundDomain) },
+        { label: "单笔额度（元）", value: `¥${(row.limitAmountCent / 100).toFixed(2)}` },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "配置编号", value: row.id },
+      ],
+    });
+  }
+
+  function openRuleDetail(row: RefundRuleRow) {
+    setDetail({
+      title: `退款自动放行规则 · ${formatBusinessStatus(row.ruleType)}`,
+      fields: [
+        { label: "退款域", value: formatBusinessStatus(row.refundDomain) },
+        { label: "规则类型", value: formatBusinessStatus(row.ruleType) },
+        { label: "启用", value: row.enabled ? "是" : "否" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "配置编号", value: row.id },
+      ],
+    });
+  }
+
   return (
     <section data-testid="refund-authority-page">
       <AdminPageHeader
@@ -103,10 +133,12 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
             </thead>
             <tbody>
               {limits.map((row) => (
-                <tr key={row.id} data-testid={`refund-limit-${row.id}`}>
-                  <td>{row.subjectType}</td>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`refund-limit-${row.id}`}
+                  onClick={() => openLimitDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openLimitDetail(row); } }}>
+                  <td>{formatBusinessStatus(row.subjectType)}</td>
                   <td>{row.subjectId}</td>
-                  <td>{row.refundDomain}</td>
+                  <td>{formatBusinessStatus(row.refundDomain)}</td>
                   <td>{(row.limitAmountCent / 100).toFixed(2)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                 </tr>
@@ -164,12 +196,14 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
             </thead>
             <tbody>
               {rules.map((row) => (
-                <tr key={row.id} data-testid={`refund-rule-${row.id}`}>
-                  <td>{row.refundDomain}</td>
-                  <td>{row.ruleType}</td>
+                <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`refund-rule-${row.id}`}
+                  onClick={() => openRuleDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRuleDetail(row); } }}>
+                  <td>{formatBusinessStatus(row.refundDomain)}</td>
+                  <td>{formatBusinessStatus(row.ruleType)}</td>
                   <td>{row.enabled ? "是" : "否"}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
-                  <td>
+                  <td onClick={(event) => event.stopPropagation()}>
                     <PermissionButton
                       permissionsState={effectivePermissions}
                       permissions={MANAGE}
@@ -212,6 +246,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
           </PermissionButton>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

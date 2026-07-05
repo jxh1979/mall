@@ -9,6 +9,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, InventoryItemRow, StockBalanceRow, StockMovementRow } from "../types";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 // 后端写权限码（InventoryController：POST /stock-movements）
 const STOCK_MOVE_PERMISSION = "inventory.stock.move";
@@ -81,6 +82,8 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 -> 该物料/余额/流水完整字段（状态中文·时间中文）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -171,6 +174,44 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
     }
   }
 
+  function openItemDetail(item: InventoryItemRow) {
+    setDetail({
+      title: `${TEXT.items} · ${item.itemName ?? item.itemCode ?? item.id}`,
+      fields: [
+        { label: TEXT.itemCode, value: item.itemCode ?? item.id },
+        { label: TEXT.itemName, value: item.itemName ?? "-" },
+        { label: TEXT.category, value: item.category ?? "-" },
+        { label: TEXT.unit, value: item.unit ?? "-" },
+        { label: TEXT.status, value: formatBusinessStatus(item.status) },
+        { label: TEXT.itemId, value: item.id },
+      ],
+    });
+  }
+
+  function openBalanceDetail(row: StockBalanceRow) {
+    setDetail({
+      title: `${TEXT.balances} · ${row.itemId ?? row.id}`,
+      fields: [
+        { label: TEXT.itemId, value: row.itemId ?? "-" },
+        { label: TEXT.location, value: row.locationType ?? row.locationId ?? "-" },
+        { label: TEXT.quantity, value: row.quantity ?? "-" },
+        { label: TEXT.status, value: formatBusinessStatus(row.status ?? "normal") },
+      ],
+    });
+  }
+
+  function openMovementDetail(row: StockMovementRow) {
+    setDetail({
+      title: `${TEXT.movements} · ${row.itemId ?? row.id ?? "-"}`,
+      fields: [
+        { label: TEXT.itemId, value: row.itemId ?? "-" },
+        { label: TEXT.quantity, value: row.quantity ?? "-" },
+        { label: TEXT.status, value: formatBusinessStatus(row.status) },
+        { label: TEXT.time, value: cnDate(row.createdAt) },
+      ],
+    });
+  }
+
   // 物料区：登记表单（对选中物料操作）+ 物料承载表。聚焦「物料」时表单一起呈现，登记不断。
   const itemsSection = (
     <>
@@ -199,7 +240,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-items-table">
           <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th></tr></thead>
-          <tbody>{items.map((item) => <tr key={item.id} onClick={() => setSelectedItemId(item.id)}><td>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td></tr>)}</tbody>
+          <tbody>{items.map((item) => <tr key={item.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-item-row-${item.id}`} onClick={() => openItemDetail(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openItemDetail(item); } }}><td onClick={(event) => event.stopPropagation()}>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td></tr>)}</tbody>
         </table>
       </div>
     </>
@@ -211,7 +252,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-balances-table">
           <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.location}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th></tr></thead>
-          <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td></tr>)}</tbody>
+          <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-balance-row-${row.id}`} onClick={() => openBalanceDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBalanceDetail(row); } }}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td></tr>)}</tbody>
         </table>
         <TablePager testid="inventory-balances-pager" page={pagedBalances.page} pageCount={pagedBalances.pageCount} total={pagedBalances.total} onPrev={pagedBalances.prev} onNext={pagedBalances.next} />
       </div>
@@ -224,7 +265,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-movements-table">
           <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>{TEXT.time}</th></tr></thead>
-          <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td><td>{row.createdAt ?? "-"}</td></tr>)}</tbody>
+          <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-movement-row-${row.id ?? index}`} onClick={() => openMovementDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMovementDetail(row); } }}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td><td>{cnDate(row.createdAt)}</td></tr>)}</tbody>
         </table>
         <TablePager testid="inventory-movements-pager" page={pagedMovements.page} pageCount={pagedMovements.pageCount} total={pagedMovements.total} onPrev={pagedMovements.prev} onNext={pagedMovements.next} />
       </div>
@@ -277,6 +318,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

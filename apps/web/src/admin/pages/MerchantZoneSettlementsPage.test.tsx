@@ -83,3 +83,40 @@ describe("MerchantZoneSettlementsPage KPI 聚焦视图", () => {
     expect(table).not.toContain("disputed");
   });
 });
+
+describe("MerchantZoneSettlementsPage 行明细抽屉（整行可点·时间中文）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant-zone/settlements");
+  });
+
+  it("点结算单行 -> 抽屉含结算单号+中文触发/状态，合同 TraceLink 保留", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlement-row-st-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-settlement-row-st-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("st-1");
+    expect(text).toContain("退租");
+    expect(text).toContain("待结算");
+    expect(text).not.toContain("move_out");
+    expect(text).not.toContain("pending_settlement");
+    expect(drawer.querySelector('[data-testid="trace-link-ADM-CONT-001-c-1"]')).toBeTruthy();
+  });
+
+  it("点结算单行 -> Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlement-row-st-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-settlement-row-st-2"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点单选框仅选中、不弹抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlement-pick-st-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-settlement-pick-st-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});

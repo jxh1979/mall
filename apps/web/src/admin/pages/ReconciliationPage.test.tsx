@@ -120,3 +120,39 @@ describe("ReconciliationPage KPI 聚焦视图（带参重进本页）", () => {
     expect(diffTable).not.toContain("ignored");
   });
 });
+
+describe("ReconciliationPage 行明细抽屉（整行可点·零英文）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin/finance/reconciliation");
+  });
+
+  it("点批次行 -> 抽屉含批次号与金额，状态中文，无英文枚举", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("reconciliation-batch-row-b-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("reconciliation-batch-row-b-1"));
+    const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(drawer).toContain("REC-2026-07-01");
+    expect(drawer).toContain("已匹配");
+    expect(drawer).not.toContain("matched");
+  });
+
+  it("点差异行 -> 抽屉含差异号+金额+中文状态；Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("reconciliation-difference-row-d-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("reconciliation-difference-row-d-1"));
+    const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(drawer).toContain("DIFF-001");
+    expect(drawer).toContain("待处理");
+    expect(drawer).not.toContain("pending");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("差异行点单选框仅选中、不弹抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("reconciliation-select-d-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("reconciliation-select-d-1"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});
