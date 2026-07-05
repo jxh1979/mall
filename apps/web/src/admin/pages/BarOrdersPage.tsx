@@ -235,7 +235,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                 return (
                   <tr key={order.id}>
                     <td><input type="radio" data-testid={`bar-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
-                    <td>{order.orderNo ?? order.id}</td>
+                    <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={order.id}>{order.orderNo ?? order.id}</TraceLink></td>
                     <td><TraceLink navigateTo={navigateTo} pageId="ADM-BAR-001" objectId={order.tableId}>{order.tableId ?? "-"}</TraceLink></td>
                     <td>{displayStatus(order.status)}</td>
                     <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>

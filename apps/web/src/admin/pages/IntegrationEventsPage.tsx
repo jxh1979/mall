@@ -13,6 +13,7 @@ const RETRY_MANAGE_PERMISSION = "integration.retry.manage";
 const COMPENSATION_MANAGE_PERMISSION = "integration.compensation.manage";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, IntegrationEventRow } from "../types";
+import { TraceLink } from "../components/TraceLink";
 
 const ENDPOINTS = [
   { label: "重试任务", source: "retry_task", endpoint: "/api/v1/integration/retry-tasks" },
@@ -72,7 +73,7 @@ function nextKey() {
   return `integration-polling-${Date.now()}`;
 }
 
-export function IntegrationEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function IntegrationEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<LoadedEventRow[]>([]);
   const [pollingNote, setPollingNote] = React.useState("已完成 Webhook 与定时轮询一致性校验");
   const [retryReason, setRetryReason] = React.useState("供应商超时后人工触发重试");
@@ -235,7 +236,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
             <tbody>{paged.pageRows.map((row, index) => (
               <tr key={eventKey(row, index)}>
                 <td>{row.sourceLabel}</td>
-                <td>{row.taskNo ?? row.orderNo ?? row.verificationNo ?? row.id ?? "-"}</td>
+                <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={row.orderNo}>{row.taskNo ?? row.orderNo ?? row.verificationNo ?? row.id ?? "-"}</TraceLink></td>
                 <td>{row.providerCode ?? row.channelCode ?? "-"}</td>
                 <td>{row.eventType ?? row.syncType ?? row.verificationType ?? "-"}</td>
                 <td>{formatBusinessStatus(row.status)}</td>

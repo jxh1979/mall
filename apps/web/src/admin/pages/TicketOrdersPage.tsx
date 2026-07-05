@@ -55,7 +55,7 @@ function selectedLabel(order: TicketOrderRow | undefined) {
   return order?.orderNo ?? order?.id ?? "-";
 }
 
-export function TicketOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function TicketOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
   const [orders, setOrders] = React.useState<TicketOrderRow[]>([]);
   const [entitlements, setEntitlements] = React.useState<TicketIssuedEntitlementRow[]>([]);
   const [verifications, setVerifications] = React.useState<TicketVerificationRow[]>([]);
@@ -83,8 +83,19 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
 
   const paidCount = orders.filter((order) => order.payStatus === "paid").length;
   const pendingIssueCount = orders.filter((order) => order.issueStatus !== "issued").length;
-  const filteredOrders = orders.filter((order) => rowMatchesKeyword(order, query));
-  const paged = usePagedRows(filteredOrders, 10, query);
+  // 作下钻目标：focusObjectId 可能是订单 id 或订单号，两者都匹配
+  const focusMatches = (order: TicketOrderRow) => !!focusObjectId && (order.id === focusObjectId || order.orderNo === focusObjectId);
+  const focusedOrder = focusObjectId ? orders.find(focusMatches) : undefined;
+  const keywordOrders = orders.filter((order) => rowMatchesKeyword(order, query));
+  // 命中下钻订单时置顶，确保落在第 1 页可见并高亮；无 focus 时顺序完全不变
+  const filteredOrders = focusedOrder
+    ? [focusedOrder, ...keywordOrders.filter((order) => order.id !== focusedOrder.id)]
+    : keywordOrders;
+  const paged = usePagedRows(filteredOrders, 10, query + "|" + (focusObjectId || ""));
+
+  React.useEffect(() => {
+    if (focusedOrder) setSelectedOrderId(focusedOrder.id);
+  }, [focusedOrder, setSelectedOrderId]);
 
   async function runAction(action: string, request: () => Promise<unknown>, reload = true) {
     setBusyAction(action);
@@ -136,6 +147,9 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="ticket-orders-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="ticket_order.viewed / ticket.issued / ticket_verification.previewed" />
+      {focusObjectId ? (
+        <div className="admin-state" data-testid="ticket-orders-focus">已从下钻定位到订单：{focusObjectId}{focusedOrder ? "（下表已置顶并高亮）" : "（未在当前订单列表中）"}</div>
+      ) : null}
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reloadResource}>
         <div className="admin-kpi-grid" data-testid="ticket-orders-summary">
           <div className="admin-kpi-card"><span>{TEXT.orders}</span><strong>{orders.length}</strong><small>{TEXT.boundary}</small></div>
@@ -177,7 +191,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
             </thead>
             <tbody>
               {paged.pageRows.map((order) => (
-                <tr key={order.id}>
+                <tr key={order.id} className={focusMatches(order) ? "admin-row-focus" : undefined}>
                   <td><input type="radio" data-testid={`ticket-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                   <td>{order.orderNo ?? order.id}</td>
                   <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={order.ticketTypeId}>{order.ticketTypeId ?? "-"}</TraceLink></td>
