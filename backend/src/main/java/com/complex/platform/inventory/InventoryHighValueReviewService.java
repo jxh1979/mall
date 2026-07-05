@@ -99,6 +99,8 @@ public class InventoryHighValueReviewService {
         List<String> photos = requireNonEmptyList(photoAttachmentIds, "photo_attachment_ids");
         List<String> videos = requireNonEmptyList(videoAttachmentIds, "video_attachment_ids");
         Instant now = Instant.now();
+        // C3：建单即落归属商户（当前 scope），供 reviewInternal 拒绝跨商户翻转。平台/项目管理员空 scope → null（放行）。
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         InventoryHighValueReviewRecord review = repository.saveHighValueReview(new InventoryHighValueReviewRecord(
                 "hvr_" + slug(idempotencySeed + ":" + type + ":" + subject),
                 type,
@@ -109,7 +111,8 @@ public class InventoryHighValueReviewService {
                 null,
                 null,
                 now,
-                null));
+                null,
+                merchantId));
         auditEventService.recordSuccess(
                 "inventory.high_value_review_created",
                 "inventory.high_value.review",
@@ -154,6 +157,14 @@ public class InventoryHighValueReviewService {
                     InventoryHighValueReviewRecord current = repository.findHighValueReviewByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound(
                                     "HIGH_VALUE_REVIEW_NOT_FOUND", "high value review not found"));
+                    // C3：复核前校验归属——有商户 scope 时复核单必须归属本商户，否则 403（含 reject 分支，
+                    // 此前 saved_bottle_void reject 不加载 subject 即无任何 scope 校验，B 可翻转 A 的复核单）。
+                    authorizationService.currentMerchantScope().ifPresent(scope -> {
+                        if (!scope.equals(current.merchantId())) {
+                            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                    "high value review does not belong to your merchant");
+                        }
+                    });
                     if (!"pending".equals(current.reviewStatus())) {
                         throw ApiException.conflict(
                                 "HIGH_VALUE_REVIEW_NOT_PENDING", "high value review is not pending");
@@ -163,7 +174,8 @@ public class InventoryHighValueReviewService {
                     InventoryHighValueReviewRecord resolved = new InventoryHighValueReviewRecord(
                             current.id(), current.subjectType(), current.subjectId(),
                             current.photoAttachmentIds(), current.videoAttachmentIds(),
-                            decision, reviewer, trimToNull(actual.reason()), current.createdAt(), now);
+                            decision, reviewer, trimToNull(actual.reason()), current.createdAt(), now,
+                            current.merchantId());
                     // approve → 动作生效（回调）；reject → 收口（报损/盘点差异置 rejected，存酒维持冻结/不扣减）。
                     if ("approved".equals(decision) && onApprove != null) {
                         onApprove.accept(resolved);
@@ -197,7 +209,8 @@ public class InventoryHighValueReviewService {
             StockAdjustmentRecord adjustment = loadAdjustmentPending(resolved.subjectId());
             // approve → 真正扣减（报损/盘点差异均为减少库存）+ 置 completed。
             int affected = repository.atomicDecreaseStockBalance(
-                    adjustment.itemId(), adjustment.locationId(), adjustment.quantity());
+                    adjustment.itemId(), adjustment.locationId(), adjustment.quantity(),
+                    authorizationService.currentMerchantScope().orElse(null));
             if (affected == 0) {
                 throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
             }

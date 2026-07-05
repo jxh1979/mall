@@ -108,9 +108,11 @@ public interface InventoryRepository {
     void saveRobotTaskEvent(String id, String robotTaskRef, String eventType, String handoverId, String payloadJson, Instant reportedAt);
 
     // P0-1: 原子库存余额操作，消除竞态条件
-    int atomicDecreaseStockBalance(String itemId, String locationId, int qty);
+    // C1: merchantScope 谓词（null=平台/项目管理员放行全量），数据层防跨商户扣减。
+    int atomicDecreaseStockBalance(String itemId, String locationId, int qty, String merchantScope);
 
-    void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId);
+    // C2: projectId 归属列，供项目级读隔离。
+    void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId, String projectId);
 
     // P0-2: 行锁读取，消除 claimSavedBottle 竞态
     Optional<SavedBottleRecord> findSavedBottleByIdForUpdate(String id);
@@ -123,6 +125,9 @@ public interface InventoryRepository {
     List<PurchaseRequestRecord> listPurchaseRequestsByMerchant(String merchantId);
 
     List<StockBalanceRecord> listStockBalancesByMerchant(String merchantId);
+
+    // C2: 项目级读隔离通道（项目员工无商户 scope 时按项目过滤）。
+    List<StockBalanceRecord> listStockBalancesByProject(String projectId);
 
     List<StockMovementRecord> listStockMovementsByMerchant(String merchantId);
 

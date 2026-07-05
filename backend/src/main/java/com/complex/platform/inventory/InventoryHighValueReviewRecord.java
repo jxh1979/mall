@@ -24,6 +24,9 @@ public record InventoryHighValueReviewRecord(
         String reviewerUserId,
         String reason,
         Instant createdAt,
-        Instant reviewedAt
+        Instant reviewedAt,
+        // C3：复核单归属商户（建单时由 createPending 从 currentMerchantScope 落库），
+        // reviewInternal 据此拒绝跨商户翻转他人复核单（含 reject 分支）。历史行由 V237 从 subject 回填。
+        String merchantId
 ) {
 }

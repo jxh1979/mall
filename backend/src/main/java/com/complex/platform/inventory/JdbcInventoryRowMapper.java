@@ -347,7 +347,8 @@ final class JdbcInventoryRowMapper {
                 resultSet.getString("reviewer_user_id"),
                 resultSet.getString("reason"),
                 instant(resultSet, "created_at"),
-                instantOrNull(resultSet, "reviewed_at")
+                instantOrNull(resultSet, "reviewed_at"),
+                resultSet.getString("merchant_id")
         );
     }
 

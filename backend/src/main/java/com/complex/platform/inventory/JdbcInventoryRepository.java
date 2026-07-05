@@ -708,8 +708,15 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     // P0-1: 原子减少库存，WHERE 条件确保 available_quantity 足够，返回受影响行数（0 = 库存不足）
+    // C1: 数据层防跨商户扣减——WHERE 叠加 merchant 谓词（scope 为 null=平台/项目管理员放行全量）。
+    // 与入口 requireItemOwnership 服务层守卫构成纵深防御：即便入口被绕过，SQL 也不会扣到他商户余额。
     @Override
-    public int atomicDecreaseStockBalance(String itemId, String locationId, int qty) {
+    public int atomicDecreaseStockBalance(String itemId, String locationId, int qty, String merchantScope) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("qty", qty)
+                .addValue("item_id", itemId)
+                .addValue("location_id", locationId)
+                .addValue("scope", merchantScope);
         return jdbcTemplate.update("""
                 UPDATE inventory_stock_balances
                    SET quantity = quantity - :qty,
@@ -718,28 +725,32 @@ class JdbcInventoryRepository implements InventoryRepository {
                  WHERE item_id = :item_id
                    AND location_id = :location_id
                    AND available_quantity >= :qty
-                """, Map.of("qty", qty, "item_id", itemId, "location_id", locationId));
+                   AND (merchant_id = :scope OR CAST(:scope AS VARCHAR) IS NULL)
+                """, params);
     }
 
     // P0-1: 原子增加库存，INSERT ON CONFLICT 保证幂等
+    // C2: 余额行落归属 project_id（入库时由服务层从 currentProjectScopeQuietly 传入），供项目级读隔离。
     @Override
-    public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId) {
+    public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId, String projectId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("id", newId)
                 .addValue("item_id", itemId)
                 .addValue("location_id", locationId)
                 .addValue("qty", qty)
                 .addValue("merchant_id", merchantId)
-                .addValue("warehouse_id", warehouseId);
+                .addValue("warehouse_id", warehouseId)
+                .addValue("project_id", projectId);
         // R5 T6：余额挂结构化库房 warehouse_id（可空）。COALESCE 保证仅在新值非空时覆盖既有挂载，
-        // 避免后续不带库房的入库把已挂载的库房抹掉。
+        // 避免后续不带库房的入库把已挂载的库房抹掉。project_id 同 COALESCE 语义（不被后续空值抹掉）。
         jdbcTemplate.update("""
-                INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, merchant_id, warehouse_id, updated_at)
-                VALUES (:id, :item_id, :location_id, :qty, 0, :qty, :merchant_id, :warehouse_id, NOW())
+                INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, merchant_id, warehouse_id, project_id, updated_at)
+                VALUES (:id, :item_id, :location_id, :qty, 0, :qty, :merchant_id, :warehouse_id, :project_id, NOW())
                 ON CONFLICT (item_id, location_id) DO UPDATE SET
                     quantity = inventory_stock_balances.quantity + EXCLUDED.quantity,
                     available_quantity = inventory_stock_balances.available_quantity + EXCLUDED.available_quantity,
                     warehouse_id = COALESCE(EXCLUDED.warehouse_id, inventory_stock_balances.warehouse_id),
+                    project_id = COALESCE(EXCLUDED.project_id, inventory_stock_balances.project_id),
                     updated_at = NOW()
                 """, params);
     }
@@ -798,6 +809,17 @@ class JdbcInventoryRepository implements InventoryRepository {
                  WHERE merchant_id = :merchant_id
                  ORDER BY updated_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapStockBalance);
+    }
+
+    // C2: 项目级读隔离——项目员工（无商户 scope、有项目 scope）只读本项目余额，不越读他项目全平台库存。
+    @Override
+    public List<StockBalanceRecord> listStockBalancesByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
+                  FROM inventory_stock_balances
+                 WHERE project_id = :project_id
+                 ORDER BY updated_at DESC, id
+                """, Map.of("project_id", projectId), rowMapper::mapStockBalance);
     }
 
     @Override
@@ -1301,12 +1323,12 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_high_value_reviews (
                     id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
-                    review_status, reviewer_user_id, reason, created_at, reviewed_at
+                    review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id
                 )
                 VALUES (
                     :id, :subject_type, :subject_id,
                     CAST(:photo_attachment_ids AS jsonb), CAST(:video_attachment_ids AS jsonb),
-                    :review_status, :reviewer_user_id, :reason, :created_at, :reviewed_at
+                    :review_status, :reviewer_user_id, :reason, :created_at, :reviewed_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     subject_type = EXCLUDED.subject_type,
@@ -1327,7 +1349,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("reviewer_user_id", review.reviewerUserId())
                 .addValue("reason", review.reason())
                 .addValue("created_at", offset(review.createdAt()))
-                .addValue("reviewed_at", offset(review.reviewedAt())));
+                .addValue("reviewed_at", offset(review.reviewedAt()))
+                .addValue("merchant_id", review.merchantId()));
         return review;
     }
 
@@ -1335,7 +1358,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<InventoryHighValueReviewRecord> findHighValueReviewByIdForUpdate(String id) {
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
-                       review_status, reviewer_user_id, reason, created_at, reviewed_at
+                       review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id
                   FROM inventory_high_value_reviews
                  WHERE id = :id
                    FOR UPDATE
@@ -1346,7 +1369,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryHighValueReviewRecord> listHighValueReviews() {
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
-                       review_status, reviewer_user_id, reason, created_at, reviewed_at
+                       review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id
                   FROM inventory_high_value_reviews
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapHighValueReview);

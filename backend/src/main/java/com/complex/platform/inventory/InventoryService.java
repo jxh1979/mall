@@ -905,7 +905,8 @@ public class InventoryService {
                                         ? stocktake.warehouseId() : rows.get(0).locationId();
                                 repository.atomicIncreaseStockBalance(
                                         variance.itemId(), targetLocation, delta,
-                                        "bal_recon_" + slug(vId), variance.merchantId(), stocktake.warehouseId());
+                                        "bal_recon_" + slug(vId), variance.merchantId(), stocktake.warehouseId(),
+                                        authorizationService.currentProjectScopeQuietly().orElse(null));
                                 // 裁决#7 守恒账本：盘盈纠账改了余额，同事务（@Transactional reviewVariance）补写一条
                                 // inventory_stock_movements（count_correction，盘盈 → 目标库位入），否则按流水重建对不平。
                                 repository.saveStockMovement(new StockMovementRecord(
@@ -931,7 +932,8 @@ public class InventoryService {
                                     }
                                     int take = Math.min(remaining, Math.max(0, row.availableQuantity()));
                                     if (take > 0 && repository.atomicDecreaseStockBalance(
-                                            variance.itemId(), row.locationId(), take) == 1) {
+                                            variance.itemId(), row.locationId(), take,
+                                            authorizationService.currentMerchantScope().orElse(null)) == 1) {
                                         remaining -= take;
                                         // 守恒账本：盘亏逐库位扣减，按库位各补一条流水（source=该库位），
                                         // 多库位也能逐位回放对平，避免合并一条导致重建在库位维度漂移。
@@ -1141,9 +1143,15 @@ public class InventoryService {
                 "inventory.stock.view",
                 "inventory_stock_balance",
                 () -> {
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    return scope.map(repository::listStockBalancesByMerchant)
-                                .orElseGet(repository::listStockBalances);
+                    // C2：商户员工按 merchant 隔离；商户空但项目非空（项目员工）按 project 隔离；
+                    // 平台管理员（二者皆空）看全量。杜绝项目员工越读他项目/全平台库存余额。
+                    Optional<String> merchantScope = authorizationService.currentMerchantScope();
+                    if (merchantScope.isPresent()) {
+                        return repository.listStockBalancesByMerchant(merchantScope.get());
+                    }
+                    Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
+                    return projectScope.map(repository::listStockBalancesByProject)
+                                       .orElseGet(repository::listStockBalances);
                 }
         );
     }
@@ -1776,8 +1784,15 @@ public class InventoryService {
     private InventoryStockBatchRecord createStockBatchOnce(InventoryStockBatchRequest request) {
         InventoryStockBatchRequest actual = requireRequest(request);
         String itemId = requireText(actual.itemId(), "item_id");
-        repository.findInventoryItemById(itemId)
+        InventoryItemRecord ownedItem = repository.findInventoryItemById(itemId)
                 .orElseThrow(() -> ApiException.notFound("INVENTORY_ITEM_NOT_FOUND", "inventory item not found"));
+        // C1：建批次前校验物料归属当前商户，防跨商户对他人物料建批次。
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(ownedItem.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                        "inventory item does not belong to your merchant");
+            }
+        });
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         return repository.saveStockBatch(new InventoryStockBatchRecord(

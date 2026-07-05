@@ -105,6 +105,9 @@ class InventoryServiceTests {
     void outboundConsumesBatchesByFefoEarliestExpiryFirst() {
         // 2e：出库 FEFO 先到期先出。注入 2 批次（B 先到期 6/5、A 后到期 6/10）+ balance 10。
         java.time.Instant now = java.time.Instant.now();
+        // C4：出库入口现校验物料存在（404），补建 item_fefo（管理员空 scope 不做归属限制）。
+        inventoryRepository.saveInventoryItem(new InventoryItemRecord(
+                "item_fefo", null, "FEFO Item", "spirit", "bottle", null, false, 0, "active", now, now, null, null));
         inventoryRepository.saveStockBatch(new InventoryStockBatchRecord(
                 "fefo-A", "item_fefo", "loc_fefo", "BA", null, 5,
                 java.time.Instant.parse("2026-06-10T00:00:00Z"), "active", List.of(), now, now, null));
@@ -1247,6 +1250,118 @@ class InventoryServiceTests {
         assertThat(result.operatorUserId()).isEqualTo(ADMIN_ACTOR.id());
     }
 
+    // ── 越权隔离修复：跨商户出入库 / 高价值复核越租户 / 物料不存在 404。 ──
+
+    // C1【Critical】商户 B 不得用商户 A 的物料出库（当前无归属校验会 success 扣到 A 的库存）。
+    @Test
+    void stockMovementRejectsCrossMerchantItem() {
+        // 商户 A 的物料 + 余额。
+        inventoryRepository.saveInventoryItem(new InventoryItemRecord(
+                "item_ca", null, "Item CA", "spirit", "bottle", null, false, 0, "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal_ca", "item_ca", "loc_ca", 100, 0, 100, Instant.now(), "m_a", "wh_ca"));
+
+        // 商户 B 视角出库商户 A 的 item → 应 403 CROSS_MERCHANT_FORBIDDEN。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThatThrownBy(() -> service.createStockMovement(new StockMovementRequest(
+                "xm-move-1", "out", List.of(), "loc_ca", "bar_x",
+                List.of(Map.of("item_id", "item_ca", "quantity", 40)), "tc-xm")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        // 商户 A 库存未被动。
+        assertThat(inventoryRepository.findStockBalance("item_ca", "loc_ca").orElseThrow().availableQuantity())
+                .isEqualTo(100);
+    }
+
+    // C1【Critical】商户 B 不得对商户 A 的物料入库。
+    @Test
+    void stockInRejectsCrossMerchantItem() {
+        inventoryRepository.saveInventoryItem(new InventoryItemRecord(
+                "item_cin", null, "Item CIN", "spirit", "bottle", null, false, 0, "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null));
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThatThrownBy(() -> service.createStockIn(new StockInRequest(
+                "xm-in-1", "x", List.of(), "manual", "src-1", "wh_cin",
+                List.of(Map.of("item_id", "item_cin", "quantity", 5)))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    // C1【Critical】商户 B 不得对商户 A 的物料做库存调整。
+    @Test
+    void stockAdjustmentRejectsCrossMerchantItem() {
+        inventoryRepository.saveInventoryItem(new InventoryItemRecord(
+                "item_cadj", null, "Item CADJ", "spirit", "bottle", null, false, 0, "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal_cadj", "item_cadj", "loc_cadj", 100, 0, 100, Instant.now(), "m_a", "wh_cadj"));
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThatThrownBy(() -> service.createStockAdjustment(new StockAdjustmentRequest(
+                "xm-adj-1", "note", List.of(), "loss",
+                List.of(Map.of("item_id", "item_cadj", "location_id", "loc_cadj", "quantity", 10)),
+                "shrinkage", 100L, List.of("att_photo"), List.of("att_video"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(inventoryRepository.findStockBalance("item_cadj", "loc_cadj").orElseThrow().availableQuantity())
+                .isEqualTo(100);
+    }
+
+    // C1【Critical】商户 B 不得对商户 A 的物料建批次。
+    @Test
+    void stockBatchRejectsCrossMerchantItem() {
+        inventoryRepository.saveInventoryItem(new InventoryItemRecord(
+                "item_cbat", null, "Item CBAT", "spirit", "bottle", null, false, 0, "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null));
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThatThrownBy(() -> service.createStockBatch(new InventoryStockBatchRequest(
+                "xm-bat-1", "note", List.of(), "item_cbat", "loc_cbat", "BATCH-XM", null, 5,
+                Instant.parse("2026-12-31T00:00:00Z"), "active")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    // C4【Medium】出库传不存在的 item_id → 显式 404 INVENTORY_ITEM_NOT_FOUND（此前靠 DB FK 兜底成 500）。
+    @Test
+    void stockMovementRejectsUnknownItemWith404() {
+        assertThatThrownBy(() -> service.createStockMovement(new StockMovementRequest(
+                "unknown-item-1", "out", List.of(), "loc_u", "bar_u",
+                List.of(Map.of("item_id", "item_does_not_exist", "quantity", 1)), "tc-u")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("INVENTORY_ITEM_NOT_FOUND"));
+    }
+
+    // C3【High】商户 B 不得复核（reject）商户 A 的高价值存酒作废单（越租户翻转他人复核）。
+    @Test
+    void highValueReviewRejectsCrossMerchantReviewer() {
+        // 商户 A 视角：建高价值存酒 → 作废（建 pending 复核，复核单归属 m_a）。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
+        InventoryItemRecord item = createItem("hv-xm");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-hv-xm", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), "LBL-HVXM", "客", null, true, 500000L,
+                List.of("reg_photo"), null));
+        service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-xm", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
+        String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
+
+        // 商户 B 视角：reject 商户 A 的复核单 → 应 403 CROSS_MERCHANT_FORBIDDEN，复核单维持 pending。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThatThrownBy(() -> service.reviewHighValue(reviewId,
+                new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+                        "review-xm", "rejected", "flip")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(inventoryRepository.listHighValueReviews().getFirst().reviewStatus()).isEqualTo("pending");
+    }
+
     // P1-1: 商户用户只能看到本商户数据
     @Test
     void listMethodsRespectMerchantScope() {
@@ -1814,12 +1929,22 @@ class InventoryServiceTests {
                     .toList();
         }
 
-        // P0-1: 原子减少库存余额（available_quantity >= qty 检查）
+        // C2: in-memory 不落 project 列，按 merchant 无法映射 project；返回空以匹配"项目员工不越读"语义（JDBC 层为权威覆盖）。
         @Override
-        public int atomicDecreaseStockBalance(String itemId, String locationId, int qty) {
+        public List<StockBalanceRecord> listStockBalancesByProject(String projectId) {
+            return List.of();
+        }
+
+        // P0-1: 原子减少库存余额（available_quantity >= qty 检查）
+        // C1: merchantScope 谓词（null 放行）——scope 非空且不匹配余额行 merchant 时不扣（返回 0）。
+        @Override
+        public int atomicDecreaseStockBalance(String itemId, String locationId, int qty, String merchantScope) {
             String key = balanceKey(itemId, locationId);
             StockBalanceRecord existing = balances.get(key);
             if (existing == null || existing.availableQuantity() < qty) {
+                return 0;
+            }
+            if (merchantScope != null && !merchantScope.equals(existing.merchantId())) {
                 return 0;
             }
             balances.put(key, new StockBalanceRecord(
@@ -1837,8 +1962,9 @@ class InventoryServiceTests {
         }
 
         // P0-1: 原子增加库存余额（INSERT ON CONFLICT DO UPDATE 语义）
+        // C2: projectId 参数（in-memory 语义不落 project 列，仅保持签名一致；项目隔离由 JDBC 层测试覆盖）。
         @Override
-        public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId) {
+        public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId, String projectId) {
             String key = balanceKey(itemId, locationId);
             StockBalanceRecord existing = balances.get(key);
             if (existing == null) {

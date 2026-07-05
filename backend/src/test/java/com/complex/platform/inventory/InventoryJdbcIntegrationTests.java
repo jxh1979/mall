@@ -464,6 +464,80 @@ class InventoryJdbcIntegrationTests {
                 .contains(tuple("supplier_recon_p1_jdbc", -12000L, "difference_found"));
     }
 
+
+    // C1【Critical】数据层防跨商户扣减：atomicDecreaseStockBalance 的 merchant 谓词。
+    // scope=商户B 不得扣减归属商户A 的余额（返回 0 未扣）；scope=null（管理员）与 scope=商户A 正常扣。
+    @Test
+    void atomicDecreaseStockBalanceEnforcesMerchantScope() {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_items (id, sku_code, item_name, item_type, unit, trace_required, min_quantity, status, created_at, updated_at, merchant_id)
+                VALUES ('item_dec', 'SKU-DEC', 'Dec Item', 'spirit', 'bottle', false, 0, 'active', now(), now(), 'm_a')
+                ON CONFLICT (id) DO NOTHING
+                """);
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveStockBalance(new StockBalanceRecord(
+                "bal_dec", "item_dec", "loc_dec", 100, 0, 100, now, "m_a", null));
+
+        // 商户 B 视角扣减 → 0 行（谓词拦截），余额不变。
+        assertThat(repository.atomicDecreaseStockBalance("item_dec", "loc_dec", 40, "m_b")).isZero();
+        assertThat(repository.findStockBalance("item_dec", "loc_dec").orElseThrow().availableQuantity())
+                .isEqualTo(100);
+
+        // 商户 A 视角扣减 → 成功扣 40。
+        assertThat(repository.atomicDecreaseStockBalance("item_dec", "loc_dec", 40, "m_a")).isEqualTo(1);
+        assertThat(repository.findStockBalance("item_dec", "loc_dec").orElseThrow().availableQuantity())
+                .isEqualTo(60);
+
+        // 平台管理员（scope=null）放行 → 再扣 10。
+        assertThat(repository.atomicDecreaseStockBalance("item_dec", "loc_dec", 10, null)).isEqualTo(1);
+        assertThat(repository.findStockBalance("item_dec", "loc_dec").orElseThrow().availableQuantity())
+                .isEqualTo(50);
+    }
+
+    // C2【High】库存余额项目级读隔离：listStockBalancesByProject 只返回本项目余额行。
+    @Test
+    void listStockBalancesByProjectIsolatesProjects() {
+        // C2 迁移：project_id 列存在。
+        Integer cols = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM information_schema.columns
+                 WHERE table_name = 'inventory_stock_balances' AND column_name = 'project_id'
+                """, Integer.class);
+        assertThat(cols).isEqualTo(1);
+
+        jdbcTemplate.update("""
+                INSERT INTO inventory_items (id, sku_code, item_name, item_type, unit, trace_required, min_quantity, status, created_at, updated_at)
+                VALUES ('item_pa', 'SKU-PA', 'PA Item', 'spirit', 'bottle', false, 0, 'active', now(), now()),
+                       ('item_pb', 'SKU-PB', 'PB Item', 'spirit', 'bottle', false, 0, 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        // 经原子入库落 project_id（proj_a / proj_b）。
+        repository.atomicIncreaseStockBalance("item_pa", "loc_pa", 10, "bal_pa", "m_a", null, "proj_a");
+        repository.atomicIncreaseStockBalance("item_pb", "loc_pb", 20, "bal_pb", "m_b", null, "proj_b");
+
+        assertThat(repository.listStockBalancesByProject("proj_a"))
+                .extracting(StockBalanceRecord::id).contains("bal_pa").doesNotContain("bal_pb");
+        assertThat(repository.listStockBalancesByProject("proj_b"))
+                .extracting(StockBalanceRecord::id).contains("bal_pb").doesNotContain("bal_pa");
+        assertThat(repository.listStockBalancesByProject("proj_nonexistent")).isEmpty();
+    }
+
+    // C3【High】高价值复核单归属商户列存在 + 往返（reviewInternal 据此拒绝跨租户翻转）。
+    @Test
+    void highValueReviewCarriesMerchantId() {
+        Integer cols = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM information_schema.columns
+                 WHERE table_name = 'inventory_high_value_reviews' AND column_name = 'merchant_id'
+                """, Integer.class);
+        assertThat(cols).isEqualTo(1);
+
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveHighValueReview(new InventoryHighValueReviewRecord(
+                "hvr_m", "saved_bottle_void", "sb_x", List.of("p1"), List.of("v1"),
+                "pending", null, null, now, null, "m_a"));
+        assertThat(repository.findHighValueReviewByIdForUpdate("hvr_m"))
+                .get().extracting(InventoryHighValueReviewRecord::merchantId).isEqualTo("m_a");
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass(?)::text", String.class, tableName);
     }

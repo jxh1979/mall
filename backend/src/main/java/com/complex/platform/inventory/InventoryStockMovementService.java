@@ -71,6 +71,8 @@ final class InventoryStockMovementService {
                     StockAdjustmentRequest actual = requireRequest(request);
                     Map<String, Object> item = firstItem(actual.items(), "items");
                     String itemId = requireItemText(item, "item_id");
+                    // C1/C4：入口显式校验物料存在（404）+ 归属当前商户（跨商户 403），杜绝越权改库存/靠 DB FK 兜底成 500。
+                    requireItemOwnership(itemId);
                     String locationId = requireItemText(item, "location_id");
                     // 盘点期冻结：盘点进行中（counting/reviewing）不得经调整单偷改库存基线（与 stock-in/movement 一致）。
                     requireNoActiveStocktake(locationId);
@@ -175,6 +177,8 @@ final class InventoryStockMovementService {
                     StockMovementRecord last = null;
                     for (Map<String, Object> item : requireItems(actual.items(), "items")) {
                         String itemId = requireItemText(item, "item_id");
+                        // C1/C4：入库前校验物料存在 + 归属当前商户。
+                        requireItemOwnership(itemId);
                         int quantity = requirePositiveItemQuantity(item, "quantity");
                         increaseBalance(itemId, warehouseId, quantity);
                         createInboundBatch(actual.idempotencyKey(), itemId, warehouseId, quantity, merchantId,
@@ -320,6 +324,8 @@ final class InventoryStockMovementService {
         StockMovementRecord last = null;
         for (Map<String, Object> item : requireItems(actual.items(), "items")) {
             String itemId = requireItemText(item, "item_id");
+            // C1/C4：出库/移库前校验物料存在 + 归属当前商户（跨商户扣减 403，不存在 404）。
+            requireItemOwnership(itemId);
             int quantity = requirePositiveItemQuantity(item, "quantity");
             if (decreaseSource) {
                 decreaseBalance(itemId, sourceLocationId, quantity);
@@ -385,12 +391,15 @@ final class InventoryStockMovementService {
     private void increaseBalance(String itemId, String locationId, int quantity, String warehouseId) {
         String balanceId = "balance_" + slug(itemId + ":" + locationId);
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
-        repository.atomicIncreaseStockBalance(itemId, locationId, quantity, balanceId, merchantId, warehouseId);
+        // C2：余额行落归属 project_id（写入者项目 scope），供项目级读隔离。
+        String projectId = authorizationService.currentProjectScopeQuietly().orElse(null);
+        repository.atomicIncreaseStockBalance(itemId, locationId, quantity, balanceId, merchantId, warehouseId, projectId);
     }
 
     // P0-1: 原子减少余额，消除 read-modify-write 竞态
     private void decreaseBalance(String itemId, String locationId, int quantity) {
-        int affected = repository.atomicDecreaseStockBalance(itemId, locationId, quantity);
+        String merchantScope = authorizationService.currentMerchantScope().orElse(null);
+        int affected = repository.atomicDecreaseStockBalance(itemId, locationId, quantity, merchantScope);
         if (affected == 0) {
             throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
         }
@@ -636,6 +645,24 @@ final class InventoryStockMovementService {
         }
         return (long) quantity * unitCostCents >= threshold;
     }
+
+    /**
+     * C1/C4 入口归属校验：物料必须存在（否则 404 INVENTORY_ITEM_NOT_FOUND，替代靠 DB FK 兜底的 500），
+     * 且在有商户 scope 时必须归属当前商户（否则 403 CROSS_MERCHANT_FORBIDDEN，杜绝跨商户改他人库存）。
+     * 平台/项目管理员（空 scope）不做归属限制（放行全量），与既有 loadXxxScoped 口径一致。
+     */
+    private void requireItemOwnership(String itemId) {
+        InventoryItemRecord item = repository.findInventoryItemById(itemId)
+                .orElseThrow(() -> ApiException.notFound(
+                        "INVENTORY_ITEM_NOT_FOUND", "inventory item not found"));
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(item.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                        "inventory item does not belong to your merchant");
+            }
+        });
+    }
+
 
     private List<String> safeList(List<String> value) {
         return value == null ? List.of() : List.copyOf(value);
