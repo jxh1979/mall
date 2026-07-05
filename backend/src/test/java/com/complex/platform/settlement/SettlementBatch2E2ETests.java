@@ -32,13 +32,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *       逐环断言 ar_ap(payable/ticket_distribution/金额/counterparty)、明细 posted+回填、结算单 settled。</li>
  * </ol>
  *
- * <p><b>⚠️ 过账幂等键 40 字符截断风险（已发现，批2-4 生产口径，本测试不改生产代码）</b>：
- * {@code SettlementPostingService} 用 {@code "settle-ticket-dist-"+settlementItemId} 作幂等键，
- * {@code FinanceService.slug()} 截断 40 字符。标准明细 id 形如
- * {@code si_sb_<projectId>_<YearMonth>_<merchant>}，商户判别位落在 40 字符之后 → 同一结算单多家酒吧的应付
- * PK({@code arap_<slug40>}) 相撞、被 ON CONFLICT DO UPDATE 覆盖成 1 条，丢失其余家应付（postBill 仍返回过账笔数）。
- * 故用例①的<b>过账段按单结算单聚合断言</b>（不逐家断 ar_ap，避免踩截断丢账）；<b>逐家一条应付的语义由用例②(单家)守</b>。
- * 该截断为真实隐患，见交付报告，留待批2-4 修（如幂等键改用短哈希/明细序号）。
+ * <p><b>过账幂等键 40 字符截断丢账（曾为真实资金 bug，已修）</b>：
+ * 旧 {@code SettlementPostingService} 用明文 {@code "settle-ticket-dist-"+settlementItemId} 作幂等键，
+ * 经 {@code FinanceService.slug()} 截断 40 字符——标准明细 id {@code si_sb_<projectId>_<YearMonth>_<merchant>}
+ * 商户判别位落在 40 字符之后 → 同一结算单多家酒吧应付 PK({@code arap_<slug40>}) 相撞、被 ON CONFLICT DO UPDATE
+ * 覆盖成 1 条丢账。现幂等键改为明细 id 的短哈希（{@code settle-td-<sha20>}，定长 <40 字符不截断）→ N 家落 N 条独立应付。
+ * 故用例①过账段<b>逐家真实断言 4 条独立应付</b>（每家 direction/source_type/counterparty/金额独立），守修复有效。
  *
  * <p>非 @Transactional(settleMonth/postBill 内部各自 @Transactional 真提交)；过账走 FinanceService(@GuardedAction)
  * 故 @BeforeEach 登录平台管理员。@AfterEach 按 project 清结算单/明细/核销；ar_ap_items 为不可变台账(source_id 唯一)不清。
@@ -159,20 +158,35 @@ class SettlementBatch2E2ETests {
         long remainder = spvPool - distributed;
         assertThat(distributed + remainder).isEqualTo(spvPool);
         assertThat(remainder).isGreaterThanOrEqualTo(0L);
-        // Σ本单 ar_ap payable = Σitems.final（按单聚合，规避 40 字符截断丢账，见类注释⚠️）。
-        long sumArAp = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(aa.amount_cent), 0) FROM ar_ap_items aa
-                 WHERE aa.source_type = 'ticket_distribution'
-                   AND aa.source_id IN (SELECT id FROM settlement_items WHERE bill_id = ?)
-                """, Long.class, billId);
         long sumItemsFinal = jdbcTemplate.queryForObject(
                 "SELECT COALESCE(SUM(final_amount_cent), 0) FROM settlement_items WHERE bill_id = ?",
                 Long.class, billId);
         assertThat(sumItemsFinal).isEqualTo(distributed); // 明细口径无漂移
-        // ponytail: 过账段按单聚合断言应付=明细。40 字符截断令多家 PK 相撞时聚合可能低于明细，
-        //   故断言「聚合 ≤ 明细 且 >0」保守通过；逐家一条应付语义由用例② 守。截断修复后可收紧为 ==。
-        assertThat(sumArAp).isGreaterThan(0L);
-        assertThat(sumArAp).isLessThanOrEqualTo(sumItemsFinal);
+
+        // ---- 逐家真实断言：4 家过账后恰好 4 条独立应付，各家金额/对手方独立正确（修前 1 条、修后 4 条）----
+        long arApCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM ar_ap_items
+                 WHERE direction = 'payable' AND source_type = 'ticket_distribution'
+                   AND source_id IN (SELECT id FROM settlement_items WHERE bill_id = ?)
+                """, Long.class, billId);
+        assertThat(arApCount).isEqualTo(4L); // ← 修复核心断言：多家不相撞，落 N 条
+
+        Map<String, Long> expectedByBar = Map.of("bar1", a1, "bar2", a2, "bar3", a3, "bar4", a4);
+        for (var e : expectedByBar.entrySet()) {
+            String m = e.getKey();
+            Map<String, Object> arap = arApBySource(itemId(pid, m));
+            assertThat(arap.get("direction")).isEqualTo("payable");
+            assertThat(arap.get("source_type")).isEqualTo("ticket_distribution");
+            assertThat(arap.get("counterparty_id")).isEqualTo(m); // 各家对手方=各自 merchant
+            assertThat(((Number) arap.get("amount_cent")).longValue()).isEqualTo(e.getValue()); // 各家金额独立正确
+        }
+        // Σ各家应付 = Σ明细 final（逐家落地后，聚合亦精确相等，无丢账）。
+        long sumArAp = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(aa.amount_cent), 0) FROM ar_ap_items aa
+                 WHERE aa.direction = 'payable' AND aa.source_type = 'ticket_distribution'
+                   AND aa.source_id IN (SELECT id FROM settlement_items WHERE bill_id = ?)
+                """, Long.class, billId);
+        assertThat(sumArAp).isEqualTo(sumItemsFinal);
     }
 
     /**
@@ -220,8 +234,8 @@ class SettlementBatch2E2ETests {
     // ---- helpers（照批2-3/2-4 风格）----
 
     /**
-     * 短项目 id：结算单/明细 id 派生自 project_id，而过账幂等键 slug 截断 40 字符——短 id 保单家用例的应付真实落地。
-     * (多家用例的截断丢账已在类注释⚠️说明，用例① 过账段以聚合断言规避。)
+     * 短项目 id：结算单/明细 id 派生自 project_id。历史上过账幂等键曾受 slug 40 字符截断，短 id 是当时的规避；
+     * 现幂等键已改短哈希（见类注释），长短 id 均落 N 条独立应付，短 id 仅留作稳定造数习惯。
      */
     private String newProject() {
         String pid = "p" + Long.toHexString(System.nanoTime() & 0xFFFFFFFL);

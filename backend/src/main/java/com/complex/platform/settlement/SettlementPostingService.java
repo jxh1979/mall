@@ -3,6 +3,9 @@ package com.complex.platform.settlement;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.ArApItemRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
@@ -84,13 +87,17 @@ public class SettlementPostingService {
 
     /**
      * 通票分账过账：按明细挂平台→酒吧应付（direction='payable'、source_type='ticket_distribution'、
-     * source_id/幂等键=settlementItemId）。幂等靠 (direction,source_type,source_id) 唯一 + PK=arap_&lt;itemId&gt;，
+     * source_id=settlementItemId；幂等键={@link #idempotencyKey(String)}=明细 id 的短哈希）。
+     * 幂等靠 (direction,source_type,source_id) 唯一 + PK=arap_&lt;短哈希 slug&gt;，
      * 重复过账命中已存在项、不重复插。返回 ar_ap_item_id。
+     *
+     * <p>⚠️ 幂等键<b>不能</b>用 {@code "..."+settlementItemId} 明文——会被内部 slug() 截断 40 字符，
+     * 令同一结算单多家酒吧应付 PK 相撞、丢账（详见 {@link #idempotencyKey(String)}）。
      */
     String createPayableForTicketDistribution(
             String settlementItemId, String merchantId, long amountCent, LocalDate dueDate) {
         ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
-                "settle-ticket-dist-" + settlementItemId,
+                idempotencyKey(settlementItemId),
                 "ticket distribution settlement payable: item " + settlementItemId,
                 List.of(),
                 "payable",
@@ -102,5 +109,30 @@ public class SettlementPostingService {
                 YearMonth.from(dueDate).toString()
         ));
         return item.id();
+    }
+
+    /**
+     * 过账幂等键：明细 id 的 SHA-256 前 20 hex（{@code settle-td-<hash20>}，共 29 字符）。
+     *
+     * <p>直接用 {@code "settle-ticket-dist-"+明细id} 会被 {@link FinanceService#createArApItem}
+     * 内部 {@code slug()} 截断 40 字符——标准明细 id {@code si_sb_<projectId>_<YearMonth>_<merchant>}
+     * 的商户判别位落在 40 字符之后，同一结算单多家酒吧的应付 PK({@code arap_<slug40>}) 相撞、被
+     * ON CONFLICT DO UPDATE 覆盖成 1 条 → <b>资金丢账</b>。改用定长短哈希后：
+     * ① 天然 &lt;40 字符不受截断；② 明细 id 一一对应、各家键互不相撞 → N 家落 N 条独立应付；
+     * ③ 输入相同（同一明细重复过账）哈希相同 → 幂等不重复插。
+     */
+    private static String idempotencyKey(String settlementItemId) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(settlementItemId.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(40);
+            for (int i = 0; i < 10; i++) { // 10 字节 = 20 hex
+                hex.append(Character.forDigit((digest[i] >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(digest[i] & 0xF, 16));
+            }
+            return "settle-td-" + hex; // 10 + 20 = 30 字符，< 40 不截断
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e); // JRE 必带，理论不达
+        }
     }
 }
