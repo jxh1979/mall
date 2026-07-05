@@ -83,4 +83,50 @@ describe("DynamicPricingPage KPI 聚焦视图", () => {
     expect(table).toContain("草稿");
     expect(table).toContain("已上架");
   });
+
+  it("生效期列为中文日期，不含 ISO 原文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dynamic-pricing-table")).toBeTruthy());
+    const table = screen.getByTestId("dynamic-pricing-table").textContent ?? "";
+    expect(table).toContain("2026年6月1日");
+    expect(table).not.toContain("2026-06-01");
+  });
+});
+
+describe("DynamicPricingPage 行明细抽屉（整行可点·日期中文）", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/admin/ticketing/dynamic-pricing");
+  });
+
+  it("点规则行 -> 抽屉含规则名+中文渠道+中文状态+中文生效期，无英文枚举码", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dynamic-pricing-row-r-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dynamic-pricing-row-r-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("草稿规则");
+    expect(text).toContain("网页端");
+    expect(text).toContain("草稿");
+    expect(text).toContain("2026年6月1日");
+    expect(text).not.toContain("draft");
+    expect(text).not.toContain("web");
+    expect(text).not.toContain("percent_delta");
+  });
+
+  it("点规则行 -> Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dynamic-pricing-row-r-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dynamic-pricing-row-r-2"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点单选按钮只选中行、不弹抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dynamic-pricing-select-r-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dynamic-pricing-select-r-1"));
+    expect((screen.getByTestId("dynamic-pricing-select-r-1") as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
 });

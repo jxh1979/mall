@@ -79,4 +79,57 @@ describe("MerchantZoneContractsPage KPI 聚焦视图", () => {
     expect(table).not.toContain("effective");
     expect(table).not.toContain("expired");
   });
+
+  it("租期列为中文日期，不含 ISO 原文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-contracts-table")).toBeTruthy());
+    const table = screen.getByTestId("merchant-zone-contracts-table").textContent ?? "";
+    expect(table).toContain("2026年1月1日");
+    expect(table).not.toContain("2026-01-01");
+  });
+});
+
+describe("MerchantZoneContractsPage 行明细抽屉（整行可点·日期中文）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant-zone/contracts");
+  });
+
+  it("点合同行 -> 抽屉含租期中文日期+中文状态+保证金，合同下钻 TraceLink 保留", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-contract-row-contract-aaaa1111"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("2026年1月1日");
+    expect(text).toContain("履约中");
+    expect(text).not.toContain("effective");
+    expect(drawer.querySelector('[data-testid="trace-link-ADM-CONT-001-contract-aaaa1111"]')).toBeTruthy();
+  });
+
+  it("点合同行 -> Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-contract-row-contract-bbbb2222")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-zone-contract-row-contract-bbbb2222"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点合同下钻 TraceLink 触发下钻、不弹抽屉（stopPropagation）", async () => {
+    const navigateTo = vi.fn();
+    const props: AdminPageProps = {
+      api: makeApi(),
+      user: { id: "u1", username: "merchant", accountType: "merchant_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+      navigateTo,
+    };
+    render(<MerchantZoneContractsPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("trace-link-ADM-CONT-001-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("trace-link-ADM-CONT-001-contract-aaaa1111"));
+    expect(navigateTo).toHaveBeenCalled();
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
 });

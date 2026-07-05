@@ -102,4 +102,33 @@ describe("CustomerAccountsPage", () => {
     expect(screen.getByTestId("customer-account-blacklist")).toBeDisabled();
     expect(screen.getByTestId("customer-account-reinstate")).toBeDisabled();
   });
+
+  it("注册时间列为中文日期，不含 ISO 原文", async () => {
+    renderPage();
+    await searchFor("13900001234");
+    const table = screen.getByTestId("customer-account-table").textContent ?? "";
+    expect(table).toContain("2026年6月14日");
+    expect(table).not.toContain("2026-06-14");
+  });
+
+  it("点账号行 -> 抽屉含掩码手机号+中文状态+中文注册时间", async () => {
+    renderPage();
+    await searchFor("13900001234");
+    fireEvent.click(screen.getByTestId("customer-account-cust_1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("139****1234");
+    expect(text).toContain("正常");
+    expect(text).toContain("2026年6月14日");
+    expect(text).not.toContain("active");
+  });
+
+  it("点账号行 -> Esc 关闭抽屉", async () => {
+    renderPage();
+    await searchFor("13900001234");
+    fireEvent.click(screen.getByTestId("customer-account-cust_1"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
 });

@@ -2,6 +2,7 @@ import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 // 平台侧客人账号安全投影（后端 CustomerAccountView，unwrap 已 camel 化）。只有掩码手机号，明文不出网。
 type CustomerAccountRow = {
@@ -33,6 +34,21 @@ export function CustomerAccountsPage({ api, setActionResult, setGlobalError, eff
   const [loading, setLoading] = React.useState(false);
   const [suspendForm, setSuspendForm] = React.useState({ until: "", reason: "" });
   const [reason, setReason] = React.useState("");
+  // 行明细抽屉：整行可点 → 该客人账号完整字段（掩码手机号·中文状态·中文日期）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openAccountDetail(row: CustomerAccountRow) {
+    setDetail({
+      title: `客人账号明细 · ${row.maskedPhone}`,
+      fields: [
+        { label: "手机号", value: row.maskedPhone },
+        { label: "账号状态", value: STATUS_LABELS[row.status] ?? row.status },
+        { label: "封禁到期", value: row.suspendedUntil ? cnDate(row.suspendedUntil) : "—" },
+        { label: "注册时间", value: cnDate(row.createdAt) },
+        { label: "客人编号", value: row.id },
+      ],
+    });
+  }
 
   async function search() {
     const trimmed = phone.trim();
@@ -113,11 +129,13 @@ export function CustomerAccountsPage({ api, setActionResult, setGlobalError, eff
                 </tr>
               </thead>
               <tbody>
-                <tr data-testid={`customer-account-${account.id}`}>
+                <tr data-testid={`customer-account-${account.id}`} className="admin-row-clickable" tabIndex={0}
+                  onClick={() => openAccountDetail(account)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAccountDetail(account); } }}>
                   <td>{account.maskedPhone}</td>
                   <td data-testid="customer-account-status">{STATUS_LABELS[account.status] ?? account.status}</td>
-                  <td>{account.suspendedUntil ? new Date(account.suspendedUntil).toLocaleString() : "—"}</td>
-                  <td>{account.createdAt ? new Date(account.createdAt).toLocaleDateString() : "—"}</td>
+                  <td>{account.suspendedUntil ? cnDate(account.suspendedUntil) : "—"}</td>
+                  <td>{cnDate(account.createdAt)}</td>
                 </tr>
               </tbody>
             </table>
@@ -174,6 +192,7 @@ export function CustomerAccountsPage({ api, setActionResult, setGlobalError, eff
           </div>
         </>
       )}
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

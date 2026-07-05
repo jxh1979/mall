@@ -7,6 +7,7 @@ import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useSelectedRow } from "../hooks/useSelectedRow";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, TicketDynamicPricingRuleRow, TicketDynamicPricingSimulationResult } from "../types";
 
 // 后端写权限码（TicketingController：/dynamic-pricing-rules/{id}/publish）
@@ -86,6 +87,23 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该动态定价规则完整字段（渠道/状态中文·生效期中文日期）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openRuleDetail(rule: TicketDynamicPricingRuleRow) {
+    setDetail({
+      title: `动态定价规则明细 · ${rule.ruleName ?? rule.id}`,
+      fields: [
+        { label: "规则名称", value: rule.ruleName ?? rule.id },
+        { label: "渠道", value: formatBusinessStatus(rule.salesChannel) },
+        { label: "优先级", value: rule.priority ?? "—" },
+        { label: "调整", value: `${adjustmentTypeLabel(rule.adjustmentType)} ${rule.adjustmentRate ?? ""}`.trim() },
+        { label: "状态", value: formatBusinessStatus(rule.status) },
+        { label: "生效期", value: `${cnDate(rule.effectiveFrom)} ~ ${cnDate(rule.effectiveTo)}` },
+        { label: "规则编号", value: rule.id },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -245,20 +263,23 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
             </thead>
             <tbody>
               {visibleRules.map((rule) => (
-                <tr key={rule.id}>
-                  <td><input type="radio" data-testid={`dynamic-pricing-select-${rule.id}`} checked={(selectedRule?.id ?? "") === rule.id} onChange={() => setSelectedRuleId(rule.id)} /></td>
+                <tr key={rule.id} className="admin-row-clickable" tabIndex={0} data-testid={`dynamic-pricing-row-${rule.id}`}
+                  onClick={() => openRuleDetail(rule)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRuleDetail(rule); } }}>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`dynamic-pricing-select-${rule.id}`} checked={(selectedRule?.id ?? "") === rule.id} onChange={() => setSelectedRuleId(rule.id)} /></td>
                   <td>{rule.ruleName ?? rule.id}</td>
                   <td>{formatBusinessStatus(rule.salesChannel)}</td>
                   <td>{rule.priority ?? "-"}</td>
                   <td>{adjustmentTypeLabel(rule.adjustmentType)} {rule.adjustmentRate ?? ""}</td>
                   <td>{formatBusinessStatus(rule.status)}</td>
-                  <td>{rule.effectiveFrom ?? "-"} / {rule.effectiveTo ?? "-"}</td>
+                  <td>{cnDate(rule.effectiveFrom)} ~ {cnDate(rule.effectiveTo)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

@@ -14,7 +14,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, TicketVerificationRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { cnDate } from "../components/RowDetailDrawer";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
@@ -93,6 +93,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [busyAction, setBusyAction] = React.useState("");
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该订单完整字段（金额¥·枚举中文·下单/支付时间中文），与既有单选/下钻并存。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   // 浏览器后退/前进也能进出聚焦视图。AdminApp 的 popstate 只重建 route/focus，本页 ?kpi= 参数自理，互不干扰。
   React.useEffect(() => {
@@ -203,6 +205,26 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
     }), false);
   }
 
+  function openOrderDetail(order: TicketOrderRow) {
+    setDetail({
+      title: `订单明细 · ${order.orderNo ?? order.id}`,
+      fields: [
+        { label: TEXT.orderNo, value: order.orderNo ?? order.id },
+        { label: TEXT.ticketType, value: <TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={order.ticketTypeId}>{order.ticketTypeId ?? "—"}</TraceLink> },
+        { label: TEXT.quantity, value: order.quantity ?? "—" },
+        { label: TEXT.visitDate, value: cnDate(order.visitDate) },
+        { label: TEXT.channel, value: formatBusinessStatus(order.salesChannel) },
+        { label: TEXT.amount, value: formatAmount(order.amountCent) },
+        { label: TEXT.payStatus, value: formatBusinessStatus(order.payStatus) },
+        { label: TEXT.issueStatus, value: formatBusinessStatus(order.issueStatus) },
+        { label: TEXT.status, value: formatBusinessStatus(order.status) },
+        { label: TEXT.createdAt, value: cnDate(order.createdAt) },
+        { label: TEXT.paidAt, value: cnDate(order.paidAt) },
+        { label: "订单编号", value: order.id },
+      ],
+    });
+  }
+
   return (
     <section data-testid="ticket-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -261,12 +283,15 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
             </thead>
             <tbody>
               {paged.pageRows.map((order) => (
-                <tr key={order.id} className={focusMatches(order) ? "admin-row-focus" : undefined}>
-                  <td><input type="radio" data-testid={`ticket-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
+                <tr key={order.id} data-testid={`ticket-order-row-${order.id}`}
+                  className={`admin-row-clickable${focusMatches(order) ? " admin-row-focus" : ""}`} tabIndex={0}
+                  onClick={() => openOrderDetail(order)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOrderDetail(order); } }}>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`ticket-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                   <td>{order.orderNo ?? order.id}</td>
-                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={order.ticketTypeId}>{order.ticketTypeId ?? "-"}</TraceLink></td>
+                  <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={order.ticketTypeId}>{order.ticketTypeId ?? "-"}</TraceLink></td>
                   <td>{order.quantity ?? "-"}</td>
-                  <td>{order.visitDate ?? "-"}</td>
+                  <td>{cnDate(order.visitDate)}</td>
                   <td>{formatBusinessStatus(order.salesChannel)}</td>
                   <td>{formatAmount(order.amountCent)}</td>
                   <td>{formatBusinessStatus(order.payStatus)}</td>
@@ -282,6 +307,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
         </div>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

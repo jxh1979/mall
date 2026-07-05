@@ -6,6 +6,7 @@ import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -75,6 +76,50 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1" });
   // 区4 派生价规则
   const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "0.8", fixedYuan: "" });
+
+  // 行明细抽屉：三张业务表（票种/权益模板/派生价规则）整行可点 → 该行完整字段（金额¥·枚举中文·引用 TraceLink）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openTicketTypeDetail(row: TicketTypeRow) {
+    setDetail({
+      title: `票种明细 · ${row.ticketName}`,
+      fields: [
+        { label: "票种名称", value: row.ticketName },
+        { label: "平日价", value: `¥${yuan(row.weekdayPriceCent)}` },
+        { label: "周末价", value: `¥${yuan(row.weekendPriceCent)}` },
+        { label: "节假日价", value: `¥${yuan(row.holidayPriceCent)}` },
+        { label: "限量", value: row.stockQuantity ?? "不限" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "票种编号", value: row.id },
+      ],
+    });
+  }
+
+  function openTemplateDetail(row: EntitlementTemplateRow) {
+    setDetail({
+      title: `权益模板明细 · ${row.name}`,
+      fields: [
+        { label: "模板名称", value: row.name },
+        { label: "权益类型", value: formatBusinessStatus(row.entitlementType) },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "模板编号", value: row.id },
+      ],
+    });
+  }
+
+  function openRuleDetail(row: PriceRuleRow) {
+    setDetail({
+      title: `派生价规则明细 · ${VARIANT_LABELS[row.variantType] ?? row.variantType}`,
+      fields: [
+        { label: "票种", value: <TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={row.ticketTypeId}>{tickets.find((t) => t.id === row.ticketTypeId)?.ticketName ?? row.ticketTypeId}</TraceLink> },
+        { label: "人群/渠道", value: VARIANT_LABELS[row.variantType] ?? row.variantType },
+        { label: "定价方式", value: row.priceMode === "fixed_price" ? "固定价" : "按基础价折扣" },
+        { label: "折扣/价格", value: row.priceMode === "fixed_price" ? `¥${yuan(row.weekdayPriceCent)}` : row.discountRate != null ? `${Math.round(Number(row.discountRate) * 100)}%` : "—" },
+        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "规则编号", value: row.id },
+      ],
+    });
+  }
 
   const { loading, error: loadError, reload } = useAdminResource(
     async () => {
@@ -212,7 +257,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
             </thead>
             <tbody>
               {tickets.map((row) => (
-                <tr key={row.id} data-testid={`ticket-type-${row.id}`} className={focusObjectId === row.id ? "admin-row-focus" : undefined}>
+                <tr key={row.id} data-testid={`ticket-type-${row.id}`}
+                  className={`admin-row-clickable${focusObjectId === row.id ? " admin-row-focus" : ""}`} tabIndex={0}
+                  onClick={() => openTicketTypeDetail(row)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTicketTypeDetail(row); } }}>
                   <td>{row.ticketName}</td>
                   <td>{yuan(row.weekdayPriceCent)}</td>
                   <td>{yuan(row.weekendPriceCent)}</td>
@@ -252,7 +300,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           </thead>
           <tbody>
             {templates.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`entitlement-template-${row.id}`}
+                onClick={() => openTemplateDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
                 <td>{row.name}</td>
                 <td>{formatBusinessStatus(row.entitlementType)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
@@ -311,8 +361,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           </thead>
           <tbody>
             {rules.map((row) => (
-              <tr key={row.id}>
-                <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={row.ticketTypeId}>{tickets.find((t) => t.id === row.ticketTypeId)?.ticketName ?? row.ticketTypeId}</TraceLink></td>
+              <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`price-rule-${row.id}`}
+                onClick={() => openRuleDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRuleDetail(row); } }}>
+                <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={row.ticketTypeId}>{tickets.find((t) => t.id === row.ticketTypeId)?.ticketName ?? row.ticketTypeId}</TraceLink></td>
                 <td>{VARIANT_LABELS[row.variantType] ?? row.variantType}</td>
                 <td>{row.priceMode === "fixed_price" ? "固定价" : "按基础价折扣"}</td>
                 <td>{row.priceMode === "fixed_price" ? `¥${yuan(row.weekdayPriceCent)}` : row.discountRate != null ? `${Math.round(Number(row.discountRate) * 100)}%` : "—"}</td>
@@ -347,6 +399,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           新建派生价
         </PermissionButton>
       </div>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }

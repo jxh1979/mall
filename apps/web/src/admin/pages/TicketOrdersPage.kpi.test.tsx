@@ -117,3 +117,58 @@ describe("TicketOrdersPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("ticket-order-paid-at-o-2").textContent).toBe("—");
   });
 });
+
+describe("TicketOrdersPage 行明细抽屉（整行可点·时间中文，与单选/下钻/高亮并存）", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/admin/ticketing/orders");
+  });
+
+  it("点订单行 -> 抽屉含订单号+中文支付/出票状态+下单/支付时间中文，无英文枚举码", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("ticket-order-row-o-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("ticket-order-row-o-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    const text = drawer.textContent ?? "";
+    expect(text).toContain("TKT-0001");
+    expect(text).toContain("已支付");
+    expect(text).toContain("已出票");
+    expect(text).toContain("2026年7月5日 09:00");
+    expect(text).toContain("2026年7月5日 10:30");
+    expect(text).not.toContain("paid");
+    expect(text).not.toContain("issued");
+  });
+
+  it("点订单行 -> Esc 关闭抽屉", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("ticket-order-row-o-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("ticket-order-row-o-2"));
+    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+
+  it("点单选按钮只选中订单、不弹抽屉（stopPropagation）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("ticket-order-select-o-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("ticket-order-select-o-1"));
+    expect((screen.getByTestId("ticket-order-select-o-1") as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("点票种 TraceLink 触发下钻、不弹抽屉（stopPropagation）", async () => {
+    const navigateTo = vi.fn();
+    renderPage({ navigateTo });
+    await waitFor(() => expect(screen.getByTestId("trace-link-ADM-TKT-001-tt-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("trace-link-ADM-TKT-001-tt-1"));
+    expect(navigateTo).toHaveBeenCalled();
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+
+  it("P1-B 下钻定位高亮与整行可点并存（focus 行同时有 clickable 与 focus 类）", async () => {
+    renderPage({ focusObjectId: "o-1" });
+    await waitFor(() => expect(screen.getByTestId("ticket-order-row-o-1")).toBeTruthy());
+    const row = screen.getByTestId("ticket-order-row-o-1");
+    expect(row.className).toContain("admin-row-clickable");
+    expect(row.className).toContain("admin-row-focus");
+  });
+});

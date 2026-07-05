@@ -5,6 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, MerchantZoneContractRow } from "../types";
 
 const TEXT = {
@@ -50,6 +51,32 @@ function readKpiFocusFromUrl(): KpiFocus | null {
 export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneContractRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 行明细抽屉：整行可点 → 该合同完整字段（日期中文·金额¥·状态中文·合同/空间引用 TraceLink）。
+  const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  function openContractDetail(row: MerchantZoneContractRow) {
+    setDetail({
+      title: `合同明细 · ${shortId(row.id)}`,
+      fields: [
+        { label: "合同", value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.id}>{row.id}</TraceLink> },
+        { label: "租期", value: `${cnDate(row.effectiveDate)} ~ ${cnDate(row.expiryDate)}` },
+        {
+          label: "空间",
+          value: (row.spaceIds ?? []).length > 0
+            ? (row.spaceIds ?? []).map((sid, i) => <React.Fragment key={sid}>{i > 0 ? "、" : ""}<TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={sid}>{sid}</TraceLink></React.Fragment>)
+            : "—",
+        },
+        { label: "状态", value: STATUS_LABELS[row.lifecycleStatus ?? ""] ?? row.lifecycleStatus ?? "—" },
+        { label: "保证金", value: money(row.depositCent) },
+        {
+          label: "续签自",
+          value: row.renewedFromContractId
+            ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.renewedFromContractId}>{row.renewedFromContractId}</TraceLink>
+            : "—",
+        },
+      ],
+    });
+  }
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -97,17 +124,19 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
         </thead>
         <tbody>
           {paged.pageRows.map((row) => (
-            <tr key={row.id}>
-              <td className="admin-id-cell" title={row.id}>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-zone-contract-row-${row.id}`}
+              onClick={() => openContractDetail(row)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openContractDetail(row); } }}>
+              <td className="admin-id-cell" title={row.id} onClick={(event) => event.stopPropagation()}>
                 <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.id}>{shortId(row.id)}</TraceLink>
               </td>
-              <td>{row.effectiveDate ?? "-"} ~ {row.expiryDate ?? "-"}</td>
-              <td>{(row.spaceIds ?? []).length > 0
-                ? (row.spaceIds ?? []).map((sid, i) => <React.Fragment key={sid}>{i > 0 ? ", " : ""}<TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={sid}>{sid}</TraceLink></React.Fragment>)
+              <td>{cnDate(row.effectiveDate)} ~ {cnDate(row.expiryDate)}</td>
+              <td onClick={(event) => event.stopPropagation()}>{(row.spaceIds ?? []).length > 0
+                ? (row.spaceIds ?? []).map((sid, i) => <React.Fragment key={sid}>{i > 0 ? "、" : ""}<TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={sid}>{sid}</TraceLink></React.Fragment>)
                 : "-"}</td>
               <td>{STATUS_LABELS[row.lifecycleStatus ?? ""] ?? row.lifecycleStatus ?? "-"}</td>
               <td className="admin-num">{money(row.depositCent)}</td>
-              <td className="admin-id-cell" title={row.renewedFromContractId ?? undefined}>
+              <td className="admin-id-cell" title={row.renewedFromContractId ?? undefined} onClick={(event) => event.stopPropagation()}>
                 {row.renewedFromContractId
                   ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.renewedFromContractId}>{shortId(row.renewedFromContractId)}</TraceLink>
                   : shortId(row.renewedFromContractId)}
@@ -143,6 +172,7 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
           </>
         )}
       </AdminDataState>
+      <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
 }
