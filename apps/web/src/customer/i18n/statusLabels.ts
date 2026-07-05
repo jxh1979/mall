@@ -168,6 +168,68 @@ const STATUS_LABELS: Record<string, string> = {
   fixed_rent_plus_commission: "固定租金+抽成",
   revenue_share: "收入分成",
   fixed_rent: "固定租金",
+  // —— KPI 前置批全局补充（2026-07-05）——
+  // 商户类型（platform 域 merchant_type；service 已有）
+  tenant: "租赁商户",
+  retail: "零售",
+  catering: "餐饮",
+  entertainment: "娱乐",
+  // 业务域 / 退款域（refund_domain 等）
+  ticket: "票务",
+  bar: "酒吧",
+  amusement: "游乐",
+  finance: "财务",
+  all: "全部",
+  // 经营分析统计口径（segment_type；merchant 多义不进全局表）
+  platform: "平台",
+  project: "项目",
+  // 票务权益类型（entitlement_type）
+  entry: "入园",
+  ride: "游乐项目",
+  gift_drink: "赠饮",
+  drink: "酒水",
+  // 退款自动规则类型
+  expired_unused: "到期未用",
+  unused: "未使用",
+  // 游乐 KPI 标签用词（reserved 已有"已预订"，游乐"已占用"义留页级）
+  bookings: "预约",
+  sessions: "场次",
+  capacity: "容量",
+  locked: "已锁定",
+  projects: "项目",
+  // 设施工单流转（accepted/suspended 多义留页级）
+  pending_review: "待复核",
+  pending_acceptance: "待验收",
+  overtime: "已超时",
+  // 巡检整改
+  rectifying: "整改中",
+  rechecked: "已复查",
+  rectification_submitted: "整改已提交",
+  // 能耗抄表复核
+  recorded: "已记录",
+  reviewed: "已复核",
+  // 进场施工
+  submitted: "已提交",
+  // 账单账龄
+  overdue: "已逾期",
+  // 对账 / 集成事件
+  processed: "已处理",
+  matched: "已匹配",
+  ignored: "已忽略",
+  // 风险预警处置
+  dismissed: "已忽略",
+  // 集成适配器类型 / 就绪状态（retail/catering 与商户类型同词同义）
+  payment: "支付",
+  ticket_channel: "票务渠道",
+  face_age: "人脸年龄核验",
+  wecom: "企业微信",
+  robot: "机器人",
+  video: "视频",
+  device: "设备",
+  not_ready: "未就绪",
+  // 支付渠道
+  cash: "现金",
+  pos: "POS刷卡",
 };
 
 export function formatBusinessStatus(code: string | null | undefined): string {
