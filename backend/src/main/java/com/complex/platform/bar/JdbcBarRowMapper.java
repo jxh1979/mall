@@ -173,7 +173,9 @@ final class JdbcBarRowMapper {
                 resultSet.getBoolean("sold_out"),
                 nullableInstant(resultSet, "sold_out_at"),
                 resultSet.getString("sold_out_reason"),
-                resultSet.getObject("internal_settlement_price_cent", Long.class)
+                resultSet.getObject("internal_settlement_price_cent", Long.class),
+                resultSet.getString("category_id"),
+                resultSet.getString("image_url")
         );
     }
 

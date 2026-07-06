@@ -30004,6 +30004,309 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/bar/catalog/categories": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "listBarProductCategories",
+        "summary": "查询酒吧商品分类",
+        "description": "图形化点单 POS 可配置分类目录，供按分类分屏列菜。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "bar.category.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.category.viewed",
+        "x-audit-event-failure": "bar.category.viewed_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "saveBarProductCategory",
+        "summary": "新增或修改酒吧商品分类",
+        "description": "图形化点单 POS 分类维护（后台自建分类，可停用）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "bar.category.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.category.saved",
+        "x-audit-event-failure": "bar.category.saved_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarProductCategoryRequest"
+        }
+      }
+    },
+    "/api/v1/bar/catalog/products/{product_id}/category": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "assignBarProductCategory",
+        "summary": "给酒吧商品设分类",
+        "description": "将商品归入某可配置分类（categoryId 空=清除分类）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "bar.product.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.product.category_assigned",
+        "x-audit-event-failure": "bar.product.category_assigned_failed",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarProductCategoryAssignRequest"
+        }
+      }
+    },
+    "/api/v1/bar/catalog/products": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "listBarProductsByCategory",
+        "summary": "按分类查询酒吧商品",
+        "description": "图形化点单 POS 拉菜单（按 bar_id + category_id 归组，category_id 空=未分类商品）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "bar.product.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.product.viewed",
+        "x-audit-event-failure": "bar.product.viewed_failed",
+        "parameters": [
+          {
+            "name": "bar_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/bar/catalog/combos": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "listBarCombos",
+        "summary": "查询酒吧套餐",
+        "description": "图形化点单 POS 套餐目录（含组合明细与内部结算价）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "bar.combo.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.combo.viewed",
+        "x-audit-event-failure": "bar.combo.viewed_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "saveBarCombo",
+        "summary": "新增或修改酒吧套餐",
+        "description": "从既有 SKU 组合套餐、定整体售价与内部结算价（含内部结算价，敏感）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "bar.combo.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.combo.saved",
+        "x-audit-event-failure": "bar.combo.saved_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarComboRequest"
+        }
+      }
+    },
+    "/api/v1/bar/catalog/images": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "uploadBarCatalogImage",
+        "summary": "上传酒吧商品/套餐图片",
+        "description": "图形化点单 POS 图片本地存储（同 image_url 先例，不上云）；product_id 非空时同时写回商品图片。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "bar.product.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.catalog.image_uploaded",
+        "x-audit-event-failure": "bar.catalog.image_uploaded_failed",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -32469,6 +32772,36 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/PartnerSubordinateRequest"
+            }
+          }
+        }
+      },
+      "BarProductCategoryRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarProductCategoryRequest"
+            }
+          }
+        }
+      },
+      "BarProductCategoryAssignRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarProductCategoryAssignRequest"
+            }
+          }
+        }
+      },
+      "BarComboRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarComboRequest"
             }
           }
         }
@@ -43029,6 +43362,136 @@
             "type": "string",
             "maxLength": 64,
             "description": "下属账号登录名。"
+          }
+        }
+      },
+      "BarProductCategoryRequest": {
+        "type": "object",
+        "description": "酒吧商品分类请求体（图形化点单 POS 可配置分类）。字段必须与 OpenAPI、后端 DTO、前端请求保持一致。",
+        "additionalProperties": false,
+        "required": [
+          "category_name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "分类 id；空=新增，非空=更新该分类。"
+          },
+          "bar_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "所属酒吧 id；新增时必填。"
+          },
+          "category_name": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "分类名称。"
+          },
+          "sort_order": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999999,
+            "description": "排序（小在前，POS 分屏顺序）。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "description": "分类状态；archived=停用（不在 POS 出现，历史商品仍可引用）。"
+          }
+        }
+      },
+      "BarProductCategoryAssignRequest": {
+        "type": "object",
+        "description": "给酒吧商品设分类请求体。字段必须与 OpenAPI、后端 DTO、前端请求保持一致。",
+        "additionalProperties": false,
+        "properties": {
+          "category_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "目标分类 id；空=清除分类（未分类）。"
+          }
+        }
+      },
+      "BarComboRequest": {
+        "type": "object",
+        "description": "酒吧套餐请求体（从既有 SKU 组合）。字段必须与 OpenAPI、后端 DTO、前端请求保持一致。",
+        "additionalProperties": false,
+        "required": [
+          "combo_name",
+          "price_cent",
+          "items"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "套餐 id；空=新增，非空=更新（含整体替换 items）。"
+          },
+          "bar_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "所属酒吧 id；新增时必填。"
+          },
+          "combo_name": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "套餐名称。"
+          },
+          "price_cent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999999999999,
+            "description": "套餐整体售价（分）。"
+          },
+          "internal_settlement_price_cent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999999999999,
+            "description": "套餐内部结算价（分，可空）；平台↔酒吧成本结算价基。"
+          },
+          "image_url": {
+            "type": "string",
+            "maxLength": 1024,
+            "description": "套餐图片相对路径（可空，本地存储）。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "description": "套餐状态。"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "套餐组合项（选哪些 SKU + 数量）。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "product_id",
+                "quantity"
+              ],
+              "properties": {
+                "product_id": {
+                  "type": "string",
+                  "maxLength": 64,
+                  "description": "组合商品 id（bar_products）。"
+                },
+                "quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 999999,
+                  "description": "该商品在套餐中的数量。"
+                }
+              }
+            }
           }
         }
       }

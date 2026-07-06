@@ -363,14 +363,16 @@ final class JdbcBarCatalogRepository {
                     inventory_item_id, stock_location_id, stock_deduction_required,
                     status, created_at, updated_at,
                     standard_pour_volume, pour_volume_unit, loss_threshold,
-                    sold_out, sold_out_at, sold_out_reason, internal_settlement_price_cent
+                    sold_out, sold_out_at, sold_out_reason, internal_settlement_price_cent,
+                    category_id, image_url
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :product_name, :product_type, :price_cent, :currency,
                     :inventory_item_id, :stock_location_id, :stock_deduction_required,
                     :status, :created_at, :updated_at,
                     :standard_pour_volume, :pour_volume_unit, :loss_threshold,
-                    :sold_out, :sold_out_at, :sold_out_reason, :internal_settlement_price_cent
+                    :sold_out, :sold_out_at, :sold_out_reason, :internal_settlement_price_cent,
+                    :category_id, :image_url
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -390,7 +392,9 @@ final class JdbcBarCatalogRepository {
                     sold_out = EXCLUDED.sold_out,
                     sold_out_at = EXCLUDED.sold_out_at,
                     sold_out_reason = EXCLUDED.sold_out_reason,
-                    internal_settlement_price_cent = EXCLUDED.internal_settlement_price_cent
+                    internal_settlement_price_cent = EXCLUDED.internal_settlement_price_cent,
+                    category_id = EXCLUDED.category_id,
+                    image_url = EXCLUDED.image_url
                 """, parameterSource.productParameters(product));
         return product;
     }

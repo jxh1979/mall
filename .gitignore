@@ -49,3 +49,6 @@ docs/_archive/**/*.log
 /bizflow-audit.mjs
 /eng-check.mjs
 /verify-fe.mjs
+
+# 图形化点单 POS 商品/套餐图片本地存储目录(运行态生成,不入库)
+backend/data/bar-images/

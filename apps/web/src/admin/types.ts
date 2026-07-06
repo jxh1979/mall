@@ -63,6 +63,8 @@ export type AdminApiClient = {
   put<T>(path: string, body?: Record<string, unknown>): Promise<T>;
   patch<T>(path: string, body?: Record<string, unknown>): Promise<T>;
   delete<T>(path: string): Promise<T>;
+  /** multipart 上传（图片等）：不做 JSON 键转换，浏览器自动设 multipart 边界。可选=既有测试 mock 无需改。 */
+  postForm?<T>(path: string, form: FormData): Promise<T>;
 };
 
 export type AdminPageProps = {
@@ -296,6 +298,36 @@ export type BarProductRow = {
   soldOut?: boolean;
   /** V152 内部结算价（分）：平台↔酒吧成本结算价基；null/未录入=不参与结算/提成扣减。 */
   internalSettlementPriceCent?: number | null;
+  /** V256 图形化点单 POS：分类 FK（null=未分类）+ 商品图片相对路径。 */
+  categoryId?: string | null;
+  imageUrl?: string | null;
+};
+
+/** V256 酒吧商品分类（图形化点单 POS 阶段1）。 */
+export type BarProductCategoryRow = {
+  id: string;
+  barId?: string;
+  categoryName?: string;
+  sortOrder?: number;
+  status?: string;
+};
+
+/** V257 酒吧套餐 + 明细。 */
+export type BarComboItemRow = {
+  id: string;
+  productId: string;
+  productName?: string;
+  quantity: number;
+};
+export type BarComboRow = {
+  id: string;
+  barId?: string;
+  comboName?: string;
+  priceCent?: number;
+  internalSettlementPriceCent?: number | null;
+  imageUrl?: string | null;
+  status?: string;
+  items?: BarComboItemRow[];
 };
 
 export type StoredWineRow = {

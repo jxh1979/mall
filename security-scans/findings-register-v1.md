@@ -3,8 +3,8 @@
 > 本清单由 `tools/generate-formal-security-baseline.mjs` 生成。P0 未修复或未正式豁免前，不允许进入公开生产安全准入。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 607
-- OpenAPI SHA-256: `2c1e40dc865a4f09dcc2f255d6da6a7ee251a3a1c9019a07061f08d4fa97c61d`
+- OpenAPI operation count: 614
+- OpenAPI SHA-256: `de0fc319ee28b048542e863bcc58e191f24e47b8eb2008c3135ab43a42f186fa`
 
 ## status-policy
 

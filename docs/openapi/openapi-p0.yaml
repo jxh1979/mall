@@ -1669,7 +1669,8 @@ paths:
         - analytics
       operationId: createReviewLock
       summary: 锁定经营复盘快照
-      description: 用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于把当前经营分析视图沉淀为一条权威复盘锁定凭据（真落库，project_id 由 token 派生，不取请求体）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
+        深度能力不得反向扩大 P0 范围。
       x-permission: analytics.review.lock
       x-data-scope: project
       x-terminal-allowed:
@@ -2342,31 +2343,6 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/bar/tables/availability:
-    get:
-      tags:
-        - bar
-      operationId: listBarTableAvailability
-      summary: 酒吧空位视图(员工代订用)
-      description: BYOD 一期(2026-07-02):员工自有手机帮客人订位——桌位+活跃预订(近4小时起,
-        未取消)占用标记;权限走 bar.reservation.create(能订位自然能看空位),不放大到桌位管理。
-      x-permission: bar.reservation.create
-      x-data-scope: project-merchant-space
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-        - tablet
-      x-idempotency-required: false
-      x-audit-event-success: bar.table_availability.viewed
-      x-audit-event-failure: bar.table_availability.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -6113,7 +6089,8 @@ paths:
         - terminal
       operationId: listEffectiveDisabledTerminalSwitches
       summary: 当前终端的已关闭开关行（前端菜单 gating 数据源）
-      description: 3.19 二期：各端启动时拉取"本端哪些模块/能力被关"——只回 enabled=false 的行；terminal_type 取 X-Terminal-Type 头（缺省 web）。功能可用性非机密，任何已登录主体可读（普通员工菜单也要按开关隐藏）；拉取失败端侧兜底关。
+      description: 3.19 二期：各端启动时拉取"本端哪些模块/能力被关"——只回 enabled=false 的行；terminal_type 取 X-Terminal-Type 头（缺省
+        web）。功能可用性非机密，任何已登录主体可读（普通员工菜单也要按开关隐藏）；拉取失败端侧兜底关。
       x-permission: not_applicable
       x-data-scope: platform
       x-terminal-allowed:
@@ -7207,111 +7184,6 @@ paths:
       x-device-capability:
         - verification-gate
       x-auth-context: staff-token
-  /api/v1/merchant-portal/contracts:
-    get:
-      tags:
-        - merchant-portal
-      operationId: listMerchantPortalContracts
-      summary: 商户专区·我的合同(只读关键信息)
-      description: 商户自助查看本商户合同关键信息(租期/空间/状态/保证金,最小披露);
-        平台管理员为全量监督口径。数据边界=currentMerchantScope,员工无商户归属 fail-closed。
-      x-auth-context: staff-token
-      x-permission: contract.view
-      x-data-scope: merchant
-      x-terminal-allowed:
-        - web
-        - merchant_portal
-      x-idempotency-required: false
-      x-audit-event-success: merchant_portal.contract.viewed
-      x-audit-event-failure: merchant_portal.contract.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/merchant-portal/settlements:
-    get:
-      tags:
-        - merchant-portal
-      operationId: listMerchantPortalSettlements
-      summary: 商户专区·我的对账(结算单只读)
-      description: 商户自助查看与本商户相关的退租/到期结算单;平台管理员为全量监督口径。
-        数据边界=合同 merchant 关联(currentMerchantScope)。
-      x-auth-context: staff-token
-      x-permission: merchant.portal.settlement.view
-      x-data-scope: merchant
-      x-terminal-allowed:
-        - web
-        - merchant_portal
-      x-idempotency-required: false
-      x-audit-event-success: merchant_portal.settlement.viewed
-      x-audit-event-failure: merchant_portal.settlement.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/merchant-portal/settlements/{settlement_id}/dispute:
-    post:
-      tags:
-        - merchant-portal
-      operationId: submitMerchantPortalSettlementDispute
-      summary: 商户专区·结算单异议留言
-      description: 商户对未结清结算单提交异议,结算单挂起为「有争议」;
-        平台按既有裁决流(contract.settlement.dispute.resolve)闭环,资金权威流程不变。
-        跨商户拒绝(CROSS_MERCHANT_FORBIDDEN),已结清/已有争议拒绝(SETTLEMENT_NOT_DISPUTABLE)。
-      x-auth-context: staff-token
-      x-permission: merchant.portal.settlement.dispute
-      x-data-scope: merchant
-      x-terminal-allowed:
-        - web
-        - merchant_portal
-      x-idempotency-required: true
-      x-audit-event-success: merchant_portal.settlement.disputed
-      x-audit-event-failure: merchant_portal.settlement.dispute_failed
-      parameters:
-        - name: settlement_id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-              required:
-                - idempotency_key
-                - reason
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
-                  maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
-                reason:
-                  type: string
-                  description: 异议理由(商户留言)。
-                  maxLength: 2000
-      responses:
-        "200":
-          $ref: "#/components/responses/Item"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
   /api/v1/merchant-billing/bills:
     get:
       tags:
@@ -8322,1383 +8194,6 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/catalog:
-    get:
-      tags:
-        - service
-      operationId: listServiceCatalog
-      summary: 服务目录(上架项,下单用)
-      x-permission: service.order.create
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-        - tablet
-        - app
-      x-idempotency-required: false
-      x-audit-event-success: service.catalog.viewed
-      x-audit-event-failure: service.catalog.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    post:
-      tags:
-        - service
-      operationId: upsertServiceCatalogItem
-      summary: 维护服务目录项(固定参考价)
-      description: G批口径①(H批修订):后台目录+固定价;公司代收口径下价格为实收金额,全额入公司账,完成履约时按管理费/提成分账列支。
-      x-permission: service.catalog.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: service.catalog.saved
-      x-audit-event-failure: service.catalog.save_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - name
-                - price_cent
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                id:
-                  type: string
-                  description: 目录项 id(空=新建)。
-                  maxLength: 64
-                name:
-                  type: string
-                  description: 服务名(如点舞)。
-                  maxLength: 120
-                price_cent:
-                  type: integer
-                  description: 固定价(分;H批公司代收口径,实收全额入公司账)。
-                  minimum: 0
-                duration_minutes:
-                  type: integer
-                  description: 时长(分钟,可空)。
-                  minimum: 1
-                active:
-                  type: boolean
-                  description: 上下架。
-                mgmt_fee_mode:
-                  type: string
-                  description: 管理费模式(H批拍板:按目录项二选一可配)。
-                  enum:
-                    - none
-                    - percent
-                    - fixed
-                mgmt_fee_value:
-                  type: integer
-                  description: 管理费值(percent=基点bp,如1000=10%;fixed=分)。
-                  minimum: 0
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/catalog/all:
-    get:
-      tags:
-        - service
-      operationId: listServiceCatalogAll
-      summary: 服务目录全量(含下架,后台维护)
-      x-permission: service.catalog.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: service.catalog.viewed
-      x-audit-event-failure: service.catalog.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/payment-code:
-    post:
-      tags:
-        - service
-      operationId: setMyServicePaymentCode
-      summary: 录入我的收款码(履约人)
-      description: G批历史能力(兼容保留):履约人录入个人收款码。H批(2026-07-02 最终拍板)已废弃个人码收款流程,现场收款一律走公司统一收款码代收;本接口仅存量兼容,不再作为下单前置。
-      x-permission: service.order.perform
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: service.payment_code.saved
-      x-audit-event-failure: service.payment_code.save_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - qr_content
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                qr_content:
-                  type: string
-                  description: 收款码二维码内容(固定码长期有效)。
-                  maxLength: 500
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/payment-code/mine:
-    get:
-      tags:
-        - service
-      operationId: myServicePaymentCode
-      summary: 我的收款码
-      x-permission: service.order.perform
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: service.payment_code.viewed
-      x-audit-event-failure: service.payment_code.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/orders:
-    post:
-      tags:
-        - service
-      operationId: createServiceOrder
-      summary: 代客下单(指定履约人)
-      description: G批口径②③(H批修订):服务员代客点(客人App自点预留 app 终端);下单即指定履约人,价格/名称取目录快照;H批公司代收:下单后向客人出示公司统一收款码,不再要求履约人预录个人收款码。
-      x-permission: service.order.create
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_work_phone
-        - web
-        - tablet
-        - app
-      x-idempotency-required: true
-      x-audit-event-success: service.order.created
-      x-audit-event-failure: service.order.create_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - catalog_item_id
-                - performer_user_id
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                catalog_item_id:
-                  type: string
-                  description: 服务目录项 id。
-                  maxLength: 64
-                performer_user_id:
-                  type: string
-                  description: 履约员工(客人指定谁填谁)。
-                  maxLength: 64
-                bar_id:
-                  type: string
-                  description: 酒吧 id(可空,仅记录来源)。
-                  maxLength: 64
-                table_id:
-                  type: string
-                  description: 桌台 id(可空,仅记录来源;不进桌台账单)。
-                  maxLength: 64
-                customer_note:
-                  type: string
-                  description: 备注。
-                  maxLength: 255
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    get:
-      tags:
-        - service
-      operationId: listServiceOrders
-      summary: 服务单列表(后台)
-      x-permission: service.catalog.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: service.order.listed
-      x-audit-event-failure: service.order.list_failed
-      parameters:
-        - name: date
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - pending_accept
-              - accepted
-              - completed
-              - cancelled
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/orders/assigned-to-me:
-    get:
-      tags:
-        - service
-      operationId: listMyServiceOrders
-      summary: 我的服务任务(履约人手机)
-      x-permission: service.order.perform
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: service.order.mine_viewed
-      x-audit-event-failure: service.order.mine_view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/orders/{id}/mark-paid:
-    post:
-      tags:
-        - service
-      operationId: markServiceOrderPaid
-      summary: 确认收款到公司账户(服务员现场)
-      description: H批(2026-07-02 最终拍板,公司代收):客人扫公司统一收款码支付,服务员目视支付
-        成功页确认;钱进公司账户,财务可对账——解决个人收款码无支付回调的确认盲区;
-        未确认收款不可完成履约。
-      x-permission: service.order.create
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_work_phone
-        - web
-        - tablet
-      x-idempotency-required: true
-      x-audit-event-success: service.order.paid
-      x-audit-event-failure: service.order.pay_confirm_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                pay_method:
-                  type: string
-                  description: 收款方式(默认公司收款码;聚合支付回调二期)。
-                  maxLength: 24
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/pay-config:
-    get:
-      tags:
-        - service
-      operationId: getServicePayConfig
-      summary: 公司统一收款码(下单出示用)
-      x-permission: service.order.create
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-        - tablet
-      x-idempotency-required: false
-      x-audit-event-success: service.pay_config.viewed
-      x-audit-event-failure: service.pay_config.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    post:
-      tags:
-        - service
-      operationId: setServicePayConfig
-      summary: 配置公司统一收款码
-      description: H批:公司账户代收的收款码(财务对账基准);改动审计留痕。
-      x-permission: service.catalog.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: service.pay_config.saved
-      x-audit-event-failure: service.pay_config.save_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - qr_content
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                qr_content:
-                  type: string
-                  description: 公司收款码内容(链接文本,端上重绘二维码)。
-                  maxLength: 500
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/orders/{id}/accept:
-    post:
-      tags:
-        - service
-      operationId: acceptServiceOrder
-      summary: 接单(仅指定履约人)
-      x-permission: service.order.perform
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: service.order.accepted
-      x-audit-event-failure: service.order.accept_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/orders/{id}/complete:
-    post:
-      tags:
-        - service
-      operationId: completeServiceOrder
-      summary: 完成履约(公司代收:管理费归公司,应得月结进薪资)
-      x-permission: service.order.create
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_work_phone
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: service.order.completed
-      x-audit-event-failure: service.order.complete_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/orders/{id}/cancel:
-    post:
-      tags:
-        - service
-      operationId: cancelServiceOrder
-      summary: 取消服务单(履约前;留原因)
-      description: G批口径⑤(H批修订):履约完成前可取消;已收款(公司账户)后取消记退款备注,公司线下退、财务留痕;已完成不可退,纠纷线下处理。
-      x-permission: service.order.create
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: service.order.cancelled
-      x-audit-event-failure: service.order.cancel_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - reason
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                reason:
-                  type: string
-                  description: 取消原因(留痕必填)。
-                  maxLength: 255
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/orders/{id}/payment-code:
-    get:
-      tags:
-        - service
-      operationId: serviceOrderPaymentCode
-      summary: 出示公司统一收款码(H批代收;个人码流程已废弃)
-      x-permission: service.order.create
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_work_phone
-        - web
-        - tablet
-        - app
-      x-idempotency-required: false
-      x-audit-event-success: service.payment_code.presented
-      x-audit-event-failure: service.payment_code.present_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/services/orders/my-stats:
-    get:
-      tags:
-        - service
-      operationId: myServiceStats
-      summary: 我的服务统计(当月次数+参考收入)
-      description: H批公司代收口径:当月完成次数+分账应得合计;应得月结进薪资提成并按劳务报酬税表代扣个税。
-      x-permission: service.order.perform
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: service.order.stats_viewed
-      x-audit-event-failure: service.order.stats_view_failed
-      parameters:
-        - name: month
-          in: query
-          required: true
-          schema:
-            type: string
-            pattern: '^\d{4}-\d{2}$'
-            maxLength: 7
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/payroll/base:
-    post:
-      tags:
-        - staff
-      operationId: setStaffBaseSalary
-      summary: 固定工资设定(人事)
-      description: F批(2026-07-02 拍板):薪资四块之固定工资=员工档案月薪,人事维护。
-      x-permission: staff.payroll.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: staff.payroll.base_saved
-      x-audit-event-failure: staff.payroll.base_save_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - user_id
-                - monthly_salary_cent
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                user_id:
-                  type: string
-                  description: 员工账号 id。
-                  maxLength: 64
-                monthly_salary_cent:
-                  type: integer
-                  description: 月薪(分,非负)。
-                  minimum: 0
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/payroll/adjustments:
-    post:
-      tags:
-        - staff
-      operationId: addStaffPayrollAdjustment
-      summary: 奖金/处罚手录(必须带事由)
-      description: F批:奖惩手工录入,事由必填,审计留痕;计入当月薪资(月结时聚合)。
-      x-permission: staff.payroll.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: staff.payroll.adjustment_added
-      x-audit-event-failure: staff.payroll.adjustment_add_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - user_id
-                - month
-                - adj_type
-                - amount_cent
-                - reason
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                user_id:
-                  type: string
-                  description: 员工账号 id。
-                  maxLength: 64
-                month:
-                  type: string
-                  description: 归属月份(YYYY-MM)。
-                  pattern: '^\d{4}-\d{2}$'
-                  maxLength: 7
-                adj_type:
-                  type: string
-                  description: 激励奖金/处罚扣款。
-                  enum:
-                    - bonus
-                    - penalty
-                amount_cent:
-                  type: integer
-                  description: 金额(分,>0)。
-                  minimum: 1
-                reason:
-                  type: string
-                  description: 事由(必填,钱路留痕硬约束)。
-                  maxLength: 255
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/payroll/commissions:
-    post:
-      tags:
-        - staff
-      operationId: addStaffCommission
-      summary: 提成入台账(手录/系统写入口)
-      description: F批:通用提成台账——酒吧提成月结时自动归集;服务点单等业务后续自动写入;此端点供手录与系统补录。
-      x-permission: staff.payroll.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: staff.payroll.commission_added
-      x-audit-event-failure: staff.payroll.commission_add_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - user_id
-                - month
-                - amount_cent
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                user_id:
-                  type: string
-                  description: 员工账号 id。
-                  maxLength: 64
-                month:
-                  type: string
-                  description: 归属月份(YYYY-MM)。
-                  pattern: '^\d{4}-\d{2}$'
-                  maxLength: 7
-                source_type:
-                  type: string
-                  description: 提成来源(manual/service_order/…)。
-                  maxLength: 32
-                source_id:
-                  type: string
-                  description: 来源单据 id(可空)。
-                  maxLength: 64
-                amount_cent:
-                  type: integer
-                  description: 金额(分,>=0)。
-                  minimum: 0
-                note:
-                  type: string
-                  description: 备注。
-                  maxLength: 255
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/payroll/close:
-    post:
-      tags:
-        - staff
-      operationId: closeStaffPayrollMonth
-      summary: 月结(定格全员薪资单)
-      description: F批(2026-07-02 拍板):月结后员工才可见;total=固定+提成(台账+酒吧提成)+奖-罚;
-        可重复执行=重算覆盖(补录奖惩后重结),审计留痕。
-      x-permission: staff.payroll.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: staff.payroll.month_closed
-      x-audit-event-failure: staff.payroll.month_close_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - month
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                month:
-                  type: string
-                  description: 月份(YYYY-MM)。
-                  pattern: '^\d{4}-\d{2}$'
-                  maxLength: 7
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/payroll:
-    get:
-      tags:
-        - staff
-      operationId: listStaffPayroll
-      summary: 全员薪资单(人事,按月)
-      x-permission: staff.payroll.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: staff.payroll.viewed
-      x-audit-event-failure: staff.payroll.view_failed
-      parameters:
-        - name: month
-          in: query
-          required: true
-          schema:
-            type: string
-            pattern: '^\d{4}-\d{2}$'
-            maxLength: 7
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/payroll/mine:
-    get:
-      tags:
-        - staff
-      operationId: listMyStaffPayroll
-      summary: 我的薪资(员工手机;仅已月结月份)
-      description: F批(拍板:月结后才可见):四块=固定工资/提成/激励奖金/处罚扣款+实发合计;未结月返回空。
-      x-permission: staff.payroll.view_mine
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: staff.payroll_mine.viewed
-      x-audit-event-failure: staff.payroll_mine.view_failed
-      parameters:
-        - name: month
-          in: query
-          required: true
-          schema:
-            type: string
-            pattern: '^\d{4}-\d{2}$'
-            maxLength: 7
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/leaves:
-    post:
-      tags:
-        - staff
-      operationId: submitStaffLeave
-      summary: 提交请假(员工手机)
-      description: F批(2026-07-02 拍板):四类假(事假/病假/调休/年假)+日期区间+事由;排班主管审批;
-        通过区间考勤月视图记「请假」不算缺勤。
-      x-permission: staff.leave.submit
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: staff.leave.submitted
-      x-audit-event-failure: staff.leave.submit_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - leave_type
-                - start_date
-                - end_date
-                - reason
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                leave_type:
-                  type: string
-                  description: 事假/病假/调休/年假。
-                  enum:
-                    - personal
-                    - sick
-                    - comp
-                    - annual
-                start_date:
-                  type: string
-                  format: date
-                  description: 起始日。
-                end_date:
-                  type: string
-                  format: date
-                  description: 结束日(>=起始日)。
-                reason:
-                  type: string
-                  description: 事由(必填)。
-                  maxLength: 255
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    get:
-      tags:
-        - staff
-      operationId: listStaffLeaves
-      summary: 查请假(主管/后台,按状态)
-      x-permission: staff.shift.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-        - staff_private_phone
-      x-idempotency-required: false
-      x-audit-event-success: staff.leave.viewed
-      x-audit-event-failure: staff.leave.view_failed
-      parameters:
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - pending
-              - approved
-              - rejected
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/leaves/mine:
-    get:
-      tags:
-        - staff
-      operationId: listMyStaffLeaves
-      summary: 我的请假(员工手机)
-      x-permission: staff.leave.submit
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: staff.leave_mine.viewed
-      x-audit-event-failure: staff.leave_mine.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/leaves/{id}/review:
-    post:
-      tags:
-        - staff
-      operationId: reviewStaffLeave
-      summary: 请假审批(排班主管)
-      description: 通过/驳回+批注;通过区间考勤记「请假」;审批留痕。
-      x-permission: staff.shift.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-        - staff_private_phone
-      x-idempotency-required: true
-      x-audit-event-success: staff.leave.reviewed
-      x-audit-event-failure: staff.leave.review_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - decision
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                decision:
-                  type: string
-                  description: 通过/驳回。
-                  enum:
-                    - approve
-                    - reject
-                review_note:
-                  type: string
-                  description: 批注。
-                  maxLength: 255
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/attendance/month-view:
-    get:
-      tags:
-        - staff
-      operationId: myStaffAttendanceMonthView
-      summary: 考勤月视图(员工手机,逐日六态)
-      description: F批(2026-07-02 拍板口径):出勤/缺勤(有排班无上班卡)/迟到/早退/未打下班卡/
-        请假(approved 覆盖);无排班=休;同日多问题并列。
-      x-permission: staff.shift.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: staff.attendance_month.viewed
-      x-audit-event-failure: staff.attendance_month.view_failed
-      parameters:
-        - name: month
-          in: query
-          required: true
-          schema:
-            type: string
-            pattern: '^\d{4}-\d{2}$'
-            maxLength: 7
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/shifts:
-    post:
-      tags:
-        - staff
-      operationId: upsertStaffShift
-      summary: 主管排班(双端)
-      description: BYOD E批(2026-07-02 拍板):主管排班到分钟+指定点位;后台页与主管 App 同套规则;
-        同员工同开始时刻幂等覆盖;审计留痕。
-      x-permission: staff.shift.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-        - staff_private_phone
-      x-idempotency-required: true
-      x-audit-event-success: staff.shift.saved
-      x-audit-event-failure: staff.shift.save_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - user_id
-                - work_date
-                - start_at
-                - end_at
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                user_id:
-                  type: string
-                  description: 员工账号 id。
-                  maxLength: 64
-                work_date:
-                  type: string
-                  format: date
-                  description: 班次归属日期。
-                start_at:
-                  type: string
-                  format: date-time
-                  description: 班次开始(到分钟)。
-                end_at:
-                  type: string
-                  format: date-time
-                  description: 班次结束(须晚于开始)。
-                point_space_ids:
-                  type: array
-                  description: 当班点位(空间/点位 id 列表,服务员/保洁类岗位用)。
-                  items:
-                    type: string
-                    maxLength: 64
-                  maxItems: 20
-                note:
-                  type: string
-                  description: 备注。
-                  maxLength: 255
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    get:
-      tags:
-        - staff
-      operationId: listStaffShifts
-      summary: 查排班(后台/主管)
-      x-permission: staff.shift.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-        - staff_private_phone
-      x-idempotency-required: false
-      x-audit-event-success: staff.shift.viewed
-      x-audit-event-failure: staff.shift.view_failed
-      parameters:
-        - name: date
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date
-        - name: user_id
-          in: query
-          required: false
-          schema:
-            type: string
-            maxLength: 64
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/shifts/mine:
-    get:
-      tags:
-        - staff
-      operationId: listMyStaffShifts
-      summary: 我的班次与点位(员工手机)
-      description: 今天起 7 天;时间到分钟;含当班点位。
-      x-permission: staff.shift.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: staff.shift_mine.viewed
-      x-audit-event-failure: staff.shift_mine.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/attendance/punch:
-    post:
-      tags:
-        - staff
-      operationId: punchStaffAttendance
-      summary: 考勤打卡(NFC/扫码)
-      description: BYOD E批(2026-07-02 拍板):时间以服务器为准;严格无宽限——上班晚于班次开始即迟到、
-        下班早于班次结束即早退,当日无班次记 no_shift;只记录不自动扣罚;点位标签原文与设备指纹留痕。
-      x-permission: staff.attendance.punch
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: staff.attendance.punched
-      x-audit-event-failure: staff.attendance.punch_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - punch_type
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                punch_type:
-                  type: string
-                  description: 上班/下班。
-                  enum:
-                    - check_in
-                    - check_out
-                method:
-                  type: string
-                  description: 打卡方式(NFC 碰标签/扫点位二维码/手动)。
-                  enum:
-                    - nfc
-                    - qr
-                    - manual
-                tag_ref:
-                  type: string
-                  description: 点位标签原文(NDEF 文本或标签 UID/二维码载荷),留痕防代打。
-                  maxLength: 200
-                space_id:
-                  type: string
-                  description: 解析出的点位 id(可空)。
-                  maxLength: 64
-                device_fingerprint:
-                  type: string
-                  description: 设备指纹(AndroidKeyStore 派生),留痕防代打。
-                  maxLength: 128
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/attendance/mine:
-    get:
-      tags:
-        - staff
-      operationId: listMyStaffAttendance
-      summary: 我的打卡记录(最近30天)
-      x-permission: staff.shift.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: staff.attendance_mine.viewed
-      x-audit-event-failure: staff.attendance_mine.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/staff/attendance:
-    get:
-      tags:
-        - staff
-      operationId: listStaffAttendance
-      summary: 按日查考勤(后台/主管)
-      x-permission: staff.attendance.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-        - staff_private_phone
-      x-idempotency-required: false
-      x-audit-event-success: staff.attendance.viewed
-      x-audit-event-failure: staff.attendance.view_failed
-      parameters:
-        - name: date
-          in: query
-          required: true
-          schema:
-            type: string
-            format: date
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -16798,586 +15293,6 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/analytics/holiday-calendar:
-    get:
-      tags:
-        - analytics
-      operationId: listHolidayPeriods
-      summary: 节假日日历
-      description: H1(2026-07-02 拍板):节假日对比与异常免报共用;农历+调休每年按国务院公布,
-        URL 抓取(holiday-cn JSON)或手动录入,2025 已预填种子。
-      x-permission: analytics.dashboard.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.holiday_calendar.viewed
-      x-audit-event-failure: analytics.holiday_calendar.view_failed
-      parameters:
-        - name: year
-          in: query
-          required: false
-          schema:
-            type: integer
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    post:
-      tags:
-        - analytics
-      operationId: upsertHolidayPeriod
-      summary: 手动录入节假日区间
-      description: 同名同年幂等覆盖;审计留痕。
-      x-permission: analytics.operating_params.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: analytics.holiday_calendar.updated
-      x-audit-event-failure: analytics.holiday_calendar.update_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - holiday_name
-                - holiday_year
-                - start_date
-                - end_date
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                holiday_name:
-                  type: string
-                  description: 节假日名(同名跨年对比,如「春节」)。
-                  maxLength: 64
-                holiday_year:
-                  type: integer
-                  description: 年份(2000-2100)。
-                  minimum: 2000
-                  maximum: 2100
-                start_date:
-                  type: string
-                  format: date
-                  description: 假期首日。
-                end_date:
-                  type: string
-                  format: date
-                  description: 假期末日(≥首日)。
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/holiday-calendar/fetch:
-    post:
-      tags:
-        - analytics
-      operationId: fetchHolidayCalendar
-      summary: 从 URL 抓取节假日日历
-      description: H1(2026-07-02 拍板):支持 holiday-cn JSON 格式({days:[{name,date,isOffDay}]});
-        抓取失败(内网不通/格式不符)不动既有日历,提示手动录入兜底;审计记录 URL 与导入数。
-      x-permission: analytics.operating_params.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: analytics.holiday_calendar.fetched
-      x-audit-event-failure: analytics.holiday_calendar.fetch_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - url
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                url:
-                  type: string
-                  description: 节假日数据源 URL(http/https)。
-                  maxLength: 500
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/holiday-comparison:
-    get:
-      tags:
-        - analytics
-      operationId: getHolidayComparison
-      summary: 节假日对比(今年 vs 去年同名)
-      description: H1(2026-07-02 拍板):流量=区间累计+日均双列(天数不同看日均才公平,同比按日均);
-        存量=假期末时点;去年无同名假期→上年侧空(积累中,不伪造)。
-      x-permission: analytics.dashboard.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.holiday_comparison.viewed
-      x-audit-event-failure: analytics.holiday_comparison.view_failed
-      parameters:
-        - name: holiday
-          in: query
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-        - name: year
-          in: query
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/anomaly-config:
-    get:
-      tags:
-        - analytics
-      operationId: getAnomalyConfig
-      summary: 读指标异常检测阈值
-      description: BI M3(2026-07-02 拍板):日环比突变检测阈值——可疑线/高风险线,经营参数页后台可调。
-      x-permission: analytics.dashboard.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.anomaly_config.viewed
-      x-audit-event-failure: analytics.anomaly_config.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    post:
-      tags:
-        - analytics
-      operationId: updateAnomalyConfig
-      summary: 改指标异常检测阈值
-      description: 校验 0<可疑线<=高风险线;审计留痕;ETL 下一轮检测即用新阈值。
-      x-permission: analytics.operating_params.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: analytics.anomaly_config.updated
-      x-audit-event-failure: analytics.anomaly_config.update_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - surge_pct
-                - high_pct
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
-                  maxLength: 128
-                surge_pct:
-                  type: number
-                  description: 可疑线(小数,0.5=±50%)。
-                  minimum: 0
-                  maximum: 10
-                high_pct:
-                  type: number
-                  description: 高风险线(小数,须≥可疑线)。
-                  minimum: 0
-                  maximum: 10
-                enabled:
-                  type: boolean
-                  description: 是否启用日环比突变检测。
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/monthly-comparison:
-    get:
-      tags:
-        - analytics
-      operationId: getMonthlyComparison
-      summary: 月度对比(环比/同比)
-      description: BI M1(2026-07-02 拍板④混合口径):流量类=月累计、存量/比率类=期末时点;
-        环比=上月 monthly 快照、同比=去年同月;缺月返回 null(前端标「积累中」,不伪造)。
-      x-permission: analytics.dashboard.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.monthly_comparison.viewed
-      x-audit-event-failure: analytics.monthly_comparison.view_failed
-      parameters:
-        - name: month
-          in: query
-          required: false
-          schema:
-            type: string
-            pattern: '^\d{4}-\d{2}$'
-            maxLength: 7
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/reports/monthly-export:
-    get:
-      tags:
-        - analytics
-      operationId: exportMonthlyReport
-      summary: 月度经营报表导出(分权)
-      description: BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须
-        独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批);
-        数据与月度对比同一份组装(图表=导出,单一口径)。
-      x-permission: analytics.report.export
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.monthly_report.exported
-      x-audit-event-failure: analytics.monthly_report.export_failed
-      parameters:
-        - name: month
-          in: query
-          required: false
-          schema:
-            type: string
-            pattern: '^\d{4}-\d{2}$'
-            maxLength: 7
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/work-order-sla/overdue-orders:
-    get:
-      tags:
-        - analytics
-      operationId: listOverdueWorkOrders
-      summary: 超时工单明细(时效钻取)
-      description: BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细,
-        与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单
-        (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。
-      x-permission: facility.work_order.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.overdue_work_orders.viewed
-      x-audit-event-failure: analytics.overdue_work_orders.view_failed
-      parameters:
-        - name: source
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - facility
-              - merchant
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            maximum: 200
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/energy/abnormal-readings:
-    get:
-      tags:
-        - analytics
-      operationId: listAbnormalReadings
-      summary: 异常读数明细(能耗钻取)
-      description: BI S5:当日经营窗内异常读数(突增/突降/零读数/倒走)实时明细,
-        与 energy.abnormal_count 同过滤同口径,含表计名称与类型。
-      x-permission: energy.reading.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.abnormal_readings.viewed
-      x-audit-event-failure: analytics.abnormal_readings.view_failed
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            maximum: 200
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/occupancy/vacant-spaces:
-    get:
-      tags:
-        - analytics
-      operationId: listVacantSpaces
-      summary: 空置铺位明细(出租率钻取)
-      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径
-        (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。
-      x-permission: contract.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.vacant_spaces.viewed
-      x-audit-event-failure: analytics.vacant_spaces.view_failed
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            maximum: 200
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/occupancy/expiring-contracts:
-    get:
-      tags:
-        - analytics
-      operationId: listExpiringContracts
-      summary: 到期预警合同明细
-      description: 90 天(可配 1-365)内到期的生效合同,按到期日升序,含商户与绑定面积。
-      x-permission: contract.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.expiring_contracts.viewed
-      x-audit-event-failure: analytics.expiring_contracts.view_failed
-      parameters:
-        - name: window_days
-          in: query
-          required: false
-          schema:
-            type: integer
-            maximum: 365
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            maximum: 200
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/finance-receivables/debtors:
-    get:
-      tags:
-        - analytics
-      operationId: listArOverdueDebtors
-      summary: 欠费商户明细排行(账龄钻取)
-      description: BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径
-        (direction=receivable、未结清、已过应收日);bucket 过滤 a0_30/a31_60/a61_90/a90p。
-      x-permission: finance.ar_ap.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.ar_debtors.viewed
-      x-audit-event-failure: analytics.ar_debtors.view_failed
-      parameters:
-        - name: bucket
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [a0_30, a31_60, a61_90, a90p]
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            maximum: 200
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/analytics/business-day-cutoffs:
-    get:
-      tags:
-        - analytics
-      operationId: listBusinessDayCutoffs
-      summary: 查询经营日切分配置(按业务域)
-      description: BI S0(2026-07-02 拍板):各业务的「一天」从不同时点切——酒吧06:00、零售/餐饮商户10:00、
-        其余04:00;platform 行为跨域汇总与财务日结的对齐基准。经营参数页数据源。
-      x-permission: analytics.dashboard.view
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: analytics.business_day_cutoff.viewed
-      x-audit-event-failure: analytics.business_day_cutoff.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    post:
-      tags:
-        - analytics
-      operationId: upsertBusinessDayCutoff
-      summary: 修改某业务域的经营日切分小时
-      description: 高敏:改动影响该域指标分桶(60s 内生效,当日窗口移动会由 ETL 重算);
-        platform 行影响全场对账口径。域限九域白名单,小时 0-23。
-      x-permission: analytics.operating_params.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: analytics.business_day_cutoff.updated
-      x-audit-event-failure: analytics.business_day_cutoff.update_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-              required:
-                - idempotency_key
-                - domain
-                - cutoff_hour
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
-                  maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
-                domain:
-                  type: string
-                  description: 业务域(platform/finance/ticketing/amusement/customer/inventory/governance/bar/merchant)。
-                  maxLength: 32
-                cutoff_hour:
-                  type: integer
-                  description: 日切小时(0-23)。
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/analytics/operating-params:
     get:
       tags:
@@ -17431,7 +15346,7 @@ paths:
         - staff
       operationId: listPayrollTaxBrackets
       summary: 个税税表档位清单
-      description: V217：列劳务报酬预扣个税税表分档(payroll_tax_brackets)，经营参数页维护读。
+      description: V217:列劳务报酬预扣个税税表分档(payroll_tax_brackets),经营参数页维护读。
       x-permission: staff.payroll.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -17440,19 +15355,19 @@ paths:
       x-audit-event-success: staff.payroll.tax_bracket_viewed
       x-audit-event-failure: staff.payroll.tax_bracket_view_failed
       responses:
-        200:
-          : #/components/responses/Page
-        403:
-          : #/components/responses/Error
-        500:
-          : #/components/responses/Error
+        "200":
+          "": "#/components/responses/Page"
+        "403":
+          "": "#/components/responses/Error"
+        "500":
+          "": "#/components/responses/Error"
       x-auth-context: staff-token
     post:
       tags:
         - staff
       operationId: upsertPayrollTaxBracket
       summary: 维护个税税表档位
-      description: V217：按 id 幂等 upsert 一档(税法参数变更改配置不改代码；高敏 staff.tax_bracket.manage)。
+      description: V217:按 id 幂等 upsert 一档(税法参数变更改配置不改代码;高敏 staff.tax_bracket.manage)。
       x-permission: staff.tax_bracket.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -17465,15 +15380,40 @@ paths:
           application/json:
             schema:
               type: object
+              properties:
+                id:
+                  type: string
+                category:
+                  type: string
+                seq:
+                  type: integer
+                income_floor_cent:
+                  type: integer
+                income_ceiling_cent:
+                  type: integer
+                income_base_bps:
+                  type: integer
+                flat_deduction_cent:
+                  type: integer
+                rate_bps:
+                  type: integer
+                quick_deduction_cent:
+                  type: integer
+                effective_from:
+                  type: string
+                idempotency_key:
+                  type: string
       responses:
-        200:
-          : #/components/responses/Success
-        400:
-          : #/components/responses/Error
-        409:
-          : #/components/responses/Error
-        500:
-          : #/components/responses/Error
+        "200":
+          "": "#/components/responses/Success"
+        "400":
+          "": "#/components/responses/Error"
+        "403":
+          "": "#/components/responses/Error"
+        "409":
+          "": "#/components/responses/Error"
+        "500":
+          "": "#/components/responses/Error"
       x-auth-context: staff-token
   /api/v1/analytics/ai-thresholds:
     get:
@@ -17481,7 +15421,7 @@ paths:
         - analytics
       operationId: getAiThresholds
       summary: AI/对标阈值配置
-      description: V218：读 AI建议采纳最低置信度 + 对标偏离告警线(单例 default)，经营参数页维护读。
+      description: V218:读 AI建议采纳最低置信度 + 对标偏离告警线(单例 default),经营参数页维护读。
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -17490,19 +15430,19 @@ paths:
       x-audit-event-success: analytics.ai_thresholds.viewed
       x-audit-event-failure: analytics.ai_thresholds.view_failed
       responses:
-        200:
-          : #/components/responses/Page
-        403:
-          : #/components/responses/Error
-        500:
-          : #/components/responses/Error
+        "200":
+          "": "#/components/responses/Page"
+        "403":
+          "": "#/components/responses/Error"
+        "500":
+          "": "#/components/responses/Error"
       x-auth-context: staff-token
     post:
       tags:
         - analytics
       operationId: updateAiThresholds
       summary: 维护 AI/对标阈值
-      description: V218：更新 AI采纳置信度 + 对标偏离线(均∈[0,1])；阈值变更改配置不改代码。
+      description: V218:更新 AI采纳置信度 + 对标偏离线(均∈[0,1]);阈值变更改配置不改代码。
       x-permission: analytics.operating_params.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -17515,15 +15455,24 @@ paths:
           application/json:
             schema:
               type: object
+              properties:
+                local_llm_min_confidence:
+                  type: number
+                benchmark_deviation:
+                  type: number
+                idempotency_key:
+                  type: string
       responses:
-        200:
-          : #/components/responses/Success
-        400:
-          : #/components/responses/Error
-        409:
-          : #/components/responses/Error
-        500:
-          : #/components/responses/Error
+        "200":
+          "": "#/components/responses/Success"
+        "400":
+          "": "#/components/responses/Error"
+        "403":
+          "": "#/components/responses/Error"
+        "409":
+          "": "#/components/responses/Error"
+        "500":
+          "": "#/components/responses/Error"
       x-auth-context: staff-token
   /api/v1/analytics/notification-windows:
     get:
@@ -17531,7 +15480,7 @@ paths:
         - analytics
       operationId: listNotificationWindows
       summary: 提醒窗天数配置
-      description: V219：列各提醒窗提前天数，经营参数页维护读。
+      description: V219:列各提醒窗提前天数(contract.renewal/inventory.saved_bottle/leasing.lead_follow_up),经营参数页维护读。
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -17540,19 +15489,19 @@ paths:
       x-audit-event-success: analytics.notification_windows.viewed
       x-audit-event-failure: analytics.notification_windows.view_failed
       responses:
-        200:
-          : #/components/responses/Page
-        403:
-          : #/components/responses/Error
-        500:
-          : #/components/responses/Error
+        "200":
+          "": "#/components/responses/Page"
+        "403":
+          "": "#/components/responses/Error"
+        "500":
+          "": "#/components/responses/Error"
       x-auth-context: staff-token
     post:
       tags:
         - analytics
       operationId: upsertNotificationWindow
       summary: 维护提醒窗天数
-      description: V219：按 window_key upsert 提醒提前天数(>0)；运营调窗口改配置不改代码。
+      description: V219:按 window_key upsert 提醒提前天数(>0);运营调窗口改配置不改代码。
       x-permission: platform.notification_window.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -17565,15 +15514,26 @@ paths:
           application/json:
             schema:
               type: object
+              properties:
+                window_key:
+                  type: string
+                days:
+                  type: integer
+                description:
+                  type: string
+                idempotency_key:
+                  type: string
       responses:
-        200:
-          : #/components/responses/Success
-        400:
-          : #/components/responses/Error
-        409:
-          : #/components/responses/Error
-        500:
-          : #/components/responses/Error
+        "200":
+          "": "#/components/responses/Success"
+        "400":
+          "": "#/components/responses/Error"
+        "403":
+          "": "#/components/responses/Error"
+        "409":
+          "": "#/components/responses/Error"
+        "500":
+          "": "#/components/responses/Error"
       x-auth-context: staff-token
   /api/v1/analytics/revenue-attribution-rules:
     get:
@@ -17581,7 +15541,7 @@ paths:
         - analytics
       operationId: listRevenueAttributionRules
       summary: 商户收入归因口径规则清单
-      description: V221：列各收入来源计入商户 net 的归因口径规则。
+      description: V221:列各收入来源(ticket/bar/contract_rent/thirdparty)计入商户 net 的归因口径规则。
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -17590,19 +15550,19 @@ paths:
       x-audit-event-success: analytics.revenue_attribution_rule.viewed
       x-audit-event-failure: analytics.revenue_attribution_rule.view_failed
       responses:
-        200:
-          : #/components/responses/Page
-        403:
-          : #/components/responses/Error
-        500:
-          : #/components/responses/Error
+        "200":
+          "": "#/components/responses/Page"
+        "403":
+          "": "#/components/responses/Error"
+        "500":
+          "": "#/components/responses/Error"
       x-auth-context: staff-token
     post:
       tags:
         - analytics
       operationId: upsertRevenueAttributionRule
       summary: 维护商户收入归因口径规则
-      description: V221：upsert 一条归因口径(gross|share_bps|exclude / net_deduct|ignore)；口径变更改配置不改代码。
+      description: V221:upsert 一条归因口径(attribution_mode gross|share_bps|exclude / refund_attribution net_deduct|ignore);口径变更改配置不改代码。
       x-permission: analytics.operating_params.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -17615,15 +15575,38 @@ paths:
           application/json:
             schema:
               type: object
+              properties:
+                id:
+                  type: string
+                rule_scope:
+                  type: string
+                merchant_id:
+                  type: string
+                revenue_source:
+                  type: string
+                attribution_mode:
+                  type: string
+                share_bps:
+                  type: integer
+                refund_attribution:
+                  type: string
+                status:
+                  type: string
+                is_draft:
+                  type: boolean
+                idempotency_key:
+                  type: string
       responses:
-        200:
-          : #/components/responses/Success
-        400:
-          : #/components/responses/Error
-        409:
-          : #/components/responses/Error
-        500:
-          : #/components/responses/Error
+        "200":
+          "": "#/components/responses/Success"
+        "400":
+          "": "#/components/responses/Error"
+        "403":
+          "": "#/components/responses/Error"
+        "409":
+          "": "#/components/responses/Error"
+        "500":
+          "": "#/components/responses/Error"
       x-auth-context: staff-token
   /api/v1/leasing/leads:
     get:
@@ -19053,30 +17036,6 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/facility/work-orders/assigned-to-me:
-    get:
-      tags:
-        - facility
-      operationId: listWorkOrdersAssignedToMe
-      summary: 我的工单(员工自有手机)
-      description: BYOD 一期(2026-07-02):员工自有手机只看流转到自己的工单(只读,最近200条);
-        凭 view_assigned,不见别人的单。
-      x-permission: facility.work_order.view_assigned
-      x-data-scope: platform
-      x-terminal-allowed:
-        - staff_private_phone
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: facility.work_order_assigned_list.viewed
-      x-audit-event-failure: facility.work_order_assigned_list.view_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/facility/work-orders/overdue:
     get:
       tags:
@@ -21074,7 +19033,6 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
-
   /api/v1/customer/orders/{order_id}/tickets:
     get:
       tags:
@@ -21108,14 +19066,12 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
-
   /api/v1/facility/site-entry-reports:
     get:
       tags:
         - facility
       operationId: listSiteEntryReports
       summary: 查看进场报备/验收单列表（外包只见本机构，平台全量）
-      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。
       x-permission: facility.site_entry.view_assigned
       x-data-scope: self
       x-terminal-allowed:
@@ -21135,6 +19091,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。
     post:
       tags:
         - facility
@@ -21147,19 +19104,6 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: facility.site_entry.create_assigned
       x-audit-event-failure: facility.site_entry.create_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - idempotency_key
-              properties:
-                idempotency_key:
-                  type: string
-                note:
-                  type: string
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -21172,13 +19116,25 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+              required:
+                - idempotency_key
   /api/v1/facility/site-entry-reports/{report_id}:
     get:
       tags:
         - facility
       operationId: getSiteEntryReport
       summary: 查看单个进场报备单
-      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。
       x-permission: facility.site_entry.view_assigned
       x-data-scope: self
       x-terminal-allowed:
@@ -21186,13 +19142,6 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: facility.site_entry.viewed
       x-audit-event-failure: facility.site_entry.view_failed
-      parameters:
-        - name: report_id
-          in: path
-          required: true
-          schema:
-            type: string
-          description: 进场报备单 id
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -21205,6 +19154,14 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 进场报备单 id
   /api/v1/facility/site-entry-reports/{report_id}/submit:
     post:
       tags:
@@ -21218,6 +19175,18 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: facility.site_entry.submit_assigned
       x-audit-event-failure: facility.site_entry.submit_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
       parameters:
         - name: report_id
           in: path
@@ -21231,25 +19200,13 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - idempotency_key
               properties:
                 idempotency_key:
                   type: string
                 note:
                   type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
+              required:
+                - idempotency_key
   /api/v1/facility/site-entry-reports/{report_id}/completion:
     post:
       tags:
@@ -21263,6 +19220,18 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: facility.site_entry.upload_completion_assigned
       x-audit-event-failure: facility.site_entry.upload_completion_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
       parameters:
         - name: report_id
           in: path
@@ -21276,25 +19245,13 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - idempotency_key
               properties:
                 idempotency_key:
                   type: string
                 note:
                   type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
+              required:
+                - idempotency_key
   /api/v1/facility/site-entry-reports/{report_id}/review:
     post:
       tags:
@@ -21308,6 +19265,18 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: facility.site_entry.review
       x-audit-event-failure: facility.site_entry.review_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
       parameters:
         - name: report_id
           in: path
@@ -21321,25 +19290,13 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - idempotency_key
               properties:
                 idempotency_key:
                   type: string
                 note:
                   type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
+              required:
+                - idempotency_key
   /api/v1/facility/site-entry-reports/{report_id}/accept:
     post:
       tags:
@@ -21353,6 +19310,18 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: facility.site_entry.accept
       x-audit-event-failure: facility.site_entry.accept_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
       parameters:
         - name: report_id
           in: path
@@ -21366,25 +19335,13 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - idempotency_key
               properties:
                 idempotency_key:
                   type: string
                 note:
                   type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
+              required:
+                - idempotency_key
   /api/v1/facility/inspections/tasks/{task_id}/report-exception:
     post:
       tags:
@@ -21398,6 +19355,18 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: facility.inspection_exception_reported
       x-audit-event-failure: facility.inspection_exception_report_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
       parameters:
         - name: task_id
           in: path
@@ -21411,25 +19380,13 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - idempotency_key
               properties:
                 idempotency_key:
                   type: string
                 note:
                   type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
+              required:
+                - idempotency_key
   /api/v1/partner/subordinates/completion:
     get:
       tags:
@@ -21455,7 +19412,2289 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-
+  /api/v1/merchant-portal/contracts:
+    get:
+      tags:
+        - merchant-portal
+      operationId: listMerchantPortalContracts
+      summary: 商户专区·我的合同(只读关键信息)
+      description: 商户自助查看本商户合同关键信息(租期/空间/状态/保证金,最小披露); 平台管理员为全量监督口径。数据边界=currentMerchantScope,员工无商户归属 fail-closed。
+      x-auth-context: staff-token
+      x-permission: contract.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: merchant_portal.contract.viewed
+      x-audit-event-failure: merchant_portal.contract.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/settlements:
+    get:
+      tags:
+        - merchant-portal
+      operationId: listMerchantPortalSettlements
+      summary: 商户专区·我的对账(结算单只读)
+      description: 商户自助查看与本商户相关的退租/到期结算单;平台管理员为全量监督口径。 数据边界=合同 merchant 关联(currentMerchantScope)。
+      x-auth-context: staff-token
+      x-permission: merchant.portal.settlement.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: merchant_portal.settlement.viewed
+      x-audit-event-failure: merchant_portal.settlement.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/settlements/{settlement_id}/dispute:
+    post:
+      tags:
+        - merchant-portal
+      operationId: submitMerchantPortalSettlementDispute
+      summary: 商户专区·结算单异议留言
+      description: 商户对未结清结算单提交异议,结算单挂起为「有争议」; 平台按既有裁决流(contract.settlement.dispute.resolve)闭环,资金权威流程不变。
+        跨商户拒绝(CROSS_MERCHANT_FORBIDDEN),已结清/已有争议拒绝(SETTLEMENT_NOT_DISPUTABLE)。
+      x-auth-context: staff-token
+      x-permission: merchant.portal.settlement.dispute
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: true
+      x-audit-event-success: merchant_portal.settlement.disputed
+      x-audit-event-failure: merchant_portal.settlement.dispute_failed
+      parameters:
+        - name: settlement_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                reason:
+                  type: string
+                  description: 异议理由(商户留言)。
+                  maxLength: 2000
+      responses:
+        "200":
+          $ref: "#/components/responses/Item"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/analytics/business-day-cutoffs:
+    get:
+      tags:
+        - analytics
+      operationId: listBusinessDayCutoffs
+      summary: 查询经营日切分配置(按业务域)
+      description: BI S0(2026-07-02 拍板):各业务的「一天」从不同时点切——酒吧06:00、零售/餐饮商户10:00、 其余04:00;platform 行为跨域汇总与财务日结的对齐基准。经营参数页数据源。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.business_day_cutoff.viewed
+      x-audit-event-failure: analytics.business_day_cutoff.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - analytics
+      operationId: upsertBusinessDayCutoff
+      summary: 修改某业务域的经营日切分小时
+      description: 高敏:改动影响该域指标分桶(60s 内生效,当日窗口移动会由 ETL 重算); platform 行影响全场对账口径。域限九域白名单,小时 0-23。
+      x-permission: analytics.operating_params.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: analytics.business_day_cutoff.updated
+      x-audit-event-failure: analytics.business_day_cutoff.update_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - domain
+                - cutoff_hour
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                domain:
+                  type: string
+                  description: 业务域(platform/finance/ticketing/amusement/customer/inventory/governance/bar/merchant)。
+                  maxLength: 32
+                cutoff_hour:
+                  type: integer
+                  description: 日切小时(0-23)。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/finance-receivables/debtors:
+    get:
+      tags:
+        - analytics
+      operationId: listArOverdueDebtors
+      summary: 欠费商户明细排行(账龄钻取)
+      description: BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径 (direction=receivable、未结清、已过应收日);bucket 过滤
+        a0_30/a31_60/a61_90/a90p。
+      x-permission: finance.ar_ap.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.ar_debtors.viewed
+      x-audit-event-failure: analytics.ar_debtors.view_failed
+      parameters:
+        - name: bucket
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - a0_30
+              - a31_60
+              - a61_90
+              - a90p
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/occupancy/vacant-spaces:
+    get:
+      tags:
+        - analytics
+      operationId: listVacantSpaces
+      summary: 空置铺位明细(出租率钻取)
+      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。
+      x-permission: contract.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.vacant_spaces.viewed
+      x-audit-event-failure: analytics.vacant_spaces.view_failed
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/occupancy/expiring-contracts:
+    get:
+      tags:
+        - analytics
+      operationId: listExpiringContracts
+      summary: 到期预警合同明细
+      description: 90 天(可配 1-365)内到期的生效合同,按到期日升序,含商户与绑定面积。
+      x-permission: contract.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.expiring_contracts.viewed
+      x-audit-event-failure: analytics.expiring_contracts.view_failed
+      parameters:
+        - name: window_days
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 365
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/work-order-sla/overdue-orders:
+    get:
+      tags:
+        - analytics
+      operationId: listOverdueWorkOrders
+      summary: 超时工单明细(时效钻取)
+      description: BI S4:处理时限落当日经营窗且超时(完成晚于时限,或未完成且时限已过)的工单实时明细, 与 wo.overdue_rate 分子同过滤同口径,含已超时小时数。source=merchant 时查商户服务工单
+        (同窗同口径;完成=关单,超时含 SLA 升级标记,已取消不计)。
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.overdue_work_orders.viewed
+      x-audit-event-failure: analytics.overdue_work_orders.view_failed
+      parameters:
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - facility
+              - merchant
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/energy/abnormal-readings:
+    get:
+      tags:
+        - analytics
+      operationId: listAbnormalReadings
+      summary: 异常读数明细(能耗钻取)
+      description: BI S5:当日经营窗内异常读数(突增/突降/零读数/倒走)实时明细, 与 energy.abnormal_count 同过滤同口径,含表计名称与类型。
+      x-permission: energy.reading.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.abnormal_readings.viewed
+      x-audit-event-failure: analytics.abnormal_readings.view_failed
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/monthly-comparison:
+    get:
+      tags:
+        - analytics
+      operationId: getMonthlyComparison
+      summary: 月度对比(环比/同比)
+      description: BI M1(2026-07-02 拍板④混合口径):流量类=月累计、存量/比率类=期末时点; 环比=上月 monthly 快照、同比=去年同月;缺月返回 null(前端标「积累中」,不伪造)。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.monthly_comparison.viewed
+      x-audit-event-failure: analytics.monthly_comparison.view_failed
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/reports/monthly-export:
+    get:
+      tags:
+        - analytics
+      operationId: exportMonthlyReport
+      summary: 月度经营报表导出(分权)
+      description: BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须 独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批);
+        数据与月度对比同一份组装(图表=导出,单一口径)。
+      x-permission: analytics.report.export
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.monthly_report.exported
+      x-audit-event-failure: analytics.monthly_report.export_failed
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/anomaly-config:
+    get:
+      tags:
+        - analytics
+      operationId: getAnomalyConfig
+      summary: 读指标异常检测阈值
+      description: BI M3(2026-07-02 拍板):日环比突变检测阈值——可疑线/高风险线,经营参数页后台可调。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.anomaly_config.viewed
+      x-audit-event-failure: analytics.anomaly_config.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - analytics
+      operationId: updateAnomalyConfig
+      summary: 改指标异常检测阈值
+      description: 校验 0<可疑线<=高风险线;审计留痕;ETL 下一轮检测即用新阈值。
+      x-permission: analytics.operating_params.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: analytics.anomaly_config.updated
+      x-audit-event-failure: analytics.anomaly_config.update_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - surge_pct
+                - high_pct
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                surge_pct:
+                  type: number
+                  description: 可疑线(小数,0.5=±50%)。
+                  minimum: 0
+                  maximum: 10
+                high_pct:
+                  type: number
+                  description: 高风险线(小数,须≥可疑线)。
+                  minimum: 0
+                  maximum: 10
+                enabled:
+                  type: boolean
+                  description: 是否启用日环比突变检测。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/holiday-calendar:
+    get:
+      tags:
+        - analytics
+      operationId: listHolidayPeriods
+      summary: 节假日日历
+      description: H1(2026-07-02 拍板):节假日对比与异常免报共用;农历+调休每年按国务院公布, URL 抓取(holiday-cn JSON)或手动录入,2025 已预填种子。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.holiday_calendar.viewed
+      x-audit-event-failure: analytics.holiday_calendar.view_failed
+      parameters:
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - analytics
+      operationId: upsertHolidayPeriod
+      summary: 手动录入节假日区间
+      description: 同名同年幂等覆盖;审计留痕。
+      x-permission: analytics.operating_params.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: analytics.holiday_calendar.updated
+      x-audit-event-failure: analytics.holiday_calendar.update_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - holiday_name
+                - holiday_year
+                - start_date
+                - end_date
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                holiday_name:
+                  type: string
+                  description: 节假日名(同名跨年对比,如「春节」)。
+                  maxLength: 64
+                holiday_year:
+                  type: integer
+                  description: 年份(2000-2100)。
+                  minimum: 2000
+                  maximum: 2100
+                start_date:
+                  type: string
+                  format: date
+                  description: 假期首日。
+                end_date:
+                  type: string
+                  format: date
+                  description: 假期末日(≥首日)。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/holiday-calendar/fetch:
+    post:
+      tags:
+        - analytics
+      operationId: fetchHolidayCalendar
+      summary: 从 URL 抓取节假日日历
+      description: H1(2026-07-02 拍板):支持 holiday-cn JSON 格式({days:[{name,date,isOffDay}]}); 抓取失败(内网不通/格式不符)不动既有日历,提示手动录入兜底;审计记录
+        URL 与导入数。
+      x-permission: analytics.operating_params.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: analytics.holiday_calendar.fetched
+      x-audit-event-failure: analytics.holiday_calendar.fetch_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - url
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                url:
+                  type: string
+                  description: 节假日数据源 URL(http/https)。
+                  maxLength: 500
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/holiday-comparison:
+    get:
+      tags:
+        - analytics
+      operationId: getHolidayComparison
+      summary: 节假日对比(今年 vs 去年同名)
+      description: H1(2026-07-02 拍板):流量=区间累计+日均双列(天数不同看日均才公平,同比按日均); 存量=假期末时点;去年无同名假期→上年侧空(积累中,不伪造)。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.holiday_comparison.viewed
+      x-audit-event-failure: analytics.holiday_comparison.view_failed
+      parameters:
+        - name: holiday
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/facility/work-orders/assigned-to-me:
+    get:
+      tags:
+        - facility
+      operationId: listWorkOrdersAssignedToMe
+      summary: 我的工单(员工自有手机)
+      description: BYOD 一期(2026-07-02):员工自有手机只看流转到自己的工单(只读,最近200条); 凭 view_assigned,不见别人的单。
+      x-permission: facility.work_order.view_assigned
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.work_order_assigned_list.viewed
+      x-audit-event-failure: facility.work_order_assigned_list.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/bar/tables/availability:
+    get:
+      tags:
+        - bar
+      operationId: listBarTableAvailability
+      summary: 酒吧空位视图(员工代订用)
+      description: BYOD 一期(2026-07-02):员工自有手机帮客人订位——桌位+活跃预订(近4小时起, 未取消)占用标记;权限走 bar.reservation.create(能订位自然能看空位),不放大到桌位管理。
+      x-permission: bar.reservation.create
+      x-data-scope: project-merchant-space
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: bar.table_availability.viewed
+      x-audit-event-failure: bar.table_availability.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/shifts:
+    post:
+      tags:
+        - staff
+      operationId: upsertStaffShift
+      summary: 主管排班(双端)
+      description: BYOD E批(2026-07-02 拍板):主管排班到分钟+指定点位;后台页与主管 App 同套规则; 同员工同开始时刻幂等覆盖;审计留痕。
+      x-permission: staff.shift.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.shift.saved
+      x-audit-event-failure: staff.shift.save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - user_id
+                - work_date
+                - start_at
+                - end_at
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                user_id:
+                  type: string
+                  description: 员工账号 id。
+                  maxLength: 64
+                work_date:
+                  type: string
+                  format: date
+                  description: 班次归属日期。
+                start_at:
+                  type: string
+                  format: date-time
+                  description: 班次开始(到分钟)。
+                end_at:
+                  type: string
+                  format: date-time
+                  description: 班次结束(须晚于开始)。
+                point_space_ids:
+                  type: array
+                  description: 当班点位(空间/点位 id 列表,服务员/保洁类岗位用)。
+                  items:
+                    type: string
+                    maxLength: 64
+                  maxItems: 20
+                note:
+                  type: string
+                  description: 备注。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    get:
+      tags:
+        - staff
+      operationId: listStaffShifts
+      summary: 查排班(后台/主管)
+      x-permission: staff.shift.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+        - staff_private_phone
+      x-idempotency-required: false
+      x-audit-event-success: staff.shift.viewed
+      x-audit-event-failure: staff.shift.view_failed
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/shifts/mine:
+    get:
+      tags:
+        - staff
+      operationId: listMyStaffShifts
+      summary: 我的班次与点位(员工手机)
+      description: 今天起 7 天;时间到分钟;含当班点位。
+      x-permission: staff.shift.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: staff.shift_mine.viewed
+      x-audit-event-failure: staff.shift_mine.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/attendance/punch:
+    post:
+      tags:
+        - staff
+      operationId: punchStaffAttendance
+      summary: 考勤打卡(NFC/扫码)
+      description: BYOD E批(2026-07-02 拍板):时间以服务器为准;严格无宽限——上班晚于班次开始即迟到、 下班早于班次结束即早退,当日无班次记 no_shift;只记录不自动扣罚;点位标签原文与设备指纹留痕。
+      x-permission: staff.attendance.punch
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: staff.attendance.punched
+      x-audit-event-failure: staff.attendance.punch_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - punch_type
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                punch_type:
+                  type: string
+                  description: 上班/下班。
+                  enum:
+                    - check_in
+                    - check_out
+                method:
+                  type: string
+                  description: 打卡方式(NFC 碰标签/扫点位二维码/手动)。
+                  enum:
+                    - nfc
+                    - qr
+                    - manual
+                tag_ref:
+                  type: string
+                  description: 点位标签原文(NDEF 文本或标签 UID/二维码载荷),留痕防代打。
+                  maxLength: 200
+                space_id:
+                  type: string
+                  description: 解析出的点位 id(可空)。
+                  maxLength: 64
+                device_fingerprint:
+                  type: string
+                  description: 设备指纹(AndroidKeyStore 派生),留痕防代打。
+                  maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/attendance/mine:
+    get:
+      tags:
+        - staff
+      operationId: listMyStaffAttendance
+      summary: 我的打卡记录(最近30天)
+      x-permission: staff.shift.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: staff.attendance_mine.viewed
+      x-audit-event-failure: staff.attendance_mine.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/attendance:
+    get:
+      tags:
+        - staff
+      operationId: listStaffAttendance
+      summary: 按日查考勤(后台/主管)
+      x-permission: staff.attendance.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+        - staff_private_phone
+      x-idempotency-required: false
+      x-audit-event-success: staff.attendance.viewed
+      x-audit-event-failure: staff.attendance.view_failed
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/payroll/base:
+    post:
+      tags:
+        - staff
+      operationId: setStaffBaseSalary
+      summary: 固定工资设定(人事)
+      description: F批(2026-07-02 拍板):薪资四块之固定工资=员工档案月薪,人事维护。
+      x-permission: staff.payroll.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: staff.payroll.base_saved
+      x-audit-event-failure: staff.payroll.base_save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - user_id
+                - monthly_salary_cent
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                user_id:
+                  type: string
+                  description: 员工账号 id。
+                  maxLength: 64
+                monthly_salary_cent:
+                  type: integer
+                  description: 月薪(分,非负)。
+                  minimum: 0
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/payroll/adjustments:
+    post:
+      tags:
+        - staff
+      operationId: addStaffPayrollAdjustment
+      summary: 奖金/处罚手录(必须带事由)
+      description: F批:奖惩手工录入,事由必填,审计留痕;计入当月薪资(月结时聚合)。
+      x-permission: staff.payroll.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: staff.payroll.adjustment_added
+      x-audit-event-failure: staff.payroll.adjustment_add_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - user_id
+                - month
+                - adj_type
+                - amount_cent
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                user_id:
+                  type: string
+                  description: 员工账号 id。
+                  maxLength: 64
+                month:
+                  type: string
+                  description: 归属月份(YYYY-MM)。
+                  pattern: ^\d{4}-\d{2}$
+                  maxLength: 7
+                adj_type:
+                  type: string
+                  description: 激励奖金/处罚扣款。
+                  enum:
+                    - bonus
+                    - penalty
+                amount_cent:
+                  type: integer
+                  description: 金额(分,>0)。
+                  minimum: 1
+                reason:
+                  type: string
+                  description: 事由(必填,钱路留痕硬约束)。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/payroll/commissions:
+    post:
+      tags:
+        - staff
+      operationId: addStaffCommission
+      summary: 提成入台账(手录/系统写入口)
+      description: F批:通用提成台账——酒吧提成月结时自动归集;服务点单等业务后续自动写入;此端点供手录与系统补录。
+      x-permission: staff.payroll.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: staff.payroll.commission_added
+      x-audit-event-failure: staff.payroll.commission_add_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - user_id
+                - month
+                - amount_cent
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                user_id:
+                  type: string
+                  description: 员工账号 id。
+                  maxLength: 64
+                month:
+                  type: string
+                  description: 归属月份(YYYY-MM)。
+                  pattern: ^\d{4}-\d{2}$
+                  maxLength: 7
+                source_type:
+                  type: string
+                  description: 提成来源(manual/service_order/…)。
+                  maxLength: 32
+                source_id:
+                  type: string
+                  description: 来源单据 id(可空)。
+                  maxLength: 64
+                amount_cent:
+                  type: integer
+                  description: 金额(分,>=0)。
+                  minimum: 0
+                note:
+                  type: string
+                  description: 备注。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/payroll/close:
+    post:
+      tags:
+        - staff
+      operationId: closeStaffPayrollMonth
+      summary: 月结(定格全员薪资单)
+      description: F批(2026-07-02 拍板):月结后员工才可见;total=固定+提成(台账+酒吧提成)+奖-罚; 可重复执行=重算覆盖(补录奖惩后重结),审计留痕。
+      x-permission: staff.payroll.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: staff.payroll.month_closed
+      x-audit-event-failure: staff.payroll.month_close_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - month
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                month:
+                  type: string
+                  description: 月份(YYYY-MM)。
+                  pattern: ^\d{4}-\d{2}$
+                  maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/payroll:
+    get:
+      tags:
+        - staff
+      operationId: listStaffPayroll
+      summary: 全员薪资单(人事,按月)
+      x-permission: staff.payroll.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: staff.payroll.viewed
+      x-audit-event-failure: staff.payroll.view_failed
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/payroll/mine:
+    get:
+      tags:
+        - staff
+      operationId: listMyStaffPayroll
+      summary: 我的薪资(员工手机;仅已月结月份)
+      description: F批(拍板:月结后才可见):四块=固定工资/提成/激励奖金/处罚扣款+实发合计;未结月返回空。
+      x-permission: staff.payroll.view_mine
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: staff.payroll_mine.viewed
+      x-audit-event-failure: staff.payroll_mine.view_failed
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/leaves:
+    post:
+      tags:
+        - staff
+      operationId: submitStaffLeave
+      summary: 提交请假(员工手机)
+      description: F批(2026-07-02 拍板):四类假(事假/病假/调休/年假)+日期区间+事由;排班主管审批; 通过区间考勤月视图记「请假」不算缺勤。
+      x-permission: staff.leave.submit
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: staff.leave.submitted
+      x-audit-event-failure: staff.leave.submit_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - leave_type
+                - start_date
+                - end_date
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                leave_type:
+                  type: string
+                  description: 事假/病假/调休/年假。
+                  enum:
+                    - personal
+                    - sick
+                    - comp
+                    - annual
+                start_date:
+                  type: string
+                  format: date
+                  description: 起始日。
+                end_date:
+                  type: string
+                  format: date
+                  description: 结束日(>=起始日)。
+                reason:
+                  type: string
+                  description: 事由(必填)。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    get:
+      tags:
+        - staff
+      operationId: listStaffLeaves
+      summary: 查请假(主管/后台,按状态)
+      x-permission: staff.shift.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+        - staff_private_phone
+      x-idempotency-required: false
+      x-audit-event-success: staff.leave.viewed
+      x-audit-event-failure: staff.leave.view_failed
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - approved
+              - rejected
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/leaves/mine:
+    get:
+      tags:
+        - staff
+      operationId: listMyStaffLeaves
+      summary: 我的请假(员工手机)
+      x-permission: staff.leave.submit
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: staff.leave_mine.viewed
+      x-audit-event-failure: staff.leave_mine.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/leaves/{id}/review:
+    post:
+      tags:
+        - staff
+      operationId: reviewStaffLeave
+      summary: 请假审批(排班主管)
+      description: 通过/驳回+批注;通过区间考勤记「请假」;审批留痕。
+      x-permission: staff.shift.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff.leave.reviewed
+      x-audit-event-failure: staff.leave.review_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - decision
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                decision:
+                  type: string
+                  description: 通过/驳回。
+                  enum:
+                    - approve
+                    - reject
+                review_note:
+                  type: string
+                  description: 批注。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/staff/attendance/month-view:
+    get:
+      tags:
+        - staff
+      operationId: myStaffAttendanceMonthView
+      summary: 考勤月视图(员工手机,逐日六态)
+      description: F批(2026-07-02 拍板口径):出勤/缺勤(有排班无上班卡)/迟到/早退/未打下班卡/ 请假(approved 覆盖);无排班=休;同日多问题并列。
+      x-permission: staff.shift.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: staff.attendance_month.viewed
+      x-audit-event-failure: staff.attendance_month.view_failed
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/catalog:
+    get:
+      tags:
+        - service
+      operationId: listServiceCatalog
+      summary: 服务目录(上架项,下单用)
+      x-permission: service.order.create
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+        - tablet
+        - app
+      x-idempotency-required: false
+      x-audit-event-success: service.catalog.viewed
+      x-audit-event-failure: service.catalog.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - service
+      operationId: upsertServiceCatalogItem
+      summary: 维护服务目录项(固定参考价)
+      description: G批口径①(H批修订):后台目录+固定价;公司代收口径下价格为实收金额,全额入公司账,完成履约时按管理费/提成分账列支。
+      x-permission: service.catalog.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: service.catalog.saved
+      x-audit-event-failure: service.catalog.save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - name
+                - price_cent
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                id:
+                  type: string
+                  description: 目录项 id(空=新建)。
+                  maxLength: 64
+                name:
+                  type: string
+                  description: 服务名(如点舞)。
+                  maxLength: 120
+                price_cent:
+                  type: integer
+                  description: 固定价(分;H批公司代收口径,实收全额入公司账)。
+                  minimum: 0
+                duration_minutes:
+                  type: integer
+                  description: 时长(分钟,可空)。
+                  minimum: 1
+                active:
+                  type: boolean
+                  description: 上下架。
+                mgmt_fee_mode:
+                  type: string
+                  description: 管理费模式(H批拍板:按目录项二选一可配)。
+                  enum:
+                    - none
+                    - percent
+                    - fixed
+                mgmt_fee_value:
+                  type: integer
+                  description: 管理费值(percent=基点bp,如1000=10%;fixed=分)。
+                  minimum: 0
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/catalog/all:
+    get:
+      tags:
+        - service
+      operationId: listServiceCatalogAll
+      summary: 服务目录全量(含下架,后台维护)
+      x-permission: service.catalog.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: service.catalog.viewed
+      x-audit-event-failure: service.catalog.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/payment-code:
+    post:
+      tags:
+        - service
+      operationId: setMyServicePaymentCode
+      summary: 录入我的收款码(履约人)
+      description: G批历史能力(兼容保留):履约人录入个人收款码。H批(2026-07-02 最终拍板)已废弃个人码收款流程,现场收款一律走公司统一收款码代收;本接口仅存量兼容,不再作为下单前置。
+      x-permission: service.order.perform
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: service.payment_code.saved
+      x-audit-event-failure: service.payment_code.save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - qr_content
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                qr_content:
+                  type: string
+                  description: 收款码二维码内容(固定码长期有效)。
+                  maxLength: 500
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/payment-code/mine:
+    get:
+      tags:
+        - service
+      operationId: myServicePaymentCode
+      summary: 我的收款码
+      x-permission: service.order.perform
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: service.payment_code.viewed
+      x-audit-event-failure: service.payment_code.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/orders:
+    post:
+      tags:
+        - service
+      operationId: createServiceOrder
+      summary: 代客下单(指定履约人)
+      description: G批口径②③(H批修订):服务员代客点(客人App自点预留 app 终端);下单即指定履约人,价格/名称取目录快照;H批公司代收:下单后向客人出示公司统一收款码,不再要求履约人预录个人收款码。
+      x-permission: service.order.create
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_work_phone
+        - web
+        - tablet
+        - app
+      x-idempotency-required: true
+      x-audit-event-success: service.order.created
+      x-audit-event-failure: service.order.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - catalog_item_id
+                - performer_user_id
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                catalog_item_id:
+                  type: string
+                  description: 服务目录项 id。
+                  maxLength: 64
+                performer_user_id:
+                  type: string
+                  description: 履约员工(客人指定谁填谁)。
+                  maxLength: 64
+                bar_id:
+                  type: string
+                  description: 酒吧 id(可空,仅记录来源)。
+                  maxLength: 64
+                table_id:
+                  type: string
+                  description: 桌台 id(可空,仅记录来源;不进桌台账单)。
+                  maxLength: 64
+                customer_note:
+                  type: string
+                  description: 备注。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    get:
+      tags:
+        - service
+      operationId: listServiceOrders
+      summary: 服务单列表(后台)
+      x-permission: service.catalog.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: service.order.listed
+      x-audit-event-failure: service.order.list_failed
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending_accept
+              - accepted
+              - completed
+              - cancelled
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/orders/assigned-to-me:
+    get:
+      tags:
+        - service
+      operationId: listMyServiceOrders
+      summary: 我的服务任务(履约人手机)
+      x-permission: service.order.perform
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: service.order.mine_viewed
+      x-audit-event-failure: service.order.mine_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/orders/{id}/accept:
+    post:
+      tags:
+        - service
+      operationId: acceptServiceOrder
+      summary: 接单(仅指定履约人)
+      x-permission: service.order.perform
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: service.order.accepted
+      x-audit-event-failure: service.order.accept_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/orders/{id}/complete:
+    post:
+      tags:
+        - service
+      operationId: completeServiceOrder
+      summary: 完成履约(公司代收:管理费归公司,应得月结进薪资)
+      x-permission: service.order.create
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_work_phone
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: service.order.completed
+      x-audit-event-failure: service.order.complete_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/orders/{id}/cancel:
+    post:
+      tags:
+        - service
+      operationId: cancelServiceOrder
+      summary: 取消服务单(履约前;留原因)
+      description: G批口径⑤(H批修订):履约完成前可取消;已收款(公司账户)后取消记退款备注,公司线下退、财务留痕;已完成不可退,纠纷线下处理。
+      x-permission: service.order.create
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: service.order.cancelled
+      x-audit-event-failure: service.order.cancel_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                reason:
+                  type: string
+                  description: 取消原因(留痕必填)。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/orders/{id}/payment-code:
+    get:
+      tags:
+        - service
+      operationId: serviceOrderPaymentCode
+      summary: 出示公司统一收款码(H批代收;个人码流程已废弃)
+      x-permission: service.order.create
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_work_phone
+        - web
+        - tablet
+        - app
+      x-idempotency-required: false
+      x-audit-event-success: service.payment_code.presented
+      x-audit-event-failure: service.payment_code.present_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/orders/my-stats:
+    get:
+      tags:
+        - service
+      operationId: myServiceStats
+      summary: 我的服务统计(当月次数+参考收入)
+      description: H批公司代收口径:当月完成次数+分账应得合计;应得月结进薪资提成并按劳务报酬税表代扣个税。
+      x-permission: service.order.perform
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: service.order.stats_viewed
+      x-audit-event-failure: service.order.stats_view_failed
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/orders/{id}/mark-paid:
+    post:
+      tags:
+        - service
+      operationId: markServiceOrderPaid
+      summary: 确认收款到公司账户(服务员现场)
+      description: H批(2026-07-02 最终拍板,公司代收):客人扫公司统一收款码支付,服务员目视支付 成功页确认;钱进公司账户,财务可对账——解决个人收款码无支付回调的确认盲区; 未确认收款不可完成履约。
+      x-permission: service.order.create
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_work_phone
+        - web
+        - tablet
+      x-idempotency-required: true
+      x-audit-event-success: service.order.paid
+      x-audit-event-failure: service.order.pay_confirm_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                pay_method:
+                  type: string
+                  description: 收款方式(默认公司收款码;聚合支付回调二期)。
+                  maxLength: 24
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/pay-config:
+    get:
+      tags:
+        - service
+      operationId: getServicePayConfig
+      summary: 公司统一收款码(下单出示用)
+      x-permission: service.order.create
+      x-data-scope: platform
+      x-terminal-allowed:
+        - staff_private_phone
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: service.pay_config.viewed
+      x-audit-event-failure: service.pay_config.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - service
+      operationId: setServicePayConfig
+      summary: 配置公司统一收款码
+      description: H批:公司账户代收的收款码(财务对账基准);改动审计留痕。
+      x-permission: service.catalog.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: service.pay_config.saved
+      x-audit-event-failure: service.pay_config.save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - qr_content
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                qr_content:
+                  type: string
+                  description: 公司收款码内容(链接文本,端上重绘二维码)。
+                  maxLength: 500
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/bar/catalog/categories:
+    get:
+      tags:
+        - bar
+      operationId: listBarProductCategories
+      summary: 查询酒吧商品分类
+      description: 图形化点单 POS 可配置分类目录，供按分类分屏列菜。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.category.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: bar.category.viewed
+      x-audit-event-failure: bar.category.viewed_failed
+      responses:
+        "200": &a2
+          $ref: "#/components/responses/Success"
+        "403": &a1
+          $ref: "#/components/responses/Error"
+        "500": *a1
+      x-auth-context: staff-token
+    post:
+      tags:
+        - bar
+      operationId: saveBarProductCategory
+      summary: 新增或修改酒吧商品分类
+      description: 图形化点单 POS 分类维护（后台自建分类，可停用）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.category.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: bar.category.saved
+      x-audit-event-failure: bar.category.saved_failed
+      responses:
+        "200": *a2
+        "400": *a1
+        "403": *a1
+        "404": *a1
+        "500": *a1
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/BarProductCategoryRequest"
+  /api/v1/bar/catalog/products/{product_id}/category:
+    post:
+      tags:
+        - bar
+      operationId: assignBarProductCategory
+      summary: 给酒吧商品设分类
+      description: 将商品归入某可配置分类（categoryId 空=清除分类）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.product.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: bar.product.category_assigned
+      x-audit-event-failure: bar.product.category_assigned_failed
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200": *a2
+        "400": *a1
+        "403": *a1
+        "404": *a1
+        "409": *a1
+        "500": *a1
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/BarProductCategoryAssignRequest"
+  /api/v1/bar/catalog/products:
+    get:
+      tags:
+        - bar
+      operationId: listBarProductsByCategory
+      summary: 按分类查询酒吧商品
+      description: 图形化点单 POS 拉菜单（按 bar_id + category_id 归组，category_id 空=未分类商品）。必须按 OpenAPI
+        schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.product.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: bar.product.viewed
+      x-audit-event-failure: bar.product.viewed_failed
+      parameters:
+        - name: bar_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200": *a2
+        "403": *a1
+        "500": *a1
+      x-auth-context: staff-token
+  /api/v1/bar/catalog/combos:
+    get:
+      tags:
+        - bar
+      operationId: listBarCombos
+      summary: 查询酒吧套餐
+      description: 图形化点单 POS 套餐目录（含组合明细与内部结算价）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.combo.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: bar.combo.viewed
+      x-audit-event-failure: bar.combo.viewed_failed
+      responses:
+        "200": *a2
+        "403": *a1
+        "500": *a1
+      x-auth-context: staff-token
+    post:
+      tags:
+        - bar
+      operationId: saveBarCombo
+      summary: 新增或修改酒吧套餐
+      description: 从既有 SKU 组合套餐、定整体售价与内部结算价（含内部结算价，敏感）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.combo.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: bar.combo.saved
+      x-audit-event-failure: bar.combo.saved_failed
+      responses:
+        "200": *a2
+        "400": *a1
+        "403": *a1
+        "404": *a1
+        "409": *a1
+        "500": *a1
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/BarComboRequest"
+  /api/v1/bar/catalog/images:
+    post:
+      tags:
+        - bar
+      operationId: uploadBarCatalogImage
+      summary: 上传酒吧商品/套餐图片
+      description: 图形化点单 POS 图片本地存储（同 image_url 先例，不上云）；product_id 非空时同时写回商品图片。必须按 OpenAPI
+        schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.product.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: bar.catalog.image_uploaded
+      x-audit-event-failure: bar.catalog.image_uploaded_failed
+      parameters:
+        - name: product_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200": *a2
+        "400": *a1
+        "403": *a1
+        "500": *a1
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
 components:
   securitySchemes:
     BearerAuth:
@@ -23037,6 +23276,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/PartnerSubordinateRequest"
+    BarProductCategoryRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarProductCategoryRequest"
+    BarProductCategoryAssignRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarProductCategoryAssignRequest"
+    BarComboRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarComboRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -23739,11 +23996,6 @@ components:
           type: string
           description: 结算主体 id(缺省=合同主体)。
           maxLength: 64
-        space_ids:
-          type: array
-          items:
-            type: string
-          description: 3.13 意向空间（可选）。传了则起草即校验空间存在并与生效合同租期重叠早拒，同时预绑定；提交审批时复检。
         effective_date:
           type: string
           format: date
@@ -23801,6 +24053,11 @@ components:
           type: string
           description: 经营范围(存 rent_terms；越界 enforcement 属下游)。
           maxLength: 500
+        space_ids:
+          type: array
+          items:
+            type: string
+          description: 3.13 意向空间（可选）。传了则起草即校验空间存在并与生效合同租期重叠早拒，同时预绑定；提交审批时复检。
     ApprovalRequest:
       type: object
       description: 请求载荷 `ApprovalRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -26830,13 +27087,13 @@ components:
           enum:
             - entry
             - drink
-            - gift_drink
             - amusement
-            - admission
-            - dining
             - discount
             - stored_value
-          description: 权益模板.entitlement_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。dining=餐饮权益（核销按内部结算价全额归餐厅商户）。
+            - gift_drink
+            - admission
+            - dining
+          description: 权益模板.entitlement_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         default_total_times:
           type: integer
           minimum: 0
@@ -26877,11 +27134,11 @@ components:
           type: integer
           minimum: 0
           maximum: 999999999999
-          description: 权益模板.agreement_price_cent 字段（可选）；虚拟/餐饮权益的内部结算价（分），核销按此价结算归商户；为空回退面值。
+          description: 权益模板.agreement_price_cent 字段（可选）；虚拟/餐饮权益内部结算价（分），核销按此价结算归商户；为空回退面值。
         exclusive_merchant_id:
           type: string
           maxLength: 64
-          description: 权益模板.exclusive_merchant_id 字段（可选）；专属商户「不分摊」——非空则该权益核销收入全额归该商户不进池；餐饮权益填餐厅商户。
+          description: 权益模板.exclusive_merchant_id 字段（可选）；专属商户不分摊——非空则核销收入全额归该商户；餐饮填餐厅商户。
     TicketTypeEntitlementRequest:
       type: object
       description: 票类型权益请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
@@ -31346,6 +31603,107 @@ components:
           type: string
           maxLength: 64
           description: 下属账号登录名。
+    BarProductCategoryRequest:
+      type: object
+      description: 酒吧商品分类请求体（图形化点单 POS 可配置分类）。字段必须与 OpenAPI、后端 DTO、前端请求保持一致。
+      additionalProperties: false
+      required:
+        - category_name
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          description: 分类 id；空=新增，非空=更新该分类。
+        bar_id:
+          type: string
+          maxLength: 64
+          description: 所属酒吧 id；新增时必填。
+        category_name:
+          type: string
+          maxLength: 128
+          description: 分类名称。
+        sort_order:
+          type: integer
+          minimum: 0
+          maximum: 999999
+          description: 排序（小在前，POS 分屏顺序）。
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+          description: 分类状态；archived=停用（不在 POS 出现，历史商品仍可引用）。
+    BarProductCategoryAssignRequest:
+      type: object
+      description: 给酒吧商品设分类请求体。字段必须与 OpenAPI、后端 DTO、前端请求保持一致。
+      additionalProperties: false
+      properties:
+        category_id:
+          type: string
+          maxLength: 64
+          description: 目标分类 id；空=清除分类（未分类）。
+    BarComboRequest:
+      type: object
+      description: 酒吧套餐请求体（从既有 SKU 组合）。字段必须与 OpenAPI、后端 DTO、前端请求保持一致。
+      additionalProperties: false
+      required:
+        - combo_name
+        - price_cent
+        - items
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          description: 套餐 id；空=新增，非空=更新（含整体替换 items）。
+        bar_id:
+          type: string
+          maxLength: 64
+          description: 所属酒吧 id；新增时必填。
+        combo_name:
+          type: string
+          maxLength: 128
+          description: 套餐名称。
+        price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 套餐整体售价（分）。
+        internal_settlement_price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 套餐内部结算价（分，可空）；平台↔酒吧成本结算价基。
+        image_url:
+          type: string
+          maxLength: 1024
+          description: 套餐图片相对路径（可空，本地存储）。
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+          description: 套餐状态。
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: 套餐组合项（选哪些 SKU + 数量）。
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - product_id
+              - quantity
+            properties:
+              product_id:
+                type: string
+                maxLength: 64
+                description: 组合商品 id（bar_products）。
+              quantity:
+                type: integer
+                minimum: 1
+                maximum: 999999
+                description: 该商品在套餐中的数量。
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

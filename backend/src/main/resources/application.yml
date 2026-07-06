@@ -78,6 +78,11 @@ ticket:
       version: ${COMPLEX_TICKET_SIGNING_VERSION:v1}
 
 bar:
+  pos:
+    image:
+      # V256 图形化点单 POS 商品/套餐图片本地存储目录（同 image_url 先例，不上云）。
+      # 生产可由 env COMPLEX_BAR_POS_IMAGE_DIR 指向持久化卷；dev 默认相对工作目录。
+      dir: ${COMPLEX_BAR_POS_IMAGE_DIR:./data/bar-images}
   invitation:
     signing:
       # V155 订卡邀请函二维码 HMAC 签名密钥。

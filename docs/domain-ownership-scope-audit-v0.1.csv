@@ -51,12 +51,15 @@ bar_bill_adjustments,inherited,bill/order linkage,bill/order linkage -> bar_orde
 bar_bill_operations,inherited,bill/order linkage,bill/order linkage -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,covered
 bar_bill_settlements,direct,merchant_id,merchant_id column on bar_bill_settlements,ready for project/merchant scoped query enforcement,covered
 bar_bills,direct,merchant_id,merchant_id column on bar_bills,ready for project/merchant scoped query enforcement,covered
+bar_combo_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+bar_combos,direct,merchant_id,merchant_id column on bar_combos,ready for project/merchant scoped query enforcement,covered
 bar_commission_calculations,inherited,bill_id,bill_id -> bar_bills -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,covered
 bar_deposit_rules,direct,merchant_id,merchant_id column on bar_deposit_rules,ready for project/merchant scoped query enforcement,covered
 bar_gift_redemptions,direct,merchant_id,merchant_id column on bar_gift_redemptions,ready for project/merchant scoped query enforcement,covered
 bar_order_item_voids,direct,merchant_id,merchant_id column on bar_order_item_voids,ready for project/merchant scoped query enforcement,covered
 bar_order_items,inherited,order_id,order_id -> bar_orders -> table_id/bar_id -> venue/project scope,must join through scope path before multi-complex rollout,covered
 bar_orders,direct,merchant_id,merchant_id column on bar_orders,ready for project/merchant scoped query enforcement,covered
+bar_product_categories,direct,merchant_id,merchant_id column on bar_product_categories,ready for project/merchant scoped query enforcement,covered
 bar_production_ticket_events,inherited,order_id,order_id -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,covered
 bar_production_tickets,direct,merchant_id,merchant_id column on bar_production_tickets,ready for project/merchant scoped query enforcement,covered
 bar_products,direct,merchant_id,merchant_id column on bar_products,ready for project/merchant scoped query enforcement,covered

@@ -138,6 +138,27 @@ export class AdminApi {
     return this.request<T>(path, "DELETE");
   }
 
+  /** multipart 上传：复用 auth/终端头，但不设 content-type（浏览器带 boundary），不转键。走 401 刷新重放一次。 */
+  async postForm<T>(path: string, form: FormData): Promise<T> {
+    const buildInit = (): RequestInit => {
+      const headers = new Headers();
+      if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);
+      headers.set("x-terminal-type", this.terminalType);
+      if (this.moduleCode) headers.set("x-module-code", this.moduleCode);
+      return { method: "POST", headers, body: form };
+    };
+    let response = await fetch(`${this.apiBaseUrl}${path}`, buildInit());
+    if (response.status === 401 && !path.includes("/auth/")) {
+      if (this.refreshToken && (await this.tryRefresh())) {
+        response = await fetch(`${this.apiBaseUrl}${path}`, buildInit());
+      }
+      if (response.status === 401) this.notifySessionExpired();
+    }
+    const text = await response.text();
+    if (!response.ok) throw apiErrorFromResponse(path, response.status, text, "POST");
+    return (text ? unwrap(JSON.parse(text)) : null) as T;
+  }
+
   private buildInit(method: string, body: JsonBody | undefined): RequestInit {
     const headers = new Headers();
     if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);
