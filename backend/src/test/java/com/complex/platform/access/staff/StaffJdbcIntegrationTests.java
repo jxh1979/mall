@@ -337,6 +337,30 @@ class StaffJdbcIntegrationTests {
     }
 
     @org.junit.jupiter.api.Test
+    void submitLeaveRejectsOverlapWithActiveLeave() {
+        // 审计 B-P2(本轮修):与未撤销(pending/approved)请假重叠的新请假被拒,防重复扣薪。
+        authenticateAsPlatformAdmin();
+        com.complex.platform.access.staff.StaffLeaveRequestRecord first = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "personal", java.time.LocalDate.parse("2099-09-10"),
+                        java.time.LocalDate.parse("2099-09-12"), "事假"));
+        service.reviewLeave(first.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(
+                key(), "approve", "准"));
+        // 09-11 落在 09-10..12 内 → 重叠拒绝
+        assertThatThrownBy(() -> service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "personal", java.time.LocalDate.parse("2099-09-11"),
+                        java.time.LocalDate.parse("2099-09-13"), "重叠")))
+                .isInstanceOf(ApiException.class);
+        // 09-20 不重叠 → 放行
+        com.complex.platform.access.staff.StaffLeaveRequestRecord third = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "personal", java.time.LocalDate.parse("2099-09-20"),
+                        java.time.LocalDate.parse("2099-09-21"), "另一段"));
+        assertThat(third.status()).isEqualTo("pending");
+    }
+
+    @org.junit.jupiter.api.Test
     void v211PayrollLeaveMonthView() {
         // F批(2026-07-02 拍板):月结定格(total=base+提成+奖-罚,可重结覆盖);员工只见已定格月;
         // 请假主管审,通过区间月视图记 leave;月视图六态口径。

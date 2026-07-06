@@ -862,6 +862,10 @@ public class StaffService {
                     "leave_type(personal|sick|comp|annual)/start_date<=end_date/reason are required");
         }
         var actor = authorizationService.currentActor();
+        if (repository.hasActiveLeaveOverlap(actor.id(), request.startDate(), request.endDate())) {
+            throw ApiException.badRequest("LEAVE_OVERLAP",
+                    "already has an active (pending/approved) leave overlapping this date range");
+        }
         Instant now = Instant.now();
         StaffLeaveRequestRecord saved = repository.saveLeaveRequest(new StaffLeaveRequestRecord(
                 "lv_" + UUID.randomUUID(), actor.id(), request.leaveType(), request.startDate(),

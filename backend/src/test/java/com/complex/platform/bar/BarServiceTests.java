@@ -243,6 +243,21 @@ class BarServiceTests {
     }
 
     @Test
+    void createReservationRejectsAnotherMerchantsTable() {
+        // 审计 C-P1:卡座预订须校验桌位属调用方商户,否则恶意商户可把预订写到他人物理桌位。
+        TestSecurityActors.asMerchantUser("merchant_b");
+        BarTableRecord othersTable = service.createTable(new BarTableRequest(
+                "table-cp1-b", "create", List.of(), "bar_1", "VIP B", "card_seat", 50000L, 2, "active"));
+
+        TestSecurityActors.asMerchantUser("merchant_a");
+        assertThatThrownBy(() -> service.createReservation(new BarReservationRequest(
+                "resv-cp1", "create reservation", List.of(), "bar_1",
+                othersTable.id(), Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
     void listTablesReturnsOnlyCurrentMerchantRecordsWhenScopedToMerchant() {
         TestSecurityActors.asMerchantUser("merchant_a");
         BarTableRecord merchantATable = service.createTable(new BarTableRequest(

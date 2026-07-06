@@ -45,6 +45,9 @@ public interface StaffRepository {
 
     StaffLeaveRequestRecord saveLeaveRequest(StaffLeaveRequestRecord record);
 
+    /** 该员工在 [start,end] 是否已有未撤销(pending/approved)请假(防重叠重复扣薪)。 */
+    boolean hasActiveLeaveOverlap(String userId, java.time.LocalDate start, java.time.LocalDate end);
+
     java.util.Optional<StaffLeaveRequestRecord> findLeaveById(String id);
 
     java.util.List<StaffLeaveRequestRecord> listLeaves(String status, String userId, String projectScope);

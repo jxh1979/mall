@@ -13,9 +13,11 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 final class JdbcTicketingParameterSource {
 
     private final ObjectMapper objectMapper;
+    private final com.complex.platform.common.crypto.PiiCipher piiCipher;
 
-    JdbcTicketingParameterSource(ObjectMapper objectMapper) {
+    JdbcTicketingParameterSource(ObjectMapper objectMapper, com.complex.platform.common.crypto.PiiCipher piiCipher) {
         this.objectMapper = objectMapper;
+        this.piiCipher = piiCipher;
     }
 
     MapSqlParameterSource ticketTypeParameters(TicketTypeRecord ticketType) {
@@ -195,7 +197,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("quantity", order.quantity())
                 .addValue("visit_date", order.visitDate())
                 .addValue("sales_channel", order.salesChannel())
-                .addValue("buyer_phone", order.buyerPhone())
+                .addValue("buyer_phone", piiCipher.encrypt(order.buyerPhone()))
                 .addValue("amount_cent", order.amountCent())
                 .addValue("dynamic_pricing_rule_id", order.dynamicPricingRuleId())
                 .addValue("base_amount_cent", order.baseAmountCent())

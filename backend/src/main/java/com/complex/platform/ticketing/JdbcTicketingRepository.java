@@ -15,11 +15,12 @@ class JdbcTicketingRepository implements TicketingRepository {
     private final JdbcTicketingRowMapper rowMapper;
     private final JdbcTicketingParameterSource parameterSource;
 
-    JdbcTicketingRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcTicketingRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
+            com.complex.platform.common.crypto.PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
         var jdbcObjectMapper = objectMapper.copy().findAndRegisterModules();
-        this.rowMapper = new JdbcTicketingRowMapper(jdbcObjectMapper);
-        this.parameterSource = new JdbcTicketingParameterSource(jdbcObjectMapper);
+        this.rowMapper = new JdbcTicketingRowMapper(jdbcObjectMapper, piiCipher);
+        this.parameterSource = new JdbcTicketingParameterSource(jdbcObjectMapper, piiCipher);
     }
 
     @Override

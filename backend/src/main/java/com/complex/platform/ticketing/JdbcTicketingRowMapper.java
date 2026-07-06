@@ -21,9 +21,11 @@ final class JdbcTicketingRowMapper {
     };
 
     private final ObjectMapper objectMapper;
+    private final com.complex.platform.common.crypto.PiiCipher piiCipher;
 
-    JdbcTicketingRowMapper(ObjectMapper objectMapper) {
+    JdbcTicketingRowMapper(ObjectMapper objectMapper, com.complex.platform.common.crypto.PiiCipher piiCipher) {
         this.objectMapper = objectMapper;
+        this.piiCipher = piiCipher;
     }
 
     TicketTypeRecord mapTicketType(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -210,7 +212,7 @@ final class JdbcTicketingRowMapper {
                 resultSet.getInt("quantity"),
                 resultSet.getObject("visit_date", LocalDate.class),
                 resultSet.getString("sales_channel"),
-                resultSet.getString("buyer_phone"),
+                piiCipher.decrypt(resultSet.getString("buyer_phone")),
                 resultSet.getLong("amount_cent"),
                 resultSet.getString("dynamic_pricing_rule_id"),
                 resultSet.getLong("base_amount_cent"),

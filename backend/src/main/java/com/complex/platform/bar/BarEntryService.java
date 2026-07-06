@@ -47,6 +47,11 @@ public class BarEntryService {
             throw ApiException.conflict("BAR_SCOPE_MISMATCH", "reservation table is not in this bar");
         }
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        // 跨商户写守卫(与 BarOrderService.createOrderInternal 一致):桌位须属调用方商户,
+        // 否则恶意商户可把预订写到他人物理桌位。barId==table.barId() 自洽无用,须校验 merchant。
+        if (merchantId != null && !merchantId.equals(table.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "bar table belongs to another merchant");
+        }
         Instant now = Instant.now();
         // T16：按 bar_deposit_rules（table_type/time_slot 优先于 bar）解析定金。无匹配规则保持向后兼容（0/not_required）。
         BarDepositRuleRecord rule = resolveDepositRule(table);

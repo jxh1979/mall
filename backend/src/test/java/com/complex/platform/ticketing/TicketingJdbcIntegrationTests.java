@@ -703,6 +703,11 @@ class TicketingJdbcIntegrationTests {
 
         TicketOrderRecord reloaded = repository.findTicketOrderById("ticket_order_trace_jdbc").orElseThrow();
         assertThat(reloaded.baseAmountCent() + reloaded.dynamicAdjustmentCent()).isEqualTo(reloaded.amountCent());
+        // 审计 F-P1:购票人手机号落库为密文(enc:v1: 信封),读回明文(PiiCipher 透明加解密)。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT buyer_phone FROM ticket_orders WHERE id = 'ticket_order_trace_jdbc'", String.class))
+                .startsWith("enc:v1:");
+        assertThat(reloaded.buyerPhone()).isEqualTo("13800138000");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT dynamic_pricing_rule_id FROM ticket_orders WHERE id = 'ticket_order_trace_jdbc'",
                 String.class

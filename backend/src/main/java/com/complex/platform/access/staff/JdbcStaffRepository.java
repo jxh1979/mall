@@ -330,6 +330,17 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("project_scope", projectScope), this::mapLeave);
     }
 
+    @Override
+    public boolean hasActiveLeaveOverlap(String userId, java.time.LocalDate start, java.time.LocalDate end) {
+        // 两区间 [s1,e1]/[s2,e2] 重叠 <=> s1<=e2 && s2<=e1;只算未撤销(pending/approved)。
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM staff_leave_requests
+                               WHERE user_id = :user_id AND status IN ('pending','approved')
+                                 AND start_date <= :end AND end_date >= :start)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("start", start).addValue("end", end), Boolean.class));
+    }
+
     private StaffLeaveRequestRecord mapLeave(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         return new StaffLeaveRequestRecord(
                 rs.getString("id"), rs.getString("user_id"), rs.getString("leave_type"),
