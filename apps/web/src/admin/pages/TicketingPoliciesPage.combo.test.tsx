@@ -85,4 +85,35 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
     await waitFor(() => expect(screen.getByTestId("combo-error").textContent).toContain("归属商户"));
     expect(postSpy).not.toHaveBeenCalled();
   });
+
+  it("加一条餐饮项(选餐厅+内部结算价)后提交:发1条 dining 模板,带 agreement_price_cent + exclusive_merchant_id 归该餐厅", async () => {
+    const postSpy = vi.fn(async (path: string, _body?: Record<string, unknown>) => {
+      if (path.includes("/entitlement-templates")) return { id: `tpl-${Math.random()}` } as unknown;
+      return {} as unknown;
+    });
+    renderPage(postSpy);
+    await waitFor(() => expect(screen.getByTestId("combo-ticket-select")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
+
+    // 加一条餐饮项:餐厅默认第一个商户,填内部结算价 50 元、价格 0(纯赠送)、折扣 8。
+    fireEvent.click(screen.getByTestId("combo-add-dining"));
+    await waitFor(() => expect(screen.getByTestId("combo-dining-line-0")).toBeTruthy());
+    const row = screen.getByTestId("combo-dining-line-0");
+    fireEvent.change(row.querySelector('input[aria-label="内部结算价（元）"]')!, { target: { value: "50" } });
+    fireEvent.change(row.querySelector('input[aria-label="折扣"]')!, { target: { value: "8" } });
+
+    fireEvent.click(screen.getByTestId("combo-submit"));
+
+    await waitFor(() => {
+      const templateCalls = postSpy.mock.calls.filter((c) => String(c[0]).includes("/ticketing/entitlement-templates"));
+      expect(templateCalls.length).toBe(1);
+      const body = (templateCalls[0]?.[1] ?? {}) as Record<string, unknown>;
+      // 餐饮结算关键断言:类型=dining、内部结算价=5000 分、专属餐厅=该商户(核销全额归餐厅)、价格可为 0。
+      expect(body.entitlement_type).toBe("dining");
+      expect(body.agreement_price_cent).toBe(5000);
+      expect(body.exclusive_merchant_id).toBe("mch-1");
+      expect(body.merchant_id).toBe("mch-1");
+      expect(body.default_value_cent).toBe(0);
+    });
+  });
 });

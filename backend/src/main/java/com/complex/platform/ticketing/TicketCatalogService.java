@@ -125,14 +125,16 @@ public class TicketCatalogService {
                 now,
                 now,
                 // 结算重构批3-1(PRD §6.1)：新建模板结算类别与 V225 回填口径一致——gift_drink=实物(走内部结算价)，
-                // 其余=虚拟(走签约单价)。签约单价暂无配置入口，留空(判定层回退 value_amount)，待运营后台补录。
+                // 其余=虚拟(走签约单价/内部结算价)。餐饮(dining,用户2026-07-06)属虚拟——内部结算价复用 agreement_price_cent 承载。
                 "gift_drink".equals(entitlementType) ? "physical" : "virtual",
-                null,
+                // 餐饮结算(用户2026-07-06)：内部结算价由请求透传(可空)；餐饮 virtual 核销取 agreement_price_cent 作结算价归商户。
+                //   非餐饮调用点不带此字段=null，判定层回退 value_amount(行为同现状)。
+                nonNegativeOrNull(actual.agreementPriceCent(), "agreement_price_cent"),
                 // 结算重构批3-2(PRD §6.2)：新建模板默认逐次扣(per_use，行为同现状)；入场资格「场次规则」(per_session)
                 // 暂无配置入口，待运营后台补 consumption_window 编辑项（判定层对 NULL/per_use 走现状）。
                 "per_use",
-                // 批3-4：新建模板非专属(exclusive_merchant_id=null，走池分账)；专属由运营后台后补编辑项。
-                null,
+                // 批3-4/餐饮(用户2026-07-06)：专属商户「不分摊」由请求透传(可空=非专属走池)；餐饮填餐厅商户使核销全额按内部结算价直付餐厅。
+                trimToNull(actual.exclusiveMerchantId()),
                 // 批3-6(用户2026-07-04)：拍脸照开关由请求透传(可空=false)；游乐模板走 V229 种子回填默认开，新建按请求。
                 Boolean.TRUE.equals(actual.requireFacePhoto())
         ));

@@ -534,7 +534,9 @@ public class TicketVerificationService {
                 updated.allocatedRevenueCent(),
                 updated.validTo(),
                 // 批3-4：把该权益专属商户带入结算事件，双写时定格进 settlement_transactions（空=非专属分池）。
-                updated.exclusiveMerchantId()
+                updated.exclusiveMerchantId(),
+                // 餐饮结算(用户2026-07-06)：本次核销结算价随事件带下游；专属餐饮权益按此价×核销数直付餐厅(内部结算价)，非专属仍按 allocated。
+                settlementPriceCent
         ));
         if (credential != null) {
             repository.saveTicketCredential(new TicketCredentialRecord(
@@ -673,7 +675,9 @@ public class TicketVerificationService {
                 consumed.numPeople(),
                 consumed.allocatedRevenueCent(),
                 consumed.validTo(),
-                consumed.exclusiveMerchantId()
+                consumed.exclusiveMerchantId(),
+                // 游乐核销结算价沿用 value_amount(D6)；随事件带下游（游乐当前非专属，消费者仍按 allocated 分摊）。
+                settlementPriceCent
         ));
         return new VerificationResponse(verification.id(), verification.verificationNo(),
                 verification.status(), verification.resultReason());

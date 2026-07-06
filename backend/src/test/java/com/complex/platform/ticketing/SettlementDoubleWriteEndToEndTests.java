@@ -130,6 +130,85 @@ class SettlementDoubleWriteEndToEndTests {
         assertThat(count).isEqualTo(0);
     }
 
+    @Test
+    void diningEntitlementSettlesInternalPriceToRestaurantMerchant() {
+        // 餐饮结算(用户2026-07-06)：内部结算价 3000/次、专属餐厅 rest_a、纯赠送(allocated=null)。
+        //   核销 1 次 → verified_amount_cent = 3000×1 = 3000，全额归 rest_a(exclusive_merchant_id)，不因 allocated 缺失被跳过。
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        String suffix = Long.toString(System.nanoTime());
+        seedDevice(suffix);
+        String code = seedDiningEntitlement(suffix, 2, null, "rest_a", 3000L);
+
+        var response = ticketingService.createVerification(new VerificationRequest(
+                "idem-dining-" + suffix, "qr", code, deviceCode, "point_" + suffix, Map.of()));
+        assertThat(response.status()).isEqualTo("success");
+
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT * FROM settlement_transactions WHERE entitlement_id = ?", "ent_" + code);
+        // 结算金额=内部结算价×核销数(不是把面值/折扣当结算价乱记)；归属=专属餐厅商户。
+        assertThat(((Number) row.get("verified_amount_cent")).longValue()).isEqualTo(3000L);
+        assertThat(row.get("exclusive_merchant_id")).isEqualTo("rest_a");
+        assertThat(row.get("merchant_id")).isEqualTo("rest_a");
+        assertThat(row.get("beneficiary_type")).isEqualTo("merchant");
+        // 核销记录 settlement_price_cent 也是内部结算价(对账口径)。
+        Long settlementPrice = jdbcTemplate.queryForObject(
+                "SELECT settlement_price_cent FROM ticket_verifications WHERE entitlement_id = ? AND status = 'success'",
+                Long.class, "ent_" + code);
+        assertThat(settlementPrice).isEqualTo(3000L);
+    }
+
+    @Test
+    void diningEntitlementWithZeroPriceExchangeSettlesInternalPriceNotFaceValue() {
+        // 纯兑换：面值(value_amount)=0，但内部结算价=2500 → 餐厅仍按内部价 2500 结算(证「价格可为0+内部结算价」口径)。
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        String suffix = Long.toString(System.nanoTime());
+        seedDevice(suffix);
+        String code = seedDiningEntitlement(suffix, 1, 0L, "rest_b", 2500L);
+
+        var response = ticketingService.createVerification(new VerificationRequest(
+                "idem-dining0-" + suffix, "qr", code, deviceCode, "point_" + suffix, Map.of()));
+        assertThat(response.status()).isEqualTo("success");
+
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT * FROM settlement_transactions WHERE entitlement_id = ?", "ent_" + code);
+        assertThat(((Number) row.get("verified_amount_cent")).longValue()).isEqualTo(2500L);
+        assertThat(row.get("exclusive_merchant_id")).isEqualTo("rest_b");
+    }
+
+    /**
+     * 餐饮权益(dining)：virtual + agreement_price_cent(内部结算价) + exclusive_merchant_id(餐厅)。
+     * valueAmountCent 可为 null(纯赠送/direct 无 allocated) 或 0(纯兑换) —— 结算按内部结算价，不受其影响。
+     */
+    private String seedDiningEntitlement(String suffix, int totalTimes, Long allocatedCent,
+                                         String restaurantMerchantId, long internalPriceCent) {
+        String code = "st-dining-" + suffix;
+        seededCodes.add(code);
+        Instant now = Instant.now();
+        java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        String typeId = "tt_" + code;
+        String templateId = "et_" + code;
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status,
+                    created_at, updated_at)
+                VALUES (?, 'Dining Type', 'fixed', FALSE, 'active', ?, ?)
+                """, typeId, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
+                    default_value_cent, status, bar_item_ref, entitlement_kind, agreement_price_cent,
+                    exclusive_merchant_id, created_at, updated_at)
+                VALUES (?, 'Dining', 'dining', ?, 0, 'active', NULL, 'virtual', ?, ?, ?, ?)
+                """, templateId, totalTimes, internalPriceCent, restaurantMerchantId, ts, ts);
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_" + code, "ON-" + code, "cust_" + code, typeId, null, totalTimes,
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + code, code, typeId, "order_" + code, templateId, "dining",
+                restaurantMerchantId, null, "point_" + suffix, totalTimes, 0, allocatedCent, "active",
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, allocatedCent,
+                "virtual", internalPriceCent, null, restaurantMerchantId));
+        return code;
+    }
+
     private void seedDevice(String suffix) {
         deviceCode = "device_st_" + suffix;
         Instant now = Instant.now();
