@@ -39,18 +39,37 @@ public class SettlementSettledConsumer {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onSettlementSettled(SettlementSettledEvent event) {
-        Long allocated = event.allocatedRevenueCent();
-        if (allocated == null) {
-            // direct 出票无分摊快照：保守跳过不写（与 analytics 一致，避免凭空造 net）。
-            return;
-        }
         int total = event.totalTimes();
         int used = event.usedTimes();
-        // total<=0 理论不应发生（发票时至少 1 次），防御性置全额已核销避免除零。
-        long verified = total <= 0 ? allocated : Math.round((double) allocated * used / total);
-        // 夹取到 [0, allocated]，再由差值定 unverified，保证两段和恒等 allocated（无舍入漂移）。
-        verified = Math.max(0L, Math.min(allocated, verified));
-        long unverified = allocated - verified;
+        Long allocated = event.allocatedRevenueCent();
+
+        // 餐饮结算(用户2026-07-06 拍板)：专属商户「不分摊」+ 有内部结算价 → 按【内部结算价 × 核销数】全额直付该商户，
+        //   不走 allocated 比例分摊(否则纯赠送 allocated=0/折扣价会把内部结算价错算)。§6.4 exclusive_merchant_id
+        //   已使月度成账全额归 exclusive_merchant。allocated 保留供旧口径对账(可空则记 0)。
+        //   条件 exclusiveMerchantId!=null 现仅餐饮命中(其余新建模板均非专属)，故不改动 bar/游乐现状分摊。
+        boolean exclusiveByPrice = event.exclusiveMerchantId() != null && event.settlementPriceCent() != null;
+
+        long allocatedForRow;
+        long verified;
+        long unverified;
+        if (exclusiveByPrice) {
+            long price = event.settlementPriceCent();
+            verified = Math.max(0L, price * Math.max(0, used));
+            // allocated 行值取「结算价 × 总次数」作为该权益应结总额(未核销部分=剩余次数×价);缺 allocated 时不依赖它。
+            allocatedForRow = Math.max(verified, price * Math.max(0, total));
+            unverified = allocatedForRow - verified;
+        } else {
+            if (allocated == null) {
+                // direct 出票无分摊快照且非专属定价：保守跳过不写（与 analytics 一致，避免凭空造 net）。
+                return;
+            }
+            // total<=0 理论不应发生（发票时至少 1 次），防御性置全额已核销避免除零。
+            verified = total <= 0 ? allocated : Math.round((double) allocated * used / total);
+            // 夹取到 [0, allocated]，再由差值定 unverified，保证两段和恒等 allocated（无舍入漂移）。
+            verified = Math.max(0L, Math.min(allocated, verified));
+            allocatedForRow = allocated;
+            unverified = allocated - verified;
+        }
 
         repository.upsertVerificationSettled(new SettlementTransactionRecord(
                 "st_vs_" + event.entitlementId(),
@@ -64,7 +83,7 @@ public class SettlementSettledConsumer {
                 used,
                 total,
                 event.numPeople(),
-                allocated,
+                allocatedForRow,
                 verified,
                 unverified,
                 BENEFICIARY_MERCHANT,

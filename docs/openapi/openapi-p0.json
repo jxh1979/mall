@@ -37285,7 +37285,10 @@
               "drink",
               "amusement",
               "discount",
-              "stored_value"
+              "stored_value",
+              "gift_drink",
+              "admission",
+              "dining"
             ],
             "description": "权益模板.entitlement_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
@@ -37329,6 +37332,21 @@
             "type": "string",
             "maxLength": 64,
             "description": "权益模板.point_id 字段（可选）；权益归属点位，为空表示不限定。"
+          },
+          "require_face_photo": {
+            "type": "boolean",
+            "description": "权益模板.require_face_photo 字段（可选）；购买/发放时是否要求拍脸照存档，缺省 false。"
+          },
+          "agreement_price_cent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999999999999,
+            "description": "权益模板.agreement_price_cent 字段（可选）；虚拟/餐饮权益内部结算价（分），核销按此价结算归商户；为空回退面值。"
+          },
+          "exclusive_merchant_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "权益模板.exclusive_merchant_id 字段（可选）；专属商户不分摊——非空则核销收入全额归该商户；餐饮填餐厅商户。"
           }
         }
       },

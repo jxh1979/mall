@@ -26830,10 +26830,13 @@ components:
           enum:
             - entry
             - drink
+            - gift_drink
             - amusement
+            - admission
+            - dining
             - discount
             - stored_value
-          description: 权益模板.entitlement_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: 权益模板.entitlement_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。dining=餐饮权益（核销按内部结算价全额归餐厅商户）。
         default_total_times:
           type: integer
           minimum: 0
@@ -26867,6 +26870,18 @@ components:
           type: string
           maxLength: 64
           description: 权益模板.point_id 字段（可选）；权益归属点位，为空表示不限定。
+        require_face_photo:
+          type: boolean
+          description: 权益模板.require_face_photo 字段（可选）；购买/发放时是否要求拍脸照存档，缺省 false。
+        agreement_price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 权益模板.agreement_price_cent 字段（可选）；虚拟/餐饮权益的内部结算价（分），核销按此价结算归商户；为空回退面值。
+        exclusive_merchant_id:
+          type: string
+          maxLength: 64
+          description: 权益模板.exclusive_merchant_id 字段（可选）；专属商户「不分摊」——非空则该权益核销收入全额归该商户不进池；餐饮权益填餐厅商户。
     TicketTypeEntitlementRequest:
       type: object
       description: 票类型权益请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。

@@ -23,6 +23,8 @@ import java.time.Instant;
  * @param allocatedRevenueCent 权益总分配收入快照（可空：direct 出票为 null → 消费者跳过不写）
  * @param validTo              权益有效期截止（过期判定基线，写入 entitlement_valid_to）
  * @param exclusiveMerchantId  结算重构批3-4(PRD §6.4)：专属某商户「不分摊」，非空=该权益核销收入全额归该商户（不进池）；空=非专属分池
+ * @param settlementPriceCent  本次核销结算价(分,可空)——resolveSettlementPrice 结果。餐饮等专属权益按此价×核销数直付商户(内部结算价口径)；
+ *                             为空或非专属时消费者仍按 allocated 分摊(现状,与旧口径对账)。
  */
 public record SettlementSettledEvent(
         String entitlementId,
@@ -35,6 +37,7 @@ public record SettlementSettledEvent(
         int numPeople,
         Long allocatedRevenueCent,
         Instant validTo,
-        String exclusiveMerchantId
+        String exclusiveMerchantId,
+        Long settlementPriceCent
 ) {
 }
