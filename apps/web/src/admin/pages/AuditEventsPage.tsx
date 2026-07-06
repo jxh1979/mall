@@ -35,7 +35,7 @@ const TEXT = {
   result: "结果",
   risk: "风险",
   source: "来源",
-  trace: "Trace ID",
+  trace: "追踪号",
   object: "对象",
   summary: "摘要",
   occurredAt: "发生时间",

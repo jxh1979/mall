@@ -268,10 +268,10 @@ class MainActivity : Activity() {
   // ---------------------------------------------------------------------------
   private fun showTicketVerify() {
     val credential = editText("核销凭证（扫码或手动输入）")
-    val status = statusText("先预检（preview）再核销（verify）")
+    val status = statusText("先预检再核销")
     val scanButton = secondaryButton("扫码读取凭证") { launchScan(credential) }
 
-    val previewButton = secondaryButton("预检 preview") {
+    val previewButton = secondaryButton("预检") {
       val code = credential.text.toString().trim()
       if (code.isEmpty()) { status.text = "请输入核销凭证"; return@secondaryButton }
       requireBindingOr(status) {
@@ -287,7 +287,7 @@ class MainActivity : Activity() {
       }
     }
 
-    val verifyButton = primaryButton("核销 verify") {
+    val verifyButton = primaryButton("核销") {
       val code = credential.text.toString().trim()
       if (code.isEmpty()) { status.text = "请输入核销凭证"; return@primaryButton }
       requireBindingOr(status) {
@@ -420,7 +420,7 @@ class MainActivity : Activity() {
       )
     }
 
-    val settleButton = primaryButton("结算账单 settle") {
+    val settleButton = primaryButton("结算账单") {
       val bill = billId.text.toString().trim()
       if (bill.isEmpty()) { status.text = "请输入账单 bill_id"; return@primaryButton }
       val ch = selectedChannel()

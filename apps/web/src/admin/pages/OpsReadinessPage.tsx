@@ -56,9 +56,9 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
 
   function openBlockerDetail(row: ReadinessItemRow) {
     setDetail({
-      title: `生产 blocker 明细 · ${row.blockerCode ?? row.title ?? row.id}`,
+      title: `生产阻断项明细 · ${row.blockerCode ?? row.title ?? row.id}`,
       fields: [
-        { label: "Blocker", value: row.blockerCode ?? row.title ?? "—" },
+        { label: "阻断项", value: row.blockerCode ?? row.title ?? "—" },
         { label: "标题", value: row.title ?? "—" },
         { label: "责任人", value: row.owner ?? "—" },
         { label: "状态", value: formatBusinessStatus(row.status) },
@@ -86,7 +86,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
         {formError ? <div data-testid="ops-readiness-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="ops-readiness-table">
-            <thead><tr><th>选择</th><th>Blocker</th><th>责任人</th><th>状态</th></tr></thead>
+            <thead><tr><th>选择</th><th>阻断项</th><th>责任人</th><th>状态</th></tr></thead>
             <tbody>{rows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`ops-readiness-row-${row.id}`}
                 onClick={() => openBlockerDetail(row)}
