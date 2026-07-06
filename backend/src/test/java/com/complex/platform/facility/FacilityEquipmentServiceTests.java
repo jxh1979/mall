@@ -88,7 +88,8 @@ class FacilityEquipmentServiceTests {
         FacilityEquipmentRecord done = service.recordMaintenanceDone(rec.id(), "k_done");
         assertThat(done.status()).isEqualTo("normal");
         assertThat(done.lastMaintenanceAt()).isNotNull();
-        assertThat(done.nextMaintenanceDue()).isEqualTo(LocalDate.now().plusDays(30));
+        // 到期由服务按 UTC 计算(Instant.now().atZone(UTC)),断言同用 UTC 才不受服务器时区/时刻影响
+        assertThat(done.nextMaintenanceDue()).isEqualTo(LocalDate.now(java.time.ZoneOffset.UTC).plusDays(30));
     }
 
     @Test

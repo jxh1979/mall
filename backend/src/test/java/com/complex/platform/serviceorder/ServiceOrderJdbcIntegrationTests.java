@@ -173,13 +173,13 @@ class ServiceOrderJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT project_id FROM service_orders WHERE id = ?", String.class, order.id()))
                 .isEqualTo("prj_a");
-        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
-        assertThat(repository.listOrders(today, null, "prj_a"))
+        // 本用例验的是项目隔离,与"当天"无关;传 null 日期避免 created_at::date(DB 会话时区)与 UTC 边界抖动
+        assertThat(repository.listOrders((java.time.LocalDate) null, null, "prj_a"))
                 .extracting(ServiceOrderRecord::id).contains(order.id());
-        assertThat(repository.listOrders(today, null, "prj_b"))
+        assertThat(repository.listOrders((java.time.LocalDate) null, null, "prj_b"))
                 .extracting(ServiceOrderRecord::id).doesNotContain(order.id());
         // 平台(null scope)全量可见。
-        assertThat(repository.listOrders(today, null, null))
+        assertThat(repository.listOrders((java.time.LocalDate) null, null, null))
                 .extracting(ServiceOrderRecord::id).contains(order.id());
     }
 
