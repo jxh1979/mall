@@ -38807,6 +38807,11 @@
             "type": "string",
             "description": "驳回原因；decision=reject 时必填。",
             "maxLength": 255
+          },
+          "initial_password": {
+            "type": "string",
+            "description": "员工初始登录密码；decision=approve 时必填，审批通过即建登录凭证供员工登录。",
+            "maxLength": 128
           }
         }
       },

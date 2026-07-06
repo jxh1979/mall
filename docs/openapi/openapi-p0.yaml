@@ -28056,6 +28056,10 @@ components:
           type: string
           description: 驳回原因；decision=reject 时必填。
           maxLength: 255
+        initial_password:
+          type: string
+          description: 员工初始登录密码；decision=approve 时必填，审批通过即建登录凭证供员工登录。
+          maxLength: 128
     StaffDeviceBindRequest:
       type: object
       description: 员工设备凭证绑定/换机请求体。device_public_key=Keystore 公钥，device_fingerprint_hash=不可逆指纹（不读 NFC）。

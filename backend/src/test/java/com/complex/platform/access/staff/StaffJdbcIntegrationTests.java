@@ -80,7 +80,7 @@ class StaffJdbcIntegrationTests {
         assertThat(submitted.userId()).isNull();
 
         StaffProfileRecord approved = service.reviewRegistration(submitted.id(),
-                new StaffRegistrationReviewRequest(key(), null, "approve", null));
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-Staff-1"));
 
         assertThat(approved.registrationStatus()).isEqualTo("approved");
         assertThat(approved.userId()).isNotBlank();
@@ -96,16 +96,25 @@ class StaffJdbcIntegrationTests {
     }
 
     @Test
+    void registrationApproveRequiresInitialPassword() {
+        StaffProfileRecord submitted = submitRegistration(null);
+        assertThatThrownBy(() -> service.reviewRegistration(submitted.id(),
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("初始登录密码");
+    }
+
+    @Test
     void registrationRejectRequiresReason() {
         StaffProfileRecord submitted = submitRegistration(null);
 
         assertThatThrownBy(() -> service.reviewRegistration(submitted.id(),
-                new StaffRegistrationReviewRequest(key(), null, "reject", null)))
+                new StaffRegistrationReviewRequest(key(), null, "reject", null, null)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("reject_reason");
 
         StaffProfileRecord rejected = service.reviewRegistration(submitted.id(),
-                new StaffRegistrationReviewRequest(key(), null, "reject", "材料不全"));
+                new StaffRegistrationReviewRequest(key(), null, "reject", "材料不全", null));
         assertThat(rejected.registrationStatus()).isEqualTo("rejected");
         assertThat(rejected.rejectReason()).isEqualTo("材料不全");
     }
@@ -282,7 +291,7 @@ class StaffJdbcIntegrationTests {
     private StaffProfileRecord approvedProfile(String merchantId) {
         StaffProfileRecord submitted = submitRegistration(merchantId);
         return service.reviewRegistration(submitted.id(),
-                new StaffRegistrationReviewRequest(key(), null, "approve", null));
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-Staff-1"));
     }
 
     @org.junit.jupiter.api.Test

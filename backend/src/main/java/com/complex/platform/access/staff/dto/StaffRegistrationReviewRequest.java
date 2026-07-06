@@ -8,6 +8,7 @@ public record StaffRegistrationReviewRequest(
         String idempotencyKey,
         String operatorNote,
         String decision,
-        String rejectReason
+        String rejectReason,
+        String initialPassword
 ) {
 }
