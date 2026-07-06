@@ -3,6 +3,7 @@ import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { formatLocation, KNOWN_LOCATIONS } from "../i18n/locationLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -193,7 +194,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       title: `${TEXT.balances} · ${row.itemId ?? row.id}`,
       fields: [
         { label: TEXT.itemId, value: row.itemId ?? "-" },
-        { label: TEXT.location, value: row.locationType ?? row.locationId ?? "-" },
+        { label: TEXT.location, value: formatLocation(row.locationType ?? row.locationId) },
         { label: TEXT.quantity, value: row.quantity ?? "-" },
         { label: TEXT.status, value: formatBusinessStatus(row.status ?? "normal") },
       ],
@@ -216,8 +217,9 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const itemsSection = (
     <>
       <div className="admin-form-grid" data-testid="inventory-movement-form">
-        <label>{TEXT.fromLocation}<input data-testid="inventory-movement-from" value={fromLocation} onChange={(event) => setFromLocation(event.target.value)} /></label>
-        <label>{TEXT.toLocation}<input data-testid="inventory-movement-to" value={toLocation} onChange={(event) => setToLocation(event.target.value)} /></label>
+        <label>{TEXT.fromLocation}<input list="inventory-location-options" data-testid="inventory-movement-from" value={fromLocation} onChange={(event) => setFromLocation(event.target.value)} /></label>
+        <label>{TEXT.toLocation}<input list="inventory-location-options" data-testid="inventory-movement-to" value={toLocation} onChange={(event) => setToLocation(event.target.value)} /></label>
+        <datalist id="inventory-location-options">{KNOWN_LOCATIONS.map((loc) => <option key={loc.code} value={loc.code}>{loc.name}</option>)}</datalist>
         <label>{TEXT.quantity}<input data-testid="inventory-movement-quantity" type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
         <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
         <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
@@ -252,7 +254,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-balances-table">
           <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.location}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th></tr></thead>
-          <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-balance-row-${row.id}`} onClick={() => openBalanceDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBalanceDetail(row); } }}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td></tr>)}</tbody>
+          <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-balance-row-${row.id}`} onClick={() => openBalanceDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBalanceDetail(row); } }}><td>{row.itemId ?? "-"}</td><td title={row.locationType ?? row.locationId ?? ""}>{formatLocation(row.locationType ?? row.locationId)}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td></tr>)}</tbody>
         </table>
         <TablePager testid="inventory-balances-pager" page={pagedBalances.page} pageCount={pagedBalances.pageCount} total={pagedBalances.total} onPrev={pagedBalances.prev} onNext={pagedBalances.next} />
       </div>
