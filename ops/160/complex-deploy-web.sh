@@ -15,11 +15,22 @@ echo "[$(date -Iseconds)] deploy web start release=$release_id" | tee -a "$LOG_D
 
 cd "$PROJECT_DIR"
 # 部署前治理门禁(2026-07-05):同 deploy-api,delivery-gates 快子集绿才允许部署。
-echo "[$(date -Iseconds)] pre-deploy governance gates: npm run verify:predeploy" | tee -a "$LOG_DIR/deploy.log"
-if ! npm run verify:predeploy; then
-  echo "[$(date -Iseconds)] DEPLOY ABORTED: delivery-gates red (verify:predeploy failed)." | tee -a "$LOG_DIR/deploy.log" >&2
-  exit 1
-fi
+# 部署门禁(2026-07-06,codex 复核后加固):部署脚本直接跑权威门禁列表,不解析/信任 package.json 里
+# 可被抽空或惰性化(如 verify:predeploy="true # 门禁名...")的脚本串——"改 package.json 让门禁空跑"这条路被堵死。
+# 仍非仓外强制:能改本部署脚本(需 .160 shell)或 tools/verify-*.mjs 者仍可绕过;真闭合需受保护 CI(见 docs/deploy-and-change-flow)。
+REQUIRED_GATES=(
+  verify:delivery-gates-docs verify:full-admin-matrix verify:domain-ownership-scope
+  verify:matrix-vs-migration verify:data-isolation-spec verify:tenant-isolation
+  verify:p0-contract verify:security-baseline verify:production-readiness-evidence
+  verify:production-blockers verify:pii-encryption verify:test-db-isolation
+)
+for gate in "${REQUIRED_GATES[@]}"; do
+  echo "[$(date -Iseconds)] pre-deploy gate: npm run $gate" | tee -a "$LOG_DIR/deploy.log"
+  if ! npm run "$gate"; then
+    echo "[$(date -Iseconds)] DEPLOY ABORTED: $gate 未过,拒绝部署。" | tee -a "$LOG_DIR/deploy.log" >&2
+    exit 1
+  fi
+done
 npm run build --workspace apps/web
 
 mkdir -p "$release_dir"
