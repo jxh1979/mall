@@ -10,6 +10,11 @@ import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDra
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
+// 组合式配置策略（用户 2026-07-06 拍板）：一张通票 = 组合多个权益绑定（跨酒吧/游乐），
+// 前端一次性编排既有端点完成：createEntitlementTemplate → bindTicketTypeEntitlement，
+// 游乐额外 POST /amusement/projects/{id}/entitlements（收紧核销绑定）。零新增后端端点/迁移。
+// ponytail: 餐饮兑换/折扣本轮不做——discount_rate/dining_exchange 权益会被通用发放+核销路当成面值记账，
+//   真正的折扣核销逻辑与结算口径（归商户/进池/平台留存）是产品决策，待拍板后单独做。
 type TicketTypeRow = {
   id: string;
   ticketName: string;
@@ -24,8 +29,6 @@ type EntitlementTemplateRow = {
   name: string;
   entitlementType: string;
   status: string;
-  archivedAt: string | null;
-  deleteStatus: string;
 };
 type PriceRuleRow = {
   id: string;
@@ -36,6 +39,8 @@ type PriceRuleRow = {
   weekdayPriceCent: number | null;
   status: string;
 };
+type MerchantRow = { id: string; merchantName: string; merchantType: string | null };
+type AmusementProjectRow = { id: string; projectName: string };
 
 const MANAGE = ["ticket.product.manage"];
 const VARIANT_TYPES = ["new_customer", "student", "group", "channel", "member"];
@@ -47,6 +52,15 @@ const VARIANT_LABELS: Record<string, string> = {
   member: "会员价",
 };
 const ENTITLEMENT_TYPES = ["entry", "ride", "gift_drink", "bar", "amusement"];
+
+// 组合式配置策略：酒吧权益种类（对应 entitlement_type）。gift_drink=酒水兑换，admission=入场资格。
+const BAR_ENTITLEMENT_KINDS = [
+  { value: "gift_drink", label: "酒水兑换" },
+  { value: "admission", label: "入场资格" },
+];
+
+// 组合表单里的酒吧权益行。
+type BarLine = { merchantId: string; kind: string; totalTimes: string; valueYuan: string };
 
 function toRows<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
@@ -61,8 +75,9 @@ function yuan(cent: number | null): string {
 export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo }: AdminPageProps) {
   const [tickets, setTickets] = React.useState<TicketTypeRow[]>([]);
   const [templates, setTemplates] = React.useState<EntitlementTemplateRow[]>([]);
-  const [showArchived, setShowArchived] = React.useState(false);
   const [rules, setRules] = React.useState<PriceRuleRow[]>([]);
+  const [merchants, setMerchants] = React.useState<MerchantRow[]>([]);
+  const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
 
   // 区1 新建票种（保留既有 e2e 锚点：三档价 + ticket-publish + ticket-policy-error）
   const [ticketName, setTicketName] = React.useState("后台通票策略");
@@ -79,6 +94,17 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1" });
   // 区4 派生价规则
   const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "0.8", fixedYuan: "" });
+
+  // 组合式配置策略（新）：选一张通票 → 多选酒吧（每个配权益：兑换/次数/面值）+ 多选游乐设施 → 一次性组合创建。
+  const [comboTicketId, setComboTicketId] = React.useState("");
+  const [barLines, setBarLines] = React.useState<BarLine[]>([]);
+  const [selectedProjects, setSelectedProjects] = React.useState<Record<string, boolean>>({});
+  const [projectTimes, setProjectTimes] = React.useState("1");
+  // 游乐权益也必须归属商户（后端 createEntitlementTemplate 强制 merchant_id 非空，否则结算成孤儿）。
+  // /amusement/projects 不返回项目所属商户（merchantId 被 @JsonIgnore），故此处让运营选一个归属商户，全部游乐权益用它。
+  const [amusementMerchantId, setAmusementMerchantId] = React.useState("");
+  const [comboBusy, setComboBusy] = React.useState(false);
+  const [comboError, setComboError] = React.useState("");
 
   // 行明细抽屉：三张业务表（票种/权益模板/派生价规则）整行可点 → 该行完整字段（金额¥·枚举中文·引用 TraceLink）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -126,55 +152,22 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
 
   const { loading, error: loadError, reload } = useAdminResource(
     async () => {
-      const [ticketRows, templateRows, ruleRows] = await Promise.all([
+      const [ticketRows, templateRows, ruleRows, merchantRows, projectRows] = await Promise.all([
         api.get<unknown>("/api/v1/ticketing/ticket-types"),
-        api.get<unknown>(`/api/v1/ticketing/entitlement-templates?includeArchived=${showArchived}`),
+        api.get<unknown>("/api/v1/ticketing/entitlement-templates"),
         api.get<unknown>("/api/v1/ticketing/price-rules"),
+        // 数据源（组合式配置多选）：商户（酒吧）+ 游乐设施。读失败不阻断本页主体，降级为空列表。
+        api.get<unknown>("/api/v1/platform/merchants").catch(() => ({ items: [] })),
+        api.get<unknown>("/api/v1/amusement/projects").catch(() => ({ items: [] })),
       ]);
       setTickets(toRows<TicketTypeRow>(ticketRows));
       setTemplates(toRows<EntitlementTemplateRow>(templateRows));
       setRules(toRows<PriceRuleRow>(ruleRows));
+      setMerchants(toRows<MerchantRow>(merchantRows));
+      setProjects(toRows<AmusementProjectRow>(projectRows));
     },
     { onError: setGlobalError, fallbackMessage: "票务策略配置读取失败" },
   );
-
-  // 切换「显示已存档」后重新拉取（后端按 includeArchived 过滤）。
-  const firstArchivedToggle = React.useRef(true);
-  React.useEffect(() => {
-    if (firstArchivedToggle.current) {
-      firstArchivedToggle.current = false;
-      return;
-    }
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showArchived]);
-
-  async function archiveTemplate(id: string, archive: boolean) {
-    await api.post(`/api/v1/ticketing/entitlement-templates/${id}/${archive ? "archive" : "unarchive"}`, {
-      idempotency_key: crypto.randomUUID(),
-    });
-    setActionResult({ action: archive ? "entitlement_template_archived" : "entitlement_template_unarchived", id });
-    reload();
-  }
-
-  async function requestDeleteTemplate(id: string) {
-    const reason = window.prompt("删除理由（提交后需上级审批）：") ?? "";
-    await api.post(`/api/v1/ticketing/entitlement-templates/${id}/delete-request`, {
-      idempotency_key: crypto.randomUUID(),
-      reason,
-    });
-    setActionResult({ action: "entitlement_template_delete_requested", id });
-    reload();
-  }
-
-  async function approveDeleteTemplate(id: string, decision: "approved" | "rejected") {
-    const decided = await api.post<{ deleted?: boolean }>(`/api/v1/ticketing/entitlement-templates/${id}/delete-approve`, {
-      idempotency_key: crypto.randomUUID(),
-      decision,
-    });
-    setActionResult({ action: "entitlement_template_delete_" + decision, id, deleted: decided?.deleted ?? false });
-    reload();
-  }
 
   async function publish() {
     if (!weekday || !weekend || !holiday) {
@@ -272,11 +265,106 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     reload();
   }
 
+  // ---- 组合式配置策略编排 ----
+  function merchantName(id: string): string {
+    return merchants.find((m) => m.id === id)?.merchantName ?? id;
+  }
+  function addBarLine() {
+    setBarLines([...barLines, { merchantId: merchants[0]?.id ?? "", kind: "gift_drink", totalTimes: "1", valueYuan: "" }]);
+  }
+
+  // 创建单条权益模板并绑定到目标通票。merchantId 必填（后端强制）。
+  async function createAndBind(payload: {
+    name: string;
+    entitlementType: string;
+    totalTimes: number;
+    valueCent: number | null;
+    merchantId: string;
+  }, ticketTypeId: string) {
+    const tpl = await api.post<{ id: string }>("/api/v1/ticketing/entitlement-templates", {
+      idempotency_key: crypto.randomUUID(),
+      name: payload.name,
+      entitlement_type: payload.entitlementType,
+      default_total_times: payload.totalTimes,
+      default_value_cent: payload.valueCent,
+      status: "active",
+      merchant_id: payload.merchantId,
+    });
+    await api.post(`/api/v1/ticketing/ticket-types/${ticketTypeId}/entitlements`, {
+      idempotency_key: crypto.randomUUID(),
+      entitlement_template_id: tpl.id,
+      quantity: 1,
+      total_times: payload.totalTimes,
+      num_people: 1,
+    });
+  }
+
+  async function submitCombo() {
+    if (!comboTicketId) {
+      setComboError("请先选择要配置的通票。");
+      return;
+    }
+    const chosenProjects = projects.filter((p) => selectedProjects[p.id]);
+    if (barLines.length === 0 && chosenProjects.length === 0) {
+      setComboError("至少选择一个酒吧权益或游乐设施。");
+      return;
+    }
+    // 游乐权益也须归属商户（后端强制），选了游乐就必须选归属商户。
+    if (chosenProjects.length > 0 && !amusementMerchantId) {
+      setComboError("已勾选游乐设施，请选择游乐权益的归属商户。");
+      return;
+    }
+    setComboError("");
+    setComboBusy(true);
+    try {
+      // 酒吧权益：每行一条模板（gift_drink=酒水兑换 / admission=入场资格），绑定该商户。
+      for (const line of barLines) {
+        if (!line.merchantId) continue;
+        const kindLabel = BAR_ENTITLEMENT_KINDS.find((k) => k.value === line.kind)?.label ?? line.kind;
+        await createAndBind({
+          name: `${merchantName(line.merchantId)} · ${kindLabel}`,
+          entitlementType: line.kind,
+          totalTimes: Number(line.totalTimes) || 1,
+          valueCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : null,
+          merchantId: line.merchantId,
+        }, comboTicketId);
+      }
+      // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。归属商户用统一选择的 amusementMerchantId。
+      for (const project of chosenProjects) {
+        await createAndBind({
+          name: `${project.projectName} · 游乐`,
+          entitlementType: "amusement",
+          totalTimes: Number(projectTimes) || 1,
+          valueCent: null,
+          merchantId: amusementMerchantId,
+        }, comboTicketId);
+        // 项目↔权益类型绑定（V082）：配置后该项目核销收紧为「仅接受 amusement 类权益」。
+        await api.post(`/api/v1/amusement/projects/${project.id}/entitlements`, {
+          idempotency_key: crypto.randomUUID(),
+          entitlement_type: "amusement",
+        }).catch(() => undefined); // 已绑定（唯一键冲突）时忽略。
+      }
+      setActionResult({
+        action: "pass_config_strategy_composed",
+        ticketTypeId: comboTicketId,
+        bars: barLines.length,
+        amusementProjects: chosenProjects.length,
+      });
+      setBarLines([]);
+      setSelectedProjects({});
+      reload();
+    } catch (composeError) {
+      setComboError(composeError instanceof Error ? composeError.message : "组合配置失败");
+    } finally {
+      setComboBusy(false);
+    }
+  }
+
   return (
     <section data-testid="ticketing-policies-page">
       <AdminPageHeader
         title="票务策略"
-        description="票种/通票、权益、适用范围与派生价规则全部在此配置：先建票种并发布，再建权益模板并组装成通票，最后配派生价（新人/学生/多人/渠道/会员）。"
+        description="票种/通票、权益、适用范围与派生价规则全部在此配置：先建票种并发布，再用「组合式配置策略」一次性给通票配好跨酒吧/游乐的权益，最后配派生价（新人/学生/多人/渠道/会员）。"
       />
 
       {focusObjectId && (
@@ -329,6 +417,71 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       </div>
       {error ? <div data-testid="ticket-policy-error" className="admin-inline-error">{error}</div> : null}
 
+      <h3>组合式配置策略（一次性给通票配跨酒吧/游乐的权益）</h3>
+      <div className="admin-preview">
+        选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施，点「组合配置到通票」一次性写入。
+      </div>
+      <div className="admin-inline-form" data-testid="pass-combo-form">
+        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => setComboTicketId(event.target.value)}>
+          <option value="">选择要配置的通票</option>
+          {tickets.map((t) => (
+            <option key={t.id} value={t.id}>{t.ticketName}</option>
+          ))}
+        </select>
+      </div>
+
+      <h4>酒吧权益（多选）</h4>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="combo-bar-table">
+          <thead>
+            <tr><th>酒吧/商户</th><th>权益</th><th>次数</th><th>面值（元）</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            {barLines.map((line, index) => (
+              <tr key={index} data-testid={`combo-bar-line-${index}`}>
+                <td>
+                  <select aria-label="酒吧" value={line.merchantId} onChange={(event) => setBarLines(barLines.map((l, i) => i === index ? { ...l, merchantId: event.target.value } : l))}>
+                    <option value="">选择商户</option>
+                    {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
+                  </select>
+                </td>
+                <td>
+                  <select aria-label="权益" value={line.kind} onChange={(event) => setBarLines(barLines.map((l, i) => i === index ? { ...l, kind: event.target.value } : l))}>
+                    {BAR_ENTITLEMENT_KINDS.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
+                  </select>
+                </td>
+                <td><input aria-label="次数" type="number" min={1} value={line.totalTimes} onChange={(event) => setBarLines(barLines.map((l, i) => i === index ? { ...l, totalTimes: event.target.value } : l))} /></td>
+                <td><input aria-label="面值（元）" type="number" min={0} step="0.01" value={line.valueYuan} placeholder="可空" onChange={(event) => setBarLines(barLines.map((l, i) => i === index ? { ...l, valueYuan: event.target.value } : l))} /></td>
+                <td><button type="button" className="admin-secondary-button" onClick={() => setBarLines(barLines.filter((_, i) => i !== index))}>移除</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" className="admin-secondary-button" data-testid="combo-add-bar" onClick={addBarLine} disabled={merchants.length === 0}>+ 添加酒吧权益</button>
+
+      <h4>游乐设施（多选）</h4>
+      <div className="admin-inline-form" data-testid="combo-amusement-list">
+        {projects.length === 0 ? <span>暂无游乐设施</span> : projects.map((p) => (
+          <label key={p.id} className="admin-checkbox" data-testid={`combo-project-${p.id}`}>
+            <input type="checkbox" checked={!!selectedProjects[p.id]} onChange={(event) => setSelectedProjects({ ...selectedProjects, [p.id]: event.target.checked })} />
+            {p.projectName}
+          </label>
+        ))}
+        <input aria-label="游乐次数" type="number" min={1} value={projectTimes} onChange={(event) => setProjectTimes(event.target.value)} placeholder="游乐次数（每设施）" />
+        <select aria-label="游乐权益归属商户" data-testid="combo-amusement-merchant" value={amusementMerchantId} onChange={(event) => setAmusementMerchantId(event.target.value)}>
+          <option value="">游乐权益归属商户</option>
+          {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
+        </select>
+      </div>
+
+      <div className="admin-form-row">
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="combo-submit" onClick={() => void submitCombo()} disabled={comboBusy}>
+          组合配置到通票
+        </PermissionButton>
+      </div>
+      {comboError ? <div data-testid="combo-error" className="admin-inline-error">{comboError}</div> : null}
+
       <h3>权益模板</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="entitlement-templates-table">
@@ -337,8 +490,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
               <th>模板名称</th>
               <th>权益类型</th>
               <th>状态</th>
-              <th>存档/删除</th>
-              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -349,41 +500,11 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <td>{row.name}</td>
                 <td>{formatBusinessStatus(row.entitlementType)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
-                <td>{row.deleteStatus === "pending" ? "待审批删除" : row.archivedAt ? "已存档" : "生效中"}</td>
-                <td onClick={(event) => event.stopPropagation()}>
-                  {row.deleteStatus === "pending" ? (
-                    <span className="admin-inline-actions">
-                      <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.approve"]} data-testid={`entitlement-template-delete-approve-${row.id}`} onClick={() => void approveDeleteTemplate(row.id, "approved")}>
-                        批准删除
-                      </PermissionButton>
-                      <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.approve"]} data-testid={`entitlement-template-delete-reject-${row.id}`} onClick={() => void approveDeleteTemplate(row.id, "rejected")}>
-                        驳回
-                      </PermissionButton>
-                    </span>
-                  ) : row.archivedAt ? (
-                    <span className="admin-inline-actions">
-                      <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid={`entitlement-template-unarchive-${row.id}`} onClick={() => void archiveTemplate(row.id, false)}>
-                        取消存档
-                      </PermissionButton>
-                      <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid={`entitlement-template-delete-request-${row.id}`} onClick={() => void requestDeleteTemplate(row.id)}>
-                        申请删除
-                      </PermissionButton>
-                    </span>
-                  ) : (
-                    <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid={`entitlement-template-archive-${row.id}`} onClick={() => void archiveTemplate(row.id, true)}>
-                      存档
-                    </PermissionButton>
-                  )}
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <label className="admin-inline-check" data-testid="entitlement-show-archived">
-        <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
-        显示已存档
-      </label>
       <div className="admin-inline-form" data-testid="entitlement-template-form">
         <input aria-label="模板名称" placeholder="模板名称（如 入园1次）" value={tplForm.name} onChange={(event) => setTplForm({ ...tplForm, name: event.target.value })} />
         <select aria-label="权益类型" value={tplForm.entitlementType} onChange={(event) => setTplForm({ ...tplForm, entitlementType: event.target.value })}>
