@@ -79,7 +79,7 @@ function adjustmentTypeLabel(type: string | undefined): string {
 export function DynamicPricingPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rules, setRules] = React.useState<TicketDynamicPricingRuleRow[]>([]);
   const { selectedId: selectedRuleId, setSelectedId: setSelectedRuleId, selected: selectedRule } = useSelectedRow(rules);
-  const [ruleName, setRuleName] = React.useState("Weekend Boost");
+  const [ruleName, setRuleName] = React.useState("周末上浮");
   const [salesChannel, setSalesChannel] = React.useState("web");
   const [adjustmentRate, setAdjustmentRate] = React.useState("10");
   const [visitDate, setVisitDate] = React.useState("2026-06-20");
