@@ -33,7 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
         "complex.auth.production.seed-admin.username=p0_riskhit_admin",
         "complex.auth.production.seed-admin.password=p0_riskhit_password",
         "ticket.credential.signing.secret=prod-test-ticket-signing-secret-32-bytes-minimum",
-        "bar.invitation.signing.secret=prod-test-bar-invitation-signing-secret-32-bytes-minimum"
+        "bar.invitation.signing.secret=prod-test-bar-invitation-signing-secret-32-bytes-minimum",
+        "keyvault.keys.pii=prod-test-pii-keyvault-secret-32-bytes-minimum",
+        "keyvault.keys.pii-index=prod-test-pii-index-blind-secret-32-bytes-minimum"
 })
 @Transactional
 class WecomRiskHitsEndpointReproTests {
