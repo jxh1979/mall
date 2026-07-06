@@ -32,7 +32,7 @@ class StaffScopeTests {
         authz = mock(AuthorizationService.class);
         when(idem.execute(any(), any(), any(), any(), any()))
                 .thenAnswer(i -> ((Supplier<?>) i.getArgument(3)).get());
-        return new StaffService(repo, access, idem, audit, authz);
+        return new StaffService(repo, access, idem, audit, authz, com.complex.platform.access.AccessCredentialProvisioner.noop());
     }
 
     @Test

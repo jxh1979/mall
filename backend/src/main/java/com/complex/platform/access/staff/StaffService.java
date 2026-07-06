@@ -48,19 +48,36 @@ public class StaffService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public StaffService(
             StaffRepository repository,
             AccessRepository accessRepository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            org.springframework.beans.factory.ObjectProvider<com.complex.platform.access.AccessCredentialProvisioner> credentialProvisioner
+    ) {
+        this(repository, accessRepository, idempotencyService, auditEventService, authorizationService,
+                credentialProvisioner.getIfAvailable(com.complex.platform.access.AccessCredentialProvisioner::noop));
+    }
+
+    StaffService(
+            StaffRepository repository,
+            AccessRepository accessRepository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            com.complex.platform.access.AccessCredentialProvisioner credentialProvisioner
     ) {
         this.repository = repository;
         this.accessRepository = accessRepository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.credentialProvisioner = credentialProvisioner == null
+                ? com.complex.platform.access.AccessCredentialProvisioner.noop() : credentialProvisioner;
     }
 
     // ============================================================ 员工注册 / 审批
@@ -145,6 +162,11 @@ public class StaffService {
                         AccessActor actor = authorizationService.currentActor();
                         Instant now = Instant.now();
                         if ("approve".equalsIgnoreCase(decision == null ? "" : decision)) {
+                            String initialPassword = trimToNull(request.initialPassword());
+                            if (initialPassword == null) {
+                                throw ApiException.badRequest("VALIDATION_FAILED",
+                                        "approve 时必须设置员工初始登录密码 (initial_password)");
+                            }
                             AccessUser created = accessRepository.createUser(new AccessUser(
                                     "usr_" + profile.id(),
                                     "staff_" + profile.id(),
@@ -154,6 +176,7 @@ public class StaffService {
                                     "active",
                                     now
                             ));
+                            credentialProvisioner.provisionCredential(created.id(), initialPassword, "active", now);
                             StaffProfileRecord approved = new StaffProfileRecord(
                                     profile.id(), profile.projectId(), profile.merchantId(), created.id(),
                                     profile.name(), profile.phoneHash(), profile.idDocHash(), profile.staffLevelId(),
