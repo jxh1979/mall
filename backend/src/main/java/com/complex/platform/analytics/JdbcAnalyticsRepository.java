@@ -710,6 +710,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public BigDecimal countNewMembers(LocalDate businessDate) {
+        // 仅 COUNT(*)，不读取任何 PII 列；customers.phone 的信封哑密文占位不影响本聚合。
         BigDecimal value = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                   FROM customers
