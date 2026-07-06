@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
  *      ④取照端点有权解密+写审计、无权 403；⑤清理 job 删过期不删未到期。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

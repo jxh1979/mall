@@ -24,7 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 每个用例用独立 projectId（含 nanoTime）隔离，避免并发会话/真实数据串扰。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

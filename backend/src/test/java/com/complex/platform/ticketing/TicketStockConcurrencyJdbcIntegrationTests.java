@@ -21,7 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 补审计 P1「全测试库零并发用例」缺口：验证 atomicDeductTicketStock 的 CAS（sold+qty<=stock）在并发下精确防超卖。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

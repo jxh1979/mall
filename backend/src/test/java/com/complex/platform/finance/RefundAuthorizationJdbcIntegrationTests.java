@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
  * listLimits/listRules 按 project 过滤（该综合体 + 全局）。@Transactional 回滚隔离，不污染共享库。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

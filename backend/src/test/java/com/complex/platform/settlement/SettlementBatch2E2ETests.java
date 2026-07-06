@@ -43,7 +43,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 故 @BeforeEach 登录平台管理员。@AfterEach 按 project 清结算单/明细/核销；ar_ap_items 为不可变台账(source_id 唯一)不清。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

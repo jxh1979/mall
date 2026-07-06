@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 履约状态机(仅履约人可动)/完成后不可取消/月度统计。真库 @Transactional 回滚。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

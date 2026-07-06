@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 走真实 Postgres,@Transactional 回滚。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

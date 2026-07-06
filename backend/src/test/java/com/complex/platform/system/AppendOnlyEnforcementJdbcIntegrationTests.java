@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 永久留痕表的 DELETE 必须被拦截。覆盖"对抗审计 P0 #1（审计可被篡改/删除）"。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })
