@@ -7,12 +7,12 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 
-type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; taxCent?: number; totalCent?: number };
+type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; leaveDeductionCent?: number; taxCent?: number; totalCent?: number };
 type LeaveRow = { id: string; userId?: string; leaveType?: string; startDate?: string; endDate?: string; reason?: string; status?: string; reviewNote?: string };
 
 const TEXT = {
   title: "薪酬与请假",
-  description: "薪资四块:固定工资(员工档案)+提成(业务自动归集)+奖金/处罚(手录必须带事由,审计留痕);人事「月结」后员工才可见,补录后可重结覆盖。请假由排班主管审批,通过区间考勤记「请假」。",
+  description: "薪资四块:固定工资(员工档案)+提成(业务自动归集)+奖金/处罚(手录必须带事由,审计留痕);人事「月结」后员工才可见,补录后可重结覆盖。请假由排班主管审批,通过区间考勤记「请假」;事假(无薪假)按日工资(月薪÷21.75)×天数自动扣薪,病假/年假/调休不扣。",
   loadFailed: "薪酬请假读取失败",
 };
 
@@ -115,6 +115,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
         { label: "提成", value: money(row.commissionCent) },
         { label: "奖金", value: money(row.bonusCent) },
         { label: "处罚", value: money(row.penaltyCent) },
+        { label: "请假扣薪", value: money(row.leaveDeductionCent) },
         { label: "代扣个税", value: money(row.taxCent) },
         { label: "实发合计", value: money(row.totalCent) },
         { label: "薪资单号", value: row.id },
@@ -165,7 +166,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
         <h3>当月薪资单(月结后生成;员工端仅见已定格月份)</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="payroll-table">
-            <thead><tr><th>员工</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>代扣个税</th><th>实发合计</th></tr></thead>
+            <thead><tr><th>员工</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>请假扣薪</th><th>代扣个税</th><th>实发合计</th></tr></thead>
             <tbody>
               {payroll.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`payroll-row-${row.id}`}
@@ -176,6 +177,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
                   <td>{money(row.commissionCent)}</td>
                   <td>{money(row.bonusCent)}</td>
                   <td>{money(row.penaltyCent)}</td>
+                  <td>{money(row.leaveDeductionCent)}</td>
                   <td>{money(row.taxCent)}</td>
                   <td>{money(row.totalCent)}</td>
                 </tr>

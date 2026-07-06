@@ -419,6 +419,30 @@ class StaffJdbcIntegrationTests {
         assertThat(byDay.get("2099-08-10")).containsExactly("leave");
         assertThat(byDay.get("2099-08-11")).containsExactly("leave");
         assertThat(byDay.get("2099-08-20")).containsExactly("rest");
+
+        // 请假扣薪(2026-07-05 拍板):事假(无薪假)按日工资×天数扣;病假/年假不扣。
+        // 已有年假 2099-08-10..11(2 天)不扣;新增事假 2099-08-15..16(2 天)扣、病假 2099-08-18(1 天)不扣。
+        com.complex.platform.access.staff.StaffLeaveRequestRecord personalLeave = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "personal", java.time.LocalDate.parse("2099-08-15"),
+                        java.time.LocalDate.parse("2099-08-16"), "私事"));
+        service.reviewLeave(personalLeave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(
+                key(), "approve", "准"));
+        com.complex.platform.access.staff.StaffLeaveRequestRecord sickLeave = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "sick", java.time.LocalDate.parse("2099-08-18"),
+                        java.time.LocalDate.parse("2099-08-18"), "感冒"));
+        service.reviewLeave(sickLeave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(
+                key(), "approve", "准"));
+
+        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        com.complex.platform.access.staff.StaffPayrollStatementRecord withLeave = service.listMyPayroll(month).items().stream()
+                .filter(row -> row.userId().equals("usr_admin")).findFirst().orElseThrow();
+        long dailyWage = Math.round(800000L / 21.75);   // 月薪÷21.75(法定计薪天数),四舍五入到分
+        assertThat(withLeave.leaveDeductionCent()).isEqualTo(dailyWage * 2);   // 仅事假 2 天,病假/年假不扣
+        assertThat(withLeave.totalCent()).isEqualTo(withLeave.baseCent() + withLeave.commissionCent()
+                + withLeave.bonusCent() - withLeave.penaltyCent() - withLeave.leaveDeductionCent()
+                - withLeave.taxCent());
     }
 
     @org.junit.jupiter.api.Test

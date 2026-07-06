@@ -90,16 +90,17 @@ class JdbcStaffRepository implements StaffRepository {
         //   也不被 ON CONFLICT 覆盖(DO UPDATE WHERE status <> 'paid' 兜底并发)。重结新单显式置 'closed'。
         return jdbcTemplate.update("""
                 INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, commission_cent,
-                        bonus_cent, penalty_cent, tax_cent, total_cent, status, closed_by, closed_at, project_id)
+                        bonus_cent, penalty_cent, leave_deduction_cent, tax_cent, total_cent, status, closed_by, closed_at, project_id)
                 SELECT 'pay_' || gen_random_uuid(), u.user_id, :month,
                        COALESCE(b.monthly_salary_cent, 0),
                        COALESCE(c.total, 0) + COALESCE(bc.total, 0),
                        COALESCE(adj.bonus, 0),
                        COALESCE(adj.penalty, 0),
+                       COALESCE(lv.deduction, 0),
                        -- H批:对当月服务劳务(service_order 台账)按劳务报酬预扣预缴法定税表代扣个税(单位:分)。
                        COALESCE(tax.tax_cent, 0),
                        COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
-                           + COALESCE(adj.bonus, 0) - COALESCE(adj.penalty, 0) - COALESCE(tax.tax_cent, 0),
+                           + COALESCE(adj.bonus, 0) - COALESCE(adj.penalty, 0) - COALESCE(lv.deduction, 0) - COALESCE(tax.tax_cent, 0),
                        'closed', :closed_by, :now, sp.project_id
                   FROM (SELECT user_id FROM staff_base_salaries
                         UNION SELECT user_id FROM staff_commission_ledger WHERE month = :month
@@ -134,6 +135,18 @@ class JdbcStaffRepository implements StaffRepository {
                                 AND sb.svc >= br.income_floor_cent
                                 AND (br.income_ceiling_cent IS NULL OR sb.svc <= br.income_ceiling_cent)) tax
                          ON tax.user_id = u.user_id
+                  -- 请假扣薪(V246,2026-07-05 拍板):仅事假(personal,无薪假)按日工资×天数扣;
+                  -- 病假/年假/调休不扣。日工资=月薪÷21.75(法定月计薪天数),四舍五入到分。
+                  -- ponytail: 按自然日计天数(未剔除周末/法定节假日),有工作日历表后可精确到计薪日。
+                  LEFT JOIN (SELECT lr.user_id,
+                                    ROUND(COALESCE(bs.monthly_salary_cent, 0) / 21.75)
+                                      * SUM((LEAST(lr.end_date, :last) - GREATEST(lr.start_date, :first)) + 1) AS deduction
+                               FROM staff_leave_requests lr
+                               LEFT JOIN staff_base_salaries bs ON bs.user_id = lr.user_id
+                              WHERE lr.status = 'approved' AND lr.leave_type = 'personal'
+                                AND lr.start_date <= :last AND lr.end_date >= :first
+                              GROUP BY lr.user_id, bs.monthly_salary_cent) lv
+                         ON lv.user_id = u.user_id
                   LEFT JOIN (SELECT DISTINCT ON (user_id) user_id, project_id FROM staff_profiles
                               ORDER BY user_id, created_at DESC) sp
                          ON sp.user_id = u.user_id
@@ -150,6 +163,7 @@ class JdbcStaffRepository implements StaffRepository {
                     commission_cent = EXCLUDED.commission_cent,
                     bonus_cent = EXCLUDED.bonus_cent,
                     penalty_cent = EXCLUDED.penalty_cent,
+                    leave_deduction_cent = EXCLUDED.leave_deduction_cent,
                     tax_cent = EXCLUDED.tax_cent,
                     total_cent = EXCLUDED.total_cent,
                     closed_by = EXCLUDED.closed_by,
@@ -158,6 +172,8 @@ class JdbcStaffRepository implements StaffRepository {
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("month", month).addValue("closed_by", closedBy)
                 .addValue("now", java.sql.Timestamp.from(now))
+                .addValue("first", java.sql.Date.valueOf(java.time.YearMonth.parse(month).atDay(1)))
+                .addValue("last", java.sql.Date.valueOf(java.time.YearMonth.parse(month).atEndOfMonth()))
                 .addValue("project_scope", projectScope));
     }
 
@@ -191,7 +207,7 @@ class JdbcStaffRepository implements StaffRepository {
             String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent,
-                       tax_cent, total_cent, closed_by, closed_at
+                       leave_deduction_cent, tax_cent, total_cent, closed_by, closed_at
                   FROM staff_payroll_statements
                  WHERE month = :month AND (:user_id::text IS NULL OR user_id = :user_id)
                    AND (:project_scope::text IS NULL OR project_id = :project_scope)
@@ -202,7 +218,7 @@ class JdbcStaffRepository implements StaffRepository {
                 (rs, n) -> new StaffPayrollStatementRecord(
                         rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
                         rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
-                        rs.getLong("penalty_cent"), rs.getLong("tax_cent"), rs.getLong("total_cent"),
+                        rs.getLong("penalty_cent"), rs.getLong("leave_deduction_cent"), rs.getLong("tax_cent"), rs.getLong("total_cent"),
                         rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant()));
     }
 
