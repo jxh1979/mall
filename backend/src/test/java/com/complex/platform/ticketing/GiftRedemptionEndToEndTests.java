@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  * redemption.note 标注未配置 SKU；链路（核销→0元单→出品事件→桥表）全打通且可追溯。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

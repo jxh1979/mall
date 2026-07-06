@@ -29,7 +29,7 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
  * <p>走 {@link TicketingService#createVerification}（真提交，与批1 端到端同范式）；@AfterEach 按 suffix 清理落地行。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

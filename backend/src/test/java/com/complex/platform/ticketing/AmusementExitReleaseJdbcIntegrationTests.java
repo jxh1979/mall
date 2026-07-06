@@ -39,7 +39,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 证伪：注掉出场 -N（decrementConcurrentSnapshot）→ 用例1 快照断言红；去掉部分唯一索引 → 用例4 双入场断言红。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

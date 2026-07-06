@@ -23,7 +23,7 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
  * 走 {@link TicketingService#createVerification}（@Transactional 生产入口）驱动，方有真提交触发 AFTER_COMMIT。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

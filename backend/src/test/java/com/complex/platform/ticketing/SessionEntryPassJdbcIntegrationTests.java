@@ -32,7 +32,7 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
  * <p>营业时间表播 7×(00:00→23:59) 覆盖任意"当前时刻",使场次解析稳定命中(不依赖跑测时间)。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })

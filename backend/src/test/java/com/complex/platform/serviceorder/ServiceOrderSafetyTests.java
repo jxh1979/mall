@@ -26,7 +26,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
  * 并发用真多线程复现;非 @Transactional(并发跨连接需真提交,测试自行清理构造数据)。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd"
 })
