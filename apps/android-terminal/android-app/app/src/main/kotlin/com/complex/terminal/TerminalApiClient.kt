@@ -6,6 +6,7 @@ import java.net.URI
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -96,12 +97,12 @@ class TerminalApiClient(
 
   // ── G批:服务点单(公司代收口径:收款码原文由服务端返回,App 重绘 QR) ──
 
-  fun listServiceCatalog(): List<ServiceCatalogRow> = get("/api/v1/services/catalog")
+  fun listServiceCatalog(): List<ServiceCatalogRow> = get<Page<ServiceCatalogRow>>("/api/v1/services/catalog").items
 
   fun createServiceOrder(request: ServiceOrderCreateReq): ServiceOrderRow =
     post("/api/v1/services/orders", request)
 
-  fun listMyServiceOrders(): List<ServiceOrderRow> = get("/api/v1/services/orders/assigned-to-me")
+  fun listMyServiceOrders(): List<ServiceOrderRow> = get<Page<ServiceOrderRow>>("/api/v1/services/orders/assigned-to-me").items
 
   /** H批:服务员现场确认收款到公司账户(公司统一收款码,财务可对账)。 */
   fun markServiceOrderPaid(id: String, request: ServiceMarkPaidReq): ServiceOrderRow =
@@ -125,14 +126,14 @@ class TerminalApiClient(
 
   /** 我的薪资(仅已月结定格月份;未结月为空——拍板:月结后才可见)。 */
   fun listMyPayroll(month: String): List<PayrollStatementRow> =
-    get("/api/v1/staff/payroll/mine?month=$month")
+    get<Page<PayrollStatementRow>>("/api/v1/staff/payroll/mine?month=$month").items
 
   /** 提交请假(事假/病假/调休/年假;主管审)。 */
   fun submitLeave(request: LeaveSubmitRequest): LeaveRow =
     post("/api/v1/staff/leaves", request)
 
   /** 我的请假列表。 */
-  fun listMyLeaves(): List<LeaveRow> = get("/api/v1/staff/leaves/mine")
+  fun listMyLeaves(): List<LeaveRow> = get<Page<LeaveRow>>("/api/v1/staff/leaves/mine").items
 
   /** 考勤月视图(六态逐日)。 */
   fun attendanceMonthView(month: String): List<AttendanceDayRow> =
@@ -145,28 +146,28 @@ class TerminalApiClient(
     post("/api/v1/staff/shifts", request)
 
   /** 我的班次与点位(今天起 7 天,时间到分钟)。 */
-  fun listMyShifts(): List<StaffShiftRow> = get("/api/v1/staff/shifts/mine")
+  fun listMyShifts(): List<StaffShiftRow> = get<Page<StaffShiftRow>>("/api/v1/staff/shifts/mine").items
 
   /** 考勤打卡(NFC/扫码;时间以服务器为准;严格无宽限判定随响应返回)。 */
   fun punchAttendance(request: AttendancePunchRequest): AttendanceRow =
     post("/api/v1/staff/attendance/punch", request)
 
   /** 我的打卡记录(最近 30 天)。 */
-  fun listMyAttendance(): List<AttendanceRow> = get("/api/v1/staff/attendance/mine")
+  fun listMyAttendance(): List<AttendanceRow> = get<Page<AttendanceRow>>("/api/v1/staff/attendance/mine").items
 
-  fun listStaffNotices(): List<EmployeeNoticeRecord> = get("/api/v1/staff/notices")
+  fun listStaffNotices(): List<EmployeeNoticeRecord> = get<Page<EmployeeNoticeRecord>>("/api/v1/staff/notices").items
 
   fun acknowledgeStaffNotice(id: String, request: NoticeAcknowledgeRequest): EmployeeNoticeRecord =
     post("/api/v1/staff/notices/$id/acknowledge", request)
 
-  fun listMyWorkOrders(): List<MyWorkOrderRecord> = get("/api/v1/facility/work-orders/assigned-to-me")
+  fun listMyWorkOrders(): List<MyWorkOrderRecord> = get<Page<MyWorkOrderRecord>>("/api/v1/facility/work-orders/assigned-to-me").items
 
-  fun listBarTableAvailability(): List<BarTableAvailabilityRow> = get("/api/v1/bar/tables/availability")
+  fun listBarTableAvailability(): List<BarTableAvailabilityRow> = get<Page<BarTableAvailabilityRow>>("/api/v1/bar/tables/availability").items
 
   fun createBarReservation(request: BarReservationCreateRequest): BarReservationRecord =
     post("/api/v1/bar/reservations", request)
 
-  fun events(limit: Int = 20): List<JsonObject> = get("/api/v1/evidence/events?limit=$limit")
+  fun events(limit: Int = 20): List<JsonObject> = get<Page<JsonObject>>("/api/v1/evidence/events?limit=$limit").items
 
   fun amusementVerify(request: VerificationRequest): AmusementVerificationRecord =
     post("/api/v1/amusement/verifications", request)
@@ -264,3 +265,6 @@ class TerminalApiClient(
 
   private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 }
+
+@Serializable
+private data class Page<T>(val items: List<T> = emptyList())
