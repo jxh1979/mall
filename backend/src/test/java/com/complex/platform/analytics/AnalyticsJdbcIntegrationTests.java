@@ -888,7 +888,7 @@ class AnalyticsJdbcIntegrationTests {
         jdbcTemplate.update("""
                 INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
                     pay_status, issue_status, status, created_at, updated_at)
-                VALUES (:id, :id, 'tt_share', 1, 'online', :amount, 'paid', 'issued', 'active', :at, :at)
+                VALUES (:id, :id, 'tt_share', 1, 'online', :amount, 'paid', 'issued', 'created', :at, :at)
                 """, Map.of("id", id, "amount", amountCent, "at", ts));
     }
 

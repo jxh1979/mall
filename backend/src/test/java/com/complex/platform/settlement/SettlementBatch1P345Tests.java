@@ -178,7 +178,7 @@ class SettlementBatch1P345Tests {
         jdbcTemplate.update("""
                 INSERT INTO ticket_orders (id, order_no, customer_id, ticket_type_id, quantity, visit_date,
                     sales_channel, amount_cent, currency, pay_status, issue_status, status, created_at, updated_at)
-                VALUES (?, ?, NULL, ?, ?, NULL, 'web', 0, 'CNY', 'paid', 'issued', 'paid', ?, ?)
+                VALUES (?, ?, NULL, ?, ?, NULL, 'web', 0, 'CNY', 'paid', 'issued', 'created', ?, ?)
                 ON CONFLICT (id) DO NOTHING
                 """, orderId, "ON-" + ent, typeId, totalTimes, ct, ct);
         jdbcTemplate.update("""

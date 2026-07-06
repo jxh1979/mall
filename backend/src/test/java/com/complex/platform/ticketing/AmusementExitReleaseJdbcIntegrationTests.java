@@ -287,7 +287,7 @@ class AmusementExitReleaseJdbcIntegrationTests {
                 """, templateId, totalTimes, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
-                LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "paid", now, now));
+                LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "amusement_pass",
                 "merchant_a", null, null, totalTimes, 0, 5500L, "active",

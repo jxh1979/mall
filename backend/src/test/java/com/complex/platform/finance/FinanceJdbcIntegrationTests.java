@@ -344,7 +344,7 @@ class FinanceJdbcIntegrationTests {
                 INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, visit_date, sales_channel,
                                            amount_cent, currency, pay_status, issue_status, status,
                                            merchant_id, created_at, updated_at)
-                VALUES (?, ?, ?, 1, ?, ?, ?, 'CNY', 'paid', 'issued', 'active', ?, now(), now())
+                VALUES (?, ?, ?, 1, ?, ?, ?, 'CNY', 'paid', 'issued', 'created', ?, now(), now())
                 """, id, "ORD-" + id, ticketTypeId, visitDate, channel, amountCent, merchantId);
     }
 

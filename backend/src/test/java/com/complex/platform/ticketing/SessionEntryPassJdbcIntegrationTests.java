@@ -249,7 +249,7 @@ class SessionEntryPassJdbcIntegrationTests {
                 """, templateId, venueId, agreementPrice, window, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
-                LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "paid", now, now));
+                LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
         // total_times=1(单次)；value_amount=9999(回退基准,virtual 应取 agreement_price 而非它)；venue_id 决定场次。
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "entry",

@@ -161,7 +161,7 @@ class SettlementDoubleWriteEndToEndTests {
                 """, templateId, totalTimes, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, totalTimes,
-                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "paid", now, now));
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "entry",
                 merchantId, null, "point_" + suffix, totalTimes, 0, 0L, "active",

@@ -177,7 +177,7 @@ class TicketingJdbcIntegrationTests {
         // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
         repository.saveTicketOrder(new TicketOrderRecord(
                 "order_jdbc", "ON-JDBC", "cust_jdbc", "ticket_type_jdbc_issue", null, 2,
-                java.time.LocalDate.parse("2099-06-14"), "web", null, 9900L, "CNY", "paid", "issued", "paid", now, now));
+                java.time.LocalDate.parse("2099-06-14"), "web", null, 9900L, "CNY", "paid", "issued", "created", now, now));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_jdbc",
                 "P0-JDBC",
@@ -306,7 +306,7 @@ class TicketingJdbcIntegrationTests {
         // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
         repository.saveTicketOrder(new TicketOrderRecord(
                 "order_chk", "ON-CHK", "cust_chk", "ticket_type_chk", null, 4,
-                java.time.LocalDate.parse("2026-06-18"), "web", null, 9900L, "CNY", "paid", "issued", "paid", now, now));
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 9900L, "CNY", "paid", "issued", "created", now, now));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_chk", "P0-CHK", "ticket_type_chk", "order_chk", "template_chk", "entry",
                 "mch_chk", "venue_chk", "gate_chk", 4, 0, 9900L, "active",
@@ -522,7 +522,7 @@ class TicketingJdbcIntegrationTests {
         repository.saveTicketOrder(new TicketOrderRecord(
                 "o_share_live", "TO-SHARE-LIVE", "customer_share_live", "tt_share_live", null,
                 2, java.time.LocalDate.parse("2026-06-20"), "miniapp", "13800138000",
-                19800L, "CNY", "paid", "issued", "paid", now, now));
+                19800L, "CNY", "paid", "issued", "created", now, now));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_share_live", "Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now,
                 null, null));

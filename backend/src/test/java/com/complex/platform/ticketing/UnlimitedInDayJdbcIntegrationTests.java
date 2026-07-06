@@ -271,7 +271,7 @@ class UnlimitedInDayJdbcIntegrationTests {
                 """, templateId, totalTimes, venueId, agreementPrice, window, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
-                LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "paid", now, now));
+                LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));
         // valid 窗口足够宽(±很久),使跨日测试不因有效期先失败——聚焦"当天无限+跨日扣次"机制。
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "amusement",
