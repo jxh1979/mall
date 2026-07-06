@@ -1,6 +1,7 @@
 package com.complex.platform.bar;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,6 +28,9 @@ class BarPosCatalogJdbcIntegrationTests {
 
     @Autowired
     private JdbcBarRepository barRepository;
+
+    @Autowired
+    private BarPosCatalogService service;
 
     private BarProductRecord newProduct(String id, String barId, String name) {
         Instant now = Instant.now();
@@ -108,5 +112,20 @@ class BarPosCatalogJdbcIntegrationTests {
 
         assertThat(catalog.listCombos(Optional.empty(), "bar_pos_test3"))
                 .extracting(BarComboRecord::id).contains("barcombo_pos_1");
+    }
+    @Test
+    void crossMerchantCategoryEditIsForbidden() {
+        // 复核 Important:服务层租户隔离守卫 checkOwnership 需有测试——B 商户不得改 A 商户的分类。
+        Instant now = Instant.now();
+        catalog.saveCategory(new BarProductCategoryRecord(
+                "barcat_iso_a", "bar_iso_a", "merchant_iso_A", "A家分类", 1, "active", now, now));
+        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_iso_B");
+        try {
+            assertThatThrownBy(() -> service.saveCategory(new BarProductCategoryRequest(
+                    "barcat_iso_a", "bar_iso_a", "B想改名", 1, "active")))
+                    .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+        } finally {
+            com.complex.platform.support.TestSecurityActors.clear();
+        }
     }
 }

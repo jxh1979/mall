@@ -7,6 +7,10 @@ server:
 spring:
   application:
     name: complex-api
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   jackson:
     property-naming-strategy: SNAKE_CASE
   profiles:
