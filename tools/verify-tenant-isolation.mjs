@@ -140,6 +140,9 @@ function extractCteNames(sql) {
 
 // 抽取 SQL 中引用的表（FROM / JOIN / INTO / UPDATE），排除子查询、CTE、SQL 噪声 token。
 function extractReferencedTables(sql, cteNames) {
+  // EXTRACT(<unit> FROM <expr>) 的 FROM 是函数语法而非表引用；不中和会把 open_time/close_time
+  // 等列名(EXTRACT(EPOCH FROM open_time))误判为未登记表。抽取前就地中和该语法 FROM。
+  sql = sql.replace(/\bEXTRACT\s*\(\s*\w+\s+FROM\b/gi, "EXTRACT(");
   const tables = new Set();
   const patterns = [
     new RegExp(`\\bFROM\\s+${TABLE_TOKEN}`, "gi"),

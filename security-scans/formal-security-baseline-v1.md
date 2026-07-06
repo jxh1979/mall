@@ -3,8 +3,8 @@
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 593
-- OpenAPI SHA-256: `a43d94af9d62a4c18a0514f9c48355aa34de1329ab29df82bc236d1317641d98`
+- OpenAPI operation count: 603
+- OpenAPI SHA-256: `2c1e40dc865a4f09dcc2f255d6da6a7ee251a3a1c9019a07061f08d4fa97c61d`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`
@@ -42,7 +42,7 @@
 | `device-credential` | 3 |
 | `open-app-credential` | 1 |
 | `public` | 6 |
-| `staff-token` | 552 |
+| `staff-token` | 562 |
 | `webhook-signature` | 4 |
 
 | 检查项 | 结论 |
@@ -57,8 +57,8 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 全部 operation | 593 |
-| 写 operation | 355 |
+| 全部 operation | 603 |
+| 写 operation | 360 |
 | public operation | 6 |
 | open-app/webhook operation | 5 |
 
@@ -72,10 +72,10 @@
 | `mobile_admin` | 62 |
 | `provider-webhook` | 3 |
 | `server-to-server` | 2 |
-| `staff_private_phone` | 33 |
-| `staff_work_phone` | 63 |
+| `staff_private_phone` | 29 |
+| `staff_work_phone` | 67 |
 | `tablet` | 91 |
-| `web` | 560 |
+| `web` | 570 |
 
 当前 SecurityConfig 允许 `/docs/**`、`/swagger-ui/**`、`/v3/api-docs/**` 公开访问。该配置可用于内网开发和联调，但公网公开生产必须关闭或加认证保护。
 
@@ -151,8 +151,6 @@
 | P2 | `SEC-P2-SMOKE-HASH-001` | dev smoke AuthService 使用 SHA-256 密码摘要，不可迁移到生产认证 | resolved | 仅允许 local/dev/test；公开生产必须替换为正式身份源或强密码哈希方案 | 后端/安全 | `AuthService` 使用 `MessageDigest.getInstance("SHA-256")`，且类上存在 local/dev/test profile | 生产认证不得复用该 smoke 账号存储；若自建密码，采用 Argon2id/bcrypt/PBKDF2 并补 MFA/锁定策略 |
 | P2 | `SEC-P2-CSRF-API-001` | 当前 API 关闭 CSRF，需在最终认证形态中复核 Web Cookie 场景 | open_for_prod_review | 不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产 | 后端/前端/安全 | `SecurityConfig` 调用 `csrf.disable()`；客人 web 端 httpOnly 会话 cookie（3.3 免登录）已自带防御——SameSite=Strict + `CustomerSessionCookieFilter` 对 cookie 鉴权写操作强制 X-Requested-With 自定义头（含单测） | 员工后台仍为 Bearer 头 token（无 cookie 环境凭证）；若后台改用 Cookie 会话再按 SameSite/双提交复核 |
 | P3 | `SEC-P3-BASELINE-AUTOMATION-001` | 安全基线已脚本化，后续需接入发布闸口 | resolved | 已纳入完整 P0 验证链 | 技术负责人 | `verify:p0` 已包含 `verify:security-baseline`，安全基线验证会随完整 P0 验证执行 | 后续发布前继续执行 `npm run verify:p0`，不要绕过安全基线闸口 |
-| P2 | `SEC-P2-COOKIE-SECURE-001` | 客人会话 cookie 的 Secure 标记依赖 request.isSecure()，TLS 终止反代下可能误发非 Secure cookie | resolved | 已加固：反代场景 request.isSecure() 采信转发头，且 prod 强制 secure=true | 后端/安全 | `application.yml` 增 `server.forward-headers-strategy=framework`；`CustomerController` 在 prod profile 下 `forceSecureCookie=true`（dev/local 保持依赖 isSecure 便于本地 http 调试）；`CustomerControllerTests`/`CustomerSessionCookieFilterTests` 绿 | 后台若改 Cookie 会话按同口径处理 |
-| P2 | `SEC-P2-CSP-XSS-001` | 缺少 CSP 响应头，XSS 注入面偏大（后台 token 存 localStorage 时风险面更需收敛） | resolved | 已加固：SPA 文档 CSP meta（script-src self）+ 后端安全响应头（CSP/frame-ancestors none/nosniff） | 前端/后端/安全 | `apps/web/index.html` 增 CSP meta（生产构建实测 0 违规、不白屏）；`SecurityConfig` `.headers()` 下发 CSP+frameOptions.deny+contentTypeOptions；`verify:security-baseline` 绿 | frame-ancestors 在 meta 无效，前端静态托管方须以响应头补发 X-Frame-Options |
 
 ## verification-and-gates
 

@@ -1,13 +1,13 @@
 {
   "status": "passed",
   "evidence_type": "formal_security_baseline_v1",
-  "verified_at": "2026-06-21T06:40:00Z",
+  "verified_at": "2026-07-06T05:30:00Z",
   "verified_on_host": "192.168.88.160",
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 593,
+  "openapi_operation_count": 603,
   "security_baseline_version": "V1",
   "plaintext_secret_present": false,
-  "notes": "Formal security baseline and findings register are generated and verified. Re-synced to 593 operations after BI/staff/service-order/audit-P1 OpenAPI additions; re-verified via npm run verify:security-baseline and verify:production-readiness-evidence. P0/P1 open findings remain production blockers until real external or IT evidence is supplied."
+  "notes": "Formal security baseline and findings register are generated and verified. Re-synced to 603 operations after ticket-settlement-review / property-fee / audit PII (buyer_phone, amusement contact_phone) OpenAPI additions; re-verified via npm run verify:security-baseline and verify:production-readiness-evidence. P0/P1 open findings remain production blockers until real external or IT evidence is supplied."
 }

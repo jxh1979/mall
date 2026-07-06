@@ -40,3 +40,12 @@ docs/_archive/**/*.log
 
 # loop 工具运行产物（非仓库内容）
 .loop-engineering/
+
+# 临时调试/探针/冒烟脚本(仓库根,非正式交付;保持审计输入干净、防误提交)
+/debug*.mjs
+/probe-*.mjs
+/smoke-*.mjs
+/btn-*.mjs
+/bizflow-audit.mjs
+/eng-check.mjs
+/verify-fe.mjs

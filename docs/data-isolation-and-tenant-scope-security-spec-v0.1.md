@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V216**，发现 **135** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V248**，发现 **150** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -85,7 +85,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `analytics_dashboard_snapshots` | `project_id` | direct | V017 | `V017__p0_analytics_ai_quality_risk_dashboard.sql` |
 | `analytics_merchant_health_scores` | `merchant_id` | direct | V017 | `V017__p0_analytics_ai_quality_risk_dashboard.sql` |
 | `analytics_merchant_summaries` | `merchant_id` | direct | V017 | `V017__p0_analytics_ai_quality_risk_dashboard.sql` |
-| `ar_ap_items` | `merchant_id` | direct | V044 | `V044__finance_security_isolation.sql` |
+| `ar_ap_items` | `merchant_id` + `project_id` | direct | V044, V243 | `V044__finance_security_isolation.sql`<br>`V243__ar_ap_project_isolation.sql` |
 | `audit_events` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
 | `bar_bill_settlements` | `merchant_id` | direct | V062 | `V062__bar_bill_settlement_channel.sql` |
 | `bar_bills` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
@@ -136,13 +136,15 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `facility_inspection_tasks` | `project_id` + `space_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_inspection_templates` | `project_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_work_orders` | `merchant_id` + `project_id` + `space_id` | direct | V166 | `V166__facility_work_orders.sql` |
+| `giveaway_cost_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `inventory_high_value_reviews` | `merchant_id` | direct | V237 | `V237__inventory_isolation_fixes.sql` |
 | `inventory_items` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_purchase_requests` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_risk_alerts` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_stock_adjustments` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
-| `inventory_stock_balances` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
-| `inventory_stock_batches` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
-| `inventory_stock_movements` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_stock_balances` | `merchant_id` + `project_id` | direct | V046, V237 | `V046__inventory_security_fixes.sql`<br>`V237__inventory_isolation_fixes.sql` |
+| `inventory_stock_batches` | `merchant_id` + `project_id` | direct | V046, V244 | `V046__inventory_security_fixes.sql`<br>`V244__inventory_movement_batch_project_isolation.sql` |
+| `inventory_stock_movements` | `merchant_id` + `project_id` | direct | V046, V244 | `V046__inventory_security_fixes.sql`<br>`V244__inventory_movement_batch_project_isolation.sql` |
 | `inventory_supplier_reconciliations` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_suppliers` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_trace_codes` | `merchant_id` | direct | V128 | `V128__inventory_trace_codes.sql` |
@@ -157,7 +159,9 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_bill_dunning_records` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bills` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_fee_notification_recipient` | `merchant_id` | direct | V182 | `V182__merchant_fee_notification_recipient.sql` |
+| `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
+| `platform_retention_rules` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `position_role_templates` | `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
 | `projects` | `merchant_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
 | `property_fee_bills` | `merchant_id` + `project_id` | direct | V150 | `V150__property_fee_fixed_billing.sql` |
@@ -169,6 +173,10 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `saved_bottles` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `service_orders` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `service_responsibility_records` | `merchant_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
+| `settlement_bills` | `project_id` | direct | V224 | `V224__settlement_bills_batch2.sql` |
+| `settlement_items` | `merchant_id` | direct | V224 | `V224__settlement_bills_batch2.sql` |
+| `settlement_tax_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `settlement_transactions` | `merchant_id` + `project_id` | direct | V222 | `V222__settlement_transactions_batch1.sql` |
 | `site_entry_reports` | `project_id` + `space_id` | direct | V179 | `V179__site_entry_reports.sql` |
 | `space_expiry_color_rules` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
 | `spaces` | `merchant_id` + `project_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
@@ -178,6 +186,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `staff_leave_requests` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `staff_level_assignments` | `merchant_id` + `organization_id` | direct | V055 | `V055__access_staff_levels_and_salary.sql` |
 | `staff_payroll_adjustments` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
+| `staff_payroll_payouts` | `project_id` | direct | V238 | `V238__payroll_statement_paid_state.sql` |
 | `staff_payroll_statements` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `staff_profiles` | `merchant_id` + `project_id` | direct | V086 | `V086__staff_tables.sql` |
 | `staff_shift_schedules` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
@@ -187,10 +196,16 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `supplier_settlement_methods` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
 | `supply_contracts` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
 | `terminal_devices` | `merchant_id` + `venue_id` | direct | V007 | `V007__p0_terminal_evidence.sql` |
+| `ticket_distribution_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `ticket_distribution_merchant_rates` | `merchant_id` + `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `ticket_distribution_rank_tiers` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `ticket_orders` | `merchant_id` | direct | V135 | `V135__ticket_orders_merchant_id.sql` |
+| `ticket_refunds` | `merchant_id` | direct | V220 | `V220__ticket_refunds_merchant_id.sql` |
 | `ticket_verifications` | `merchant_id` | direct | V066 | `V066__ticket_anticounterfeit_window_nonce.sql` |
 | `turnover_rent_rules` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
 | `user_position_assignments` | `merchant_id` + `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
+| `venue_business_hours` | `venue_id` | inherited-or-location-scope | V226 | `V226__entitlement_session_kind_batch3.sql` |
+| `venue_sessions` | `venue_id` | inherited-or-location-scope | V226 | `V226__entitlement_session_kind_batch3.sql` |
 | `warehouses` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
 | `wecom_conversations` | `project_id` | direct | V087 | `V087__wecom_compliance.sql` |
 | `wecom_risk_hits` | `project_id` | direct | V106 | `V106__wecom_risk_hits_and_rules.sql` |
