@@ -27,10 +27,17 @@ if (!pii.ok) reasons.push("消费者 PII 落库加密门禁(verify:pii-encryptio
 
 // 3) 生产阻断台账:任何 open 阻断都 = NO-GO(诚实反映外部 IT/运维待办)
 const reg = JSON.parse(readFileSync("docs/production-readiness-evidence/production-blocker-register-latest.json", "utf8"));
-const c = reg.counts || {};
-const openBlockers = (c.readiness_blockers || 0) + (c.credential_blockers || 0) + (c.finding_blockers || 0);
-if (reg.status !== "ready" && reg.status !== "clear" && openBlockers > 0) {
-  reasons.push(`生产阻断未闭环:readiness=${c.readiness_blockers || 0} 凭证轮换=${c.credential_blockers || 0} 安全findings=${c.finding_blockers || 0}(需外部 IT/运维/安全补真实证据后关闭,代码无法自证)`);
+// codex 复核:不信任可篡改的 counts 字段,从条目数组自行重算 open 数。
+// "已闭环"仅当条目状态为 resolved/closed/accepted/deferred_ok;其余(pending_info/open/not_started/
+// open_for_prod_review/open_blockers_present 等)一律计为 open。
+const CLOSED = new Set(["resolved", "closed", "accepted", "done", "deferred_ok", "not_applicable"]);
+function openCount(arr) { return (Array.isArray(arr) ? arr : []).filter((x) => !CLOSED.has(String(x && x.status))).length; }
+const rb = openCount(reg.readiness_blockers);
+const cb = openCount(reg.credential_blockers);
+const fb = openCount(reg.finding_blockers);
+const openBlockers = rb + cb + fb;
+if (openBlockers > 0) {
+  reasons.push(`生产阻断未闭环(从条目重算,非信任 counts 字段):readiness=${rb} 凭证轮换=${cb} 安全findings=${fb}(需外部 IT/运维/安全补真实证据后关闭,代码无法自证)`);
 }
 
 console.log("=== 发布口径(release-ready)===");
