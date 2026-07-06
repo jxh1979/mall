@@ -28,7 +28,13 @@ public interface TicketingRepository {
 
     EntitlementTemplateRecord saveEntitlementTemplate(EntitlementTemplateRecord template);
 
-    List<EntitlementTemplateRecord> listEntitlementTemplates();
+    List<EntitlementTemplateRecord> listEntitlementTemplates(boolean includeArchived);
+
+    /** 物理删除权益模板(审批通过后调用)。 */
+    void deleteEntitlementTemplate(String id);
+
+    /** 该模板被票种绑定/已发放权益引用的活跃条数(>0 则禁止硬删)。 */
+    long countTemplateReferences(String id);
 
     Optional<EntitlementTemplateRecord> findEntitlementTemplateById(String id);
 

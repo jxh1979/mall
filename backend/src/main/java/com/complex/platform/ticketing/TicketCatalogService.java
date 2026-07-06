@@ -2,6 +2,8 @@ package com.complex.platform.ticketing;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
+import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
+import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
@@ -136,12 +138,89 @@ public class TicketCatalogService {
         ));
     }
 
+    // ================= V253 数据存档与审批后删除范式（试点） =================
+
+    /** 存档/取消存档权益模板（软标记，可逆；列表默认过滤已存档）。 */
+    EntitlementTemplateRecord archiveEntitlementTemplate(String id, boolean archive, String actorId) {
+        EntitlementTemplateRecord tpl = requireTemplate(id);
+        Instant now = Instant.now();
+        if (archive) {
+            // 已有待审批删除时不允许再次存档改写状态（幂等：已存档直接返回当前态）。
+            EntitlementTemplateRecord updated = tpl.withArchive(now, actorId, now);
+            return repository.saveEntitlementTemplate(updated);
+        }
+        // 取消存档:清空 archived_at/by,并把 pending 删除申请回退 none(复核§5:取消存档=保留该模板,
+        //   顺带撤销待审批删除,避免出现"生效可见却挂着待删"的迷惑态)。approved 态行已删不会走到这。
+        return repository.saveEntitlementTemplate(
+                tpl.withArchive(null, null, now).withDelete("none", null, null, null, now));
+    }
+
+    /** 发起删除申请：须先存档（防误删在用模板），记 requested_by/at/reason，状态置 pending。 */
+    EntitlementTemplateRecord requestDeleteEntitlementTemplate(String id, EntitlementTemplateDeleteRequest request, String actorId) {
+        EntitlementTemplateRecord tpl = requireTemplate(id);
+        if (tpl.archivedAt() == null) {
+            throw ApiException.badRequest("ENTITLEMENT_TEMPLATE_NOT_ARCHIVED",
+                    "template must be archived before requesting deletion");
+        }
+        if ("pending".equals(tpl.deleteStatus())) {
+            throw ApiException.conflict("ENTITLEMENT_TEMPLATE_DELETE_ALREADY_PENDING",
+                    "a delete request is already pending for this template");
+        }
+        Instant now = Instant.now();
+        String reason = request == null ? null : trimToNull(request.reason());
+        return repository.saveEntitlementTemplate(tpl.withDelete("pending", actorId, now, reason, now));
+    }
+
+    /**
+     * 审批删除申请。approved 且无活引用 → 物理删除；rejected → 回 none。
+     * 禁自审：审批人不得为删除申请发起人（照 supervisor_review SUPERVISOR_SELF_REVIEW_FORBIDDEN 原则）。
+     */
+    EntitlementTemplateDeleteDecision approveDeleteEntitlementTemplate(String id, EntitlementTemplateDeleteApprovalRequest request, String actorId) {
+        EntitlementTemplateRecord tpl = requireTemplate(id);
+        if (!"pending".equals(tpl.deleteStatus())) {
+            throw ApiException.badRequest("ENTITLEMENT_TEMPLATE_DELETE_NOT_PENDING",
+                    "no pending delete request for this template");
+        }
+        String decision = request == null ? null : (request.decision() == null ? null : request.decision().trim().toLowerCase(Locale.ROOT));
+        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        // 职责分离：删除申请发起人不能审批自己的申请。actorId 为 null（无鉴权上下文/测试）时跳过该闸。
+        if (actorId != null && actorId.equals(tpl.deleteRequestedBy())) {
+            throw ApiException.forbidden("ENTITLEMENT_TEMPLATE_SELF_APPROVE_FORBIDDEN",
+                    "the initiator of a delete request cannot approve it");
+        }
+        if ("rejected".equals(decision)) {
+            Instant now = Instant.now();
+            repository.saveEntitlementTemplate(tpl.withDelete("none", null, null, null, now));
+            return new EntitlementTemplateDeleteDecision(id, "rejected", false);
+        }
+        // approved：先校验无活引用（票种绑定/已发放权益），有则拒绝硬删。
+        long refs = repository.countTemplateReferences(id);
+        if (refs > 0) {
+            throw ApiException.conflict("ENTITLEMENT_TEMPLATE_IN_USE",
+                    "template is still referenced by " + refs + " ticket bindings or issued entitlements");
+        }
+        repository.deleteEntitlementTemplate(id);
+        return new EntitlementTemplateDeleteDecision(id, "approved", true);
+    }
+
+    private EntitlementTemplateRecord requireTemplate(String id) {
+        return repository.findEntitlementTemplateById(requireText(id, "id"))
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
+    }
+
     TicketTypeEntitlementRecord bindTicketTypeEntitlement(String ticketTypeId, TicketTypeEntitlementRequest request) {
         TicketTypeEntitlementRequest actual = requireRequest(request);
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
         EntitlementTemplateRecord template = repository.findEntitlementTemplateById(requireText(actual.entitlementTemplateId(), "entitlement_template_id"))
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
+        // 复核§3:已存档或待删除的模板不可再被绑定到票种——否则违背"存档=软下线",且被引用后永远删不掉。
+        if (template.archivedAt() != null || !"none".equals(template.deleteStatus())) {
+            throw ApiException.conflict("ENTITLEMENT_TEMPLATE_NOT_BINDABLE",
+                    "已存档或待删除的权益模板不可绑定到票种");
+        }
         Instant now = Instant.now();
         return repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "ticket_link_" + slug(actual.idempotencyKey()),

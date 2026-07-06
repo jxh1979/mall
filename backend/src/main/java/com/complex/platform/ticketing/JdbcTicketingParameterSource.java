@@ -56,6 +56,12 @@ final class JdbcTicketingParameterSource {
                 .addValue("consumption_window", template.consumptionWindow())
                 .addValue("exclusive_merchant_id", template.exclusiveMerchantId())
                 .addValue("require_face_photo", template.requireFacePhoto())
+                .addValue("archived_at", timestampWithTimeZone(template.archivedAt()))
+                .addValue("archived_by", template.archivedBy())
+                .addValue("delete_status", template.deleteStatus())
+                .addValue("delete_requested_by", template.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(template.deleteRequestedAt()))
+                .addValue("delete_reason", template.deleteReason())
                 .addValue("created_at", timestampWithTimeZone(template.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
     }

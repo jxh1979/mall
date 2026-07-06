@@ -308,6 +308,108 @@ class TicketingServiceTests {
                 .isEqualTo(1);
     }
 
+    // ===== V253 数据存档与审批后删除范式（试点）=====
+
+    @Test
+    void archiveHidesTemplateFromDefaultListAndUnarchiveRestores() {
+        Instant now = Instant.now();
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_arch", "过期入园", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+
+        catalog.archiveEntitlementTemplate("tpl_arch", true, "op_a");
+        assertThat(ticketingRepository.listEntitlementTemplates(false)).isEmpty();
+        assertThat(ticketingRepository.listEntitlementTemplates(true)).hasSize(1);
+        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_arch").orElseThrow().archivedAt()).isNotNull();
+
+        catalog.archiveEntitlementTemplate("tpl_arch", false, "op_a");
+        assertThat(ticketingRepository.listEntitlementTemplates(false)).hasSize(1);
+        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_arch").orElseThrow().archivedAt()).isNull();
+    }
+
+    @Test
+    void deleteRequiresArchiveFirstThenApprovalAndForbidsSelfApprove() {
+        Instant now = Instant.now();
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_del", "配错模板", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+
+        // 未存档不得申请删除。
+        assertThatThrownBy(() -> catalog.requestDeleteEntitlementTemplate("tpl_del",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", "误配"), "op_a"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("archived");
+
+        catalog.archiveEntitlementTemplate("tpl_del", true, "op_a");
+        catalog.requestDeleteEntitlementTemplate("tpl_del",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", "误配"), "op_a");
+        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_del").orElseThrow().deleteStatus()).isEqualTo("pending");
+
+        // 自审禁止：申请人 op_a 不能审批自己的申请。
+        assertThatThrownBy(() -> catalog.approveDeleteEntitlementTemplate("tpl_del",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest("k2", "approved", null), "op_a"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("cannot approve");
+
+        // 他人审批通过 → 物理删除。
+        EntitlementTemplateDeleteDecision decision = catalog.approveDeleteEntitlementTemplate("tpl_del",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest("k3", "approved", null), "op_b");
+        assertThat(decision.deleted()).isTrue();
+        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_del")).isEmpty();
+    }
+
+    @Test
+    void bindRejectsArchivedTemplate() {
+        // 复核§3:已存档模板不可再被绑定到新票种。
+        TicketTypeRecord tt = createTicketType("arch-bind-tt");
+        Instant now = Instant.now();
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_ab", "已存档模板", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null)
+                .withArchive(now, "op_a", now));
+        assertThatThrownBy(() -> service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                "bind-ab", "bind", java.util.List.of(), "tpl_ab", 1, 1, 100L, "default", 1, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不可绑定");
+    }
+
+    @Test
+    void unarchiveClearsPendingDeleteRequest() {
+        // 复核§5:取消存档时把 pending 删除申请回退 none,避免"生效可见却挂着待删"迷惑态。
+        Instant now = Instant.now();
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_uc", "配错待删", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+        catalog.archiveEntitlementTemplate("tpl_uc", true, "op_a");
+        catalog.requestDeleteEntitlementTemplate("tpl_uc",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", "误配"), "op_a");
+        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_uc").orElseThrow().deleteStatus()).isEqualTo("pending");
+        catalog.archiveEntitlementTemplate("tpl_uc", false, "op_a");
+        EntitlementTemplateRecord t = ticketingRepository.findEntitlementTemplateById("tpl_uc").orElseThrow();
+        assertThat(t.archivedAt()).isNull();
+        assertThat(t.deleteStatus()).isEqualTo("none");
+    }
+
+    @Test
+    void deleteApprovalBlockedWhenTemplateStillReferenced() {
+        Instant now = Instant.now();
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_used", "在用模板", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_used", "tt_x", "tpl_used", 1, 1, 100L, "default", 1, null, now, now));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+
+        catalog.archiveEntitlementTemplate("tpl_used", true, "op_a");
+        catalog.requestDeleteEntitlementTemplate("tpl_used",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", null), "op_a");
+
+        assertThatThrownBy(() -> catalog.approveDeleteEntitlementTemplate("tpl_used",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest("k2", "approved", null), "op_b"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("referenced");
+        // 仍在库（未删）。
+        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_used")).isPresent();
+    }
+
     // R5 T5：核销冲正回滚 used_times，原记录置 reversed，新建 reversed 记录指向原记录。
     @Test
     void reverseVerificationRollsBackUsedTimesAndMarksOriginalReversed() {
@@ -2648,8 +2750,39 @@ class TicketingServiceTests {
         }
 
         @Override
-        public List<EntitlementTemplateRecord> listEntitlementTemplates() {
-            return new ArrayList<>(entitlementTemplates.values());
+        public List<EntitlementTemplateRecord> listEntitlementTemplates(boolean includeArchived) {
+            List<EntitlementTemplateRecord> out = new ArrayList<>();
+            for (EntitlementTemplateRecord t : entitlementTemplates.values()) {
+                if ("approved".equals(t.deleteStatus())) {
+                    continue;
+                }
+                if (!includeArchived && t.archivedAt() != null) {
+                    continue;
+                }
+                out.add(t);
+            }
+            return out;
+        }
+
+        @Override
+        public void deleteEntitlementTemplate(String id) {
+            entitlementTemplates.remove(id);
+        }
+
+        @Override
+        public long countTemplateReferences(String id) {
+            long count = 0;
+            for (TicketTypeEntitlementRecord b : ticketTypeEntitlements.values()) {
+                if (id.equals(b.entitlementTemplateId())) {
+                    count++;
+                }
+            }
+            for (IssuedEntitlementRecord ie : issuedEntitlements.values()) {
+                if (id.equals(ie.entitlementTemplateId())) {
+                    count++;
+                }
+            }
+            return count;
         }
 
         @Override

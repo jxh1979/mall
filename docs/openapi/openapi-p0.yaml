@@ -6561,6 +6561,138 @@ paths:
       x-auth-context: staff-token
       requestBody:
         $ref: "#/components/requestBodies/EntitlementTemplateRequest"
+  /api/v1/ticketing/entitlement-templates/{id}/archive:
+    post:
+      tags:
+        - ticketing
+      operationId: archiveEntitlementTemplate
+      summary: 存档权益模板
+      description: 软标记下线权益模板（可恢复）；列表默认过滤已存档。数据存档与审批后删除范式（试点）。
+      x-permission: ticket.entitlement.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_entitlement_template.archived
+      x-audit-event-failure: ticket_entitlement_template.archive_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/entitlement-templates/{id}/unarchive:
+    post:
+      tags:
+        - ticketing
+      operationId: unarchiveEntitlementTemplate
+      summary: 取消存档权益模板
+      description: 取消权益模板存档，恢复为生效可选用。
+      x-permission: ticket.entitlement.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_entitlement_template.unarchived
+      x-audit-event-failure: ticket_entitlement_template.unarchive_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/entitlement-templates/{id}/delete-request:
+    post:
+      tags:
+        - ticketing
+      operationId: requestDeleteEntitlementTemplate
+      summary: 发起权益模板删除申请
+      description: 对已存档的权益模板发起删除申请，进入待上级审批状态。须先存档。
+      x-permission: ticket.entitlement.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_entitlement_template.delete_requested
+      x-audit-event-failure: ticket_entitlement_template.delete_request_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/entitlement-templates/{id}/delete-approve:
+    post:
+      tags:
+        - ticketing
+      operationId: approveDeleteEntitlementTemplate
+      summary: 审批权益模板删除申请
+      description: 上级审批删除申请。approved 且无活引用即物理删除；rejected 回到未申请态。禁止申请人自审。
+      x-permission: ticket.entitlement.approve
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_entitlement_template.delete_approved
+      x-audit-event-failure: ticket_entitlement_template.delete_approve_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/ticketing/issued-entitlements:
     get:
       tags:

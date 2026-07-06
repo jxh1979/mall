@@ -7,6 +7,9 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
+import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
+import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
+import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
@@ -163,10 +166,79 @@ public class TicketingService {
         );
     }
 
-    public PageResponse<EntitlementTemplateRecord> listEntitlementTemplates() {
+    /** 当前操作者 id（用于存档/删除申请留痕与自审校验）；测试无鉴权上下文时回退 null。 */
+    private String actorId() {
+        if (authorizationService == null) {
+            return null;
+        }
+        try {
+            return authorizationService.currentActor().id();
+        } catch (RuntimeException unauthenticated) {
+            // 无鉴权上下文(测试/内部调用)时静默回退 null;留痕字段与自审校验按缺席处理。
+            return null;
+        }
+    }
+
+    public PageResponse<EntitlementTemplateRecord> listEntitlementTemplates(boolean includeArchived) {
         return operations.readPage(
                 TicketingReadOperation.LIST_ENTITLEMENT_TEMPLATES,
-                repository::listEntitlementTemplates
+                () -> repository.listEntitlementTemplates(includeArchived)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.entitlement.manage")
+    @Transactional
+    public EntitlementTemplateRecord archiveEntitlementTemplate(String id, EntitlementTemplateArchiveRequest request) {
+        String templateId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "archiveEntitlementTemplate:" + templateId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                EntitlementTemplateRecord.class,
+                TicketingWriteOperation.ARCHIVE_ENTITLEMENT_TEMPLATE,
+                () -> catalogService.archiveEntitlementTemplate(templateId, true, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.entitlement.manage")
+    @Transactional
+    public EntitlementTemplateRecord unarchiveEntitlementTemplate(String id, EntitlementTemplateArchiveRequest request) {
+        String templateId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "unarchiveEntitlementTemplate:" + templateId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                EntitlementTemplateRecord.class,
+                TicketingWriteOperation.UNARCHIVE_ENTITLEMENT_TEMPLATE,
+                () -> catalogService.archiveEntitlementTemplate(templateId, false, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.entitlement.manage")
+    @Transactional
+    public EntitlementTemplateRecord requestDeleteEntitlementTemplate(String id, EntitlementTemplateDeleteRequest request) {
+        String templateId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "requestDeleteEntitlementTemplate:" + templateId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                EntitlementTemplateRecord.class,
+                TicketingWriteOperation.REQUEST_DELETE_ENTITLEMENT_TEMPLATE,
+                () -> catalogService.requestDeleteEntitlementTemplate(templateId, request, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.entitlement.approve")
+    @Transactional
+    public EntitlementTemplateDeleteDecision approveDeleteEntitlementTemplate(String id, EntitlementTemplateDeleteApprovalRequest request) {
+        String templateId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "approveDeleteEntitlementTemplate:" + templateId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                EntitlementTemplateDeleteDecision.class,
+                TicketingWriteOperation.APPROVE_DELETE_ENTITLEMENT_TEMPLATE,
+                () -> catalogService.approveDeleteEntitlementTemplate(templateId, request, actorId())
         );
     }
 

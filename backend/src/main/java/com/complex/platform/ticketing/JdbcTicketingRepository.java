@@ -109,12 +109,16 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO entitlement_templates (
                     id, name, entitlement_type, default_total_times, default_value_cent,
                     status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                    agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo, created_at, updated_at
+                    agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                    created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :entitlement_type, :default_total_times, :default_value_cent,
                     :status, :merchant_id, :venue_id, :point_id, :bar_item_ref, :entitlement_kind,
-                    :agreement_price_cent, :consumption_window, :exclusive_merchant_id, :require_face_photo, :created_at, :updated_at
+                    :agreement_price_cent, :consumption_window, :exclusive_merchant_id, :require_face_photo,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
+                    :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -131,20 +135,30 @@ class JdbcTicketingRepository implements TicketingRepository {
                     consumption_window = EXCLUDED.consumption_window,
                     exclusive_merchant_id = EXCLUDED.exclusive_merchant_id,
                     require_face_photo = EXCLUDED.require_face_photo,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.entitlementTemplateParameters(template));
         return template;
     }
 
     @Override
-    public List<EntitlementTemplateRecord> listEntitlementTemplates() {
+    public List<EntitlementTemplateRecord> listEntitlementTemplates(boolean includeArchived) {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo, created_at, updated_at
+                       agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                       created_at, updated_at
                   FROM entitlement_templates
+                 WHERE (:include_archived OR archived_at IS NULL)
+                   AND delete_status <> 'approved'
                  ORDER BY created_at DESC, id
-                """, rowMapper::mapEntitlementTemplate);
+                """, Map.of("include_archived", includeArchived), rowMapper::mapEntitlementTemplate);
     }
 
     @Override
@@ -152,10 +166,26 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo, created_at, updated_at
+                       agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                       created_at, updated_at
                   FROM entitlement_templates
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();
+    }
+
+    @Override
+    public void deleteEntitlementTemplate(String id) {
+        jdbcTemplate.update("DELETE FROM entitlement_templates WHERE id = :id", Map.of("id", id));
+    }
+
+    @Override
+    public long countTemplateReferences(String id) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT (SELECT COUNT(1) FROM ticket_type_entitlements WHERE entitlement_template_id = :id)
+                     + (SELECT COUNT(1) FROM issued_entitlements     WHERE entitlement_template_id = :id)
+                """, Map.of("id", id), Long.class);
+        return count == null ? 0L : count;
     }
 
     @Override

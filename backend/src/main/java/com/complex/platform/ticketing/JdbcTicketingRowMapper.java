@@ -66,7 +66,13 @@ final class JdbcTicketingRowMapper {
                 nullableLong(resultSet, "agreement_price_cent"),
                 resultSet.getString("consumption_window"),
                 resultSet.getString("exclusive_merchant_id"),
-                resultSet.getBoolean("require_face_photo")
+                resultSet.getBoolean("require_face_photo"),
+                nullableInstant(resultSet, "archived_at"),
+                resultSet.getString("archived_by"),
+                resultSet.getString("delete_status"),
+                resultSet.getString("delete_requested_by"),
+                nullableInstant(resultSet, "delete_requested_at"),
+                resultSet.getString("delete_reason")
         );
     }
 

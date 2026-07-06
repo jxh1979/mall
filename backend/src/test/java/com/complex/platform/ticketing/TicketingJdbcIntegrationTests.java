@@ -124,7 +124,7 @@ class TicketingJdbcIntegrationTests {
                         TicketTypeRecord::status
                 )
                 .contains(tuple("ticket_type_jdbc", "P0 JDBC Pass", "weekday_weekend_holiday", 9900L, "active"));
-        assertThat(repository.listEntitlementTemplates())
+        assertThat(repository.listEntitlementTemplates(false))
                 .extracting(
                         EntitlementTemplateRecord::id,
                         EntitlementTemplateRecord::name,

@@ -24,6 +24,8 @@ type EntitlementTemplateRow = {
   name: string;
   entitlementType: string;
   status: string;
+  archivedAt: string | null;
+  deleteStatus: string;
 };
 type PriceRuleRow = {
   id: string;
@@ -59,6 +61,7 @@ function yuan(cent: number | null): string {
 export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo }: AdminPageProps) {
   const [tickets, setTickets] = React.useState<TicketTypeRow[]>([]);
   const [templates, setTemplates] = React.useState<EntitlementTemplateRow[]>([]);
+  const [showArchived, setShowArchived] = React.useState(false);
   const [rules, setRules] = React.useState<PriceRuleRow[]>([]);
 
   // 区1 新建票种（保留既有 e2e 锚点：三档价 + ticket-publish + ticket-policy-error）
@@ -125,7 +128,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     async () => {
       const [ticketRows, templateRows, ruleRows] = await Promise.all([
         api.get<unknown>("/api/v1/ticketing/ticket-types"),
-        api.get<unknown>("/api/v1/ticketing/entitlement-templates"),
+        api.get<unknown>(`/api/v1/ticketing/entitlement-templates?includeArchived=${showArchived}`),
         api.get<unknown>("/api/v1/ticketing/price-rules"),
       ]);
       setTickets(toRows<TicketTypeRow>(ticketRows));
@@ -134,6 +137,44 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     },
     { onError: setGlobalError, fallbackMessage: "票务策略配置读取失败" },
   );
+
+  // 切换「显示已存档」后重新拉取（后端按 includeArchived 过滤）。
+  const firstArchivedToggle = React.useRef(true);
+  React.useEffect(() => {
+    if (firstArchivedToggle.current) {
+      firstArchivedToggle.current = false;
+      return;
+    }
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived]);
+
+  async function archiveTemplate(id: string, archive: boolean) {
+    await api.post(`/api/v1/ticketing/entitlement-templates/${id}/${archive ? "archive" : "unarchive"}`, {
+      idempotency_key: crypto.randomUUID(),
+    });
+    setActionResult({ action: archive ? "entitlement_template_archived" : "entitlement_template_unarchived", id });
+    reload();
+  }
+
+  async function requestDeleteTemplate(id: string) {
+    const reason = window.prompt("删除理由（提交后需上级审批）：") ?? "";
+    await api.post(`/api/v1/ticketing/entitlement-templates/${id}/delete-request`, {
+      idempotency_key: crypto.randomUUID(),
+      reason,
+    });
+    setActionResult({ action: "entitlement_template_delete_requested", id });
+    reload();
+  }
+
+  async function approveDeleteTemplate(id: string, decision: "approved" | "rejected") {
+    const decided = await api.post<{ deleted?: boolean }>(`/api/v1/ticketing/entitlement-templates/${id}/delete-approve`, {
+      idempotency_key: crypto.randomUUID(),
+      decision,
+    });
+    setActionResult({ action: "entitlement_template_delete_" + decision, id, deleted: decided?.deleted ?? false });
+    reload();
+  }
 
   async function publish() {
     if (!weekday || !weekend || !holiday) {
@@ -296,6 +337,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
               <th>模板名称</th>
               <th>权益类型</th>
               <th>状态</th>
+              <th>存档/删除</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -306,11 +349,41 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <td>{row.name}</td>
                 <td>{formatBusinessStatus(row.entitlementType)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
+                <td>{row.deleteStatus === "pending" ? "待审批删除" : row.archivedAt ? "已存档" : "生效中"}</td>
+                <td onClick={(event) => event.stopPropagation()}>
+                  {row.deleteStatus === "pending" ? (
+                    <span className="admin-inline-actions">
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.approve"]} data-testid={`entitlement-template-delete-approve-${row.id}`} onClick={() => void approveDeleteTemplate(row.id, "approved")}>
+                        批准删除
+                      </PermissionButton>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.approve"]} data-testid={`entitlement-template-delete-reject-${row.id}`} onClick={() => void approveDeleteTemplate(row.id, "rejected")}>
+                        驳回
+                      </PermissionButton>
+                    </span>
+                  ) : row.archivedAt ? (
+                    <span className="admin-inline-actions">
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid={`entitlement-template-unarchive-${row.id}`} onClick={() => void archiveTemplate(row.id, false)}>
+                        取消存档
+                      </PermissionButton>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid={`entitlement-template-delete-request-${row.id}`} onClick={() => void requestDeleteTemplate(row.id)}>
+                        申请删除
+                      </PermissionButton>
+                    </span>
+                  ) : (
+                    <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid={`entitlement-template-archive-${row.id}`} onClick={() => void archiveTemplate(row.id, true)}>
+                      存档
+                    </PermissionButton>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <label className="admin-inline-check" data-testid="entitlement-show-archived">
+        <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
+        显示已存档
+      </label>
       <div className="admin-inline-form" data-testid="entitlement-template-form">
         <input aria-label="模板名称" placeholder="模板名称（如 入园1次）" value={tplForm.name} onChange={(event) => setTplForm({ ...tplForm, name: event.target.value })} />
         <select aria-label="权益类型" value={tplForm.entitlementType} onChange={(event) => setTplForm({ ...tplForm, entitlementType: event.target.value })}>
