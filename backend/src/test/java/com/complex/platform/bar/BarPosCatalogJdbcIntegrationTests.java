@@ -32,6 +32,9 @@ class BarPosCatalogJdbcIntegrationTests {
     @Autowired
     private BarPosCatalogService service;
 
+    @Autowired
+    private BarOrderService barOrderService;
+
     private BarProductRecord newProduct(String id, String barId, String name) {
         Instant now = Instant.now();
         return new BarProductRecord(id, barId, "merchant_pos_test", name, "spirit", 5000L, "CNY",
@@ -127,5 +130,41 @@ class BarPosCatalogJdbcIntegrationTests {
         } finally {
             com.complex.platform.support.TestSecurityActors.clear();
         }
+    }
+
+    @Test
+    void comboOrderExpandsToSkuItemsAndSplitsPriceExactly() {
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        Instant now = Instant.now();
+        String bar = "bar_pos_combo";
+        BarProductRecord skuA = new BarProductRecord("product_combo_a", bar, null, "金酒", "spirit",
+                3000L, "CNY", null, null, false, "active", now, now, null, null, null);
+        BarProductRecord skuB = new BarProductRecord("product_combo_b", bar, null, "汤力水", "soft",
+                7000L, "CNY", null, null, false, "active", now, now, null, null, null);
+        barRepository.saveProduct(skuA);
+        barRepository.saveProduct(skuB);
+        catalog.saveCombo(new BarComboRecord("barcombo_gt", bar, null, "金汤力套餐",
+                10000L, 6000L, null, "active", now, now,
+                List.of(new BarComboItemRecord("bci_a", "barcombo_gt", "product_combo_a", "金酒", 1),
+                        new BarComboItemRecord("bci_b", "barcombo_gt", "product_combo_b", "汤力水", 1))));
+        barRepository.saveTable(new BarTableRecord("bartable_combo", bar, null, "T-COMBO", "组合桌",
+                "card_seat", 4, 0, 0L, "CNY", "active", now, now));
+
+        BarOrderRecord order = barOrderService.createOrder(new BarOrderRequest(
+                "combo-order-1", null, List.of(), bar, "bartable_combo", null,
+                List.of(java.util.Map.of("combo_id", "barcombo_gt", "quantity", "2")),
+                null, List.of(), null));
+
+        assertThat(order.totalAmountCent()).isEqualTo(20000L);
+        List<BarOrderItemRecord> items = barRepository.listOrderItems(order.id());
+        assertThat(items).extracting(BarOrderItemRecord::productId)
+                .containsExactlyInAnyOrder("product_combo_a", "product_combo_b");
+        assertThat(items).allSatisfy(it -> assertThat(it.quantity()).isEqualTo(2));
+        long sum = items.stream().mapToLong(BarOrderItemRecord::amountCent).sum();
+        assertThat(sum).isEqualTo(20000L);
+        assertThat(items).filteredOn(it -> it.productId().equals("product_combo_a"))
+                .first().extracting(BarOrderItemRecord::amountCent).isEqualTo(6000L);
+        assertThat(items).filteredOn(it -> it.productId().equals("product_combo_b"))
+                .first().extracting(BarOrderItemRecord::amountCent).isEqualTo(14000L);
     }
 }

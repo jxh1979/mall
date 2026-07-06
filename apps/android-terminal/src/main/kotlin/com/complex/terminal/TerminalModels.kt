@@ -477,6 +477,68 @@ data class MyWorkOrderRecord(
   val handleDueAt: String? = null,
 )
 
+// ---------------------------------------------------------------------------
+// 图形化点单 POS 目录（V256/V257）：分类 / SKU / 套餐。GET 返回 {code,data:[...]}，
+// 客户端 decode 已剥壳为 List<T>（非分页信封，无需 Page 包装）。
+// ---------------------------------------------------------------------------
+@Serializable
+data class BarProductCategory(
+  val id: String = "",
+  val barId: String? = null,
+  val merchantId: String? = null,
+  val categoryName: String = "",
+  val sortOrder: Int = 0,
+  val status: String? = null,
+)
+
+@Serializable
+data class BarProduct(
+  val id: String = "",
+  val barId: String? = null,
+  val merchantId: String? = null,
+  val productName: String = "",
+  val productType: String? = null,
+  val priceCent: Long = 0,
+  val currency: String? = null,
+  val soldOut: Boolean = false,
+  val status: String? = null,
+  val categoryId: String? = null,
+  val imageUrl: String? = null,
+)
+
+@Serializable
+data class BarComboItem(
+  val id: String = "",
+  val comboId: String? = null,
+  val productId: String = "",
+  val productName: String? = null,
+  val quantity: Int = 0,
+)
+
+@Serializable
+data class BarCombo(
+  val id: String = "",
+  val barId: String? = null,
+  val merchantId: String? = null,
+  val comboName: String = "",
+  val priceCent: Long = 0,
+  val internalSettlementPriceCent: Long? = null,
+  val imageUrl: String? = null,
+  val status: String? = null,
+  val items: List<BarComboItem> = emptyList(),
+)
+
+// 由订单生成账单 POST /api/v1/bar/orders/{order_id}/bill（按桌整单结账前置步）。
+@Serializable
+data class BarOrderBillCreateRequest(
+  val idempotencyKey: String,
+  val operatorNote: String? = null,
+  val evidenceAttachmentIds: List<String> = emptyList(),
+  val paymentMode: String? = null,
+  val minSpendFillRequired: Boolean? = null,
+  val serviceFeeRateBp: Int? = null,
+)
+
 @Serializable
 data class BarTableAvailabilityRow(
   val id: String? = null,

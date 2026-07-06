@@ -164,6 +164,35 @@ class TerminalApiClient(
 
   fun listBarTableAvailability(): List<BarTableAvailabilityRow> = get<Page<BarTableAvailabilityRow>>("/api/v1/bar/tables/availability").items
 
+  // ── 图形化点单 POS 目录（V256/V257）──
+  fun listBarCategories(barId: String): List<BarProductCategory> =
+    get("/api/v1/bar/catalog/categories?bar_id=${urlEncode(barId)}")
+
+  fun listBarCatalogProducts(barId: String, categoryId: String?): List<BarProduct> {
+    val q = StringBuilder("bar_id=").append(urlEncode(barId))
+    if (categoryId != null && categoryId.isNotBlank()) q.append("&category_id=").append(urlEncode(categoryId))
+    return get("/api/v1/bar/catalog/products?$q")
+  }
+
+  fun listBarCombos(barId: String): List<BarCombo> =
+    get("/api/v1/bar/catalog/combos?bar_id=${urlEncode(barId)}")
+
+  fun createBarOrderBill(orderId: String, request: BarOrderBillCreateRequest): BarBillRecord =
+    post("/api/v1/bar/orders/${urlEncode(orderId)}/bill", request)
+
+  /** 鉴权回读目录图片（带 Bearer，返回原始字节供 UI 解码为 Bitmap）。 */
+  fun catalogImageBytes(imageUrl: String): ByteArray {
+    val path = if (imageUrl.startsWith("/")) imageUrl else "/$imageUrl"
+    val connection = open(path, "GET")
+    return try {
+      val status = connection.responseCode
+      if (status !in 200..299) throw ApiException(status, path, "")
+      connection.inputStream.readBytes()
+    } finally {
+      connection.disconnect()
+    }
+  }
+
   fun createBarReservation(request: BarReservationCreateRequest): BarReservationRecord =
     post("/api/v1/bar/reservations", request)
 

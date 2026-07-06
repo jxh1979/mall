@@ -197,6 +197,24 @@ class TerminalApiClient(
   fun listBarTableAvailability(): List<BarTableAvailabilityRow> = get("/api/v1/bar/tables/availability")
 
   /** 员工帮客人订位(免定金——预订创建即 not_required,收款只在公司设备/前台)。 */
+  // ── 图形化点单 POS 目录（V256/V257）──
+  fun listBarCategories(barId: String): List<BarProductCategory> =
+    get("/api/v1/bar/catalog/categories?bar_id=${urlEncode(barId)}")
+
+  fun listBarCatalogProducts(barId: String, categoryId: String?): List<BarProduct> {
+    val q = StringBuilder("bar_id=").append(urlEncode(barId))
+    if (categoryId != null && categoryId.isNotBlank()) q.append("&category_id=").append(urlEncode(categoryId))
+    return get("/api/v1/bar/catalog/products?$q")
+  }
+
+  fun listBarCombos(barId: String): List<BarCombo> =
+    get("/api/v1/bar/catalog/combos?bar_id=${urlEncode(barId)}")
+
+  fun createBarOrderBill(orderId: String, request: BarOrderBillCreateRequest): BarBillRecord {
+    val orderSeg = urlEncode(orderId)
+    return post("/api/v1/bar/orders/${orderSeg}/bill", request)
+  }
+
   fun createBarReservation(request: BarReservationCreateRequest): BarReservationRecord =
     post("/api/v1/bar/reservations", request)
 
