@@ -143,6 +143,14 @@ class SettlementBatch2E2ETests {
         assertThat(bill(pid).get("status")).isEqualTo("settled");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT settled_at FROM settlement_bills WHERE id = ?", java.sql.Timestamp.class, billId)).isNotNull();
+
+        // B-1 守卫(2026-07-06 审计):bill 已 settled 后再跑 settleMonth 必须被拒——否则 deleteItemsByBill
+        //   会删掉已挂应付(ar_ap_item_id 已置)的明细,产生孤儿 AR/AP。守卫在 settleMonth 起始 fail-fast。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> settlementService.settleMonth(pid, MONTH))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("已过账");
+        // 且已 settled 的 bill 与明细未被破坏(守卫在写前抛,事务回滚无副作用)。
+        assertThat(bill(pid).get("status")).isEqualTo("settled");
         // 各明细均 posted + 回填 ar_ap_item_id。
         for (String m : new String[]{"bar1", "bar2", "bar3", "bar4"}) {
             assertThat(itemStatus(pid, m)).isEqualTo("posted");

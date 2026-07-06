@@ -52,6 +52,14 @@ public class TicketDistributionSettlementService {
     public String settleMonth(String projectId, YearMonth month) {
         LocalDate periodStart = month.atDay(1);
         LocalDate periodEnd = month.atEndOfMonth();
+
+        // B-1 守卫(2026-07-06 第一性原理审计):已过账/已结算月份不可重结——重跑会 deleteItemsByBill
+        //   删掉已挂应付(ar_ap_item_id 已置)的明细,产生孤儿 AR/AP。draft/confirmed(未过账)仍可安全重算(幂等覆盖)。
+        String existingStatus = repository.findBillStatusByPeriod(projectId, periodStart, periodEnd);
+        if ("posted".equals(existingStatus) || "settled".equals(existingStatus)) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_ALREADY_POSTED",
+                    "该月份结算单已过账/已结算,不可重结;如需重算请先对已过账明细做冲正");
+        }
         Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 
