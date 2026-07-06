@@ -31,7 +31,7 @@
 
 **已在仓内做实的(我能做的)**:
 1. 部署硬闸:`complex-deploy-api/web.sh` 构建前跑 `verify:predeploy`,红即 exit 1。
-2. **门禁完整性守卫**:部署脚本另跑一段 node 校验,确认 `verify:predeploy` 仍含必需安全/治理门禁(tenant-isolation/security-baseline/pii-encryption/production-blockers/full-admin-matrix/test-db-isolation/p0-contract);被 PR 抽空/设 `true` 即拒绝部署(反例自测:设 true 立即 ABORTED)。把篡改门槛从"改一行 package.json"抬到"改 .160 部署脚本"。
+2. **部署脚本直接跑权威门禁数组**(codex 复核后从"解析 package.json"改为此):部署脚本内硬编码必需门禁列表并逐个 `npm run`,**不解析也不信任 package.json 的 verify:predeploy 串**。因此"把 verify:predeploy 抽空/设 `true`/惰性化(如 `\"true # 门禁名...\"`)"对部署无效——对抗自测证实:篡改后部署仍跑全部门禁。**仍非仓外强制**:能改本部署脚本(需 .160 shell)或 `tools/verify-*.mjs`(让门禁真跑但断言变 no-op)者仍可绕过。
 3. pre-push 钩子禁直推 main;`.github/CODEOWNERS` 标记强制点文件。
 4. GitHub Actions 门禁模板 `ops/ci/predeploy-gates.yml`(见下需手动激活)。
 
