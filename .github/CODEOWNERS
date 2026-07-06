@@ -1,0 +1,12 @@
+# 强制点文件(2026-07-06):改动应经独立复核。
+# 注意:CODEOWNERS 仅在"受保护分支 + require review"启用时被 GitHub 自动强制;
+# 当前私有库免费版无法启用分支保护,故此文件当前仅"记录意图 + 一旦升级即生效"。
+/ops/160/complex-deploy-api.sh              @jxh1979
+/ops/160/complex-deploy-web.sh              @jxh1979
+/ops/160/hooks/                             @jxh1979
+/ops/160/propose-change.sh                  @jxh1979
+/ops/ci/                                    @jxh1979
+/.github/                                   @jxh1979
+/tools/                                     @jxh1979
+/package.json                               @jxh1979
+/backend/src/main/resources/db/migration/   @jxh1979

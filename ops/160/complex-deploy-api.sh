@@ -188,6 +188,13 @@ echo "[$(date -Iseconds)] deploy api start release=$release_id stack=java-spring
 cd "$PROJECT_DIR"
 # 部署前治理门禁(2026-07-05):delivery-gates 快子集绿才允许部署;红即中止不碰生产。
 # 覆盖 codex 审计暴露的漂移类(scope 登记/安全基线/后台矩阵/契约/阻断台账),静态分析无需 DB。
+# 门禁完整性守卫(2026-07-06,codex 复核:防同权限者在 PR 里把 verify:predeploy 抽空/设 true 后蒙混部署)。
+# 部署脚本(在 .160 部署机、不随 PR 改动)重新校验 verify:predeploy 仍含必需安全/治理门禁;缺则中止。
+# 说明:这不是"仓外强制"(受保护 CI 才是),但把篡改门槛从"改一行 package.json"抬到"改 .160 部署脚本"。
+if ! node -e 'const s=(require("./package.json").scripts||{})["verify:predeploy"]||"";const req=["verify:tenant-isolation","verify:security-baseline","verify:pii-encryption","verify:production-blockers","verify:full-admin-matrix","verify:test-db-isolation","verify:p0-contract"];const miss=req.filter(g=>!s.includes(g));if(miss.length){console.error("PREDEPLOY_TAMPERED 缺必需门禁: "+miss.join(", "));process.exit(1);}' ; then
+  echo "[$(date -Iseconds)] DEPLOY ABORTED: verify:predeploy 被篡改/抽空(缺必需门禁),拒绝部署。" | tee -a "$LOG_DIR/deploy.log" >&2
+  exit 1
+fi
 echo "[$(date -Iseconds)] pre-deploy governance gates: npm run verify:predeploy" | tee -a "$LOG_DIR/deploy.log"
 if ! npm run verify:predeploy; then
   echo "[$(date -Iseconds)] DEPLOY ABORTED: delivery-gates red (verify:predeploy failed). Fix governance drift before deploying." | tee -a "$LOG_DIR/deploy.log" >&2
