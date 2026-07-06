@@ -533,7 +533,7 @@ class AnalyticsJdbcIntegrationTests {
     private void insertCustomer(String id, String status, String createdAt) {
         jdbcTemplate.update("""
                 INSERT INTO customers (id, phone, masked_phone, status, created_at, updated_at)
-                VALUES (:id, :id, '138****0000', :status, :created_at::timestamptz, :created_at::timestamptz)
+                VALUES (:id, 'enc:v1:'||:id, '138****0000', :status, :created_at::timestamptz, :created_at::timestamptz)
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", id).addValue("status", status).addValue("created_at", createdAt));
     }
@@ -962,7 +962,7 @@ class AnalyticsJdbcIntegrationTests {
         Instant at = businessDate.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC);
         jdbcTemplate.update("""
                 INSERT INTO customers (id, phone, masked_phone, status, created_at, updated_at)
-                VALUES (:id, :phone, :masked, 'active', :at, :at)
+                VALUES (:id, 'enc:v1:'||:phone, :masked, 'active', :at, :at)
                 """, Map.of("id", id, "phone", phone, "masked", "139****" + phone.substring(7), "at", java.sql.Timestamp.from(at)));
     }
 
