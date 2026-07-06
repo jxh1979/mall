@@ -149,8 +149,10 @@ public class TicketCatalogService {
             EntitlementTemplateRecord updated = tpl.withArchive(now, actorId, now);
             return repository.saveEntitlementTemplate(updated);
         }
-        // 取消存档：清空 archived_at/by。若正处于 pending 删除，取消存档不影响删除申请（申请仍在）。
-        return repository.saveEntitlementTemplate(tpl.withArchive(null, null, now));
+        // 取消存档:清空 archived_at/by,并把 pending 删除申请回退 none(复核§5:取消存档=保留该模板,
+        //   顺带撤销待审批删除,避免出现"生效可见却挂着待删"的迷惑态)。approved 态行已删不会走到这。
+        return repository.saveEntitlementTemplate(
+                tpl.withArchive(null, null, now).withDelete("none", null, null, null, now));
     }
 
     /** 发起删除申请：须先存档（防误删在用模板），记 requested_by/at/reason，状态置 pending。 */
@@ -214,6 +216,11 @@ public class TicketCatalogService {
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
         EntitlementTemplateRecord template = repository.findEntitlementTemplateById(requireText(actual.entitlementTemplateId(), "entitlement_template_id"))
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
+        // 复核§3:已存档或待删除的模板不可再被绑定到票种——否则违背"存档=软下线",且被引用后永远删不掉。
+        if (template.archivedAt() != null || !"none".equals(template.deleteStatus())) {
+            throw ApiException.conflict("ENTITLEMENT_TEMPLATE_NOT_BINDABLE",
+                    "已存档或待删除的权益模板不可绑定到票种");
+        }
         Instant now = Instant.now();
         return repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "ticket_link_" + slug(actual.idempotencyKey()),

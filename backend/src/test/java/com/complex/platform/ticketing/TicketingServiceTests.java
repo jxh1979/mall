@@ -359,6 +359,37 @@ class TicketingServiceTests {
     }
 
     @Test
+    void bindRejectsArchivedTemplate() {
+        // 复核§3:已存档模板不可再被绑定到新票种。
+        TicketTypeRecord tt = createTicketType("arch-bind-tt");
+        Instant now = Instant.now();
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_ab", "已存档模板", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null)
+                .withArchive(now, "op_a", now));
+        assertThatThrownBy(() -> service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                "bind-ab", "bind", java.util.List.of(), "tpl_ab", 1, 1, 100L, "default", 1, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不可绑定");
+    }
+
+    @Test
+    void unarchiveClearsPendingDeleteRequest() {
+        // 复核§5:取消存档时把 pending 删除申请回退 none,避免"生效可见却挂着待删"迷惑态。
+        Instant now = Instant.now();
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_uc", "配错待删", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+        catalog.archiveEntitlementTemplate("tpl_uc", true, "op_a");
+        catalog.requestDeleteEntitlementTemplate("tpl_uc",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", "误配"), "op_a");
+        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_uc").orElseThrow().deleteStatus()).isEqualTo("pending");
+        catalog.archiveEntitlementTemplate("tpl_uc", false, "op_a");
+        EntitlementTemplateRecord t = ticketingRepository.findEntitlementTemplateById("tpl_uc").orElseThrow();
+        assertThat(t.archivedAt()).isNull();
+        assertThat(t.deleteStatus()).isEqualTo("none");
+    }
+
+    @Test
     void deleteApprovalBlockedWhenTemplateStillReferenced() {
         Instant now = Instant.now();
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
