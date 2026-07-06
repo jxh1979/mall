@@ -38,6 +38,9 @@ class SavedBottleNotificationIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.common.crypto.PiiCipher piiCipher;
+
     @BeforeEach
     void setUp() {
         TestSecurityActors.asPlatformAdmin();
@@ -87,7 +90,7 @@ class SavedBottleNotificationIntegrationTest {
         assertThat(logParam("deposit", DEPOSIT_PHONE, "expireAt")).isEqualTo("2026-07-10T00:00:00Z");
 
         jdbcTemplate.update("UPDATE customers SET phone = ?, masked_phone = ?, updated_at = now() WHERE id = ?",
-                CLAIM_PHONE, maskPhone(CLAIM_PHONE), customerId);
+                piiCipher.encrypt(CLAIM_PHONE), maskPhone(CLAIM_PHONE), customerId);
         SavedBottleClaimRecord claim = inventoryService.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
                 prefix + "_claim",
                 null,
@@ -203,7 +206,7 @@ class SavedBottleNotificationIntegrationTest {
                     masked_phone = EXCLUDED.masked_phone,
                     status = EXCLUDED.status,
                     updated_at = now()
-                """, id, phone, maskPhone(phone));
+                """, id, piiCipher.encrypt(phone), maskPhone(phone));
     }
 
     private void insertInventoryItem(String id, String sku, String name) {

@@ -27,6 +27,9 @@ class StoredValueNotificationIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.common.crypto.PiiCipher piiCipher;
+
     @BeforeEach
     void setUp() {
         TestSecurityActors.asPlatformAdmin();
@@ -151,7 +154,7 @@ class StoredValueNotificationIntegrationTest {
                     masked_phone = EXCLUDED.masked_phone,
                     status = EXCLUDED.status,
                     updated_at = now()
-                """, id, phone, maskPhone(phone));
+                """, id, piiCipher.encrypt(phone), maskPhone(phone));
     }
 
     private void setSwitch(String capabilityCode, boolean enabled) {
