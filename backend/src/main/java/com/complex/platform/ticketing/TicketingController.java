@@ -8,6 +8,9 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
+import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
+import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
+import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
@@ -114,9 +117,42 @@ public class TicketingController {
     }
 
     @GetMapping("/ticketing/entitlement-templates")
-    public ApiResponse<PageResponse<EntitlementTemplateRecord>> listEntitlementTemplates() {
+    public ApiResponse<PageResponse<EntitlementTemplateRecord>> listEntitlementTemplates(
+            @RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("ticket.entitlement.view");
-        return ApiResponse.ok(service.listEntitlementTemplates());
+        return ApiResponse.ok(service.listEntitlementTemplates(includeArchived));
+    }
+
+    @PostMapping("/ticketing/entitlement-templates/{id}/archive")
+    public ApiResponse<EntitlementTemplateRecord> archiveEntitlementTemplate(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid EntitlementTemplateArchiveRequest request) {
+        authorizationService.requirePermission("ticket.entitlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archiveEntitlementTemplate(id, request));
+    }
+
+    @PostMapping("/ticketing/entitlement-templates/{id}/unarchive")
+    public ApiResponse<EntitlementTemplateRecord> unarchiveEntitlementTemplate(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid EntitlementTemplateArchiveRequest request) {
+        authorizationService.requirePermission("ticket.entitlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.unarchiveEntitlementTemplate(id, request));
+    }
+
+    @PostMapping("/ticketing/entitlement-templates/{id}/delete-request")
+    public ApiResponse<EntitlementTemplateRecord> requestDeleteEntitlementTemplate(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid EntitlementTemplateDeleteRequest request) {
+        authorizationService.requirePermission("ticket.entitlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestDeleteEntitlementTemplate(id, request));
+    }
+
+    @PostMapping("/ticketing/entitlement-templates/{id}/delete-approve")
+    public ApiResponse<EntitlementTemplateDeleteDecision> approveDeleteEntitlementTemplate(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid EntitlementTemplateDeleteApprovalRequest request) {
+        authorizationService.requirePermission("ticket.entitlement.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveDeleteEntitlementTemplate(id, request));
     }
 
     @PostMapping("/ticketing/entitlement-templates")

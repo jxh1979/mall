@@ -32,8 +32,27 @@ public record EntitlementTemplateRecord(
         String exclusiveMerchantId,
         // 结算重构批3-6(用户2026-07-04)：购买/发放时是否要求拍脸照存档(全票种可配，游乐默认开=种子回填)。
         // 发放时复制到 issued_entitlements，为 true 时发放必须带人脸照 payload 否则拒 FACE_PHOTO_REQUIRED。放末位便于既有构造点追加。
-        boolean requireFacePhoto
+        boolean requireFacePhoto,
+        // 数据存档与审批后删除范式(V253,试点)。存档=软标记可恢复;删除=硬删走审批。
+        // archivedAt 非空=已存档;deleteStatus none|pending|approved。详见 docs/data-archive-delete-pattern-design-v0.1.md。
+        java.time.Instant archivedAt,
+        String archivedBy,
+        String deleteStatus,
+        String deleteRequestedBy,
+        java.time.Instant deleteRequestedAt,
+        String deleteReason
 ) {
+    // ponytail: V253 前的构造点(既有代码/测试)不带存档/删除字段,默认未存档 + delete_status=none。
+    //           避免为 6 个新字段改所有既有 17 参构造点;日后语义要变则删本构造让编译逼出所有点。
+    public EntitlementTemplateRecord(
+            String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status,
+            String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt,
+            String entitlementKind, Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId,
+            boolean requireFacePhoto) {
+        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
+                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow,
+                exclusiveMerchantId, requireFacePhoto, null, null, "none", null, null, null);
+    }
     // ponytail: 向后兼容构造——批3-2 前的调用点(测试)不带 consumptionWindow，默认 null(=判定层走现状 per_use)。
     //           避免为 1 个可空字段改既有构造点；日后默认语义要变则删本构造让编译逼出所有点。
     public EntitlementTemplateRecord(
@@ -61,5 +80,21 @@ public record EntitlementTemplateRecord(
         this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
                 barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow,
                 exclusiveMerchantId, false);
+    }
+
+    // --- V253 存档/删除范式：不可变 record 的字段更新辅助（避免 23 参构造散落业务代码）。 ---
+    public EntitlementTemplateRecord withArchive(java.time.Instant archivedAt, String archivedBy, Instant updatedAt) {
+        return new EntitlementTemplateRecord(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status,
+                merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
+                consumptionWindow, exclusiveMerchantId, requireFacePhoto,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+    }
+
+    public EntitlementTemplateRecord withDelete(String deleteStatus, String deleteRequestedBy,
+            java.time.Instant deleteRequestedAt, String deleteReason, Instant updatedAt) {
+        return new EntitlementTemplateRecord(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status,
+                merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
+                consumptionWindow, exclusiveMerchantId, requireFacePhoto,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
     }
 }
