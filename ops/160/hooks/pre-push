@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# 2026-07-05:禁止直推 main(补 GitHub 私有库免费版无分支保护的缺口)。
+# 正道:推 feature 分支 → 开 PR → 独立复核 + predeploy 门禁绿 → gh pr merge。
+# 紧急直推需显式 ALLOW_MAIN_PUSH=1 覆盖(留痕:请在 PR/提交说明记录原因)。
+while read -r localref localsha remoteref remotesha; do
+  if [[ "$remoteref" == "refs/heads/main" ]]; then
+    if [[ "${ALLOW_MAIN_PUSH:-0}" != "1" ]]; then
+      echo "[pre-push] 拒绝直推 main。请走 PR 流程(ops/160/propose-change.sh)。" >&2
+      echo "[pre-push] 确需直推:ALLOW_MAIN_PUSH=1 git push ...(并在 PR/说明记录原因)。" >&2
+      exit 1
+    fi
+    echo "[pre-push] ALLOW_MAIN_PUSH=1 覆盖:放行直推 main(已留痕提醒)。" >&2
+  fi
+done
+exit 0

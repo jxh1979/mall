@@ -186,6 +186,13 @@ release_dir="$BASE_DIR/releases/$release_id"
 echo "[$(date -Iseconds)] deploy api start release=$release_id stack=java-spring-boot" | tee -a "$LOG_DIR/deploy.log"
 
 cd "$PROJECT_DIR"
+# 部署前治理门禁(2026-07-05):delivery-gates 快子集绿才允许部署;红即中止不碰生产。
+# 覆盖 codex 审计暴露的漂移类(scope 登记/安全基线/后台矩阵/契约/阻断台账),静态分析无需 DB。
+echo "[$(date -Iseconds)] pre-deploy governance gates: npm run verify:predeploy" | tee -a "$LOG_DIR/deploy.log"
+if ! npm run verify:predeploy; then
+  echo "[$(date -Iseconds)] DEPLOY ABORTED: delivery-gates red (verify:predeploy failed). Fix governance drift before deploying." | tee -a "$LOG_DIR/deploy.log" >&2
+  exit 1
+fi
 npm run verify:backend-env
 node tools/run-backend-maven.mjs clean package
 

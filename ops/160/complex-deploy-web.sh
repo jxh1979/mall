@@ -14,6 +14,12 @@ release_dir="/opt/complex/web/releases/$release_id"
 echo "[$(date -Iseconds)] deploy web start release=$release_id" | tee -a "$LOG_DIR/deploy.log"
 
 cd "$PROJECT_DIR"
+# 部署前治理门禁(2026-07-05):同 deploy-api,delivery-gates 快子集绿才允许部署。
+echo "[$(date -Iseconds)] pre-deploy governance gates: npm run verify:predeploy" | tee -a "$LOG_DIR/deploy.log"
+if ! npm run verify:predeploy; then
+  echo "[$(date -Iseconds)] DEPLOY ABORTED: delivery-gates red (verify:predeploy failed)." | tee -a "$LOG_DIR/deploy.log" >&2
+  exit 1
+fi
 npm run build --workspace apps/web
 
 mkdir -p "$release_dir"
