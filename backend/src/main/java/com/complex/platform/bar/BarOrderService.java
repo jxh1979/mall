@@ -42,6 +42,11 @@ public class BarOrderService {
     @org.springframework.beans.factory.annotation.Value("${bar.scan_order.enabled:false}")
     boolean scanOrderEnabled;
 
+    // 图形点单套餐下单（V257）：注入 POS 目录仓以按 combo_id 展开套餐为 SKU 明细。
+    // 字段注入同 scanOrderEnabled，免改两处构造器与既有测试调用点。
+    @Autowired
+    JdbcBarPosCatalogRepository catalogRepository;
+
     @Autowired
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
             AuditEventService auditEventService, TraceabilityService traceabilityService,
@@ -134,7 +139,22 @@ public class BarOrderService {
         long total = 0L;
         Instant now = Instant.now();
         List<BarOrderItemRecord> orderItems = new ArrayList<>();
+        int lineSeq = 0;
         for (Map<String, Object> item : requireItems(actual.items(), "items")) {
+            String comboId = optionalItemText(item, "combo_id", "comboId");
+            if (comboId != null) {
+                // 套餐下单（V257）：展开为组合内 SKU 明细，客单价按套餐售价整体拆分到各 SKU
+                //（最大余数法保证拆分后合计=套餐售价×份数，不多不少）；每 SKU 仍落独立 order_item，
+                // 平台↔酒吧结算与提成扣减照既有按 SKU 内部结算价的逻辑自然生效（见 BarBillingService）。
+                // ponytail: 套餐层 internal_settlement_price_cent 目前无独立读取口径（结算按 SKU 内部价逐项派生），
+                // 故不额外记套餐级结算行；若日后要按套餐口径对账，再加 combo_id 列与读取路径。
+                for (BarOrderItemRecord expanded : expandCombo(comboId, item, merchantId, barId, orderId, lineSeq, now)) {
+                    total += expanded.amountCent();
+                    orderItems.add(expanded);
+                }
+                lineSeq++;
+                continue;
+            }
             String productId = requireItemText(item, "product_id", "sku_id", "skuId");
             BarProductRecord product = repository.findProductById(productId)
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
@@ -147,7 +167,7 @@ public class BarOrderService {
             long amount = gift ? 0L : product.priceCent() * quantity;
             total += amount;
             orderItems.add(new BarOrderItemRecord(
-                    "item_" + slug(orderId + ":" + product.id()),
+                    "item_" + slug(orderId + ":" + (lineSeq++) + ":" + product.id()),
                     orderId,
                     product.id(),
                     product.productName(),
@@ -193,6 +213,115 @@ public class BarOrderService {
                 now
         ));
         return order;
+    }
+
+
+    /**
+     * 套餐下单展开（V257 图形点单 POS）：把一份套餐(comboId × 份数)展开为组合内各 SKU 的 order_item。
+     * 定价：套餐售价 priceCent × 份数为本套餐对客总额，按各 SKU「售价×数量」的权重最大余数法拆分到明细，
+     * 拆分合计严格等于套餐总额（每分钱都落到某一明细，避免四舍五入丢分）。整份套餐不支持赠送(is_gift)——
+     * 套餐本身即定价组合，赠送走单品赠菜。SKU 归属商户/售卖状态/跨商户防护与单品下单一致。
+     */
+    private List<BarOrderItemRecord> expandCombo(String comboId, Map<String, Object> item, String merchantId,
+            String barId, String orderId, int lineSeq, Instant now) {
+        int comboQty = requirePositiveItemQuantity(item, "quantity");
+        BarComboRecord combo = catalogRepository.findCombo(comboId)
+                .orElseThrow(() -> ApiException.notFound("BAR_COMBO_NOT_FOUND", "bar combo not found"));
+        requireResourceInOrderMerchant(merchantId, combo.merchantId(), "bar combo");
+        if (!barId.equals(combo.barId())) {
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "combo is not in this bar");
+        }
+        if (!"active".equals(combo.status())) {
+            throw ApiException.conflict("BAR_COMBO_NOT_SELLABLE", "bar combo is not sellable");
+        }
+        if (combo.items() == null || combo.items().isEmpty()) {
+            throw ApiException.conflict("BAR_COMBO_EMPTY", "bar combo has no items");
+        }
+        long comboTotal = combo.priceCent() * comboQty;
+        // 各 SKU 权重 = 售价 × 数量；权重全 0（都免费/未定价）时退化为按数量均摊。
+        List<BarProductRecord> products = new ArrayList<>();
+        List<Integer> lineQty = new ArrayList<>();
+        List<Long> weights = new ArrayList<>();
+        long weightSum = 0L;
+        for (BarComboItemRecord ci : combo.items()) {
+            BarProductRecord product = repository.findProductById(ci.productId())
+                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "combo product not found"));
+            requireResourceInOrderMerchant(merchantId, product.merchantId(), "bar product");
+            requireProductSellable(product);
+            int qty = ci.quantity() * comboQty;
+            long w = product.priceCent() * ci.quantity();
+            products.add(product);
+            lineQty.add(qty);
+            weights.add(w);
+            weightSum += w;
+        }
+        if (weightSum <= 0L) {
+            long qtySum = 0L;
+            for (int q : lineQty) {
+                qtySum += q;
+            }
+            weightSum = qtySum;
+            weights.clear();
+            for (int q : lineQty) {
+                weights.add((long) q);
+            }
+        }
+        // 最大余数法：先按权重取整分配，余额逐分派给余数最大的明细。
+        long[] alloc = new long[products.size()];
+        long[] remainder = new long[products.size()];
+        long allocated = 0L;
+        for (int i = 0; i < products.size(); i++) {
+            long numerator = comboTotal * weights.get(i);
+            alloc[i] = weightSum == 0 ? 0L : numerator / weightSum;
+            remainder[i] = weightSum == 0 ? 0L : numerator % weightSum;
+            allocated += alloc[i];
+        }
+        long leftover = comboTotal - allocated;
+        // 把 leftover 分（每次 1 分）派给当前余数最大的明细，直到派完。
+        while (leftover > 0) {
+            int best = 0;
+            for (int i = 1; i < products.size(); i++) {
+                if (remainder[i] > remainder[best]) {
+                    best = i;
+                }
+            }
+            alloc[best] += 1;
+            remainder[best] = -1; // 已补过分的明细不再优先，避免同一行反复补造成偏斜
+            leftover--;
+        }
+        List<BarOrderItemRecord> expanded = new ArrayList<>();
+        for (int i = 0; i < products.size(); i++) {
+            BarProductRecord product = products.get(i);
+            int qty = lineQty.get(i);
+            long amount = alloc[i];
+            long unit = qty == 0 ? 0L : amount / qty;
+            expanded.add(new BarOrderItemRecord(
+                    "item_" + slug(orderId + ":" + lineSeq + ":combo:" + comboId + ":" + product.id()),
+                    orderId,
+                    product.id(),
+                    product.productName(),
+                    qty,
+                    unit,
+                    amount,
+                    "pending",
+                    now,
+                    now,
+                    null,
+                    0L,
+                    false
+            ));
+        }
+        return expanded;
+    }
+
+    private static String optionalItemText(Map<String, Object> item, String... names) {
+        for (String name : names) {
+            Object value = item.get(name);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString().trim();
+            }
+        }
+        return null;
     }
 
     /**

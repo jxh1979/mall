@@ -390,6 +390,27 @@ class TerminalWorkflow(
     return order
   }
 
+  /** 由订单生成账单（按桌整单结账前置步）。 */
+  fun createBarOrderBill(orderId: String): BarBillRecord {
+    requireOnline()
+    val bill = api.createBarOrderBill(
+      orderId,
+      BarOrderBillCreateRequest(
+        idempotencyKey = stableIdempotencyKey("bar-order-bill", orderId),
+        operatorNote = "Android terminal bar order bill",
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.bar.bill.created",
+        summary = "酒吧终端由订单生成账单",
+        payload = mapOf("orderId" to orderId, "billId" to bill.id),
+        occurredAt = nowIso(),
+      ),
+    )
+    return bill
+  }
+
   fun createBarPaymentIntent(
     billId: String,
     amountCent: Long,

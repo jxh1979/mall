@@ -6,6 +6,11 @@ import com.google.zxing.integration.android.IntentIntegrator
 import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
+import android.content.Context
+import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.widget.ImageView
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -38,6 +43,12 @@ import kotlinx.serialization.json.JsonPrimitive
 class MainActivity : Activity() {
 
   private val store = InMemoryLocalStore()
+  // 平板 POS 绑定持久化：首次配置本机所属酒吧后写入，之后不再追问（跨启动保留）。
+  private val posPrefs: SharedPreferences by lazy { getSharedPreferences("bar_pos", Context.MODE_PRIVATE) }
+  private var posBarId: String? = null
+  // 当前桌台 + 购物车（本 Activity 会话态；下单成功清空）。
+  private val posCart = LinkedHashMap<String, PosCartLine>()
+  private var posTable: BarTableAvailabilityRow? = null
   // 4.2 allowed hosts 生效：COMPLEX_API_ALLOWED_HOSTS 构建白名单在客户端入口强制校验。
   private val api: TerminalApiClient by lazy {
     TerminalApiClient(
@@ -224,6 +235,7 @@ class MainActivity : Activity() {
       primaryButton("门票/权益核销") { showTicketVerify() },
       primaryButton("游乐核销") { showAmusementVerify() },
       primaryButton("酒吧点酒下单 / 支付") { showBarOrder() },
+      primaryButton("平板点单 POS（图形）") { showPosEntry() },
       primaryButton("游乐检修提交 / 主管确认") { showMaintenance() },
       secondaryButton("同步待提交任务") { syncTasksAction(info) },
       secondaryButton("员工设备凭证") { showStaffDevice() },
@@ -1203,6 +1215,334 @@ class MainActivity : Activity() {
       children = listOf(status, name, projectId, submitButton, secondaryButton("返回首页") { showHome() }),
     ))
   }
+
+  // ===========================================================================
+  // 平板图形化点单 POS：① 首次绑定本机酒吧 → ② 选桌 → ③ 分类目录/SKU 卡片/套餐 →
+  //   ④ 购物车加减 → ⑤ 下单(挂桌台) → ⑥ 由订单生成账单 → 按桌结算。
+  // 图片走鉴权 GET（Bearer），异步加载解码为 Bitmap。首次绑定后 bar_id 本地持久化不再追问。
+  // ===========================================================================
+
+  /** 购物车行：SKU 用 productId、套餐用 comboId（二选一），name/priceCent 展示，qty 数量。 */
+  private data class PosCartLine(
+    val productId: String?,
+    val comboId: String?,
+    val name: String,
+    val unitPriceCent: Long,
+    var qty: Int,
+  )
+
+  private fun showPosEntry() {
+    if (store.session == null) { showLogin(); return }
+    posBarId = posPrefs.getString("bar_id", null)?.ifBlank { null }
+    if (posBarId == null) {
+      showPosSetup()
+    } else {
+      showPosTables()
+    }
+  }
+
+  /** ① 首次配置本机所属酒吧并绑定设备（terminal_type=bar_pos）。绑定成功后本地持久化 bar_id。 */
+  private fun showPosSetup() {
+    val barId = editText("本机所属酒吧 bar_id").apply {
+      posPrefs.getString("bar_id", null)?.let { setText(it) }
+    }
+    val deviceId = editText("设备编号 device_id").apply { setText("BARPOS-${System.currentTimeMillis()}") }
+    val status = statusText("首次使用：把这台平板绑定到某个酒吧。绑定后进入图形点单，之后不再询问。")
+    val bindButton = primaryButton("绑定并进入点单") {
+      val bar = barId.text.toString().trim()
+      val dev = deviceId.text.toString().trim()
+      if (bar.isEmpty()) { status.text = "请填写酒吧 bar_id"; return@primaryButton }
+      if (dev.isEmpty()) { status.text = "请填写设备编号"; return@primaryButton }
+      status.text = "正在绑定…"
+      runBackground(
+        action = {
+          workflow.bindDevice(
+            BindDeviceRequest(
+              deviceId = dev,
+              terminalType = "bar_pos",
+              bindingScope = "space",
+              boundSpaceId = bar,
+            ),
+          )
+        },
+        onSuccess = { binding ->
+          posPrefs.edit().putString("bar_id", bar).apply()
+          posBarId = bar
+          status.text = "绑定完成：${binding.deviceCode}（${binding.status}）"
+          showPosTables()
+        },
+        onError = { status.text = "绑定失败：${friendly(it)}" },
+      )
+    }
+    setContentView(
+      screen(
+        title = "平板 POS · 绑定酒吧",
+        children = listOf(status, barId, deviceId, bindButton, secondaryButton("返回首页") { showHome() }),
+      ),
+    )
+  }
+
+  /** ② 选桌：图形化桌位（可点方块，显示桌号/容纳/占用状态）。 */
+  private fun showPosTables() {
+    val bar = posBarId
+    if (bar == null) { showPosSetup(); return }
+    val status = statusText("酒吧 $bar · 请选择桌台开始点单")
+    val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    setContentView(
+      screen(
+        title = "平板 POS · 选桌",
+        children = listOf(status, grid,
+          secondaryButton("刷新桌台") { loadPosTables(bar, grid, status) },
+          secondaryButton("重设本机酒吧") { showPosSetup() },
+          secondaryButton("返回首页") { showHome() }),
+        root = true,
+      ),
+    )
+    loadPosTables(bar, grid, status)
+  }
+
+  private fun loadPosTables(bar: String, grid: LinearLayout, status: TextView) {
+    status.text = "正在加载桌台…"
+    runBackground(
+      action = { api.listBarTableAvailability().filter { it.barId == null || it.barId == bar } },
+      onSuccess = { tables ->
+        grid.removeAllViews()
+        if (tables.isEmpty()) { grid.addView(statusText("暂无桌台（可先在后台配置）")); status.text = "无桌台"; return@runBackground }
+        status.text = "共 ${tables.size} 桌，点选进入点单"
+        var row: LinearLayout? = null
+        tables.forEachIndexed { i, t ->
+          if (i % 2 == 0) {
+            row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            grid.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+          }
+          val occupied = t.reserved == true || (t.status != null && t.status != "available" && t.status != "free")
+          val tile = TextView(this).apply {
+            text = buildString {
+              append(t.tableName ?: t.tableCode ?: t.id ?: "桌")
+              t.capacity?.let { append("\n可坐 ").append(it) }
+              append('\n').append(if (occupied) "占用/预留" else "空闲")
+            }
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(20), dp(12), dp(20))
+            setTextColor(Color.parseColor(if (occupied) "#8a5a00" else "#1f5f2f"))
+            setBackgroundColor(Color.parseColor(if (occupied) "#fff3e0" else "#e6f6ea"))
+            isClickable = true
+            setOnClickListener {
+              posTable = t
+              posCart.clear()
+              showPosCatalog()
+            }
+          }
+          row!!.addView(tile, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = if (i % 2 == 1) dp(8) else 0 })
+        }
+      },
+      onError = { status.text = "加载桌台失败：${friendly(it)}" },
+    )
+  }
+
+  /** ③④ 分类目录 + SKU/套餐卡片 + 购物车。分类横向切换，卡片图片异步鉴权加载。 */
+  private fun showPosCatalog() {
+    val bar = posBarId ?: return
+    val table = posTable
+    val tableLabel = table?.tableName ?: table?.tableCode ?: table?.id ?: "-"
+    val status = statusText("桌台 $tableLabel · 选择商品加入本桌订单")
+    val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+    val tabScroll = android.widget.HorizontalScrollView(this).apply { addView(tabs) }
+    val cardsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    val cartSummary = statusText("购物车：空")
+    val submitButton = primaryButton("下单（挂本桌）") { submitPosOrder(status) }
+
+    fun refreshCart() {
+      if (posCart.isEmpty()) { cartSummary.text = "购物车：空"; return }
+      val total = posCart.values.sumOf { it.unitPriceCent * it.qty }
+      cartSummary.text = buildString {
+        append("购物车合计 ¥").append("%.2f".format(total / 100.0)).append('\n')
+        posCart.values.forEach { append("· ").append(it.name).append(" ×").append(it.qty).append('\n') }
+      }
+    }
+
+    fun card(name: String, priceCent: Long, imageUrl: String?, soldOut: Boolean, cartKey: String, mk: () -> PosCartLine): View {
+      val box = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        setBackgroundColor(Color.parseColor("#f7f8fa"))
+        gravity = Gravity.CENTER_VERTICAL
+      }
+      val img = ImageView(this).apply {
+        setBackgroundColor(Color.parseColor("#e3e6ea"))
+        scaleType = ImageView.ScaleType.CENTER_CROP
+      }
+      box.addView(img, LinearLayout.LayoutParams(dp(64), dp(64)))
+      val text = TextView(this).apply {
+        this.text = buildString {
+          append(name).append('\n').append("¥").append("%.2f".format(priceCent / 100.0))
+          if (soldOut) append("  [沽清]")
+        }
+        textSize = 15f
+        setTextColor(Color.parseColor("#1f2329"))
+        setPadding(dp(12), 0, dp(12), 0)
+      }
+      box.addView(text, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+      val add = primaryButton(if (soldOut) "沽清" else "加入") {
+        val line = posCart.getOrPut(cartKey) { mk() }
+        line.qty += 1
+        refreshCart()
+      }
+      add.isEnabled = !soldOut
+      box.addView(add)
+      // 异步鉴权加载图片
+      if (imageUrl != null && imageUrl.isNotBlank()) {
+        runBackground(
+          action = { runCatching { api.catalogImageBytes(imageUrl) }.getOrNull() },
+          onSuccess = { bytes ->
+            if (bytes != null) {
+              val bmp: Bitmap? = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
+              if (bmp != null) img.setImageBitmap(bmp)
+            }
+          },
+          onError = { /* 图片失败静默降级为占位灰块 */ },
+        )
+      }
+      return box
+    }
+
+    fun loadProducts(categoryId: String?) {
+      cardsContainer.removeAllViews()
+      cardsContainer.addView(statusText("正在加载商品…"))
+      runBackground(
+        action = { api.listBarCatalogProducts(bar, categoryId) },
+        onSuccess = { products ->
+          cardsContainer.removeAllViews()
+          if (products.isEmpty()) { cardsContainer.addView(statusText("该分类暂无商品")) }
+          products.forEach { p ->
+            cardsContainer.addView(
+              card(p.productName, p.priceCent, p.imageUrl, p.soldOut, "sku:${p.id}") {
+                PosCartLine(productId = p.id, comboId = null, name = p.productName, unitPriceCent = p.priceCent, qty = 0)
+              },
+              LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) },
+            )
+          }
+        },
+        onError = { cardsContainer.removeAllViews(); cardsContainer.addView(statusText("加载商品失败：${friendly(it)}")) },
+      )
+    }
+
+    fun loadCombos() {
+      cardsContainer.removeAllViews()
+      cardsContainer.addView(statusText("正在加载套餐…"))
+      runBackground(
+        action = { api.listBarCombos(bar) },
+        onSuccess = { combos ->
+          cardsContainer.removeAllViews()
+          if (combos.isEmpty()) { cardsContainer.addView(statusText("暂无套餐")) }
+          combos.forEach { c ->
+            val itemsDesc = c.items.joinToString("、") { "${it.productName ?: it.productId}×${it.quantity}" }
+            cardsContainer.addView(
+              card("${c.comboName}（含 $itemsDesc）", c.priceCent, c.imageUrl, c.status != null && c.status != "active", "combo:${c.id}") {
+                PosCartLine(productId = null, comboId = c.id, name = c.comboName, unitPriceCent = c.priceCent, qty = 0)
+              },
+              LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) },
+            )
+          }
+        },
+        onError = { cardsContainer.removeAllViews(); cardsContainer.addView(statusText("加载套餐失败：${friendly(it)}")) },
+      )
+    }
+
+    // 分类标签：动态拉取 + 固定「套餐」页签。
+    runBackground(
+      action = { api.listBarCategories(bar) },
+      onSuccess = { cats ->
+        tabs.removeAllViews()
+        fun tab(label: String, onPick: () -> Unit) {
+          tabs.addView(secondaryButton(label) { onPick() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) })
+        }
+        tab("全部") { loadProducts(null) }
+        cats.sortedBy { it.sortOrder }.forEach { c -> tab(c.categoryName) { loadProducts(c.id) } }
+        tab("套餐") { loadCombos() }
+        loadProducts(null)
+      },
+      onError = { status.text = "加载分类失败：${friendly(it)}"; loadProducts(null) },
+    )
+
+    setContentView(
+      screen(
+        title = "平板 POS · 点单",
+        children = listOf(status, tabScroll, cardsContainer, cartSummary, submitButton,
+          secondaryButton("清空购物车") { posCart.clear(); refreshCart() },
+          secondaryButton("返回选桌") { showPosTables() }),
+      ),
+    )
+  }
+
+  /** ⑤ 下单：购物车 → items（SKU=product_id、套餐=combo_id）→ createBarOrder 挂当前桌。 */
+  private fun submitPosOrder(status: TextView) {
+    val bar = posBarId ?: return
+    val table = posTable
+    if (posCart.isEmpty()) { status.text = "购物车为空，请先加入商品"; return }
+    val items: List<Map<String, String>> = posCart.values.filter { it.qty > 0 }.map { line ->
+      if (line.comboId != null) mapOf("combo_id" to line.comboId, "quantity" to line.qty.toString())
+      else mapOf("product_id" to (line.productId ?: ""), "quantity" to line.qty.toString())
+    }
+    status.text = "正在下单…"
+    runBackground(
+      action = { workflow.createBarOrder(barId = bar, items = items, tableId = table?.id) },
+      onSuccess = { order ->
+        posCart.clear()
+        showPosCheckout(order)
+      },
+      onError = { status.text = "下单失败：${friendly(it)}" },
+    )
+  }
+
+  /** ⑥ 按桌结账：由订单生成账单 → 展示应收（只读）→ 选渠道 → 结算。 */
+  private fun showPosCheckout(order: BarOrderRecord) {
+    val cents = order.totalAmountCent
+    val status = statusText("订单 ${order.id} 已生成，合计 ¥${"%.2f".format(cents / 100.0)}\n正在生成账单…")
+    val wechatRadio = android.widget.RadioButton(this).apply { text = "微信 wechat"; id = View.generateViewId() }
+    val alipayRadio = android.widget.RadioButton(this).apply { text = "支付宝 alipay"; id = View.generateViewId() }
+    val channel = android.widget.RadioGroup(this).apply {
+      orientation = LinearLayout.HORIZONTAL; addView(wechatRadio); addView(alipayRadio); check(wechatRadio.id)
+    }
+    fun selectedChannel(): String = if (alipayRadio.isChecked) "alipay" else "wechat"
+    var billId: String? = null
+    val settleButton = primaryButton("整桌结算") {
+      val bill = billId
+      if (bill == null) { status.text = "账单尚未生成，请稍候或返回重试"; return@primaryButton }
+      val ch = selectedChannel()
+      confirmThen(
+        title = "整桌结算",
+        message = "将按 ¥${"%.2f".format(cents / 100.0)}（渠道 $ch）结算本桌账单 $bill。\n结算即确认收款完成、账单关闭，不可撤销。",
+      ) {
+        status.text = "正在结算…"
+        runBackground(
+          action = { workflow.settleBarBill(bill, cents, ch) },
+          onSuccess = { b -> status.text = "结算完成：账单 ${b.id}\n支付：${b.paymentStatus ?: "-"}，结算：${b.settlementStatus ?: "-"}" },
+          onError = { status.text = "结算失败：${friendly(it)}" },
+        )
+      }
+    }
+    setContentView(
+      screen(
+        title = "平板 POS · 结账",
+        children = listOf(status, statusField(cents), channel, settleButton,
+          secondaryButton("返回选桌") { showPosTables() }, secondaryButton("返回首页") { showHome() }),
+      ),
+    )
+    // 生成账单
+    runBackground(
+      action = { workflow.createBarOrderBill(order.id) },
+      onSuccess = { b ->
+        billId = b.id
+        status.text = "订单 ${order.id}\n账单 ${b.id} 已生成，应收 ¥${"%.2f".format(cents / 100.0)}\n引导顾客扫码支付后点「整桌结算」。"
+      },
+      onError = { status.text = "生成账单失败：${friendly(it)}（可返回选桌重试）" },
+    )
+  }
+
+  private fun statusField(cents: Long): TextView =
+    statusText("应收金额：¥${"%.2f".format(cents / 100.0)}（按订单金额结算，不可修改）")
 
   private fun screen(title: String, children: List<View>, root: Boolean = false): View {
     onRootScreen = root
