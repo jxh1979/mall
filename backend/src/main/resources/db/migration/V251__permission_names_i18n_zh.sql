@@ -170,7 +170,7 @@ UPDATE permissions SET permission_name = '查看指派设施工单' WHERE permis
 UPDATE permissions SET permission_name = '导出应收应付台账快照(敏感资金流)' WHERE permission_code = 'finance.ar_ap.export';
 UPDATE permissions SET permission_name = '管理应收应付台账项' WHERE permission_code = 'finance.ar_ap.manage';
 UPDATE permissions SET permission_name = '查看应收应付台账项' WHERE permission_code = 'finance.ar_ap.view';
-UPDATE permissions SET permission_name = '分摊公共区域维护费' WHERE permission_code = 'finance.cam.allocate';
+UPDATE permissions SET permission_name = '分摊公区维护费' WHERE permission_code = 'finance.cam.allocate';
 UPDATE permissions SET permission_name = '结算年度公区维护费调整' WHERE permission_code = 'finance.cam.trueup';
 UPDATE permissions SET permission_name = '锁定财务日结' WHERE permission_code = 'finance.daily_close.lock';
 UPDATE permissions SET permission_name = '管理财务日结汇总' WHERE permission_code = 'finance.daily_close.manage';
@@ -272,7 +272,7 @@ UPDATE permissions SET permission_name = '导出商户准入审计轨迹' WHERE 
 UPDATE permissions SET permission_name = '配置合同审批流(阶段/并行)' WHERE permission_code = 'contract.approval.flow.manage';
 UPDATE permissions SET permission_name = '审批合同(业务审核)' WHERE permission_code = 'contract.approve.business';
 UPDATE permissions SET permission_name = '审批合同(财务审核)' WHERE permission_code = 'contract.approve.finance';
-UPDATE permissions SET permission_name = '审批合同(GM终审)' WHERE permission_code = 'contract.approve.gm';
+UPDATE permissions SET permission_name = '审批合同(总经理终审)' WHERE permission_code = 'contract.approve.gm';
 UPDATE permissions SET permission_name = '审批合同(法务审核)' WHERE permission_code = 'contract.approve.legal';
 UPDATE permissions SET permission_name = '发起合同变更(6类，走审批)' WHERE permission_code = 'contract.change.manage';
 UPDATE permissions SET permission_name = '起草/编辑合同条款' WHERE permission_code = 'contract.draft.manage';
