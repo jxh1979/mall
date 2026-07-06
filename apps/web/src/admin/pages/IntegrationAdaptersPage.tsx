@@ -39,6 +39,24 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
     setActionResult({ action: "adapter_mock_test", status: "mock_passed", result });
   }
 
+  // 适配器类型（后端固定枚举，DB CHECK 约束）→ 中文业务名，展示层翻译，接口仍用原码。
+  const ADAPTER_TYPE_LABELS: Record<string, string> = {
+    payment: "支付",
+    ticket_channel: "票务渠道",
+    face_age: "人脸年龄核验",
+    wecom: "企业微信",
+    robot: "机器人",
+    video: "视频",
+    device: "设备",
+    retail: "零售",
+    catering: "餐饮",
+    reservation_resource: "预定资源",
+  };
+  function adapterTypeLabel(code?: string) {
+    if (!code) return "—";
+    return ADAPTER_TYPE_LABELS[code] ?? code;
+  }
+
   function readyLabel(ready?: boolean) {
     return ready ? "已就绪" : "未就绪";
   }
@@ -48,7 +66,7 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
       title: `适配器明细 · ${row.providerCode ?? row.id}`,
       fields: [
         { label: "供应商", value: row.providerCode ?? "—" },
-        { label: "适配器类型", value: row.adapterType ?? "—" },
+        { label: "适配器类型", value: adapterTypeLabel(row.adapterType) },
         { label: "生产就绪", value: readyLabel(row.productionReady) },
         { label: "凭证引用", value: row.credentialSecretRef ?? row.credentialRef ?? "—" },
         { label: "适配器编号", value: row.id },
@@ -74,7 +92,7 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
                 onClick={() => openAdapterDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAdapterDetail(row); } }}>
                 <td>{row.providerCode}</td>
-                <td>{row.adapterType}</td>
+                <td title={row.adapterType ?? ""}>{adapterTypeLabel(row.adapterType)}</td>
                 <td>{readyLabel(row.productionReady)}</td>
               </tr>
             ))}</tbody>
