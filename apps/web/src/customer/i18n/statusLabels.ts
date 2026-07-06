@@ -188,8 +188,6 @@ const STATUS_LABELS: Record<string, string> = {
   ride: "游乐项目",
   gift_drink: "赠饮",
   drink: "酒水",
-  discount_rate: "折扣",
-  dining_exchange: "餐饮兑换",
   admission: "入场资格",
   // 退款自动规则类型
   expired_unused: "到期未用",

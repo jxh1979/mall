@@ -10,9 +10,11 @@ import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDra
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
-// 组合式配置策略（用户 2026-07-06 拍板）：一张通票 = 组合多个权益绑定（跨酒吧/游乐/餐饮），
+// 组合式配置策略（用户 2026-07-06 拍板）：一张通票 = 组合多个权益绑定（跨酒吧/游乐），
 // 前端一次性编排既有端点完成：createEntitlementTemplate → bindTicketTypeEntitlement，
 // 游乐额外 POST /amusement/projects/{id}/entitlements（收紧核销绑定）。零新增后端端点/迁移。
+// ponytail: 餐饮兑换/折扣本轮不做——discount_rate/dining_exchange 权益会被通用发放+核销路当成面值记账，
+//   真正的折扣核销逻辑与结算口径（归商户/进池/平台留存）是产品决策，待拍板后单独做。
 type TicketTypeRow = {
   id: string;
   ticketName: string;
@@ -56,15 +58,9 @@ const BAR_ENTITLEMENT_KINDS = [
   { value: "gift_drink", label: "酒水兑换" },
   { value: "admission", label: "入场资格" },
 ];
-// 餐饮模式：dining_exchange=餐饮兑换（按面值/次数），discount_rate=餐饮折扣（按折扣率）。
-const DINING_MODES = [
-  { value: "dining_exchange", label: "餐饮兑换" },
-  { value: "discount_rate", label: "餐饮折扣" },
-];
 
-// 组合表单里各类可编辑行。
+// 组合表单里的酒吧权益行。
 type BarLine = { merchantId: string; kind: string; totalTimes: string; valueYuan: string };
-type DiningLine = { merchantId: string; mode: string; valueYuan: string; discount: string };
 
 function toRows<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
@@ -99,12 +95,14 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   // 区4 派生价规则
   const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "0.8", fixedYuan: "" });
 
-  // 组合式配置策略（新）：选一张通票 → 多选酒吧（每个配权益：兑换/次数/面值）+ 多选游乐设施 + 餐饮兑换/折扣行 → 一次性组合创建。
+  // 组合式配置策略（新）：选一张通票 → 多选酒吧（每个配权益：兑换/次数/面值）+ 多选游乐设施 → 一次性组合创建。
   const [comboTicketId, setComboTicketId] = React.useState("");
   const [barLines, setBarLines] = React.useState<BarLine[]>([]);
   const [selectedProjects, setSelectedProjects] = React.useState<Record<string, boolean>>({});
   const [projectTimes, setProjectTimes] = React.useState("1");
-  const [diningLines, setDiningLines] = React.useState<DiningLine[]>([]);
+  // 游乐权益也必须归属商户（后端 createEntitlementTemplate 强制 merchant_id 非空，否则结算成孤儿）。
+  // /amusement/projects 不返回项目所属商户（merchantId 被 @JsonIgnore），故此处让运营选一个归属商户，全部游乐权益用它。
+  const [amusementMerchantId, setAmusementMerchantId] = React.useState("");
   const [comboBusy, setComboBusy] = React.useState(false);
   const [comboError, setComboError] = React.useState("");
 
@@ -158,7 +156,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         api.get<unknown>("/api/v1/ticketing/ticket-types"),
         api.get<unknown>("/api/v1/ticketing/entitlement-templates"),
         api.get<unknown>("/api/v1/ticketing/price-rules"),
-        // 数据源（组合式配置多选）：商户（酒吧/餐饮）+ 游乐设施。读失败不阻断本页主体，降级为空列表。
+        // 数据源（组合式配置多选）：商户（酒吧）+ 游乐设施。读失败不阻断本页主体，降级为空列表。
         api.get<unknown>("/api/v1/platform/merchants").catch(() => ({ items: [] })),
         api.get<unknown>("/api/v1/amusement/projects").catch(() => ({ items: [] })),
       ]);
@@ -274,17 +272,14 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   function addBarLine() {
     setBarLines([...barLines, { merchantId: merchants[0]?.id ?? "", kind: "gift_drink", totalTimes: "1", valueYuan: "" }]);
   }
-  function addDiningLine() {
-    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", mode: "dining_exchange", valueYuan: "", discount: "0.8" }]);
-  }
 
-  // 创建单条权益模板并绑定到目标通票。返回模板 entitlementType（游乐用于额外绑定项目）。
+  // 创建单条权益模板并绑定到目标通票。merchantId 必填（后端强制）。
   async function createAndBind(payload: {
     name: string;
     entitlementType: string;
     totalTimes: number;
     valueCent: number | null;
-    merchantId?: string | null;
+    merchantId: string;
   }, ticketTypeId: string) {
     const tpl = await api.post<{ id: string }>("/api/v1/ticketing/entitlement-templates", {
       idempotency_key: crypto.randomUUID(),
@@ -293,7 +288,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       default_total_times: payload.totalTimes,
       default_value_cent: payload.valueCent,
       status: "active",
-      merchant_id: payload.merchantId ?? null,
+      merchant_id: payload.merchantId,
     });
     await api.post(`/api/v1/ticketing/ticket-types/${ticketTypeId}/entitlements`, {
       idempotency_key: crypto.randomUUID(),
@@ -310,8 +305,13 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       return;
     }
     const chosenProjects = projects.filter((p) => selectedProjects[p.id]);
-    if (barLines.length === 0 && chosenProjects.length === 0 && diningLines.length === 0) {
-      setComboError("至少选择一个酒吧权益、游乐设施或餐饮项。");
+    if (barLines.length === 0 && chosenProjects.length === 0) {
+      setComboError("至少选择一个酒吧权益或游乐设施。");
+      return;
+    }
+    // 游乐权益也须归属商户（后端强制），选了游乐就必须选归属商户。
+    if (chosenProjects.length > 0 && !amusementMerchantId) {
+      setComboError("已勾选游乐设施，请选择游乐权益的归属商户。");
       return;
     }
     setComboError("");
@@ -329,13 +329,14 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           merchantId: line.merchantId,
         }, comboTicketId);
       }
-      // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。
+      // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。归属商户用统一选择的 amusementMerchantId。
       for (const project of chosenProjects) {
         await createAndBind({
           name: `${project.projectName} · 游乐`,
           entitlementType: "amusement",
           totalTimes: Number(projectTimes) || 1,
           valueCent: null,
+          merchantId: amusementMerchantId,
         }, comboTicketId);
         // 项目↔权益类型绑定（V082）：配置后该项目核销收紧为「仅接受 amusement 类权益」。
         await api.post(`/api/v1/amusement/projects/${project.id}/entitlements`, {
@@ -343,33 +344,14 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           entitlement_type: "amusement",
         }).catch(() => undefined); // 已绑定（唯一键冲突）时忽略。
       }
-      // 餐饮兑换/折扣：兑换按面值/次数（dining_exchange），折扣按折扣率写入 default_value_cent（basis points，折扣率×10000）。
-      for (const line of diningLines) {
-        if (!line.merchantId) continue;
-        const isDiscount = line.mode === "discount_rate";
-        await createAndBind({
-          name: `${merchantName(line.merchantId)} · ${DINING_MODES.find((d) => d.value === line.mode)?.label ?? line.mode}`,
-          entitlementType: line.mode,
-          totalTimes: 1,
-          // 折扣：把折扣率存进面值字段（1 折=1000），核销端按 discount_rate 类型解读；兑换：面值元→分。
-          valueCent: isDiscount
-            ? Math.round((Number(line.discount) || 0) * 10000)
-            : line.valueYuan.trim()
-              ? Math.round(Number(line.valueYuan) * 100)
-              : null,
-          merchantId: line.merchantId,
-        }, comboTicketId);
-      }
       setActionResult({
         action: "pass_config_strategy_composed",
         ticketTypeId: comboTicketId,
         bars: barLines.length,
         amusementProjects: chosenProjects.length,
-        dining: diningLines.length,
       });
       setBarLines([]);
       setSelectedProjects({});
-      setDiningLines([]);
       reload();
     } catch (composeError) {
       setComboError(composeError instanceof Error ? composeError.message : "组合配置失败");
@@ -382,7 +364,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     <section data-testid="ticketing-policies-page">
       <AdminPageHeader
         title="票务策略"
-        description="票种/通票、权益、适用范围与派生价规则全部在此配置：先建票种并发布，再用「组合式配置策略」一次性给通票配好跨酒吧/游乐/餐饮的权益，最后配派生价（新人/学生/多人/渠道/会员）。"
+        description="票种/通票、权益、适用范围与派生价规则全部在此配置：先建票种并发布，再用「组合式配置策略」一次性给通票配好跨酒吧/游乐的权益，最后配派生价（新人/学生/多人/渠道/会员）。"
       />
 
       {focusObjectId && (
@@ -435,9 +417,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       </div>
       {error ? <div data-testid="ticket-policy-error" className="admin-inline-error">{error}</div> : null}
 
-      <h3>组合式配置策略（一次性给通票配跨酒吧/游乐/餐饮的权益）</h3>
+      <h3>组合式配置策略（一次性给通票配跨酒吧/游乐的权益）</h3>
       <div className="admin-preview">
-        选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施、加餐饮兑换或折扣，点「组合配置到通票」一次性写入。
+        选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施，点「组合配置到通票」一次性写入。
       </div>
       <div className="admin-inline-form" data-testid="pass-combo-form">
         <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => setComboTicketId(event.target.value)}>
@@ -487,42 +469,11 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           </label>
         ))}
         <input aria-label="游乐次数" type="number" min={1} value={projectTimes} onChange={(event) => setProjectTimes(event.target.value)} placeholder="游乐次数（每设施）" />
+        <select aria-label="游乐权益归属商户" data-testid="combo-amusement-merchant" value={amusementMerchantId} onChange={(event) => setAmusementMerchantId(event.target.value)}>
+          <option value="">游乐权益归属商户</option>
+          {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
+        </select>
       </div>
-
-      <h4>餐饮兑换 / 折扣（多选）</h4>
-      <div className="admin-table-scroll">
-        <table className="admin-table" data-testid="combo-dining-table">
-          <thead>
-            <tr><th>餐饮商户</th><th>模式</th><th>面值（元）/ 折扣率</th><th>操作</th></tr>
-          </thead>
-          <tbody>
-            {diningLines.map((line, index) => (
-              <tr key={index} data-testid={`combo-dining-line-${index}`}>
-                <td>
-                  <select aria-label="餐饮商户" value={line.merchantId} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, merchantId: event.target.value } : l))}>
-                    <option value="">选择商户</option>
-                    {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
-                  </select>
-                </td>
-                <td>
-                  <select aria-label="模式" value={line.mode} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, mode: event.target.value } : l))}>
-                    {DINING_MODES.map((d) => (<option key={d.value} value={d.value}>{d.label}</option>))}
-                  </select>
-                </td>
-                <td>
-                  {line.mode === "discount_rate" ? (
-                    <input aria-label="折扣率" type="number" min={0} max={1} step="0.05" value={line.discount} placeholder="0.8=8折" onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, discount: event.target.value } : l))} />
-                  ) : (
-                    <input aria-label="面值（元）" type="number" min={0} step="0.01" value={line.valueYuan} placeholder="面值（元）" onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, valueYuan: event.target.value } : l))} />
-                  )}
-                </td>
-                <td><button type="button" className="admin-secondary-button" onClick={() => setDiningLines(diningLines.filter((_, i) => i !== index))}>移除</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <button type="button" className="admin-secondary-button" data-testid="combo-add-dining" onClick={addDiningLine} disabled={merchants.length === 0}>+ 添加餐饮项</button>
 
       <div className="admin-form-row">
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="combo-submit" onClick={() => void submitCombo()} disabled={comboBusy}>
