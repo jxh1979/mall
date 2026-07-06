@@ -6,7 +6,7 @@
 ## 三道门禁
 1. **部署门禁(硬阻断,.160)**:`complex-deploy-api.sh`/`complex-deploy-web.sh` 在构建前跑 `npm run verify:predeploy`(delivery-gates 快子集,静态无需 DB);红即 `exit 1` 不碰生产。
 2. **本地 pre-push 钩子(.160)**:禁止 `git push ...:main`;正道走 feature 分支 + PR。紧急覆盖 `ALLOW_MAIN_PUSH=1`(须在 PR/说明记录原因)。
-3. **GitHub Actions(独立、隔离,当前未激活)**:模板在 `ops/ci/predeploy-gates.yml`——**放在 ops/ci/ 下 GitHub 不会执行它**,须手动复制到 `.github/workflows/`(需 workflow scope,见文末)才会在 PR/push 到 main 时跑 `verify:predeploy`。即便激活,私有库免费版也无法设 required check,只是可见信号 + 独立复现;硬阻断由第 1、2 道承担。
+3. **GitHub Actions(独立、隔离,✅已激活 2026-07-06)**:模板在 `ops/ci/predeploy-gates.yml`——**已复制到 `.github/workflows/predeploy-gates.yml`(用户已授权 workflow scope),现于 PR/push 到 main 时在 GitHub ubuntu runner 上跑 `verify:predeploy`。即便激活,私有库免费版也无法设 required check,只是可见信号 + 独立复现;硬阻断由第 1、2 道承担。
 
 ## 变更流程
 1. feature 分支上开发 + 提交。
@@ -33,7 +33,7 @@
 1. 部署硬闸:`complex-deploy-api/web.sh` 构建前跑 `verify:predeploy`,红即 exit 1。
 2. **部署脚本直接跑权威门禁数组**(codex 复核后从"解析 package.json"改为此):部署脚本内硬编码必需门禁列表并逐个 `npm run`,**不解析也不信任 package.json 的 verify:predeploy 串**。因此"把 verify:predeploy 抽空/设 `true`/惰性化(如 `\"true # 门禁名...\"`)"对部署无效——对抗自测证实:篡改后部署仍跑全部门禁。**仍非仓外强制**:能改本部署脚本(需 .160 shell)或 `tools/verify-*.mjs`(让门禁真跑但断言变 no-op)者仍可绕过。
 3. pre-push 钩子禁直推 main;`.github/CODEOWNERS` 标记强制点文件。
-4. GitHub Actions 门禁模板 `ops/ci/predeploy-gates.yml`(见下需手动激活)。
+4. GitHub Actions 门禁(`.github/workflows/predeploy-gates.yml`,✅已激活):PR 到 main 时 GitHub 侧独立跑 verify:predeploy,首跑已 SUCCESS。因私有免费版无法设 required check,当前为可见信号(非硬阻断合并)。
 
 **只有你(账号/基础设施权限)能做的 —— 我给不了,做完才算真闭合**:
 - **激活 GitHub Actions 门禁**(token 无 workflow scope,git push 与 Contents API 均被 404 拒):
