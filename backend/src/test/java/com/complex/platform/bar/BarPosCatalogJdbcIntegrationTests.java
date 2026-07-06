@@ -167,4 +167,38 @@ class BarPosCatalogJdbcIntegrationTests {
         assertThat(items).filteredOn(it -> it.productId().equals("product_combo_b"))
                 .first().extracting(BarOrderItemRecord::amountCent).isEqualTo(14000L);
     }
+    @Test
+    void comboOrderSplitsIndivisiblePriceByLargestRemainder() {
+        // 锁死最大余数法 leftover>0 分支:两等权 SKU、套餐价 10001 分不整除,
+        // 那一分落在第一明细 → 5001/5000,拆分合计严格 = 10001,不多不少。
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        Instant now = Instant.now();
+        String bar = "bar_pos_combo_rem";
+        BarProductRecord skuA = new BarProductRecord("product_rem_a", bar, null, "SKU甲", "spirit",
+                5000L, "CNY", null, null, false, "active", now, now, null, null, null);
+        BarProductRecord skuB = new BarProductRecord("product_rem_b", bar, null, "SKU乙", "soft",
+                5000L, "CNY", null, null, false, "active", now, now, null, null, null);
+        barRepository.saveProduct(skuA);
+        barRepository.saveProduct(skuB);
+        catalog.saveCombo(new BarComboRecord("barcombo_rem", bar, null, "等权不整除套餐",
+                10001L, null, null, "active", now, now,
+                List.of(new BarComboItemRecord("bci_rem_a", "barcombo_rem", "product_rem_a", "SKU甲", 1),
+                        new BarComboItemRecord("bci_rem_b", "barcombo_rem", "product_rem_b", "SKU乙", 1))));
+        barRepository.saveTable(new BarTableRecord("bartable_rem", bar, null, "T-REM", "余数桌",
+                "card_seat", 4, 0, 0L, "CNY", "active", now, now));
+
+        BarOrderRecord order = barOrderService.createOrder(new BarOrderRequest(
+                "combo-order-rem", null, List.of(), bar, "bartable_rem", null,
+                List.of(java.util.Map.of("combo_id", "barcombo_rem", "quantity", "1")),
+                null, List.of(), null));
+
+        assertThat(order.totalAmountCent()).isEqualTo(10001L);
+        List<BarOrderItemRecord> items = barRepository.listOrderItems(order.id());
+        long sum = items.stream().mapToLong(BarOrderItemRecord::amountCent).sum();
+        assertThat(sum).isEqualTo(10001L); // 守恒:每一分都落到某一明细
+        assertThat(items).filteredOn(it -> it.productId().equals("product_rem_a"))
+                .first().extracting(BarOrderItemRecord::amountCent).isEqualTo(5001L); // 余数落第一行
+        assertThat(items).filteredOn(it -> it.productId().equals("product_rem_b"))
+                .first().extracting(BarOrderItemRecord::amountCent).isEqualTo(5000L);
+    }
 }
