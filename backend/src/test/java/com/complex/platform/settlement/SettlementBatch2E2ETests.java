@@ -151,6 +151,14 @@ class SettlementBatch2E2ETests {
                 .hasMessageContaining("已过账");
         // 且已 settled 的 bill 与明细未被破坏(守卫在写前抛,事务回滚无副作用)。
         assertThat(bill(pid).get("status")).isEqualTo("settled");
+
+        // 复核补强:reversed(V224 CHECK 合法终结态,将来接冲正即可达)也必须 fail-closed 拒绝重结——
+        //   否则对已 reverse 的单重跑会删掉曾 posted 回填过 ar_ap_item_id 的明细→孤儿 AR/AP。旧的正向白名单会漏放它。
+        jdbcTemplate.update("UPDATE settlement_bills SET status = 'reversed' WHERE id = ?", billId);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> settlementService.settleMonth(pid, MONTH))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("不可重结");
+        assertThat(bill(pid).get("status")).isEqualTo("reversed");
         // 各明细均 posted + 回填 ar_ap_item_id。
         for (String m : new String[]{"bar1", "bar2", "bar3", "bar4"}) {
             assertThat(itemStatus(pid, m)).isEqualTo("posted");

@@ -53,12 +53,14 @@ public class TicketDistributionSettlementService {
         LocalDate periodStart = month.atDay(1);
         LocalDate periodEnd = month.atEndOfMonth();
 
-        // B-1 守卫(2026-07-06 第一性原理审计):已过账/已结算月份不可重结——重跑会 deleteItemsByBill
-        //   删掉已挂应付(ar_ap_item_id 已置)的明细,产生孤儿 AR/AP。draft/confirmed(未过账)仍可安全重算(幂等覆盖)。
+        // B-1 守卫(2026-07-06 第一性原理审计 + 独立复核):仅 draft/confirmed(未过账)可安全重算(幂等覆盖);
+        //   settled/reversed 及将来 CHECK 新增的任何"已出账/终结"态一律 fail-closed 拒绝——重跑会 deleteItemsByBill
+        //   删掉已挂应付(ar_ap_item_id 已置)的明细,产生孤儿 AR/AP。反向白名单跟随 schema,不必每加终态回来改;
+        //   注:posted 是 settlement_items 的状态、bill 永不为之(V224 CHECK 只含 draft/confirmed/settled/reversed),故不单列。
         String existingStatus = repository.findBillStatusByPeriod(projectId, periodStart, periodEnd);
-        if ("posted".equals(existingStatus) || "settled".equals(existingStatus)) {
+        if (existingStatus != null && !"draft".equals(existingStatus) && !"confirmed".equals(existingStatus)) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_ALREADY_POSTED",
-                    "该月份结算单已过账/已结算,不可重结;如需重算请先对已过账明细做冲正");
+                    "该月份结算单已过账/结算/冲正(状态=" + existingStatus + "),不可重结;如需重算请先对已过账明细做冲正");
         }
         Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
