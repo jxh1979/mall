@@ -297,6 +297,19 @@ public class JdbcSettlementBillRepository {
                 rs -> rs.next() ? rs.getString("status") : null);
     }
 
+    /** 按期查结算单状态(null=该期无单);月结重跑前守卫用,避免覆盖已过账/已结算单致孤儿 AR/AP。 */
+    public String findBillStatusByPeriod(String projectId, java.time.LocalDate periodStart, java.time.LocalDate periodEnd) {
+        return jdbcTemplate.query("""
+                SELECT status FROM settlement_bills
+                 WHERE COALESCE(project_id, '__DEFAULT__') = COALESCE(:project_id, '__DEFAULT__')
+                   AND period_start = :period_start AND period_end = :period_end
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("period_start", java.sql.Date.valueOf(periodStart))
+                .addValue("period_end", java.sql.Date.valueOf(periodEnd)),
+                rs -> rs.next() ? rs.getString("status") : null);
+    }
+
     /** 该单待过账明细：status='draft' 且 final_amount_cent>0（final=0 由调用方天然跳过，此处直接不取）。 */
     public List<PostableItem> findPostableItems(String billId) {
         return jdbcTemplate.query("""
