@@ -312,6 +312,12 @@ class AmusementJdbcIntegrationTests {
                 .get()
                 .extracting(AmusementGroupBookingRecord::bookingType, AmusementGroupBookingRecord::bookingStatus)
                 .containsExactly("private", "pending_approval");
+        // 审计 F-P2:团体预订联系人手机号落库为密文(enc:v1: 信封),读回明文(PiiCipher 透明加解密)。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT contact_phone FROM amusement_group_bookings WHERE id = 'group_booking_jdbc'", String.class))
+                .startsWith("enc:v1:");
+        assertThat(repository.findGroupBookingById("group_booking_jdbc").orElseThrow().contactPhone())
+                .isEqualTo("13900000000");
 
         // 清单#6：项目↔权益绑定 CRUD（amusement_project_entitlements）。
         repository.saveProjectEntitlement(new AmusementProjectEntitlementRecord(

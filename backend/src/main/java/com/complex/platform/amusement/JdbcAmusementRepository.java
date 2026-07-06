@@ -17,11 +17,14 @@ class JdbcAmusementRepository implements AmusementRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final JdbcAmusementRowMapper rowMapper;
+    private final com.complex.platform.common.crypto.PiiCipher piiCipher;
 
-    JdbcAmusementRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcAmusementRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
+            com.complex.platform.common.crypto.PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
-        this.rowMapper = new JdbcAmusementRowMapper(this.objectMapper);
+        this.piiCipher = piiCipher;
+        this.rowMapper = new JdbcAmusementRowMapper(this.objectMapper, piiCipher);
     }
 
     @Override
@@ -1892,7 +1895,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("session_id", booking.sessionId())
                 .addValue("booking_type", booking.bookingType())
                 .addValue("customer_name", booking.customerName())
-                .addValue("contact_phone", booking.contactPhone())
+                .addValue("contact_phone", piiCipher.encrypt(booking.contactPhone()))
                 .addValue("party_size", booking.partySize())
                 .addValue("reserved_capacity", booking.reservedCapacity())
                 .addValue("booking_status", booking.bookingStatus())

@@ -21,9 +21,11 @@ final class JdbcAmusementRowMapper {
     };
 
     private final ObjectMapper objectMapper;
+    private final com.complex.platform.common.crypto.PiiCipher piiCipher;
 
-    JdbcAmusementRowMapper(ObjectMapper objectMapper) {
+    JdbcAmusementRowMapper(ObjectMapper objectMapper, com.complex.platform.common.crypto.PiiCipher piiCipher) {
         this.objectMapper = objectMapper;
+        this.piiCipher = piiCipher;
     }
 
     AmusementSafetyTemplateRecord mapSafetyTemplate(ResultSet rs, int rowNum) throws SQLException {
@@ -250,7 +252,7 @@ final class JdbcAmusementRowMapper {
                 rs.getString("session_id"),
                 rs.getString("booking_type"),
                 rs.getString("customer_name"),
-                rs.getString("contact_phone"),
+                piiCipher.decrypt(rs.getString("contact_phone")),
                 rs.getInt("party_size"),
                 rs.getInt("reserved_capacity"),
                 rs.getString("booking_status"),
