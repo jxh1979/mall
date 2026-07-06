@@ -4,10 +4,11 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
-import type { AdminPageProps, BarProductRow } from "../types";
+import type { AdminPageProps, BarProductRow, BarProductCategoryRow } from "../types";
 import { PermissionButton } from "../security/Can";
 
 // 商品类别码 → 中文（零英文强制；不进共享码表，就近页级映射）。未知码原样返回。
+// 说明：这是既有的 product_type 兼容字段（粗类别）；V256 起「可配置分类」走 categoryId，两者并存展示。
 const CATEGORY_LABELS: Record<string, string> = {
   spirit: "烈酒",
   wine: "葡萄酒",
@@ -48,18 +49,33 @@ type ProductForm = {
 
 const EMPTY_FORM: ProductForm = { barId: "", productName: "", category: "spirit", priceYuan: "", internalPriceYuan: "" };
 
+type CategoryForm = { barId: string; categoryName: string; sortOrder: string };
+const EMPTY_CATEGORY_FORM: CategoryForm = { barId: "", categoryName: "", sortOrder: "0" };
+
 /**
- * 酒吧商品管理页（ADM-BAR-005）：列商品 + 录入售价/内部结算价。
- * 内部结算价（V152 internal_settlement_price_cent）是平台↔酒吧的成本结算价基，属敏感数据：
- *   ① 通票免费酒水核销驱动平台↔酒吧结算按此价；② 吧台随单赠送项按此价 × 数量从销售提成基数扣除（F-TXN-05）。
- * 查看需 bar.product.view；录入/修改需高危权限 bar.product.manage（与 /bar/products 接口守卫一致）。
+ * 酒吧商品管理页（ADM-BAR-005，V256 图形化点单 POS 阶段1扩展）：
+ *   ① 分类可配置（后台自建分类表 bar_product_categories，商品挂 categoryId，供 POS 按分类分屏列菜）；
+ *   ② 给商品挂分类、上传图片（本地存储，同 image_url 先例）；
+ *   ③ 录入售价/内部结算价（原有能力保留）。
+ * product_type（粗类别，历史兼容）保留展示；categoryId 为新的可配置精分类。
+ * 查看需 bar.product.view；商品录入/改需 bar.product.manage；分类维护需 bar.category.manage。
  */
 export function BarProductsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<BarProductRow[]>([]);
+  const [categories, setCategories] = React.useState<BarProductCategoryRow[]>([]);
   const [form, setForm] = React.useState<ProductForm>(EMPTY_FORM);
+  const [categoryForm, setCategoryForm] = React.useState<CategoryForm>(EMPTY_CATEGORY_FORM);
   const [formError, setFormError] = React.useState<string | null>(null);
-  // 行明细抽屉：整行可点 → 该商品完整字段（类别/状态中文·金额¥·内部结算价）。
+  const [categoryError, setCategoryError] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+
+  const categoryName = React.useCallback(
+    (id: string | null | undefined): string => {
+      if (!id) return "未分类";
+      return categories.find((c) => c.id === id)?.categoryName ?? id;
+    },
+    [categories],
+  );
 
   function openProductDetail(row: BarProductRow) {
     setDetail({
@@ -69,8 +85,10 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         { label: "商品", value: row.productName ?? "—" },
         { label: "所属酒吧", value: row.barId ?? "—" },
         { label: "类别", value: categoryLabel(row.productType) },
+        { label: "分类", value: categoryName(row.categoryId) },
         { label: "售价（元）", value: `¥${yuan(row.priceCent)}` },
         { label: "内部结算价（元）", value: row.internalSettlementPriceCent === null || row.internalSettlementPriceCent === undefined ? "未录入" : `¥${yuan(row.internalSettlementPriceCent)}` },
+        { label: "图片", value: row.imageUrl ? row.imageUrl : "未上传" },
         { label: "状态", value: row.soldOut ? "沽清" : formatBusinessStatus(row.status) },
       ],
     });
@@ -80,12 +98,42 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     async () => {
       const items = await api.get<BarProductRow[]>("/api/v1/bar/products");
       setRows(items ?? []);
+      try {
+        const cats = await api.get<BarProductCategoryRow[]>("/api/v1/bar/catalog/categories");
+        setCategories(Array.isArray(cats) ? cats : []);
+      } catch {
+        setCategories([]);
+      }
     },
     { onError: setGlobalError, fallbackMessage: "商品列表读取失败" },
   );
 
   function setField(key: keyof ProductForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+  function setCategoryField(key: keyof CategoryForm, value: string) {
+    setCategoryForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submitCategory() {
+    setCategoryError(null);
+    const barId = categoryForm.barId.trim();
+    const name = categoryForm.categoryName.trim();
+    if (!barId || !name) {
+      setCategoryError("酒吧、分类名必填");
+      return;
+    }
+    const sortOrder = Number(categoryForm.sortOrder.trim() || "0");
+    try {
+      await api.post("/api/v1/bar/catalog/categories", { barId, categoryName: name, sortOrder });
+      setCategoryForm({ ...EMPTY_CATEGORY_FORM, barId });
+      setActionResult({ action: "bar_category_created", categoryName: name });
+      await reload();
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "分类保存失败";
+      setCategoryError(message);
+      setGlobalError(message);
+    }
   }
 
   async function submit() {
@@ -126,14 +174,65 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     }
   }
 
+  async function changeCategory(row: BarProductRow, categoryId: string) {
+    try {
+      await api.post(`/api/v1/bar/catalog/products/${row.id}/category`, { categoryId: categoryId || null });
+      setActionResult({ action: "bar_product_category_assigned", productId: row.id, categoryId: categoryId || null });
+      await reload();
+    } catch (assignError) {
+      setGlobalError(assignError instanceof Error ? assignError.message : "设分类失败");
+    }
+  }
+
+  async function uploadImage(row: BarProductRow, file: File) {
+    try {
+      if (!api.postForm) {
+        setGlobalError("当前环境不支持图片上传");
+        return;
+      }
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("product_id", row.id);
+      await api.postForm("/api/v1/bar/catalog/images", fd);
+      setActionResult({ action: "bar_product_image_uploaded", productId: row.id });
+      await reload();
+    } catch (uploadError) {
+      setGlobalError(uploadError instanceof Error ? uploadError.message : "图片上传失败");
+    }
+  }
+
+  const activeCategories = categories.filter((c) => c.status !== "archived");
+
   return (
     <section data-testid="bar-products-page">
       <AdminPageHeader
         title="商品管理"
-        description="酒吧商品目录：录入售价与内部结算价。内部结算价是平台↔酒吧的成本结算价基，用于通票免费酒水平台↔酒吧结算与吧台赠送项按内部价扣减销售提成；留空表示该商品不参与结算/提成扣减。"
+        description="酒吧商品目录：维护可配置分类、给商品挂分类与上传图片、录入售价与内部结算价。分类供平板图形化点单按分类分屏列菜；图片存服务器本地。内部结算价是平台↔酒吧成本结算价基，留空表示不参与结算/提成扣减。"
       />
 
+      <div className="admin-form" data-testid="bar-category-create-form">
+        <h3>分类维护（供图形化点单分屏）</h3>
+        <label><span>酒吧 ID</span><input data-testid="bar-category-bar-id" value={categoryForm.barId} onChange={(e) => setCategoryField("barId", e.target.value)} /></label>
+        <label><span>分类名</span><input data-testid="bar-category-name" value={categoryForm.categoryName} onChange={(e) => setCategoryField("categoryName", e.target.value)} /></label>
+        <label><span>排序（小在前）</span><input data-testid="bar-category-sort" inputMode="numeric" value={categoryForm.sortOrder} onChange={(e) => setCategoryField("sortOrder", e.target.value)} /></label>
+        {categoryError ? <div className="admin-inline-error" data-testid="bar-category-form-error">{categoryError}</div> : null}
+        <PermissionButton
+          permissionsState={effectivePermissions}
+          permissions={["bar.category.manage"]}
+          data-testid="bar-category-submit"
+          onClick={() => void submitCategory()}
+        >
+          保存分类
+        </PermissionButton>
+        {categories.length > 0 ? (
+          <div data-testid="bar-category-list">
+            已有分类：{categories.map((c) => `${c.categoryName ?? c.id}(${c.status === "archived" ? "停用" : "启用"})`).join("、")}
+          </div>
+        ) : null}
+      </div>
+
       <div className="admin-form" data-testid="bar-product-create-form">
+        <h3>商品录入</h3>
         <label><span>酒吧 ID</span><input data-testid="bar-product-bar-id" value={form.barId} onChange={(e) => setField("barId", e.target.value)} /></label>
         <label><span>商品名</span><input data-testid="bar-product-name" value={form.productName} onChange={(e) => setField("productName", e.target.value)} /></label>
         <label><span>类别</span><input data-testid="bar-product-category" value={form.category} onChange={(e) => setField("category", e.target.value)} /></label>
@@ -157,8 +256,10 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
               <tr>
                 <th>商品</th>
                 <th>类别</th>
+                <th>分类（可配置）</th>
                 <th>售价（元）</th>
                 <th>内部结算价（元）</th>
+                <th>图片</th>
                 <th>状态</th>
               </tr>
             </thead>
@@ -173,8 +274,30 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
                     <small>{row.id}</small>
                   </td>
                   <td>{categoryLabel(row.productType)}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <select
+                      data-testid={`bar-product-category-select-${row.id}`}
+                      value={row.categoryId ?? ""}
+                      onChange={(e) => void changeCategory(row, e.target.value)}
+                    >
+                      <option value="">未分类</option>
+                      {activeCategories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.categoryName ?? c.id}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td>{yuan(row.priceCent)}</td>
                   <td data-testid={`bar-product-internal-price-${row.id}`}>{yuan(row.internalSettlementPriceCent)}</td>
+                  <td data-testid={`bar-product-image-${row.id}`} onClick={(e) => e.stopPropagation()}>
+                    {row.imageUrl ? <small>{row.imageUrl}</small> : <small>未上传</small>}
+                    <br />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      data-testid={`bar-product-image-input-${row.id}`}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadImage(row, f); }}
+                    />
+                  </td>
                   <td>{row.soldOut ? "沽清" : formatBusinessStatus(row.status)}</td>
                 </tr>
               ))}

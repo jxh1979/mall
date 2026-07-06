@@ -93,7 +93,9 @@ public class BarOrderService {
                 false,
                 null,
                 null,
-                internalPrice
+                internalPrice,
+                trimToNull(actual.categoryId()),
+                trimToNull(actual.imageUrl())
         ));
     }
 
