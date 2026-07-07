@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps, MerchantZoneFeeRecipientRow } from "../types";
 
 const MANAGE_PERMS = ["merchant.portal.fee_recipient.manage"];
@@ -53,6 +54,8 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
   const [feeEvent, setFeeEvent] = React.useState("rent");
   const [name, setName] = React.useState("");
   const [phone, setPhone] = React.useState("");
+  // 引导式流程 phase-6：新增接收人收起为主按钮 + 分步引导弹窗（停用是行内动作不动）。
+  const [recipientOpen, setRecipientOpen] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该接收人完整字段（费用事件/状态中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -111,20 +114,27 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
     fallbackMessage: TEXT.actionFailed,
   });
 
+  // 接收人校验（步内 + 提交双保险）：姓名 + 手机号都必填。
+  function recipientInvalid() {
+    if (!name.trim()) return TEXT.nameRequired;
+    if (!phone.trim()) return TEXT.phoneRequired;
+    return null;
+  }
+
   async function saveRecipient() {
-    if (!name.trim()) {
-      setFormError(TEXT.nameRequired);
-      return;
-    }
-    if (!phone.trim()) {
-      setFormError(TEXT.phoneRequired);
+    const invalid = recipientInvalid();
+    if (invalid) {
+      setFormError(invalid);
       return;
     }
     const request = { idempotencyKey: nextKey("merchant-zone-fee-recipient"), feeEvent, recipientName: name, recipientPhone: phone };
-    await runAction("merchant_zone_fee_recipient_saved", request,
+    const ok = await runAction("merchant_zone_fee_recipient_saved", request,
       () => api.post("/api/v1/merchant-billing/fee-notification-recipients", request));
-    setName("");
-    setPhone("");
+    if (ok) {
+      setName("");
+      setPhone("");
+      setRecipientOpen(false);
+    }
   }
 
   async function deactivateRecipient(id: string) {
@@ -174,20 +184,47 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="merchant_billing.fee_recipient.upserted / merchant_billing.fee_recipient.deactivated" />
       <div className="admin-form-row" data-testid="merchant-zone-fee-recipient-form">
-        <label>费用事件<select data-testid="merchant-zone-fee-recipient-event" value={feeEvent} onChange={(event) => setFeeEvent(event.target.value)}>
-          {Object.entries(FEE_EVENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select></label>
-        <label>接收人姓名<input data-testid="merchant-zone-fee-recipient-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="如:王店长" /></label>
-        <label>接收手机号<input data-testid="merchant-zone-fee-recipient-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="11 位手机号" /></label>
         <PermissionButton
           permissionsState={effectivePermissions}
           permissions={MANAGE_PERMS}
-          data-testid="merchant-zone-fee-recipient-save"
-          disabled={busyAction === "merchant_zone_fee_recipient_saved"}
-          onClick={saveRecipient}
-        >{TEXT.save}</PermissionButton>
+          data-testid="merchant-zone-fee-recipient-create-open"
+          onClick={() => { setFormError(""); setRecipientOpen(true); }}
+        >＋ 新增接收人</PermissionButton>
+        <span className="admin-muted-action">按费用事件（租金 / 能耗 / 物业 / 续约）各设一位接收人，停用后回落商户首要联系人。</span>
       </div>
-      {formError ? <div className="admin-form-error" data-testid="merchant-zone-fee-recipient-form-error">{formError}</div> : null}
+      <GuidedFlowModal
+        open={recipientOpen}
+        title="新增费用通知接收人"
+        testId="merchant-zone-fee-recipient-guided"
+        submitTestId="merchant-zone-fee-recipient-save"
+        submitLabel={TEXT.save}
+        submitting={busyAction === "merchant_zone_fee_recipient_saved"}
+        error={formError || undefined}
+        onClose={() => setRecipientOpen(false)}
+        onSubmit={() => void saveRecipient()}
+        steps={[
+          {
+            title: "接收人信息",
+            description: "选择费用事件并填写接收人姓名与手机号。",
+            validate: () => recipientInvalid(),
+            content: (
+              <>
+                <label>费用事件<select data-testid="merchant-zone-fee-recipient-event" value={feeEvent} onChange={(event) => setFeeEvent(event.target.value)}>
+                  {Object.entries(FEE_EVENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select></label>
+                <label>接收人姓名<input data-testid="merchant-zone-fee-recipient-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="如:王店长" /></label>
+                <label>接收手机号<input data-testid="merchant-zone-fee-recipient-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="11 位手机号" /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "费用事件", value: FEE_EVENT_LABELS[feeEvent] ?? feeEvent },
+          { label: "接收人姓名", value: name.trim() || "未填写" },
+          { label: "接收手机号", value: phone.trim() || "未填写" },
+        ]}
+      />
+      {formError && !recipientOpen ? <div className="admin-form-error" data-testid="merchant-zone-fee-recipient-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

@@ -145,11 +145,14 @@ test.describe("full admin MVP acceptance", () => {
     await installMockApi(page);
     await adminLogin(page, "/admin/integrations/adapters");
 
+    // 引导式流程 phase-6：新增适配器改分步引导弹窗——先开弹窗，凭证填在步内，「下一步」触发步内校验。
+    await page.getByTestId("integration-create-open").click();
     await page.getByTestId("integration-credential-ref").fill("plaintext-secret");
-    await page.getByTestId("integration-save").click();
+    await page.getByTestId("integration-next").click();
     await expect(page.getByTestId("integration-error")).toContainText("凭证引用");
 
     await page.getByTestId("integration-credential-ref").fill("cred://prod/provider/mock");
+    await page.getByTestId("integration-next").click();
     await page.getByTestId("integration-save").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("provider");
     await page.getByTestId("integration-test-mock").click();
