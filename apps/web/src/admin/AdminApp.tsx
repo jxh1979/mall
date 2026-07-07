@@ -350,6 +350,16 @@ export default function AdminApp() {
   const [loading, setLoading] = React.useState(false);
   const [globalError, setGlobalError] = React.useState<string | null>(null);
   const [actionResult, setActionResult] = React.useState<unknown>(null);
+  // 深色模式（2026-07-07）：localStorage 优先，无则跟随系统偏好；data-theme 打在 <html> 上（覆盖 antd portal）。
+  const [themeMode, setThemeMode] = React.useState<"light" | "dark">(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("adm-theme") : null;
+    if (saved === "dark" || saved === "light") return saved;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+  React.useEffect(() => {
+    document.documentElement.setAttribute("data-theme", themeMode);
+    window.localStorage.setItem("adm-theme", themeMode);
+  }, [themeMode]);
 
   const api = React.useMemo(() => {
     const instance = new AdminApi(token);
@@ -638,6 +648,16 @@ export default function AdminApp() {
           <div className="admin-topbar-actions">
             <span className="admin-topbar-store">营业中 · 综合体</span>
             <span className="admin-user-chip">{user.username}</span>
+            <button
+              type="button"
+              className="admin-theme-toggle"
+              data-testid="admin-theme-toggle"
+              aria-label={themeMode === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+              title={themeMode === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+              onClick={() => setThemeMode((m) => (m === "dark" ? "light" : "dark"))}
+            >
+              {themeMode === "dark" ? "☀" : "🌙"}
+            </button>
             <button type="button" data-testid="admin-logout" onClick={logout}>退出</button>
           </div>
         </header>
@@ -663,7 +683,7 @@ export default function AdminApp() {
   );
 
   return (
-    <ConfigProvider locale={zhCN} theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#1b1d21", borderRadius: 10, fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" } }}>
+    <ConfigProvider locale={zhCN} theme={{ algorithm: themeMode === "dark" ? theme.darkAlgorithm : theme.defaultAlgorithm, token: { colorPrimary: themeMode === "dark" ? "#d99a2b" : "#1b1d21", borderRadius: 10, fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" } }}>
       {shell}
     </ConfigProvider>
   );
