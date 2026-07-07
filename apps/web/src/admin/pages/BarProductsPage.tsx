@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, BarProductRow, BarProductCategoryRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { RowActions, type RowAction } from "../components/RowActions";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { BarVenueSelect } from "../components/BarVenueSelect";
 
@@ -178,25 +179,20 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     const manage = kind === "products" ? ["bar.product.manage"] : ["bar.category.manage"];
     const approve = kind === "products" ? ["bar.product.approve"] : ["bar.category.approve"];
     const prefix = kind === "products" ? "bar-product" : "bar-category";
-    if (row.deleteStatus === "pending") {
-      return (
-        <>
-          <PermissionButton permissionsState={effectivePermissions} permissions={approve} data-testid={`${prefix}-delete-approve-${row.id}`} onClick={() => void approveDeleteEntity(kind, row.id, "approved")}>批准删除</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={approve} data-testid={`${prefix}-delete-reject-${row.id}`} onClick={() => void approveDeleteEntity(kind, row.id, "rejected")}>驳回</PermissionButton>
-        </>
-      );
-    }
-    if (row.archivedAt) {
-      return (
-        <>
-          <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-unarchive-${row.id}`} onClick={() => void archiveEntity(kind, row.id, false)}>取消存档</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-delete-request-${row.id}`} onClick={() => void requestDeleteEntity(kind, row.id)}>申请删除</PermissionButton>
-        </>
-      );
-    }
-    return (
-      <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-archive-${row.id}`} onClick={() => void archiveEntity(kind, row.id, true)}>存档</PermissionButton>
-    );
+    const actions: RowAction[] = row.deleteStatus === "pending"
+      ? [
+          { key: "approve", label: "批准删除", permissions: approve, onClick: () => void approveDeleteEntity(kind, row.id, "approved"), testId: `${prefix}-delete-approve-${row.id}` },
+          { key: "reject", label: "驳回", permissions: approve, danger: true, onClick: () => void approveDeleteEntity(kind, row.id, "rejected"), testId: `${prefix}-delete-reject-${row.id}` },
+        ]
+      : row.archivedAt
+      ? [
+          { key: "unarchive", label: "取消存档", permissions: manage, onClick: () => void archiveEntity(kind, row.id, false), testId: `${prefix}-unarchive-${row.id}` },
+          { key: "delete-request", label: "申请删除", permissions: manage, danger: true, onClick: () => void requestDeleteEntity(kind, row.id), testId: `${prefix}-delete-request-${row.id}` },
+        ]
+      : [
+          { key: "archive", label: "存档", permissions: manage, onClick: () => void archiveEntity(kind, row.id, true), testId: `${prefix}-archive-${row.id}` },
+        ];
+    return <RowActions actions={actions} permissionsState={effectivePermissions} testId={`${prefix}-actions-${row.id}`} />;
   }
 
   function setField(key: keyof ProductForm, value: string) {

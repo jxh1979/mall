@@ -96,6 +96,8 @@ describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
 
   it("点操作按钮不误触抽屉（stopPropagation）", async () => {
     renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-grant-actions-gr-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-actions-gr-1"));
     await waitFor(() => expect(screen.getByTestId("access-grant-approve-gr-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("access-grant-approve-gr-1"));
     // 审批会触发 reload；抽屉不应因点操作按钮弹出。
@@ -117,8 +119,10 @@ describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
     const text = screen.getByTestId("access-grant-requests-table").textContent ?? "";
     expect(text).toContain("临时权限");
     expect(text).toContain("待处理");
-    expect(text).toContain("通过");
-    expect(text).toContain("驳回");
+    fireEvent.click(screen.getByTestId("access-grant-actions-gr-1"));
+    await waitFor(() => expect(screen.getByTestId("access-grant-approve-gr-1")).toBeTruthy());
+    expect(screen.getByTestId("access-grant-approve-gr-1").textContent).toContain("通过");
+    expect(screen.getByTestId("access-grant-reject-gr-1").textContent).toContain("驳回");
     expect(text).not.toContain("pending");
     expect(text).not.toContain("approve");
     expect(text).not.toContain("reject");

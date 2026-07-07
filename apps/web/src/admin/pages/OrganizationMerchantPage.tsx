@@ -6,6 +6,7 @@ import { AuditTrailHint, auditTraceField } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { RowActions, type RowAction } from "../components/RowActions";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
@@ -286,25 +287,20 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   }
 
   function merchantActions(row: MerchantAdmissionRow) {
-    if (row.deleteStatus === "pending") {
-      return (
-        <>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.approve"]} data-testid={`merchant-delete-approve-${row.id}`} onClick={() => void approveDeleteMerchant(row.id, "approved")}>批准删除</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.approve"]} data-testid={`merchant-delete-reject-${row.id}`} onClick={() => void approveDeleteMerchant(row.id, "rejected")}>驳回</PermissionButton>
-        </>
-      );
-    }
-    if (row.archivedAt) {
-      return (
-        <>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid={`merchant-unarchive-${row.id}`} onClick={() => void archiveMerchant(row.id, false)}>取消存档</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid={`merchant-delete-request-${row.id}`} onClick={() => void requestDeleteMerchant(row.id)}>申请删除</PermissionButton>
-        </>
-      );
-    }
-    return (
-      <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid={`merchant-archive-${row.id}`} onClick={() => void archiveMerchant(row.id, true)}>存档</PermissionButton>
-    );
+    const actions: RowAction[] = row.deleteStatus === "pending"
+      ? [
+          { key: "approve", label: "批准删除", permissions: ["merchant.profile.approve"], onClick: () => void approveDeleteMerchant(row.id, "approved"), testId: `merchant-delete-approve-${row.id}` },
+          { key: "reject", label: "驳回", permissions: ["merchant.profile.approve"], danger: true, onClick: () => void approveDeleteMerchant(row.id, "rejected"), testId: `merchant-delete-reject-${row.id}` },
+        ]
+      : row.archivedAt
+      ? [
+          { key: "unarchive", label: "取消存档", permissions: ["merchant.profile.manage"], onClick: () => void archiveMerchant(row.id, false), testId: `merchant-unarchive-${row.id}` },
+          { key: "delete-request", label: "申请删除", permissions: ["merchant.profile.manage"], danger: true, onClick: () => void requestDeleteMerchant(row.id), testId: `merchant-delete-request-${row.id}` },
+        ]
+      : [
+          { key: "archive", label: "存档", permissions: ["merchant.profile.manage"], onClick: () => void archiveMerchant(row.id, true), testId: `merchant-archive-${row.id}` },
+        ];
+    return <RowActions actions={actions} permissionsState={effectivePermissions} testId={`merchant-actions-${row.id}`} />;
   }
 
   const merchantsSection = (
