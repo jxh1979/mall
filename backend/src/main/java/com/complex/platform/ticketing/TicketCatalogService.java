@@ -64,8 +64,14 @@ public class TicketCatalogService {
     TicketPriceRuleRecord createPriceRule(TicketPriceRuleRequest request) {
         TicketPriceRuleRequest actual = requireRequest(request);
         String ticketTypeId = requireText(actual.ticketTypeId(), "ticket_type_id");
-        repository.findTicketTypeById(ticketTypeId)
+        TicketTypeRecord ruleTicketType = repository.findTicketTypeById(ticketTypeId)
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        // 复核§3(V260)：已存档/待删除票种不可再配派生价规则——否则"存档=软下线"名存实亡，
+        // 且新引用会让审批删除永远过不了引用校验（与本范式的硬删闸互相打架）。
+        if (ruleTicketType.archivedAt() != null || !"none".equals(ruleTicketType.deleteStatus())) {
+            throw ApiException.conflict("TICKET_TYPE_NOT_CONFIGURABLE",
+                    "已存档或待删除的票种不可配置派生价规则");
+        }
         String variantType = requireEnum(actual.variantType(), PRICE_VARIANTS, "variant_type");
         String priceMode = requireEnum(actual.priceMode(), PRICE_MODES, "price_mode");
         if ("fixed_price".equals(priceMode)
@@ -327,6 +333,11 @@ public class TicketCatalogService {
         TicketTypeEntitlementRequest actual = requireRequest(request);
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        // 复核§3(V260)：票种侧同样拒绑——已存档/待删除票种不可再被绑定新权益。
+        if (ticketType.archivedAt() != null || !"none".equals(ticketType.deleteStatus())) {
+            throw ApiException.conflict("TICKET_TYPE_NOT_BINDABLE",
+                    "已存档或待删除的票种不可绑定权益");
+        }
         EntitlementTemplateRecord template = repository.findEntitlementTemplateById(requireText(actual.entitlementTemplateId(), "entitlement_template_id"))
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
         // 复核§3:已存档或待删除的模板不可再被绑定到票种——否则违背"存档=软下线",且被引用后永远删不掉。

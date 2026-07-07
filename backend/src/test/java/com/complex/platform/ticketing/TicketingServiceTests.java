@@ -392,6 +392,33 @@ class TicketingServiceTests {
     // ===== V260 存档/删除范式铺到票种/价格规则 =====
 
     @Test
+    void archivedTicketTypeRejectsNewPriceRuleBindingAndOrder() {
+        // 复核§3(V260)：存档=软下线，三个引用入口（配价规/绑权益/下单）都必须拒，否则删除永远被新引用卡死。
+        TicketTypeRecord tt = createTicketType("archived-ref-guard");
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+        catalog.archiveTicketType(tt.id(), true, "op_a");
+
+        assertThatThrownBy(() -> service.createTicketPriceRule(new TicketPriceRuleRequest(
+                "arch-rule", "fixed", List.of(), tt.id(), "student", "fixed_price",
+                1000L, null, null, null, "ch_default", null)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("TICKET_TYPE_NOT_CONFIGURABLE"));
+
+        assertThatThrownBy(() -> service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                "arch-bind", "bind", java.util.List.of(), "tpl_any", 1, 1, 100L, "default", 1, null)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("TICKET_TYPE_NOT_BINDABLE"));
+
+        assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                "arch-order", "order", List.of(), tt.id(), null, 1,
+                LocalDate.parse("2026-07-01"), "app", "13800138000", "customer_x")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("TICKET_TYPE_NOT_SELLABLE"));
+    }
+
+
+
+    @Test
     void ticketTypeArchiveHidesFromDefaultListAndUnarchiveRestores() {
         Instant now = Instant.now();
         ticketingRepository.saveTicketType(new TicketTypeRecord(

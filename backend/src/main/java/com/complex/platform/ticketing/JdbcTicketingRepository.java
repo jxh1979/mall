@@ -104,8 +104,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 """, Map.of("column_name", columnName), String.class);
         long total = 0L;
         for (String table : tables) {
-            // 被删实体自己的表不算引用（ticket_price_rules.ticket_type_id 属于价规引用票种，保留计数；
-            // 此处仅排除同名主表自引用场景，当前两列均无，防御性保留判断）。
+            // ticket_price_rules.ticket_type_id 属于"价规引用票种"，保留计数（删票种前须先删净价规）。
+            // 当前两列（ticket_type_id/price_rule_id）均不存在主表自引用列，无需排除。
             Long c = jdbcTemplate.queryForObject(
                     "SELECT COUNT(1) FROM " + table + " WHERE " + columnName + " = :id",
                     Map.of("id", id), Long.class);

@@ -203,7 +203,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   }
 
   async function requestDeleteCatalog(kind: "ticket-types" | "price-rules", id: string) {
-    const reason = window.prompt("删除理由（提交后需上级审批）：") ?? "";
+    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    if (reason === null) {
+      return; // 用户点「取消」= 中止申请，不提交空理由。
+    }
     setGlobalError(null);
     await api.post(`/api/v1/ticketing/${kind}/${id}/delete-request`, {
       idempotencyKey: `${kind}-delete-request-${id}-${Date.now()}`,
