@@ -74,6 +74,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-STF-002", label: "薪酬与请假", route: "/admin/staff/payroll" },
   { pageId: "ADM-STF-003", label: "个税税表", route: "/admin/staff/tax-brackets" },
   { pageId: "ADM-SVC-001", label: "服务点单", route: "/admin/services/orders" },
+  { pageId: "ADM-OPS-002", label: "数据清理工具", route: "/admin/ops/data-cleanup" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -192,6 +193,12 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("payroll-tax-brackets-page")).toBeVisible();
     await expect(page.getByTestId("payroll-tax-brackets-table")).toContainText("20.00%");
     await expect(page.getByTestId("payroll-tax-brackets-form")).toBeVisible();
+  } else if (spec.pageId === "ADM-OPS-002") {
+    await expect(page.getByTestId("data-cleanup-page")).toBeVisible();
+    await expect(page.getByTestId("data-cleanup-request")).toBeVisible();
+    await expect(page.getByTestId("data-cleanup-scope")).toBeVisible();
+    await expect(page.getByTestId("data-cleanup-preview-button")).toBeVisible();
+    await expect(page.getByTestId("data-cleanup-pending")).toContainText("待审批的清理申请");
   } else if (spec.pageId === "ADM-ANA-010") {
     await expect(page.getByTestId("ai-thresholds-page")).toBeVisible();
     await expect(page.getByTestId("ai-threshold-confidence")).toContainText("60%");

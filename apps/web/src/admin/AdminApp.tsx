@@ -87,6 +87,7 @@ const VendorSubordinatesPage = React.lazy(() => import("./pages/VendorSubordinat
 const SmsNotificationSwitchesPage = React.lazy(() => import("./pages/SmsNotificationSwitchesPage").then((m) => ({ default: m.SmsNotificationSwitchesPage })));
 const LeasingRentalStatusPage = React.lazy(() => import("./pages/LeasingRentalStatusPage").then((m) => ({ default: m.LeasingRentalStatusPage })));
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
+const DataCleanupPage = React.lazy(() => import("./pages/DataCleanupPage").then((m) => ({ default: m.DataCleanupPage })));
 const FloorPlanImportPage = React.lazy(() => import("./pages/FloorPlanImportPage").then((m) => ({ default: m.FloorPlanImportPage })));
 const T3AReadonlyAnalyticsPage = React.lazy(() => import("./pages/T3AReadonlyAnalyticsPage").then((m) => ({ default: m.T3AReadonlyAnalyticsPage })));
 const ComplianceRemindersPage = React.lazy(() => import("./pages/ComplianceRemindersPage").then((m) => ({ default: m.ComplianceRemindersPage })));
@@ -313,6 +314,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <IntegrationSwitchesPage {...props} />;
     case "ADM-OPS-001":
       return <OpsReadinessPage {...props} />;
+    case "ADM-OPS-002":
+      return <DataCleanupPage {...props} />;
     case "ADM-GOV-001":
       return <GovernanceTopologyPage {...props} />;
     case "ADM-GOV-002":

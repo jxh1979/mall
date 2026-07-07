@@ -922,6 +922,23 @@ export type ReadinessItemRow = {
   dueAt?: string | null;
 };
 
+// 集中数据清理作业（Tier-D 集中清理工具；对应后端 DataCleanupJobRecord）。
+export type DataCleanupJobRow = {
+  id: string;
+  scopeType: string;
+  filterParams?: Record<string, unknown>;
+  status: string;
+  previewCount: number;
+  previewSample?: { id: string; archivedAt?: string | null }[];
+  reason?: string | null;
+  requestedBy?: string | null;
+  requestedAt?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  executedAt?: string | null;
+  deletedCount?: number | null;
+};
+
 // 真操作留痕行（audit_events 表；对应后端 AuditEvent record 的 JSON 字段）。
 // 与 AuditEventRow（证据表 evidence.events）不同：这是「谁/何时/对什么对象/做了什么/结果」的操作日志。
 export type AuditOperationEventRow = {
