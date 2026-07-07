@@ -55,12 +55,18 @@ describe("BarCombosPage 套餐管理", () => {
   it("从 SKU 选组合 + 填价 → 提交携带 items", async () => {
     const post = vi.fn().mockResolvedValue({ id: "combo-2" });
     renderPage(makeApi(post));
-    await waitFor(() => expect(screen.getByTestId("bar-combo-create-form")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("bar-combo-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("bar-combo-create-open"));
+    // 步骤1 套餐信息
     fireEvent.change(screen.getByTestId("bar-combo-bar-id"), { target: { value: "bar-main" } });
     fireEvent.change(screen.getByTestId("bar-combo-name"), { target: { value: "组合A" } });
+    fireEvent.click(screen.getByTestId("bar-combo-guided-next"));
+    // 步骤2 定价与商品
     fireEvent.change(screen.getByTestId("bar-combo-price"), { target: { value: "88" } });
     fireEvent.change(screen.getByTestId("bar-combo-item-product-0"), { target: { value: "prod-1" } });
     fireEvent.change(screen.getByTestId("bar-combo-item-qty-0"), { target: { value: "2" } });
+    fireEvent.click(screen.getByTestId("bar-combo-guided-next"));
+    // 确认步 → 提交
     fireEvent.click(screen.getByTestId("bar-combo-submit"));
     await waitFor(() => expect(post).toHaveBeenCalled());
     const call = post.mock.calls[0] ?? [];
@@ -78,12 +84,15 @@ describe("BarCombosPage 套餐管理", () => {
   it("无组合项 → 拦截提交", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));
-    await waitFor(() => expect(screen.getByTestId("bar-combo-create-form")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("bar-combo-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("bar-combo-create-open"));
     fireEvent.change(screen.getByTestId("bar-combo-bar-id"), { target: { value: "bar-main" } });
     fireEvent.change(screen.getByTestId("bar-combo-name"), { target: { value: "空套餐" } });
+    fireEvent.click(screen.getByTestId("bar-combo-guided-next"));
+    // 步骤2 只填价、不选商品 → 点下一步被步内校验拦截
     fireEvent.change(screen.getByTestId("bar-combo-price"), { target: { value: "10" } });
-    fireEvent.click(screen.getByTestId("bar-combo-submit"));
-    await waitFor(() => expect(screen.getByTestId("bar-combo-form-error").textContent).toContain("至少包含一个商品"));
+    fireEvent.click(screen.getByTestId("bar-combo-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("bar-combo-guided-error").textContent).toContain("至少包含一个商品"));
     expect(post).not.toHaveBeenCalled();
   });
 });

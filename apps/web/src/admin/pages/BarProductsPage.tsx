@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, BarProductRow, BarProductCategoryRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 // 商品类别码 → 中文（零英文强制；不进共享码表，就近页级映射）。未知码原样返回。
 // 说明：这是既有的 product_type 兼容字段（粗类别）；V256 起「可配置分类」走 categoryId，两者并存展示。
@@ -70,6 +71,9 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // V262 存档/删除范式：默认列表不含已存档，勾选后带出。
   const [showArchived, setShowArchived] = React.useState(false);
+  // 引导式流程 phase-3：新建商品/新建分类收起为主按钮，点击弹出分步引导（GuidedFlowModal）。
+  const [productOpen, setProductOpen] = React.useState(false);
+  const [categoryOpen, setCategoryOpen] = React.useState(false);
 
   const categoryName = React.useCallback(
     (id: string | null | undefined): string => {
@@ -206,6 +210,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     try {
       await api.post("/api/v1/bar/catalog/categories", { barId, categoryName: name, sortOrder });
       setCategoryForm({ ...EMPTY_CATEGORY_FORM, barId });
+      setCategoryOpen(false);
       setActionResult({ action: "bar_category_created", categoryName: name });
       await reload();
     } catch (submitError) {
@@ -244,6 +249,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         internalSettlementPriceCent,
       });
       setForm(EMPTY_FORM);
+      setProductOpen(false);
       setActionResult({ action: "bar_product_created", productId: created?.id, productName });
       await reload();
     } catch (submitError) {
@@ -292,18 +298,41 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
 
       <div className="admin-form" data-testid="bar-category-create-form">
         <h3>分类维护（供图形化点单分屏）</h3>
-        <label><span>酒吧 ID</span><input data-testid="bar-category-bar-id" value={categoryForm.barId} onChange={(e) => setCategoryField("barId", e.target.value)} /></label>
-        <label><span>分类名</span><input data-testid="bar-category-name" value={categoryForm.categoryName} onChange={(e) => setCategoryField("categoryName", e.target.value)} /></label>
-        <label><span>排序（小在前）</span><input data-testid="bar-category-sort" inputMode="numeric" value={categoryForm.sortOrder} onChange={(e) => setCategoryField("sortOrder", e.target.value)} /></label>
-        {categoryError ? <div className="admin-inline-error" data-testid="bar-category-form-error">{categoryError}</div> : null}
-        <PermissionButton
-          permissionsState={effectivePermissions}
-          permissions={["bar.category.manage"]}
-          data-testid="bar-category-submit"
-          onClick={() => void submitCategory()}
-        >
-          保存分类
-        </PermissionButton>
+        {/* 引导式流程 phase-3：新建分类入口按钮（权限门在入口），点击弹出分步引导。 */}
+        <div className="admin-form-row">
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.category.manage"]} data-testid="bar-category-create-open" onClick={() => { setCategoryError(null); setCategoryOpen(true); }}>
+            ＋ 新建分类
+          </PermissionButton>
+        </div>
+        <GuidedFlowModal
+          open={categoryOpen}
+          title="新建分类"
+          testId="bar-category-guided"
+          submitTestId="bar-category-submit"
+          submitLabel="保存分类"
+          error={categoryError ?? undefined}
+          onClose={() => setCategoryOpen(false)}
+          onSubmit={() => void submitCategory()}
+          steps={[
+            {
+              title: "分类信息",
+              description: "填写所属酒吧与分类名，排序小的在前。",
+              validate: () => (categoryForm.barId.trim() && categoryForm.categoryName.trim() ? null : "酒吧、分类名必填"),
+              content: (
+                <>
+                  <label><span>酒吧 ID</span><input data-testid="bar-category-bar-id" value={categoryForm.barId} onChange={(e) => setCategoryField("barId", e.target.value)} /></label>
+                  <label><span>分类名</span><input data-testid="bar-category-name" value={categoryForm.categoryName} onChange={(e) => setCategoryField("categoryName", e.target.value)} /></label>
+                  <label><span>排序（小在前）</span><input data-testid="bar-category-sort" inputMode="numeric" value={categoryForm.sortOrder} onChange={(e) => setCategoryField("sortOrder", e.target.value)} /></label>
+                </>
+              ),
+            },
+          ]}
+          summary={[
+            { label: "酒吧 ID", value: categoryForm.barId.trim() || "未填写" },
+            { label: "分类名", value: categoryForm.categoryName.trim() || "未填写" },
+            { label: "排序", value: categoryForm.sortOrder.trim() || "0" },
+          ]}
+        />
         {categories.length > 0 ? (
           <div className="admin-table-scroll" data-testid="bar-category-list">
             <table className="admin-table" data-testid="bar-categories-table">
@@ -334,20 +363,61 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
 
       <div className="admin-form" data-testid="bar-product-create-form">
         <h3>商品录入</h3>
-        <label><span>酒吧 ID</span><input data-testid="bar-product-bar-id" value={form.barId} onChange={(e) => setField("barId", e.target.value)} /></label>
-        <label><span>商品名</span><input data-testid="bar-product-name" value={form.productName} onChange={(e) => setField("productName", e.target.value)} /></label>
-        <label><span>类别</span><input data-testid="bar-product-category" value={form.category} onChange={(e) => setField("category", e.target.value)} /></label>
-        <label><span>售价（元）</span><input data-testid="bar-product-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setField("priceYuan", e.target.value)} /></label>
-        <label><span>内部结算价（元，可空）</span><input data-testid="bar-product-internal-price" inputMode="decimal" value={form.internalPriceYuan} onChange={(e) => setField("internalPriceYuan", e.target.value)} /></label>
-        {formError ? <div className="admin-inline-error" data-testid="bar-product-form-error">{formError}</div> : null}
-        <PermissionButton
-          permissionsState={effectivePermissions}
-          permissions={["bar.product.manage"]}
-          data-testid="bar-product-submit"
-          onClick={() => void submit()}
-        >
-          录入商品
-        </PermissionButton>
+        {/* 引导式流程 phase-3：新建商品入口按钮（权限门在入口），点击弹出分步引导。图片上传仍在下方商品列表行内逐件上传（后端按 product_id 挂图）。 */}
+        <div className="admin-form-row">
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.product.manage"]} data-testid="bar-product-create-open" onClick={() => { setFormError(null); setProductOpen(true); }}>
+            ＋ 新建商品
+          </PermissionButton>
+        </div>
+        <GuidedFlowModal
+          open={productOpen}
+          title="新建商品"
+          testId="bar-product-guided"
+          submitTestId="bar-product-submit"
+          submitLabel="录入商品"
+          error={formError ?? undefined}
+          onClose={() => setProductOpen(false)}
+          onSubmit={() => void submit()}
+          steps={[
+            {
+              title: "商品信息",
+              description: "填写所属酒吧、商品名与类别。",
+              validate: () => (form.barId.trim() && form.productName.trim() && form.category.trim() ? null : "酒吧、商品名、类别必填"),
+              content: (
+                <>
+                  <label><span>酒吧 ID</span><input data-testid="bar-product-bar-id" value={form.barId} onChange={(e) => setField("barId", e.target.value)} /></label>
+                  <label><span>商品名</span><input data-testid="bar-product-name" value={form.productName} onChange={(e) => setField("productName", e.target.value)} /></label>
+                  <label><span>类别</span><input data-testid="bar-product-category" value={form.category} onChange={(e) => setField("category", e.target.value)} /></label>
+                </>
+              ),
+            },
+            {
+              title: "定价与图片",
+              description: "售价必填（非负），内部结算价可空（留空=不参与结算/提成扣减）；商品图片在录入后于下方列表按行上传。",
+              validate: () => {
+                const priceCent = toCent(form.priceYuan);
+                if (priceCent === null || priceCent < 0) return "售价必须为非负数字";
+                const internal = toCent(form.internalPriceYuan);
+                if (form.internalPriceYuan.trim() !== "" && (internal === null || internal < 0)) return "内部结算价必须为非负数字（留空=不录入）";
+                return null;
+              },
+              content: (
+                <>
+                  <label><span>售价（元）</span><input data-testid="bar-product-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setField("priceYuan", e.target.value)} /></label>
+                  <label><span>内部结算价（元，可空）</span><input data-testid="bar-product-internal-price" inputMode="decimal" value={form.internalPriceYuan} onChange={(e) => setField("internalPriceYuan", e.target.value)} /></label>
+                  <div className="admin-preview" data-testid="bar-product-image-hint">图片：商品录入后在下方列表对应行上传（按商品挂图）。</div>
+                </>
+              ),
+            },
+          ]}
+          summary={[
+            { label: "酒吧 ID", value: form.barId.trim() || "未填写" },
+            { label: "商品名", value: form.productName.trim() || "未填写" },
+            { label: "类别", value: form.category.trim() || "未填写" },
+            { label: "售价（元）", value: form.priceYuan.trim() || "未填写" },
+            { label: "内部结算价（元）", value: form.internalPriceYuan.trim() || "不录入" },
+          ]}
+        />
       </div>
 
       <label className="admin-inline-check" data-testid="bar-catalog-show-archived">

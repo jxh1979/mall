@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, BarComboRow, BarProductRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 function yuan(cent: number | null | undefined): string {
   if (cent === null || cent === undefined) return "—";
@@ -42,6 +43,8 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // V262 存档/删除范式：默认列表不含已存档，勾选后带出。
   const [showArchived, setShowArchived] = React.useState(false);
+  // 引导式流程 phase-3：新建套餐收起为主按钮，点击弹出分步引导（GuidedFlowModal）。
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   const productName = React.useCallback(
     (id: string): string => products.find((p) => p.id === id)?.productName ?? id,
@@ -203,6 +206,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
         items,
       });
       setForm(EMPTY_COMBO_FORM);
+      setCreateOpen(false);
       setActionResult({ action: "bar_combo_created", comboId: created?.id, comboName });
       await reload();
     } catch (submitError) {
@@ -219,41 +223,82 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
         description="酒吧套餐目录：从既有商品挑若干件组成套餐并定整体售价。套餐供平板图形化点单直接下单。内部结算价是平台↔酒吧成本结算价基，可空。"
       />
 
+      {/* 引导式流程 phase-3：新建套餐入口按钮（权限门在入口），点击弹出分步引导。 */}
       <div className="admin-form" data-testid="bar-combo-create-form">
-        <label><span>酒吧 ID</span><input data-testid="bar-combo-bar-id" value={form.barId} onChange={(e) => setField("barId", e.target.value)} /></label>
-        <label><span>套餐名</span><input data-testid="bar-combo-name" value={form.comboName} onChange={(e) => setField("comboName", e.target.value)} /></label>
-        <label><span>售价（元）</span><input data-testid="bar-combo-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setField("priceYuan", e.target.value)} /></label>
-        <label><span>内部结算价（元，可空）</span><input data-testid="bar-combo-internal-price" inputMode="decimal" value={form.internalPriceYuan} onChange={(e) => setField("internalPriceYuan", e.target.value)} /></label>
-
-        <div data-testid="bar-combo-items">
-          <span>组合商品</span>
-          {form.items.map((it, index) => (
-            <div key={index} className="admin-form-row" data-testid={`bar-combo-item-${index}`}>
-              <select data-testid={`bar-combo-item-product-${index}`} value={it.productId} onChange={(e) => setItem(index, "productId", e.target.value)}>
-                <option value="">选择商品</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.productName ?? p.id}</option>
-                ))}
-              </select>
-              <input data-testid={`bar-combo-item-qty-${index}`} inputMode="numeric" value={it.quantity} onChange={(e) => setItem(index, "quantity", e.target.value)} />
-              {form.items.length > 1 ? (
-                <button type="button" data-testid={`bar-combo-item-remove-${index}`} onClick={() => removeItem(index)}>移除</button>
-              ) : null}
-            </div>
-          ))}
-          <button type="button" data-testid="bar-combo-item-add" onClick={addItem}>新增组合项</button>
+        <div className="admin-form-row">
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.manage"]} data-testid="bar-combo-create-open" onClick={() => { setFormError(null); setCreateOpen(true); }}>
+            ＋ 新建套餐
+          </PermissionButton>
         </div>
-
-        {formError ? <div className="admin-inline-error" data-testid="bar-combo-form-error">{formError}</div> : null}
-        <PermissionButton
-          permissionsState={effectivePermissions}
-          permissions={["bar.combo.manage"]}
-          data-testid="bar-combo-submit"
-          onClick={() => void submit()}
-        >
-          保存套餐
-        </PermissionButton>
       </div>
+      <GuidedFlowModal
+        open={createOpen}
+        title="新建套餐"
+        testId="bar-combo-guided"
+        submitTestId="bar-combo-submit"
+        submitLabel="保存套餐"
+        error={formError ?? undefined}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={() => void submit()}
+        steps={[
+          {
+            title: "套餐信息",
+            description: "填写所属酒吧与套餐名。",
+            validate: () => (form.barId.trim() && form.comboName.trim() ? null : "酒吧、套餐名必填"),
+            content: (
+              <>
+                <label><span>酒吧 ID</span><input data-testid="bar-combo-bar-id" value={form.barId} onChange={(e) => setField("barId", e.target.value)} /></label>
+                <label><span>套餐名</span><input data-testid="bar-combo-name" value={form.comboName} onChange={(e) => setField("comboName", e.target.value)} /></label>
+              </>
+            ),
+          },
+          {
+            title: "定价与商品",
+            description: "售价必填（非负），内部结算价可空；从既有商品挑至少一件组成套餐，数量为正整数。",
+            validate: () => {
+              const priceCent = toCent(form.priceYuan);
+              if (priceCent === null || priceCent < 0) return "售价必须为非负数字";
+              const items = form.items
+                .map((it) => ({ productId: it.productId.trim(), quantity: Number(it.quantity.trim() || "0") }))
+                .filter((it) => it.productId !== "");
+              if (items.length === 0) return "套餐至少包含一个商品";
+              if (items.some((it) => !Number.isInteger(it.quantity) || it.quantity <= 0)) return "每个组合项数量必须为正整数";
+              return null;
+            },
+            content: (
+              <>
+                <label><span>售价（元）</span><input data-testid="bar-combo-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setField("priceYuan", e.target.value)} /></label>
+                <label><span>内部结算价（元，可空）</span><input data-testid="bar-combo-internal-price" inputMode="decimal" value={form.internalPriceYuan} onChange={(e) => setField("internalPriceYuan", e.target.value)} /></label>
+                <div data-testid="bar-combo-items">
+                  <span>组合商品</span>
+                  {form.items.map((it, index) => (
+                    <div key={index} className="admin-form-row" data-testid={`bar-combo-item-${index}`}>
+                      <select data-testid={`bar-combo-item-product-${index}`} value={it.productId} onChange={(e) => setItem(index, "productId", e.target.value)}>
+                        <option value="">选择商品</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>{p.productName ?? p.id}</option>
+                        ))}
+                      </select>
+                      <input data-testid={`bar-combo-item-qty-${index}`} inputMode="numeric" value={it.quantity} onChange={(e) => setItem(index, "quantity", e.target.value)} />
+                      {form.items.length > 1 ? (
+                        <button type="button" data-testid={`bar-combo-item-remove-${index}`} onClick={() => removeItem(index)}>移除</button>
+                      ) : null}
+                    </div>
+                  ))}
+                  <button type="button" data-testid="bar-combo-item-add" onClick={addItem}>新增组合项</button>
+                </div>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "酒吧 ID", value: form.barId.trim() || "未填写" },
+          { label: "套餐名", value: form.comboName.trim() || "未填写" },
+          { label: "售价（元）", value: form.priceYuan.trim() || "未填写" },
+          { label: "内部结算价（元）", value: form.internalPriceYuan.trim() || "不录入" },
+          { label: "组合商品数", value: String(form.items.filter((it) => it.productId.trim() !== "").length) },
+        ]}
+      />
 
       <label className="admin-inline-check" data-testid="bar-combos-show-archived">
         <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
