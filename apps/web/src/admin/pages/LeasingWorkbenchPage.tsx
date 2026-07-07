@@ -13,6 +13,7 @@ import { useSortedRows } from "../components/useSortedRows";
 import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 // 招商前漏斗行类型（后端 leasing.* 记录的前端视图，camelCase 由 adminClient 统一转换）。
 interface LeasingLeadRow {
@@ -139,6 +140,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [followContent, setFollowContent] = React.useState("已电话沟通，客户意向较强");
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
+  // 引导式创建流（一期范式）：新建线索收起为主按钮 → 分步弹窗 → 确认创建。
+  const [leadFlowOpen, setLeadFlowOpen] = React.useState(false);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -276,6 +279,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       brandId: brand.selected?.id ?? null,
     };
     await runAction("leasing_lead_created", request, () => api.post("/api/v1/leasing/leads", request));
+    // 成功或失败都收起弹窗：字段是页面态不丢失，失败信息在页面 leasing-error 区展示。
+    setLeadFlowOpen(false);
   }
 
   async function assignLead() {
@@ -473,16 +478,9 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>品牌库</span><button type="button" className="admin-kpi-value" data-testid="leasing-kpi-brands" onClick={() => enterKpiFocus("brands")}>{brands.length}</button><small>含黑名单</small></div>
             </div>
 
-            {/* 线索建档 */}
-            <div className="admin-form-grid" data-testid="leasing-lead-create-form">
-              <label>联系人<input data-testid="leasing-lead-contact-name" value={contactName} onChange={(e) => setContactName(e.target.value)} /></label>
-              <label>联系电话<input data-testid="leasing-lead-contact-phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} /></label>
-              <label>来源<select data-testid="leasing-lead-source" value={source} onChange={(e) => setSource(e.target.value)}><option value="outbound">外拓</option><option value="online_inquiry">线上咨询</option><option value="referral">转介绍</option><option value="exhibition">展会</option></select></label>
-              <label>意向业态<input data-testid="leasing-lead-business-type" value={intendedBusinessType} onChange={(e) => setIntendedBusinessType(e.target.value)} /></label>
-              <label>意向空间<input data-testid="leasing-lead-space" value={intendedSpaceId} onChange={(e) => setIntendedSpaceId(e.target.value)} /></label>
-            </div>
+            {/* 线索建档：引导式流程一期，内联填表收起为主按钮 → 分步弹窗（GuidedFlowModal）。 */}
             <div className="admin-form-row">
-              <button type="button" data-testid="leasing-lead-create" disabled={busyAction !== ""} onClick={() => void createLead()}>创建线索</button>
+              <button type="button" data-testid="leasing-lead-create-open" onClick={() => { setFormError(""); setLeadFlowOpen(true); }}>＋ 新建线索</button>
               <span className="admin-muted-action" data-testid="leasing-boundary">招商前漏斗为后台主数据；签约直接生成合同草稿，进入合同生命周期工作台审批。</span>
             </div>
 
@@ -549,6 +547,49 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
           </>
         )}
       </AdminDataState>
+      <GuidedFlowModal
+        open={leadFlowOpen}
+        title="新建招商线索"
+        testId="leasing-lead-flow"
+        submitTestId="leasing-lead-create"
+        submitLabel="创建线索"
+        submitting={busyAction !== ""}
+        error={formError}
+        onClose={() => setLeadFlowOpen(false)}
+        onSubmit={() => void createLead()}
+        steps={[
+          {
+            title: "联系人信息",
+            description: "填写线索联系人及联系电话。",
+            validate: () => (contactName.trim() ? null : TEXT.contactRequired),
+            content: (
+              <>
+                <label>联系人<input data-testid="leasing-lead-contact-name" value={contactName} onChange={(e) => setContactName(e.target.value)} /></label>
+                <label>联系电话<input data-testid="leasing-lead-contact-phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} /></label>
+              </>
+            ),
+          },
+          {
+            title: "来源与意向",
+            description: "记录线索来源、意向业态与意向空间。",
+            content: (
+              <>
+                <label>来源<select data-testid="leasing-lead-source" value={source} onChange={(e) => setSource(e.target.value)}><option value="outbound">外拓</option><option value="online_inquiry">线上咨询</option><option value="referral">转介绍</option><option value="exhibition">展会</option></select></label>
+                <label>意向业态<input data-testid="leasing-lead-business-type" value={intendedBusinessType} onChange={(e) => setIntendedBusinessType(e.target.value)} /></label>
+                <label>意向空间<input data-testid="leasing-lead-space" value={intendedSpaceId} onChange={(e) => setIntendedSpaceId(e.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "联系人", value: contactName },
+          { label: "联系电话", value: contactPhone },
+          { label: "来源", value: label(SOURCE_LABELS, source) },
+          { label: "意向业态", value: label(BUSINESS_TYPE_LABELS, intendedBusinessType) },
+          { label: "意向空间", value: intendedSpaceId },
+          { label: "关联品牌", value: brand.selected?.brandName ?? "未关联" },
+        ]}
+      />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

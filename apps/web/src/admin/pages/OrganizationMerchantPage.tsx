@@ -9,6 +9,7 @@ import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 const TEXT = {
   title: "组织与商户档案",
@@ -63,6 +64,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [contactPhone, setContactPhone] = React.useState("13800000000");
   const [cooperationForm, setCooperationForm] = React.useState("fixed_rent_plus_commission");
   const [formError, setFormError] = React.useState("");
+  // 引导式创建流（一期范式）：主按钮 → 分步弹窗 → 确认创建。
+  const [createOpen, setCreateOpen] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：三张业务表（经营主体/商户/项目）整行可点 → 该行完整字段（枚举中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -158,6 +161,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     };
     const result = await api.post<unknown>("/api/v1/platform/merchants", request);
     setActionResult({ action: "merchant_profile_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+    setCreateOpen(false);
     await reload();
   }
 
@@ -366,15 +370,9 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
               </div>
             </div>
 
-            <div className="admin-form-grid">
-              <label>商户名称<input data-testid="organization-merchant-name" value={merchantName} onChange={(event) => setMerchantName(event.target.value)} /></label>
-              <label>商户类型<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}</select></label>
-              <label>联系人<input data-testid="organization-merchant-contact-name" value={contactName} onChange={(event) => setContactName(event.target.value)} /></label>
-              <label>联系电话<input data-testid="organization-merchant-contact-phone" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></label>
-              <label>合作形式<select data-testid="organization-merchant-cooperation" value={cooperationForm} onChange={(event) => setCooperationForm(event.target.value)}>{COOPERATION_FORMS.map((form) => <option key={form} value={form}>{formatBusinessStatus(form)}</option>)}</select></label>
-            </div>
+            {/* 引导式流程一期：内联填表收起为主按钮，点击弹出分步引导（GuidedFlowModal）。 */}
             <div className="admin-form-row">
-              <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid="organization-merchant-create" onClick={() => void createMerchant()}>创建商户档案</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid="organization-merchant-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ 新建商户</PermissionButton>
               <span className="admin-muted-action" data-testid="organization-merchant-boundary">{TEXT.boundary}</span>
             </div>
 
@@ -384,6 +382,54 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
           </>
         )}
       </AdminDataState>
+      <GuidedFlowModal
+        open={createOpen}
+        title="新建商户档案"
+        testId="organization-merchant-flow"
+        submitTestId="organization-merchant-create"
+        submitLabel="创建商户档案"
+        error={formError}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={() => void createMerchant()}
+        steps={[
+          {
+            title: "基本信息",
+            description: "填写商户名称与业态类型。",
+            validate: () => (merchantName.trim() ? null : TEXT.merchantNameRequired),
+            content: (
+              <>
+                <label>商户名称<input data-testid="organization-merchant-name" value={merchantName} onChange={(event) => setMerchantName(event.target.value)} /></label>
+                <label>商户类型<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}</select></label>
+              </>
+            ),
+          },
+          {
+            title: "联系人",
+            description: "填写商户对接联系人及电话。",
+            validate: () => (/^1[3-9]\d{9}$/.test(contactPhone.trim()) ? null : TEXT.contactPhoneInvalid),
+            content: (
+              <>
+                <label>联系人<input data-testid="organization-merchant-contact-name" value={contactName} onChange={(event) => setContactName(event.target.value)} /></label>
+                <label>联系电话<input data-testid="organization-merchant-contact-phone" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></label>
+              </>
+            ),
+          },
+          {
+            title: "经营与租赁",
+            description: "选择与商户约定的合作形式。",
+            content: (
+              <label>合作形式<select data-testid="organization-merchant-cooperation" value={cooperationForm} onChange={(event) => setCooperationForm(event.target.value)}>{COOPERATION_FORMS.map((form) => <option key={form} value={form}>{formatBusinessStatus(form)}</option>)}</select></label>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "商户名称", value: merchantName },
+          { label: "商户类型", value: formatBusinessStatus(merchantType) },
+          { label: "联系人", value: contactName },
+          { label: "联系电话", value: contactPhone },
+          { label: "合作形式", value: formatBusinessStatus(cooperationForm) },
+        ]}
+      />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

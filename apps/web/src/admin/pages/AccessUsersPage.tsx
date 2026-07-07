@@ -6,6 +6,7 @@ import type { AccessUserRow, AdminPageProps, PermissionTemplateRow } from "../ty
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 function templateLabel(template: PermissionTemplateRow) {
   return template.templateName ?? template.name ?? template.id;
@@ -35,6 +36,8 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  // 引导式创建流（一期范式）：新建账号收起为主按钮 → 分步弹窗 → 确认创建。
+  const [createOpen, setCreateOpen] = React.useState(false);
   // 行明细抽屉：整行可点 → 该员工账号完整字段（账号类型/状态中文·组织商户显名）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -117,6 +120,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       setPhone("");
       setConsentReference("");
       setEvidenceAttachmentIds("");
+      setCreateOpen(false);
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "创建员工失败";
       setFormError(message);
@@ -166,31 +170,9 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
     <section data-testid="access-users-page">
       <AdminPageHeader title="员工账号" description="管理员工账号、岗位角色和企业微信同步结果；禁用、手动录入和分配权限模板必须留痕。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        {/* 引导式流程一期：内联填表收起为主按钮，点击弹出分步引导（GuidedFlowModal）。 */}
         <div className="admin-form-row">
-          <label>员工账号<input data-testid="access-user-name" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="登录用账号名" /></label>
-          <label>初始密码<input data-testid="access-user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="首次登录使用" /></label>
-          <label>手机号<input data-testid="access-user-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="可选，后端仅留哈希" /></label>
-          <label>账号类型<select data-testid="access-user-account-type" value={accountType} onChange={(event) => setAccountType(event.target.value)}>
-            <option value="staff">普通员工</option>
-            <option value="sales">销售人员</option>
-            <option value="supervisor">主管</option>
-            <option value="merchant_admin">商户管理员</option>
-            <option value="merchant">商户员工</option>
-          </select></label>
-          <label>所属组织<input data-testid="access-user-org" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} placeholder="组织 ID" /></label>
-          <label>所属商户<input data-testid="access-user-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)} placeholder="商户 ID（销售/商户账号必填）" /></label>
-          <label>授权凭据<input data-testid="access-user-consent" value={consentReference} onChange={(event) => setConsentReference(event.target.value)} placeholder="同意/授权凭据编号（可选）" /></label>
-          <label>证据附件<input data-testid="access-user-evidence" value={evidenceAttachmentIds} onChange={(event) => setEvidenceAttachmentIds(event.target.value)} placeholder="附件 ID，逗号分隔（可选）" /></label>
-          <label>初始状态<select data-testid="access-user-status" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="active">启用</option>
-            <option value="invited">待激活</option>
-            <option value="disabled">禁用</option>
-          </select></label>
-          <label>权限模板<select data-testid="access-user-template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
-            <option value="">暂不赋权</option>
-            {templates.map((template) => <option key={template.id} value={template.id}>{templateLabel(template)}</option>)}
-          </select></label>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["access.user.manage"]} data-testid="access-user-create" onClick={() => void createUser()} disabled={!username.trim() || !password.trim() || submitting}>新增员工并赋权</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["access.user.manage"]} data-testid="access-user-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ 新建员工账号</PermissionButton>
         </div>
         {formError ? <div data-testid="access-users-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">
@@ -215,6 +197,84 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           </table>
         </div>
       </AdminDataState>
+      <GuidedFlowModal
+        open={createOpen}
+        title="新建员工账号"
+        testId="access-user-flow"
+        submitTestId="access-user-create"
+        submitLabel="新增员工并赋权"
+        submitting={submitting}
+        error={formError}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={() => void createUser()}
+        steps={[
+          {
+            title: "账号信息",
+            description: "填写登录账号、初始密码与账号类型。",
+            validate: () => {
+              if (!username.trim()) return "员工账号不能为空。";
+              if (!password.trim()) return "初始密码不能为空；后台手动建号必须能完成登录闭环。";
+              if (phone.trim() && !/^1\d{10}$/.test(phone.trim())) return "手机号必须是 11 位大陆手机号；不实名场景可留空。";
+              return null;
+            },
+            content: (
+              <>
+                <label>员工账号<input data-testid="access-user-name" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="登录用账号名" /></label>
+                <label>初始密码<input data-testid="access-user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="首次登录使用" /></label>
+                <label>手机号<input data-testid="access-user-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="可选，后端仅留哈希" /></label>
+                <label>账号类型<select data-testid="access-user-account-type" value={accountType} onChange={(event) => setAccountType(event.target.value)}>
+                  <option value="staff">普通员工</option>
+                  <option value="sales">销售人员</option>
+                  <option value="supervisor">主管</option>
+                  <option value="merchant_admin">商户管理员</option>
+                  <option value="merchant">商户员工</option>
+                </select></label>
+              </>
+            ),
+          },
+          {
+            title: "归属与授权",
+            description: "指定账号归属的组织/商户，并留存授权凭据。",
+            validate: () => (organizationId.trim() ? null : "组织 ID 不能为空，用于数据范围和留痕。"),
+            content: (
+              <>
+                <label>所属组织<input data-testid="access-user-org" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} placeholder="组织 ID" /></label>
+                <label>所属商户<input data-testid="access-user-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)} placeholder="商户 ID（销售/商户账号必填）" /></label>
+                <label>授权凭据<input data-testid="access-user-consent" value={consentReference} onChange={(event) => setConsentReference(event.target.value)} placeholder="同意/授权凭据编号（可选）" /></label>
+                <label>证据附件<input data-testid="access-user-evidence" value={evidenceAttachmentIds} onChange={(event) => setEvidenceAttachmentIds(event.target.value)} placeholder="附件 ID，逗号分隔（可选）" /></label>
+              </>
+            ),
+          },
+          {
+            title: "状态与权限",
+            description: "设定初始状态，可同时套用权限模板完成赋权。",
+            content: (
+              <>
+                <label>初始状态<select data-testid="access-user-status" value={status} onChange={(event) => setStatus(event.target.value)}>
+                  <option value="active">启用</option>
+                  <option value="invited">待激活</option>
+                  <option value="disabled">禁用</option>
+                </select></label>
+                <label>权限模板<select data-testid="access-user-template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+                  <option value="">暂不赋权</option>
+                  {templates.map((template) => <option key={template.id} value={template.id}>{templateLabel(template)}</option>)}
+                </select></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "员工账号", value: username },
+          { label: "手机号", value: phone.trim() || "未填写" },
+          { label: "账号类型", value: formatBusinessStatus(accountType) },
+          { label: "所属组织", value: orgDisplay(organizationId.trim() || null) },
+          { label: "所属商户", value: merchantDisplay(merchantId.trim() || null) },
+          { label: "初始状态", value: formatBusinessStatus(status) },
+          { label: "权限模板", value: (() => { const template = templates.find((t) => t.id === selectedTemplateId); return template ? templateLabel(template) : "暂不赋权"; })() },
+          { label: "授权凭据", value: consentReference.trim() || "未填写" },
+          { label: "证据附件", value: evidenceAttachmentIds.trim() || "未填写" },
+        ]}
+      />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

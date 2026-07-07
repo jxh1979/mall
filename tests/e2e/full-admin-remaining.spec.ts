@@ -583,7 +583,12 @@ test.describe("full admin remaining pages acceptance", () => {
     await adminLogin(page);
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-002")!);
+    // 引导式流程一期：主按钮打开分步弹窗 → 基本信息 → 联系人 → 经营与租赁 → 确认页创建。
+    await page.getByTestId("organization-merchant-create-open").click();
     await page.getByTestId("organization-merchant-name").fill("二期测试商户");
+    await page.getByTestId("organization-merchant-flow-next").click();
+    await page.getByTestId("organization-merchant-flow-next").click();
+    await page.getByTestId("organization-merchant-flow-next").click();
     await page.getByTestId("organization-merchant-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant_profile_created");
     await expect(page.getByTestId("admin-action-result")).toContainText("Created Merchant");
