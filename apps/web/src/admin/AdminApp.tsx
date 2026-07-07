@@ -634,7 +634,7 @@ export default function AdminApp() {
               <path d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <div><strong>{route.label}</strong><span>{route.pageId} · {route.route}</span></div>
+          <div><strong>{route.label}</strong><span>{route.module}</span></div>
           <div className="admin-topbar-actions">
             <span className="admin-topbar-store">营业中 · 综合体</span>
             <span className="admin-user-chip">{user.username}</span>
