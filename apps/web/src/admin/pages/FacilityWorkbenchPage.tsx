@@ -9,6 +9,7 @@ import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { Tabs } from "antd";
 
 type FacilityEquipmentRow = {
   id: string; name: string; equipmentType: string; status: string;
@@ -450,6 +451,13 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
     <section data-testid="facility-workbench-page">
       <AdminPageHeader title="楼宇运营工作台" description="设备台账、维保工单、楼宇巡检按后台真实端点闭环；设备告警和巡检异常仍由后端触发工单联动。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        <div className="admin-preview" data-testid="facility-workbench-guide">
+          <strong>这一页做什么：</strong>楼宇运营三大块——① 设备台账（含维保到期提醒）② 维保工单（派单 / 逾期 / SLA 策略）③ 楼宇巡检（模板 / 任务 / 记录）。切换下方标签查看；设备告警与巡检异常仍由后端自动联动生成工单。
+        </div>
+        <Tabs
+          data-testid="facility-workbench-tabs"
+          items={[
+            { key: "equipment", label: "① 设备台账", forceRender: true, children: (<>
         <h3>设备台账</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-equipment-table">
@@ -531,6 +539,8 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           </table>
         </div>
 
+          </>) },
+          { key: "workorders", label: "② 维保工单", forceRender: true, children: (<>
         <h3>维保工单</h3>
         <div className="admin-inline-form" data-testid="facility-work-order-create-form">
           <select data-testid="facility-work-order-type" aria-label="工单类型" value={workOrderForm.workOrderType} onChange={(event) => setWorkOrderForm({ ...workOrderForm, workOrderType: event.target.value })}>{WORK_ORDER_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
@@ -598,6 +608,8 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid="facility-policy-save" onClick={() => void savePolicy()}>保存 SLA</PermissionButton>
         </div>
 
+          </>) },
+          { key: "inspection", label: "③ 楼宇巡检", forceRender: true, children: (<>
         <h3>楼宇巡检</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-templates-table">
@@ -655,6 +667,9 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <tbody>{inspectionRecords.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-record-${row.id}`} onClick={() => openInspectionRecordDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionRecordDetail(row); } }}><td>{row.id}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{cnDate(row.recordedAt)}</td></tr>)}</tbody>
           </table>
         </div>
+          </>) },
+        ]}
+      />
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
