@@ -45,7 +45,6 @@ describe("DynamicPricingPage 引导式新建定价规则", () => {
     await waitFor(() => expect(screen.getByTestId("dynamic-pricing-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("dynamic-pricing-create-open"));
     fireEvent.change(screen.getByTestId("dynamic-pricing-rule-name"), { target: { value: "低库存加价" } });
-    fireEvent.click(screen.getByTestId("dynamic-pricing-guided-next"));
     fireEvent.change(screen.getByTestId("dynamic-pricing-adjustment-rate"), { target: { value: "15" } });
     fireEvent.click(screen.getByTestId("dynamic-pricing-guided-next"));
     fireEvent.click(screen.getByTestId("dynamic-pricing-create"));

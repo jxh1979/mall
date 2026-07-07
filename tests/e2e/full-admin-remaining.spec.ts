@@ -599,8 +599,6 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("organization-merchant-create-open").click();
     await page.getByTestId("organization-merchant-name").fill("二期测试商户");
     await page.getByTestId("organization-merchant-flow-next").click();
-    await page.getByTestId("organization-merchant-flow-next").click();
-    await page.getByTestId("organization-merchant-flow-next").click();
     await page.getByTestId("organization-merchant-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant_profile_created");
     await expect(page.getByTestId("admin-action-result")).toContainText("Created Merchant");
@@ -655,7 +653,6 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("finalPriceCent");
     // 引导式流程 phase-3:新建定价规则改弹窗(规则名默认周末上浮/调整率默认10,均有效)→翻页→提交。
     await page.getByTestId("dynamic-pricing-create-open").click();
-    await page.getByTestId("dynamic-pricing-guided-next").click();
     await page.getByTestId("dynamic-pricing-guided-next").click();
     await page.getByTestId("dynamic-pricing-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("draft");
@@ -739,7 +736,6 @@ test.describe("full admin remaining pages acceptance", () => {
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-001")!);
     await page.getByTestId("merchant-work-order-create-open").click();
     await page.getByTestId("merchant-work-order-title").fill("排水异味投诉");
-    await page.getByTestId("merchant-work-order-guided-next").click();
     await page.getByTestId("merchant-work-order-guided-next").click();
     await page.getByTestId("merchant-work-order-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_created");

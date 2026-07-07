@@ -75,7 +75,6 @@ describe("StaffShiftAttendancePage 引导式新增排班(phase-10)", () => {
     fireEvent.change(screen.getByTestId("shift-user-input"), { target: { value: "staff-9" } });
     fireEvent.change(screen.getByTestId("shift-start-input"), { target: { value: "2026-07-05T09:00" } });
     fireEvent.change(screen.getByTestId("shift-end-input"), { target: { value: "2026-07-05T18:00" } });
-    fireEvent.click(screen.getByTestId("shift-create-guided-next")); // 步1→步2
     fireEvent.change(screen.getByTestId("shift-points-input"), { target: { value: "sp-a, sp-b" } });
     fireEvent.click(screen.getByTestId("shift-create-guided-next")); // 步2→确认
     await waitFor(() => expect(screen.getByTestId("shift-create-guided-summary")).toBeTruthy());

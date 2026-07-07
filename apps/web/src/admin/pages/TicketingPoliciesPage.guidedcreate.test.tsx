@@ -41,11 +41,8 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     expect(screen.queryByTestId("ticket-name")).toBeNull();
 
     fireEvent.click(screen.getByTestId("ticket-create-open"));
-    // 步1 基本信息（名称有默认值）→ 下一步。
+    // 一屏表单：名称有默认值。只填平日/周末，缺节假日 → 下一步触发校验，弹窗留开显错。
     expect(screen.getByTestId("ticket-name")).toBeTruthy();
-    fireEvent.click(screen.getByTestId("ticket-policy-next"));
-
-    // 步2 定价：只填平日/周末，缺节假日 → 下一步触发校验，弹窗留开显错。
     fireEvent.change(screen.getByTestId("ticket-weekday-price"), { target: { value: "100" } });
     fireEvent.change(screen.getByTestId("ticket-weekend-price"), { target: { value: "120" } });
     fireEvent.click(screen.getByTestId("ticket-policy-next"));

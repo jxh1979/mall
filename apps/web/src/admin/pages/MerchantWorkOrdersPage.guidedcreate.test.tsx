@@ -41,8 +41,6 @@ describe("MerchantWorkOrdersPage 引导式新建工单", () => {
     // 步骤1 工单信息（title 有默认值，改成自定义标题）
     fireEvent.change(screen.getByTestId("merchant-work-order-title"), { target: { value: "排水异味投诉" } });
     fireEvent.click(screen.getByTestId("merchant-work-order-guided-next"));
-    // 步骤2 分类与优先级（默认值即可）
-    fireEvent.click(screen.getByTestId("merchant-work-order-guided-next"));
     // 确认步 → 提交
     fireEvent.click(screen.getByTestId("merchant-work-order-create"));
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/merchant-service/work-orders")).toBe(true));

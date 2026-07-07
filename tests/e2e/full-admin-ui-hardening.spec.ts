@@ -90,9 +90,8 @@ test.describe("full admin UI hardening acceptance", () => {
     await adminLogin(page, "/admin/ticketing/policies");
 
     await openNav(page, "ADM-TKT-001");
-    // 引导式流程 phase-2：新建票种分步弹窗，定价步校验平日价必须 > 0。
+    // 引导式流程：新建票种一屏表单，下一步校验平日价必须 > 0。
     await page.getByTestId("ticket-create-open").click();
-    await page.getByTestId("ticket-policy-next").click(); // 步1 名称有默认值
     await page.getByTestId("ticket-weekday-price").fill("0");
     await page.getByTestId("ticket-weekend-price").fill("100");
     await page.getByTestId("ticket-holiday-price").fill("120");
@@ -191,7 +190,6 @@ test.describe("full admin UI hardening acceptance", () => {
     // 引导式流程一期：主按钮打开分步弹窗；非法手机号在「联系人」步被拦截，不发任何写请求。
     await page.getByTestId("organization-merchant-create-open").click();
     await page.getByTestId("organization-merchant-type").selectOption("retail");
-    await page.getByTestId("organization-merchant-flow-next").click();
     await page.getByTestId("organization-merchant-contact-name").fill("王经理");
     await page.getByTestId("organization-merchant-contact-phone").fill("12345");
     await page.getByTestId("organization-merchant-flow-next").click();
@@ -200,7 +198,6 @@ test.describe("full admin UI hardening acceptance", () => {
 
     // Valid input flows the matrix key_fields (type/contact) into the create request
     await page.getByTestId("organization-merchant-contact-phone").fill("13912345678");
-    await page.getByTestId("organization-merchant-flow-next").click();
     await page.getByTestId("organization-merchant-flow-next").click();
     await page.getByTestId("organization-merchant-create").click();
     const result = page.getByTestId("admin-action-result");

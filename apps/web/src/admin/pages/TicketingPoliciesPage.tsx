@@ -562,17 +562,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         onSubmit={() => void publish()}
         steps={[
           {
-            title: "基本信息",
-            description: "填写票种名称。",
-            validate: () => (ticketName.trim() ? null : "票种名称必填。"),
-            content: (
-              <label>票种名称<input data-testid="ticket-name" value={ticketName} onChange={(event) => setTicketName(event.target.value)} placeholder="票种名称" aria-label="票种名称" /></label>
-            ),
-          },
-          {
-            title: "定价",
-            description: "平日/周末/节假日基础价必填（大于 0），限量可空表示不限。",
+            title: "填写票种信息",
+            description: "票种名称与平日/周末/节假日基础价必填（价格大于 0），限量可空表示不限。填完点下一步核对信息再发布。",
             validate: () => {
+              if (!ticketName.trim()) return "票种名称必填。";
               if (!weekday || !weekend || !holiday) return "平日、周末、节假日基础价必须全部填写，缺少节假日价不可发布。";
               const prices: Record<string, number> = { 平日价: Number(weekday), 周末价: Number(weekend), 节假日价: Number(holiday) };
               const invalid = Object.entries(prices).find(([, value]) => !Number.isFinite(value) || value <= 0);
@@ -580,6 +573,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
             },
             content: (
               <>
+                <label>票种名称<input data-testid="ticket-name" value={ticketName} onChange={(event) => setTicketName(event.target.value)} placeholder="票种名称" aria-label="票种名称" /></label>
                 <label>平日价（元）<input data-testid="ticket-weekday-price" type="number" min={0} step="0.01" value={weekday} onChange={(event) => setWeekday(event.target.value)} placeholder="平日价" /></label>
                 <label>周末价（元）<input data-testid="ticket-weekend-price" type="number" min={0} step="0.01" value={weekend} onChange={(event) => setWeekend(event.target.value)} placeholder="周末价" /></label>
                 <label>节假日价（元）<input data-testid="ticket-holiday-price" type="number" min={0} step="0.01" value={holiday} onChange={(event) => setHoliday(event.target.value)} placeholder="节假日价" /></label>

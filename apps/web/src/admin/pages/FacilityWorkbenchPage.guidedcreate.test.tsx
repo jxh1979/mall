@@ -51,7 +51,6 @@ describe("FacilityWorkbenchPage 引导式新增设备", () => {
     // 补齐设备名 → 步进到责任步 → 确认页 → 提交。
     fireEvent.change(screen.getByTestId("facility-equipment-name"), { target: { value: "1号客梯" } });
     fireEvent.click(screen.getByTestId("facility-equipment-flow-next"));
-    fireEvent.click(screen.getByTestId("facility-equipment-flow-next"));
     fireEvent.click(screen.getByTestId("facility-equipment-create"));
 
     await waitFor(() => {

@@ -45,12 +45,10 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("access-user-password").fill("ChangeMe@123");
     await page.getByTestId("access-user-phone").fill("13800000001");
     await page.getByTestId("access-user-account-type").selectOption("sales");
-    await page.getByTestId("access-user-flow-next").click();
     await page.getByTestId("access-user-org").fill("org-1");
     await page.getByTestId("access-user-merchant").fill("merchant-1");
     await page.getByTestId("access-user-consent").fill("consent-staff-001");
     await page.getByTestId("access-user-evidence").fill("ev-staff-001,ev-hr-001");
-    await page.getByTestId("access-user-flow-next").click();
     await page.getByTestId("access-user-status").selectOption("active");
     await expect(page.getByTestId("access-user-template")).toBeVisible();
     await page.getByTestId("access-user-flow-next").click();
@@ -67,8 +65,7 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("permission-template-type").selectOption("temporary");
     await page.getByTestId("permission-template-valid-until").fill("2026-07-01T10:00");
     await page.getByTestId("permission-template-single-use").check();
-    await page.getByTestId("permission-template-create-guided-next").click();
-    // 步2 选权限：至少选一个权限点。
+    // 单屏：权限点与模板信息同屏，直接勾选。
     await page.getByTestId("permission-template-new-code-access.permission_template.view").check();
     await page.getByTestId("permission-template-new-code-bar.table_session.view").check();
     await page.getByTestId("permission-template-create-guided-next").click();
@@ -89,11 +86,9 @@ test.describe("full admin MVP acceptance", () => {
     await installMockApi(page);
     await adminLogin(page, "/admin/ticketing/policies");
 
-    // 引导式流程 phase-2：新建票种改为分步弹窗（基本信息→定价→确认）。
+    // 引导式流程：新建票种一屏表单（所有字段）→ 确认页 → 发布。
     await page.getByTestId("ticket-create-open").click();
-    // 步1 基本信息：票种名有默认值，直接下一步。
-    await page.getByTestId("ticket-policy-next").click();
-    // 步2 定价：缺节假日价 → 下一步触发校验报错。
+    // 一屏填：票种名有默认值，缺节假日价 → 下一步触发校验报错。
     await page.getByTestId("ticket-weekday-price").fill("100");
     await page.getByTestId("ticket-weekend-price").fill("120");
     await page.getByTestId("ticket-policy-next").click();

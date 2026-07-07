@@ -78,7 +78,6 @@ describe("VendorSiteEntriesPage 引导式新建进场报备(phase-11)", () => {
     fireEvent.change(screen.getByTestId("vendor-site-entry-project"), { target: { value: "venue-9" } });
     fireEvent.change(screen.getByTestId("vendor-site-entry-space"), { target: { value: "area-9" } });
     fireEvent.change(screen.getByTestId("vendor-site-entry-scope"), { target: { value: "外立面清洗" } });
-    fireEvent.click(screen.getByTestId("vendor-site-entry-create-guided-next")); // 步1→步2
     fireEvent.click(screen.getByTestId("vendor-site-entry-create-guided-next")); // 步2→确认
     await waitFor(() => expect(screen.getByTestId("vendor-site-entry-create-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("vendor-site-entry-create"));

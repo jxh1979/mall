@@ -56,6 +56,8 @@ function baseProps(overrides: Partial<AdminPageProps> = {}): AdminPageProps {
 
 // 打开一份合同的下方联动子表（变更/退租结算）：点该行操作列的「明细」按钮。
 async function loadSubTables() {
+  fireEvent.click(screen.getByTestId("contract-actions-contract-aaaa1111"));
+  await waitFor(() => expect(screen.getByTestId("contract-detail-contract-aaaa1111")).toBeTruthy());
   fireEvent.click(screen.getByTestId("contract-detail-contract-aaaa1111"));
   await waitFor(() => expect(screen.getByTestId("contract-change-change-cccc3333")).toBeTruthy());
   await waitFor(() => expect(screen.getByTestId("contract-settlement-settle-dddd4444")).toBeTruthy());
@@ -161,6 +163,8 @@ describe("ContractWorkbenchPage 行明细抽屉", () => {
   it("点操作列「明细」按钮加载子表、不弹抽屉（stopPropagation）", async () => {
     render(<ContractWorkbenchPage {...baseProps()} />);
     await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-actions-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("contract-detail-contract-aaaa1111")).toBeTruthy());
     fireEvent.click(screen.getByTestId("contract-detail-contract-aaaa1111"));
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
     await waitFor(() => expect(screen.getByTestId("contract-change-change-cccc3333")).toBeTruthy());

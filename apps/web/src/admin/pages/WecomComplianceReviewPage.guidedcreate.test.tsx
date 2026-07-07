@@ -64,7 +64,6 @@ describe("WecomComplianceReviewPage 引导式新增留存策略(phase-11)", () =
     fireEvent.click(screen.getByTestId("wecom-policy-create-open"));
 
     fireEvent.change(screen.getByTestId("wecom-policy-days"), { target: { value: "90" } });
-    fireEvent.click(screen.getByTestId("wecom-policy-guided-next")); // 步1→步2
     fireEvent.click(screen.getByTestId("wecom-policy-guided-next")); // 步2→确认
     await waitFor(() => expect(screen.getByTestId("wecom-policy-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("wecom-policy-save"));

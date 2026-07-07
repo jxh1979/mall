@@ -159,9 +159,7 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     expect(typeText).toContain("餐饮");
     expect(typeText).not.toContain("tenant");
     expect(typeText).not.toContain("catering");
-    // 步进到第三步：经营与租赁（合作形式下拉）。默认值合法，直接下一步两次。
-    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
-    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    // 单屏模式：经营与租赁（合作形式下拉）与基本信息同屏，无需步进。
     const coopText = screen.getByTestId("organization-merchant-cooperation").textContent ?? "";
     expect(coopText).toContain("固定租金");
     expect(coopText).not.toContain("fixed_rent");
@@ -173,21 +171,18 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     await waitFor(() => expect(screen.getByTestId("organization-merchant-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("organization-merchant-create-open"));
 
-    // 第一步：清空商户名 → 校验拦截，停在本步。
+    // 单屏模式：所有字段同屏，「下一步」一次跑完各步校验（按字段顺序命中）。
+    // 商户名空 → 命中商户名校验。
     fireEvent.change(screen.getByTestId("organization-merchant-name"), { target: { value: " " } });
     fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
     expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("商户名称不能为空");
+    // 补商户名但电话非法 → 命中手机号校验。
     fireEvent.change(screen.getByTestId("organization-merchant-name"), { target: { value: "引导流程商户" } });
-    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
-
-    // 第二步：联系电话非法 → 校验拦截。
     fireEvent.change(screen.getByTestId("organization-merchant-contact-phone"), { target: { value: "12345" } });
     fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
     expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("手机号");
+    // 修正电话 → 下一步进确认页。
     fireEvent.change(screen.getByTestId("organization-merchant-contact-phone"), { target: { value: "13912345678" } });
-    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
-
-    // 第三步：经营与租赁 → 下一步进确认页。
     fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
     const summary = screen.getByTestId("organization-merchant-flow-summary");
     expect(summary.textContent).toContain("引导流程商户");
