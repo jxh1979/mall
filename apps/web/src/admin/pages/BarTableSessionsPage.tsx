@@ -5,6 +5,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { BarVenueSelect } from "../components/BarVenueSelect";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -47,9 +48,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [tableCreateOpen, setTableCreateOpen] = React.useState(false);
   const [tableCreateError, setTableCreateError] = React.useState("");
   // 从零起单三表单：新建卡座 / 新建订台（代客）/ 开台。全站零英文，受权限按钮约束。
-  const [newTable, setNewTable] = React.useState({ barId: "bar-main", tableName: "", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
-  const [newReservation, setNewReservation] = React.useState({ barId: "bar-main", tableId: "", guestCount: "2", salespersonUserId: "" });
-  const [newSession, setNewSession] = React.useState({ barId: "bar-main", tableId: "", businessDate: todayBusinessDate(), guestCount: "2", salesStaffId: "", serviceStaffId: "" });
+  const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
+  const [newReservation, setNewReservation] = React.useState({ barId: "", tableId: "", guestCount: "2", salespersonUserId: "" });
+  const [newSession, setNewSession] = React.useState({ barId: "", tableId: "", businessDate: todayBusinessDate(), guestCount: "2", salesStaffId: "", serviceStaffId: "" });
   // 行明细抽屉：三张业务表整行可点 → 完整字段（状态中文·开台/关台/预定时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -404,7 +405,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
             },
             content: (
               <>
-                <label>所属酒吧<input data-testid="bar-new-table-bar" value={newTable.barId} onChange={(event) => setNewTable((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
+                <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-table-bar" value={newTable.barId} onChange={(v) => setNewTable((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
                 <label>卡座名称<input data-testid="bar-new-table-name" value={newTable.tableName} onChange={(event) => setNewTable((p) => ({ ...p, tableName: event.target.value }))} placeholder="如 VIP-01" /></label>
               </>
             ),
@@ -431,14 +432,14 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         ]}
       />
       <div className="admin-form-row" data-testid="bar-create-reservation-form">
-        <label>所属酒吧<input data-testid="bar-new-reservation-bar" value={newReservation.barId} onChange={(event) => setNewReservation((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
+        <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-reservation-bar" value={newReservation.barId} onChange={(v) => setNewReservation((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
         <label>卡座 ID<input data-testid="bar-new-reservation-table" value={newReservation.tableId} onChange={(event) => setNewReservation((p) => ({ ...p, tableId: event.target.value }))} placeholder="要订的卡座 ID" /></label>
         <label>人数<input data-testid="bar-new-reservation-guests" type="number" min={1} value={newReservation.guestCount} onChange={(event) => setNewReservation((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
         <label>销售员（选填）<input data-testid="bar-new-reservation-sales" value={newReservation.salespersonUserId} onChange={(event) => setNewReservation((p) => ({ ...p, salespersonUserId: event.target.value }))} placeholder="销售员 ID" /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_RESERVATION_CREATE_PERMISSION]} disabled={submitting} onClick={() => void createReservation()} data-testid="bar-new-reservation-submit">新建订台（代客）</PermissionButton>
       </div>
       <div className="admin-form-row" data-testid="bar-create-session-form">
-        <label>所属酒吧<input data-testid="bar-new-session-bar" value={newSession.barId} onChange={(event) => setNewSession((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
+        <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-session-bar" value={newSession.barId} onChange={(v) => setNewSession((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
         <label>卡座 ID<input data-testid="bar-new-session-table" value={newSession.tableId} onChange={(event) => setNewSession((p) => ({ ...p, tableId: event.target.value }))} placeholder="要开台的卡座 ID" /></label>
         <label>营业日<input data-testid="bar-new-session-date" type="date" value={newSession.businessDate} onChange={(event) => setNewSession((p) => ({ ...p, businessDate: event.target.value }))} /></label>
         <label>人数<input data-testid="bar-new-session-guests" type="number" min={1} value={newSession.guestCount} onChange={(event) => setNewSession((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>

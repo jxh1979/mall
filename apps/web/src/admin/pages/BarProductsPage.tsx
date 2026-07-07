@@ -7,6 +7,7 @@ import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDra
 import type { AdminPageProps, BarProductRow, BarProductCategoryRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { BarVenueSelect } from "../components/BarVenueSelect";
 
 // 商品类别码 → 中文（零英文强制；不进共享码表，就近页级映射）。未知码原样返回。
 // 说明：这是既有的 product_type 兼容字段（粗类别）；V256 起「可配置分类」走 categoryId，两者并存展示。
@@ -320,7 +321,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
               validate: () => (categoryForm.barId.trim() && categoryForm.categoryName.trim() ? null : "酒吧、分类名必填"),
               content: (
                 <>
-                  <label><span>酒吧 ID</span><input data-testid="bar-category-bar-id" value={categoryForm.barId} onChange={(e) => setCategoryField("barId", e.target.value)} /></label>
+                  <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-category-bar-id" value={categoryForm.barId} onChange={(v) => setCategoryField("barId", v)} setGlobalError={setGlobalError} /></label>
                   <label><span>分类名</span><input data-testid="bar-category-name" value={categoryForm.categoryName} onChange={(e) => setCategoryField("categoryName", e.target.value)} /></label>
                   <label><span>排序（小在前）</span><input data-testid="bar-category-sort" inputMode="numeric" value={categoryForm.sortOrder} onChange={(e) => setCategoryField("sortOrder", e.target.value)} /></label>
                 </>
@@ -385,7 +386,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
               validate: () => (form.barId.trim() && form.productName.trim() && form.category.trim() ? null : "酒吧、商品名、类别必填"),
               content: (
                 <>
-                  <label><span>酒吧 ID</span><input data-testid="bar-product-bar-id" value={form.barId} onChange={(e) => setField("barId", e.target.value)} /></label>
+                  <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-product-bar-id" value={form.barId} onChange={(v) => setField("barId", v)} setGlobalError={setGlobalError} /></label>
                   <label><span>商品名</span><input data-testid="bar-product-name" value={form.productName} onChange={(e) => setField("productName", e.target.value)} /></label>
                   <label><span>类别</span><input data-testid="bar-product-category" value={form.category} onChange={(e) => setField("category", e.target.value)} /></label>
                 </>
