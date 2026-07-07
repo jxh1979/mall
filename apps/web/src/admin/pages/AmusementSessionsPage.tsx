@@ -11,6 +11,7 @@ import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps, AmusementProjectRow, AmusementSessionRow, AmusementVerificationRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 const SESSION_MANAGE = ["amusement.session.manage"];
 
@@ -53,6 +54,8 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [projectSubmitting, setProjectSubmitting] = React.useState(false);
+  // 引导式流程 phase-7：新增场次收起为主按钮 + 分步引导弹窗（新建项目仍内联，本期不动）。
+  const [sessionOpen, setSessionOpen] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 项目/场次完整字段（时间中文·状态中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -148,6 +151,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     try {
       const result = await api.post<unknown>("/api/v1/amusement/sessions", request);
       setActionResult({ action: "amusement_session_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+      setSessionOpen(false);
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "新增场次失败";
@@ -250,8 +254,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
             </div>
             <div className="admin-form-grid"><label>项目名称<input data-testid="amusement-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /></label><label>项目容量<input data-testid="amusement-project-capacity" value={projectCapacity} onChange={(event) => setProjectCapacity(event.target.value)} /></label></div>
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-project-create" disabled={projectSubmitting} onClick={() => void createProject()}>新建项目</PermissionButton></div>
-            <div className="admin-form-grid"><label>场次名称<input data-testid="amusement-session-name" value={sessionName} onChange={(event) => setSessionName(event.target.value)} /></label><label>容量<input data-testid="amusement-session-capacity" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label></div>
-            <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-session-create" disabled={submitting} onClick={() => void createSession()}>新增验收场次</PermissionButton><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
+            <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-session-create-open" disabled={submitting} onClick={() => { setFormError(""); setSessionOpen(true); }}>＋ 新增场次</PermissionButton><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
             {projectsSection}
             {sessionsSection}
             {verificationsSection}
@@ -259,6 +262,35 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
         )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={sessionOpen}
+        title="新增场次"
+        testId="amusement-session-guided"
+        submitTestId="amusement-session-create"
+        submitLabel="新增场次"
+        submitting={submitting}
+        error={formError || undefined}
+        onClose={() => setSessionOpen(false)}
+        onSubmit={() => void createSession()}
+        steps={[
+          {
+            title: "场次信息",
+            description: "填写场次名称与容量，容量至少 1；场次归属首个项目。",
+            validate: () => (!sessionName.trim() ? TEXT.nameRequired : null),
+            content: (
+              <>
+                <label>场次名称<input data-testid="amusement-session-name" value={sessionName} onChange={(event) => setSessionName(event.target.value)} /></label>
+                <label>容量<input data-testid="amusement-session-capacity" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "场次名称", value: sessionName.trim() || "未填写" },
+          { label: "容量", value: String(Math.max(1, Number(capacity) || 1)) },
+          { label: "归属项目", value: projects[0]?.projectName ?? projects[0]?.id ?? "amuse-1" },
+        ]}
+      />
     </section>
   );
 }
