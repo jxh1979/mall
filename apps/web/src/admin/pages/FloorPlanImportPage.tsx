@@ -5,6 +5,8 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
+import { IconButton } from "../components/IconButton";
+import { UnorderedListOutlined, ProfileOutlined } from "@ant-design/icons";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -161,7 +163,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
               <tr key={plan.id}>
                 <td>{plan.planName ?? plan.id}</td><td>{plan.buildingCode ?? "-"}/{plan.floorNo ?? "-"}</td>
                 <td>{plan.versionNo ?? "-"}</td><td>{formatBusinessStatus(plan.status)}</td>
-                <td><button type="button" data-testid={`floor-plan-select-${plan.id}`} onClick={() => void loadImports(plan.id)}>查看导入</button></td>
+                <td><IconButton icon={<UnorderedListOutlined />} tip="查看导入任务" onClick={() => void loadImports(plan.id)} testId={`floor-plan-select-${plan.id}`} /></td>
               </tr>
             ))}
           </tbody>
@@ -182,7 +184,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
                   <tr key={task.id}>
                     <td>{task.sourceName ?? task.id}</td><td>{formatBusinessStatus(task.status)}</td>
                     <td>{task.candidateCount ?? 0}</td><td>{task.errorCount ?? 0}</td>
-                    <td><button type="button" data-testid={`floor-plan-import-select-${task.id}`} onClick={() => void loadCandidates(selectedPlanId, task.id)}>候选明细</button></td>
+                    <td><IconButton icon={<ProfileOutlined />} tip="查看候选明细" onClick={() => void loadCandidates(selectedPlanId, task.id)} testId={`floor-plan-import-select-${task.id}`} /></td>
                   </tr>
                 ))}
               </tbody>

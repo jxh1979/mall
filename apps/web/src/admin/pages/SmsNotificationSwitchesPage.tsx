@@ -3,7 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
-import { PermissionButton } from "../security/Can";
+import { PermissionSwitch } from "../components/PermissionSwitch";
 
 type SwitchRow = { id: string; terminalType: string; capabilityCode: string; scopeId: string | null; enabled: boolean };
 
@@ -69,10 +69,8 @@ export function SmsNotificationSwitchesPage({ api, setActionResult, setGlobalErr
                     <td><small>{row.capabilityCode}</small></td>
                     <td data-testid={`sms-switch-state-${row.capabilityCode}`}>{row.enabled ? "开启" : "关闭"}</td>
                     <td>
-                      <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
-                        data-testid={`sms-switch-toggle-${row.capabilityCode}`} onClick={() => void toggle(row)}>
-                        {row.enabled ? "关闭" : "开启"}
-                      </PermissionButton>
+                      <PermissionSwitch permissionsState={effectivePermissions} permissions={MANAGE}
+                        checked={row.enabled} onChange={() => void toggle(row)} testId={`sms-switch-toggle-${row.capabilityCode}`} />
                     </td>
                   </tr>
                 );

@@ -3,7 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, CapabilitySwitchRow } from "../types";
-import { PermissionButton } from "../security/Can";
+import { PermissionSwitch } from "../components/PermissionSwitch";
 
 type SwitchCatalogEntry = {
   label: string;
@@ -142,14 +142,13 @@ export function IntegrationSwitchesPage({ api, setActionResult, setGlobalError, 
                       <div>开启：{entry ? entry.enabledRequirements : "—"}</div>
                     </td>
                     <td>
-                      <PermissionButton
+                      <PermissionSwitch
                         permissionsState={effectivePermissions}
                         permissions={["terminal.switch.manage"]}
-                        data-testid={`switch-toggle-${row.capabilityCode}`}
-                        onClick={() => void toggle(row)}
-                      >
-                        {row.enabled ? "关闭" : "开启"}
-                      </PermissionButton>
+                        checked={row.enabled}
+                        onChange={() => void toggle(row)}
+                        testId={`switch-toggle-${row.capabilityCode}`}
+                      />
                     </td>
                   </tr>
                 );
