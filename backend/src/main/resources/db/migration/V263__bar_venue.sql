@@ -68,6 +68,15 @@ SELECT DISTINCT bar_id, bar_id, 'active', NULL, now(), now()
         UNION SELECT bar_id FROM bar_bills
         UNION SELECT bar_id FROM bar_table_sessions
         UNION SELECT bar_id FROM bar_shifts
+        UNION SELECT bar_id FROM bar_deposit_rules
+        UNION SELECT bar_id FROM bar_gift_redemptions
+        UNION SELECT bar_id FROM bar_order_item_voids
+        UNION SELECT bar_id FROM bar_production_tickets
+        UNION SELECT bar_id FROM bar_production_ticket_events
+        UNION SELECT bar_id FROM bar_reservation_invitation_members
+        UNION SELECT bar_id FROM bar_table_guest_checkins
+        UNION SELECT bar_id FROM bar_table_session_adjustments
+        UNION SELECT bar_id FROM service_orders
   ) t
  WHERE bar_id IS NOT NULL
    AND bar_id <> ''
