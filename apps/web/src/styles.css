@@ -2432,3 +2432,14 @@ body {
 .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active {
   border-top: 2px solid var(--adm-gold);
 }
+
+/* ---------- 触摸屏基线（酒吧/服务业现场触摸屏也用；目标 ≥44px、菜单项一指可点） ---------- */
+.ant-dropdown-menu-item,
+.ant-select-item-option {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.admin-table .ant-btn {
+  min-height: 36px;
+}
