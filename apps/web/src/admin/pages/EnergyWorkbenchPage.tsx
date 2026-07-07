@@ -10,6 +10,7 @@ import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { Tabs } from "antd";
 
 type EnergyMeterRow = {
   id: string; name: string; meterType: string; parentMeterId?: string | null; gatherObject: string;
@@ -264,6 +265,13 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           <button type="button" data-testid="energy-period-load" onClick={() => void reload()}>按期读取</button>
         </div>
 
+        <div className="admin-preview" data-testid="energy-workbench-guide">
+          <strong>这一页做什么：</strong>能源管理三块——① 表计台账（4 类 / 总分表建档）② 抄表与抹差（录抄表、复核异常、总分表抹差）③ 能源费结算。先在上方「按期读取」选期间，再切标签操作。
+        </div>
+        <Tabs
+          data-testid="energy-workbench-tabs"
+          items={[
+            { key: "meters", label: "① 表计台账", forceRender: true, children: (<>
         <h3>表计台账（4 类 / 总分表）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-meters-table">
@@ -343,6 +351,8 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           <PermissionButton permissionsState={effectivePermissions} permissions={METER} data-testid="energy-meter-update" onClick={() => void saveMeter()}>保存表计</PermissionButton>
         </div>
 
+          </>) },
+          { key: "readings", label: "② 抄表与抹差", forceRender: true, children: (<>
         <h3>抄表与异常复核</h3>
         <div className="admin-inline-form" data-testid="energy-reading-form">
           <input aria-label="读数表计 id" placeholder="表计 id" value={readingForm.meterId} onChange={(event) => setReadingForm({ ...readingForm, meterId: event.target.value })} />
@@ -386,6 +396,8 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           </div>
         ) : null}
 
+          </>) },
+          { key: "settlement", label: "③ 能源费结算", forceRender: true, children: (<>
         <h3>能源费结算</h3>
         <div className="admin-inline-form" data-testid="energy-settlement-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={READING} data-testid="energy-fee-settle" onClick={() => void settleEnergyFee()}>结算本期能源费</PermissionButton>
@@ -404,6 +416,9 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
             ))}</tbody>
           </table>
         </div>
+          </>) },
+        ]}
+      />
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
