@@ -39,7 +39,8 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                            archived_at, archived_by, delete_status, delete_requested_by,
                            delete_requested_at, delete_reason
                       FROM merchant_service_work_orders
-                     WHERE merchant_id = :merchant_id
+                     WHERE delete_status <> 'approved'
+                       AND merchant_id = :merchant_id
                      ORDER BY created_at DESC, id
                      LIMIT :limit
                     """, Map.of("merchant_id", merchantScope.get(), "limit", limit), this::mapWorkOrder);
@@ -52,6 +53,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        archived_at, archived_by, delete_status, delete_requested_by,
                        delete_requested_at, delete_reason
                   FROM merchant_service_work_orders
+                 WHERE delete_status <> 'approved'
                  ORDER BY created_at DESC, id
                  LIMIT :limit
                 """, Map.of("limit", limit), this::mapWorkOrder);
@@ -92,6 +94,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        delete_requested_at, delete_reason
                   FROM merchant_service_work_orders
                  WHERE id = :id
+                   AND delete_status <> 'approved'
                 """, Map.of("id", id), this::mapWorkOrder).stream().findFirst();
     }
 
@@ -105,7 +108,8 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        archived_at, archived_by, delete_status, delete_requested_by,
                        delete_requested_at, delete_reason
                   FROM merchant_service_work_orders
-                 WHERE due_at IS NOT NULL
+                 WHERE delete_status <> 'approved'
+                   AND due_at IS NOT NULL
                    AND due_at <= :now
                    AND escalated_at IS NULL
                    AND status NOT IN ('resolved', 'closed', 'cancelled')
@@ -213,7 +217,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
 
     @Override
     public void deleteWorkOrder(String id) {
-        jdbcTemplate.update("DELETE FROM merchant_service_work_orders WHERE id = :id", Map.of("id", id));
+        jdbcTemplate.update("UPDATE merchant_service_work_orders SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     private MapSqlParameterSource workOrderParameters(MerchantWorkOrderRecord record) {

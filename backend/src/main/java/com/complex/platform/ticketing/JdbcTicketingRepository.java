@@ -77,7 +77,7 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public void deleteTicketType(String id) {
-        jdbcTemplate.update("DELETE FROM ticket_types WHERE id = :id", Map.of("id", id));
+        jdbcTemplate.update("UPDATE ticket_types SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     @Override
@@ -227,7 +227,7 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public void deleteEntitlementTemplate(String id) {
-        jdbcTemplate.update("DELETE FROM entitlement_templates WHERE id = :id", Map.of("id", id));
+        jdbcTemplate.update("UPDATE entitlement_templates SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     @Override
@@ -530,7 +530,7 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public void deletePriceRule(String id) {
-        jdbcTemplate.update("DELETE FROM ticket_price_rules WHERE id = :id", Map.of("id", id));
+        jdbcTemplate.update("UPDATE ticket_price_rules SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     @Override

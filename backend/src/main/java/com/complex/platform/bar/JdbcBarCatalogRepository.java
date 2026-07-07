@@ -56,7 +56,8 @@ final class JdbcBarCatalogRepository {
         jdbcTemplate.query("""
                 SELECT DISTINCT table_id
                   FROM bar_reservations
-                 WHERE status NOT IN ('cancelled', 'expired', 'completed')
+                 WHERE delete_status <> 'approved'
+                   AND status NOT IN ('cancelled', 'expired', 'completed')
                    AND reserved_at >= :since
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("since", java.sql.Timestamp.from(since)),
@@ -214,6 +215,7 @@ final class JdbcBarCatalogRepository {
                 SELECT *
                   FROM bar_reservations
                  WHERE invitation_token = :token
+                   AND delete_status <> 'approved'
                 """, Map.of("token", token), rowMapper::mapReservation).stream().findFirst();
     }
 
@@ -313,7 +315,7 @@ final class JdbcBarCatalogRepository {
     }
 
     public void deleteReservation(String id) {
-        jdbcTemplate.update("DELETE FROM bar_reservations WHERE id = :id", Map.of("id", id));
+        jdbcTemplate.update("UPDATE bar_reservations SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     public Optional<BarReservationRecord> findReservationById(String id) {
@@ -321,6 +323,7 @@ final class JdbcBarCatalogRepository {
                 SELECT *
                   FROM bar_reservations
                  WHERE id = :id
+                   AND delete_status <> 'approved'
                 """, Map.of("id", id), rowMapper::mapReservation).stream().findFirst();
     }
 

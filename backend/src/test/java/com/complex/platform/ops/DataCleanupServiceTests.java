@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 集中数据清理工具（Tier-D）服务集成测试。以 bar_products 为清理目标验证四条安全闸：
  *  ① dry-run 只统计不删；② 只删【已存档超 N 天】的行、活数据/近期存档一律不删；
- *  ③ approved 才真删并记 deleted_count、rejected 不删；④ 禁自审（发起人≠审批人）。
+ *  ③ approved 才批量隐藏(软删)并记隐藏条数、rejected 不动；④ 禁自审（发起人≠审批人）。
  * 用 complex_test 库 + @Transactional 自动回滚，不污染共享库。
  */
 @SpringBootTest(properties = {
@@ -61,6 +61,13 @@ class DataCleanupServiceTests {
         return c != null && c > 0;
     }
 
+    /** 软删后行仍在库但 delete_status='approved'（被前台读取过滤隐藏）。 */
+    private boolean hidden(String id) {
+        String status = jdbcTemplate.queryForObject(
+                "SELECT delete_status FROM bar_products WHERE id = ?", String.class, id);
+        return "approved".equals(status);
+    }
+
     @Test
     void previewCountsOnlyArchivedOlderThanAndDeletesNothing() {
         seedProduct("prod_old", 100);    // 已存档 100 天前 → 命中
@@ -80,7 +87,7 @@ class DataCleanupServiceTests {
     }
 
     @Test
-    void approveExecutesRealDeleteOfOnlyArchivedOldRows() {
+    void approveHidesOnlyArchivedOldRowsButKeepsThemInDb() {
         seedProduct("prod_del", 100);
         seedProduct("prod_keep_recent", 5);
         seedProduct("prod_keep_active", -1);
@@ -95,12 +102,16 @@ class DataCleanupServiceTests {
         var executed = service.approveAndExecute(pending.id(), new DataCleanupApprovalRequest("approved"));
 
         assertThat(executed.status()).isEqualTo("executed");
-        assertThat(executed.deletedCount()).isEqualTo(1);
+        assertThat(executed.deletedCount()).isEqualTo(1); // deleted_count 语义已改为隐藏条数
         assertThat(executed.approvedBy()).isEqualTo("usr_approver");
-        // 只删了已存档超期的那条；近期存档与活数据都在。
-        assertThat(exists("prod_del")).isFalse();
+        // 软删：只隐藏了已存档超期的那条，行仍在库（可恢复），仅被前台读取过滤隐藏。
+        assertThat(exists("prod_del")).isTrue();   // 行仍在数据库里（不物理删）
+        assertThat(hidden("prod_del")).isTrue();   // 已置 delete_status='approved' → 前台隐藏
+        // 近期存档与活数据既未删也未隐藏。
         assertThat(exists("prod_keep_recent")).isTrue();
+        assertThat(hidden("prod_keep_recent")).isFalse();
         assertThat(exists("prod_keep_active")).isTrue();
+        assertThat(hidden("prod_keep_active")).isFalse();
     }
 
     @Test
@@ -153,5 +164,6 @@ class DataCleanupServiceTests {
 
         assertThat(executed.deletedCount()).isZero();
         assertThat(exists("prod_referenced")).isTrue();
+        assertThat(hidden("prod_referenced")).isFalse(); // 有活引用被跳过，未隐藏
     }
 }

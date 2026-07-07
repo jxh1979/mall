@@ -54,7 +54,16 @@ class FacilityEquipmentArchiveDeleteJdbcIntegrationTests {
         FacilityEquipmentDeleteDecision decision = service.approveDelete(
                 "feq_del", new FacilityEquipmentDeleteApprovalRequest("approved", null));
         assertThat(decision.deleted()).isTrue();
-        assertThat(repository.findEquipmentById("feq_del")).isEmpty();
+        // 软删语义：审批通过后行仍保留在库（可查/可审计/可恢复），只是前台各处不再展示。
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM facility_equipment WHERE id = ?", Integer.class, "feq_del");
+        assertThat(rows).isEqualTo(1); // (a) 行仍在数据库里
+        String status = jdbcTemplate.queryForObject(
+                "SELECT delete_status FROM facility_equipment WHERE id = ?", String.class, "feq_del");
+        assertThat(status).isEqualTo("approved");
+        assertThat(repository.findEquipmentById("feq_del")).isEmpty(); // (b) 前台按 id 查不到（被隐藏）
+        assertThat(repository.listEquipment(true)).extracting(FacilityEquipmentRecord::id)
+                .doesNotContain("feq_del"); // (b) 前台列表也查不到
     }
 
     @Test

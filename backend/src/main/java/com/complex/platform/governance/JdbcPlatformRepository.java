@@ -179,7 +179,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
     @Override
     public void deleteMerchant(String merchantId) {
-        jdbcTemplate.update("DELETE FROM merchants WHERE id = :id", Map.of("id", merchantId));
+        jdbcTemplate.update("UPDATE merchants SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", merchantId));
     }
 
     @Override
