@@ -8,6 +8,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps, BarReservationRow, BarTableRow, BarTableSessionRow } from "../types";
 
 const BAR_CHECKIN_PERMISSION = "bar.table.guest_checkin";
@@ -42,6 +43,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
   const [barError, setBarError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  // 引导式流程 phase-5：新建卡座收起为主按钮 + 分步引导弹窗（订台/开台/转合续等操作流不动）。
+  const [tableCreateOpen, setTableCreateOpen] = React.useState(false);
+  const [tableCreateError, setTableCreateError] = React.useState("");
   // 从零起单三表单：新建卡座 / 新建订台（代客）/ 开台。全站零英文，受权限按钮约束。
   const [newTable, setNewTable] = React.useState({ barId: "bar-main", tableName: "", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
   const [newReservation, setNewReservation] = React.useState({ barId: "bar-main", tableId: "", guestCount: "2", salespersonUserId: "" });
@@ -200,21 +204,25 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   }
 
   // 新建卡座：可进人数（容量）独立于免通票入场人数；低消按元填、后端按分存。
-  function validateNewTable() {
-    if (!newTable.barId.trim()) return fail("新建卡座请填写所属酒吧。");
-    if (!newTable.tableName.trim()) return fail("新建卡座请填写卡座名称。");
+  // 返回中文错误文案则校验不过，null=放行（供弹窗步内校验 + 提交双保险共用）。
+  function newTableValidationMessage(): string | null {
+    if (!newTable.barId.trim()) return "新建卡座请填写所属酒吧。";
+    if (!newTable.tableName.trim()) return "新建卡座请填写卡座名称。";
     const cap = Number(newTable.capacity);
-    if (!Number.isFinite(cap) || cap <= 0) return fail("可进人数必须大于 0。");
+    if (!Number.isFinite(cap) || cap <= 0) return "可进人数必须大于 0。";
     const free = Number(newTable.allowedFreeEntryCount);
-    if (!Number.isFinite(free) || free < 0) return fail("免通票入场人数不能为负。");
+    if (!Number.isFinite(free) || free < 0) return "免通票入场人数不能为负。";
     const spend = Number(newTable.minimumSpendYuan);
-    if (!Number.isFinite(spend) || spend < 0) return fail("低消金额不能为负。");
-    setBarError("");
-    return true;
+    if (!Number.isFinite(spend) || spend < 0) return "低消金额不能为负。";
+    return null;
   }
 
   async function createTable() {
-    if (!validateNewTable()) return;
+    const message = newTableValidationMessage();
+    if (message) {
+      setTableCreateError(message);
+      return;
+    }
     setSubmitting(true);
     setGlobalError(null);
     try {
@@ -226,12 +234,13 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         minimumSpendCent: Math.round(Number(newTable.minimumSpendYuan) * 100),
       });
       setActionResult({ action: "bar_table_create", status: "created", result });
-      setBarError("");
+      setTableCreateError("");
       setNewTable((prev) => ({ ...prev, tableName: "" }));
+      setTableCreateOpen(false);
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "新建卡座失败";
-      setBarError(message);
+      setTableCreateError(message);
       setGlobalError(message);
       setActionResult({ action: "bar_table_create", status: "failed", message });
     } finally {
@@ -371,13 +380,56 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       {/* 从零起单入口：即便零数据也常驻可见（放在空态短路之外），支持新建卡座 / 新建订台（代客）/ 开台。 */}
       <h3>从零起单</h3>
       <div className="admin-form-row" data-testid="bar-create-table-form">
-        <label>所属酒吧<input data-testid="bar-new-table-bar" value={newTable.barId} onChange={(event) => setNewTable((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
-        <label>卡座名称<input data-testid="bar-new-table-name" value={newTable.tableName} onChange={(event) => setNewTable((p) => ({ ...p, tableName: event.target.value }))} placeholder="如 VIP-01" /></label>
-        <label>可进人数<input data-testid="bar-new-table-capacity" type="number" min={1} value={newTable.capacity} onChange={(event) => setNewTable((p) => ({ ...p, capacity: event.target.value }))} placeholder="容量" /></label>
-        <label>免通票入场人数<input data-testid="bar-new-table-free" type="number" min={0} value={newTable.allowedFreeEntryCount} onChange={(event) => setNewTable((p) => ({ ...p, allowedFreeEntryCount: event.target.value }))} placeholder="免票人数" /></label>
-        <label>低消（元）<input data-testid="bar-new-table-spend" type="number" min={0} value={newTable.minimumSpendYuan} onChange={(event) => setNewTable((p) => ({ ...p, minimumSpendYuan: event.target.value }))} placeholder="低消" /></label>
-        <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_MANAGE_PERMISSION]} disabled={submitting} onClick={() => void createTable()} data-testid="bar-new-table-submit">新建卡座</PermissionButton>
+        <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_MANAGE_PERMISSION]} disabled={submitting} onClick={() => { setTableCreateError(""); setTableCreateOpen(true); }} data-testid="bar-new-table-open">＋ 新建卡座</PermissionButton>
+        <span className="admin-muted-action">卡座为配置主数据：可进人数独立于免通票入场人数，低消按元填。</span>
       </div>
+      <GuidedFlowModal
+        open={tableCreateOpen}
+        title="新建卡座"
+        testId="bar-new-table-guided"
+        submitTestId="bar-new-table-submit"
+        submitLabel="新建卡座"
+        submitting={submitting}
+        error={tableCreateError || undefined}
+        onClose={() => setTableCreateOpen(false)}
+        onSubmit={() => void createTable()}
+        steps={[
+          {
+            title: "卡座信息",
+            description: "填写所属酒吧与卡座名称。",
+            validate: () => {
+              if (!newTable.barId.trim()) return "新建卡座请填写所属酒吧。";
+              if (!newTable.tableName.trim()) return "新建卡座请填写卡座名称。";
+              return null;
+            },
+            content: (
+              <>
+                <label>所属酒吧<input data-testid="bar-new-table-bar" value={newTable.barId} onChange={(event) => setNewTable((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
+                <label>卡座名称<input data-testid="bar-new-table-name" value={newTable.tableName} onChange={(event) => setNewTable((p) => ({ ...p, tableName: event.target.value }))} placeholder="如 VIP-01" /></label>
+              </>
+            ),
+          },
+          {
+            title: "容量与低消",
+            description: "填写可进人数、免通票入场人数与低消金额。",
+            validate: () => newTableValidationMessage(),
+            content: (
+              <>
+                <label>可进人数<input data-testid="bar-new-table-capacity" type="number" min={1} value={newTable.capacity} onChange={(event) => setNewTable((p) => ({ ...p, capacity: event.target.value }))} placeholder="容量" /></label>
+                <label>免通票入场人数<input data-testid="bar-new-table-free" type="number" min={0} value={newTable.allowedFreeEntryCount} onChange={(event) => setNewTable((p) => ({ ...p, allowedFreeEntryCount: event.target.value }))} placeholder="免票人数" /></label>
+                <label>低消（元）<input data-testid="bar-new-table-spend" type="number" min={0} value={newTable.minimumSpendYuan} onChange={(event) => setNewTable((p) => ({ ...p, minimumSpendYuan: event.target.value }))} placeholder="低消" /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "所属酒吧", value: newTable.barId.trim() || "未填写" },
+          { label: "卡座名称", value: newTable.tableName.trim() || "未填写" },
+          { label: "可进人数", value: newTable.capacity.trim() || "未填写" },
+          { label: "免通票入场人数", value: newTable.allowedFreeEntryCount.trim() || "0" },
+          { label: "低消（元）", value: newTable.minimumSpendYuan.trim() || "0" },
+        ]}
+      />
       <div className="admin-form-row" data-testid="bar-create-reservation-form">
         <label>所属酒吧<input data-testid="bar-new-reservation-bar" value={newReservation.barId} onChange={(event) => setNewReservation((p) => ({ ...p, barId: event.target.value }))} placeholder="酒吧 ID" /></label>
         <label>卡座 ID<input data-testid="bar-new-reservation-table" value={newReservation.tableId} onChange={(event) => setNewReservation((p) => ({ ...p, tableId: event.target.value }))} placeholder="要订的卡座 ID" /></label>

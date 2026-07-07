@@ -6,6 +6,7 @@ import { AuditTrailHint, auditTraceField } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps } from "../types";
 
 type CatalogRow = { id: string; name?: string; priceCent?: number; durationMinutes?: number; active?: boolean };
@@ -57,6 +58,10 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
   const [feeMode, setFeeMode] = React.useState("none");
   const [feeValue, setFeeValue] = React.useState("");
   const [companyQr, setCompanyQr] = React.useState("");
+  // 引导式流程 phase-5：新增服务目录收起为主按钮 + 分步引导弹窗（收款码配置表单不动）。
+  const [catalogOpen, setCatalogOpen] = React.useState(false);
+  const [catalogError, setCatalogError] = React.useState("");
+  const [catalogSubmitting, setCatalogSubmitting] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该服务单完整字段（枚举中文·金额¥·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -105,21 +110,38 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
     void reload();
   }, [date, reload]);
 
+  // 参考价校验（步内 + 提交双保险）：服务名非空 + 参考价非负数。
+  function catalogPriceInvalid() {
+    const cent = Math.round(Number(itemPrice) * 100);
+    return !itemName.trim() || !Number.isFinite(cent) || cent < 0;
+  }
+
   const saveItem = async () => {
     const cent = Math.round(Number(itemPrice) * 100);
-    if (!itemName.trim() || !Number.isFinite(cent) || cent < 0) {
-      setGlobalError("请填 服务名与非负参考价(元)");
+    if (catalogPriceInvalid()) {
+      setCatalogError("请填 服务名与非负参考价(元)");
       return;
     }
-    await api.post("/api/v1/services/catalog", {
-      name: itemName.trim(), priceCent: cent,
-      durationMinutes: itemMinutes ? Number(itemMinutes) : null, active: true,
-      mgmtFeeMode: feeMode,
-      mgmtFeeValue: feeMode === "percent" ? Math.round(Number(feeValue) * 100) : feeMode === "fixed" ? Math.round(Number(feeValue) * 100) : 0,
-    });
-    setActionResult({ action: "service_catalog_saved", name: itemName.trim() });
-    setItemName(""); setItemPrice(""); setItemMinutes("");
-    await reload();
+    setCatalogSubmitting(true);
+    try {
+      await api.post("/api/v1/services/catalog", {
+        name: itemName.trim(), priceCent: cent,
+        durationMinutes: itemMinutes ? Number(itemMinutes) : null, active: true,
+        mgmtFeeMode: feeMode,
+        mgmtFeeValue: feeMode === "percent" ? Math.round(Number(feeValue) * 100) : feeMode === "fixed" ? Math.round(Number(feeValue) * 100) : 0,
+      });
+      setActionResult({ action: "service_catalog_saved", name: itemName.trim() });
+      setItemName(""); setItemPrice(""); setItemMinutes("");
+      setCatalogError("");
+      setCatalogOpen(false);
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "新增服务目录失败";
+      setCatalogError(message);
+      setGlobalError(message);
+    } finally {
+      setCatalogSubmitting(false);
+    }
   };
 
   const cancelOrder = async (id: string) => {
@@ -179,14 +201,52 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="service.catalog.saved / service.order.created / service.order.cancelled" />
       <h3>服务目录(固定参考价)</h3>
-      <div className="admin-form-grid" data-testid="service-catalog-editor">
-        <label>服务名<input data-testid="svc-name-input" value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder="点舞" /></label>
-        <label>参考价(元)<input data-testid="svc-price-input" value={itemPrice} onChange={(event) => setItemPrice(event.target.value)} /></label>
-        <label>时长(分钟)<input data-testid="svc-minutes-input" value={itemMinutes} onChange={(event) => setItemMinutes(event.target.value)} /></label>
-        <label>管理费<select data-testid="svc-fee-mode" value={feeMode} onChange={(event) => setFeeMode(event.target.value)}><option value="none">免收</option><option value="percent">比例(%)</option><option value="fixed">固定(元)</option></select></label>
-        <label>管理费值<input data-testid="svc-fee-value" value={feeValue} onChange={(event) => setFeeValue(event.target.value)} placeholder="10 或 30" /></label>
-        <button type="button" data-testid="svc-save" onClick={() => void saveItem()}>保存目录项</button>
+      <div className="admin-form-row" data-testid="service-catalog-editor">
+        <button type="button" data-testid="svc-catalog-create-open" onClick={() => { setCatalogError(""); setCatalogOpen(true); }}>＋ 新增服务目录</button>
+        <span className="admin-muted-action">服务目录=固定参考价项目；管理费模式决定完成分账时归公司比例。</span>
       </div>
+      <GuidedFlowModal
+        open={catalogOpen}
+        title="新增服务目录"
+        testId="svc-catalog-guided"
+        submitTestId="svc-save"
+        submitLabel="保存目录项"
+        submitting={catalogSubmitting}
+        error={catalogError || undefined}
+        onClose={() => setCatalogOpen(false)}
+        onSubmit={() => void saveItem()}
+        steps={[
+          {
+            title: "服务信息",
+            description: "填写服务名、参考价与时长。",
+            validate: () => (catalogPriceInvalid() ? "请填 服务名与非负参考价(元)" : null),
+            content: (
+              <>
+                <label>服务名<input data-testid="svc-name-input" value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder="点舞" /></label>
+                <label>参考价(元)<input data-testid="svc-price-input" value={itemPrice} onChange={(event) => setItemPrice(event.target.value)} /></label>
+                <label>时长(分钟)<input data-testid="svc-minutes-input" value={itemMinutes} onChange={(event) => setItemMinutes(event.target.value)} /></label>
+              </>
+            ),
+          },
+          {
+            title: "管理费",
+            description: "选择管理费收取方式与数值。",
+            content: (
+              <>
+                <label>管理费<select data-testid="svc-fee-mode" value={feeMode} onChange={(event) => setFeeMode(event.target.value)}><option value="none">免收</option><option value="percent">比例(%)</option><option value="fixed">固定(元)</option></select></label>
+                <label>管理费值<input data-testid="svc-fee-value" value={feeValue} onChange={(event) => setFeeValue(event.target.value)} placeholder="10 或 30" /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "服务名", value: itemName.trim() || "未填写" },
+          { label: "参考价(元)", value: itemPrice.trim() || "未填写" },
+          { label: "时长(分钟)", value: itemMinutes.trim() || "未填写" },
+          { label: "管理费", value: feeMode === "percent" ? "比例(%)" : feeMode === "fixed" ? "固定(元)" : "免收" },
+          { label: "管理费值", value: feeValue.trim() || "0" },
+        ]}
+      />
       <h3>公司收款码(统一代收;客人扫此码付款)</h3>
       <div className="admin-form-grid" data-testid="svc-payconfig-editor">
         <label>收款码内容<input data-testid="svc-payqr-input" value={companyQr} onChange={(event) => setCompanyQr(event.target.value)} placeholder="https://qr.alipay.com/..." /></label>
