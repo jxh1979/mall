@@ -90,29 +90,33 @@ public class JdbcDataCleanupRepository {
         return deleted;
     }
 
-    /** 元数据驱动活引用计数：枚举 public schema 中带 referenceColumn 列的基表逐表 COUNT（跳审计表）。
-     *  无 referenceColumn（如套餐）恒 0。table 名来自系统元数据非用户输入，无注入。 */
+    /** 外键目录驱动的活引用计数（免列名差异盲区，复核 Critical 修复）：
+     *  从 pg_constraint 查真正以外键引用本实体行(<tableName>.id)的表与列——不再靠 scope 声明的列名匹配
+     *  （权益模板真实外键列是 entitlement_template_id 而非 template_id，列名匹配会漏扫导致误删）。
+     *  排除 ON DELETE CASCADE(confdeltype='c') 子表（随主行级联删、不阻断，如套餐明细/账单子项）；
+     *  其余(NO ACTION/RESTRICT/SET NULL/SET DEFAULT)一律计入=保守阻断，宁可跳过不误删。
+     *  表/列名来自系统目录非用户输入，无注入。 */
     private long countReferences(DataCleanupScope scope, String id) {
-        Optional<String> column = scope.referenceColumn();
-        if (column.isEmpty()) {
-            return 0L;
-        }
-        List<String> tables = jdbcTemplate.queryForList("""
-                SELECT c.table_name
-                FROM information_schema.columns c
-                JOIN information_schema.tables t
-                  ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-                WHERE c.table_schema = 'public'
-                  AND c.column_name = :column_name
-                  AND t.table_type = 'BASE TABLE'
-                """, new MapSqlParameterSource().addValue("column_name", column.get()), String.class);
+        List<Map<String, Object>> fks = jdbcTemplate.queryForList("""
+                SELECT con.conrelid::regclass::text AS ref_table, att.attname AS ref_column
+                FROM pg_constraint con
+                JOIN pg_class tgt ON tgt.oid = con.confrelid
+                JOIN pg_namespace ns ON ns.oid = tgt.relnamespace
+                JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+                WHERE con.contype = 'f'
+                  AND ns.nspname = 'public'
+                  AND tgt.relname = :target
+                  AND con.confdeltype <> 'c'
+                """, new MapSqlParameterSource().addValue("target", scope.tableName()));
         long total = 0L;
-        for (String table : tables) {
-            if (AUDIT_ONLY_TABLES.contains(table) || table.equals(scope.tableName())) {
-                continue; // 跳审计表 + 自身表（自身 id 列非"引用列"，仅当引用列恰为自身表某列时才排除）。
+        for (Map<String, Object> fk : fks) {
+            String refTable = String.valueOf(fk.get("ref_table"));
+            String refColumn = String.valueOf(fk.get("ref_column"));
+            if (AUDIT_ONLY_TABLES.contains(refTable) || refTable.equals(scope.tableName())) {
+                continue;
             }
             Long c = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(1) FROM " + table + " WHERE " + column.get() + " = :id",
+                    "SELECT COUNT(1) FROM " + refTable + " WHERE " + refColumn + " = :id",
                     new MapSqlParameterSource().addValue("id", id), Long.class);
             total += c == null ? 0L : c;
         }
