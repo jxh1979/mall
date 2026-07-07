@@ -6,9 +6,17 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
+// V263：所属酒吧从手填输入改为下拉选择（BarVenueSelect 拉 /api/v1/bar/venues）。
+// 测试用路径感知的 get mock 返回一个 id=bar-main 的门店，使 fireEvent.change 能选中该 option。
+const VENUES = [{ id: "bar-main", barName: "主酒吧" }];
+function venueAwareGet() {
+  return vi.fn().mockImplementation((path: string) =>
+    Promise.resolve(path.startsWith("/api/v1/bar/venues") ? VENUES : []));
+}
+
 function makeApi(post = vi.fn().mockResolvedValue({ id: "prod-new" })): AdminApiClient {
   return {
-    get: vi.fn().mockResolvedValue([]),
+    get: venueAwareGet(),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post,
     put: vi.fn().mockResolvedValue({}),
@@ -35,7 +43,8 @@ describe("BarProductsPage 引导式新建商品", () => {
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("bar-product-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("bar-product-create-open"));
-    // 步骤1 商品信息（category 默认 spirit）
+    // 步骤1 商品信息（category 默认 spirit）；所属酒吧从下拉选 bar-main
+    await waitFor(() => expect(screen.getByTestId("bar-product-bar-id").querySelectorAll("option").length).toBeGreaterThan(1));
     fireEvent.change(screen.getByTestId("bar-product-bar-id"), { target: { value: "bar-main" } });
     fireEvent.change(screen.getByTestId("bar-product-name"), { target: { value: "威士忌" } });
     fireEvent.click(screen.getByTestId("bar-product-guided-next"));
@@ -54,6 +63,7 @@ describe("BarProductsPage 引导式新建商品", () => {
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("bar-product-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("bar-product-create-open"));
+    await waitFor(() => expect(screen.getByTestId("bar-product-bar-id").querySelectorAll("option").length).toBeGreaterThan(1));
     fireEvent.change(screen.getByTestId("bar-product-bar-id"), { target: { value: "bar-main" } });
     // 不填商品名（默认空）
     fireEvent.click(screen.getByTestId("bar-product-guided-next"));
