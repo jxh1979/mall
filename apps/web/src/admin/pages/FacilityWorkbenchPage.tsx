@@ -7,6 +7,7 @@ import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 type FacilityEquipmentRow = {
   id: string; name: string; equipmentType: string; status: string;
@@ -114,6 +115,9 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [recordForm, setRecordForm] = React.useState({ result: "normal", inspectorId: "", note: "", abnormalNote: "" });
   // 行明细抽屉：本页 8 张业务表整行可点 → 该行完整字段（枚举中文·日期 cnDate·人员 TraceLink）。一个 detail state 复用。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-2：新增设备收起为主按钮，点击弹出分步引导（GuidedFlowModal）。仅改设备创建主流程。
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [equipmentError, setEquipmentError] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -136,21 +140,27 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
   );
 
   async function createEquipment() {
+    // 双保险：步内已校验设备名，提交前再挡一次。
     if (!equipmentForm.name.trim()) {
-      setGlobalError("设备名称不能为空");
+      setEquipmentError("设备名称不能为空");
       return;
     }
-    await api.post("/api/v1/facility/equipment", {
-      name: equipmentForm.name.trim(),
-      equipmentType: equipmentForm.equipmentType,
-      brand: equipmentForm.brand.trim() || undefined,
-      responsibleUserId: equipmentForm.responsibleUserId.trim() || undefined,
-      maintenanceCycleDays: positiveInt(equipmentForm.maintenanceCycleDays),
-      spaceId: equipmentForm.spaceId.trim() || undefined,
-    });
-    setActionResult({ action: "facility_equipment_created", name: equipmentForm.name.trim() });
-    setEquipmentForm({ ...equipmentForm, name: "", brand: "" });
-    await reload();
+    try {
+      await api.post("/api/v1/facility/equipment", {
+        name: equipmentForm.name.trim(),
+        equipmentType: equipmentForm.equipmentType,
+        brand: equipmentForm.brand.trim() || undefined,
+        responsibleUserId: equipmentForm.responsibleUserId.trim() || undefined,
+        maintenanceCycleDays: positiveInt(equipmentForm.maintenanceCycleDays),
+        spaceId: equipmentForm.spaceId.trim() || undefined,
+      });
+      setActionResult({ action: "facility_equipment_created", name: equipmentForm.name.trim() });
+      setEquipmentForm({ ...equipmentForm, name: "", brand: "" });
+      setCreateOpen(false);
+      await reload();
+    } catch (createError) {
+      setEquipmentError(createError instanceof Error ? createError.message : "新建设备失败");
+    }
   }
 
   async function changeEquipmentStatus() {
@@ -458,15 +468,53 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
             ))}</tbody>
           </table>
         </div>
-        <div className="admin-inline-form" data-testid="facility-equipment-create-form">
-          <input data-testid="facility-equipment-name" aria-label="设备名称" placeholder="设备名称" value={equipmentForm.name} onChange={(event) => setEquipmentForm({ ...equipmentForm, name: event.target.value })} />
-          <select data-testid="facility-equipment-type" aria-label="设备分类" value={equipmentForm.equipmentType} onChange={(event) => setEquipmentForm({ ...equipmentForm, equipmentType: event.target.value })}>{EQUIPMENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <input data-testid="facility-equipment-brand" aria-label="品牌" placeholder="品牌" value={equipmentForm.brand} onChange={(event) => setEquipmentForm({ ...equipmentForm, brand: event.target.value })} />
-          <input data-testid="facility-equipment-owner" aria-label="责任人" placeholder="责任人 id" value={equipmentForm.responsibleUserId} onChange={(event) => setEquipmentForm({ ...equipmentForm, responsibleUserId: event.target.value })} />
-          <input data-testid="facility-equipment-cycle" aria-label="维保周期" type="number" min="1" placeholder="维保周期(天)" value={equipmentForm.maintenanceCycleDays} onChange={(event) => setEquipmentForm({ ...equipmentForm, maintenanceCycleDays: event.target.value })} />
-          <input data-testid="facility-equipment-space" aria-label="空间" placeholder="空间 id" value={equipmentForm.spaceId} onChange={(event) => setEquipmentForm({ ...equipmentForm, spaceId: event.target.value })} />
-          <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-equipment-create" onClick={() => void createEquipment()}>新建设备</PermissionButton>
+        {/* 引导式流程 phase-2：新增设备入口按钮（权限门在入口），点击弹出分步引导。其余表单（状态变更等）保持不变。 */}
+        <div className="admin-form-row">
+          <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-equipment-create-open" onClick={() => { setEquipmentError(""); setCreateOpen(true); }}>＋ 新增设备</PermissionButton>
         </div>
+        <GuidedFlowModal
+          open={createOpen}
+          title="新增设备"
+          testId="facility-equipment-flow"
+          submitTestId="facility-equipment-create"
+          submitLabel="新建设备"
+          error={equipmentError}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={() => void createEquipment()}
+          steps={[
+            {
+              title: "设备信息",
+              description: "填写设备名称、选择分类，可填品牌。",
+              validate: () => (equipmentForm.name.trim() ? null : "设备名称不能为空。"),
+              content: (
+                <>
+                  <label>设备名称<input data-testid="facility-equipment-name" aria-label="设备名称" placeholder="设备名称" value={equipmentForm.name} onChange={(event) => setEquipmentForm({ ...equipmentForm, name: event.target.value })} /></label>
+                  <label>设备分类<select data-testid="facility-equipment-type" aria-label="设备分类" value={equipmentForm.equipmentType} onChange={(event) => setEquipmentForm({ ...equipmentForm, equipmentType: event.target.value })}>{EQUIPMENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                  <label>品牌<input data-testid="facility-equipment-brand" aria-label="品牌" placeholder="品牌" value={equipmentForm.brand} onChange={(event) => setEquipmentForm({ ...equipmentForm, brand: event.target.value })} /></label>
+                </>
+              ),
+            },
+            {
+              title: "责任与维保",
+              description: "指定责任人、维保周期与所在空间（均可空）。",
+              content: (
+                <>
+                  <label>责任人<input data-testid="facility-equipment-owner" aria-label="责任人" placeholder="责任人 id" value={equipmentForm.responsibleUserId} onChange={(event) => setEquipmentForm({ ...equipmentForm, responsibleUserId: event.target.value })} /></label>
+                  <label>维保周期（天）<input data-testid="facility-equipment-cycle" aria-label="维保周期" type="number" min="1" placeholder="维保周期(天)" value={equipmentForm.maintenanceCycleDays} onChange={(event) => setEquipmentForm({ ...equipmentForm, maintenanceCycleDays: event.target.value })} /></label>
+                  <label>所在空间<input data-testid="facility-equipment-space" aria-label="空间" placeholder="空间 id" value={equipmentForm.spaceId} onChange={(event) => setEquipmentForm({ ...equipmentForm, spaceId: event.target.value })} /></label>
+                </>
+              ),
+            },
+          ]}
+          summary={[
+            { label: "设备名称", value: equipmentForm.name.trim() || "未填写" },
+            { label: "设备分类", value: zh(equipmentForm.equipmentType) },
+            { label: "品牌", value: equipmentForm.brand.trim() || "未填写" },
+            { label: "责任人", value: equipmentForm.responsibleUserId.trim() || "未指定" },
+            { label: "维保周期（天）", value: equipmentForm.maintenanceCycleDays.trim() || "未填写" },
+            { label: "所在空间", value: equipmentForm.spaceId.trim() || "未指定" },
+          ]}
+        />
         <div className="admin-inline-form" data-testid="facility-equipment-status-form">
           <input data-testid="facility-equipment-status-id" aria-label="状态设备 id" placeholder="设备 id" value={statusForm.equipmentId} onChange={(event) => setStatusForm({ ...statusForm, equipmentId: event.target.value })} />
           <select data-testid="facility-equipment-status" aria-label="设备状态" value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })}>{EQUIPMENT_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>

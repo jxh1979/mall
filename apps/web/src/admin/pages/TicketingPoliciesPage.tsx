@@ -7,6 +7,7 @@ import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -99,6 +100,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [stock, setStock] = React.useState("");
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  // 引导式流程 phase-2：新建票种收起为主按钮，点击弹出分步引导（GuidedFlowModal）。
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   // 区2 新建权益模板
   const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "" });
@@ -287,6 +290,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       });
       const published = await api.post(`/api/v1/ticketing/ticket-types/${ticket.id ?? "ticket-1"}/publish`, {});
       setActionResult({ action: "ticket_policy_publish", status: "published", published });
+      setCreateOpen(false);
       reload();
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : "发布失败");
@@ -527,20 +531,61 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           </table>
         </div>
       </AdminDataState>
+      {/* 引导式流程 phase-2：新建票种入口按钮（权限门在入口），点击弹出分步引导。 */}
       <div className="admin-form-row">
-        <input data-testid="ticket-name" value={ticketName} onChange={(event) => setTicketName(event.target.value)} placeholder="票种名称" aria-label="票种名称" />
-        <input data-testid="ticket-weekday-price" type="number" min={0} step="0.01" value={weekday} onChange={(event) => setWeekday(event.target.value)} placeholder="平日价" />
-        <input data-testid="ticket-weekend-price" type="number" min={0} step="0.01" value={weekend} onChange={(event) => setWeekend(event.target.value)} placeholder="周末价" />
-        <input data-testid="ticket-holiday-price" type="number" min={0} step="0.01" value={holiday} onChange={(event) => setHoliday(event.target.value)} placeholder="节假日价" />
-        <input data-testid="ticket-stock" type="number" min={0} value={stock} onChange={(event) => setStock(event.target.value)} placeholder="限量（可空=不限）" aria-label="限量" />
-        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-publish" onClick={() => void publish()} disabled={busy}>
-          发布策略
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-create-open" onClick={() => { setError(""); setCreateOpen(true); }}>
+          ＋ 新建票种
         </PermissionButton>
       </div>
-      <div data-testid="ticket-derived-preview" className="admin-preview">
-        新人票、学生票、多人票、渠道价、会员价在下方「派生价规则」区配置：按基础价折扣派生或固定价。
-      </div>
-      {error ? <div data-testid="ticket-policy-error" className="admin-inline-error">{error}</div> : null}
+      <GuidedFlowModal
+        open={createOpen}
+        title="新建票种"
+        testId="ticket-policy"
+        submitTestId="ticket-publish"
+        submitLabel="发布策略"
+        submitting={busy}
+        error={error}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={() => void publish()}
+        steps={[
+          {
+            title: "基本信息",
+            description: "填写票种名称。",
+            validate: () => (ticketName.trim() ? null : "票种名称必填。"),
+            content: (
+              <label>票种名称<input data-testid="ticket-name" value={ticketName} onChange={(event) => setTicketName(event.target.value)} placeholder="票种名称" aria-label="票种名称" /></label>
+            ),
+          },
+          {
+            title: "定价",
+            description: "平日/周末/节假日基础价必填（大于 0），限量可空表示不限。",
+            validate: () => {
+              if (!weekday || !weekend || !holiday) return "平日、周末、节假日基础价必须全部填写，缺少节假日价不可发布。";
+              const prices: Record<string, number> = { 平日价: Number(weekday), 周末价: Number(weekend), 节假日价: Number(holiday) };
+              const invalid = Object.entries(prices).find(([, value]) => !Number.isFinite(value) || value <= 0);
+              return invalid ? `${invalid[0]}必须是大于 0 的数字。` : null;
+            },
+            content: (
+              <>
+                <label>平日价（元）<input data-testid="ticket-weekday-price" type="number" min={0} step="0.01" value={weekday} onChange={(event) => setWeekday(event.target.value)} placeholder="平日价" /></label>
+                <label>周末价（元）<input data-testid="ticket-weekend-price" type="number" min={0} step="0.01" value={weekend} onChange={(event) => setWeekend(event.target.value)} placeholder="周末价" /></label>
+                <label>节假日价（元）<input data-testid="ticket-holiday-price" type="number" min={0} step="0.01" value={holiday} onChange={(event) => setHoliday(event.target.value)} placeholder="节假日价" /></label>
+                <label>限量<input data-testid="ticket-stock" type="number" min={0} value={stock} onChange={(event) => setStock(event.target.value)} placeholder="限量（可空=不限）" aria-label="限量" /></label>
+                <div data-testid="ticket-derived-preview" className="admin-preview">
+                  新人票、学生票、多人票、渠道价、会员价在下方「派生价规则」区配置：按基础价折扣派生或固定价。
+                </div>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "票种名称", value: ticketName.trim() || "未填写" },
+          { label: "平日价（元）", value: weekday || "未填写" },
+          { label: "周末价（元）", value: weekend || "未填写" },
+          { label: "节假日价（元）", value: holiday || "未填写" },
+          { label: "限量", value: stock.trim() || "不限" },
+        ]}
+      />
 
       <h3>组合式配置策略（一次性给通票配跨酒吧/游乐/餐饮的权益）</h3>
       <div className="admin-preview">
