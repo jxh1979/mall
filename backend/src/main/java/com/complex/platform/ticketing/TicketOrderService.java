@@ -58,6 +58,10 @@ public class TicketOrderService {
         TicketOrderRequest actual = requireRequest(request);
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(actual.ticketTypeId(), "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        // 复核§3(V260)：存档=软下线。前端列表虽已隐藏，终端/H5 直传 id 下单也必须拒——放库存扣减前，拒单不动库存。
+        if (ticketType.archivedAt() != null || !"none".equals(ticketType.deleteStatus())) {
+            throw ApiException.conflict("TICKET_TYPE_NOT_SELLABLE", "该票种已下线（存档/待删除），不可下单");
+        }
         int quantity = requirePositive(actual.quantity(), "quantity");
         // P0 修复（V133）：限量票种原子扣减库存，防止超卖（stock_quantity 为 null=不限量，仅计数）。
         // createTicketOrder 已由 executeWrite 幂等包裹，重放不会重复进入此处、不会双扣。
@@ -72,6 +76,9 @@ public class TicketOrderService {
                     .orElseThrow(() -> ApiException.notFound("PRICE_RULE_NOT_FOUND", "price rule not found"));
             if (!ticketType.id().equals(priceRule.ticketTypeId())) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "price_rule_id does not match ticket_type_id");
+            }
+            if (priceRule.archivedAt() != null || !"none".equals(priceRule.deleteStatus())) {
+                throw ApiException.conflict("TICKET_PRICE_RULE_NOT_SELLABLE", "该价格规则已下线（存档/待删除），不可下单");
             }
         }
         long unitPrice = pricingService.resolveUnitPrice(ticketType, priceRule, visitDate);

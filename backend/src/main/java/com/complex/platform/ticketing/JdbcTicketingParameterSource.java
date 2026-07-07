@@ -35,6 +35,12 @@ final class JdbcTicketingParameterSource {
                 .addValue("stock_quantity", ticketType.stockQuantity())
                 .addValue("sold_quantity", ticketType.soldQuantity())
                 .addValue("ticket_category", ticketType.ticketCategory())
+                .addValue("archived_at", timestampWithTimeZone(ticketType.archivedAt()))
+                .addValue("archived_by", ticketType.archivedBy())
+                .addValue("delete_status", ticketType.deleteStatus() == null ? "none" : ticketType.deleteStatus())
+                .addValue("delete_requested_by", ticketType.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(ticketType.deleteRequestedAt()))
+                .addValue("delete_reason", ticketType.deleteReason())
                 .addValue("created_at", timestampWithTimeZone(ticketType.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()));
     }
@@ -166,6 +172,12 @@ final class JdbcTicketingParameterSource {
                 .addValue("currency", rule.currency())
                 .addValue("status", rule.status())
                 .addValue("eligibility_rule", writeJson(rule.eligibilityRule()))
+                .addValue("archived_at", timestampWithTimeZone(rule.archivedAt()))
+                .addValue("archived_by", rule.archivedBy())
+                .addValue("delete_status", rule.deleteStatus() == null ? "none" : rule.deleteStatus())
+                .addValue("delete_requested_by", rule.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(rule.deleteRequestedAt()))
+                .addValue("delete_reason", rule.deleteReason())
                 .addValue("created_at", timestampWithTimeZone(rule.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(rule.updatedAt()));
     }

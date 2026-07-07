@@ -81,16 +81,136 @@ public class TicketingService {
     }
 
     public PageResponse<TicketTypeRecord> listTicketTypes() {
+        return listTicketTypes(false);
+    }
+
+    public PageResponse<TicketTypeRecord> listTicketTypes(boolean includeArchived) {
         return operations.readPage(
                 TicketingReadOperation.LIST_TICKET_TYPES,
-                repository::listTicketTypes
+                () -> repository.listTicketTypes(includeArchived)
         );
     }
 
     public PageResponse<TicketPriceRuleRecord> listTicketPriceRules() {
+        return listTicketPriceRules(false);
+    }
+
+    public PageResponse<TicketPriceRuleRecord> listTicketPriceRules(boolean includeArchived) {
         return operations.readPage(
                 TicketingReadOperation.LIST_TICKET_PRICE_RULES,
-                repository::listPriceRules
+                () -> repository.listPriceRules(includeArchived)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
+    @Transactional
+    public TicketTypeRecord archiveTicketType(String id, TicketCatalogArchiveRequest request) {
+        String ticketTypeId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "archiveTicketType:" + ticketTypeId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTypeRecord.class,
+                TicketingWriteOperation.ARCHIVE_TICKET_TYPE,
+                () -> catalogService.archiveTicketType(ticketTypeId, true, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
+    @Transactional
+    public TicketTypeRecord unarchiveTicketType(String id, TicketCatalogArchiveRequest request) {
+        String ticketTypeId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "unarchiveTicketType:" + ticketTypeId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTypeRecord.class,
+                TicketingWriteOperation.UNARCHIVE_TICKET_TYPE,
+                () -> catalogService.archiveTicketType(ticketTypeId, false, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
+    @Transactional
+    public TicketTypeRecord requestDeleteTicketType(String id, TicketCatalogDeleteRequest request) {
+        String ticketTypeId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "requestDeleteTicketType:" + ticketTypeId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTypeRecord.class,
+                TicketingWriteOperation.REQUEST_DELETE_TICKET_TYPE,
+                () -> catalogService.requestDeleteTicketType(ticketTypeId, request, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.type.approve")
+    @Transactional
+    public TicketTypeDeleteDecision approveDeleteTicketType(String id, TicketCatalogDeleteApprovalRequest request) {
+        String ticketTypeId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "approveDeleteTicketType:" + ticketTypeId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTypeDeleteDecision.class,
+                TicketingWriteOperation.APPROVE_DELETE_TICKET_TYPE,
+                () -> catalogService.approveDeleteTicketType(ticketTypeId, request, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.price_variant.manage")
+    @Transactional
+    public TicketPriceRuleRecord archivePriceRule(String id, TicketCatalogArchiveRequest request) {
+        String ruleId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "archivePriceRule:" + ruleId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketPriceRuleRecord.class,
+                TicketingWriteOperation.ARCHIVE_TICKET_PRICE_RULE,
+                () -> catalogService.archivePriceRule(ruleId, true, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.price_variant.manage")
+    @Transactional
+    public TicketPriceRuleRecord unarchivePriceRule(String id, TicketCatalogArchiveRequest request) {
+        String ruleId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "unarchivePriceRule:" + ruleId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketPriceRuleRecord.class,
+                TicketingWriteOperation.UNARCHIVE_TICKET_PRICE_RULE,
+                () -> catalogService.archivePriceRule(ruleId, false, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.price_variant.manage")
+    @Transactional
+    public TicketPriceRuleRecord requestDeletePriceRule(String id, TicketCatalogDeleteRequest request) {
+        String ruleId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "requestDeletePriceRule:" + ruleId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketPriceRuleRecord.class,
+                TicketingWriteOperation.REQUEST_DELETE_TICKET_PRICE_RULE,
+                () -> catalogService.requestDeletePriceRule(ruleId, request, actorId())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.price_rule.approve")
+    @Transactional
+    public TicketPriceRuleDeleteDecision approveDeletePriceRule(String id, TicketCatalogDeleteApprovalRequest request) {
+        String ruleId = operations.requireText(id, "id");
+        return operations.executeWrite(
+                "approveDeletePriceRule:" + ruleId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketPriceRuleDeleteDecision.class,
+                TicketingWriteOperation.APPROVE_DELETE_TICKET_PRICE_RULE,
+                () -> catalogService.approveDeletePriceRule(ruleId, request, actorId())
         );
     }
 

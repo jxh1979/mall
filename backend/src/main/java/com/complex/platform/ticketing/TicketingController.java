@@ -46,9 +46,42 @@ public class TicketingController {
     }
 
     @GetMapping("/ticketing/ticket-types")
-    public ApiResponse<PageResponse<TicketTypeRecord>> listTicketTypes() {
+    public ApiResponse<PageResponse<TicketTypeRecord>> listTicketTypes(
+            @RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("ticket.product.view");
-        return ApiResponse.ok(service.listTicketTypes());
+        return ApiResponse.ok(service.listTicketTypes(includeArchived));
+    }
+
+    @PostMapping("/ticketing/ticket-types/{id}/archive")
+    public ApiResponse<TicketTypeRecord> archiveTicketType(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archiveTicketType(id, request));
+    }
+
+    @PostMapping("/ticketing/ticket-types/{id}/unarchive")
+    public ApiResponse<TicketTypeRecord> unarchiveTicketType(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.unarchiveTicketType(id, request));
+    }
+
+    @PostMapping("/ticketing/ticket-types/{id}/delete-request")
+    public ApiResponse<TicketTypeRecord> requestDeleteTicketType(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogDeleteRequest request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestDeleteTicketType(id, request));
+    }
+
+    @PostMapping("/ticketing/ticket-types/{id}/delete-approve")
+    public ApiResponse<TicketTypeDeleteDecision> approveDeleteTicketType(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogDeleteApprovalRequest request) {
+        authorizationService.requirePermission("ticket.type.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveDeleteTicketType(id, request));
     }
 
     @PostMapping("/ticketing/ticket-types")
@@ -69,9 +102,42 @@ public class TicketingController {
     }
 
     @GetMapping("/ticketing/price-rules")
-    public ApiResponse<PageResponse<TicketPriceRuleRecord>> listTicketPriceRules() {
+    public ApiResponse<PageResponse<TicketPriceRuleRecord>> listTicketPriceRules(
+            @RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("ticket.price_variant.view");
-        return ApiResponse.ok(service.listTicketPriceRules());
+        return ApiResponse.ok(service.listTicketPriceRules(includeArchived));
+    }
+
+    @PostMapping("/ticketing/price-rules/{id}/archive")
+    public ApiResponse<TicketPriceRuleRecord> archivePriceRule(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
+        authorizationService.requirePermission("ticket.price_variant.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archivePriceRule(id, request));
+    }
+
+    @PostMapping("/ticketing/price-rules/{id}/unarchive")
+    public ApiResponse<TicketPriceRuleRecord> unarchivePriceRule(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
+        authorizationService.requirePermission("ticket.price_variant.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.unarchivePriceRule(id, request));
+    }
+
+    @PostMapping("/ticketing/price-rules/{id}/delete-request")
+    public ApiResponse<TicketPriceRuleRecord> requestDeletePriceRule(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogDeleteRequest request) {
+        authorizationService.requirePermission("ticket.price_variant.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestDeletePriceRule(id, request));
+    }
+
+    @PostMapping("/ticketing/price-rules/{id}/delete-approve")
+    public ApiResponse<TicketPriceRuleDeleteDecision> approveDeletePriceRule(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogDeleteApprovalRequest request) {
+        authorizationService.requirePermission("ticket.price_rule.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveDeletePriceRule(id, request));
     }
 
     @PostMapping("/ticketing/price-rules")
