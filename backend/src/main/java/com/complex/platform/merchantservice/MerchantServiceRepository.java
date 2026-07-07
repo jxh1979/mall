@@ -45,4 +45,7 @@ public interface MerchantServiceRepository {
     MerchantWorkOrderActionRecord saveAction(MerchantWorkOrderActionRecord record);
 
     List<MerchantWorkOrderActionRecord> findActionsByWorkOrderId(String workOrderId);
+
+    /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
+    void setWorkOrderArchiveReason(String id, String reason);
 }

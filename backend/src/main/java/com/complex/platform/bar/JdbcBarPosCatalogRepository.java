@@ -330,4 +330,19 @@ class JdbcBarPosCatalogRepository {
         OffsetDateTime v = rs.getObject(col, OffsetDateTime.class);
         return v == null ? null : v.toInstant();
     }
+
+    public void setCategoryArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE bar_product_categories SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
+
+    public void setProductArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE bar_products SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
+
+    public void setComboArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE bar_combos SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
 }

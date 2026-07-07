@@ -466,4 +466,9 @@ final class JdbcBarCatalogRepository {
                 """, Map.of("bar_id", barId, "inventory_item_id", inventoryItemId),
                 rowMapper::mapProduct).stream().findFirst();
     }
+
+    public void setReservationArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE bar_reservations SET archive_reason = :reason WHERE id = :id",
+                new MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
 }

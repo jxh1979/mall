@@ -163,4 +163,10 @@ class JdbcFacilityRepository implements FacilityRepository {
                 rs.getString("delete_requested_by"), nullableInstant(rs, "delete_requested_at"),
                 rs.getString("delete_reason"));
     }
+
+    @Override
+    public void setEquipmentArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE facility_equipment SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
 }

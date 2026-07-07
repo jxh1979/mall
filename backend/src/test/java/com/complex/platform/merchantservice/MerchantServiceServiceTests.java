@@ -621,6 +621,7 @@ class MerchantServiceServiceTests {
      * 用以验证 service 仅依据条件 UPDATE 行数判定升级，而非依赖读端过滤。
      */
     private static final class ConcurrentSnapshotRepository implements MerchantServiceRepository {
+        @Override public void setWorkOrderArchiveReason(String id, String reason) { }
         private final Map<String, MerchantWorkOrderRecord> workOrders = new LinkedHashMap<>();
         private final List<MerchantWorkOrderActionRecord> actions = new ArrayList<>();
 
@@ -726,6 +727,7 @@ class MerchantServiceServiceTests {
     }
 
     private static final class InMemoryMerchantServiceRepository implements MerchantServiceRepository {
+        @Override public void setWorkOrderArchiveReason(String id, String reason) { }
         private final Map<String, MerchantWorkOrderRecord> workOrders = new LinkedHashMap<>();
         private final List<MerchantWorkOrderActionRecord> actions = new ArrayList<>();
         private int saveCount;

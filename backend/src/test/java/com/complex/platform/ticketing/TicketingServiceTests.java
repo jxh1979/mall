@@ -317,14 +317,35 @@ class TicketingServiceTests {
                 "tpl_arch", "过期入园", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null));
         TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
 
-        catalog.archiveEntitlementTemplate("tpl_arch", true, "op_a");
+        catalog.archiveEntitlementTemplate("tpl_arch", true, "测试存档理由", "op_a");
         assertThat(ticketingRepository.listEntitlementTemplates(false)).isEmpty();
         assertThat(ticketingRepository.listEntitlementTemplates(true)).hasSize(1);
         assertThat(ticketingRepository.findEntitlementTemplateById("tpl_arch").orElseThrow().archivedAt()).isNotNull();
 
-        catalog.archiveEntitlementTemplate("tpl_arch", false, "op_a");
+        catalog.archiveEntitlementTemplate("tpl_arch", false, null, "op_a");
         assertThat(ticketingRepository.listEntitlementTemplates(false)).hasSize(1);
         assertThat(ticketingRepository.findEntitlementTemplateById("tpl_arch").orElseThrow().archivedAt()).isNull();
+    }
+
+    @Test
+    void archiveAndDeleteRejectBlankReason() {
+        Instant now = Instant.now();
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_noreason", "缺理由", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+
+        // 存档缺理由被拒(业务HTML 2026-07-07)：空白理由不得存档，且未发生副作用。
+        assertThatThrownBy(() -> catalog.archiveEntitlementTemplate("tpl_noreason", true, "  ", "op_a"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("reason is required");
+        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_noreason").orElseThrow().archivedAt()).isNull();
+
+        // 删除申请缺理由被拒。
+        catalog.archiveEntitlementTemplate("tpl_noreason", true, "误配存档", "op_a");
+        assertThatThrownBy(() -> catalog.requestDeleteEntitlementTemplate("tpl_noreason",
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", null), "op_a"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("reason is required");
     }
 
     @Test
@@ -340,7 +361,7 @@ class TicketingServiceTests {
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("archived");
 
-        catalog.archiveEntitlementTemplate("tpl_del", true, "op_a");
+        catalog.archiveEntitlementTemplate("tpl_del", true, "测试存档理由", "op_a");
         catalog.requestDeleteEntitlementTemplate("tpl_del",
                 new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", "误配"), "op_a");
         assertThat(ticketingRepository.findEntitlementTemplateById("tpl_del").orElseThrow().deleteStatus()).isEqualTo("pending");
@@ -379,11 +400,11 @@ class TicketingServiceTests {
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_uc", "配错待删", "entry", 1, 100L, "active", "m1", null, null, null, now, now, null, null));
         TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
-        catalog.archiveEntitlementTemplate("tpl_uc", true, "op_a");
+        catalog.archiveEntitlementTemplate("tpl_uc", true, "测试存档理由", "op_a");
         catalog.requestDeleteEntitlementTemplate("tpl_uc",
                 new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", "误配"), "op_a");
         assertThat(ticketingRepository.findEntitlementTemplateById("tpl_uc").orElseThrow().deleteStatus()).isEqualTo("pending");
-        catalog.archiveEntitlementTemplate("tpl_uc", false, "op_a");
+        catalog.archiveEntitlementTemplate("tpl_uc", false, null, "op_a");
         EntitlementTemplateRecord t = ticketingRepository.findEntitlementTemplateById("tpl_uc").orElseThrow();
         assertThat(t.archivedAt()).isNull();
         assertThat(t.deleteStatus()).isEqualTo("none");
@@ -396,7 +417,7 @@ class TicketingServiceTests {
         // 复核§3(V260)：存档=软下线，三个引用入口（配价规/绑权益/下单）都必须拒，否则删除永远被新引用卡死。
         TicketTypeRecord tt = createTicketType("archived-ref-guard");
         TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
-        catalog.archiveTicketType(tt.id(), true, "op_a");
+        catalog.archiveTicketType(tt.id(), true, "测试存档理由", "op_a");
 
         assertThatThrownBy(() -> service.createTicketPriceRule(new TicketPriceRuleRequest(
                 "arch-rule", "fixed", List.of(), tt.id(), "student", "fixed_price",
@@ -425,12 +446,12 @@ class TicketingServiceTests {
                 "tt_arch", "配错票种", "calendar", 100L, 200L, 300L, false, "active", null, null, now, now));
         TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
 
-        catalog.archiveTicketType("tt_arch", true, "op_a");
+        catalog.archiveTicketType("tt_arch", true, "测试存档理由", "op_a");
         assertThat(ticketingRepository.listTicketTypes(false)).isEmpty();
         assertThat(ticketingRepository.listTicketTypes(true)).hasSize(1);
         assertThat(ticketingRepository.findTicketTypeById("tt_arch").orElseThrow().archivedAt()).isNotNull();
 
-        catalog.archiveTicketType("tt_arch", false, "op_a");
+        catalog.archiveTicketType("tt_arch", false, null, "op_a");
         assertThat(ticketingRepository.listTicketTypes(false)).hasSize(1);
         assertThat(ticketingRepository.findTicketTypeById("tt_arch").orElseThrow().archivedAt()).isNull();
     }
@@ -448,7 +469,7 @@ class TicketingServiceTests {
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("先存档");
 
-        catalog.archiveTicketType("tt_del", true, "op_a");
+        catalog.archiveTicketType("tt_del", true, "测试存档理由", "op_a");
         catalog.requestDeleteTicketType("tt_del", new TicketCatalogDeleteRequest("k1", "误录"), "op_a");
         assertThat(ticketingRepository.findTicketTypeById("tt_del").orElseThrow().deleteStatus()).isEqualTo("pending");
 
@@ -472,7 +493,7 @@ class TicketingServiceTests {
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_used", "在用票种", "calendar", 100L, 200L, 300L, false, "active", null, null, now, now));
         TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
-        catalog.archiveTicketType("tt_used", true, "op_a");
+        catalog.archiveTicketType("tt_used", true, "测试存档理由", "op_a");
         catalog.requestDeleteTicketType("tt_used", new TicketCatalogDeleteRequest("k1", "尝试删在用"), "op_a");
 
         ticketingRepository.ticketTypeReferenceCount = 3; // 模拟仍被订单/价规/权益绑定引用
@@ -492,19 +513,19 @@ class TicketingServiceTests {
                 "ch_default", "CNY", "active", Map.of(), now, now));
         TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
 
-        catalog.archivePriceRule("pr_del", true, "op_a");
+        catalog.archivePriceRule("pr_del", true, "测试存档理由", "op_a");
         assertThat(ticketingRepository.listPriceRules(false)).isEmpty();
         assertThat(ticketingRepository.listPriceRules(true)).hasSize(1);
 
         catalog.requestDeletePriceRule("pr_del", new TicketCatalogDeleteRequest("k1", "配错"), "op_a");
         // 取消存档 → pending 回退 none（复核§5）。
-        catalog.archivePriceRule("pr_del", false, "op_a");
+        catalog.archivePriceRule("pr_del", false, null, "op_a");
         TicketPriceRuleRecord back = ticketingRepository.findPriceRuleById("pr_del").orElseThrow();
         assertThat(back.archivedAt()).isNull();
         assertThat(back.deleteStatus()).isEqualTo("none");
 
         // 重新走删除：有引用拒删，无引用他人审批通过删除。
-        catalog.archivePriceRule("pr_del", true, "op_a");
+        catalog.archivePriceRule("pr_del", true, "测试存档理由", "op_a");
         catalog.requestDeletePriceRule("pr_del", new TicketCatalogDeleteRequest("k2", "配错"), "op_a");
         ticketingRepository.priceRuleReferenceCount = 2;
         assertThatThrownBy(() -> catalog.approveDeletePriceRule("pr_del",
@@ -527,9 +548,9 @@ class TicketingServiceTests {
                 "link_used", "tt_x", "tpl_used", 1, 1, 100L, "default", 1, null, now, now));
         TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
 
-        catalog.archiveEntitlementTemplate("tpl_used", true, "op_a");
+        catalog.archiveEntitlementTemplate("tpl_used", true, "测试存档理由", "op_a");
         catalog.requestDeleteEntitlementTemplate("tpl_used",
-                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", null), "op_a");
+                new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", "在用模板误配需删"), "op_a");
 
         assertThatThrownBy(() -> catalog.approveDeleteEntitlementTemplate("tpl_used",
                 new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest("k2", "approved", null), "op_b"))
@@ -2834,6 +2855,9 @@ class TicketingServiceTests {
     }
 
     private static final class InMemoryTicketingRepository implements TicketingRepository {
+        @Override public void setEntitlementTemplateArchiveReason(String id, String reason) { }
+        @Override public void setTicketTypeArchiveReason(String id, String reason) { }
+        @Override public void setPriceRuleArchiveReason(String id, String reason) { }
         private final Map<String, TicketTypeRecord> ticketTypes = new LinkedHashMap<>();
         private final Map<String, EntitlementTemplateRecord> entitlementTemplates = new LinkedHashMap<>();
         private final Map<String, TicketTypeEntitlementRecord> ticketTypeEntitlements = new LinkedHashMap<>();

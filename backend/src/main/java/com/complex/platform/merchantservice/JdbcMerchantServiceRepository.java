@@ -338,4 +338,10 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
             throw new IllegalArgumentException("json field is not readable", exception);
         }
     }
+
+    @Override
+    public void setWorkOrderArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE merchant_service_work_orders SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
 }

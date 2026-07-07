@@ -112,7 +112,7 @@ public class TicketingService {
                 request,
                 TicketTypeRecord.class,
                 TicketingWriteOperation.ARCHIVE_TICKET_TYPE,
-                () -> catalogService.archiveTicketType(ticketTypeId, true, actorId())
+                () -> catalogService.archiveTicketType(ticketTypeId, true, request == null ? null : request.reason(), actorId())
         );
     }
 
@@ -126,7 +126,7 @@ public class TicketingService {
                 request,
                 TicketTypeRecord.class,
                 TicketingWriteOperation.UNARCHIVE_TICKET_TYPE,
-                () -> catalogService.archiveTicketType(ticketTypeId, false, actorId())
+                () -> catalogService.archiveTicketType(ticketTypeId, false, null, actorId())
         );
     }
 
@@ -168,7 +168,7 @@ public class TicketingService {
                 request,
                 TicketPriceRuleRecord.class,
                 TicketingWriteOperation.ARCHIVE_TICKET_PRICE_RULE,
-                () -> catalogService.archivePriceRule(ruleId, true, actorId())
+                () -> catalogService.archivePriceRule(ruleId, true, request == null ? null : request.reason(), actorId())
         );
     }
 
@@ -182,7 +182,7 @@ public class TicketingService {
                 request,
                 TicketPriceRuleRecord.class,
                 TicketingWriteOperation.UNARCHIVE_TICKET_PRICE_RULE,
-                () -> catalogService.archivePriceRule(ruleId, false, actorId())
+                () -> catalogService.archivePriceRule(ruleId, false, null, actorId())
         );
     }
 
@@ -316,7 +316,7 @@ public class TicketingService {
                 request,
                 EntitlementTemplateRecord.class,
                 TicketingWriteOperation.ARCHIVE_ENTITLEMENT_TEMPLATE,
-                () -> catalogService.archiveEntitlementTemplate(templateId, true, actorId())
+                () -> catalogService.archiveEntitlementTemplate(templateId, true, request == null ? null : request.reason(), actorId())
         );
     }
 
@@ -330,7 +330,7 @@ public class TicketingService {
                 request,
                 EntitlementTemplateRecord.class,
                 TicketingWriteOperation.UNARCHIVE_ENTITLEMENT_TEMPLATE,
-                () -> catalogService.archiveEntitlementTemplate(templateId, false, actorId())
+                () -> catalogService.archiveEntitlementTemplate(templateId, false, null, actorId())
         );
     }
 

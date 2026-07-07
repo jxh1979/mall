@@ -48,7 +48,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     void archiveThenApproveDeleteSucceedsWhenNoReferences() {
         TestSecurityActors.asPlatformAdmin();
         seed("staff_del", "user_del_1");
-        service.archiveProfile("staff_del", true);
+        service.archiveProfile("staff_del", true, "测试存档理由");
         service.requestDeleteProfile("staff_del", new StaffProfileDeleteRequest("离职"));
         TestSecurityActors.asPlatformAdmin("usr_approver");
         StaffProfileDeleteDecision decision = service.approveDeleteProfile(
@@ -74,7 +74,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     void approveDeleteRejectedWhenReferencedByAttendance() {
         TestSecurityActors.asPlatformAdmin();
         seed("staff_use", "user_use_1");
-        service.archiveProfile("staff_use", true);
+        service.archiveProfile("staff_use", true, "测试存档理由");
         service.requestDeleteProfile("staff_use", new StaffProfileDeleteRequest("试删"));
         Instant now = Instant.now();
         jdbcTemplate.update("""
@@ -92,7 +92,7 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
     void selfApproveForbidden() {
         TestSecurityActors.asPlatformAdmin("usr_same");
         seed("staff_self", "user_self_1");
-        service.archiveProfile("staff_self", true);
+        service.archiveProfile("staff_self", true, "测试存档理由");
         service.requestDeleteProfile("staff_self", new StaffProfileDeleteRequest("x"));
         assertThatThrownBy(() -> service.approveDeleteProfile("staff_self",
                 new StaffProfileDeleteApprovalRequest("approved", null)))

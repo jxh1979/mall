@@ -104,6 +104,7 @@ class FacilityEquipmentServiceTests {
 
     /** 内存仓。 */
     static class InMemoryFacilityRepository implements FacilityRepository {
+        @Override public void setEquipmentArchiveReason(String id, String reason) { }
         final Map<String, FacilityEquipmentRecord> store = new LinkedHashMap<>();
 
         @Override

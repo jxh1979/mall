@@ -3056,6 +3056,7 @@ class BarServiceTests {
     }
 
     private static final class InMemoryBarRepository implements BarRepository {
+        @Override public void setReservationArchiveReason(String id, String reason) { }
         java.util.Set<String> activeReservedTableIds = java.util.Set.of();
 
         @Override

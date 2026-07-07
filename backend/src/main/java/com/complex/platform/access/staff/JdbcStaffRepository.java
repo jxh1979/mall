@@ -889,4 +889,10 @@ class JdbcStaffRepository implements StaffRepository {
                 nullableInstant(rs, "updated_at")
         );
     }
+
+    @Override
+    public void setStaffProfileArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE staff_profiles SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
 }

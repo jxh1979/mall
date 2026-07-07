@@ -155,9 +155,12 @@ public class PlatformService {
                 "merchant.profile.manage",
                 "merchant",
                 () -> {
+                    String r = requireText(request == null ? null : request.reason(), "reason");
                     MerchantRecord merchant = requireMerchant(id);
                     Instant now = Instant.now();
-                    return repository.saveMerchant(merchant.withArchive(now, actorId(), now));
+                    MerchantRecord saved = repository.saveMerchant(merchant.withArchive(now, actorId(), now));
+                    repository.setMerchantArchiveReason(id, r);
+                    return saved;
                 }
         );
     }
@@ -178,8 +181,10 @@ public class PlatformService {
                     MerchantRecord merchant = requireMerchant(id);
                     Instant now = Instant.now();
                     // 取消存档=保留该商户,顺带撤销待审批删除,避免"生效可见却挂着待删"的迷惑态。
-                    return repository.saveMerchant(
+                    MerchantRecord saved = repository.saveMerchant(
                             merchant.withArchive(null, null, now).withDelete("none", null, null, null, now));
+                    repository.setMerchantArchiveReason(id, null);
+                    return saved;
                 }
         );
     }
@@ -208,7 +213,7 @@ public class PlatformService {
                                 "该商户已有待审批的删除申请");
                     }
                     Instant now = Instant.now();
-                    String reason = request == null ? null : trimToNull(request.reason());
+                    String reason = requireText(request == null ? null : request.reason(), "reason");
                     return repository.saveMerchant(merchant.withDelete("pending", actorId(), now, reason, now));
                 }
         );

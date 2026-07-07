@@ -40,15 +40,16 @@ public class FacilityController {
 
     // ── V264 设施设备存档与审批后删除 ──────────────────────────────────
     @PostMapping("/{equipment_id}/archive")
-    public ApiResponse<FacilityEquipmentRecord> archive(@PathVariable("equipment_id") String equipmentId) {
+    public ApiResponse<FacilityEquipmentRecord> archive(@PathVariable("equipment_id") String equipmentId,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) com.complex.platform.facility.dto.FacilityEquipmentArchiveRequest request) {
         authorizationService.requirePermission(PERM);
-        return ApiResponse.ok(service.archive(equipmentId, true));
+        return ApiResponse.ok(service.archive(equipmentId, true, request == null ? null : request.reason()));
     }
 
     @PostMapping("/{equipment_id}/unarchive")
     public ApiResponse<FacilityEquipmentRecord> unarchive(@PathVariable("equipment_id") String equipmentId) {
         authorizationService.requirePermission(PERM);
-        return ApiResponse.ok(service.archive(equipmentId, false));
+        return ApiResponse.ok(service.archive(equipmentId, false, null));
     }
 
     @PostMapping("/{equipment_id}/delete-request")

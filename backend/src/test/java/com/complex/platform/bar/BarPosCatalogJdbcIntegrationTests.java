@@ -215,7 +215,7 @@ class BarPosCatalogJdbcIntegrationTests {
             Instant now = Instant.now();
             catalog.saveCategory(new BarProductCategoryRecord(
                     "barcat_arc", "bar_arc", "merchant_pos_test", "待存档分类", 1, "active", now, now));
-            BarProductCategoryRecord archived = service.archiveCategory("barcat_arc", true);
+            BarProductCategoryRecord archived = service.archiveCategory("barcat_arc", true, "测试存档理由");
             assertThat(archived.archivedAt()).isNotNull();
             // 默认列表(不含存档)不返回；含存档时可见。
             assertThat(catalog.listCategories(Optional.empty(), "bar_arc", false)).isEmpty();
@@ -233,7 +233,7 @@ class BarPosCatalogJdbcIntegrationTests {
             Instant now = Instant.now();
             catalog.saveCategory(new BarProductCategoryRecord(
                     "barcat_del", "bar_del", "merchant_pos_test", "待删分类", 1, "active", now, now));
-            service.archiveCategory("barcat_del", true);
+            service.archiveCategory("barcat_del", true, "测试存档理由");
             service.requestDeleteCategory("barcat_del", new BarCatalogDeleteRequest("配错"));
             // 禁自审：换一个审批人（申请人不能审批自己的申请）。
             com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
@@ -255,7 +255,7 @@ class BarPosCatalogJdbcIntegrationTests {
                     "barcat_use", "bar_use", "merchant_pos_test", "在用分类", 1, "active", now, now));
             barRepository.saveProduct(newProduct("product_cat_use", "bar_use", "挂此分类商品"));
             catalog.updateProductCategory("product_cat_use", "barcat_use", now);
-            service.archiveCategory("barcat_use", true);
+            service.archiveCategory("barcat_use", true, "测试存档理由");
             service.requestDeleteCategory("barcat_use", new BarCatalogDeleteRequest("试删"));
             // 禁自审：换一个审批人（申请人不能审批自己的申请）。
             com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
@@ -274,7 +274,7 @@ class BarPosCatalogJdbcIntegrationTests {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         try {
             barRepository.saveProduct(newProduct("product_arc", "bar_parc", "待存档商品"));
-            BarProductRecord archived = service.archiveProduct("product_arc", true);
+            BarProductRecord archived = service.archiveProduct("product_arc", true, "测试存档理由");
             assertThat(archived.archivedAt()).isNotNull();
             // 已存档商品不上 POS 菜单。
             assertThat(catalog.listProductsByCategory(Optional.empty(), "bar_parc", null))
@@ -289,7 +289,7 @@ class BarPosCatalogJdbcIntegrationTests {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         try {
             barRepository.saveProduct(newProduct("product_del", "bar_pdel", "待删商品"));
-            service.archiveProduct("product_del", true);
+            service.archiveProduct("product_del", true, "测试存档理由");
             service.requestDeleteProduct("product_del", new BarCatalogDeleteRequest("下架"));
             // 禁自审：换一个审批人（申请人不能审批自己的申请）。
             com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
@@ -312,7 +312,7 @@ class BarPosCatalogJdbcIntegrationTests {
             catalog.saveCombo(new BarComboRecord("barcombo_puse", "bar_puse", "merchant_pos_test", "含此商品套餐",
                     5000L, null, null, "active", now, now,
                     List.of(new BarComboItemRecord("bci_puse", "barcombo_puse", "product_puse", "被套餐引用商品", 1))));
-            service.archiveProduct("product_puse", true);
+            service.archiveProduct("product_puse", true, "测试存档理由");
             service.requestDeleteProduct("product_puse", new BarCatalogDeleteRequest("试删"));
             // 禁自审：换一个审批人（申请人不能审批自己的申请）。
             com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
@@ -335,7 +335,7 @@ class BarPosCatalogJdbcIntegrationTests {
             catalog.saveCombo(new BarComboRecord("barcombo_arc", "bar_carc", "merchant_pos_test", "待存档套餐",
                     9900L, null, null, "active", now, now,
                     List.of(new BarComboItemRecord("bci_carc", "barcombo_arc", "product_carc", "套餐用商品", 1))));
-            BarComboRecord archived = service.archiveCombo("barcombo_arc", true);
+            BarComboRecord archived = service.archiveCombo("barcombo_arc", true, "测试存档理由");
             assertThat(archived.archivedAt()).isNotNull();
             assertThat(catalog.listCombos(Optional.empty(), "bar_carc", false)).isEmpty();
             assertThat(catalog.listCombos(Optional.empty(), "bar_carc", true))
@@ -354,7 +354,7 @@ class BarPosCatalogJdbcIntegrationTests {
             catalog.saveCombo(new BarComboRecord("barcombo_del", "bar_cdel", "merchant_pos_test", "待删套餐",
                     9900L, null, null, "active", now, now,
                     List.of(new BarComboItemRecord("bci_cdel", "barcombo_del", "product_cdel", "套餐用商品2", 1))));
-            service.archiveCombo("barcombo_del", true);
+            service.archiveCombo("barcombo_del", true, "测试存档理由");
             service.requestDeleteCombo("barcombo_del", new BarCatalogDeleteRequest("撤套餐"));
             // 禁自审：换一个审批人（申请人不能审批自己的申请）。
             com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
@@ -392,7 +392,7 @@ class BarPosCatalogJdbcIntegrationTests {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_initiator");
         try {
             barRepository.saveProduct(newProduct("product_self", "bar_self", "自审商品"));
-            service.archiveProduct("product_self", true);
+            service.archiveProduct("product_self", true, "测试存档理由");
             service.requestDeleteProduct("product_self", new BarCatalogDeleteRequest("自审试探"));
             assertThatThrownBy(() -> service.approveDeleteProduct(
                     "product_self", new BarCatalogDeleteApprovalRequest("approved", null)))
@@ -409,7 +409,7 @@ class BarPosCatalogJdbcIntegrationTests {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_initiator");
         try {
             barRepository.saveProduct(newProduct("product_rej", "bar_rej", "被驳回商品"));
-            service.archiveProduct("product_rej", true);
+            service.archiveProduct("product_rej", true, "测试存档理由");
             service.requestDeleteProduct("product_rej", new BarCatalogDeleteRequest("误删申请"));
             com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
             BarCatalogDeleteDecision decision = service.approveDeleteProduct(
@@ -431,9 +431,9 @@ class BarPosCatalogJdbcIntegrationTests {
             Instant now = Instant.now();
             catalog.saveCategory(new BarProductCategoryRecord(
                     "barcat_unarc", "bar_unarc", "merchant_pos_test", "回退分类", 1, "active", now, now));
-            service.archiveCategory("barcat_unarc", true);
+            service.archiveCategory("barcat_unarc", true, "测试存档理由");
             service.requestDeleteCategory("barcat_unarc", new BarCatalogDeleteRequest("先申请后反悔"));
-            BarProductCategoryRecord restored = service.archiveCategory("barcat_unarc", false);
+            BarProductCategoryRecord restored = service.archiveCategory("barcat_unarc", false, null);
             assertThat(restored.archivedAt()).isNull();
             assertThat(restored.deleteStatus()).isEqualTo("none");
         } finally {
@@ -450,7 +450,7 @@ class BarPosCatalogJdbcIntegrationTests {
             catalog.saveCategory(new BarProductCategoryRecord(
                     "barcat_na", "bar_na", "merchant_pos_test", "已存档分类", 1, "active", now, now));
             barRepository.saveProduct(newProduct("product_na", "bar_na", "想挂档分类的商品"));
-            service.archiveCategory("barcat_na", true);
+            service.archiveCategory("barcat_na", true, "测试存档理由");
             assertThatThrownBy(() -> service.assignCategory(
                     "product_na", new BarProductCategoryAssignRequest("barcat_na")))
                     .isInstanceOf(com.complex.platform.common.api.ApiException.class)
@@ -468,7 +468,7 @@ class BarPosCatalogJdbcIntegrationTests {
             Instant now = Instant.now();
             catalog.saveCategory(new BarProductCategoryRecord(
                     "barcat_cp", "bar_cp", null, "已存档分类2", 1, "active", now, now));
-            service.archiveCategory("barcat_cp", true);
+            service.archiveCategory("barcat_cp", true, "测试存档理由");
             assertThatThrownBy(() -> barOrderService.createProduct(new BarProductRequest(
                     "cp-key-1", null, List.of(), "bar_cp", "新品", "spirit", 1000L, null, null,
                     "active", null, null, false, null, null, null, null, "barcat_cp", null)))
@@ -485,7 +485,7 @@ class BarPosCatalogJdbcIntegrationTests {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         try {
             barRepository.saveProduct(newProduct("product_aj", "bar_aj", "已存档商品"));
-            service.archiveProduct("product_aj", true);
+            service.archiveProduct("product_aj", true, "测试存档理由");
             assertThatThrownBy(() -> service.saveCombo(new BarComboRequest(
                     null, "bar_aj", "守卫套餐", 5000L, null, null, "active",
                     List.of(new BarComboRequest.Item("product_aj", 1)))))
@@ -506,7 +506,7 @@ class BarPosCatalogJdbcIntegrationTests {
                     3000L, "CNY", null, null, false, "active", now, now, null, null, null));
             barRepository.saveTable(new BarTableRecord("bartable_ns", "bar_ns", null, "T-NS", "守卫桌",
                     "card_seat", 4, 0, 0L, "CNY", "active", now, now));
-            service.archiveProduct("product_ns", true);
+            service.archiveProduct("product_ns", true, "测试存档理由");
             assertThatThrownBy(() -> barOrderService.createOrder(new BarOrderRequest(
                     "ns-order-1", null, List.of(), "bar_ns", "bartable_ns", null,
                     List.of(java.util.Map.of("product_id", "product_ns", "quantity", "1")),
@@ -531,7 +531,7 @@ class BarPosCatalogJdbcIntegrationTests {
                     List.of(new BarComboItemRecord("bci_ns", "barcombo_ns", "product_cns", "套餐酒", 1))));
             barRepository.saveTable(new BarTableRecord("bartable_cns", "bar_cns", null, "T-CNS", "守卫桌2",
                     "card_seat", 4, 0, 0L, "CNY", "active", now, now));
-            service.archiveCombo("barcombo_ns", true);
+            service.archiveCombo("barcombo_ns", true, "测试存档理由");
             assertThatThrownBy(() -> barOrderService.createOrder(new BarOrderRequest(
                     "cns-order-1", null, List.of(), "bar_cns", "bartable_cns", null,
                     List.of(java.util.Map.of("combo_id", "barcombo_ns", "quantity", "1")),

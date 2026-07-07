@@ -75,14 +75,16 @@ public class FacilityEquipmentService {
     }
 
     @Transactional
-    public FacilityEquipmentRecord archive(String id, boolean archive) {
+    public FacilityEquipmentRecord archive(String id, boolean archive, String reason) {
         authorizationService.requirePlatformScope();
         FacilityEquipmentRecord cur = load(id);
+        String r = archive ? requireText(reason, "reason") : null;
         Instant now = Instant.now();
         FacilityEquipmentRecord updated = archive
                 ? cur.withArchive(now, archiveActorId(), now)
                 : cur.withArchive(null, null, now).withDelete("none", null, null, null, now);
         repository.updateEquipment(updated);
+        repository.setEquipmentArchiveReason(id, r);
         auditEventService.recordSuccess(archive ? "facility.equipment_archived" : "facility.equipment_unarchived",
                 PERM, "facility_equipment", id, null, null, Map.of("archived", archive));
         return updated;
@@ -100,8 +102,7 @@ public class FacilityEquipmentService {
             throw ApiException.conflict("FACILITY_EQUIPMENT_DELETE_ALREADY_PENDING", "该设备已有待审批的删除申请");
         }
         Instant now = Instant.now();
-        String reason = request == null || request.reason() == null || request.reason().isBlank()
-                ? null : request.reason().trim();
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         FacilityEquipmentRecord updated = cur.withDelete("pending", archiveActorId(), now, reason, now);
         repository.updateEquipment(updated);
         auditEventService.recordSuccess("facility.equipment_delete_requested", PERM, "facility_equipment", id,
@@ -270,5 +271,13 @@ public class FacilityEquipmentService {
                 c.vendor(), c.responsibleUserId(), status, c.maintenanceCycleDays(), lastMaintenanceAt, nextDue,
                 c.installDate(), c.warrantyUntil(), alarmSource, alarmNote, alarmRaisedAt, c.projectId(),
                 c.merchantId(), c.createdAt(), Instant.now());
+    }
+
+    private String requireText(String value, String field) {
+        String trimmed = value == null ? null : value.trim();
+        if (trimmed == null || trimmed.isEmpty()) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", field + " is required");
+        }
+        return trimmed;
     }
 }

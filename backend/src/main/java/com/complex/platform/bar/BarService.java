@@ -207,13 +207,16 @@ public class BarService {
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
     @Transactional
-    public BarReservationRecord archiveReservation(String reservationId, boolean archive) {
+    public BarReservationRecord archiveReservation(String reservationId, boolean archive, String reason) {
         BarReservationRecord reservation = requireReservationInScope(reservationId);
+        String r = archive ? requireText(reason, "reason") : null;
         java.time.Instant now = java.time.Instant.now();
         BarReservationRecord updated = archive
                 ? reservation.withArchive(now, reservationActorId(), now)
                 : reservation.withArchive(null, null, now).withDelete("none", null, null, null, now);
-        return repository.saveReservation(updated);
+        BarReservationRecord saved = repository.saveReservation(updated);
+        repository.setReservationArchiveReason(reservationId, r);
+        return saved;
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
@@ -234,9 +237,9 @@ public class BarService {
                     "BAR_RESERVATION_DELETE_ALREADY_PENDING", "a delete request is already pending");
         }
         java.time.Instant now = java.time.Instant.now();
-        String reason = request == null ? null : request.reason();
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         return repository.saveReservation(reservation.withDelete("pending", reservationActorId(), now,
-                reason == null || reason.isBlank() ? null : reason.trim(), now));
+                reason, now));
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.approve")
@@ -749,5 +752,13 @@ public class BarService {
                 BarWriteOperation.CLOSE_SHIFT,
                 () -> shiftService.closeShift(id, request)
         );
+    }
+
+    private String requireText(String value, String field) {
+        String trimmed = value == null ? null : value.trim();
+        if (trimmed == null || trimmed.isEmpty()) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", field + " is required");
+        }
+        return trimmed;
     }
 }

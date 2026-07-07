@@ -149,18 +149,21 @@ public class TicketCatalogService {
     // ================= V253 数据存档与审批后删除范式（试点） =================
 
     /** 存档/取消存档权益模板（软标记，可逆；列表默认过滤已存档）。 */
-    EntitlementTemplateRecord archiveEntitlementTemplate(String id, boolean archive, String actorId) {
+    EntitlementTemplateRecord archiveEntitlementTemplate(String id, boolean archive, String reason, String actorId) {
         EntitlementTemplateRecord tpl = requireTemplate(id);
         Instant now = Instant.now();
         if (archive) {
-            // 已有待审批删除时不允许再次存档改写状态（幂等：已存档直接返回当前态）。
-            EntitlementTemplateRecord updated = tpl.withArchive(now, actorId, now);
-            return repository.saveEntitlementTemplate(updated);
+            // 存档必填理由(业务HTML 2026-07-07)。行已存在,archive_reason 定向写入,顺序无关。
+            String r = requireText(reason, "reason");
+            EntitlementTemplateRecord saved = repository.saveEntitlementTemplate(tpl.withArchive(now, actorId, now));
+            repository.setEntitlementTemplateArchiveReason(id, r);
+            return saved;
         }
-        // 取消存档:清空 archived_at/by,并把 pending 删除申请回退 none(复核§5:取消存档=保留该模板,
-        //   顺带撤销待审批删除,避免出现"生效可见却挂着待删"的迷惑态)。approved 态行已删不会走到这。
-        return repository.saveEntitlementTemplate(
+        // 取消存档:清空 archived_at/by + archive_reason,并把 pending 删除申请回退 none(复核§5)。
+        EntitlementTemplateRecord saved = repository.saveEntitlementTemplate(
                 tpl.withArchive(null, null, now).withDelete("none", null, null, null, now));
+        repository.setEntitlementTemplateArchiveReason(id, null);
+        return saved;
     }
 
     /** 发起删除申请：须先存档（防误删在用模板），记 requested_by/at/reason，状态置 pending。 */
@@ -175,7 +178,7 @@ public class TicketCatalogService {
                     "a delete request is already pending for this template");
         }
         Instant now = Instant.now();
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         return repository.saveEntitlementTemplate(tpl.withDelete("pending", actorId, now, reason, now));
     }
 
@@ -215,15 +218,20 @@ public class TicketCatalogService {
 
     // ================= V260 存档/删除范式铺到票种/价格规则(镜像上方权益模板) =================
 
-    TicketTypeRecord archiveTicketType(String id, boolean archive, String actorId) {
+    TicketTypeRecord archiveTicketType(String id, boolean archive, String reason, String actorId) {
         TicketTypeRecord tt = requireTicketTypeRecord(id);
         Instant now = Instant.now();
         if (archive) {
-            return repository.saveTicketType(tt.withArchive(now, actorId, now));
+            String r = requireText(reason, "reason");
+            TicketTypeRecord saved = repository.saveTicketType(tt.withArchive(now, actorId, now));
+            repository.setTicketTypeArchiveReason(id, r);
+            return saved;
         }
-        // 取消存档：清标记并把 pending 删除申请回退 none（同权益模板复核§5）。
-        return repository.saveTicketType(
+        // 取消存档：清标记 + archive_reason 并把 pending 删除申请回退 none（同权益模板复核§5）。
+        TicketTypeRecord saved = repository.saveTicketType(
                 tt.withArchive(null, null, now).withDelete("none", null, null, null, now));
+        repository.setTicketTypeArchiveReason(id, null);
+        return saved;
     }
 
     TicketTypeRecord requestDeleteTicketType(String id, TicketCatalogDeleteRequest request, String actorId) {
@@ -235,7 +243,7 @@ public class TicketCatalogService {
             throw ApiException.conflict("TICKET_TYPE_DELETE_ALREADY_PENDING", "该票种已有待审批的删除申请");
         }
         Instant now = Instant.now();
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         return repository.saveTicketType(tt.withDelete("pending", actorId, now, reason, now));
     }
 
@@ -265,14 +273,19 @@ public class TicketCatalogService {
         return new TicketTypeDeleteDecision(id, "approved", true);
     }
 
-    TicketPriceRuleRecord archivePriceRule(String id, boolean archive, String actorId) {
+    TicketPriceRuleRecord archivePriceRule(String id, boolean archive, String reason, String actorId) {
         TicketPriceRuleRecord rule = requirePriceRuleRecord(id);
         Instant now = Instant.now();
         if (archive) {
-            return repository.savePriceRule(rule.withArchive(now, actorId, now));
+            String r = requireText(reason, "reason");
+            TicketPriceRuleRecord saved = repository.savePriceRule(rule.withArchive(now, actorId, now));
+            repository.setPriceRuleArchiveReason(id, r);
+            return saved;
         }
-        return repository.savePriceRule(
+        TicketPriceRuleRecord saved = repository.savePriceRule(
                 rule.withArchive(null, null, now).withDelete("none", null, null, null, now));
+        repository.setPriceRuleArchiveReason(id, null);
+        return saved;
     }
 
     TicketPriceRuleRecord requestDeletePriceRule(String id, TicketCatalogDeleteRequest request, String actorId) {
@@ -284,7 +297,7 @@ public class TicketCatalogService {
             throw ApiException.conflict("TICKET_PRICE_RULE_DELETE_ALREADY_PENDING", "该价格规则已有待审批的删除申请");
         }
         Instant now = Instant.now();
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         return repository.savePriceRule(rule.withDelete("pending", actorId, now, reason, now));
     }
 

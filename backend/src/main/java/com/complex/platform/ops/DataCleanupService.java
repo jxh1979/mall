@@ -82,7 +82,7 @@ public class DataCleanupService {
         if (!"dry_run".equals(job.status())) {
             throw ApiException.conflict("DATA_CLEANUP_NOT_DRY_RUN", "only a dry_run job can be submitted for approval");
         }
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         Instant now = Instant.now();
         return repository.updateStatus(withStatus(job, "pending_approval", reason, null, null, null, null, now));
     }
@@ -193,5 +193,13 @@ public class DataCleanupService {
 
     private static String slug() {
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private String requireText(String value, String field) {
+        String trimmed = value == null ? null : value.trim();
+        if (trimmed == null || trimmed.isEmpty()) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", field + " is required");
+        }
+        return trimmed;
     }
 }

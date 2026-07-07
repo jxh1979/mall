@@ -106,7 +106,7 @@ class PlatformServiceTests {
     @Test
     void archiveMerchantHidesItFromDefaultListingAndKeepsWithIncludeArchived() {
         MerchantRecord merchant = seedMerchant("seed-archive");
-        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-once"));
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-once", "测试存档理由"));
 
         assertThat(service.listMerchants(false).items())
                 .noneMatch(m -> m.id().equals(merchant.id()));
@@ -117,7 +117,7 @@ class PlatformServiceTests {
     @Test
     void approveDeleteRemovesArchivedMerchantWhenNoReferences() {
         MerchantRecord merchant = seedMerchant("seed-delete");
-        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-2"));
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-2", "测试存档理由"));
         service.requestDeleteMerchant(merchant.id(),
                 new MerchantDeleteRequest("delete-req", "录入错误，退场清理"));
 
@@ -134,7 +134,7 @@ class PlatformServiceTests {
     @Test
     void approveDeleteRejectsWhenMerchantStillReferenced() {
         MerchantRecord merchant = seedMerchant("seed-inuse");
-        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-3"));
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-3", "测试存档理由"));
         service.requestDeleteMerchant(merchant.id(),
                 new MerchantDeleteRequest("delete-req-2", "尝试删除仍在用商户"));
 
@@ -419,6 +419,7 @@ class PlatformServiceTests {
     }
 
     private static final class InMemoryPlatformRepository implements PlatformRepository {
+        @Override public void setMerchantArchiveReason(String id, String reason) { }
         private final Map<String, BusinessEntityRecord> businessEntities = new LinkedHashMap<>();
         private final Map<String, MerchantRecord> merchants = new LinkedHashMap<>();
         private final Map<String, ProjectRecord> projects = new LinkedHashMap<>();
