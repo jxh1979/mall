@@ -2488,7 +2488,8 @@ body {
    data-theme 打在 <html> 上，antd 组件另由 ConfigProvider darkAlgorithm 主题化。
    强调色用暖金（--adm-gold 同色），与浅色中性深色区分、呼应服务业暖调。
    ============================================================ */
-:root[data-theme="dark"] {
+:root[data-theme="dark"] .admin-shell,
+:root[data-theme="dark"] .admin-auth-shell {
   --adm-bg: #131417;
   --adm-surface: #1b1d20;
   --adm-surface-2: #202226;
