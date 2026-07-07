@@ -5,6 +5,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { RowActions, type RowAction } from "../components/RowActions";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -341,27 +342,18 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                   <td>{cnDate(row.effectiveDate) + " → " + cnDate(row.expiryDate)}</td>
                   <td>{formatBusinessStatus(row.commissionMode)}</td>
                   <td className="admin-op-col" onClick={(event) => event.stopPropagation()}>
-                    {row.lifecycleStatus === "drafting" && (
-                      <PermissionButton permissionsState={effectivePermissions} permissions={DRAFT}
-                        data-testid={`contract-submit-${row.id}`} onClick={() => void submit(row)}>提交审批</PermissionButton>
-                    )}
-                    {row.lifecycleStatus === "pending_confirmation" && APPROVE_ROLES.map((r) => (
-                      <PermissionButton key={r.code} permissionsState={effectivePermissions} permissions={[r.code]}
-                        data-testid={`contract-approve-${r.code}-${row.id}`} onClick={() => void approve(row, r.code)}>{r.label}</PermissionButton>
-                    ))}
-                    {row.lifecycleStatus === "pending_effective" && (
-                      <PermissionButton permissionsState={effectivePermissions} permissions={ACTIVATE}
-                        data-testid={`contract-activate-${row.id}`} onClick={() => void activate(row)}>生效(绑铺位)</PermissionButton>
-                    )}
-                    {row.lifecycleStatus === "effective" && (
-                      <>
-                        <PermissionButton permissionsState={effectivePermissions} permissions={RENT_AR}
-                          data-testid={`contract-period-bills-${row.id}`} onClick={() => void generatePeriodBills(row)}>排租金AR</PermissionButton>
-                        <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE}
-                          data-testid={`contract-settle-${row.id}`} onClick={() => void settle(row)}>退租开账</PermissionButton>
-                      </>
-                    )}
-                    <button data-testid={`contract-detail-${row.id}`} onClick={() => void selectContract(row.id)}>明细</button>
+                    {(() => {
+                      const acts: RowAction[] = [];
+                      if (row.lifecycleStatus === "drafting") acts.push({ key: "submit", label: "提交审批", permissions: DRAFT, onClick: () => void submit(row), testId: `contract-submit-${row.id}` });
+                      if (row.lifecycleStatus === "pending_confirmation") APPROVE_ROLES.forEach((r) => acts.push({ key: `approve-${r.code}`, label: r.label, permissions: [r.code], onClick: () => void approve(row, r.code), testId: `contract-approve-${r.code}-${row.id}` }));
+                      if (row.lifecycleStatus === "pending_effective") acts.push({ key: "activate", label: "生效(绑铺位)", permissions: ACTIVATE, onClick: () => void activate(row), testId: `contract-activate-${row.id}` });
+                      if (row.lifecycleStatus === "effective") {
+                        acts.push({ key: "period-bills", label: "排租金AR", permissions: RENT_AR, onClick: () => void generatePeriodBills(row), testId: `contract-period-bills-${row.id}` });
+                        acts.push({ key: "settle", label: "退租开账", permissions: SETTLE, onClick: () => void settle(row), testId: `contract-settle-${row.id}` });
+                      }
+                      acts.push({ key: "detail", label: "明细", onClick: () => void selectContract(row.id), testId: `contract-detail-${row.id}` });
+                      return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`contract-actions-${row.id}`} />;
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -502,10 +494,11 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                   onClick={() => openChangeDetail(ch)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openChangeDetail(ch); } }}>
                   <td className="admin-id-cell" title={ch.id}>{shortId(ch.id)}</td><td>{formatBusinessStatus(ch.changeType)}</td><td>{formatBusinessStatus(ch.approvalStatus)}</td>
-                  <td className="admin-op-col" onClick={(event) => event.stopPropagation()}>{ch.approvalStatus === "pending" && APPROVE_ROLES.map((r) => (
-                    <PermissionButton key={r.code} permissionsState={effectivePermissions} permissions={[r.code]}
-                      data-testid={`change-approve-${r.code}-${ch.id}`} onClick={() => void approveChange(ch.id, r.code)}>{r.label}</PermissionButton>
-                  ))}</td>
+                  <td className="admin-op-col" onClick={(event) => event.stopPropagation()}>{(() => {
+                    const acts: RowAction[] = [];
+                    if (ch.approvalStatus === "pending") APPROVE_ROLES.forEach((r) => acts.push({ key: `approve-${r.code}`, label: r.label, permissions: [r.code], onClick: () => void approveChange(ch.id, r.code), testId: `change-approve-${r.code}-${ch.id}` }));
+                    return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`change-actions-${ch.id}`} />;
+                  })()}</td>
                 </tr>
               ))}
             </tbody>
@@ -534,18 +527,15 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSettlementDetail(st); } }}>
                   <td className="admin-id-cell" title={st.id}>{shortId(st.id)}</td><td>{formatBusinessStatus(st.triggerType)}</td><td>{formatBusinessStatus(st.status)}</td>
                   <td className="admin-op-col" onClick={(event) => event.stopPropagation()}>
-                    {st.status === "disputed" && (
-                      <PermissionButton permissionsState={effectivePermissions} permissions={DISPUTE_RESOLVE}
-                        data-testid={`settlement-resolve-${st.id}`} onClick={() => void settlementAction(st.id, "resolve-dispute")}>裁决→待结算</PermissionButton>
-                    )}
-                    {OPEN_SETTLEMENT.includes(st.status) && (
-                      <>
-                        <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE}
-                          data-testid={`settlement-advance-${st.id}`} onClick={() => void settlementAction(st.id, "advance")}>推进一相</PermissionButton>
-                        <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE}
-                          data-testid={`settlement-complete-${st.id}`} onClick={() => void settlementAction(st.id, "complete")}>结清</PermissionButton>
-                      </>
-                    )}
+                    {(() => {
+                      const acts: RowAction[] = [];
+                      if (st.status === "disputed") acts.push({ key: "resolve", label: "裁决→待结算", permissions: DISPUTE_RESOLVE, onClick: () => void settlementAction(st.id, "resolve-dispute"), testId: `settlement-resolve-${st.id}` });
+                      if (OPEN_SETTLEMENT.includes(st.status)) {
+                        acts.push({ key: "advance", label: "推进一相", permissions: SETTLE, onClick: () => void settlementAction(st.id, "advance"), testId: `settlement-advance-${st.id}` });
+                        acts.push({ key: "complete", label: "结清", permissions: SETTLE, onClick: () => void settlementAction(st.id, "complete"), testId: `settlement-complete-${st.id}` });
+                      }
+                      return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`settlement-actions-${st.id}`} />;
+                    })()}
                   </td>
                 </tr>
               ))}
