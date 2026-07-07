@@ -83,6 +83,7 @@ cam_trueup_runs,single_complex_default,P0_SINGLE_COMPLEX,single-complex default 
 complex_operating_params,direct,project_id,project_id column on complex_operating_params,ready for project/merchant scoped query enforcement,covered
 compliance_expiry_items,direct,merchant_id,merchant_id column on compliance_expiry_items,ready for project/merchant scoped query enforcement,covered
 compliance_reminders,direct,merchant_id,merchant_id column on compliance_reminders,ready for project/merchant scoped query enforcement,covered
+comprehensive_service_fee_configs,direct,project_id,project_id column on comprehensive_service_fee_configs,ready for project/merchant scoped query enforcement,covered
 contract_approval_flow_steps,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 contract_approval_flows,direct,project_id,project_id column on contract_approval_flows,ready for project/merchant scoped query enforcement,covered
 contract_approvals,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
@@ -265,6 +266,7 @@ terminal_devices,direct,venue_id,venue_id column on terminal_devices,ready for p
 terminal_kiosk_configs,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
 terminal_kiosk_heartbeats,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
 terminal_sync_tasks,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
+ticket_combo_discount_configs,direct,project_id,project_id column on ticket_combo_discount_configs,ready for project/merchant scoped query enforcement,covered
 ticket_credentials,inherited,order_id/entitlement_id,order_id/entitlement_id -> ticket_orders/issued_entitlements -> ticket_type/project scope,must join through scope path before multi-complex rollout,covered
 ticket_distribution_configs,direct,project_id,project_id column on ticket_distribution_configs,ready for project/merchant scoped query enforcement,covered
 ticket_distribution_merchant_rates,direct,project_id,project_id column on ticket_distribution_merchant_rates,ready for project/merchant scoped query enforcement,covered
