@@ -4,7 +4,7 @@
 // 3. 提交失败 = 弹窗留开 + 通过 error prop 在弹窗内显错（try/catch → setXxxError），绝不静默关闭。
 // 4. 原有 data-testid 原样保留在弹窗内输入与提交按钮上（e2e/门禁依赖）。
 import React from "react";
-import { Modal, Steps } from "antd";
+import { Button, Modal, Steps } from "antd";
 
 // 引导式流程弹窗（一期范式，2026-07-06 用户拍板）：
 // 页面上只留一个醒目的功能按钮，点击后弹出分步引导：每步一组相关字段（带标题/说明），
@@ -80,13 +80,14 @@ export function GuidedFlowModal({ open, title, steps, summary, submitLabel = "�
     setCurrent((value) => value - 1);
   }
 
+  // 页脚用 antd Button：原生 <button> 在 antd 弹窗内会被 antd 样式覆盖成"白字透明底"=隐形（关键缺陷修复）。
   const footer = (
     <div className="admin-form-row">
-      <button type="button" data-testid={`${testId}-cancel`} onClick={onClose}>取消</button>
-      {current > 0 ? <button type="button" data-testid={`${testId}-prev`} onClick={prev}>上一步</button> : null}
-      {current < confirmIndex ? <button type="button" data-testid={`${testId}-next`} onClick={next}>下一步</button> : null}
+      <Button data-testid={`${testId}-cancel`} onClick={onClose}>取消</Button>
+      {current > 0 ? <Button data-testid={`${testId}-prev`} onClick={prev}>上一步</Button> : null}
+      {current < confirmIndex ? <Button type="primary" data-testid={`${testId}-next`} onClick={next}>下一步</Button> : null}
       {current === confirmIndex ? (
-        <button type="button" data-testid={submitTestId} disabled={submitting} onClick={onSubmit}>{submitLabel}</button>
+        <Button type="primary" data-testid={submitTestId} disabled={submitting} loading={submitting} onClick={onSubmit}>{submitLabel}</Button>
       ) : null}
     </div>
   );
