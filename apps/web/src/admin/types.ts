@@ -301,6 +301,9 @@ export type BarProductRow = {
   /** V256 图形化点单 POS：分类 FK（null=未分类）+ 商品图片相对路径。 */
   categoryId?: string | null;
   imageUrl?: string | null;
+  /** V262 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。 */
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 
 /** V256 酒吧商品分类（图形化点单 POS 阶段1）。 */
@@ -310,6 +313,9 @@ export type BarProductCategoryRow = {
   categoryName?: string;
   sortOrder?: number;
   status?: string;
+  /** V262 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。 */
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 
 /** V257 酒吧套餐 + 明细。 */
@@ -328,6 +334,9 @@ export type BarComboRow = {
   imageUrl?: string | null;
   status?: string;
   items?: BarComboItemRow[];
+  /** V262 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。 */
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 
 export type StoredWineRow = {

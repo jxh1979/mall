@@ -68,6 +68,8 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
   const [formError, setFormError] = React.useState<string | null>(null);
   const [categoryError, setCategoryError] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // V262 存档/删除范式：默认列表不含已存档，勾选后带出。
+  const [showArchived, setShowArchived] = React.useState(false);
 
   const categoryName = React.useCallback(
     (id: string | null | undefined): string => {
@@ -96,10 +98,10 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const items = await api.get<BarProductRow[]>("/api/v1/bar/products");
+      const items = await api.get<BarProductRow[]>(`/api/v1/bar/products?includeArchived=${showArchived}`);
       setRows(items ?? []);
       try {
-        const cats = await api.get<BarProductCategoryRow[]>("/api/v1/bar/catalog/categories");
+        const cats = await api.get<BarProductCategoryRow[]>(`/api/v1/bar/catalog/categories?includeArchived=${showArchived}`);
         setCategories(Array.isArray(cats) ? cats : []);
       } catch {
         setCategories([]);
@@ -107,6 +109,83 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     },
     { onError: setGlobalError, fallbackMessage: "商品列表读取失败" },
   );
+
+
+  // V262 存档/删除范式:切换「显示已存档」后重新拉取(后端按 includeArchived 过滤),首次挂载不触发。
+  const firstArchivedToggle = React.useRef(true);
+  React.useEffect(() => {
+    if (firstArchivedToggle.current) {
+      firstArchivedToggle.current = false;
+      return;
+    }
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived]);
+
+  function archiveLabel(row: { archivedAt?: string | null; deleteStatus?: string }): string {
+    if (row.deleteStatus === "pending") return "待审批删除";
+    if (row.archivedAt) return "已存档";
+    return "生效中";
+  }
+
+  async function archiveEntity(kind: "products" | "categories", id: string, archive: boolean) {
+    try {
+      await api.post(`/api/v1/bar/catalog/${kind}/${id}/${archive ? "archive" : "unarchive"}`, {});
+      setActionResult({ action: `bar_${kind}_${archive ? "archived" : "unarchived"}`, id });
+      await reload();
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : "存档操作失败");
+    }
+  }
+
+  async function requestDeleteEntity(kind: "products" | "categories", id: string) {
+    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    if (reason === null) {
+      return; // 用户点「取消」= 中止申请。
+    }
+    try {
+      await api.post(`/api/v1/bar/catalog/${kind}/${id}/delete-request`, { reason });
+      setActionResult({ action: `bar_${kind}_delete_requested`, id });
+      await reload();
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : "删除申请失败");
+    }
+  }
+
+  async function approveDeleteEntity(kind: "products" | "categories", id: string, decision: "approved" | "rejected") {
+    try {
+      const decided = await api.post<{ deleted?: boolean }>(`/api/v1/bar/catalog/${kind}/${id}/delete-approve`, { decision });
+      setActionResult({ action: `bar_${kind}_delete_${decision}`, id, deleted: decided?.deleted ?? false });
+      await reload();
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : "删除审批失败");
+    }
+  }
+
+  function catalogActions(kind: "products" | "categories", row: { id: string; archivedAt?: string | null; deleteStatus?: string }) {
+    const manage = kind === "products" ? ["bar.product.manage"] : ["bar.category.manage"];
+    const approve = kind === "products" ? ["bar.product.approve"] : ["bar.category.approve"];
+    const prefix = kind === "products" ? "bar-product" : "bar-category";
+    if (row.deleteStatus === "pending") {
+      return (
+        <>
+          <PermissionButton permissionsState={effectivePermissions} permissions={approve} data-testid={`${prefix}-delete-approve-${row.id}`} onClick={() => void approveDeleteEntity(kind, row.id, "approved")}>批准删除</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={approve} data-testid={`${prefix}-delete-reject-${row.id}`} onClick={() => void approveDeleteEntity(kind, row.id, "rejected")}>驳回</PermissionButton>
+        </>
+      );
+    }
+    if (row.archivedAt) {
+      return (
+        <>
+          <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-unarchive-${row.id}`} onClick={() => void archiveEntity(kind, row.id, false)}>取消存档</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-delete-request-${row.id}`} onClick={() => void requestDeleteEntity(kind, row.id)}>申请删除</PermissionButton>
+        </>
+      );
+    }
+    return (
+      <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-archive-${row.id}`} onClick={() => void archiveEntity(kind, row.id, true)}>存档</PermissionButton>
+    );
+  }
 
   function setField(key: keyof ProductForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -201,7 +280,8 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     }
   }
 
-  const activeCategories = categories.filter((c) => c.status !== "archived");
+  // 可指派分类：启用、未存档、非待删（引用侧守卫的前端同口径；后端 BAR_CATEGORY_NOT_ASSIGNABLE 兜底）。
+  const activeCategories = categories.filter((c) => c.status !== "archived" && !c.archivedAt && (c.deleteStatus ?? "none") === "none");
 
   return (
     <section data-testid="bar-products-page">
@@ -225,8 +305,29 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
           保存分类
         </PermissionButton>
         {categories.length > 0 ? (
-          <div data-testid="bar-category-list">
-            已有分类：{categories.map((c) => `${c.categoryName ?? c.id}(${c.status === "archived" ? "停用" : "启用"})`).join("、")}
+          <div className="admin-table-scroll" data-testid="bar-category-list">
+            <table className="admin-table" data-testid="bar-categories-table">
+              <thead>
+                <tr>
+                  <th>分类</th>
+                  <th>排序</th>
+                  <th>状态</th>
+                  <th>存档状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((c) => (
+                  <tr key={c.id} data-testid={`bar-category-row-${c.id}`}>
+                    <td>{c.categoryName ?? c.id}<br /><small>{c.id}</small></td>
+                    <td>{c.sortOrder ?? 0}</td>
+                    <td>{c.status === "archived" ? "停用" : "启用"}</td>
+                    <td data-testid={`bar-category-archive-label-${c.id}`}>{archiveLabel(c)}</td>
+                    <td>{catalogActions("categories", c)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : null}
       </div>
@@ -249,6 +350,11 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         </PermissionButton>
       </div>
 
+      <label className="admin-inline-check" data-testid="bar-catalog-show-archived">
+        <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+        显示已存档分类与商品
+      </label>
+
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-products-table">
@@ -261,6 +367,8 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
                 <th>内部结算价（元）</th>
                 <th>图片</th>
                 <th>状态</th>
+                <th>存档状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -299,6 +407,8 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
                     />
                   </td>
                   <td>{row.soldOut ? "沽清" : formatBusinessStatus(row.status)}</td>
+                  <td data-testid={`bar-product-archive-label-${row.id}`}>{archiveLabel(row)}</td>
+                  <td onClick={(e) => e.stopPropagation()}>{catalogActions("products", row)}</td>
                 </tr>
               ))}
             </tbody>

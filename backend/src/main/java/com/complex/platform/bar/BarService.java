@@ -146,10 +146,13 @@ public class BarService {
         );
     }
 
-    public PageResponse<BarProductRecord> listProducts() {
+    public PageResponse<BarProductRecord> listProducts(boolean includeArchived) {
         return operations.readPage(
                 BarReadOperation.LIST_PRODUCTS,
-                () -> repository.listProducts(authorizationService.currentMerchantScope())
+                // V262：列表默认排除已存档商品；includeArchived=true 才带出（内存过滤，商品目录量级小）。
+                () -> repository.listProducts(authorizationService.currentMerchantScope()).stream()
+                        .filter(p -> includeArchived || p.archivedAt() == null)
+                        .toList()
         );
     }
 

@@ -40,6 +40,8 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
   const [form, setForm] = React.useState<ComboForm>(EMPTY_COMBO_FORM);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // V262 存档/删除范式：默认列表不含已存档，勾选后带出。
+  const [showArchived, setShowArchived] = React.useState(false);
 
   const productName = React.useCallback(
     (id: string): string => products.find((p) => p.id === id)?.productName ?? id,
@@ -48,7 +50,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const combos = await api.get<BarComboRow[]>("/api/v1/bar/catalog/combos");
+      const combos = await api.get<BarComboRow[]>(`/api/v1/bar/catalog/combos?includeArchived=${showArchived}`);
       setRows(Array.isArray(combos) ? combos : []);
       try {
         const prods = await api.get<BarProductRow[]>("/api/v1/bar/products");
@@ -59,6 +61,80 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
     },
     { onError: setGlobalError, fallbackMessage: "套餐列表读取失败" },
   );
+
+
+  // V262 存档/删除范式:切换「显示已存档」后重新拉取,首次挂载不触发。
+  const firstArchivedToggle = React.useRef(true);
+  React.useEffect(() => {
+    if (firstArchivedToggle.current) {
+      firstArchivedToggle.current = false;
+      return;
+    }
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived]);
+
+  function archiveLabel(row: { archivedAt?: string | null; deleteStatus?: string }): string {
+    if (row.deleteStatus === "pending") return "待审批删除";
+    if (row.archivedAt) return "已存档";
+    return "生效中";
+  }
+
+  async function archiveCombo(id: string, archive: boolean) {
+    try {
+      await api.post(`/api/v1/bar/catalog/combos/${id}/${archive ? "archive" : "unarchive"}`, {});
+      setActionResult({ action: `bar_combo_${archive ? "archived" : "unarchived"}`, id });
+      await reload();
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : "存档操作失败");
+    }
+  }
+
+  async function requestDeleteCombo(id: string) {
+    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    if (reason === null) {
+      return; // 用户点「取消」= 中止申请。
+    }
+    try {
+      await api.post(`/api/v1/bar/catalog/combos/${id}/delete-request`, { reason });
+      setActionResult({ action: "bar_combo_delete_requested", id });
+      await reload();
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : "删除申请失败");
+    }
+  }
+
+  async function approveDeleteCombo(id: string, decision: "approved" | "rejected") {
+    try {
+      const decided = await api.post<{ deleted?: boolean }>(`/api/v1/bar/catalog/combos/${id}/delete-approve`, { decision });
+      setActionResult({ action: `bar_combo_delete_${decision}`, id, deleted: decided?.deleted ?? false });
+      await reload();
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : "删除审批失败");
+    }
+  }
+
+  function comboActions(row: BarComboRow) {
+    if (row.deleteStatus === "pending") {
+      return (
+        <>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.approve"]} data-testid={`bar-combo-delete-approve-${row.id}`} onClick={() => void approveDeleteCombo(row.id, "approved")}>批准删除</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.approve"]} data-testid={`bar-combo-delete-reject-${row.id}`} onClick={() => void approveDeleteCombo(row.id, "rejected")}>驳回</PermissionButton>
+        </>
+      );
+    }
+    if (row.archivedAt) {
+      return (
+        <>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.manage"]} data-testid={`bar-combo-unarchive-${row.id}`} onClick={() => void archiveCombo(row.id, false)}>取消存档</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.manage"]} data-testid={`bar-combo-delete-request-${row.id}`} onClick={() => void requestDeleteCombo(row.id)}>申请删除</PermissionButton>
+        </>
+      );
+    }
+    return (
+      <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.manage"]} data-testid={`bar-combo-archive-${row.id}`} onClick={() => void archiveCombo(row.id, true)}>存档</PermissionButton>
+    );
+  }
 
   function openDetail(row: BarComboRow) {
     setDetail({
@@ -179,6 +255,11 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
         </PermissionButton>
       </div>
 
+      <label className="admin-inline-check" data-testid="bar-combos-show-archived">
+        <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+        显示已存档套餐
+      </label>
+
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-combos-table">
@@ -189,6 +270,8 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
                 <th>内部结算价（元）</th>
                 <th>含商品</th>
                 <th>状态</th>
+                <th>存档状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -205,6 +288,8 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
                   <td>{yuan(row.internalSettlementPriceCent)}</td>
                   <td>{(row.items ?? []).map((it) => `${it.productName ?? productName(it.productId)} ×${it.quantity}`).join("、") || "—"}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
+                  <td data-testid={`bar-combo-archive-label-${row.id}`}>{archiveLabel(row)}</td>
+                  <td onClick={(e) => e.stopPropagation()}>{comboActions(row)}</td>
                 </tr>
               ))}
             </tbody>
