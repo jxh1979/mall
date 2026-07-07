@@ -48,11 +48,14 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     public List<PermissionTemplate> listTemplates() {
         return jdbcTemplate.query("""
-                SELECT id, template_code, template_name, description, template_type, source_template_id,
-                       owner_scope_type, owner_scope_id, usage_mode, valid_from, valid_to, single_use,
-                       status, reason, approved_by, approved_at, created_at, updated_at
-                  FROM permission_templates
-                 ORDER BY created_at DESC, id
+                SELECT t.id, t.template_code, t.template_name, t.description, t.template_type, t.source_template_id,
+                       t.owner_scope_type, t.owner_scope_id, t.usage_mode, t.valid_from, t.valid_to, t.single_use,
+                       t.status, t.reason, t.approved_by, t.approved_at, t.created_at, t.updated_at,
+                       COALESCE(array_agg(i.permission_code) FILTER (WHERE i.permission_code IS NOT NULL), ARRAY[]::text[]) AS permission_codes
+                  FROM permission_templates t
+                  LEFT JOIN permission_template_items i ON i.template_id = t.id
+                 GROUP BY t.id
+                 ORDER BY t.created_at DESC, t.id
                 """, this::mapTemplate);
     }
 
@@ -60,23 +63,29 @@ class JdbcAccessRepository implements AccessRepository {
     public List<PermissionTemplate> listTemplates(String organizationId) {
         if (organizationId == null) return listTemplates();
         return jdbcTemplate.query("""
-                SELECT id, template_code, template_name, description, template_type, source_template_id,
-                       owner_scope_type, owner_scope_id, usage_mode, valid_from, valid_to, single_use,
-                       status, reason, approved_by, approved_at, created_at, updated_at
-                  FROM permission_templates
-                 WHERE owner_scope_id = :organization_id
-                 ORDER BY created_at DESC, id
+                SELECT t.id, t.template_code, t.template_name, t.description, t.template_type, t.source_template_id,
+                       t.owner_scope_type, t.owner_scope_id, t.usage_mode, t.valid_from, t.valid_to, t.single_use,
+                       t.status, t.reason, t.approved_by, t.approved_at, t.created_at, t.updated_at,
+                       COALESCE(array_agg(i.permission_code) FILTER (WHERE i.permission_code IS NOT NULL), ARRAY[]::text[]) AS permission_codes
+                  FROM permission_templates t
+                  LEFT JOIN permission_template_items i ON i.template_id = t.id
+                 WHERE t.owner_scope_id = :organization_id
+                 GROUP BY t.id
+                 ORDER BY t.created_at DESC, t.id
                 """, Map.of("organization_id", organizationId), this::mapTemplate);
     }
 
     @Override
     public Optional<PermissionTemplate> findTemplateById(String id) {
         List<PermissionTemplate> result = jdbcTemplate.query("""
-                SELECT id, template_code, template_name, description, template_type, source_template_id,
-                       owner_scope_type, owner_scope_id, usage_mode, valid_from, valid_to, single_use,
-                       status, reason, approved_by, approved_at, created_at, updated_at
-                  FROM permission_templates
-                 WHERE id = :id
+                SELECT t.id, t.template_code, t.template_name, t.description, t.template_type, t.source_template_id,
+                       t.owner_scope_type, t.owner_scope_id, t.usage_mode, t.valid_from, t.valid_to, t.single_use,
+                       t.status, t.reason, t.approved_by, t.approved_at, t.created_at, t.updated_at,
+                       COALESCE(array_agg(i.permission_code) FILTER (WHERE i.permission_code IS NOT NULL), ARRAY[]::text[]) AS permission_codes
+                  FROM permission_templates t
+                  LEFT JOIN permission_template_items i ON i.template_id = t.id
+                 WHERE t.id = :id
+                 GROUP BY t.id
                 """, Map.of("id", id), this::mapTemplate);
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
@@ -977,8 +986,18 @@ class JdbcAccessRepository implements AccessRepository {
                 resultSet.getString("approved_by"),
                 nullableInstant(resultSet, "approved_at"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                readPermissionCodes(resultSet)
         );
+    }
+
+    private static List<String> readPermissionCodes(ResultSet resultSet) throws SQLException {
+        java.sql.Array array = resultSet.getArray("permission_codes");
+        if (array == null) {
+            return List.of();
+        }
+        String[] codes = (String[]) array.getArray();
+        return codes == null ? List.of() : java.util.Arrays.asList(codes);
     }
 
     private AccessUser mapUser(ResultSet resultSet, int rowNumber) throws SQLException {

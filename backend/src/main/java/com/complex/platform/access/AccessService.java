@@ -1727,7 +1727,8 @@ public class AccessService {
                 "access-api",
                 now,
                 now,
-                now
+                now,
+                safeList(request.permissionCodes())
         );
     }
 
