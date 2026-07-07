@@ -38,8 +38,6 @@ describe("EnergyWorkbenchPage 引导式新增仪表", () => {
     // 步骤1 基本信息（type/gather 有默认值，填 name）
     fireEvent.change(screen.getByTestId("energy-meter-guided-name"), { target: { value: "公区总电表" } });
     fireEvent.click(screen.getByTestId("energy-meter-guided-next"));
-    // 步骤2 归属与读数（默认值即可）
-    fireEvent.click(screen.getByTestId("energy-meter-guided-next"));
     // 确认步 → 提交
     fireEvent.click(screen.getByTestId("energy-meter-save"));
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/energy/meters")).toBe(true));

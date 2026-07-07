@@ -87,7 +87,6 @@ describe("AccessGovernancePage 引导式新增岗位角色模板(phase-9)", () =
 
     fireEvent.change(screen.getByTestId("access-position-role-template-position"), { target: { value: "front_desk" } });
     fireEvent.change(screen.getByTestId("access-position-role-template-level"), { target: { value: "lvl_p1" } });
-    fireEvent.click(screen.getByTestId("access-position-role-template-guided-next")); // 步1→步2
     fireEvent.click(screen.getByTestId("access-position-role-template-guided-next")); // 步2→确认
     await waitFor(() => expect(screen.getByTestId("access-position-role-template-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("access-position-role-template-save"));

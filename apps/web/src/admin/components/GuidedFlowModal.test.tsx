@@ -27,6 +27,7 @@ function Harness({ onSubmit, onClose }: { onSubmit: () => void; onClose: () => v
       title="新建示例"
       testId="demo-flow"
       submitTestId="demo-flow-submit"
+      singlePage={false}
       steps={steps}
       summary={[{ label: "名称", value: name }]}
       onSubmit={onSubmit}

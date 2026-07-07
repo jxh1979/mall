@@ -53,9 +53,7 @@ describe("PayrollTaxBracketsPage 引导式新增税率档(phase-7)", () => {
     fireEvent.change(screen.getByLabelText("档位 id"), { target: { value: "ptb_labor_2" } });
     fireEvent.change(screen.getByLabelText("序号"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText("毛收入下界(分)"), { target: { value: "400001" } });
-    fireEvent.click(screen.getByTestId("payroll-tax-brackets-guided-next"));
-
-    // 第二步：税率参数
+    // 一屏填完所有字段（含税率参数）
     await waitFor(() => expect(screen.getByLabelText("应税基数万分比")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("应税基数万分比"), { target: { value: "8000" } });
     fireEvent.change(screen.getByLabelText("税率万分比"), { target: { value: "3000" } });
@@ -82,7 +80,6 @@ describe("PayrollTaxBracketsPage 引导式新增税率档(phase-7)", () => {
     fireEvent.change(screen.getByLabelText("毛收入下界(分)"), { target: { value: "400001" } });
     fireEvent.click(screen.getByTestId("payroll-tax-brackets-guided-next"));
     expect(screen.getByTestId("payroll-tax-brackets-guided-error").textContent).toContain("档位 id");
-    expect(screen.queryByLabelText("应税基数万分比")).toBeNull();
     expect(post).not.toHaveBeenCalled();
   });
 

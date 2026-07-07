@@ -40,8 +40,6 @@ describe("ServiceOrdersPage 引导式新增服务目录", () => {
     fireEvent.change(screen.getByTestId("svc-price-input"), { target: { value: "200" } });
     fireEvent.change(screen.getByTestId("svc-minutes-input"), { target: { value: "10" } });
     fireEvent.click(screen.getByTestId("svc-catalog-guided-next"));
-    // 步骤2 管理费（默认免收）
-    fireEvent.click(screen.getByTestId("svc-catalog-guided-next"));
     // 确认步 → 提交
     fireEvent.click(screen.getByTestId("svc-save"));
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/services/catalog")).toBe(true));

@@ -39,8 +39,6 @@ describe("BarTableSessionsPage 引导式新建卡座", () => {
     // 步骤1 卡座信息（barId 从下拉自动选中第一个 bar-main；tableName 需填）
     await waitFor(() => expect((screen.getByTestId("bar-new-table-bar") as HTMLSelectElement).value).toBe("bar-main"));
     fireEvent.change(screen.getByTestId("bar-new-table-name"), { target: { value: "VIP-01" } });
-    fireEvent.click(screen.getByTestId("bar-new-table-guided-next"));
-    // 步骤2 容量与低消（默认 capacity=4/free=0/spend=0）
     fireEvent.change(screen.getByTestId("bar-new-table-spend"), { target: { value: "500" } });
     fireEvent.click(screen.getByTestId("bar-new-table-guided-next"));
     // 确认步 → 提交
