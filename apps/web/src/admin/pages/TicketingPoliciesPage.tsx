@@ -9,6 +9,7 @@ import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { Tabs } from "antd";
+import { RowActions, type RowAction } from "../components/RowActions";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -248,25 +249,20 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     const manage = kind === "ticket-types" ? MANAGE : ["ticket.price_variant.manage"];
     const approve = kind === "ticket-types" ? ["ticket.type.approve"] : ["ticket.price_rule.approve"];
     const prefix = kind === "ticket-types" ? "ticket-type" : "price-rule";
-    if (row.deleteStatus === "pending") {
-      return (
-        <>
-          <PermissionButton permissionsState={effectivePermissions} permissions={approve} data-testid={`${prefix}-delete-approve-${row.id}`} onClick={() => void approveDeleteCatalog(kind, row.id, "approved")}>批准删除</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={approve} data-testid={`${prefix}-delete-reject-${row.id}`} onClick={() => void approveDeleteCatalog(kind, row.id, "rejected")}>驳回</PermissionButton>
-        </>
-      );
-    }
-    if (row.archivedAt) {
-      return (
-        <>
-          <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-unarchive-${row.id}`} onClick={() => void archiveCatalog(kind, row.id, false)}>取消存档</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-delete-request-${row.id}`} onClick={() => void requestDeleteCatalog(kind, row.id)}>申请删除</PermissionButton>
-        </>
-      );
-    }
-    return (
-      <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-archive-${row.id}`} onClick={() => void archiveCatalog(kind, row.id, true)}>存档</PermissionButton>
-    );
+    const actions: RowAction[] = row.deleteStatus === "pending"
+      ? [
+          { key: "approve", label: "批准删除", permissions: approve, onClick: () => void approveDeleteCatalog(kind, row.id, "approved"), testId: `${prefix}-delete-approve-${row.id}` },
+          { key: "reject", label: "驳回", permissions: approve, danger: true, onClick: () => void approveDeleteCatalog(kind, row.id, "rejected"), testId: `${prefix}-delete-reject-${row.id}` },
+        ]
+      : row.archivedAt
+      ? [
+          { key: "unarchive", label: "取消存档", permissions: manage, onClick: () => void archiveCatalog(kind, row.id, false), testId: `${prefix}-unarchive-${row.id}` },
+          { key: "delete-request", label: "申请删除", permissions: manage, danger: true, onClick: () => void requestDeleteCatalog(kind, row.id), testId: `${prefix}-delete-request-${row.id}` },
+        ]
+      : [
+          { key: "archive", label: "存档", permissions: manage, onClick: () => void archiveCatalog(kind, row.id, true), testId: `${prefix}-archive-${row.id}` },
+        ];
+    return <RowActions actions={actions} permissionsState={effectivePermissions} testId={`${prefix}-actions-${row.id}`} />;
   }
 
   async function publish() {
