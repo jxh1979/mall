@@ -60,7 +60,7 @@ function expectActiveMerchantsFocusView() {
   expect(screen.queryByTestId("organization-entities-table")).toBeNull();
   expect(screen.queryByTestId("organization-projects-table")).toBeNull();
   expect(screen.queryByTestId("organization-merchant-summary")).toBeNull();
-  expect(screen.queryByTestId("organization-merchant-name")).toBeNull();
+  expect(screen.queryByTestId("organization-merchant-create-open")).toBeNull();
 }
 
 describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", () => {
@@ -91,7 +91,7 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy();
     expect(screen.getByTestId("organization-merchant-row-m-2")).toBeTruthy();
     expect(screen.getByTestId("organization-merchant-summary")).toBeTruthy();
-    expect(screen.getByTestId("organization-merchant-name")).toBeTruthy();
+    expect(screen.getByTestId("organization-merchant-create-open")).toBeTruthy();
   });
 
   it("带参刷新/直链进入 → 直接呈现聚焦视图（参数从 URL 重建）", async () => {
@@ -149,18 +149,59 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     expect(text).toContain("正常商户数");
   });
 
-  it("创建表单商户类型/合作形式下拉显示中文，不含英文枚举", async () => {
+  it("引导式弹窗内商户类型/合作形式下拉显示中文，不含英文枚举", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("organization-merchant-type")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-merchant-create-open"));
+    // 第一步：基本信息（商户类型下拉在此步）。
     const typeText = screen.getByTestId("organization-merchant-type").textContent ?? "";
     expect(typeText).toContain("租赁商户");
     expect(typeText).toContain("餐饮");
     expect(typeText).not.toContain("tenant");
     expect(typeText).not.toContain("catering");
+    // 步进到第三步：经营与租赁（合作形式下拉）。默认值合法，直接下一步两次。
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
     const coopText = screen.getByTestId("organization-merchant-cooperation").textContent ?? "";
     expect(coopText).toContain("固定租金");
     expect(coopText).not.toContain("fixed_rent");
     expect(coopText).not.toContain("revenue_share");
+  });
+
+  it("引导式创建流：分步校验拦截 → 确认页汇总 → 创建提交并关闭弹窗", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-merchant-create-open"));
+
+    // 第一步：清空商户名 → 校验拦截，停在本步。
+    fireEvent.change(screen.getByTestId("organization-merchant-name"), { target: { value: " " } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("商户名称不能为空");
+    fireEvent.change(screen.getByTestId("organization-merchant-name"), { target: { value: "引导流程商户" } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+
+    // 第二步：联系电话非法 → 校验拦截。
+    fireEvent.change(screen.getByTestId("organization-merchant-contact-phone"), { target: { value: "12345" } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("手机号");
+    fireEvent.change(screen.getByTestId("organization-merchant-contact-phone"), { target: { value: "13912345678" } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+
+    // 第三步：经营与租赁 → 下一步进确认页。
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    const summary = screen.getByTestId("organization-merchant-flow-summary");
+    expect(summary.textContent).toContain("引导流程商户");
+    expect(summary.textContent).toContain("13912345678");
+    expect(summary.textContent).not.toContain("fixed_rent");
+
+    // 确认页点「创建商户档案」→ POST 发出、弹窗关闭。
+    fireEvent.click(screen.getByTestId("organization-merchant-create"));
+    await waitFor(() => expect(screen.queryByTestId("organization-merchant-flow")).toBeNull());
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    expect(postCall).toBeTruthy();
+    expect(String(postCall![0])).toContain("/api/v1/platform/merchants");
+    expect(String((postCall![1] as RequestInit).body)).toContain("引导流程商户");
   });
 });
 

@@ -70,7 +70,7 @@ describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("leasing-lead-select-l-1")).toBeTruthy();
     expect(screen.queryByTestId("leasing-lead-select-l-2")).toBeNull();
     expect(screen.queryByTestId("leasing-summary")).toBeNull();
-    expect(screen.queryByTestId("leasing-lead-create-form")).toBeNull();
+    expect(screen.queryByTestId("leasing-lead-create-open")).toBeNull();
     expect(screen.queryByTestId("leasing-intents-table")).toBeNull();
   });
 

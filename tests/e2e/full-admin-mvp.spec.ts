@@ -39,16 +39,21 @@ test.describe("full admin MVP acceptance", () => {
     await adminLogin(page, "/admin/access/users");
 
     await expect(page.getByTestId("admin-page-title")).toContainText("员工账号");
+    // 引导式流程一期：主按钮打开分步弹窗 → 账号信息 → 归属与授权 → 状态与权限 → 确认页创建。
+    await page.getByTestId("access-user-create-open").click();
     await page.getByTestId("access-user-name").fill("new-staff");
     await page.getByTestId("access-user-password").fill("ChangeMe@123");
     await page.getByTestId("access-user-phone").fill("13800000001");
     await page.getByTestId("access-user-account-type").selectOption("sales");
+    await page.getByTestId("access-user-flow-next").click();
     await page.getByTestId("access-user-org").fill("org-1");
     await page.getByTestId("access-user-merchant").fill("merchant-1");
-    await page.getByTestId("access-user-status").selectOption("active");
     await page.getByTestId("access-user-consent").fill("consent-staff-001");
     await page.getByTestId("access-user-evidence").fill("ev-staff-001,ev-hr-001");
+    await page.getByTestId("access-user-flow-next").click();
+    await page.getByTestId("access-user-status").selectOption("active");
     await expect(page.getByTestId("access-user-template")).toBeVisible();
+    await page.getByTestId("access-user-flow-next").click();
     await page.getByTestId("access-user-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("创建员工并赋权");
     await expect(page.getByTestId("admin-action-result")).toContainText("new-staff");
