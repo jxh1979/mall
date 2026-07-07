@@ -111,7 +111,7 @@ class PlatformControllerTests {
 
     @Test
     void listingMerchantsReturnsApiResponsePageShape() throws Exception {
-        when(service.listMerchants()).thenReturn(new PageResponse<>(
+        when(service.listMerchants(false)).thenReturn(new PageResponse<>(
                 List.of(new MerchantRecord(
                         "mch_1",
                         "P0 Merchant",

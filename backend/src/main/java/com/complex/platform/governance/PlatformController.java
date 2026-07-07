@@ -45,9 +45,10 @@ public class PlatformController {
     }
 
     @GetMapping("/merchants")
-    public ApiResponse<PageResponse<MerchantRecord>> listMerchants() {
+    public ApiResponse<PageResponse<MerchantRecord>> listMerchants(
+            @org.springframework.web.bind.annotation.RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("merchant.profile.view");
-        return ApiResponse.ok(service.listMerchants());
+        return ApiResponse.ok(service.listMerchants(includeArchived));
     }
 
     @PostMapping("/merchants")
@@ -65,6 +66,44 @@ public class PlatformController {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.updateMerchant(merchantId, request));
+    }
+
+    // ================= V260 商户存档与审批后删除范式 =================
+
+    @PostMapping("/merchants/{merchant_id}/archive")
+    public ApiResponse<MerchantRecord> archiveMerchant(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantArchiveRequest request) {
+        authorizationService.requirePermission("merchant.profile.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archiveMerchant(merchantId, request));
+    }
+
+    @PostMapping("/merchants/{merchant_id}/unarchive")
+    public ApiResponse<MerchantRecord> unarchiveMerchant(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantArchiveRequest request) {
+        authorizationService.requirePermission("merchant.profile.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.unarchiveMerchant(merchantId, request));
+    }
+
+    @PostMapping("/merchants/{merchant_id}/delete-request")
+    public ApiResponse<MerchantRecord> requestDeleteMerchant(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantDeleteRequest request) {
+        authorizationService.requirePermission("merchant.profile.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestDeleteMerchant(merchantId, request));
+    }
+
+    @PostMapping("/merchants/{merchant_id}/delete-approve")
+    public ApiResponse<MerchantDeleteDecision> approveDeleteMerchant(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantDeleteApprovalRequest request) {
+        authorizationService.requirePermission("merchant.profile.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveDeleteMerchant(merchantId, request));
     }
 
     @GetMapping("/projects")

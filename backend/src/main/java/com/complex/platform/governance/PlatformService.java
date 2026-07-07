@@ -9,6 +9,9 @@ import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
+import com.complex.platform.governance.dto.MerchantDeleteApprovalRequest;
+import com.complex.platform.governance.dto.MerchantDeleteRequest;
+import com.complex.platform.governance.dto.MerchantArchiveRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
@@ -92,8 +95,8 @@ public class PlatformService {
         );
     }
 
-    public PageResponse<MerchantRecord> listMerchants() {
-        List<MerchantRecord> records = repository.listMerchants();
+    public PageResponse<MerchantRecord> listMerchants(boolean includeArchived) {
+        List<MerchantRecord> records = repository.listMerchants(includeArchived);
         auditEventService.recordSuccess(
                 "merchant.viewed",
                 "merchant.profile.view",
@@ -122,6 +125,148 @@ public class PlatformService {
                 requireText(merchantId, "merchant_id"),
                 request
         );
+    }
+
+    // ================= V260 商户存档与审批后删除范式 =================
+
+    /** 当前操作者 id（存档/删除申请留痕与自审校验）；无鉴权上下文（测试/内部）回退 null。 */
+    private String actorId() {
+        if (authorizationService == null) {
+            return null;
+        }
+        try {
+            return authorizationService.currentActor().id();
+        } catch (RuntimeException unauthenticated) {
+            return null;
+        }
+    }
+
+    /** 存档/取消存档商户（软标记，可逆；列表默认过滤已存档）。取消存档时把 pending 删除申请回退 none。 */
+    public MerchantRecord archiveMerchant(String merchantId, MerchantArchiveRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        return executeWrite(
+                "archiveMerchant:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                MerchantRecord.class,
+                "merchant.archived",
+                "merchant.archive_failed",
+                "merchant.profile.manage",
+                "merchant",
+                () -> {
+                    MerchantRecord merchant = requireMerchant(id);
+                    Instant now = Instant.now();
+                    return repository.saveMerchant(merchant.withArchive(now, actorId(), now));
+                }
+        );
+    }
+
+    public MerchantRecord unarchiveMerchant(String merchantId, MerchantArchiveRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        return executeWrite(
+                "unarchiveMerchant:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                MerchantRecord.class,
+                "merchant.unarchived",
+                "merchant.unarchive_failed",
+                "merchant.profile.manage",
+                "merchant",
+                () -> {
+                    MerchantRecord merchant = requireMerchant(id);
+                    Instant now = Instant.now();
+                    // 取消存档=保留该商户,顺带撤销待审批删除,避免"生效可见却挂着待删"的迷惑态。
+                    return repository.saveMerchant(
+                            merchant.withArchive(null, null, now).withDelete("none", null, null, null, now));
+                }
+        );
+    }
+
+    /** 发起删除申请：须先存档（防误删在用商户），记 requested_by/at/reason，状态置 pending。 */
+    public MerchantRecord requestDeleteMerchant(String merchantId, MerchantDeleteRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        return executeWrite(
+                "requestDeleteMerchant:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                MerchantRecord.class,
+                "merchant.delete_requested",
+                "merchant.delete_request_failed",
+                "merchant.profile.manage",
+                "merchant",
+                () -> {
+                    MerchantRecord merchant = requireMerchant(id);
+                    if (merchant.archivedAt() == null) {
+                        throw ApiException.badRequest("MERCHANT_NOT_ARCHIVED",
+                                "商户必须先存档才能申请删除");
+                    }
+                    if ("pending".equals(merchant.deleteStatus())) {
+                        throw ApiException.conflict("MERCHANT_DELETE_ALREADY_PENDING",
+                                "该商户已有待审批的删除申请");
+                    }
+                    Instant now = Instant.now();
+                    String reason = request == null ? null : trimToNull(request.reason());
+                    return repository.saveMerchant(merchant.withDelete("pending", actorId(), now, reason, now));
+                }
+        );
+    }
+
+    /**
+     * 审批删除申请。approved 且无活引用 → 物理删除；rejected → 回 none。
+     * 禁自审：审批人不得为删除申请发起人（照 supervisor_review 职责分离原则）。
+     */
+    public MerchantDeleteDecision approveDeleteMerchant(String merchantId, MerchantDeleteApprovalRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        return executeWrite(
+                "approveDeleteMerchant:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                MerchantDeleteDecision.class,
+                "merchant.delete_approved",
+                "merchant.delete_approve_failed",
+                "merchant.profile.approve",
+                "merchant",
+                () -> {
+                    MerchantRecord merchant = requireMerchant(id);
+                    if (!"pending".equals(merchant.deleteStatus())) {
+                        throw ApiException.badRequest("MERCHANT_DELETE_NOT_PENDING",
+                                "该商户没有待审批的删除申请");
+                    }
+                    String decision = request == null || request.decision() == null
+                            ? null : request.decision().trim().toLowerCase(Locale.ROOT);
+                    if (!"approved".equals(decision) && !"rejected".equals(decision)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+                    }
+                    // 职责分离：删除申请发起人不能审批自己的申请。actorId 为 null（无鉴权/测试）时跳过该闸。
+                    String actor = actorId();
+                    if (actor != null && actor.equals(merchant.deleteRequestedBy())) {
+                        throw ApiException.forbidden("MERCHANT_SELF_APPROVE_FORBIDDEN",
+                                "删除申请发起人不能审批自己的申请");
+                    }
+                    if ("rejected".equals(decision)) {
+                        Instant now = Instant.now();
+                        repository.saveMerchant(merchant.withDelete("none", null, null, null, now));
+                        return new MerchantDeleteDecision(id, "rejected", false);
+                    }
+                    // approved：先校验商户无核心运营表活引用，有则拒绝硬删（防连锁孤儿）。
+                    long refs = repository.countMerchantReferences(id);
+                    if (refs > 0) {
+                        throw ApiException.conflict("MERCHANT_IN_USE",
+                                "商户仍被 " + refs + " 条业务记录引用（合同/账单/工单/员工/酒吧等），不可删除");
+                    }
+                    repository.deleteMerchant(id);
+                    return new MerchantDeleteDecision(id, "approved", true);
+                }
+        );
+    }
+
+    private MerchantRecord requireMerchant(String id) {
+        return repository.findMerchantById(id)
+                .orElseThrow(() -> ApiException.notFound("MERCHANT_NOT_FOUND", "merchant not found"));
     }
 
     public PageResponse<ProjectRecord> listProjects() {

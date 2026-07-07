@@ -24,6 +24,14 @@ public final class TestSecurityActors {
                 new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
     }
 
+    /** Platform admin with an explicit user id — for two-admin segregation-of-duties (initiator vs approver) tests. */
+    public static void asPlatformAdmin(String userId) {
+        AccessActor actor = new AccessActor(
+                userId, userId + "_user", "platform_admin", "org_1", null, "active");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
+    }
+
     /** Sets a merchant actor — currentMerchantScope() returns Optional.of(merchantId). */
     public static void asMerchantUser(String merchantId) {
         AccessActor actor = new AccessActor(

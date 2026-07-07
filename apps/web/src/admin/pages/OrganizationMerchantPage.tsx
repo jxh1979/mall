@@ -66,6 +66,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：三张业务表（经营主体/商户/项目）整行可点 → 该行完整字段（枚举中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // V260 存档/删除范式：显示已存档商户开关（后端按 includeArchived 过滤）。
+  const [showArchived, setShowArchived] = React.useState(false);
 
   // 浏览器后退/前进也能进出聚焦视图：pushState 配合页面级 popstate 监听。
   // AdminApp 的 popstate 只重建 route/focus，本页的 ?kpi= 参数由本页自理，互不干扰。
@@ -102,7 +104,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     async () => {
       const [nextEntities, nextMerchants, nextProjects] = await Promise.all([
         api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities"),
-        api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"),
+        api.get<MerchantAdmissionRow[]>(`/api/v1/platform/merchants?includeArchived=${showArchived}`),
         api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
       ]);
       setEntities(nextEntities);
@@ -156,6 +158,47 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     };
     const result = await api.post<unknown>("/api/v1/platform/merchants", request);
     setActionResult({ action: "merchant_profile_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+    await reload();
+  }
+
+  // 切换「显示已存档」后重新拉取（后端按 includeArchived 过滤），首次挂载不触发。
+  const firstArchivedToggle = React.useRef(true);
+  React.useEffect(() => {
+    if (firstArchivedToggle.current) {
+      firstArchivedToggle.current = false;
+      return;
+    }
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived]);
+
+  async function archiveMerchant(id: string, archive: boolean) {
+    setGlobalError(null);
+    await api.post(`/api/v1/platform/merchants/${id}/${archive ? "archive" : "unarchive"}`, {
+      idempotencyKey: `merchant-${archive ? "archive" : "unarchive"}-${id}-${Date.now()}`,
+    });
+    setActionResult({ action: archive ? "merchant_archived" : "merchant_unarchived", id });
+    await reload();
+  }
+
+  async function requestDeleteMerchant(id: string) {
+    const reason = window.prompt("删除理由（提交后需上级审批）：") ?? "";
+    setGlobalError(null);
+    await api.post(`/api/v1/platform/merchants/${id}/delete-request`, {
+      idempotencyKey: `merchant-delete-request-${id}-${Date.now()}`,
+      reason,
+    });
+    setActionResult({ action: "merchant_delete_requested", id });
+    await reload();
+  }
+
+  async function approveDeleteMerchant(id: string, decision: "approved" | "rejected") {
+    setGlobalError(null);
+    const decided = await api.post<{ deleted?: boolean }>(`/api/v1/platform/merchants/${id}/delete-approve`, {
+      idempotencyKey: `merchant-delete-approve-${id}-${decision}-${Date.now()}`,
+      decision,
+    });
+    setActionResult({ action: `merchant_delete_${decision}`, id, deleted: decided?.deleted ?? false });
     await reload();
   }
 
@@ -218,14 +261,46 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     </>
   );
 
+  function merchantArchiveLabel(row: MerchantAdmissionRow): string {
+    if (row.deleteStatus === "pending") return "待审批删除";
+    if (row.archivedAt) return "已存档";
+    return "生效中";
+  }
+
+  function merchantActions(row: MerchantAdmissionRow) {
+    if (row.deleteStatus === "pending") {
+      return (
+        <>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.approve"]} data-testid={`merchant-delete-approve-${row.id}`} onClick={() => void approveDeleteMerchant(row.id, "approved")}>批准删除</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.approve"]} data-testid={`merchant-delete-reject-${row.id}`} onClick={() => void approveDeleteMerchant(row.id, "rejected")}>驳回</PermissionButton>
+        </>
+      );
+    }
+    if (row.archivedAt) {
+      return (
+        <>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid={`merchant-unarchive-${row.id}`} onClick={() => void archiveMerchant(row.id, false)}>取消存档</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid={`merchant-delete-request-${row.id}`} onClick={() => void requestDeleteMerchant(row.id)}>申请删除</PermissionButton>
+        </>
+      );
+    }
+    return (
+      <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid={`merchant-archive-${row.id}`} onClick={() => void archiveMerchant(row.id, true)}>存档</PermissionButton>
+    );
+  }
+
   const merchantsSection = (
     <>
       <div className="admin-section-title">商户档案</div>
+      <label className="admin-inline-check" data-testid="merchant-show-archived">
+        <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
+        显示已存档商户
+      </label>
       <div className="admin-table-scroll" data-testid="organization-merchants-section">
         <table className="admin-table" data-testid="organization-merchants-table">
           {/* 后端无“公司名/风险/留痕证据”字段（原按臆造字段读致整表“-”），列对齐真实字段：联系人/联系电话替换。 */}
-          <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th></tr></thead>
-          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+          <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>存档状态</th><th>操作</th></tr></thead>
+          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}</td></tr>)}</tbody>
         </table>
       </div>
     </>

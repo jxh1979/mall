@@ -16,6 +16,9 @@ import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
+import com.complex.platform.governance.dto.MerchantDeleteRequest;
+import com.complex.platform.governance.dto.MerchantDeleteApprovalRequest;
+import com.complex.platform.governance.dto.MerchantArchiveRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
 import com.complex.platform.support.TestSecurityActors;
@@ -89,6 +92,62 @@ class PlatformServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("merchant.update_failed");
+    }
+
+    // ---- V260 商户存档与审批后删除范式 ----
+
+    private MerchantRecord seedMerchant(String key) {
+        return service.createMerchant(new MerchantProfileRequest(
+                key, "seed", List.of(), "存档删除测试商户", "other", "be_1",
+                null, null, "Jane", "18800000011",
+                null, null, null, null, null, null, null, null, "active"));
+    }
+
+    @Test
+    void archiveMerchantHidesItFromDefaultListingAndKeepsWithIncludeArchived() {
+        MerchantRecord merchant = seedMerchant("seed-archive");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-once"));
+
+        assertThat(service.listMerchants(false).items())
+                .noneMatch(m -> m.id().equals(merchant.id()));
+        assertThat(service.listMerchants(true).items())
+                .anyMatch(m -> m.id().equals(merchant.id()) && m.archivedAt() != null);
+    }
+
+    @Test
+    void approveDeleteRemovesArchivedMerchantWhenNoReferences() {
+        MerchantRecord merchant = seedMerchant("seed-delete");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-2"));
+        service.requestDeleteMerchant(merchant.id(),
+                new MerchantDeleteRequest("delete-req", "录入错误，退场清理"));
+
+        platformRepository.merchantReferenceCount = 0;
+        TestSecurityActors.asPlatformAdmin("usr_admin2"); // 禁自审:审批人≠申请发起人
+        MerchantDeleteDecision decision = service.approveDeleteMerchant(merchant.id(),
+                new MerchantDeleteApprovalRequest("delete-approve", "approved", null));
+
+        assertThat(decision.deleted()).isTrue();
+        assertThat(service.listMerchants(true).items())
+                .noneMatch(m -> m.id().equals(merchant.id()));
+    }
+
+    @Test
+    void approveDeleteRejectsWhenMerchantStillReferenced() {
+        MerchantRecord merchant = seedMerchant("seed-inuse");
+        service.archiveMerchant(merchant.id(), new MerchantArchiveRequest("archive-3"));
+        service.requestDeleteMerchant(merchant.id(),
+                new MerchantDeleteRequest("delete-req-2", "尝试删除仍在用商户"));
+
+        platformRepository.merchantReferenceCount = 3; // 模拟仍被酒吧商品/合同等引用
+        TestSecurityActors.asPlatformAdmin("usr_admin2"); // 禁自审:审批人≠申请发起人
+
+        assertThatThrownBy(() -> service.approveDeleteMerchant(merchant.id(),
+                new MerchantDeleteApprovalRequest("delete-approve-2", "approved", null)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_IN_USE"));
+        // 拒删后商户仍在（含已存档列表可见）。
+        assertThat(service.listMerchants(true).items())
+                .anyMatch(m -> m.id().equals(merchant.id()));
     }
 
     @Test
@@ -380,6 +439,9 @@ class PlatformServiceTests {
             return new ArrayList<>(businessEntities.values());
         }
 
+        // V260 测试用：模拟商户被核心运营表引用的活条数（>0 拒硬删）。
+        private long merchantReferenceCount;
+
         @Override
         public MerchantRecord saveMerchant(MerchantRecord merchant) {
             merchants.put(merchant.id(), merchant);
@@ -389,6 +451,16 @@ class PlatformServiceTests {
         @Override
         public List<MerchantRecord> listMerchants() {
             return new ArrayList<>(merchants.values());
+        }
+
+        @Override
+        public void deleteMerchant(String merchantId) {
+            merchants.remove(merchantId);
+        }
+
+        @Override
+        public long countMerchantReferences(String merchantId) {
+            return merchantReferenceCount;
         }
 
         @Override

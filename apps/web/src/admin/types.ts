@@ -885,6 +885,9 @@ export type MerchantAdmissionRow = {
   companyName?: string;
   riskLevel?: string;
   auditEvidenceRef?: string;
+  // V259 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 
 export type SubjectBindingRow = {
