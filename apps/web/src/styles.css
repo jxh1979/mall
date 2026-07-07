@@ -1024,6 +1024,7 @@ body {
      暗侧栏上的次要文字改用 --adm-sb-text-dim 保持原视觉。 */
   --adm-text-3: #5b6472;
   --adm-accent: #1b1d21;
+  --adm-on-accent: #ffffff;
   --adm-accent-weak: color-mix(in srgb, var(--adm-accent) 9%, #fff);
   --adm-accent-soft: color-mix(in srgb, var(--adm-accent) 14%, #fff);
   --adm-radius: 10px;
@@ -1781,7 +1782,7 @@ body {
   padding: 0 15px;
   font-size: 13.5px;
   font-weight: 600;
-  color: #fff;
+  color: var(--adm-on-accent);
   background: var(--adm-accent);
   border: 1px solid var(--adm-accent);
   border-radius: 9px;
@@ -2481,3 +2482,46 @@ body {
 .admin-icon-btn:hover { color: var(--adm-accent); background: var(--adm-accent-weak); border-color: var(--adm-border); }
 .admin-icon-btn.danger:hover { color: #c0392b; background: color-mix(in srgb, #c0392b 8%, #fff); }
 .admin-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ============================================================
+   深色模式（2026-07-07 用户拍板·现场暗光护眼）：覆盖 --adm-* token。
+   data-theme 打在 <html> 上，antd 组件另由 ConfigProvider darkAlgorithm 主题化。
+   强调色用暖金（--adm-gold 同色），与浅色中性深色区分、呼应服务业暖调。
+   ============================================================ */
+:root[data-theme="dark"] {
+  --adm-bg: #131417;
+  --adm-surface: #1b1d20;
+  --adm-surface-2: #202226;
+  --adm-surface-3: #26282c;
+  --adm-border: #2f3237;
+  --adm-border-strong: #3b3f45;
+  --adm-text: #e9ebee;
+  --adm-text-2: #a3a9b1;
+  --adm-text-3: #8c939c;
+  --adm-accent: #d99a2b;
+  --adm-on-accent: #17181b;
+  --adm-accent-weak: color-mix(in srgb, var(--adm-accent) 16%, #1b1d20);
+  --adm-accent-soft: color-mix(in srgb, var(--adm-accent) 26%, #1b1d20);
+  --adm-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --adm-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.50), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --adm-sb-bg: #0f1012;
+  --adm-sb-active-bg: #26282c;
+  --adm-sb-border: #24262a;
+  --adm-ok: #46b880;   --adm-ok-bg: rgba(44, 128, 89, 0.18);
+  --adm-info: #6f8ff0; --adm-info-bg: rgba(58, 90, 217, 0.20);
+  --adm-warn: #d9a441; --adm-warn-bg: rgba(168, 119, 42, 0.22);
+  --adm-danger: #e0685f; --adm-danger-bg: rgba(176, 58, 49, 0.22);
+}
+
+/* 主题切换按钮（topbar）：比 .admin-topbar button 更具体以覆盖其底样式 */
+.admin-topbar button.admin-theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; min-width: 36px; padding: 0;
+  font-size: 16px; line-height: 1;
+  color: var(--adm-text-2); background: transparent;
+  border: 1px solid var(--adm-border); border-radius: 9px; cursor: pointer;
+  transition: background 0.14s, border-color 0.14s;
+}
+.admin-topbar button.admin-theme-toggle:hover {
+  background: var(--adm-surface-3); border-color: var(--adm-border-strong);
+}
