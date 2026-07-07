@@ -1,6 +1,10 @@
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
+  // 数据清理作业（Tier-D 集中清理工具）
+  dry_run: "已预览",
+  pending_approval: "待审批",
+  executed: "已执行",
   // 支付
   paid: "已支付",
   unpaid: "未支付",

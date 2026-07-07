@@ -110,6 +110,7 @@ customer_sessions,inherited,customer_id,customer_id -> customers -> project/cust
 customer_stored_value_accounts,direct,project_id,project_id column on customer_stored_value_accounts,ready for project/merchant scoped query enforcement,covered
 customer_stored_value_transactions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 customers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+data_cleanup_jobs,global_reference,global_reference,global reference/configuration table,safe as global reference; tenant-specific overrides require separate scoped table,covered
 deposit_ledger,direct,merchant_id,merchant_id column on deposit_ledger,ready for project/merchant scoped query enforcement,covered
 employee_notices,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 energy_anomaly_thresholds,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered

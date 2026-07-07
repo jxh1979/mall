@@ -64,6 +64,8 @@ const globalTables = new Set([
   "permissions",
   "roles",
   "platform_migration_baseline",
+  // 集中数据清理台账（Tier-D）：平台级操作台账，记谁发起/审批/删了几条；非租户数据边界。
+  "data_cleanup_jobs",
 ]);
 
 function readMigrations() {
