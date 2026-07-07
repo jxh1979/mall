@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
+import { RowActions, type RowAction } from "../components/RowActions";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AccessUserRow, AdminPageProps } from "../types";
@@ -388,12 +389,14 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
             <tbody>{grantRequests.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-request-${row.id}`} onClick={() => openGrantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openGrantDetail(row); } }}>
                 <td>{row.id}</td><td>{formatBusinessStatus(row.requestType)}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {row.positionCode ?? "-"}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status)}</td><td>{cnDate(row.expiresAt)}</td>
-                <td onClick={(event) => event.stopPropagation()}>{row.status === "pending" ? (
-                  <>
-                    <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_REVIEW} data-testid={`access-grant-approve-${row.id}`} onClick={() => void reviewGrant(row, "approve")}>通过</PermissionButton>
-                    <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_REVIEW} data-testid={`access-grant-reject-${row.id}`} onClick={() => void reviewGrant(row, "reject")}>驳回</PermissionButton>
-                  </>
-                ) : null}</td>
+                <td onClick={(event) => event.stopPropagation()}>{(() => {
+                  const acts: RowAction[] = [];
+                  if (row.status === "pending") {
+                    acts.push({ key: "approve", label: "通过", permissions: GRANT_REVIEW, onClick: () => void reviewGrant(row, "approve"), testId: `access-grant-approve-${row.id}` });
+                    acts.push({ key: "reject", label: "驳回", permissions: GRANT_REVIEW, danger: true, onClick: () => void reviewGrant(row, "reject"), testId: `access-grant-reject-${row.id}` });
+                  }
+                  return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`access-grant-actions-${row.id}`} />;
+                })()}</td>
               </tr>
             ))}</tbody>
           </table>

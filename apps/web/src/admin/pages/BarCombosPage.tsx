@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, BarComboRow, BarProductRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { RowActions, type RowAction } from "../components/RowActions";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { BarVenueSelect } from "../components/BarVenueSelect";
 
@@ -126,25 +127,20 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
   }
 
   function comboActions(row: BarComboRow) {
-    if (row.deleteStatus === "pending") {
-      return (
-        <>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.approve"]} data-testid={`bar-combo-delete-approve-${row.id}`} onClick={() => void approveDeleteCombo(row.id, "approved")}>批准删除</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.approve"]} data-testid={`bar-combo-delete-reject-${row.id}`} onClick={() => void approveDeleteCombo(row.id, "rejected")}>驳回</PermissionButton>
-        </>
-      );
-    }
-    if (row.archivedAt) {
-      return (
-        <>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.manage"]} data-testid={`bar-combo-unarchive-${row.id}`} onClick={() => void archiveCombo(row.id, false)}>取消存档</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.manage"]} data-testid={`bar-combo-delete-request-${row.id}`} onClick={() => void requestDeleteCombo(row.id)}>申请删除</PermissionButton>
-        </>
-      );
-    }
-    return (
-      <PermissionButton permissionsState={effectivePermissions} permissions={["bar.combo.manage"]} data-testid={`bar-combo-archive-${row.id}`} onClick={() => void archiveCombo(row.id, true)}>存档</PermissionButton>
-    );
+    const actions: RowAction[] = row.deleteStatus === "pending"
+      ? [
+          { key: "approve", label: "批准删除", permissions: ["bar.combo.approve"], onClick: () => void approveDeleteCombo(row.id, "approved"), testId: `bar-combo-delete-approve-${row.id}` },
+          { key: "reject", label: "驳回", permissions: ["bar.combo.approve"], danger: true, onClick: () => void approveDeleteCombo(row.id, "rejected"), testId: `bar-combo-delete-reject-${row.id}` },
+        ]
+      : row.archivedAt
+      ? [
+          { key: "unarchive", label: "取消存档", permissions: ["bar.combo.manage"], onClick: () => void archiveCombo(row.id, false), testId: `bar-combo-unarchive-${row.id}` },
+          { key: "delete-request", label: "申请删除", permissions: ["bar.combo.manage"], danger: true, onClick: () => void requestDeleteCombo(row.id), testId: `bar-combo-delete-request-${row.id}` },
+        ]
+      : [
+          { key: "archive", label: "存档", permissions: ["bar.combo.manage"], onClick: () => void archiveCombo(row.id, true), testId: `bar-combo-archive-${row.id}` },
+        ];
+    return <RowActions actions={actions} permissionsState={effectivePermissions} testId={`bar-combo-actions-${row.id}`} />;
   }
 
   function openDetail(row: BarComboRow) {

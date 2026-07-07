@@ -7,6 +7,7 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
+import { RowActions, type RowAction } from "../components/RowActions";
 
 type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; leaveDeductionCent?: number; taxCent?: number; totalCent?: number };
 type LeaveRow = { id: string; userId?: string; leaveType?: string; startDate?: string; endDate?: string; reason?: string; status?: string; reviewNote?: string };
@@ -35,7 +36,7 @@ function cnMonth(value?: string) {
   return m ? `${m[1]}年${Number(m[2])}月` : value;
 }
 
-export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: AdminPageProps) {
+export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
   const [month, setMonth] = React.useState(currentMonth);
   const [payroll, setPayroll] = React.useState<PayrollRow[]>([]);
   const [leaves, setLeaves] = React.useState<LeaveRow[]>([]);
@@ -249,8 +250,13 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
                   <td>{row.reason ?? "—"}</td>
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}</td>
                   <td onClick={(event) => event.stopPropagation()}>
-                    <button type="button" data-testid={`leave-approve-${row.id}`} onClick={() => void review(row.id, "approve")}>通过</button>
-                    <button type="button" data-testid={`leave-reject-${row.id}`} onClick={() => void review(row.id, "reject")}>驳回</button>
+                    {(() => {
+                      const acts: RowAction[] = [
+                        { key: "approve", label: "通过", onClick: () => void review(row.id, "approve"), testId: `leave-approve-${row.id}` },
+                        { key: "reject", label: "驳回", danger: true, onClick: () => void review(row.id, "reject"), testId: `leave-reject-${row.id}` },
+                      ];
+                      return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`leave-actions-${row.id}`} />;
+                    })()}
                   </td>
                 </tr>
               ))}
