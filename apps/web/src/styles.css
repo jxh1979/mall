@@ -1278,7 +1278,7 @@ body {
 }
 
 .admin-sidebar nav button:hover {
-  background: var(--adm-sb-active-bg);
+  background: #202226;
   color: var(--adm-sb-text-strong);
 }
 
@@ -1352,8 +1352,9 @@ body {
 }
 
 .admin-sidebar nav button.active {
-  background: var(--adm-sb-active-bg);
+  background: #2d3036;
   color: var(--adm-sb-text-strong);
+  box-shadow: inset 3px 0 0 var(--adm-sb-text-strong);
 }
 
 .admin-sidebar nav button.active strong {
