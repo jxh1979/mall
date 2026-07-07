@@ -6,6 +6,7 @@ import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
@@ -42,6 +43,10 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   const [selectedImportId, setSelectedImportId] = React.useState("");
   const [floorPlanImportDetails, setFloorPlanImportDetails] = React.useState<FloorPlanImportDetails | null>(null);
   const [planForm, setPlanForm] = React.useState({ planName: "", buildingCode: "", floorNo: "" });
+  // 引导式「新增平面图」弹窗状态（范式：字段留页面持有，弹窗只编排）。
+  const [planOpen, setPlanOpen] = React.useState(false);
+  const [planError, setPlanError] = React.useState("");
+  const [planSaving, setPlanSaving] = React.useState(false);
   const [importForm, setImportForm] = React.useState({ sourceFormat: "geojson", sourceName: "", sourcePayload: "" });
   const [publishCandidateIds, setPublishCandidateIds] = React.useState("");
   // 行明细抽屉：候选/错误明细数据行整行可点 → 完整字段（枚举中文·序号/行号原样）。
@@ -69,15 +74,20 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
     setFloorPlanImportDetails(details);
   };
 
+  // 提交在确认步触发；校验失败/接口失败弹窗留开显错，成功才关。原接口/请求体保留（双保险再校验一次名称）。
   const createPlan = async () => {
+    if (!planForm.planName.trim()) { setPlanError("请填写平面图名称"); return; }
+    setPlanSaving(true);
+    setPlanError("");
     try {
       await api.post("/api/v1/floor-plans", {
         idempotency_key: `fp-${Date.now()}`, plan_name: planForm.planName,
         building_code: planForm.buildingCode, floor_no: planForm.floorNo, status: "draft",
       });
       setActionResult({ action: "floor_plan_created", planName: planForm.planName });
+      setPlanOpen(false);
       reload();
-    } catch (e) { setGlobalError((e as Error).message); }
+    } catch (e) { setPlanError((e as Error).message); } finally { setPlanSaving(false); }
   };
 
   const createImport = async () => {
@@ -136,11 +146,13 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
       <AuditTrailHint event="floor_plan.created / floor_plan.import_published" />
       <TechDetails><div className="admin-generic-evidence" data-testid="floor-plan-evidence">/api/v1/floor-plans</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
-        <div className="admin-form-grid" data-testid="floor-plan-create-form">
-          <label>平面图名称<input data-testid="floor-plan-name" value={planForm.planName} onChange={(e) => setPlanForm({ ...planForm, planName: e.target.value })} /></label>
-          <label>楼栋<input data-testid="floor-plan-building" value={planForm.buildingCode} onChange={(e) => setPlanForm({ ...planForm, buildingCode: e.target.value })} /></label>
-          <label>楼层<input data-testid="floor-plan-floor" value={planForm.floorNo} onChange={(e) => setPlanForm({ ...planForm, floorNo: e.target.value })} /></label>
-          <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="floor-plan-create" onClick={() => void createPlan()}>创建平面图</PermissionButton>
+        <div className="admin-form-row" data-testid="floor-plan-create-form">
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={MANAGE}
+            data-testid="floor-plan-create-open"
+            onClick={() => { setPlanForm({ planName: "", buildingCode: "", floorNo: "" }); setPlanError(""); setPlanOpen(true); }}
+          >＋ 新增平面图</PermissionButton>
         </div>
         <table className="admin-table" data-testid="floor-plans-table">
           <thead><tr><th>名称</th><th>楼栋/层</th><th>版本</th><th>状态</th><th>操作</th></tr></thead>
@@ -224,6 +236,37 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
         ) : null}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={planOpen}
+        title="新增平面图"
+        testId="floor-plan-create-guided"
+        submitTestId="floor-plan-create"
+        submitLabel="创建平面图"
+        submitting={planSaving}
+        error={planError || undefined}
+        onClose={() => setPlanOpen(false)}
+        onSubmit={() => void createPlan()}
+        steps={[
+          {
+            title: "基本信息",
+            description: "平面图名称必填；楼栋/楼层选填。新建平面图初始为草稿，导入候选复核后再发布。",
+            validate: () => (planForm.planName.trim() ? null : "请填写平面图名称"),
+            content: (
+              <>
+                <label>平面图名称<input data-testid="floor-plan-name" value={planForm.planName} onChange={(e) => setPlanForm({ ...planForm, planName: e.target.value })} /></label>
+                <label>楼栋<input data-testid="floor-plan-building" value={planForm.buildingCode} onChange={(e) => setPlanForm({ ...planForm, buildingCode: e.target.value })} /></label>
+                <label>楼层<input data-testid="floor-plan-floor" value={planForm.floorNo} onChange={(e) => setPlanForm({ ...planForm, floorNo: e.target.value })} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "平面图名称", value: planForm.planName.trim() || "未填写" },
+          { label: "楼栋", value: planForm.buildingCode.trim() || "—" },
+          { label: "楼层", value: planForm.floorNo.trim() || "—" },
+          { label: "初始状态", value: "草稿" },
+        ]}
+      />
     </section>
   );
 }
