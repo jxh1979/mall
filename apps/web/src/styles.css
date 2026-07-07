@@ -1721,7 +1721,7 @@ body {
 .admin-form-row select,
 .admin-list-toolbar input,
 .admin-list-toolbar select {
-  height: 36px;
+  height: 40px;
   min-width: 0;
   padding: 0 12px;
   font-size: 13px;
@@ -2442,4 +2442,11 @@ body {
 }
 .admin-table .ant-btn {
   min-height: 36px;
+}
+/* 表单网格/弹窗内输入触摸尺寸 >=40px（现场触摸屏可点；桌面密度基本不损） */
+.admin-form-grid input,
+.admin-form-grid select,
+.admin-form-grid textarea,
+.admin-form-row textarea {
+  min-height: 40px;
 }
