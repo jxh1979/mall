@@ -35487,7 +35487,29 @@
             "type": "array",
             "description": "BarOrderDeliveryRequest.delivered_items 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
             "items": {
-              "type": "object"
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "order_item_id",
+                "quantity"
+              ],
+              "properties": {
+                "order_item_id": {
+                  "type": "string",
+                  "description": "出品/送达的订单项 ID；必须属于本订单且未被撤单。",
+                  "maxLength": 64
+                },
+                "quantity": {
+                  "type": "integer",
+                  "description": "本次出品/送达数量；必须为正且等于订单项应交付数量（要求整单交付）。",
+                  "minimum": 1
+                },
+                "actual_pour_volume": {
+                  "type": "integer",
+                  "description": "按杯出品实际出酒量（毫升）；按杯出品项（配置了 standard_pour_volume）在严格模式（bar.pour-cost.strict-mode=true，默认）下必填，缺失拒单 POUR_VOLUME_REQUIRED；实际量>标准量记损耗，超阈值落 inventory.loss_exception 核查留痕。非按杯出品项忽略。",
+                  "minimum": 0
+                }
+              }
             },
             "maxItems": 200
           },

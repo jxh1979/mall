@@ -192,6 +192,99 @@ class TicketingControllerTests {
         verify(authorizationService).requirePermission("ticket.verify.reverse");
     }
 
+    // item7 C1/REQ-05: manual release endpoint uses supervisor permission verification.manual_override
+    //   + idempotency key required + success returns manual_overridden + cross-tenant forbidden.
+    @Test
+    void manualOverrideWithoutOverridePermissionReturnsPermissionDenied() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("verification.manual_override");
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications/manual-override")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "override-denied",
+                                  "credential_type": "qr",
+                                  "credential_payload": "P0-ENT-1",
+                                  "device_id": "dev_1",
+                                  "point_id": "gate_1",
+                                  "reason": "supervisor release"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+    }
+
+    @Test
+    void manualOverrideWithoutIdempotencyKeyReturnsValidationFailed() throws Exception {
+        mockMvc.perform(post("/api/v1/ticketing/verifications/manual-override")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "credential_type": "qr",
+                                  "credential_payload": "P0-ENT-1",
+                                  "device_id": "dev_1",
+                                  "point_id": "gate_1",
+                                  "reason": "supervisor release"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+    }
+
+    @Test
+    void manualOverrideRouteUsesOverridePermissionAndReturnsManualOverridden() throws Exception {
+        when(service.manualOverrideVerification(any(VerificationRequest.class), any()))
+                .thenReturn(new VerificationResponse("ver_mo_1", "V20260618MO0001", "manual_overridden", "supervisor release"));
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications/manual-override")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "override-ok",
+                                  "credential_type": "qr",
+                                  "credential_payload": "P0-ENT-1",
+                                  "device_id": "dev_1",
+                                  "point_id": "gate_1",
+                                  "reason": "supervisor release"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("manual_overridden"));
+
+        verify(authorizationService).requirePermission("verification.manual_override");
+    }
+
+    // Cross-tenant: service-layer enforceMerchantScope throws CROSS_MERCHANT_FORBIDDEN for another
+    //   merchant's entitlement; the endpoint must pass the 403 through unchanged.
+    @Test
+    void manualOverrideRejectsCrossMerchantAccessWithForbidden() throws Exception {
+        when(service.manualOverrideVerification(any(VerificationRequest.class), any()))
+                .thenThrow(ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                        "access to another merchant's resource is not allowed"));
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications/manual-override")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "override-cross",
+                                  "credential_type": "qr",
+                                  "credential_payload": "P0-ENT-OTHER",
+                                  "device_id": "dev_1",
+                                  "point_id": "gate_1",
+                                  "reason": "supervisor release"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
     @Test
     void creatingTicketTypeUsesOpenApiPermissionAndSnakeCaseResponse() throws Exception {
         when(service.createTicketType(any(TicketTypeRequest.class))).thenReturn(new TicketTypeRecord(
