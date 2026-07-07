@@ -165,6 +165,7 @@ public class JdbcSettlementBillRepository {
     public List<ExclusiveMerchantRevenue> aggregateExclusiveRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
         return jdbcTemplate.query("""
                 SELECT exclusive_merchant_id AS merchant_id,
+                       entitlement_type,
                        COALESCE(SUM(verified_amount_cent), 0) AS revenue_cent,
                        COALESCE(SUM(verified_count), 0)       AS verified_count,
                        COALESCE(SUM(num_people), 0)           AS guest_count
@@ -173,11 +174,11 @@ public class JdbcSettlementBillRepository {
                    AND exclusive_merchant_id IS NOT NULL
                    AND created_at >= :start AND created_at < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
-                 GROUP BY exclusive_merchant_id
-                 ORDER BY exclusive_merchant_id
+                 GROUP BY exclusive_merchant_id, entitlement_type
+                 ORDER BY exclusive_merchant_id, entitlement_type
                 """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
-                new ExclusiveMerchantRevenue(rs.getString("merchant_id"), rs.getLong("revenue_cent"),
-                        rs.getInt("verified_count"), rs.getInt("guest_count")));
+                new ExclusiveMerchantRevenue(rs.getString("merchant_id"), rs.getString("entitlement_type"),
+                        rs.getLong("revenue_cent"), rs.getInt("verified_count"), rs.getInt("guest_count")));
     }
 
     private MapSqlParameterSource monthWindow(String projectId, Instant monthStart, Instant nextMonthStart) {
@@ -185,6 +186,48 @@ public class JdbcSettlementBillRepository {
                 .addValue("project_id", projectId)
                 .addValue("start", Timestamp.from(monthStart))
                 .addValue("end", Timestamp.from(nextMonthStart));
+    }
+
+    /**
+     * V268 综合服务费(§7.2 口径8+"所有门票都抽")万分比:项目x商户x票种范围可配,默认 0(不抽)。
+     * 查询精度:商户+票种特例 > 商户特例 > 票种特例 > 项目默认(COALESCE 归一 NULL,ORDER 让更具体的优先)。
+     * 无任何配置行 -> 回退 0(禁硬编码,与建表默认一致) -> 该笔专属直付零扣费,商户拿全额,零行为变更。
+     */
+    public int findComprehensiveServiceFeeBps(String projectId, String merchantId, String entitlementType) {
+        Integer bps = jdbcTemplate.query("""
+                SELECT fee_bps FROM comprehensive_service_fee_configs
+                 WHERE status = 'active'
+                   AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
+                   AND (merchant_id IS NULL OR merchant_id = :merchant_id)
+                   AND (entitlement_type IS NULL OR entitlement_type = :entitlement_type)
+                 ORDER BY (project_id IS NOT NULL) DESC,
+                          (merchant_id IS NOT NULL) DESC,
+                          (entitlement_type IS NOT NULL) DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("merchant_id", merchantId)
+                .addValue("entitlement_type", entitlementType),
+                rs -> rs.next() ? rs.getInt("fee_bps") : null);
+        return bps == null ? 0 : bps;
+    }
+
+    /**
+     * V268 套票折扣归属(§7.4 口径10):项目级可配,默认 platform_absorb(项目承担)。
+     * 说明:当前无折扣额进结算引擎(折扣是定价期概念),本解析器先落地供后台/引擎读,逐笔应用待折扣额接入流水后启用。
+     */
+    public ComboDiscountConfig findComboDiscountConfig(String projectId) {
+        ComboDiscountConfig cfg = jdbcTemplate.query("""
+                SELECT discount_bearer, split_platform_bps FROM ticket_combo_discount_configs
+                 WHERE status = 'active'
+                   AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
+                 ORDER BY (project_id IS NOT NULL) DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource().addValue("project_id", projectId),
+                rs -> rs.next()
+                        ? new ComboDiscountConfig(rs.getString("discount_bearer"), rs.getInt("split_platform_bps"))
+                        : null);
+        return cfg == null ? new ComboDiscountConfig("platform_absorb", 10000) : cfg;
     }
 
     // ---- upsert 结算单头 + 明细（COALESCE(project_id)+period 唯一，幂等覆盖）----
@@ -204,6 +247,7 @@ public class JdbcSettlementBillRepository {
                 .addValue("retention_cent", bill.retentionCent())
                 .addValue("spv_pool_cent", bill.spvPoolCent())
                 .addValue("distributed_cent", bill.distributedCent())
+                .addValue("comp_service_fee_cent", bill.compServiceFeeCent())
                 .addValue("distribution_method", bill.distributionMethod())
                 .addValue("special_approval_ref", bill.specialApprovalRef())
                 .addValue("status", bill.status());
@@ -211,12 +255,12 @@ public class JdbcSettlementBillRepository {
                 INSERT INTO settlement_bills (
                     id, project_id, period_start, period_end, ticket_revenue_cent, channel_fee_cent,
                     giveaway_cost_cent, available_pool_cent, retention_bps, retention_cent, spv_pool_cent,
-                    distributed_cent, distribution_method, special_approval_ref, status, updated_at
+                    distributed_cent, comp_service_fee_cent, distribution_method, special_approval_ref, status, updated_at
                 )
                 VALUES (
                     :id, :project_id, :period_start, :period_end, :ticket_revenue_cent, :channel_fee_cent,
                     :giveaway_cost_cent, :available_pool_cent, :retention_bps, :retention_cent, :spv_pool_cent,
-                    :distributed_cent, :distribution_method, :special_approval_ref, :status, now()
+                    :distributed_cent, :comp_service_fee_cent, :distribution_method, :special_approval_ref, :status, now()
                 )
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), period_start, period_end) DO UPDATE SET
                     ticket_revenue_cent = EXCLUDED.ticket_revenue_cent,
@@ -227,6 +271,7 @@ public class JdbcSettlementBillRepository {
                     retention_cent      = EXCLUDED.retention_cent,
                     spv_pool_cent       = EXCLUDED.spv_pool_cent,
                     distributed_cent    = EXCLUDED.distributed_cent,
+                    comp_service_fee_cent = EXCLUDED.comp_service_fee_cent,
                     distribution_method = EXCLUDED.distribution_method,
                     special_approval_ref = EXCLUDED.special_approval_ref,
                     status              = EXCLUDED.status,
@@ -355,6 +400,10 @@ public class JdbcSettlementBillRepository {
 
     // ---- 读投影 ----
 
+    /** V268 套票折扣归属配置读投影(§7.4)。splitPlatformBps 仅 split_by_ratio 用。 */
+    public record ComboDiscountConfig(String discountBearer, int splitPlatformBps) {
+    }
+
     public record RankTier(int rankFrom, int rankTo, int shareBps) {
     }
 
@@ -364,7 +413,9 @@ public class JdbcSettlementBillRepository {
     public record MerchantMonthlyStat(String merchantId, int verifiedCount, int guestCount) {
     }
 
-    /** 批3-4 专属核销直付投影：某专属商户当月全额收入 + 核销数/客数（仅供明细展示，不进池排名）。 */
-    public record ExclusiveMerchantRevenue(String merchantId, long revenueCent, int verifiedCount, int guestCount) {
+    /** 批3-4 专属核销直付投影：某专属商户x票种当月全额收入 + 核销数/客数（仅供明细展示，不进池排名）。
+     *  V268 加 entitlementType：综合服务费(§7.2)按 项目x商户x票种范围 查费率,故按票种拆聚合。 */
+    public record ExclusiveMerchantRevenue(String merchantId, String entitlementType, long revenueCent,
+                                           int verifiedCount, int guestCount) {
     }
 }

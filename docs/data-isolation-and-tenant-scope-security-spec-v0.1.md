@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V267**，发现 **153** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V268**，发现 **155** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -111,6 +111,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `complex_operating_params` | `project_id` | direct | V160 | `V160__complex_operating_params.sql` |
 | `compliance_expiry_items` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
 | `compliance_reminders` | `merchant_id` | direct | V051 | `V051__compliance_security_fixes.sql` |
+| `comprehensive_service_fee_configs` | `merchant_id` + `project_id` | direct | V268 | `V268__settlement_comprehensive_service_fee_and_combo_discount.sql` |
 | `contract_approval_flows` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
 | `contract_changes` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
 | `contract_key_dates` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
@@ -199,6 +200,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `supplier_settlement_methods` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
 | `supply_contracts` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
 | `terminal_devices` | `merchant_id` + `venue_id` | direct | V007 | `V007__p0_terminal_evidence.sql` |
+| `ticket_combo_discount_configs` | `project_id` | direct | V268 | `V268__settlement_comprehensive_service_fee_and_combo_discount.sql` |
 | `ticket_distribution_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `ticket_distribution_merchant_rates` | `merchant_id` + `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `ticket_distribution_rank_tiers` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |

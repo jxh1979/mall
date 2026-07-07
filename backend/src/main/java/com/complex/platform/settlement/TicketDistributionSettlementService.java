@@ -94,11 +94,27 @@ public class TicketDistributionSettlementService {
 
         // ⑦b 批3-4(§6.4)：专属某商户「不分摊」→ 每个专属商户一条全额直付明细（method=exclusive_full，
         //     不扣留存、不进 spvPool、不参与他家分池排名/客数聚合）。金额=该商户专属核销 Σverified 全额。
+        // V268 综合服务费(§7.2 口径8+"所有门票都抽"):单独/专属门票直付前,项目公司先抽综合服务费(项目x商户x票种范围可配),
+        //   商户拿【净额=收入-服务费】,服务费归项目(记入 bill.comp_service_fee_cent)。默认费率 0 -> 净额=全额 -> 零行为变更。
+        //   聚合已按 (merchant,entitlement_type) 拆,故费率能按票种范围精确命中;同一商户多票种的净额合并成一条明细。
         List<JdbcSettlementBillRepository.ExclusiveMerchantRevenue> exclusives =
                 repository.aggregateExclusiveRevenue(projectId, windowStart, windowEnd);
+        java.util.LinkedHashMap<String, long[]> byMerchant = new java.util.LinkedHashMap<>();
+        // byMerchant[mid] = {netAmount, verifiedCount, guestCount}
+        long compServiceFee = 0L;
         for (var ex : exclusives) {
-            items.add(new ItemCalc(ex.merchantId(), ex.verifiedCount(), ex.guestCount(), null,
-                    ex.revenueCent(), METHOD_EXCLUSIVE_FULL));
+            int feeBps = repository.findComprehensiveServiceFeeBps(projectId, ex.merchantId(), ex.entitlementType());
+            long fee = ex.revenueCent() * feeBps / 10000; // 整数分,截断余数留给商户(不多扣)
+            long net = ex.revenueCent() - fee;
+            compServiceFee += fee;
+            long[] acc = byMerchant.computeIfAbsent(ex.merchantId(), k -> new long[3]);
+            acc[0] += net;
+            acc[1] += ex.verifiedCount();
+            acc[2] += ex.guestCount();
+        }
+        for (var e : byMerchant.entrySet()) {
+            long[] acc = e.getValue();
+            items.add(new ItemCalc(e.getKey(), (int) acc[1], (int) acc[2], null, acc[0], METHOD_EXCLUSIVE_FULL));
         }
 
         // distributed = 池分账 + 专属直付（两口径并列写入同一结算单明细）。
@@ -118,7 +134,7 @@ public class TicketDistributionSettlementService {
         repository.upsertBill(new SettlementBillRecord(
                 billId, projectId, periodStart, periodEnd,
                 ticketRevenue, channelFee, giveawayCost, availablePool,
-                retentionBps, retention, spvPool, distributed,
+                retentionBps, retention, spvPool, distributed, compServiceFee,
                 method, specialApprovalRef, status));
 
         // 幂等重跑:先清旧明细再写(明细集合随当月核销变化,覆盖式最简)
