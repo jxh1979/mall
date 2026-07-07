@@ -5,6 +5,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -92,6 +93,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该预警完整字段（枚举中文·时间中文·证据附件展开）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   function openAlertDetail(row: RiskAlertRow) {
     setDetail({
@@ -178,7 +180,8 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
       objectId,
       summary,
     };
-    await runAction("risk_alert_created", request, () => api.post("/api/v1/analytics/risk-alerts", request));
+    const ok = await runAction("risk_alert_created", request, () => api.post("/api/v1/analytics/risk-alerts", request));
+    if (ok) setCreateOpen(false);
   }
 
   function validateResolve() {
@@ -260,16 +263,10 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
               <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected?.summary ?? "-"}>{selected?.summary ?? "-"}</strong><small>{formatBusinessStatus(selected?.riskLevel)}</small></div>
             </div>
 
-            <div className="admin-form-grid" data-testid="risk-alert-form">
-              <label>{TEXT.alertType}<select data-testid="risk-alert-type" value={alertType} onChange={(event) => setAlertType(event.target.value)}><option value="staff_behavior">员工行为</option><option value="customer_risk">客人风险</option><option value="third_party_exception">第三方异常</option><option value="production_risk">出品风险</option></select></label>
-              <label>{TEXT.riskLevel}<select data-testid="risk-alert-level" value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)}><option value="suspicious">可疑</option><option value="high">高</option><option value="critical">紧急</option></select></label>
-              <label>{TEXT.objectType}<input data-testid="risk-alert-object-type" value={objectType} onChange={(event) => setObjectType(event.target.value)} /></label>
-              <label>{TEXT.objectId}<input data-testid="risk-alert-object-id" value={objectId} onChange={(event) => setObjectId(event.target.value)} /></label>
-              <label>{TEXT.summary}<input data-testid="risk-alert-summary-input" value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
-              <label>{TEXT.reason}<input data-testid="risk-alert-resolution-reason" value={resolutionReason} onChange={(event) => setResolutionReason(event.target.value)} /></label>
-            </div>
+            {/* 引导式：创建预警收起为「＋ 创建预警」入口，点开分步引导；处理(resolve)是对选中预警的动作，留在动作区。 */}
             <div className="admin-form-row" data-testid="risk-alert-actions">
-              <button type="button" data-testid="risk-alert-create" disabled={busyAction !== ""} onClick={() => void createAlert()}>{TEXT.create}</button>
+              <button type="button" data-testid="risk-alert-create-open" disabled={busyAction !== ""} onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ {TEXT.create}</button>
+              <label>{TEXT.reason}<input data-testid="risk-alert-resolution-reason" value={resolutionReason} onChange={(event) => setResolutionReason(event.target.value)} /></label>
               <HighRiskConfirm
                 label={TEXT.resolve}
                 impact="预警将被置为已解决并写入审计留痕，下游统计与风险看板按此关闭。"
@@ -281,6 +278,48 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
                 data-testid="risk-alert-resolve"
               />
             </div>
+            <GuidedFlowModal
+              open={createOpen}
+              title={TEXT.create}
+              testId="risk-alert-guided"
+              submitTestId="risk-alert-create"
+              submitLabel={TEXT.create}
+              submitting={busyAction !== ""}
+              error={formError || undefined}
+              onClose={() => setCreateOpen(false)}
+              onSubmit={() => void createAlert()}
+              steps={[
+                {
+                  title: "预警分类",
+                  description: "选择预警类型与风险等级。",
+                  content: (
+                    <>
+                      <label>{TEXT.alertType}<select data-testid="risk-alert-type" value={alertType} onChange={(event) => setAlertType(event.target.value)}><option value="staff_behavior">员工行为</option><option value="customer_risk">客人风险</option><option value="third_party_exception">第三方异常</option><option value="production_risk">出品风险</option></select></label>
+                      <label>{TEXT.riskLevel}<select data-testid="risk-alert-level" value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)}><option value="suspicious">可疑</option><option value="high">高</option><option value="critical">紧急</option></select></label>
+                    </>
+                  ),
+                },
+                {
+                  title: "对象与摘要",
+                  description: "填写风险对象与预警摘要。",
+                  validate: () => (summary.trim() ? null : TEXT.summaryRequired),
+                  content: (
+                    <>
+                      <label>{TEXT.objectType}<input data-testid="risk-alert-object-type" value={objectType} onChange={(event) => setObjectType(event.target.value)} /></label>
+                      <label>{TEXT.objectId}<input data-testid="risk-alert-object-id" value={objectId} onChange={(event) => setObjectId(event.target.value)} /></label>
+                      <label>{TEXT.summary}<input data-testid="risk-alert-summary-input" value={summary} onChange={(event) => setSummary(event.target.value)} /></label>
+                    </>
+                  ),
+                },
+              ]}
+              summary={[
+                { label: TEXT.alertType, value: formatBusinessStatus(alertType) },
+                { label: TEXT.riskLevel, value: formatBusinessStatus(riskLevel) },
+                { label: TEXT.objectType, value: objectType || "未填写" },
+                { label: TEXT.objectId, value: objectId || "未填写" },
+                { label: TEXT.summary, value: summary || "未填写" },
+              ]}
+            />
             <div className="admin-muted-action" data-testid="risk-alerts-boundary">{TEXT.boundary}</div>
             {formError ? <div data-testid="risk-alert-error" className="admin-inline-error">{formError}</div> : null}
 
