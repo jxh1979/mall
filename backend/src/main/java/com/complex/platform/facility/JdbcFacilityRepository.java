@@ -31,7 +31,8 @@ class JdbcFacilityRepository implements FacilityRepository {
 
     @Override
     public List<FacilityEquipmentRecord> listEquipment() {
-        return jdbcTemplate.query("SELECT " + EQUIP_COLS + " FROM facility_equipment ORDER BY created_at DESC, id",
+        return jdbcTemplate.query("SELECT " + EQUIP_COLS
+                + " FROM facility_equipment WHERE delete_status <> 'approved' ORDER BY created_at DESC, id",
                 this::mapEquipment);
     }
 
@@ -54,7 +55,8 @@ class JdbcFacilityRepository implements FacilityRepository {
 
     @Override
     public void deleteEquipment(String id) {
-        jdbcTemplate.update("DELETE FROM facility_equipment WHERE id = :id", new MapSqlParameterSource("id", id));
+        jdbcTemplate.update("UPDATE facility_equipment SET delete_status = 'approved', updated_at = now() WHERE id = :id",
+                new MapSqlParameterSource("id", id));
     }
 
     @Override
@@ -68,7 +70,8 @@ class JdbcFacilityRepository implements FacilityRepository {
 
     @Override
     public Optional<FacilityEquipmentRecord> findEquipmentById(String id) {
-        return jdbcTemplate.query("SELECT " + EQUIP_COLS + " FROM facility_equipment WHERE id = :id",
+        return jdbcTemplate.query("SELECT " + EQUIP_COLS
+                + " FROM facility_equipment WHERE id = :id AND delete_status <> 'approved'",
                 new MapSqlParameterSource("id", id), this::mapEquipment).stream().findFirst();
     }
 

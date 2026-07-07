@@ -54,7 +54,11 @@ class StaffProfileArchiveDeleteJdbcIntegrationTests {
         StaffProfileDeleteDecision decision = service.approveDeleteProfile(
                 "staff_del", new StaffProfileDeleteApprovalRequest("approved", null));
         assertThat(decision.deleted()).isTrue();
-        assertThat(repository.findProfileById("staff_del")).isEmpty();
+        // 软删语义：行仍保留在库（可查/可审计/可恢复），仅前台不再展示。
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM staff_profiles WHERE id = ?", Integer.class, "staff_del");
+        assertThat(rows).isEqualTo(1); // (a) 行仍在数据库里
+        assertThat(repository.findProfileById("staff_del")).isEmpty(); // (b) 前台查不到（被隐藏）
     }
 
     @Test

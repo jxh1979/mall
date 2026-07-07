@@ -607,6 +607,7 @@ class JdbcStaffRepository implements StaffRepository {
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM staff_profiles
                  WHERE id = :id
+                   AND delete_status <> 'approved'
                 """, Map.of("id", id), this::mapProfile);
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
@@ -619,6 +620,7 @@ class JdbcStaffRepository implements StaffRepository {
                            registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
                            archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                       FROM staff_profiles
+                     WHERE delete_status <> 'approved'
                      ORDER BY created_at DESC, id
                     """, this::mapProfile);
         }
@@ -627,7 +629,8 @@ class JdbcStaffRepository implements StaffRepository {
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM staff_profiles
-                 WHERE merchant_id = :merchant_id
+                 WHERE delete_status <> 'approved'
+                   AND merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantScope), this::mapProfile);
     }
@@ -669,7 +672,7 @@ class JdbcStaffRepository implements StaffRepository {
 
     @Override
     public void deleteProfile(String id) {
-        jdbcTemplate.update("DELETE FROM staff_profiles WHERE id = :id", Map.of("id", id));
+        jdbcTemplate.update("UPDATE staff_profiles SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
@@ -679,7 +682,8 @@ class JdbcStaffRepository implements StaffRepository {
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM staff_profiles
-                 WHERE project_id = :project_id
+                 WHERE delete_status <> 'approved'
+                   AND project_id = :project_id
                  ORDER BY created_at DESC, id
                 """, Map.of("project_id", projectId), this::mapProfile);
     }

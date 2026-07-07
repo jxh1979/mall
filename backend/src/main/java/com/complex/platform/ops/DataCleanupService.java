@@ -103,7 +103,7 @@ public class DataCleanupService {
             return repository.updateStatus(withStatus(job, "rejected", job.reason(), approver, now, null, null, now));
         }
 
-        // 批准 → 真删（走审计留痕执行器）。cutoff 用作业当初预览的 olderThanDays 重算（幂等重放安全）。
+        // 批准 → 批量隐藏（软删，走审计留痕执行器）。cutoff 用作业当初预览的 olderThanDays 重算（幂等重放安全）。
         return operations.readSingle(CLEANUP_EXECUTED, () -> doExecute(job, approver, now), r -> ((DataCleanupJobRecord) r).id());
     }
 
@@ -112,8 +112,8 @@ public class DataCleanupService {
                 .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "unsupported scope_type"));
         int olderThanDays = normalizeDays(numberOf(job.filterParams().get("olderThanDays")));
         Instant cutoff = now.minus(olderThanDays, ChronoUnit.DAYS);
-        int deleted = repository.deleteArchivedBefore(scope, cutoff);
-        return repository.updateStatus(withStatus(job, "executed", job.reason(), approver, now, now, deleted, now));
+        int hidden = repository.hideArchivedBefore(scope, cutoff);
+        return repository.updateStatus(withStatus(job, "executed", job.reason(), approver, now, now, hidden, now));
     }
 
     // ---------- helpers ----------

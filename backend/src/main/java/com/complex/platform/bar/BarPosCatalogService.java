@@ -362,8 +362,8 @@ public class BarPosCatalogService {
             repository.saveCombo(combo.withDelete("none", null, null, null, Instant.now()));
             return new BarCatalogDeleteDecision(id, "rejected", false);
         }
-        // 套餐无外部活引用：bar_combo_items 是套餐自身明细（ON DELETE CASCADE 子表），无订单表引用套餐，
-        // 故 countReferences 恒 0，可直接删，明细随 CASCADE 清除（诚实按 grep 结果：套餐不被外部引用）。
+        // 套餐无外部活引用：bar_combo_items 是套餐自身明细，无订单表引用套餐，故 countReferences 恒 0，可直接软删。
+        // 软删=UPDATE delete_status，不触发 CASCADE，明细自动保留（可恢复）；前台读被 delete_status 过滤隐藏。
         repository.deleteCombo(id);
         return new BarCatalogDeleteDecision(id, "approved", true);
     }

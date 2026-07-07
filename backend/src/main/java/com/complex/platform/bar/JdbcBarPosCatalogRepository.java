@@ -50,7 +50,8 @@ class JdbcBarPosCatalogRepository {
     }
 
     Optional<BarProductCategoryRecord> findCategory(String id) {
-        return jdbcTemplate.query("SELECT * FROM bar_product_categories WHERE id = :id",
+        return jdbcTemplate.query(
+                "SELECT * FROM bar_product_categories WHERE id = :id AND delete_status <> 'approved'",
                 Map.of("id", id), this::mapCategory).stream().findFirst();
     }
 
@@ -95,7 +96,7 @@ class JdbcBarPosCatalogRepository {
     }
 
     void deleteCategory(String id) {
-        jdbcTemplate.update("DELETE FROM bar_product_categories WHERE id = :id", Map.of("id", id));
+        jdbcTemplate.update("UPDATE bar_product_categories SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     /** 分类引用：任何仍挂在该分类下的商品数——含已存档商品。fk_bar_products_category 无 ON DELETE
@@ -111,7 +112,8 @@ class JdbcBarPosCatalogRepository {
     // ---------- 商品：设分类/图片、按分类列、存档/删除 ----------
 
     Optional<BarProductRecord> findProduct(String id) {
-        return jdbcTemplate.query("SELECT * FROM bar_products WHERE id = :id",
+        return jdbcTemplate.query(
+                "SELECT * FROM bar_products WHERE id = :id AND delete_status <> 'approved'",
                 Map.of("id", id), productRowMapper::mapProduct).stream().findFirst();
     }
 
@@ -157,7 +159,7 @@ class JdbcBarPosCatalogRepository {
     }
 
     void deleteProduct(String id) {
-        jdbcTemplate.update("DELETE FROM bar_products WHERE id = :id", Map.of("id", id));
+        jdbcTemplate.update("UPDATE bar_products SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     /** 商品活引用：被订单明细(bar_order_items)或套餐明细(bar_combo_items)引用的行数之和。
@@ -215,7 +217,8 @@ class JdbcBarPosCatalogRepository {
     }
 
     Optional<BarComboRecord> findCombo(String id) {
-        return jdbcTemplate.query("SELECT * FROM bar_combos WHERE id = :id",
+        return jdbcTemplate.query(
+                "SELECT * FROM bar_combos WHERE id = :id AND delete_status <> 'approved'",
                 Map.of("id", id), this::mapCombo).stream().findFirst().map(this::withItems);
     }
 
@@ -281,8 +284,9 @@ class JdbcBarPosCatalogRepository {
     }
 
     void deleteCombo(String id) {
-        // bar_combo_items 走 ON DELETE CASCADE（V257），子表明细随套餐一并删除。
-        jdbcTemplate.update("DELETE FROM bar_combos WHERE id = :id", Map.of("id", id));
+        // 软删：保留套餐主行（delete_status=approved 被读取过滤隐藏）。
+        // 改 UPDATE 后 ON DELETE CASCADE（V257）不再触发，bar_combo_items 明细自动保留（可恢复）。
+        jdbcTemplate.update("UPDATE bar_combos SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
 
     private BarComboRecord withItems(BarComboRecord combo) {

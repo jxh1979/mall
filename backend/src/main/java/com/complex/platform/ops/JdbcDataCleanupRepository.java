@@ -68,26 +68,30 @@ public class JdbcDataCleanupRepository {
     }
 
     /**
-     * 真删：只删【已存档 + delete_status<>'approved' + 早于 cutoff + 无活引用】的行，返回实删条数。
-     * 逐行取 id 再校验引用后 DELETE（有引用的跳过），保证与逐条审批删除同样的活引用闸不被绕过。
+     * 批量隐藏（软删）：只隐藏【已存档 + delete_status<>'approved' + 早于 cutoff + 无活引用】的行，返回隐藏条数。
+     * 行保留在库（可查/可审计/可恢复），仅置 delete_status='approved' 使其被各前台读取过滤隐藏。
+     * 逐行取 id 再校验引用后 UPDATE（有引用的跳过），保证与逐条审批删除同样的活引用闸不被绕过。
      */
-    int deleteArchivedBefore(DataCleanupScope scope, Instant cutoff) {
+    int hideArchivedBefore(DataCleanupScope scope, Instant cutoff) {
         List<String> ids = jdbcTemplate.queryForList(
                 "SELECT id FROM " + scope.tableName()
                         + " WHERE archived_at IS NOT NULL AND archived_at < :cutoff"
                         + " AND delete_status <> 'approved'",
                 new MapSqlParameterSource().addValue("cutoff", timestampWithTimeZone(cutoff)),
                 String.class);
-        int deleted = 0;
+        int hidden = 0;
         for (String id : ids) {
             if (countReferences(scope, id) > 0) {
-                continue; // 仍有活引用，跳过（诚实：不强删被引用行，避免连锁孤儿）。
+                continue; // 仍有活引用，跳过（诚实：不强隐被引用行，避免连锁孤儿）。
             }
-            deleted += jdbcTemplate.update(
-                    "DELETE FROM " + scope.tableName() + " WHERE id = :id",
+            hidden += jdbcTemplate.update(
+                    "UPDATE " + scope.tableName() + " SET delete_status = 'approved',"
+                            + " delete_reason = COALESCE(delete_reason, '批量清理隐藏'),"
+                            + " delete_requested_at = COALESCE(delete_requested_at, now())"
+                            + " WHERE id = :id AND delete_status <> 'approved'",
                     new MapSqlParameterSource().addValue("id", id));
         }
-        return deleted;
+        return hidden;
     }
 
     /** 外键目录驱动的活引用计数（免列名差异盲区，复核 Critical 修复）：
