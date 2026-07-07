@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 
 type SubordinateRow = { id: string; username: string; partnerOrgId: string; accountType: string; status: string };
@@ -20,6 +21,10 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
   const [rows, setRows] = React.useState<SubordinateRow[]>([]);
   const [completion, setCompletion] = React.useState<CompletionRow[]>([]);
   const [username, setUsername] = React.useState("");
+  // 引导式「开通下属」弹窗状态（范式：字段留页面持有，弹窗只编排）。
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addError, setAddError] = React.useState("");
+  const [addSaving, setAddSaving] = React.useState(false);
   // 行明细抽屉：整行可点 → 该下属账号/完成情况完整字段（状态中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -59,13 +64,19 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
     { onError: setGlobalError, fallbackMessage: "下属账号读取失败" },
   );
 
+  // 提交在确认步触发；校验失败/接口失败弹窗留开显错，成功才关。原接口/请求体/双保险校验保留。
   async function addSubordinate() {
     const name = username.trim();
-    if (!name) { setGlobalError("请填写下属账号登录名"); return; }
-    await api.post("/api/v1/partner/subordinates", { idempotencyKey: `partner-sub-${name}`, username: name });
-    setActionResult({ action: "partner_subordinate_created", username: name });
-    setUsername("");
-    reload();
+    if (!name) { setAddError("请填写下属账号登录名"); return; }
+    setAddSaving(true);
+    setAddError("");
+    try {
+      await api.post("/api/v1/partner/subordinates", { idempotencyKey: `partner-sub-${name}`, username: name });
+      setActionResult({ action: "partner_subordinate_created", username: name });
+      setUsername("");
+      setAddOpen(false);
+      reload();
+    } catch (e) { setAddError((e as Error).message); } finally { setAddSaving(false); }
   }
 
   async function disableSubordinate(id: string) {
@@ -101,11 +112,10 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
             </tbody>
           </table>
         </div>
-        <div className="admin-inline-form" data-testid="vendor-subordinates-form">
-          <input aria-label="下属登录名" placeholder="下属登录名" value={username}
-            onChange={(event) => setUsername(event.target.value)} />
+        <div className="admin-form-row" data-testid="vendor-subordinates-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
-            data-testid="vendor-subordinate-add" onClick={() => void addSubordinate()}>开通下属</PermissionButton>
+            data-testid="vendor-subordinate-add-open"
+            onClick={() => { setUsername(""); setAddError(""); setAddOpen(true); }}>＋ 开通下属</PermissionButton>
         </div>
         <h3>下属工作完成情况</h3>
         <div className="admin-table-scroll">
@@ -127,6 +137,30 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
           </table>
         </div>
       </AdminDataState>
+      <GuidedFlowModal
+        open={addOpen}
+        title="开通下属账号"
+        testId="vendor-subordinate-add-guided"
+        submitTestId="vendor-subordinate-add"
+        submitLabel="开通下属"
+        submitting={addSaving}
+        error={addError || undefined}
+        onClose={() => setAddOpen(false)}
+        onSubmit={() => void addSubordinate()}
+        steps={[
+          {
+            title: "下属信息",
+            description: "填写下属登录名。下属继承机构被授权范围；机构停用/过期或超上限时开通会被拒。",
+            validate: () => (username.trim() ? null : "请填写下属账号登录名"),
+            content: (
+              <label>下属登录名<input data-testid="vendor-subordinate-username" aria-label="下属登录名" placeholder="下属登录名" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "下属登录名", value: username.trim() || "未填写" },
+        ]}
+      />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
