@@ -16,7 +16,7 @@
 ## 2. 为什么存档=软标记、删除=硬删+审批
 
 - **存档**面向"配错了/过期了、先下线别再用、但别丢历史"。这是高频、低危操作，用软删除范式（本仓已有先例 `V182 merchant_fee_notification_recipient.deleted_at`、`V179 site_entry_reports.deleted_at`），列表 `WHERE archived_at IS NULL` 默认过滤即可。**取消存档**只是把 `archived_at` 置回 NULL。
-- **删除**面向"这条记录本就不该存在/彻底清掉"。物理删除不可逆、可能触及外键（`ticket_type_entitlements`/`issued_entitlements` 均 `REFERENCES entitlement_templates(id)`，非 CASCADE），所以**必须走审批**且**执行前校验无活引用**。
+- **删除**面向"这条记录本就不该存在/该彻底下线"。**⚠️2026-07-07 更新（PR#53，用户拍板"所谓删除只是存到数据库中、不在前台展示"）：删除已改为软删除——不物理抹除，执行为 `UPDATE delete_status='approved'` 使行保留在库、被前台读取（`delete_status <> 'approved'`）过滤隐藏，可查/可审计/可恢复；集中清理工具亦由物理删改为批量隐藏；数据按分类归纳。** 仍**必须走审批**且**执行前校验无活引用**（避免隐藏被引用行留悬空关系）；组合套餐软删时子项一并保留。唯 PIPL 生物识别照片（`ticket_face_photos.purge_after`）等法定必销数据、以及"重算替换"类（合同审批步骤/角色权限分配/套餐明细替换/结算草稿）仍走物理删。
 
 ## 3. 复用现有审批基建的取舍（诚实标注）
 
