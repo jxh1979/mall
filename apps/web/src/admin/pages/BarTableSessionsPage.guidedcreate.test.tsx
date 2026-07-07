@@ -8,7 +8,8 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 
 function makeApi(post = vi.fn().mockResolvedValue({ id: "tbl-new" })): AdminApiClient {
   return {
-    get: vi.fn().mockResolvedValue([]),
+    get: vi.fn().mockImplementation((path: string) =>
+      Promise.resolve(path.startsWith("/api/v1/bar/venues") ? [{ id: "bar-main", barName: "主酒吧" }] : [])),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post,
     put: vi.fn().mockResolvedValue({}),
@@ -35,7 +36,8 @@ describe("BarTableSessionsPage 引导式新建卡座", () => {
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("bar-new-table-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("bar-new-table-open"));
-    // 步骤1 卡座信息（barId 默认 bar-main；tableName 需填）
+    // 步骤1 卡座信息（barId 从下拉自动选中第一个 bar-main；tableName 需填）
+    await waitFor(() => expect((screen.getByTestId("bar-new-table-bar") as HTMLSelectElement).value).toBe("bar-main"));
     fireEvent.change(screen.getByTestId("bar-new-table-name"), { target: { value: "VIP-01" } });
     fireEvent.click(screen.getByTestId("bar-new-table-guided-next"));
     // 步骤2 容量与低消（默认 capacity=4/free=0/spend=0）
@@ -55,7 +57,8 @@ describe("BarTableSessionsPage 引导式新建卡座", () => {
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("bar-new-table-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("bar-new-table-open"));
-    // 不填卡座名称（默认空）
+    // barId 从下拉自动选中 bar-main；不填卡座名称（默认空）→ 校验应命中卡座名称
+    await waitFor(() => expect((screen.getByTestId("bar-new-table-bar") as HTMLSelectElement).value).toBe("bar-main"));
     fireEvent.click(screen.getByTestId("bar-new-table-guided-next"));
     await waitFor(() => expect(screen.getByTestId("bar-new-table-guided-error").textContent).toContain("卡座名称"));
     expect(screen.queryByTestId("bar-new-table-submit")).toBeNull();

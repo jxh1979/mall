@@ -73,6 +73,7 @@ const StoredWinePage = React.lazy(() => import("./pages/StoredWinePage").then((m
 const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage").then((m) => ({ default: m.BarCommissionsPage })));
 const BarProductsPage = React.lazy(() => import("./pages/BarProductsPage").then((m) => ({ default: m.BarProductsPage })));
 const BarCombosPage = React.lazy(() => import("./pages/BarCombosPage").then((m) => ({ default: m.BarCombosPage })));
+const BarVenuesPage = React.lazy(() => import("./pages/BarVenuesPage").then((m) => ({ default: m.BarVenuesPage })));
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
 const TerminalSwitchMatrixPage = React.lazy(() => import("./pages/TerminalSwitchMatrixPage").then((m) => ({ default: m.TerminalSwitchMatrixPage })));
@@ -205,6 +206,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <BarProductsPage {...props} />;
     case "ADM-BAR-006":
       return <BarCombosPage {...props} />;
+    case "ADM-BAR-007":
+      return <BarVenuesPage {...props} />;
     case "ADM-INV-001":
       return <InventoryLedgerPage {...props} />;
     case "ADM-FIN-002":

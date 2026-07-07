@@ -20,7 +20,10 @@ const COMBOS: BarComboRow[] = [
 
 function makeApi(post = vi.fn().mockResolvedValue({ id: "combo-2" })): AdminApiClient {
   const get = vi.fn().mockImplementation((path: string) =>
-    Promise.resolve(path.includes("/combos") ? COMBOS : PRODUCTS));
+    Promise.resolve(
+      path.startsWith("/api/v1/bar/venues") ? [{ id: "bar-main", barName: "主酒吧" }]
+        : path.includes("/combos") ? COMBOS
+        : PRODUCTS));
   return {
     get,
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
@@ -58,6 +61,7 @@ describe("BarCombosPage 套餐管理", () => {
     await waitFor(() => expect(screen.getByTestId("bar-combo-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("bar-combo-create-open"));
     // 步骤1 套餐信息
+    await waitFor(() => expect(screen.getByTestId("bar-combo-bar-id").querySelectorAll("option").length).toBeGreaterThan(1));
     fireEvent.change(screen.getByTestId("bar-combo-bar-id"), { target: { value: "bar-main" } });
     fireEvent.change(screen.getByTestId("bar-combo-name"), { target: { value: "组合A" } });
     fireEvent.click(screen.getByTestId("bar-combo-guided-next"));
@@ -86,6 +90,7 @@ describe("BarCombosPage 套餐管理", () => {
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("bar-combo-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("bar-combo-create-open"));
+    await waitFor(() => expect(screen.getByTestId("bar-combo-bar-id").querySelectorAll("option").length).toBeGreaterThan(1));
     fireEvent.change(screen.getByTestId("bar-combo-bar-id"), { target: { value: "bar-main" } });
     fireEvent.change(screen.getByTestId("bar-combo-name"), { target: { value: "空套餐" } });
     fireEvent.click(screen.getByTestId("bar-combo-guided-next"));

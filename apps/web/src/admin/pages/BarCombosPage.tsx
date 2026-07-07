@@ -7,6 +7,7 @@ import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDra
 import type { AdminPageProps, BarComboRow, BarProductRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { BarVenueSelect } from "../components/BarVenueSelect";
 
 function yuan(cent: number | null | undefined): string {
   if (cent === null || cent === undefined) return "—";
@@ -247,7 +248,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
             validate: () => (form.barId.trim() && form.comboName.trim() ? null : "酒吧、套餐名必填"),
             content: (
               <>
-                <label><span>酒吧 ID</span><input data-testid="bar-combo-bar-id" value={form.barId} onChange={(e) => setField("barId", e.target.value)} /></label>
+                <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-combo-bar-id" value={form.barId} onChange={(v) => setField("barId", v)} setGlobalError={setGlobalError} /></label>
                 <label><span>套餐名</span><input data-testid="bar-combo-name" value={form.comboName} onChange={(e) => setField("comboName", e.target.value)} /></label>
               </>
             ),
