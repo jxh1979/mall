@@ -504,6 +504,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <strong>怎么用这一页（票务策略配置流程）：</strong>① 先在「票种 / 通票」建好票种并发布 → ② 建「权益模板」（入园 / 酒水兑换 / 游乐等可复用的权益）→ ③ 用「通票组装」把票种绑上权益，或用「组合式套票配置」一次性给一张通票配好跨酒吧 / 游乐 / 餐饮的套票权益 → ④ 最后配「派生价规则」（新人 / 学生 / 多人 / 渠道 / 会员的折扣或固定价）。切换下方标签逐步配置。
       </div>
       <Tabs
+        type="card"
         data-testid="ticketing-tabs"
         items={[
           { key: "types", label: "① 票种 / 通票", forceRender: true, children: (<>
