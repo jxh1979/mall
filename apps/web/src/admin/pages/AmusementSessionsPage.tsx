@@ -54,8 +54,10 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [projectSubmitting, setProjectSubmitting] = React.useState(false);
-  // 引导式流程 phase-7：新增场次收起为主按钮 + 分步引导弹窗（新建项目仍内联，本期不动）。
+  // 引导式流程 phase-7：新增场次收起为主按钮 + 分步引导弹窗。
   const [sessionOpen, setSessionOpen] = React.useState(false);
+  // 引导式流程 phase-8：新建项目也收起为主按钮 + 分步引导弹窗（与场次流各自独立 testid/弹窗，不互相影响）。
+  const [projectOpen, setProjectOpen] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 项目/场次完整字段（时间中文·状态中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -118,6 +120,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     try {
       const result = await api.post<unknown>("/api/v1/amusement/projects", request);
       setActionResult({ action: "amusement_project_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+      setProjectOpen(false);
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "新建项目失败";
@@ -252,8 +255,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>总容量</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-capacity" onClick={() => enterKpiFocus("sessions")}>{totalCapacity}</button><small>容量合计</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已锁定</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-locked" onClick={() => enterKpiFocus("sessions")}>{sessions.reduce((sum, row) => sum + Number(row.lockedCapacity ?? 0), 0)}</button><small>已锁定容量</small></div>
             </div>
-            <div className="admin-form-grid"><label>项目名称<input data-testid="amusement-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /></label><label>项目容量<input data-testid="amusement-project-capacity" value={projectCapacity} onChange={(event) => setProjectCapacity(event.target.value)} /></label></div>
-            <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-project-create" disabled={projectSubmitting} onClick={() => void createProject()}>新建项目</PermissionButton></div>
+            <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-project-create-open" disabled={projectSubmitting} onClick={() => { setFormError(""); setProjectOpen(true); }}>＋ 新建项目</PermissionButton></div>
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-session-create-open" disabled={submitting} onClick={() => { setFormError(""); setSessionOpen(true); }}>＋ 新增场次</PermissionButton><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
             {projectsSection}
             {sessionsSection}
@@ -262,6 +264,34 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
         )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={projectOpen}
+        title="新建项目"
+        testId="amusement-project-guided"
+        submitTestId="amusement-project-create"
+        submitLabel="新建项目"
+        submitting={projectSubmitting}
+        error={formError || undefined}
+        onClose={() => setProjectOpen(false)}
+        onSubmit={() => void createProject()}
+        steps={[
+          {
+            title: "项目信息",
+            description: "填写项目名称与容量，项目名称必填、容量取不小于 0 的数字。",
+            validate: () => (!projectName.trim() ? TEXT.projectNameRequired : null),
+            content: (
+              <>
+                <label>项目名称<input data-testid="amusement-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /></label>
+                <label>项目容量<input data-testid="amusement-project-capacity" value={projectCapacity} onChange={(event) => setProjectCapacity(event.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "项目名称", value: projectName.trim() || "未填写" },
+          { label: "项目容量", value: String(Math.max(0, Number(projectCapacity) || 0)) },
+        ]}
+      />
       <GuidedFlowModal
         open={sessionOpen}
         title="新增场次"
