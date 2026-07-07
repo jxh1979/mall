@@ -36,6 +36,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-BAR-004", label: "销售提成", route: "/admin/bar/commissions" },
   { pageId: "ADM-BAR-005", label: "商品管理", route: "/admin/bar/products" },
   { pageId: "ADM-BAR-006", label: "套餐管理", route: "/admin/bar/combos" },
+  { pageId: "ADM-BAR-007", label: "酒吧门店", route: "/admin/bar/venues" },
   { pageId: "ADM-AMU-001", label: "项目与场次", route: "/admin/amusement/sessions" },
   { pageId: "ADM-AMU-002", label: "团体/包场", route: "/admin/amusement/group-bookings" },
   { pageId: "ADM-AMU-003", label: "安全巡检/事故", route: "/admin/amusement/safety-incidents" },
@@ -74,6 +75,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-STF-002", label: "薪酬与请假", route: "/admin/staff/payroll" },
   { pageId: "ADM-STF-003", label: "个税税表", route: "/admin/staff/tax-brackets" },
   { pageId: "ADM-SVC-001", label: "服务点单", route: "/admin/services/orders" },
+  { pageId: "ADM-OPS-002", label: "数据清理工具", route: "/admin/ops/data-cleanup" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -115,6 +117,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("bar-products-page")).toBeVisible();
   } else if (spec.pageId === "ADM-BAR-006") {
     await expect(page.getByTestId("bar-combos-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-BAR-007") {
+    await expect(page.getByTestId("bar-venues-page")).toBeVisible();
   } else if (spec.pageId === "ADM-INV-001") {
     await expect(page.getByTestId("inventory-ledger-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-002") {
@@ -192,6 +196,12 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("payroll-tax-brackets-page")).toBeVisible();
     await expect(page.getByTestId("payroll-tax-brackets-table")).toContainText("20.00%");
     await expect(page.getByTestId("payroll-tax-brackets-form")).toBeVisible();
+  } else if (spec.pageId === "ADM-OPS-002") {
+    await expect(page.getByTestId("data-cleanup-page")).toBeVisible();
+    await expect(page.getByTestId("data-cleanup-request")).toBeVisible();
+    await expect(page.getByTestId("data-cleanup-scope")).toBeVisible();
+    await expect(page.getByTestId("data-cleanup-preview-button")).toBeVisible();
+    await expect(page.getByTestId("data-cleanup-pending")).toContainText("待审批的清理申请");
   } else if (spec.pageId === "ADM-ANA-010") {
     await expect(page.getByTestId("ai-thresholds-page")).toBeVisible();
     await expect(page.getByTestId("ai-threshold-confidence")).toContainText("60%");

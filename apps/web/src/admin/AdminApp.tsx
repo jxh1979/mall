@@ -73,6 +73,7 @@ const StoredWinePage = React.lazy(() => import("./pages/StoredWinePage").then((m
 const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage").then((m) => ({ default: m.BarCommissionsPage })));
 const BarProductsPage = React.lazy(() => import("./pages/BarProductsPage").then((m) => ({ default: m.BarProductsPage })));
 const BarCombosPage = React.lazy(() => import("./pages/BarCombosPage").then((m) => ({ default: m.BarCombosPage })));
+const BarVenuesPage = React.lazy(() => import("./pages/BarVenuesPage").then((m) => ({ default: m.BarVenuesPage })));
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
 const TerminalSwitchMatrixPage = React.lazy(() => import("./pages/TerminalSwitchMatrixPage").then((m) => ({ default: m.TerminalSwitchMatrixPage })));
@@ -87,6 +88,7 @@ const VendorSubordinatesPage = React.lazy(() => import("./pages/VendorSubordinat
 const SmsNotificationSwitchesPage = React.lazy(() => import("./pages/SmsNotificationSwitchesPage").then((m) => ({ default: m.SmsNotificationSwitchesPage })));
 const LeasingRentalStatusPage = React.lazy(() => import("./pages/LeasingRentalStatusPage").then((m) => ({ default: m.LeasingRentalStatusPage })));
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
+const DataCleanupPage = React.lazy(() => import("./pages/DataCleanupPage").then((m) => ({ default: m.DataCleanupPage })));
 const FloorPlanImportPage = React.lazy(() => import("./pages/FloorPlanImportPage").then((m) => ({ default: m.FloorPlanImportPage })));
 const T3AReadonlyAnalyticsPage = React.lazy(() => import("./pages/T3AReadonlyAnalyticsPage").then((m) => ({ default: m.T3AReadonlyAnalyticsPage })));
 const ComplianceRemindersPage = React.lazy(() => import("./pages/ComplianceRemindersPage").then((m) => ({ default: m.ComplianceRemindersPage })));
@@ -205,6 +207,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <BarProductsPage {...props} />;
     case "ADM-BAR-006":
       return <BarCombosPage {...props} />;
+    case "ADM-BAR-007":
+      return <BarVenuesPage {...props} />;
     case "ADM-INV-001":
       return <InventoryLedgerPage {...props} />;
     case "ADM-FIN-002":
@@ -313,6 +317,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <IntegrationSwitchesPage {...props} />;
     case "ADM-OPS-001":
       return <OpsReadinessPage {...props} />;
+    case "ADM-OPS-002":
+      return <DataCleanupPage {...props} />;
     case "ADM-GOV-001":
       return <GovernanceTopologyPage {...props} />;
     case "ADM-GOV-002":

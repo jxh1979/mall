@@ -339,6 +339,21 @@ export type BarComboRow = {
   deleteStatus?: string;
 };
 
+/** V263 酒吧门店主数据：独立门店实体，挂项目（综合体），可选绑经营商户与所在空间。 */
+export type BarVenueRow = {
+  id: string;
+  projectId?: string | null;
+  merchantId?: string | null;
+  spaceId?: string | null;
+  barName?: string;
+  barCode?: string | null;
+  minimumSpendCent?: number | null;
+  status?: string;
+  /** V262 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。 */
+  archivedAt?: string | null;
+  deleteStatus?: string;
+};
+
 export type StoredWineRow = {
   id: string;
   savedNo?: string;
@@ -920,6 +935,23 @@ export type ReadinessItemRow = {
   status?: string;
   evidenceRef?: string | null;
   dueAt?: string | null;
+};
+
+// 集中数据清理作业（Tier-D 集中清理工具；对应后端 DataCleanupJobRecord）。
+export type DataCleanupJobRow = {
+  id: string;
+  scopeType: string;
+  filterParams?: Record<string, unknown>;
+  status: string;
+  previewCount: number;
+  previewSample?: { id: string; archivedAt?: string | null }[];
+  reason?: string | null;
+  requestedBy?: string | null;
+  requestedAt?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  executedAt?: string | null;
+  deletedCount?: number | null;
 };
 
 // 真操作留痕行（audit_events 表；对应后端 AuditEvent record 的 JSON 字段）。
