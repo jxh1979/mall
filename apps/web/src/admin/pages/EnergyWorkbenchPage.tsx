@@ -4,6 +4,8 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
+import { IconButton } from "../components/IconButton";
+import { SelectOutlined } from "@ant-design/icons";
 import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -272,7 +274,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMeterDetail(row); } }}>
                 <td>{row.id}</td><td>{row.name}</td><td>{zh(row.meterType)}</td><td>{zh(row.gatherObject)}</td><td>{row.parentMeterId ?? "-"}</td>
                 <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink></td><td>{zh(row.readMode)}</td><td>{row.active === false ? "停用" : "启用"}</td>
-                <td onClick={(event) => event.stopPropagation()}><button type="button" data-testid={`energy-meter-select-${row.id}`} onClick={() => selectMeter(row)}>选中</button></td>
+                <td onClick={(event) => event.stopPropagation()}><IconButton icon={<SelectOutlined />} tip="选中该表计填入表单" onClick={() => selectMeter(row)} testId={`energy-meter-select-${row.id}`} /></td>
               </tr>
             ))}</tbody>
           </table>

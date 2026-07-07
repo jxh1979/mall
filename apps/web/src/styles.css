@@ -1771,7 +1771,6 @@ body {
    ============================================================ */
 .admin-auth-panel button,
 .admin-form-row button,
-.admin-secondary-button,
 .admin-state button,
 .admin-pager button {
   display: inline-flex;
@@ -1792,7 +1791,6 @@ body {
 
 .admin-auth-panel button:hover,
 .admin-form-row button:hover,
-.admin-secondary-button:hover,
 .admin-state button:hover,
 .admin-pager button:hover {
   filter: brightness(1.15);
@@ -2450,3 +2448,36 @@ body {
 .admin-form-row textarea {
   min-height: 40px;
 }
+
+/* ============================================================
+   按钮层级（2026-07-07）：主(填充暗色·上方规则) / 次(描边) / 文字(无边框) + 表格图标按钮
+   ============================================================ */
+.admin-secondary-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 36px; padding: 0 15px; font-size: 13.5px; font-weight: 600;
+  color: var(--adm-accent); background: transparent;
+  border: 1px solid var(--adm-border); border-radius: 9px; cursor: pointer;
+  transition: background 0.14s, border-color 0.14s;
+}
+.admin-secondary-button:hover { background: var(--adm-accent-weak); border-color: var(--adm-accent); }
+.admin-secondary-button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.admin-text-button {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 8px; font-size: 13.5px; font-weight: 600;
+  color: var(--adm-accent); background: transparent; border: none;
+  border-radius: 8px; cursor: pointer; transition: background 0.14s;
+}
+.admin-text-button:hover { background: var(--adm-accent-weak); }
+.admin-text-button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.admin-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; font-size: 17px; line-height: 1;
+  color: var(--adm-text-2); background: transparent;
+  border: 1px solid transparent; border-radius: 8px; cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.admin-icon-btn:hover { color: var(--adm-accent); background: var(--adm-accent-weak); border-color: var(--adm-border); }
+.admin-icon-btn.danger:hover { color: #c0392b; background: color-mix(in srgb, #c0392b 8%, #fff); }
+.admin-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
