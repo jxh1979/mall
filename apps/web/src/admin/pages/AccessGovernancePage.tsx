@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { Tabs } from "antd";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
@@ -328,6 +329,13 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
     <section data-testid="access-governance-page">
       <AdminPageHeader title="访问治理工作台" description="岗位角色模板、用户定岗自动适配、直接角色装配和高危授权审批；审批总结用于发现频繁临时授权。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        <div className="admin-preview" data-testid="access-governance-guide">
+          <strong>这一页做什么：</strong>访问治理三块——① 角色装配（职位↔模板映射、给用户定职位自动适配、直接装配角色）② 高危授权审批 ③ 智能总结（发现频繁临时授权）。切换标签操作。
+        </div>
+        <Tabs
+          data-testid="access-governance-tabs"
+          items={[
+            { key: "assign", label: "① 角色装配", forceRender: true, children: (<>
         <h3>职位 ↔ 模板映射</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-position-role-templates-table">
@@ -373,6 +381,8 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-role-unassign" onClick={() => void roleAssignment("unassign")}>卸载角色</PermissionButton>
         </div>
 
+          </>) },
+          { key: "grant", label: "② 高危授权审批", forceRender: true, children: (<>
         <h3>高危授权审批</h3>
         <div className="admin-form-row" data-testid="access-grant-request-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_APPLY} data-testid="access-grant-request-create-open"
@@ -402,6 +412,8 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           </table>
         </div>
 
+          </>) },
+          { key: "summary", label: "③ 智能总结", forceRender: true, children: (<>
         <h3>智能总结</h3>
         <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_VIEW} data-testid="access-grant-summary-refresh" onClick={() => void reload()}>刷新总结</PermissionButton>
         <div className="admin-table-scroll">
@@ -413,6 +425,9 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
             </tbody>
           </table>
         </div>
+          </>) },
+        ]}
+      />
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
       <GuidedFlowModal
