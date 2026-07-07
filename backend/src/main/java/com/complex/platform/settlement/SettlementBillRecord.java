@@ -16,6 +16,7 @@ public record SettlementBillRecord(
         long retentionCent,
         long spvPoolCent,
         long distributedCent,
+        long compServiceFeeCent,
         String distributionMethod,
         String specialApprovalRef,
         String status

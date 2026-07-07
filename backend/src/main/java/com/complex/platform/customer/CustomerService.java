@@ -418,12 +418,19 @@ public class CustomerService {
                     }
                     long totalPoints = item.pointsCost() * quantity;
                     CustomerPointsAccountRecord account = loadOrCreatePointsAccountForUpdate(customer.id());
+                    // R3 P0-7 修：所有前置校验（余额充足、账户未冻结）必须在扣库存之前完成，任一不过即抛错，
+                    // 绝不先动库存——避免"扣了货没扣分=库存泄漏"的顺序脆弱性（此前冻结校验误排在扣库存之后，
+                    // 仅靠同事务回滚兜底）。扣库存 + 扣积分 + 存兑换记录同处 redeemPoints 的 @Transactional，
+                    // 且 createTypedStockMovement 经 IdempotencyService 的 TransactionTemplate（REQUIRED）并入本事务，
+                    // 三者原子。兑换为即时履约（无 reserve→履约→取消释放 的时间分离），故无需两段式预占。
                     if (account.balance() < totalPoints) {
                         throw ApiException.conflict("POINTS_INSUFFICIENT", "points balance is insufficient");
                     }
+                    if ("frozen".equals(account.accountStatus())) {
+                        throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
+                    }
                     String redemptionId = "redemption_" + slug(key);
-                    // R3 P0-7：兑换扣库存使用 redeem_consume 类型移动（替代此前误用的 "loss" 调整），
-                    // 从礼物绑定的库位扣减；语义正确、可与损耗/报废区分对账。
+                    // 兑换扣库存使用 redeem_consume 类型移动，从礼物绑定的库位扣减；语义正确、可与损耗/报废区分对账。
                     inventoryService.createTypedStockMovement("redeem_consume", new StockMovementRequest(
                             "points-redemption-" + key,
                             "customer points redemption " + redemptionId,
@@ -436,9 +443,6 @@ public class CustomerService {
                             )),
                             "points_redemption:" + redemptionId
                     ));
-                    if ("frozen".equals(account.accountStatus())) {
-                        throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
-                    }
                     long balanceAfter = account.balance() - totalPoints;
                     // FIFO 消耗获取批次剩余，使过期清零只清未用部分。
                     consumeFifoBatches(customer.id(), totalPoints);

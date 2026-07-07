@@ -690,6 +690,59 @@ class CustomerServiceTests {
     }
 
     @Test
+    void redeemPointsRejectsFrozenAccountWithoutTouchingInventoryOrPoints() {
+        // R3 P0-7 顺序修回归：冻结账户校验必须在扣库存之前——余额足够但账户冻结时，绝不能先扣库存。
+        // 此前冻结校验误排在 createTypedStockMovement 之后，仅靠同事务回滚兜底；本用例以 never() 锁死顺序。
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        customerRepository.savePoints(new CustomerPointsAccountRecord(
+                "points_" + login.customerId(),
+                login.customerId(),
+                500L,
+                "silver",
+                Map.of(),
+                0L,
+                "frozen",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                0L,
+                null,
+                null,
+                0,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
+                "gift_active",
+                "Plush Gift",
+                "gift",
+                120L,
+                "item_gift",
+                "gift_shelf",
+                1,
+                "active",
+                null,
+                null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+
+        assertThatThrownBy(() -> service.redeemPoints(
+                login.customerToken(),
+                "redeem-frozen",
+                new CustomerPointsRedemptionRequest(null, "gift_active", 1, "miniapp")
+        ))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("points account is frozen");
+
+        // 库存零调用：冻结校验在扣库存之前把请求挡下。
+        verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
+        // 积分未扣、无兑换记录、无扣分流水。
+        assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(500L);
+        assertThat(customerRepository.listPointsRedemptionsByCustomerId(login.customerId())).isEmpty();
+        assertThat(customerRepository.pointsLedger)
+                .noneMatch(entry -> "points_redemption".equals(entry.sourceType()));
+    }
+
+    @Test
     void redeemPointsKeepsBalanceWhenInventoryFails() {
         CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
         customerRepository.savePoints(new CustomerPointsAccountRecord(

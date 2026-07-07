@@ -36,6 +36,9 @@ class CustomerJdbcIntegrationTests {
     @Autowired
     private CustomerService customerService;
 
+    @Autowired
+    private CustomerPointsRuleAdminService pointsRuleAdminService;
+
     @Test
     void phoneLoginPersistsNonLeakingCustomerIdToRealPostgres() {
         // 真实后端活证据：新客人经真实 CustomerService.phoneLogin 落真实 Postgres，主键不得内嵌明文手机号。
@@ -482,7 +485,37 @@ class CustomerJdbcIntegrationTests {
                 .containsExactly(tuple("redemption_jdbc", "pending_pickup"));
     }
 
-    private String regclass(String tableName) {
+    @Test
+    void pointsRuleAdminEndpointsCreateListGetUpdateAsPlatformAdmin() {
+        // item6 后台积分规则 CRUD 端到端（真 DB + 真 AuthorizationService，平台管理员上下文）。
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        try {
+            CustomerPointsRuleRecord created = pointsRuleAdminService.create(
+                    new com.complex.platform.customer.dto.CustomerPointsRuleRequest(
+                            "prj_rule_jdbc", "JDBC earn rule", "consume_amount", 5L, "{\"silver\":1000}",
+                            "fixed_days", 365, "fifo_batch", null, "active"));
+            assertThat(created.id()).startsWith("points_rule_");
+            assertThat(created.projectId()).isEqualTo("prj_rule_jdbc");
+
+            assertThat(pointsRuleAdminService.list().items())
+                    .extracting(CustomerPointsRuleRecord::id)
+                    .contains(created.id());
+
+            assertThat(pointsRuleAdminService.get(created.id()).earnRatio()).isEqualTo(5L);
+
+            CustomerPointsRuleRecord updated = pointsRuleAdminService.update(created.id(),
+                    new com.complex.platform.customer.dto.CustomerPointsRuleRequest(
+                            null, null, null, 8L, null, null, null, null, null, "paused"));
+            assertThat(updated.earnRatio()).isEqualTo(8L);
+            assertThat(updated.status()).isEqualTo("paused");
+            // project_id 不因 update 改动（更新沿用既有归属）。
+            assertThat(updated.projectId()).isEqualTo("prj_rule_jdbc");
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+        private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }
 
