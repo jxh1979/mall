@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { Tabs } from "antd";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -200,6 +201,13 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
           <PermissionButton permissionsState={effectivePermissions} permissions={REMINDER_SCAN} data-testid="compliance-scan" onClick={() => void scanReminders()}>扫描生成提醒</PermissionButton>
         </div>
 
+        <div className="admin-preview" data-testid="compliance-reminders-guide">
+          <strong>这一页做什么：</strong>合规到期三块——① 到期提醒（扫描生成、可建议阻断）② 合同关键日期 ③ 合规证照到期。上方设扫描基准日与提前天数后切标签查看。
+        </div>
+        <Tabs
+          data-testid="compliance-reminders-tabs"
+          items={[
+            { key: "reminders", label: "① 到期提醒", forceRender: true, children: (<>
         <h3>到期提醒</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="compliance-reminders-table">
@@ -217,6 +225,8 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
           </table>
         </div>
 
+          </>) },
+          { key: "contract-dates", label: "② 合同关键日期", forceRender: true, children: (<>
         <h3>合同关键日期</h3>
         <div className="admin-form-row" data-testid="compliance-key-date-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={KEY_DATE_MANAGE} data-testid="compliance-key-date-create-open" onClick={() => { setKeyDateError(null); setKeyDateOpen(true); }}>＋ 补录关键日期</PermissionButton>
@@ -272,6 +282,8 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
           </table>
         </div>
 
+          </>) },
+          { key: "licenses", label: "③ 合规证照到期", forceRender: true, children: (<>
         <h3>合规证照到期</h3>
         <div className="admin-form-grid" data-testid="compliance-expiry-form">
           <label>证照类型
@@ -299,6 +311,9 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
             </tbody>
           </table>
         </div>
+          </>) },
+        ]}
+      />
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
