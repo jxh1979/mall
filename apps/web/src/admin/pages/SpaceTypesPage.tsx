@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 // 空间类型字典行（后端 SpaceTypeRecord，客户端 unwrap 已 camel 化）。
 type SpaceTypeRow = {
@@ -24,6 +25,10 @@ const MANAGE = ["governance.space.manage"];
 export function SpaceTypesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [rows, setRows] = React.useState<SpaceTypeRow[]>([]);
   const [form, setForm] = React.useState({ typeCode: "", typeName: "", sortOrder: "100", status: "active" });
+  // 引导式流程 phase-7：新增空间类型收起为主按钮 + 分步引导弹窗。
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [formError, setFormError] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -44,23 +49,40 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
 
   const isFocused = (row: SpaceTypeRow) => !!focusObjectId && (focusObjectId === row.id || focusObjectId === row.typeCode);
 
+  // 编码/显示名非空校验（步内 + 提交双保险）。
+  function typeInvalid() {
+    return !form.typeCode.trim() || !form.typeName.trim();
+  }
+
   async function saveType() {
     const code = form.typeCode.trim();
     const name = form.typeName.trim();
-    if (!code || !name) {
-      setGlobalError("请填写类型编码与显示名");
+    if (typeInvalid()) {
+      setFormError("请填写类型编码与显示名");
       return;
     }
-    await api.post("/api/v1/platform/space-types", {
-      idempotencyKey: `space-type-${code}-${form.sortOrder}`,
-      typeCode: code,
-      typeName: name,
-      sortOrder: Number(form.sortOrder) || 100,
-      status: form.status,
-    });
-    setActionResult({ action: "space_type_saved", typeCode: code });
-    setForm({ typeCode: "", typeName: "", sortOrder: "100", status: "active" });
-    reload();
+    setFormError("");
+    setGlobalError(null);
+    setSubmitting(true);
+    try {
+      await api.post("/api/v1/platform/space-types", {
+        idempotencyKey: `space-type-${code}-${form.sortOrder}`,
+        typeCode: code,
+        typeName: name,
+        sortOrder: Number(form.sortOrder) || 100,
+        status: form.status,
+      });
+      setActionResult({ action: "space_type_saved", typeCode: code });
+      setForm({ typeCode: "", typeName: "", sortOrder: "100", status: "active" });
+      setCreateOpen(false);
+      reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "新增空间类型失败";
+      setFormError(message);
+      setGlobalError(message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -86,23 +108,51 @@ export function SpaceTypesPage({ api, setActionResult, setGlobalError, effective
             </tbody>
           </table>
         </div>
-        <div className="admin-inline-form" data-testid="space-types-form">
-          <input aria-label="类型编码" placeholder="类型编码（如 kiosk）" value={form.typeCode}
-            onChange={(event) => setForm({ ...form, typeCode: event.target.value })} />
-          <input aria-label="显示名" placeholder="显示名（如 一体机位）" value={form.typeName}
-            onChange={(event) => setForm({ ...form, typeName: event.target.value })} />
-          <input aria-label="排序" type="number" min="0" placeholder="排序" value={form.sortOrder}
-            onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} />
-          <select aria-label="状态" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
-            <option value="active">启用</option>
-            <option value="disabled">停用</option>
-          </select>
+        <div className="admin-form-row" data-testid="space-types-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
-            data-testid="space-types-save" onClick={() => void saveType()}>
-            保存类型
+            data-testid="space-types-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>
+            ＋ 新增空间类型
           </PermissionButton>
         </div>
       </AdminDataState>
+      <GuidedFlowModal
+        open={createOpen}
+        title="新增空间类型"
+        testId="space-types-guided"
+        submitTestId="space-types-save"
+        submitLabel="保存类型"
+        submitting={submitting}
+        error={formError || undefined}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={() => void saveType()}
+        steps={[
+          {
+            title: "类型信息",
+            description: "填写类型编码与显示名，设置排序与启用状态。编码/显示名必填。",
+            validate: () => (typeInvalid() ? "请填写类型编码与显示名" : null),
+            content: (
+              <>
+                <label>类型编码<input aria-label="类型编码" placeholder="类型编码（如 kiosk）" value={form.typeCode}
+                  onChange={(event) => setForm({ ...form, typeCode: event.target.value })} /></label>
+                <label>显示名<input aria-label="显示名" placeholder="显示名（如 一体机位）" value={form.typeName}
+                  onChange={(event) => setForm({ ...form, typeName: event.target.value })} /></label>
+                <label>排序<input aria-label="排序" type="number" min="0" placeholder="排序" value={form.sortOrder}
+                  onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} /></label>
+                <label>状态<select aria-label="状态" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+                  <option value="active">启用</option>
+                  <option value="disabled">停用</option>
+                </select></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "类型编码", value: form.typeCode.trim() || "未填写" },
+          { label: "显示名", value: form.typeName.trim() || "未填写" },
+          { label: "排序", value: String(Number(form.sortOrder) || 100) },
+          { label: "状态", value: form.status === "active" ? "启用" : "停用" },
+        ]}
+      />
     </section>
   );
 }

@@ -690,8 +690,11 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("att-recon-1");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-001")!);
+    // 引导式流程 phase-7：新增场次收起为主按钮 + 分步弹窗（入口→填字段→下一步→提交）。
+    await page.getByTestId("amusement-session-create-open").click();
     await page.getByTestId("amusement-session-name").fill("验收场次");
     await page.getByTestId("amusement-session-capacity").fill("12");
+    await page.getByTestId("amusement-session-guided-next").click();
     await page.getByTestId("amusement-session-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("amusement_session_created");
     await expect(page.getByTestId("admin-action-result")).toContainText("P0 Web Session");
