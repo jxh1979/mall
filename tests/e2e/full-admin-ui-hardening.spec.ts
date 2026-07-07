@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
+import { fillCnDate } from "./support/cn-date";
 
 async function adminLogin(page: Page, path = "/admin/overview") {
   await page.goto(path);
@@ -74,8 +75,8 @@ test.describe("full admin UI hardening acceptance", () => {
     await expect(page.getByTestId("overview-kpi-ticket")).toBeVisible();
     await expect(page.getByTestId("overview-kpi-bar")).toBeVisible();
 
-    await page.getByTestId("overview-date-from").fill("2026-06-01");
-    await page.getByTestId("overview-date-to").fill("2026-06-30");
+    await fillCnDate(page, page.getByTestId("overview-date-from"), "2026-06-01");
+    await fillCnDate(page, page.getByTestId("overview-date-to"), "2026-06-30");
     await page.getByTestId("overview-date-apply").click();
 
     await expect(page.getByTestId("overview-date-applied")).toContainText("2026-06-01");

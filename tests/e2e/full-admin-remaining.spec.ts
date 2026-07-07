@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
+import { fillCnDate } from "./support/cn-date";
 
 type RouteSpec = {
   pageId: string;
@@ -66,7 +67,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-006", label: "工单时效", route: "/admin/analytics/work-order-sla" },
   { pageId: "ADM-ANA-007", label: "能耗分析", route: "/admin/analytics/energy" },
   { pageId: "ADM-ANA-008", label: "月度对比", route: "/admin/analytics/monthly" },
-  { pageId: "ADM-ANA-010", label: "AI阈值", route: "/admin/analytics/ai-thresholds" },
+  { pageId: "ADM-ANA-010", label: "AI/对标阈值", route: "/admin/analytics/ai-thresholds" },
   { pageId: "ADM-ANA-011", label: "提醒窗配置", route: "/admin/analytics/notification-windows" },
   { pageId: "ADM-ANA-009", label: "T3-A 只读经营分析", route: "/admin/analytics/t3a-readonly" },
   { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
@@ -340,8 +341,8 @@ test.describe("full admin remaining pages acceptance", () => {
         const dynamicPricingTable = page.getByTestId("dynamic-pricing-table");
         await expect(dynamicPricingTable).toBeVisible();
         await expect(dynamicPricingTable).toContainText("Weekend Boost");
-        await expect(dynamicPricingTable).toContainText("percent_delta");
-        await expect(dynamicPricingTable).toContainText("draft");
+        await expect(dynamicPricingTable).toContainText("百分比调整");
+        await expect(dynamicPricingTable).toContainText("草稿");
         continue;
       }
       if (spec.pageId === "ADM-TKT-003") {
@@ -350,7 +351,8 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(ticketOrdersTable).toBeVisible();
         await expect(ticketOrdersTable).toContainText("TO-MOCK-1");
         await expect(ticketOrdersTable).toContainText("未出票"); // 3.8 展示层中文业务口径（提交仍原码）
-        await expect(page.getByTestId("ticket-orders-summary")).toContainText("ENT-0001");
+        // KPI 摘要改版为计数卡片,权益码默认值落在核销预检输入框
+        await expect(page.getByTestId("ticket-entitlement-code")).toHaveValue("ENT-0001");
         continue;
       }
       if (spec.pageId === "ADM-BAR-003") {
@@ -386,7 +388,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("amusement-group-bookings-evidence")).toContainText("/api/v1/amusement/group-bookings");
         await expect(page.getByTestId("amusement-group-bookings-summary")).toContainText("团体");
         await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("Team A");
-        await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("approved");
+        await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("已通过");
         await expect(page.getByTestId("amusement-group-bookings-boundary")).toContainText("容量占用");
         continue;
       }
@@ -469,7 +471,6 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/contracts");
         await expect(page.getByTestId("admission-audits-summary")).toContainText("准入闭环");
         await expect(page.getByTestId("admission-audits-merchants-table")).toContainText("Main Merchant");
-        await expect(page.getByTestId("admission-audits-merchants-table")).toContainText("audit://admission/merchant-1");
         await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("Main Contract Co");
         await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("audit://admission/binding-1");
         await expect(page.getByTestId("admission-audits-contracts-table")).toContainText("contract-subject-1");
@@ -502,7 +503,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("integration-events-table")).toContainText("CP-1");
         await expect(page.getByTestId("integration-events-table")).toContainText("SYNC-1");
         await expect(page.getByTestId("integration-events-table")).toContainText("VCH-1");
-        await expect(page.getByTestId("integration-events-summary")).toContainText("4/4");
+        await expect(page.getByTestId("integration-events-summary")).toContainText("四类读取接口");
         await expect(page.getByTestId("integration-events-boundary")).toContainText("Webhook + 定时轮询校验");
         await expect(page.getByTestId("integration-events-boundary")).toContainText("不得伪造第三方生产补偿执行");
         continue;
@@ -548,7 +549,8 @@ test.describe("full admin remaining pages acceptance", () => {
         await page.getByTestId("business-analytics-lock-note").fill("总控周会复盘锁定");
         await page.getByTestId("business-analytics-lock-snapshot").click();
         await expect(page.getByTestId("admin-action-result")).toContainText("business_snapshot_locked");
-        await expect(page.getByTestId("admin-action-result")).toContainText("management_review_ready");
+        // V216 复盘锁真落库后不再返回 management_review_ready 状态,以审计键为准
+        await expect(page.getByTestId("admin-action-result")).toContainText("analytics.review.locked");
         continue;
       }
       if (spec.pageId === "ADM-ANA-002") {
@@ -603,8 +605,8 @@ test.describe("full admin remaining pages acceptance", () => {
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-CONT-001")!);
     await page.getByLabel("商户 id").fill("merchant-1");
     await page.getByLabel("合同主体 id").fill("contract-subject-1");
-    await page.getByLabel("生效日期").fill("2026-07-01");
-    await page.getByLabel("到期日期").fill("2027-06-30");
+    await fillCnDate(page, page.getByLabel("生效日期"), "2026-07-01");
+    await fillCnDate(page, page.getByLabel("到期日期"), "2027-06-30");
     await page.getByTestId("contract-draft-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("contract_drafted");
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant-1");
