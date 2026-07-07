@@ -6,6 +6,8 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { formatLocation, KNOWN_LOCATIONS } from "../i18n/locationLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { PermissionButton } from "../security/Can";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -82,6 +84,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const [operatorNote, setOperatorNote] = React.useState("完整后台验收库存移动");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 -> 该物料/余额/流水完整字段（状态中文·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -164,6 +167,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
     try {
       const result = await api.post("/api/v1/inventory/stock-movements", requestBody);
       setActionResult({ action: "inventory_stock_movement_created", requestBody, result });
+      setCreateOpen(false);
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : TEXT.actionFailed;
@@ -216,28 +220,59 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   // 物料区：登记表单（对选中物料操作）+ 物料承载表。聚焦「物料」时表单一起呈现，登记不断。
   const itemsSection = (
     <>
-      <div className="admin-form-grid" data-testid="inventory-movement-form">
-        <label>{TEXT.fromLocation}<input list="inventory-location-options" data-testid="inventory-movement-from" value={fromLocation} onChange={(event) => setFromLocation(event.target.value)} /></label>
-        <label>{TEXT.toLocation}<input list="inventory-location-options" data-testid="inventory-movement-to" value={toLocation} onChange={(event) => setToLocation(event.target.value)} /></label>
-        <datalist id="inventory-location-options">{KNOWN_LOCATIONS.map((loc) => <option key={loc.code} value={loc.code}>{loc.name}</option>)}</datalist>
-        <label>{TEXT.quantity}<input data-testid="inventory-movement-quantity" type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-        <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
-        <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
-      </div>
-      <div className="admin-form-row">
-        <HighRiskConfirm
-          label={TEXT.submit}
-          impact="将按选中物料登记库存移动并落库，影响库存余额；禁止负库存，高价值酒水保持在线核销。"
-          disabled={submitting}
-          precheck={validateMovement}
-          onConfirm={() => void submitMovement()}
-          permissionsState={effectivePermissions}
-          permissions={[STOCK_MOVE_PERMISSION]}
-          data-testid="inventory-movement-submit"
-        />
+      {/* 引导式：登记库存移动收起为入口按钮，先在下方物料表选中物料，再点开分步引导（位置→数量→确认）。 */}
+      <div className="admin-form-row" data-testid="inventory-movement-form">
+        <PermissionButton permissionsState={effectivePermissions} permissions={[STOCK_MOVE_PERMISSION]} data-testid="inventory-movement-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ {TEXT.submit}</PermissionButton>
         <span className="admin-muted-action" data-testid="inventory-ledger-boundary">{TEXT.boundary}</span>
       </div>
       {formError ? <div data-testid="inventory-ledger-error" className="admin-inline-error">{formError}</div> : null}
+      <GuidedFlowModal
+        open={createOpen}
+        title={TEXT.submit}
+        testId="inventory-movement-guided"
+        submitTestId="inventory-movement-submit"
+        submitLabel={TEXT.submit}
+        submitting={submitting}
+        error={formError || undefined}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={() => void submitMovement()}
+        steps={[
+          {
+            title: "出入库位置",
+            description: selectedItem ? `物料：${selectedItem.itemName ?? selectedItem.itemCode ?? selectedItem.id}` : TEXT.noItem,
+            content: (
+              <>
+                <label>{TEXT.fromLocation}<input list="inventory-location-options" data-testid="inventory-movement-from" value={fromLocation} onChange={(event) => setFromLocation(event.target.value)} /></label>
+                <label>{TEXT.toLocation}<input list="inventory-location-options" data-testid="inventory-movement-to" value={toLocation} onChange={(event) => setToLocation(event.target.value)} /></label>
+                <datalist id="inventory-location-options">{KNOWN_LOCATIONS.map((loc) => <option key={loc.code} value={loc.code}>{loc.name}</option>)}</datalist>
+              </>
+            ),
+          },
+          {
+            title: "数量与追踪",
+            description: TEXT.boundary,
+            validate: () => {
+              const q = Number(quantity);
+              if (!selectedItem) return TEXT.noItem;
+              return !Number.isFinite(q) || q <= 0 ? TEXT.quantityInvalid : null;
+            },
+            content: (
+              <>
+                <label>{TEXT.quantity}<input data-testid="inventory-movement-quantity" type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
+                <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
+                <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: TEXT.items, value: selectedItem?.itemName ?? selectedItem?.itemCode ?? selectedItem?.id ?? TEXT.noItem },
+          { label: TEXT.fromLocation, value: formatLocation(fromLocation) },
+          { label: TEXT.toLocation, value: formatLocation(toLocation) },
+          { label: TEXT.quantity, value: quantity },
+          { label: TEXT.traceCode, value: traceCode || "-" },
+        ]}
+      />
       <h3>{TEXT.items}</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-items-table">
