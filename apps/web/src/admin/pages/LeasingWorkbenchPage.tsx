@@ -62,6 +62,7 @@ const TEXT = {
   noBrand: "请先选中一个品牌。",
   contactRequired: "创建线索必须填写联系人。",
   leadRequired: "创建意向必须先选中一条线索。",
+  brandNameRequired: "录入品牌必须填写品牌名称。",
   focusClear: "清除筛选，返回全部",
 };
 
@@ -142,6 +143,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 引导式创建流（一期范式）：新建线索收起为主按钮 → 分步弹窗 → 确认创建。
   const [leadFlowOpen, setLeadFlowOpen] = React.useState(false);
+  // 引导式流程 phase-5：新增品牌收起为主按钮 → 分步弹窗（线索/意向/跟进/拉黑表单不动）。
+  const [brandFlowOpen, setBrandFlowOpen] = React.useState(false);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -352,8 +355,13 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   }
 
   async function createBrand() {
+    if (!brandName.trim()) {
+      setFormError(TEXT.brandNameRequired);
+      return;
+    }
     const request = { idempotencyKey: nextKey("leasing-brand-create"), brandName, brandType, businessType: brandBusinessType };
-    await runAction("leasing_brand_created", request, () => api.post("/api/v1/leasing/brands", request));
+    const ok = await runAction("leasing_brand_created", request, () => api.post("/api/v1/leasing/brands", request));
+    if (ok) setBrandFlowOpen(false);
   }
 
   async function blacklistBrand() {
@@ -511,15 +519,15 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <button type="button" data-testid="leasing-intent-sign" disabled={busyAction !== ""} onClick={() => void signIntent()}>签约→合同草稿</button>
             </div>
 
-            {/* 品牌库 */}
+            {/* 品牌库：录入品牌走引导式弹窗；拉黑原因 + 拉入黑名单为品牌处置动作，原样保留。 */}
+            <div className="admin-form-row" data-testid="leasing-brand-create-entry">
+              <button type="button" data-testid="leasing-brand-create-open" onClick={() => { setFormError(""); setBrandFlowOpen(true); }}>＋ 录入品牌</button>
+              <span className="admin-muted-action">品牌库为招商后台主数据；拉黑需先在下方品牌表选中目标品牌。</span>
+            </div>
             <div className="admin-form-grid" data-testid="leasing-brand-form">
-              <label>品牌名称<input data-testid="leasing-brand-name" value={brandName} onChange={(e) => setBrandName(e.target.value)} /></label>
-              <label>品牌类型<input data-testid="leasing-brand-type" value={brandType} onChange={(e) => setBrandType(e.target.value)} /></label>
-              <label>业态<input data-testid="leasing-brand-business" value={brandBusinessType} onChange={(e) => setBrandBusinessType(e.target.value)} /></label>
               <label>拉黑原因<input data-testid="leasing-brand-blacklist-reason" value={blacklistReason} onChange={(e) => setBlacklistReason(e.target.value)} /></label>
             </div>
             <div className="admin-form-row" data-testid="leasing-brand-actions">
-              <button type="button" data-testid="leasing-brand-create" disabled={busyAction !== ""} onClick={() => void createBrand()}>录入品牌</button>
               <button type="button" data-testid="leasing-brand-blacklist" disabled={busyAction !== ""} onClick={() => void blacklistBrand()}>拉入黑名单</button>
             </div>
             {formError ? <div data-testid="leasing-error" className="admin-inline-error">{formError}</div> : null}
@@ -588,6 +596,36 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
           { label: "意向业态", value: label(BUSINESS_TYPE_LABELS, intendedBusinessType) },
           { label: "意向空间", value: intendedSpaceId },
           { label: "关联品牌", value: brand.selected?.brandName ?? "未关联" },
+        ]}
+      />
+      <GuidedFlowModal
+        open={brandFlowOpen}
+        title="录入品牌"
+        testId="leasing-brand-flow"
+        submitTestId="leasing-brand-create"
+        submitLabel="录入品牌"
+        submitting={busyAction !== ""}
+        error={formError}
+        onClose={() => setBrandFlowOpen(false)}
+        onSubmit={() => void createBrand()}
+        steps={[
+          {
+            title: "品牌信息",
+            description: "填写品牌名称、类型与业态。",
+            validate: () => (brandName.trim() ? null : TEXT.brandNameRequired),
+            content: (
+              <>
+                <label>品牌名称<input data-testid="leasing-brand-name" value={brandName} onChange={(e) => setBrandName(e.target.value)} /></label>
+                <label>品牌类型<input data-testid="leasing-brand-type" value={brandType} onChange={(e) => setBrandType(e.target.value)} /></label>
+                <label>业态<input data-testid="leasing-brand-business" value={brandBusinessType} onChange={(e) => setBrandBusinessType(e.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "品牌名称", value: brandName.trim() || "未填写" },
+          { label: "品牌类型", value: brandType.trim() || "未填写" },
+          { label: "业态", value: brandBusinessType.trim() || "未填写" },
         ]}
       />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />

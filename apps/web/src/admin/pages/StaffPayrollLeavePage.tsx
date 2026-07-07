@@ -4,6 +4,7 @@ import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 
@@ -40,6 +41,10 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
   const [leaves, setLeaves] = React.useState<LeaveRow[]>([]);
   const [baseUser, setBaseUser] = React.useState("");
   const [baseSalary, setBaseSalary] = React.useState("");
+  // 引导式流程 phase-5：薪资基数录入收起为主按钮 + 分步引导弹窗（奖惩/月结/请假审批不动）。
+  const [baseOpen, setBaseOpen] = React.useState(false);
+  const [baseError, setBaseError] = React.useState("");
+  const [baseSubmitting, setBaseSubmitting] = React.useState(false);
   const [adjUser, setAdjUser] = React.useState("");
   const [adjType, setAdjType] = React.useState("bonus");
   const [adjAmount, setAdjAmount] = React.useState("");
@@ -68,15 +73,32 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
     void reload();
   }, [month, reload]);
 
+  // 基数校验（步内 + 提交双保险）：员工 id 非空 + 月薪非负数。
+  function baseInvalid() {
+    const cent = Math.round(Number(baseSalary) * 100);
+    return !baseUser.trim() || !Number.isFinite(cent) || cent < 0;
+  }
+
   const saveBase = async () => {
     const cent = Math.round(Number(baseSalary) * 100);
-    if (!baseUser.trim() || !Number.isFinite(cent) || cent < 0) {
-      setGlobalError("请填 员工id 与 非负月薪(元)");
+    if (baseInvalid()) {
+      setBaseError("请填 员工id 与 非负月薪(元)");
       return;
     }
-    await api.post("/api/v1/staff/payroll/base", { userId: baseUser.trim(), monthlySalaryCent: cent });
-    setActionResult({ action: "payroll_base_saved", userId: baseUser.trim() });
-    setBaseUser(""); setBaseSalary("");
+    setBaseSubmitting(true);
+    try {
+      await api.post("/api/v1/staff/payroll/base", { userId: baseUser.trim(), monthlySalaryCent: cent });
+      setActionResult({ action: "payroll_base_saved", userId: baseUser.trim() });
+      setBaseUser(""); setBaseSalary("");
+      setBaseError("");
+      setBaseOpen(false);
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "薪资基数录入失败";
+      setBaseError(message);
+      setGlobalError(message);
+    } finally {
+      setBaseSubmitting(false);
+    }
   };
 
   const saveAdjustment = async () => {
@@ -149,11 +171,38 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult }: 
         <button type="button" data-testid="payroll-close" onClick={() => void closeMonth()}>执行月结(重结=覆盖)</button>
       </div>
       <h3>固定工资设定(员工档案)</h3>
-      <div className="admin-form-grid" data-testid="payroll-base-editor">
-        <label>员工 user_id<input data-testid="base-user-input" value={baseUser} onChange={(event) => setBaseUser(event.target.value)} /></label>
-        <label>月薪(元)<input data-testid="base-salary-input" value={baseSalary} onChange={(event) => setBaseSalary(event.target.value)} /></label>
-        <button type="button" data-testid="base-save" onClick={() => void saveBase()}>保存</button>
+      <div className="admin-form-row" data-testid="payroll-base-editor">
+        <button type="button" data-testid="payroll-base-create-open" onClick={() => { setBaseError(""); setBaseOpen(true); }}>＋ 薪资基数录入</button>
+        <span className="admin-muted-action">固定工资录入后进入员工档案，作为月结固定工资项基数。</span>
       </div>
+      <GuidedFlowModal
+        open={baseOpen}
+        title="薪资基数录入"
+        testId="payroll-base-guided"
+        submitTestId="base-save"
+        submitLabel="保存"
+        submitting={baseSubmitting}
+        error={baseError || undefined}
+        onClose={() => setBaseOpen(false)}
+        onSubmit={() => void saveBase()}
+        steps={[
+          {
+            title: "固定工资",
+            description: "填写员工与月薪(元)。",
+            validate: () => (baseInvalid() ? "请填 员工id 与 非负月薪(元)" : null),
+            content: (
+              <>
+                <label>员工 user_id<input data-testid="base-user-input" value={baseUser} onChange={(event) => setBaseUser(event.target.value)} /></label>
+                <label>月薪(元)<input data-testid="base-salary-input" value={baseSalary} onChange={(event) => setBaseSalary(event.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "员工 user_id", value: baseUser.trim() || "未填写" },
+          { label: "月薪(元)", value: baseSalary.trim() || "未填写" },
+        ]}
+      />
       <h3>奖金 / 处罚手录(必须带事由)</h3>
       <div className="admin-form-grid" data-testid="payroll-adj-editor">
         <label>员工 user_id<input data-testid="adj-user-input" value={adjUser} onChange={(event) => setAdjUser(event.target.value)} /></label>
