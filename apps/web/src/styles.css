@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * {
@@ -1045,7 +1045,7 @@ body {
   /* WCAG AA：#c2453c 在浅红底 4.22:1，加深到 ≥5:1。 */
   --adm-danger: #b03a31;
   --adm-danger-bg: #fbe8e6;
-  --adm-font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --adm-font: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --adm-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-family: var(--adm-font);
   background: var(--adm-bg);
@@ -2149,7 +2149,7 @@ body {
 /* 金额类列等宽数字（台账/合同/账单统一） */
 .admin-num { font-variant-numeric: tabular-nums; }
 /* ID 类值：等宽字体，配合尾 8 位截断 + title 悬浮全量 */
-.admin-id-cell { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+.admin-id-cell { font-family: var(--adm-mono); font-size: 12.5px; }
 /* 全链下钻：被 ?focus= 定位命中的行高亮，供 TraceLink 落地页标注来源对象 */
 .admin-row-selected { background: #fff7e6; outline: 2px solid #F59E0B; outline-offset: -2px; }
 
