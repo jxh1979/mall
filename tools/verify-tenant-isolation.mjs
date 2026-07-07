@@ -46,7 +46,8 @@ const writeBaseline = process.argv.includes("--write-baseline");
 const WHITELIST_SCOPE_TYPES = new Set(["global_reference", "single_complex_default"]);
 
 // 基础设施/非租户表，CSV 不纳管也不应误报为「未登记租户表」。
-const INFRA_TABLE_WHITELIST = new Set(["flyway_schema_history"]);
+// information_schema：PostgreSQL 系统目录（元数据驱动引用计数枚举表名用），非租户数据表。
+const INFRA_TABLE_WHITELIST = new Set(["flyway_schema_history", "information_schema"]);
 
 // SQL 关键字/伪 token：FROM/JOIN 后若命中这些，说明匹配到的是子查询或谓词残片，非真实表名。
 const SQL_NOISE_TOKENS = new Set([
