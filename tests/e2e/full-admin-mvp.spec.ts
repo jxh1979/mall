@@ -79,14 +79,21 @@ test.describe("full admin MVP acceptance", () => {
     await installMockApi(page);
     await adminLogin(page, "/admin/ticketing/policies");
 
+    // 引导式流程 phase-2：新建票种改为分步弹窗（基本信息→定价→确认）。
+    await page.getByTestId("ticket-create-open").click();
+    // 步1 基本信息：票种名有默认值，直接下一步。
+    await page.getByTestId("ticket-policy-next").click();
+    // 步2 定价：缺节假日价 → 下一步触发校验报错。
     await page.getByTestId("ticket-weekday-price").fill("100");
     await page.getByTestId("ticket-weekend-price").fill("120");
-    await page.getByTestId("ticket-publish").click();
+    await page.getByTestId("ticket-policy-next").click();
     await expect(page.getByTestId("ticket-policy-error")).toContainText("节假日");
 
     await page.getByTestId("ticket-holiday-price").fill("150");
     await expect(page.getByTestId("ticket-derived-preview")).toContainText("新人票");
     await expect(page.getByTestId("ticket-derived-preview")).toContainText("学生票");
+    // 定价合法 → 进确认页 → 发布。
+    await page.getByTestId("ticket-policy-next").click();
     await page.getByTestId("ticket-publish").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("published");
   });

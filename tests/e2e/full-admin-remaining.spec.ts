@@ -439,7 +439,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("contracts-table")).toBeVisible();
         await expect(page.getByTestId("contract-flow-table")).toBeVisible();
         await expect(page.getByTestId("contract-settlements-table")).toBeVisible();
-        await expect(page.getByTestId("contract-draft-form")).toBeVisible();
+        await expect(page.getByTestId("contract-draft-open")).toBeVisible();
         continue;
       }
       if (spec.pageId === "ADM-FAC-001") {
@@ -603,10 +603,15 @@ test.describe("full admin remaining pages acceptance", () => {
 
     // 合同生命周期工作台（V162 重建）：起草合同为可审计写动作（商户/主体/起止日期必填，POST /api/v1/contracts）。
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-CONT-001")!);
+    // 引导式流程 phase-2：起草合同改为分步弹窗（合同双方→租期与租金→结算方式→确认）。
+    await page.getByTestId("contract-draft-open").click();
     await page.getByLabel("商户 id").fill("merchant-1");
     await page.getByLabel("合同主体 id").fill("contract-subject-1");
+    await page.getByTestId("contract-draft-next").click(); // 步1→步2
     await fillCnDate(page, page.getByLabel("生效日期"), "2026-07-01");
     await fillCnDate(page, page.getByLabel("到期日期"), "2027-06-30");
+    await page.getByTestId("contract-draft-next").click(); // 步2→步3
+    await page.getByTestId("contract-draft-next").click(); // 步3→确认
     await page.getByTestId("contract-draft-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("contract_drafted");
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant-1");

@@ -9,6 +9,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { auditTraceField } from "../components/AuditTrailHint";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 // ponytail: ID 展示统一截尾 8 位 + title 全量；等宽由 admin-id-cell 类保证。
 function shortId(id: string | null | undefined): string {
@@ -87,6 +88,9 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
   // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。合同/变更/退租结算三张业务表接入。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-2：起草合同收起为主按钮，点击弹出分步引导（GuidedFlowModal）。
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [draftError, setDraftError] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -124,24 +128,30 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   }, [focusObjectId, contracts.length]);
 
   async function createDraft() {
+    // 双保险：步内已校验，提交前再挡一次（起草需填商户/合同主体/生效/到期日期）。
     if (!draft.merchantId.trim() || !draft.contractSubjectId.trim() || !draft.effectiveDate || !draft.expiryDate) {
-      setGlobalError("起草需填写商户、合同主体、生效/到期日期");
+      setDraftError("起草需填写商户、合同主体、生效/到期日期");
       return;
     }
     const cent = Math.round(Number(draft.baseRentYuan) * 100);
-    await api.post("/api/v1/contracts", {
-      merchantId: draft.merchantId.trim(),
-      contractSubjectId: draft.contractSubjectId.trim(),
-      settlementSubjectId: (draft.settlementSubjectId.trim() || draft.contractSubjectId.trim()),
-      effectiveDate: draft.effectiveDate,
-      expiryDate: draft.expiryDate,
-      rentTerms: Number.isFinite(cent) && cent > 0 ? { baseRentCent: cent } : {},
-      commissionMode: draft.commissionMode,
-      energyFeeBasis: draft.energyFeeBasis,
-    });
-    setActionResult({ action: "contract_drafted", merchantId: draft.merchantId.trim() });
-    setDraft({ ...draft, merchantId: "", baseRentYuan: "" });
-    reload();
+    try {
+      await api.post("/api/v1/contracts", {
+        merchantId: draft.merchantId.trim(),
+        contractSubjectId: draft.contractSubjectId.trim(),
+        settlementSubjectId: (draft.settlementSubjectId.trim() || draft.contractSubjectId.trim()),
+        effectiveDate: draft.effectiveDate,
+        expiryDate: draft.expiryDate,
+        rentTerms: Number.isFinite(cent) && cent > 0 ? { baseRentCent: cent } : {},
+        commissionMode: draft.commissionMode,
+        energyFeeBasis: draft.energyFeeBasis,
+      });
+      setActionResult({ action: "contract_drafted", merchantId: draft.merchantId.trim() });
+      setDraft({ ...draft, merchantId: "", baseRentYuan: "" });
+      setCreateOpen(false);
+      reload();
+    } catch (createError) {
+      setDraftError(createError instanceof Error ? createError.message : "起草合同失败");
+    }
   }
 
   async function submit(row: ContractRow) {
@@ -358,28 +368,84 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             </tbody>
           </table>
         </div>
-        <div className="admin-inline-form" data-testid="contract-draft-form">
-          <input aria-label="商户 id" placeholder="商户 id" value={draft.merchantId} onChange={(e) => setDraft({ ...draft, merchantId: e.target.value })} />
-          <input aria-label="合同主体 id" placeholder="合同主体 id" value={draft.contractSubjectId} onChange={(e) => setDraft({ ...draft, contractSubjectId: e.target.value })} />
-          <input aria-label="结算主体 id" placeholder="结算主体 id(缺省=合同主体)" value={draft.settlementSubjectId} onChange={(e) => setDraft({ ...draft, settlementSubjectId: e.target.value })} />
-          <CnDatePicker aria-label="生效日期" value={draft.effectiveDate} onChange={(v) => setDraft({ ...draft, effectiveDate: v })} />
-          <CnDatePicker aria-label="到期日期" value={draft.expiryDate} onChange={(v) => setDraft({ ...draft, expiryDate: v })} />
-          <input aria-label="月租金（元）" type="number" min="0" placeholder="月租金（元）" value={draft.baseRentYuan} onChange={(e) => setDraft({ ...draft, baseRentYuan: e.target.value })} />
-          <select aria-label="抽成模式" value={draft.commissionMode} onChange={(e) => setDraft({ ...draft, commissionMode: e.target.value })}>
-            <option value="fixed_ratio">固定比例</option>
-            <option value="guarantee_or_commission_higher">保底与抽成取高</option>
-            <option value="tiered_ratio">阶梯比例</option>
-            <option value="guarantee_plus_commission">保底+抽成叠加</option>
-          </select>
-          <select aria-label="能源费分摊" value={draft.energyFeeBasis} onChange={(e) => setDraft({ ...draft, energyFeeBasis: e.target.value })}>
-            <option value="by_area">按面积</option>
-            <option value="by_usage">按用量</option>
-            <option value="by_contract">按合同约定</option>
-            <option value="none">不分摊</option>
-          </select>
+        {/* 引导式流程 phase-2：起草合同入口按钮（权限门在入口），点击弹出分步引导。 */}
+        <div className="admin-form-row">
           <PermissionButton permissionsState={effectivePermissions} permissions={DRAFT}
-            data-testid="contract-draft-create" onClick={() => void createDraft()}>起草合同</PermissionButton>
+            data-testid="contract-draft-open" onClick={() => { setDraftError(""); setCreateOpen(true); }}>＋ 起草合同</PermissionButton>
         </div>
+        <GuidedFlowModal
+          open={createOpen}
+          title="起草合同"
+          testId="contract-draft"
+          submitTestId="contract-draft-create"
+          submitLabel="起草合同"
+          error={draftError}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={() => void createDraft()}
+          steps={[
+            {
+              title: "合同双方",
+              description: "填写商户与合同/结算主体（结算主体缺省时取合同主体）。",
+              validate: () => {
+                if (!draft.merchantId.trim()) return "商户 id 不能为空。";
+                if (!draft.contractSubjectId.trim()) return "合同主体 id 不能为空。";
+                return null;
+              },
+              content: (
+                <>
+                  <label>商户 id<input aria-label="商户 id" placeholder="商户 id" value={draft.merchantId} onChange={(e) => setDraft({ ...draft, merchantId: e.target.value })} /></label>
+                  <label>合同主体 id<input aria-label="合同主体 id" placeholder="合同主体 id" value={draft.contractSubjectId} onChange={(e) => setDraft({ ...draft, contractSubjectId: e.target.value })} /></label>
+                  <label>结算主体 id<input aria-label="结算主体 id" placeholder="结算主体 id(缺省=合同主体)" value={draft.settlementSubjectId} onChange={(e) => setDraft({ ...draft, settlementSubjectId: e.target.value })} /></label>
+                </>
+              ),
+            },
+            {
+              title: "租期与租金",
+              description: "选择生效/到期日期，填写月租金（可空）。",
+              validate: () => {
+                if (!draft.effectiveDate) return "请选择生效日期。";
+                if (!draft.expiryDate) return "请选择到期日期。";
+                return null;
+              },
+              content: (
+                <>
+                  <label>生效日期<CnDatePicker aria-label="生效日期" value={draft.effectiveDate} onChange={(v) => setDraft({ ...draft, effectiveDate: v })} /></label>
+                  <label>到期日期<CnDatePicker aria-label="到期日期" value={draft.expiryDate} onChange={(v) => setDraft({ ...draft, expiryDate: v })} /></label>
+                  <label>月租金（元）<input aria-label="月租金（元）" type="number" min="0" placeholder="月租金（元）" value={draft.baseRentYuan} onChange={(e) => setDraft({ ...draft, baseRentYuan: e.target.value })} /></label>
+                </>
+              ),
+            },
+            {
+              title: "结算方式",
+              description: "选择抽成模式与能源费分摊口径。",
+              content: (
+                <>
+                  <label>抽成模式<select aria-label="抽成模式" value={draft.commissionMode} onChange={(e) => setDraft({ ...draft, commissionMode: e.target.value })}>
+                    <option value="fixed_ratio">固定比例</option>
+                    <option value="guarantee_or_commission_higher">保底与抽成取高</option>
+                    <option value="tiered_ratio">阶梯比例</option>
+                    <option value="guarantee_plus_commission">保底+抽成叠加</option>
+                  </select></label>
+                  <label>能源费分摊<select aria-label="能源费分摊" value={draft.energyFeeBasis} onChange={(e) => setDraft({ ...draft, energyFeeBasis: e.target.value })}>
+                    <option value="by_area">按面积</option>
+                    <option value="by_usage">按用量</option>
+                    <option value="by_contract">按合同约定</option>
+                    <option value="none">不分摊</option>
+                  </select></label>
+                </>
+              ),
+            },
+          ]}
+          summary={[
+            { label: "商户 id", value: draft.merchantId.trim() || "未填写" },
+            { label: "合同主体 id", value: draft.contractSubjectId.trim() || "未填写" },
+            { label: "结算主体 id", value: draft.settlementSubjectId.trim() || "缺省取合同主体" },
+            { label: "生效日期", value: draft.effectiveDate || "未选择" },
+            { label: "到期日期", value: draft.expiryDate || "未选择" },
+            { label: "月租金（元）", value: draft.baseRentYuan.trim() || "未填写" },
+            { label: "抽成模式", value: formatBusinessStatus(draft.commissionMode) },
+          ]}
+        />
         <div className="admin-inline-form" data-testid="contract-activate-form">
           <input aria-label="生效绑定空间 id" placeholder="生效绑定空间 id" value={spaceId} onChange={(e) => setSpaceId(e.target.value)} />
           <CnDatePicker mode="month" aria-label="排租金AR账期" data-testid="contract-bill-period" value={billPeriod} onChange={setBillPeriod} />

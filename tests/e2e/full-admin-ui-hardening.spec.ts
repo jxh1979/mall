@@ -90,12 +90,17 @@ test.describe("full admin UI hardening acceptance", () => {
     await adminLogin(page, "/admin/ticketing/policies");
 
     await openNav(page, "ADM-TKT-001");
+    // 引导式流程 phase-2：新建票种分步弹窗，定价步校验平日价必须 > 0。
+    await page.getByTestId("ticket-create-open").click();
+    await page.getByTestId("ticket-policy-next").click(); // 步1 名称有默认值
     await page.getByTestId("ticket-weekday-price").fill("0");
     await page.getByTestId("ticket-weekend-price").fill("100");
     await page.getByTestId("ticket-holiday-price").fill("120");
-    await page.getByTestId("ticket-publish").click();
+    await page.getByTestId("ticket-policy-next").click(); // 定价步校验
     await expect(page.getByTestId("ticket-policy-error")).toContainText("平日价");
     await expect(page.getByTestId("admin-action-result")).toHaveCount(0);
+    // 关闭引导弹窗，避免遮罩拦截后续导航点击。
+    await page.getByTestId("ticket-policy-cancel").click();
 
     await openNav(page, "ADM-FIN-001");
     await page.getByTestId("finance-payment-amount").fill("0");
