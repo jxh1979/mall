@@ -184,27 +184,35 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
     @Override
     public long countMerchantReferences(String merchantId) {
-        // V260：商户被【核心运营表】以 merchant_id 引用的活条数，>0 拒硬删（防连锁孤儿）。
-        // 覆盖：合同(V010 contracts)/供应合同(V085 supply_contracts)/合同租金账单(V162 contract_rent_bills)/
-        //       商户服务工单(V022)/物业费账单(V026 merchant_bills)/员工(V086 staff_profiles，仅商户员工)/
-        //       酒吧商户隔离六表(V047: bar_tables/bar_reservations/bar_products/bar_orders/bar_production_tickets/bar_bills)。
-        // 说明：ticket_orders/inventory_items/储值卡账户 均无 merchant_id 列（票务与储值为综合体级、库存为共享），故不纳入。
-        // ponytail: 宁可多算核心表也别漏——商户是主数据，误删连锁孤儿代价远高于多几张 COUNT。
-        Long count = jdbcTemplate.queryForObject("""
-                SELECT (SELECT COUNT(1) FROM contracts               WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM supply_contracts        WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM contract_rent_bills     WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM merchant_service_work_orders WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM merchant_bills          WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM staff_profiles          WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM bar_tables              WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM bar_reservations        WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM bar_products            WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM bar_orders              WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM bar_production_tickets  WHERE merchant_id = :id)
-                     + (SELECT COUNT(1) FROM bar_bills               WHERE merchant_id = :id)
-                """, Map.of("id", merchantId), Long.class);
-        return count == null ? 0L : count;
+        // V259：商户被业务表以 merchant_id 引用的活条数，>0 拒硬删（防连锁孤儿/资金孤儿）。
+        // 元数据驱动：动态枚举所有带 merchant_id 列的基表并逐表 COUNT，避免硬编码清单随新表漂移
+        // ——结算(settlement_transactions/items)、票单(ticket_orders/refunds)、储值(customer_stored_value_accounts)、
+        //   公摊(cam_allocations)等资金承载表极易漏，漏则连锁孤儿/资金记录指向已删商户。
+        // 仅排除纯审计历史表：其保留悬空 merchant_id 属预期审计留痕，不应阻断删除。
+        // ponytail: 元数据枚举替代手维 12 表清单；宁可多算也别漏，商户误删代价远高于多几张 COUNT。
+        java.util.Set<String> auditOnly = java.util.Set.of(
+                "audit_events", "evidence_events", "evidence_attachments", "evidence_reviews");
+        java.util.List<String> tables = jdbcTemplate.queryForList("""
+                SELECT c.table_name
+                FROM information_schema.columns c
+                JOIN information_schema.tables t
+                  ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+                WHERE c.table_schema = 'public'
+                  AND c.column_name = 'merchant_id'
+                  AND t.table_type = 'BASE TABLE'
+                """, Map.of(), String.class);
+        long total = 0L;
+        for (String table : tables) {
+            if (auditOnly.contains(table)) {
+                continue;
+            }
+            // table 名来自 information_schema（系统元数据，非用户输入），无注入风险；merchant_id 走参数绑定。
+            Long c = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(1) FROM " + table + " WHERE merchant_id = :id",
+                    Map.of("id", merchantId), Long.class);
+            total += c == null ? 0L : c;
+        }
+        return total;
     }
 
     @Override
