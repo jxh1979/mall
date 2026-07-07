@@ -1,5 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
+import { formatPermissionDomain } from "../i18n/permissionDomainLabels";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { PermissionButton } from "../security/Can";
@@ -335,7 +336,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
         <div className="admin-permission-grid" data-testid="permission-template-permission-grid">
           {groupedPermissions.map(([domain, items]) => (
             <fieldset key={domain} className="admin-permission-domain">
-              <legend>{domain}</legend>
+              <legend>{formatPermissionDomain(domain)}</legend>
               {items.map((item) => {
                 const code = permissionCode(item);
                 return (
