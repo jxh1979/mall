@@ -8,7 +8,7 @@ export interface AdminActionState {
     action: string,
     request: Record<string, unknown>,
     call: () => Promise<unknown>,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
 }
 
 /**
@@ -47,11 +47,13 @@ export function useAdminAction(options: {
         current.onSuccess?.(result);
         current.setActionResult(current.makeResult(action, request, result));
         await current.reload();
+        return true;
       } catch (actionError) {
         const message = actionError instanceof Error ? actionError.message : fallbackMessage;
         setFormError(message);
         current.setGlobalError(message);
         current.setActionResult({ action, status: "failed", message });
+        return false;
       } finally {
         setBusyAction("");
       }

@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField, cnDate } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps } from "../types";
 
 // 合规到期台账域内枚举中文（全局状态表未含的日期类型/来源/严重度，页内映射；状态码走全局表兜底）。
@@ -58,6 +59,9 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
   const [keyDateForm, setKeyDateForm] = React.useState({ contractId: "", title: "", dateType: "renewal", dueDate: "" });
   const [expiryForm, setExpiryForm] = React.useState({ itemType: "business_license", itemName: "", documentNo: "", validTo: "" });
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-4：主创建流=合同关键日期补录，收起为主按钮 + 分步引导弹窗（扫描、证照到期补录不变）。
+  const [keyDateOpen, setKeyDateOpen] = React.useState(false);
+  const [keyDateError, setKeyDateError] = React.useState<string | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -89,14 +93,24 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
   };
 
   const createKeyDate = async () => {
+    setKeyDateError(null);
+    if (!keyDateForm.contractId.trim() || !keyDateForm.title.trim()) {
+      setKeyDateError("关联合同、标题必填");
+      return;
+    }
     try {
       await api.post("/api/v1/compliance/contract-key-dates", {
         idempotency_key: `ckd-${Date.now()}`, contract_id: keyDateForm.contractId, title: keyDateForm.title,
         date_type: keyDateForm.dateType, due_date: keyDateForm.dueDate || null, source_type: "manual", human_confirmed: true,
       });
       setActionResult({ action: "compliance_key_date_created", title: keyDateForm.title });
+      setKeyDateOpen(false);
       reload();
-    } catch (e) { setGlobalError((e as Error).message); }
+    } catch (e) {
+      const message = (e as Error).message;
+      setKeyDateError(message);
+      setGlobalError(message);
+    }
   };
 
   const createExpiryItem = async () => {
@@ -204,17 +218,44 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
         </div>
 
         <h3>合同关键日期</h3>
-        <div className="admin-form-grid" data-testid="compliance-key-date-form">
-          <label>关联合同<input data-testid="compliance-key-date-contract" value={keyDateForm.contractId} onChange={(e) => setKeyDateForm({ ...keyDateForm, contractId: e.target.value })} /></label>
-          <label>标题<input data-testid="compliance-key-date-title" value={keyDateForm.title} onChange={(e) => setKeyDateForm({ ...keyDateForm, title: e.target.value })} /></label>
-          <label>日期类型
-            <select data-testid="compliance-key-date-type" value={keyDateForm.dateType} onChange={(e) => setKeyDateForm({ ...keyDateForm, dateType: e.target.value })}>
-              {Object.entries(DATE_TYPE_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-            </select>
-          </label>
-          <label>到期日<input type="date" data-testid="compliance-key-date-due" value={keyDateForm.dueDate} onChange={(e) => setKeyDateForm({ ...keyDateForm, dueDate: e.target.value })} /></label>
-          <PermissionButton permissionsState={effectivePermissions} permissions={KEY_DATE_MANAGE} data-testid="compliance-key-date-create" onClick={() => void createKeyDate()}>补录关键日期</PermissionButton>
+        <div className="admin-form-row" data-testid="compliance-key-date-form">
+          <PermissionButton permissionsState={effectivePermissions} permissions={KEY_DATE_MANAGE} data-testid="compliance-key-date-create-open" onClick={() => { setKeyDateError(null); setKeyDateOpen(true); }}>＋ 补录关键日期</PermissionButton>
         </div>
+        <GuidedFlowModal
+          open={keyDateOpen}
+          title="补录合同关键日期"
+          testId="compliance-key-date-guided"
+          submitTestId="compliance-key-date-create"
+          submitLabel="补录关键日期"
+          error={keyDateError ?? undefined}
+          onClose={() => setKeyDateOpen(false)}
+          onSubmit={() => void createKeyDate()}
+          steps={[
+            {
+              title: "关键日期信息",
+              description: "填写关联合同、标题、日期类型与到期日。",
+              validate: () => (keyDateForm.contractId.trim() && keyDateForm.title.trim() ? null : "关联合同、标题必填"),
+              content: (
+                <>
+                  <label>关联合同<input data-testid="compliance-key-date-contract" value={keyDateForm.contractId} onChange={(e) => setKeyDateForm({ ...keyDateForm, contractId: e.target.value })} /></label>
+                  <label>标题<input data-testid="compliance-key-date-title" value={keyDateForm.title} onChange={(e) => setKeyDateForm({ ...keyDateForm, title: e.target.value })} /></label>
+                  <label>日期类型
+                    <select data-testid="compliance-key-date-type" value={keyDateForm.dateType} onChange={(e) => setKeyDateForm({ ...keyDateForm, dateType: e.target.value })}>
+                      {Object.entries(DATE_TYPE_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label>到期日<input type="date" data-testid="compliance-key-date-due" value={keyDateForm.dueDate} onChange={(e) => setKeyDateForm({ ...keyDateForm, dueDate: e.target.value })} /></label>
+                </>
+              ),
+            },
+          ]}
+          summary={[
+            { label: "关联合同", value: keyDateForm.contractId.trim() || "未填写" },
+            { label: "标题", value: keyDateForm.title.trim() || "未填写" },
+            { label: "日期类型", value: DATE_TYPE_LABELS[keyDateForm.dateType] ?? keyDateForm.dateType },
+            { label: "到期日", value: keyDateForm.dueDate || "未填写" },
+          ]}
+        />
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="compliance-key-dates-table">
             <thead><tr><th>标题</th><th>日期类型</th><th>关联合同</th><th>到期日</th><th>来源</th><th>状态</th></tr></thead>

@@ -7,6 +7,7 @@ import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 type EnergyMeterRow = {
   id: string; name: string; meterType: string; parentMeterId?: string | null; gatherObject: string;
@@ -43,6 +44,12 @@ const LABELS: Record<string, string> = {
   remote: "远程", manual: "人工", ...ENERGY_FEE_BASIS_LABELS,
 };
 const zh = (v?: string | null) => (v == null || v === "" ? "-" : (LABELS[v] ?? v));
+
+// 新建仪表的空表单默认值（引导式流程 phase-4：主创建流=新增仪表）。
+const EMPTY_METER_FORM = {
+  id: "", name: "", meterType: "electricity", parentMeterId: "", gatherObject: "public_area",
+  spaceId: "", merchantId: "", projectId: "", readMode: "remote", active: true,
+};
 
 function numberText(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
@@ -83,6 +90,9 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
   const [differenceMeterId, setDifferenceMeterId] = React.useState("");
   // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·金额¥·时间中文·引用 TraceLink）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-4：主创建流=新增仪表，收起为主按钮 + 分步引导弹窗（抄表/复核/抹差/结算及既有选中编辑表单不变）。
+  const [meterCreateOpen, setMeterCreateOpen] = React.useState(false);
+  const [meterCreateError, setMeterCreateError] = React.useState<string | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -164,8 +174,11 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
   }
 
   async function saveMeter() {
+    const creating = !meterForm.id;
+    if (creating) setMeterCreateError(null);
     if (!meterForm.name.trim()) {
-      setGlobalError("表计名称不能为空");
+      const message = "表计名称不能为空";
+      if (creating) setMeterCreateError(message); else setGlobalError(message);
       return;
     }
     const body = {
@@ -179,12 +192,18 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
       readMode: meterForm.readMode,
       active: meterForm.active,
     };
-    const saved = meterForm.id
-      ? await api.post<EnergyMeterRow>(`/api/v1/energy/meters/${encodeURIComponent(meterForm.id)}`, body)
-      : await api.post<EnergyMeterRow>("/api/v1/energy/meters", body);
-    setActionResult({ action: "energy_meter_saved", meterId: saved.id });
-    setMeterForm({ ...meterForm, id: "", name: "" });
-    await reload();
+    try {
+      const saved = meterForm.id
+        ? await api.post<EnergyMeterRow>(`/api/v1/energy/meters/${encodeURIComponent(meterForm.id)}`, body)
+        : await api.post<EnergyMeterRow>("/api/v1/energy/meters", body);
+      setActionResult({ action: "energy_meter_saved", meterId: saved.id });
+      setMeterForm({ ...meterForm, id: "", name: "" });
+      if (creating) setMeterCreateOpen(false);
+      await reload();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "表计保存失败";
+      if (creating) setMeterCreateError(message); else setGlobalError(message);
+    }
   }
 
   async function recordReading() {
@@ -258,6 +277,56 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
             ))}</tbody>
           </table>
         </div>
+        {/* 引导式流程 phase-4：新增仪表入口按钮（权限门在入口），点击弹出分步引导。下方内联表单保留用于选中后编辑既有仪表。 */}
+        <div className="admin-form-row" data-testid="energy-meter-create-form">
+          <PermissionButton permissionsState={effectivePermissions} permissions={METER} data-testid="energy-meter-create-open" onClick={() => { setMeterCreateError(null); setMeterForm({ ...EMPTY_METER_FORM }); setMeterCreateOpen(true); }}>＋ 新增仪表</PermissionButton>
+        </div>
+        <GuidedFlowModal
+          open={meterCreateOpen}
+          title="新增仪表"
+          testId="energy-meter-guided"
+          submitTestId="energy-meter-save"
+          submitLabel="保存表计"
+          error={meterCreateError ?? undefined}
+          onClose={() => setMeterCreateOpen(false)}
+          onSubmit={() => void saveMeter()}
+          steps={[
+            {
+              title: "表计基本信息",
+              description: "填写表计名称、类型与归集对象。",
+              validate: () => (meterForm.name.trim() ? null : "表计名称不能为空"),
+              content: (
+                <>
+                  <label><span>表计名称</span><input data-testid="energy-meter-guided-name" value={meterForm.name} onChange={(event) => setMeterForm({ ...meterForm, name: event.target.value })} /></label>
+                  <label><span>表计类型</span><select data-testid="energy-meter-guided-type" value={meterForm.meterType} onChange={(event) => setMeterForm({ ...meterForm, meterType: event.target.value })}>{METER_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                  <label><span>归集对象</span><select data-testid="energy-meter-guided-gather" value={meterForm.gatherObject} onChange={(event) => setMeterForm({ ...meterForm, gatherObject: event.target.value })}>{GATHER_OBJECTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                </>
+              ),
+            },
+            {
+              title: "归属与读数方式",
+              description: "可选填上级总表、空间/商户/项目归属，选择读数方式与启用状态。",
+              content: (
+                <>
+                  <label><span>上级总表 id（可空）</span><input data-testid="energy-meter-guided-parent" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })} /></label>
+                  <label><span>空间 id（可空）</span><input data-testid="energy-meter-guided-space" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })} /></label>
+                  <label><span>商户 id（可空）</span><input data-testid="energy-meter-guided-merchant" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })} /></label>
+                  <label><span>项目 id（可空）</span><input data-testid="energy-meter-guided-project" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })} /></label>
+                  <label><span>读数方式</span><select data-testid="energy-meter-guided-readmode" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select></label>
+                  <label className="admin-inline-check"><input type="checkbox" data-testid="energy-meter-guided-active" checked={meterForm.active} onChange={(event) => setMeterForm({ ...meterForm, active: event.target.checked })} />启用</label>
+                </>
+              ),
+            },
+          ]}
+          summary={[
+            { label: "表计名称", value: meterForm.name.trim() || "未填写" },
+            { label: "表计类型", value: zh(meterForm.meterType) },
+            { label: "归集对象", value: zh(meterForm.gatherObject) },
+            { label: "上级总表", value: meterForm.parentMeterId.trim() || "无" },
+            { label: "读数方式", value: zh(meterForm.readMode) },
+            { label: "状态", value: meterForm.active ? "启用" : "停用" },
+          ]}
+        />
         <div className="admin-inline-form" data-testid="energy-meter-form">
           <input aria-label="表计 id" placeholder="表计 id(选中后更新)" value={meterForm.id} onChange={(event) => setMeterForm({ ...meterForm, id: event.target.value })} />
           <input aria-label="表计名称" placeholder="表计名称" value={meterForm.name} onChange={(event) => setMeterForm({ ...meterForm, name: event.target.value })} />
@@ -269,7 +338,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           <input aria-label="项目 id" placeholder="项目 id" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })} />
           <select aria-label="读数方式" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select>
           <label><input type="checkbox" checked={meterForm.active} onChange={(event) => setMeterForm({ ...meterForm, active: event.target.checked })} />启用</label>
-          <PermissionButton permissionsState={effectivePermissions} permissions={METER} data-testid="energy-meter-save" onClick={() => void saveMeter()}>保存表计</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={METER} data-testid="energy-meter-update" onClick={() => void saveMeter()}>保存表计</PermissionButton>
         </div>
 
         <h3>抄表与异常复核</h3>

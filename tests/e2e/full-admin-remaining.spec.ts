@@ -703,7 +703,9 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("released");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-003")!);
+    await page.getByTestId("amusement-safety-create-open").click();
     await page.getByTestId("amusement-safety-create-title").fill("开放前护栏检查");
+    await page.getByTestId("amusement-safety-guided-next").click();
     await page.getByTestId("amusement-safety-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_inspection_created");
     await page.getByTestId("amusement-safety-submit").click();
@@ -718,7 +720,10 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("evidenceAttachmentIds");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-001")!);
+    await page.getByTestId("merchant-work-order-create-open").click();
     await page.getByTestId("merchant-work-order-title").fill("排水异味投诉");
+    await page.getByTestId("merchant-work-order-guided-next").click();
+    await page.getByTestId("merchant-work-order-guided-next").click();
     await page.getByTestId("merchant-work-order-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_created");
     await expect(page.getByTestId("admin-action-result")).toContainText("idempotencyKey");

@@ -13,6 +13,7 @@ import { useSortedRows } from "../components/useSortedRows";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const WO_CREATE = ["merchant.service_work_order.create"];
@@ -115,6 +116,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该工单完整字段（枚举中文·截止时间中文·引用 TraceLink）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-4：新建工单收起为主按钮 + 分步引导弹窗（派单/处理/关闭动作表单不变）。
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -191,7 +194,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       reportedChannel: "web_admin",
       dueAt: "2026-06-16T10:00:00.000Z",
     };
-    await runAction("merchant_work_order_created", request, () => api.post("/api/v1/merchant-service/work-orders", request));
+    const ok = await runAction("merchant_work_order_created", request, () => api.post("/api/v1/merchant-service/work-orders", request));
+    if (ok) setCreateOpen(false);
   }
 
   async function assignWorkOrder() {
@@ -286,15 +290,51 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
           <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected?.title ?? "-"}>{selected?.title ?? "-"}</strong><small>{selected?.status ?? "-"}</small></div>
         </div>
 
-        <div className="admin-form-grid" data-testid="merchant-work-order-create-form">
-          <label>{TEXT.workOrderTitle}<input data-testid="merchant-work-order-title" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-          <label>{TEXT.descriptionLabel}<input data-testid="merchant-work-order-description" value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-          <label>{TEXT.type}<select data-testid="merchant-work-order-type" value={workOrderType} onChange={(event) => setWorkOrderType(event.target.value)}><option value="repair">报修</option><option value="complaint">投诉</option><option value="rectification">整改</option><option value="service">服务</option></select></label>
-          <label>{TEXT.priority}<select data-testid="merchant-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="critical">紧急</option></select></label>
-        </div>
-        <div className="admin-form-row">
-          <PermissionButton permissionsState={effectivePermissions} permissions={WO_CREATE} data-testid="merchant-work-order-create" disabled={busyAction !== ""} onClick={() => void createWorkOrder()}>{TEXT.create}</PermissionButton>
-          <span className="admin-muted-action" data-testid="merchant-work-orders-boundary">{TEXT.boundary}</span>
+        <div data-testid="merchant-work-order-create-form">
+          <div className="admin-form-row">
+            <PermissionButton permissionsState={effectivePermissions} permissions={WO_CREATE} data-testid="merchant-work-order-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ {TEXT.create}</PermissionButton>
+            <span className="admin-muted-action" data-testid="merchant-work-orders-boundary">{TEXT.boundary}</span>
+          </div>
+          <GuidedFlowModal
+            open={createOpen}
+            title={TEXT.create}
+            testId="merchant-work-order-guided"
+            submitTestId="merchant-work-order-create"
+            submitLabel={TEXT.create}
+            submitting={busyAction !== ""}
+            error={formError || undefined}
+            onClose={() => setCreateOpen(false)}
+            onSubmit={() => void createWorkOrder()}
+            steps={[
+              {
+                title: "工单信息",
+                description: "填写工单标题与问题描述。",
+                validate: () => (title.trim() ? null : TEXT.titleRequired),
+                content: (
+                  <>
+                    <label>{TEXT.workOrderTitle}<input data-testid="merchant-work-order-title" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+                    <label>{TEXT.descriptionLabel}<input data-testid="merchant-work-order-description" value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+                  </>
+                ),
+              },
+              {
+                title: "分类与优先级",
+                description: "选择工单类型与优先级。",
+                content: (
+                  <>
+                    <label>{TEXT.type}<select data-testid="merchant-work-order-type" value={workOrderType} onChange={(event) => setWorkOrderType(event.target.value)}><option value="repair">报修</option><option value="complaint">投诉</option><option value="rectification">整改</option><option value="service">服务</option></select></label>
+                    <label>{TEXT.priority}<select data-testid="merchant-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="critical">紧急</option></select></label>
+                  </>
+                ),
+              },
+            ]}
+            summary={[
+              { label: TEXT.workOrderTitle, value: title.trim() || "未填写" },
+              { label: TEXT.descriptionLabel, value: description.trim() || "未填写" },
+              { label: TEXT.type, value: formatBusinessStatus(workOrderType) },
+              { label: TEXT.priority, value: formatBusinessStatus(priority) },
+            ]}
+          />
         </div>
 
         <div className="admin-form-grid" data-testid="merchant-work-order-action-form">

@@ -11,6 +11,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, AmusementSafetyInspectionRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEXT = {
@@ -109,6 +110,8 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   const [rectifyNote, setRectifyNote] = React.useState("已更换防护垫并上传照片");
   // 行明细抽屉：整行可点 → 该巡检完整字段（结果/状态中文·时间中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-4：新建巡检收起为主按钮 + 分步引导弹窗（提交/整改/复检/审批动作表单不变）。
+  const [createOpen, setCreateOpen] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
 
   React.useEffect(() => {
@@ -179,7 +182,8 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
       inspectedAt: "2026-06-16T10:00:00.000Z",
       items: [{ itemCode: "guardrail", itemName: createTitle, result: "fail", severity: "high" }],
     };
-    await runAction("amusement_safety_inspection_created", request, () => api.post("/api/v1/amusement/safety-inspections", request));
+    const ok = await runAction("amusement_safety_inspection_created", request, () => api.post("/api/v1/amusement/safety-inspections", request));
+    if (ok) setCreateOpen(false);
   }
 
   async function submitInspection() {
@@ -319,12 +323,35 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
               <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected ? displayNo(selected) : "-"}>{selected ? displayNo(selected) : "-"}</strong><small>{selected?.rectificationStatus ? rectificationLabel(selected.rectificationStatus) : formatBusinessStatus(selected?.status)}</small></div>
             </div>
 
-            <div className="admin-form-grid" data-testid="amusement-safety-create-form">
-              <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
+            <div className="admin-form-row" data-testid="amusement-safety-create-form">
+              <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.create"]} data-testid="amusement-safety-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ {TEXT.create}</PermissionButton>
+            </div>
+            <GuidedFlowModal
+              open={createOpen}
+              title={TEXT.create}
+              testId="amusement-safety-guided"
+              submitTestId="amusement-safety-create"
+              submitLabel={TEXT.create}
+              submitting={busyAction !== ""}
+              error={formError || undefined}
+              onClose={() => setCreateOpen(false)}
+              onSubmit={() => void createInspection()}
+              steps={[
+                {
+                  title: "巡检项",
+                  description: "填写开放前安全巡检的检查项说明。",
+                  validate: () => (createTitle.trim() ? null : TEXT.createTitleRequired),
+                  content: (
+                    <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
+                  ),
+                },
+              ]}
+              summary={[{ label: TEXT.createTitle, value: createTitle.trim() || "未填写" }]}
+            />
+            <div className="admin-form-grid" data-testid="amusement-safety-action-form">
               <label>{TEXT.rectifyNote}<input data-testid="amusement-safety-rectify-note" value={rectifyNote} onChange={(event) => setRectifyNote(event.target.value)} /></label>
             </div>
             <div className="admin-form-row" data-testid="amusement-safety-actions">
-              <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.create"]} data-testid="amusement-safety-create" disabled={busyAction !== ""} onClick={() => void createInspection()}>{TEXT.create}</PermissionButton>
               <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.submit"]} data-testid="amusement-safety-submit" disabled={busyAction !== ""} onClick={() => void submitInspection()}>{TEXT.submit}</PermissionButton>
               <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.rectify"]} data-testid="amusement-safety-rectify" disabled={busyAction !== ""} onClick={() => void rectifyInspection()}>{TEXT.rectify}</PermissionButton>
               <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.recheck"]} data-testid="amusement-safety-recheck" disabled={busyAction !== ""} onClick={() => void recheckInspection()}>{TEXT.recheck}</PermissionButton>
