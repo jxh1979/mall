@@ -1045,6 +1045,8 @@ body {
   /* WCAG AA：#c2453c 在浅红底 4.22:1，加深到 ≥5:1。 */
   --adm-danger: #b03a31;
   --adm-danger-bg: #fbe8e6;
+  /* 服务业暖调强调色（酒吧/待客感·克制用于选中/强调；深色模式后续覆盖） */
+  --adm-gold: #d99a2b;
   --adm-font: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --adm-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-family: var(--adm-font);
@@ -1354,7 +1356,7 @@ body {
 .admin-sidebar nav button.active {
   background: #2d3036;
   color: var(--adm-sb-text-strong);
-  box-shadow: inset 3px 0 0 var(--adm-sb-text-strong);
+  box-shadow: inset 3px 0 0 var(--adm-gold);
 }
 
 .admin-sidebar nav button.active strong {
@@ -2425,3 +2427,8 @@ body {
   border-color: var(--adm-accent);
 }
 .cn-date-cell.is-selected:hover { background: var(--adm-accent); }
+
+/* 服务业暖调：页内卡片标签选中态加暖金顶条（待客强调） */
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active {
+  border-top: 2px solid var(--adm-gold);
+}
