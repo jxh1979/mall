@@ -1,3 +1,8 @@
+// 引导式流程范式约定（2026-07-06 用户拍板，铺全站时照做）：
+// 1. 页面保留醒目「＋ 新建」入口按钮（PermissionButton，权限门在入口，不在弹窗内提交按钮）。
+// 2. 字段状态由页面持有，本组件只做步进/校验/确认/提交编排。
+// 3. 提交失败 = 弹窗留开 + 通过 error prop 在弹窗内显错（try/catch → setXxxError），绝不静默关闭。
+// 4. 原有 data-testid 原样保留在弹窗内输入与提交按钮上（e2e/门禁依赖）。
 import React from "react";
 import { Modal, Steps } from "antd";
 

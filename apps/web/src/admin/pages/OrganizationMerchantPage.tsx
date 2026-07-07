@@ -159,10 +159,15 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       cooperationForm,
       status: "active",
     };
-    const result = await api.post<unknown>("/api/v1/platform/merchants", request);
-    setActionResult({ action: "merchant_profile_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
-    setCreateOpen(false);
-    await reload();
+    // 范式约定（引导式流程）：提交失败 = 弹窗留开 + error prop 在弹窗内显错，不静默。
+    try {
+      const result = await api.post<unknown>("/api/v1/platform/merchants", request);
+      setActionResult({ action: "merchant_profile_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+      setCreateOpen(false);
+      await reload();
+    } catch (submitError) {
+      setFormError(submitError instanceof Error ? submitError.message : "创建商户失败，请稍后重试。");
+    }
   }
 
   // 切换「显示已存档」后重新拉取（后端按 includeArchived 过滤），首次挂载不触发。
