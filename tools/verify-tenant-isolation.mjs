@@ -47,7 +47,8 @@ const WHITELIST_SCOPE_TYPES = new Set(["global_reference", "single_complex_defau
 
 // 基础设施/非租户表，CSV 不纳管也不应误报为「未登记租户表」。
 // information_schema：PostgreSQL 系统目录（元数据驱动引用计数枚举表名用），非租户数据表。
-const INFRA_TABLE_WHITELIST = new Set(["flyway_schema_history", "information_schema"]);
+// pg_* = PostgreSQL 系统目录(外键目录驱动的引用计数查询用),非租户数据表。
+const INFRA_TABLE_WHITELIST = new Set(["flyway_schema_history", "information_schema", "pg_constraint", "pg_class", "pg_namespace", "pg_attribute"]);
 
 // SQL 关键字/伪 token：FROM/JOIN 后若命中这些，说明匹配到的是子查询或谓词残片，非真实表名。
 const SQL_NOISE_TOKENS = new Set([
