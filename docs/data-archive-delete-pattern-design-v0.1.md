@@ -153,3 +153,32 @@ pending --reject[需 approve 权限]--> none
 - **业务记录 Tier-B（员工/客户/设备/工单/预约）**：存档+审批删除尚未铺。
 - **批量存档/删除 + 跨实体"待审批删除"聚合看板**：未做。
 - **多级审批链**：删除审批仍单级（申请→一次审批）。
+
+## 11. 第二批铺开(2026-07-07 续)：业务记录删除 + 集中清理工具 + 酒吲门店纠正
+
+§10 之后继续铺，均已合并 origin/main 并部署测试机：
+
+### 11.1 业务记录删除 Tier-B（V266，PR #48，后端）
+把「存档+审批后删除」范式铺到 4 个业务记录实体（非资金）——照 §10 三条硬约束：
+
+| 实体 | 引用校验(countReferences 拒删覆盖) |
+|------|------|
+| 商户服务工单 `merchant_service_work_orders` | 非终态(status∉closed/cancelled)即拒删；子表 actions 为 ON DELETE CASCADE 不计 |
+| 卡座预订 `bar_reservations` | bar_orders / bar_bills / bar_table_sessions / bar_reservation_invitation_members（guest_checkins CASCADE 不计） |
+| 员工档案 `staff_profiles` | 按 user_id 数 staff_attendance_records / staff_leave_requests / staff_level_assignments |
+| 设施设备 `facility_equipment` | facility_work_orders.equipment_id |
+
+禁自审、须先存档、审计留痕、rejected 回 none、取消存档回退 pending→none 全按范式。**本批仅后端**（前端存档/删除操作列按用户要求留后续）。16 JDBC 集成测试全绿。
+
+### 11.2 集中数据清理工具 Tier-D（V265，PR #47）
+用户反馈"逐条删除藏在 存档→显示已存档→申请删除→审批 多步里太隐蔽、只看到存档"。建集中入口 `data_cleanup_jobs`（平台级台账）：
+- **只删已存档且超 N 天的数据，绝不删活数据**；
+- **dry-run 预览**（只统计将删条数+样本，不删）→ **提交** → **他人审批**（禁自审）→ **批量执行**（一事务，部分失败整批回滚）；
+- **删前逐行再校验无活引用**——引用计数改为**外键目录(pg_constraint)驱动**（复核修：原按列名匹配会漏扫差异命名外键，如权益模板真实外键列 entitlement_template_id≠声明的 template_id，导致漏判照删触发外键违约整批回滚；改查 pg_constraint 后免疫所有列名差异，排除 ON DELETE CASCADE 子表）；
+- 支持 7 类已存档配置实体清理；权限 `data.cleanup.request`(发起)≠`data.cleanup.approve`(审批)。
+- 前端「数据清理工具」页(ADM-OPS-002)：选范围→预览(醒目"仅预览未删除")→提交→审批执行→留痕。
+
+> 这就是 §10 "仍未做" 里列的**批量清理工具**，本批已补齐。剩余未做收敛为：**Tier-C 资金/交易类(订单/核销/结算流水/账单)仅存档不硬删** + **多级审批链**。
+
+### 11.3 酒吲门店建模纠正（V267，进行中）
+§10.交互层 曾提"酒吲门店可新建"。**用户 2026-07-07 拍板纠正:酒吲门店就是商户本身**——酒吲=业态 merchant_type='bar' 的商户，经招商/商户准入正路引进，不该凭空"新建门店"。故：删除此前误建的独立 `bars` 门店主数据表+管理页+BarVenue 全套（V263），`bar_id` 语义改为酒吲商户的 merchant_id；新建卡座/商品/套餐的"酒吲"从选门店改为**选酒吲商户**；V267 先把老 bar_id seed 成酒吲商户再 DROP bars（不丢历史）。**教训:实体建模决策要带"业务来路"视角(这东西正常怎么引进/是谁的下级)，别只给技术建模角度，否则易造出绕过正规业务流程的平行概念。**
