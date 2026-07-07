@@ -80,9 +80,11 @@ export function GuidedFlowModal({ open, title, steps, summary, submitLabel = "�
     setCurrent((value) => value - 1);
   }
 
-  // 页脚用 antd Button：原生 <button> 在 antd 弹窗内会被 antd 样式覆盖成"白字透明底"=隐形（关键缺陷修复）。
+  // 页脚用 antd Button + 不带 admin-form-row 类：原生<button>/带admin类的按钮在 antd 弹窗(portal 渲染于 body、
+  // 在 .admin-* 作用域外)里,css 变量 --adm-accent 取不到→background 塌成透明=按钮隐形(关键缺陷修复)。
+  // 去掉 admin-form-row 类,让 antd Button 自带样式生效;内联 flex 只管布局不碰按钮外观。
   const footer = (
-    <div className="admin-form-row">
+    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
       <Button data-testid={`${testId}-cancel`} onClick={onClose}>取消</Button>
       {current > 0 ? <Button data-testid={`${testId}-prev`} onClick={prev}>上一步</Button> : null}
       {current < confirmIndex ? <Button type="primary" data-testid={`${testId}-next`} onClick={next}>下一步</Button> : null}
