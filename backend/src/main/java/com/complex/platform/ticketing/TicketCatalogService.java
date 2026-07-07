@@ -207,6 +207,117 @@ public class TicketCatalogService {
         return new EntitlementTemplateDeleteDecision(id, "approved", true);
     }
 
+    // ================= V260 存档/删除范式铺到票种/价格规则(镜像上方权益模板) =================
+
+    TicketTypeRecord archiveTicketType(String id, boolean archive, String actorId) {
+        TicketTypeRecord tt = requireTicketTypeRecord(id);
+        Instant now = Instant.now();
+        if (archive) {
+            return repository.saveTicketType(tt.withArchive(now, actorId, now));
+        }
+        // 取消存档：清标记并把 pending 删除申请回退 none（同权益模板复核§5）。
+        return repository.saveTicketType(
+                tt.withArchive(null, null, now).withDelete("none", null, null, null, now));
+    }
+
+    TicketTypeRecord requestDeleteTicketType(String id, TicketCatalogDeleteRequest request, String actorId) {
+        TicketTypeRecord tt = requireTicketTypeRecord(id);
+        if (tt.archivedAt() == null) {
+            throw ApiException.badRequest("TICKET_TYPE_NOT_ARCHIVED", "票种必须先存档才能申请删除");
+        }
+        if ("pending".equals(tt.deleteStatus())) {
+            throw ApiException.conflict("TICKET_TYPE_DELETE_ALREADY_PENDING", "该票种已有待审批的删除申请");
+        }
+        Instant now = Instant.now();
+        String reason = request == null ? null : trimToNull(request.reason());
+        return repository.saveTicketType(tt.withDelete("pending", actorId, now, reason, now));
+    }
+
+    TicketTypeDeleteDecision approveDeleteTicketType(String id, TicketCatalogDeleteApprovalRequest request, String actorId) {
+        TicketTypeRecord tt = requireTicketTypeRecord(id);
+        if (!"pending".equals(tt.deleteStatus())) {
+            throw ApiException.badRequest("TICKET_TYPE_DELETE_NOT_PENDING", "该票种没有待审批的删除申请");
+        }
+        String decision = request == null || request.decision() == null
+                ? null : request.decision().trim().toLowerCase(Locale.ROOT);
+        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        if (actorId != null && actorId.equals(tt.deleteRequestedBy())) {
+            throw ApiException.forbidden("TICKET_TYPE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
+        }
+        if ("rejected".equals(decision)) {
+            repository.saveTicketType(tt.withDelete("none", null, null, null, Instant.now()));
+            return new TicketTypeDeleteDecision(id, "rejected", false);
+        }
+        long refs = repository.countTicketTypeReferences(id);
+        if (refs > 0) {
+            throw ApiException.conflict("TICKET_TYPE_IN_USE",
+                    "票种仍被 " + refs + " 条业务记录引用（订单/权益/价格规则/结算等），不可删除");
+        }
+        repository.deleteTicketType(id);
+        return new TicketTypeDeleteDecision(id, "approved", true);
+    }
+
+    TicketPriceRuleRecord archivePriceRule(String id, boolean archive, String actorId) {
+        TicketPriceRuleRecord rule = requirePriceRuleRecord(id);
+        Instant now = Instant.now();
+        if (archive) {
+            return repository.savePriceRule(rule.withArchive(now, actorId, now));
+        }
+        return repository.savePriceRule(
+                rule.withArchive(null, null, now).withDelete("none", null, null, null, now));
+    }
+
+    TicketPriceRuleRecord requestDeletePriceRule(String id, TicketCatalogDeleteRequest request, String actorId) {
+        TicketPriceRuleRecord rule = requirePriceRuleRecord(id);
+        if (rule.archivedAt() == null) {
+            throw ApiException.badRequest("TICKET_PRICE_RULE_NOT_ARCHIVED", "价格规则必须先存档才能申请删除");
+        }
+        if ("pending".equals(rule.deleteStatus())) {
+            throw ApiException.conflict("TICKET_PRICE_RULE_DELETE_ALREADY_PENDING", "该价格规则已有待审批的删除申请");
+        }
+        Instant now = Instant.now();
+        String reason = request == null ? null : trimToNull(request.reason());
+        return repository.savePriceRule(rule.withDelete("pending", actorId, now, reason, now));
+    }
+
+    TicketPriceRuleDeleteDecision approveDeletePriceRule(String id, TicketCatalogDeleteApprovalRequest request, String actorId) {
+        TicketPriceRuleRecord rule = requirePriceRuleRecord(id);
+        if (!"pending".equals(rule.deleteStatus())) {
+            throw ApiException.badRequest("TICKET_PRICE_RULE_DELETE_NOT_PENDING", "该价格规则没有待审批的删除申请");
+        }
+        String decision = request == null || request.decision() == null
+                ? null : request.decision().trim().toLowerCase(Locale.ROOT);
+        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        if (actorId != null && actorId.equals(rule.deleteRequestedBy())) {
+            throw ApiException.forbidden("TICKET_PRICE_RULE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
+        }
+        if ("rejected".equals(decision)) {
+            repository.savePriceRule(rule.withDelete("none", null, null, null, Instant.now()));
+            return new TicketPriceRuleDeleteDecision(id, "rejected", false);
+        }
+        long refs = repository.countPriceRuleReferences(id);
+        if (refs > 0) {
+            throw ApiException.conflict("TICKET_PRICE_RULE_IN_USE",
+                    "价格规则仍被 " + refs + " 条订单记录引用，不可删除");
+        }
+        repository.deletePriceRule(id);
+        return new TicketPriceRuleDeleteDecision(id, "approved", true);
+    }
+
+    private TicketTypeRecord requireTicketTypeRecord(String id) {
+        return repository.findTicketTypeById(requireText(id, "id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+    }
+
+    private TicketPriceRuleRecord requirePriceRuleRecord(String id) {
+        return repository.findPriceRuleById(requireText(id, "id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_PRICE_RULE_NOT_FOUND", "price rule not found"));
+    }
+
     private EntitlementTemplateRecord requireTemplate(String id) {
         return repository.findEntitlementTemplateById(requireText(id, "id"))
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));

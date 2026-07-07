@@ -389,6 +389,108 @@ class TicketingServiceTests {
         assertThat(t.deleteStatus()).isEqualTo("none");
     }
 
+    // ===== V260 存档/删除范式铺到票种/价格规则 =====
+
+    @Test
+    void ticketTypeArchiveHidesFromDefaultListAndUnarchiveRestores() {
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_arch", "配错票种", "calendar", 100L, 200L, 300L, false, "active", null, null, now, now));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+
+        catalog.archiveTicketType("tt_arch", true, "op_a");
+        assertThat(ticketingRepository.listTicketTypes(false)).isEmpty();
+        assertThat(ticketingRepository.listTicketTypes(true)).hasSize(1);
+        assertThat(ticketingRepository.findTicketTypeById("tt_arch").orElseThrow().archivedAt()).isNotNull();
+
+        catalog.archiveTicketType("tt_arch", false, "op_a");
+        assertThat(ticketingRepository.listTicketTypes(false)).hasSize(1);
+        assertThat(ticketingRepository.findTicketTypeById("tt_arch").orElseThrow().archivedAt()).isNull();
+    }
+
+    @Test
+    void ticketTypeDeleteRequiresArchiveForbidsSelfApproveThenDeletes() {
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_del", "误录票种", "calendar", 100L, 200L, 300L, false, "active", null, null, now, now));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+
+        // 未存档不得申请删除。
+        assertThatThrownBy(() -> catalog.requestDeleteTicketType("tt_del",
+                new TicketCatalogDeleteRequest("k1", "误录"), "op_a"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("先存档");
+
+        catalog.archiveTicketType("tt_del", true, "op_a");
+        catalog.requestDeleteTicketType("tt_del", new TicketCatalogDeleteRequest("k1", "误录"), "op_a");
+        assertThat(ticketingRepository.findTicketTypeById("tt_del").orElseThrow().deleteStatus()).isEqualTo("pending");
+
+        // 禁自审：申请人 op_a 不能审批自己的申请。
+        assertThatThrownBy(() -> catalog.approveDeleteTicketType("tt_del",
+                new TicketCatalogDeleteApprovalRequest("k2", "approved", null), "op_a"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不能审批");
+
+        // 他人审批通过（无引用）→ 物理删除。
+        ticketingRepository.ticketTypeReferenceCount = 0;
+        TicketTypeDeleteDecision decision = catalog.approveDeleteTicketType("tt_del",
+                new TicketCatalogDeleteApprovalRequest("k3", "approved", null), "op_b");
+        assertThat(decision.deleted()).isTrue();
+        assertThat(ticketingRepository.findTicketTypeById("tt_del")).isEmpty();
+    }
+
+    @Test
+    void ticketTypeDeleteBlockedWhenStillReferenced() {
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_used", "在用票种", "calendar", 100L, 200L, 300L, false, "active", null, null, now, now));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+        catalog.archiveTicketType("tt_used", true, "op_a");
+        catalog.requestDeleteTicketType("tt_used", new TicketCatalogDeleteRequest("k1", "尝试删在用"), "op_a");
+
+        ticketingRepository.ticketTypeReferenceCount = 3; // 模拟仍被订单/价规/权益绑定引用
+        assertThatThrownBy(() -> catalog.approveDeleteTicketType("tt_used",
+                new TicketCatalogDeleteApprovalRequest("k2", "approved", null), "op_b"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("TICKET_TYPE_IN_USE"));
+        // 拒删后票种仍在（含已存档列表可见），pending 态保留。
+        assertThat(ticketingRepository.listTicketTypes(true)).hasSize(1);
+    }
+
+    @Test
+    void priceRuleArchiveDeleteFlowWithReferenceGuardAndUnarchiveRollback() {
+        Instant now = Instant.now();
+        ticketingRepository.savePriceRule(new TicketPriceRuleRecord(
+                "pr_del", "tt_x", "student", "calendar", 100L, 200L, 300L, null,
+                "ch_default", "CNY", "active", Map.of(), now, now));
+        TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
+
+        catalog.archivePriceRule("pr_del", true, "op_a");
+        assertThat(ticketingRepository.listPriceRules(false)).isEmpty();
+        assertThat(ticketingRepository.listPriceRules(true)).hasSize(1);
+
+        catalog.requestDeletePriceRule("pr_del", new TicketCatalogDeleteRequest("k1", "配错"), "op_a");
+        // 取消存档 → pending 回退 none（复核§5）。
+        catalog.archivePriceRule("pr_del", false, "op_a");
+        TicketPriceRuleRecord back = ticketingRepository.findPriceRuleById("pr_del").orElseThrow();
+        assertThat(back.archivedAt()).isNull();
+        assertThat(back.deleteStatus()).isEqualTo("none");
+
+        // 重新走删除：有引用拒删，无引用他人审批通过删除。
+        catalog.archivePriceRule("pr_del", true, "op_a");
+        catalog.requestDeletePriceRule("pr_del", new TicketCatalogDeleteRequest("k2", "配错"), "op_a");
+        ticketingRepository.priceRuleReferenceCount = 2;
+        assertThatThrownBy(() -> catalog.approveDeletePriceRule("pr_del",
+                new TicketCatalogDeleteApprovalRequest("k3", "approved", null), "op_b"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("TICKET_PRICE_RULE_IN_USE"));
+        ticketingRepository.priceRuleReferenceCount = 0;
+        TicketPriceRuleDeleteDecision decision = catalog.approveDeletePriceRule("pr_del",
+                new TicketCatalogDeleteApprovalRequest("k4", "approved", null), "op_b");
+        assertThat(decision.deleted()).isTrue();
+        assertThat(ticketingRepository.findPriceRuleById("pr_del")).isEmpty();
+    }
+
     @Test
     void deleteApprovalBlockedWhenTemplateStillReferenced() {
         Instant now = Instant.now();
@@ -2733,8 +2835,30 @@ class TicketingServiceTests {
         }
 
         @Override
-        public List<TicketTypeRecord> listTicketTypes() {
-            return new ArrayList<>(ticketTypes.values());
+        public List<TicketTypeRecord> listTicketTypes(boolean includeArchived) {
+            List<TicketTypeRecord> out = new ArrayList<>();
+            for (TicketTypeRecord t : ticketTypes.values()) {
+                if ("approved".equals(t.deleteStatus())) {
+                    continue;
+                }
+                if (!includeArchived && t.archivedAt() != null) {
+                    continue;
+                }
+                out.add(t);
+            }
+            return out;
+        }
+
+        @Override
+        public void deleteTicketType(String id) {
+            ticketTypes.remove(id);
+        }
+
+        long ticketTypeReferenceCount;
+
+        @Override
+        public long countTicketTypeReferences(String id) {
+            return ticketTypeReferenceCount;
         }
 
         @Override
@@ -2883,8 +3007,30 @@ class TicketingServiceTests {
         }
 
         @Override
-        public List<TicketPriceRuleRecord> listPriceRules() {
-            return new ArrayList<>(priceRules.values());
+        public List<TicketPriceRuleRecord> listPriceRules(boolean includeArchived) {
+            List<TicketPriceRuleRecord> out = new ArrayList<>();
+            for (TicketPriceRuleRecord r : priceRules.values()) {
+                if ("approved".equals(r.deleteStatus())) {
+                    continue;
+                }
+                if (!includeArchived && r.archivedAt() != null) {
+                    continue;
+                }
+                out.add(r);
+            }
+            return out;
+        }
+
+        @Override
+        public void deletePriceRule(String id) {
+            priceRules.remove(id);
+        }
+
+        long priceRuleReferenceCount;
+
+        @Override
+        public long countPriceRuleReferences(String id) {
+            return priceRuleReferenceCount;
         }
 
         @Override

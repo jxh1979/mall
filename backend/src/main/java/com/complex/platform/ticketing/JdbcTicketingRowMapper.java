@@ -44,7 +44,13 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "updated_at"),
                 nullableInteger(resultSet, "stock_quantity"),
                 resultSet.getInt("sold_quantity"),
-                resultSet.getString("ticket_category")
+                resultSet.getString("ticket_category"),
+                nullableInstant(resultSet, "archived_at"),
+                resultSet.getString("archived_by"),
+                resultSet.getString("delete_status"),
+                resultSet.getString("delete_requested_by"),
+                nullableInstant(resultSet, "delete_requested_at"),
+                resultSet.getString("delete_reason")
         );
     }
 
@@ -181,7 +187,13 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("status"),
                 readObjectMap(resultSet.getString("eligibility_rule")),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                nullableInstant(resultSet, "archived_at"),
+                resultSet.getString("archived_by"),
+                resultSet.getString("delete_status"),
+                resultSet.getString("delete_requested_by"),
+                nullableInstant(resultSet, "delete_requested_at"),
+                resultSet.getString("delete_reason")
         );
     }
 

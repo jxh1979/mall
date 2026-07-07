@@ -6,7 +6,15 @@ import java.util.Optional;
 public interface TicketingRepository {
     TicketTypeRecord saveTicketType(TicketTypeRecord ticketType);
 
-    List<TicketTypeRecord> listTicketTypes();
+    List<TicketTypeRecord> listTicketTypes(boolean includeArchived);
+
+    default List<TicketTypeRecord> listTicketTypes() {
+        return listTicketTypes(false);
+    }
+
+    void deleteTicketType(String id);
+
+    long countTicketTypeReferences(String id);
 
     Optional<TicketTypeRecord> findTicketTypeById(String id);
 
@@ -119,7 +127,15 @@ public interface TicketingRepository {
 
     TicketPriceRuleRecord savePriceRule(TicketPriceRuleRecord rule);
 
-    List<TicketPriceRuleRecord> listPriceRules();
+    List<TicketPriceRuleRecord> listPriceRules(boolean includeArchived);
+
+    default List<TicketPriceRuleRecord> listPriceRules() {
+        return listPriceRules(false);
+    }
+
+    void deletePriceRule(String id);
+
+    long countPriceRuleReferences(String id);
 
     Optional<TicketPriceRuleRecord> findPriceRuleById(String id);
 

@@ -29,12 +29,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO ticket_types (
                     id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                     holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
-                    stock_quantity, sold_quantity, ticket_category, created_at, updated_at
+                    stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                 )
                 VALUES (
                     :id, :ticket_name, :base_calendar_price_mode, :weekday_price_cent, :weekend_price_cent,
                     :holiday_price_cent, :stock_required, :status, :validity_days, :refresh_interval_seconds,
-                    :stock_quantity, :sold_quantity, :ticket_category, :created_at, :updated_at
+                    :stock_quantity, :sold_quantity, :ticket_category, :created_at, :updated_at,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_name = EXCLUDED.ticket_name,
@@ -48,20 +50,68 @@ class JdbcTicketingRepository implements TicketingRepository {
                     refresh_interval_seconds = EXCLUDED.refresh_interval_seconds,
                     stock_quantity = EXCLUDED.stock_quantity,
                     ticket_category = EXCLUDED.ticket_category,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.ticketTypeParameters(ticketType));
         return ticketType;
     }
 
     @Override
-    public List<TicketTypeRecord> listTicketTypes() {
+    public List<TicketTypeRecord> listTicketTypes(boolean includeArchived) {
         return jdbcTemplate.query("""
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
-                       stock_quantity, sold_quantity, ticket_category, created_at, updated_at
+                       stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM ticket_types
+                 WHERE (:include_archived OR archived_at IS NULL)
+                   AND delete_status <> 'approved'
                  ORDER BY created_at DESC, id
-                """, rowMapper::mapTicketType);
+                """, Map.of("include_archived", includeArchived), rowMapper::mapTicketType);
+    }
+
+    @Override
+    public void deleteTicketType(String id) {
+        jdbcTemplate.update("DELETE FROM ticket_types WHERE id = :id", Map.of("id", id));
+    }
+
+    @Override
+    public long countTicketTypeReferences(String id) {
+        // V260：元数据驱动（照 V259 商户范式）——动态枚举所有带 ticket_type_id 列的基表逐表 COUNT，
+        // 避免硬编码清单随新表漂移；票单/结算/价规/权益绑定等引用均自动纳入，>0 拒硬删。
+        return countReferencesByColumn("ticket_type_id", id);
+    }
+
+    @Override
+    public long countPriceRuleReferences(String id) {
+        return countReferencesByColumn("price_rule_id", id);
+    }
+
+    private long countReferencesByColumn(String columnName, String id) {
+        List<String> tables = jdbcTemplate.queryForList("""
+                SELECT c.table_name
+                FROM information_schema.columns c
+                JOIN information_schema.tables t
+                  ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+                WHERE c.table_schema = 'public'
+                  AND c.column_name = :column_name
+                  AND t.table_type = 'BASE TABLE'
+                """, Map.of("column_name", columnName), String.class);
+        long total = 0L;
+        for (String table : tables) {
+            // 被删实体自己的表不算引用（ticket_price_rules.ticket_type_id 属于价规引用票种，保留计数；
+            // 此处仅排除同名主表自引用场景，当前两列均无，防御性保留判断）。
+            Long c = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(1) FROM " + table + " WHERE " + columnName + " = :id",
+                    Map.of("id", id), Long.class);
+            total += c == null ? 0L : c;
+        }
+        return total;
     }
 
     @Override
@@ -69,7 +119,8 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
-                       stock_quantity, sold_quantity, ticket_category, created_at, updated_at
+                       stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM ticket_types
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();
@@ -431,12 +482,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO ticket_price_rules (
                     id, ticket_type_id, variant_type, price_mode, weekday_price_cent, weekend_price_cent,
                     holiday_price_cent, discount_rate, channel_id, currency, status, eligibility_rule,
-                    created_at, updated_at
+                    created_at, updated_at,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                 )
                 VALUES (
                     :id, :ticket_type_id, :variant_type, :price_mode, :weekday_price_cent, :weekend_price_cent,
                     :holiday_price_cent, :discount_rate, :channel_id, :currency, :status, CAST(:eligibility_rule AS jsonb),
-                    :created_at, :updated_at
+                    :created_at, :updated_at,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -450,20 +503,34 @@ class JdbcTicketingRepository implements TicketingRepository {
                     currency = EXCLUDED.currency,
                     status = EXCLUDED.status,
                     eligibility_rule = EXCLUDED.eligibility_rule,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.priceRuleParameters(rule));
         return rule;
     }
 
     @Override
-    public List<TicketPriceRuleRecord> listPriceRules() {
+    public List<TicketPriceRuleRecord> listPriceRules(boolean includeArchived) {
         return jdbcTemplate.query("""
                 SELECT id, ticket_type_id, variant_type, price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, discount_rate, channel_id, currency, status,
-                       eligibility_rule::text AS eligibility_rule, created_at, updated_at
+                       eligibility_rule::text AS eligibility_rule, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM ticket_price_rules
+                 WHERE (:include_archived OR archived_at IS NULL)
+                   AND delete_status <> 'approved'
                  ORDER BY created_at DESC, id
-                """, rowMapper::mapPriceRule);
+                """, Map.of("include_archived", includeArchived), rowMapper::mapPriceRule);
+    }
+
+    @Override
+    public void deletePriceRule(String id) {
+        jdbcTemplate.update("DELETE FROM ticket_price_rules WHERE id = :id", Map.of("id", id));
     }
 
     @Override
@@ -471,7 +538,8 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_type_id, variant_type, price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, discount_rate, channel_id, currency, status,
-                       eligibility_rule::text AS eligibility_rule, created_at, updated_at
+                       eligibility_rule::text AS eligibility_rule, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM ticket_price_rules
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapPriceRule).stream().findFirst();

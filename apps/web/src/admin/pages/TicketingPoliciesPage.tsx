@@ -24,6 +24,9 @@ type TicketTypeRow = {
   holidayPriceCent: number | null;
   status: string;
   stockQuantity: number | null;
+  // V260 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 type EntitlementTemplateRow = {
   id: string;
@@ -39,6 +42,8 @@ type PriceRuleRow = {
   discountRate: number | null;
   weekdayPriceCent: number | null;
   status: string;
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 type MerchantRow = { id: string; merchantName: string; merchantType: string | null };
 type AmusementProjectRow = { id: string; projectName: string };
@@ -83,6 +88,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [rules, setRules] = React.useState<PriceRuleRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantRow[]>([]);
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
+  // V260 存档/删除范式：显示已存档票种/价规开关（后端按 includeArchived 过滤）。
+  const [showArchived, setShowArchived] = React.useState(false);
 
   // 区1 新建票种（保留既有 e2e 锚点：三档价 + ticket-publish + ticket-policy-error）
   const [ticketName, setTicketName] = React.useState("后台通票策略");
@@ -159,9 +166,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const { loading, error: loadError, reload } = useAdminResource(
     async () => {
       const [ticketRows, templateRows, ruleRows, merchantRows, projectRows] = await Promise.all([
-        api.get<unknown>("/api/v1/ticketing/ticket-types"),
+        api.get<unknown>(`/api/v1/ticketing/ticket-types?includeArchived=${showArchived}`),
         api.get<unknown>("/api/v1/ticketing/entitlement-templates"),
-        api.get<unknown>("/api/v1/ticketing/price-rules"),
+        api.get<unknown>(`/api/v1/ticketing/price-rules?includeArchived=${showArchived}`),
         // 数据源（组合式配置多选）：商户（酒吧）+ 游乐设施。读失败不阻断本页主体，降级为空列表。
         api.get<unknown>("/api/v1/platform/merchants").catch(() => ({ items: [] })),
         api.get<unknown>("/api/v1/amusement/projects").catch(() => ({ items: [] })),
@@ -174,6 +181,78 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     },
     { onError: setGlobalError, fallbackMessage: "票务策略配置读取失败" },
   );
+
+  // 切换「显示已存档」后重新拉取（后端按 includeArchived 过滤），首次挂载不触发。
+  const firstArchivedToggle = React.useRef(true);
+  React.useEffect(() => {
+    if (firstArchivedToggle.current) {
+      firstArchivedToggle.current = false;
+      return;
+    }
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived]);
+
+  async function archiveCatalog(kind: "ticket-types" | "price-rules", id: string, archive: boolean) {
+    setGlobalError(null);
+    await api.post(`/api/v1/ticketing/${kind}/${id}/${archive ? "archive" : "unarchive"}`, {
+      idempotencyKey: `${kind}-${archive ? "archive" : "unarchive"}-${id}-${Date.now()}`,
+    });
+    setActionResult({ action: `${kind === "ticket-types" ? "ticket_type" : "price_rule"}_${archive ? "archived" : "unarchived"}`, id });
+    await reload();
+  }
+
+  async function requestDeleteCatalog(kind: "ticket-types" | "price-rules", id: string) {
+    const reason = window.prompt("删除理由（提交后需上级审批）：") ?? "";
+    setGlobalError(null);
+    await api.post(`/api/v1/ticketing/${kind}/${id}/delete-request`, {
+      idempotencyKey: `${kind}-delete-request-${id}-${Date.now()}`,
+      reason,
+    });
+    setActionResult({ action: `${kind === "ticket-types" ? "ticket_type" : "price_rule"}_delete_requested`, id });
+    await reload();
+  }
+
+  async function approveDeleteCatalog(kind: "ticket-types" | "price-rules", id: string, decision: "approved" | "rejected") {
+    setGlobalError(null);
+    const decided = await api.post<{ deleted?: boolean }>(`/api/v1/ticketing/${kind}/${id}/delete-approve`, {
+      idempotencyKey: `${kind}-delete-approve-${id}-${decision}-${Date.now()}`,
+      decision,
+    });
+    setActionResult({ action: `${kind === "ticket-types" ? "ticket_type" : "price_rule"}_delete_${decision}`, id, deleted: decided?.deleted ?? false });
+    await reload();
+  }
+
+  function archiveLabel(row: { archivedAt?: string | null; deleteStatus?: string }): string {
+    if (row.deleteStatus === "pending") return "待审批删除";
+    if (row.archivedAt) return "已存档";
+    return "生效中";
+  }
+
+  function catalogActions(kind: "ticket-types" | "price-rules", row: { id: string; archivedAt?: string | null; deleteStatus?: string }) {
+    const manage = kind === "ticket-types" ? MANAGE : ["ticket.price_variant.manage"];
+    const approve = kind === "ticket-types" ? ["ticket.type.approve"] : ["ticket.price_rule.approve"];
+    const prefix = kind === "ticket-types" ? "ticket-type" : "price-rule";
+    if (row.deleteStatus === "pending") {
+      return (
+        <>
+          <PermissionButton permissionsState={effectivePermissions} permissions={approve} data-testid={`${prefix}-delete-approve-${row.id}`} onClick={() => void approveDeleteCatalog(kind, row.id, "approved")}>批准删除</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={approve} data-testid={`${prefix}-delete-reject-${row.id}`} onClick={() => void approveDeleteCatalog(kind, row.id, "rejected")}>驳回</PermissionButton>
+        </>
+      );
+    }
+    if (row.archivedAt) {
+      return (
+        <>
+          <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-unarchive-${row.id}`} onClick={() => void archiveCatalog(kind, row.id, false)}>取消存档</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-delete-request-${row.id}`} onClick={() => void requestDeleteCatalog(kind, row.id)}>申请删除</PermissionButton>
+        </>
+      );
+    }
+    return (
+      <PermissionButton permissionsState={effectivePermissions} permissions={manage} data-testid={`${prefix}-archive-${row.id}`} onClick={() => void archiveCatalog(kind, row.id, true)}>存档</PermissionButton>
+    );
+  }
 
   async function publish() {
     if (!weekday || !weekend || !holiday) {
@@ -406,6 +485,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-state" data-testid="ticketing-policies-focus">已从下钻定位到票种：{focusObjectId}（下表高亮行）</div>
       )}
       <h3>票种 / 通票</h3>
+      <label className="admin-inline-check" data-testid="ticket-catalog-show-archived">
+        <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
+        显示已存档票种与派生价规则
+      </label>
       <AdminDataState loading={loading} error={loadError} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="ticket-types-table">
@@ -417,6 +500,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <th>节假日（元）</th>
                 <th>限量</th>
                 <th>状态</th>
+                <th>存档状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -431,6 +516,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                   <td>{yuan(row.holidayPriceCent)}</td>
                   <td>{row.stockQuantity ?? "不限"}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
+                  <td>{archiveLabel(row)}</td>
+                  <td onClick={(event) => event.stopPropagation()}>{catalogActions("ticket-types", row)}</td>
                 </tr>
               ))}
             </tbody>
@@ -621,6 +708,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
               <th>定价方式</th>
               <th>折扣/价格</th>
               <th>状态</th>
+              <th>存档状态</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -633,6 +722,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <td>{row.priceMode === "fixed_price" ? "固定价" : "按基础价折扣"}</td>
                 <td>{row.priceMode === "fixed_price" ? `¥${yuan(row.weekdayPriceCent)}` : row.discountRate != null ? `${Math.round(Number(row.discountRate) * 100)}%` : "—"}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
+                <td>{archiveLabel(row)}</td>
+                <td onClick={(event) => event.stopPropagation()}>{catalogActions("price-rules", row)}</td>
               </tr>
             ))}
           </tbody>
