@@ -77,13 +77,15 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
                     settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                     leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
-                    rent_per_square_meter, cooperation_form, status, created_at, updated_at
+                    rent_per_square_meter, cooperation_form, status, created_at, updated_at,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                 )
                 VALUES (
                     :id, :merchant_name, :merchant_type, :business_entity_id, :contract_entity_id,
                     :settlement_entity_id, :contact_name, :contact_phone, :owner_person, :mall_block_code, :area_square_meter,
                     :leased_area_square_meter, :secondary_contact_name, :secondary_contact_phone,
-                    :rent_per_square_meter, :cooperation_form, :status, :created_at, :updated_at
+                    :rent_per_square_meter, :cooperation_form, :status, :created_at, :updated_at,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     merchant_name = EXCLUDED.merchant_name,
@@ -102,7 +104,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     rent_per_square_meter = EXCLUDED.rent_per_square_meter,
                     cooperation_form = EXCLUDED.cooperation_form,
                     status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason
                 """, merchantParameters(merchant));
         return merchant;
     }
@@ -113,7 +121,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
-                       rent_per_square_meter, cooperation_form, status, created_at, updated_at
+                       rent_per_square_meter, cooperation_form, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM merchants
                  ORDER BY created_at DESC, id
                  LIMIT 500
@@ -128,12 +137,74 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
-                       rent_per_square_meter, cooperation_form, status, created_at, updated_at
+                       rent_per_square_meter, cooperation_form, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM merchants
                  WHERE business_entity_id = :business_entity_id
+                   AND archived_at IS NULL AND delete_status <> 'approved'
                  ORDER BY created_at DESC, id
                  LIMIT 500
                 """, Map.of("business_entity_id", businessEntityId), this::mapMerchant);
+    }
+
+    @Override
+    public List<MerchantRecord> listMerchants(boolean includeArchived) {
+        // V260：默认列表隐藏已存档 + 已审批删除；includeArchived=true 时全量（后台「显示已存档」开关）。
+        return jdbcTemplate.query("""
+                SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
+                       settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
+                       leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
+                       rent_per_square_meter, cooperation_form, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                  FROM merchants
+                 WHERE (:include_archived OR archived_at IS NULL)
+                   AND delete_status <> 'approved'
+                 ORDER BY created_at DESC, id
+                 LIMIT 500
+                """, Map.of("include_archived", includeArchived), this::mapMerchant);
+    }
+
+    @Override
+    public java.util.Optional<MerchantRecord> findMerchantById(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
+                       settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
+                       leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
+                       rent_per_square_meter, cooperation_form, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                  FROM merchants
+                 WHERE id = :id
+                """, Map.of("id", merchantId), this::mapMerchant).stream().findFirst();
+    }
+
+    @Override
+    public void deleteMerchant(String merchantId) {
+        jdbcTemplate.update("DELETE FROM merchants WHERE id = :id", Map.of("id", merchantId));
+    }
+
+    @Override
+    public long countMerchantReferences(String merchantId) {
+        // V260：商户被【核心运营表】以 merchant_id 引用的活条数，>0 拒硬删（防连锁孤儿）。
+        // 覆盖：合同(V010 contracts)/供应合同(V085 supply_contracts)/合同租金账单(V162 contract_rent_bills)/
+        //       商户服务工单(V022)/物业费账单(V026 merchant_bills)/员工(V086 staff_profiles，仅商户员工)/
+        //       酒吧商户隔离六表(V047: bar_tables/bar_reservations/bar_products/bar_orders/bar_production_tickets/bar_bills)。
+        // 说明：ticket_orders/inventory_items/储值卡账户 均无 merchant_id 列（票务与储值为综合体级、库存为共享），故不纳入。
+        // ponytail: 宁可多算核心表也别漏——商户是主数据，误删连锁孤儿代价远高于多几张 COUNT。
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT (SELECT COUNT(1) FROM contracts               WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM supply_contracts        WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM contract_rent_bills     WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM merchant_service_work_orders WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM merchant_bills          WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM staff_profiles          WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM bar_tables              WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM bar_reservations        WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM bar_products            WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM bar_orders              WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM bar_production_tickets  WHERE merchant_id = :id)
+                     + (SELECT COUNT(1) FROM bar_bills               WHERE merchant_id = :id)
+                """, Map.of("id", merchantId), Long.class);
+        return count == null ? 0L : count;
     }
 
     @Override
@@ -340,7 +411,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("cooperation_form", merchant.cooperationForm())
                 .addValue("status", merchant.status())
                 .addValue("created_at", timestampWithTimeZone(merchant.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(merchant.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(merchant.updatedAt()))
+                .addValue("archived_at", timestampWithTimeZone(merchant.archivedAt()))
+                .addValue("archived_by", merchant.archivedBy())
+                .addValue("delete_status", merchant.deleteStatus() == null ? "none" : merchant.deleteStatus())
+                .addValue("delete_requested_by", merchant.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(merchant.deleteRequestedAt()))
+                .addValue("delete_reason", merchant.deleteReason());
     }
 
     private MapSqlParameterSource projectParameters(ProjectRecord project) {
@@ -423,7 +500,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("cooperation_form"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                nullableInstant(resultSet, "archived_at"),
+                resultSet.getString("archived_by"),
+                resultSet.getString("delete_status"),
+                resultSet.getString("delete_requested_by"),
+                nullableInstant(resultSet, "delete_requested_at"),
+                resultSet.getString("delete_reason")
         );
     }
 

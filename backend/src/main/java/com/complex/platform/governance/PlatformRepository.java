@@ -13,6 +13,35 @@ public interface PlatformRepository {
 
     List<MerchantRecord> listMerchants();
 
+    /** V260：按 id 查商户（存档/删除状态机读取用）。默认基于 listMerchants 过滤；Jdbc 覆写按主键。 */
+    default Optional<MerchantRecord> findMerchantById(String merchantId) {
+        return listMerchants().stream().filter(m -> m.id().equals(merchantId)).findFirst();
+    }
+
+    /**
+     * V260：列出商户，includeArchived=false 时排除已存档 + 已审批删除（默认列表）。
+     * 默认返回全量（内存 fake 用）；JdbcPlatformRepository 用 SQL 谓词过滤。
+     */
+    default List<MerchantRecord> listMerchants(boolean includeArchived) {
+        if (includeArchived) return listMerchants();
+        return listMerchants().stream()
+                .filter(m -> m.archivedAt() == null && !"approved".equals(m.deleteStatus()))
+                .toList();
+    }
+
+    /** V260：物理删除商户（仅经删除审批通过后调用）。默认不支持，Jdbc/内存 fake 覆写。 */
+    default void deleteMerchant(String merchantId) {
+        throw new UnsupportedOperationException("deleteMerchant not supported by this repository");
+    }
+
+    /**
+     * V260：统计商户被【核心运营表】以 merchant_id 引用的活跃条数，>0 则拒绝硬删（防连锁孤儿）。
+     * 覆盖表见 JdbcPlatformRepository 实现。默认 0（内存 fake 无引用表）。
+     */
+    default long countMerchantReferences(String merchantId) {
+        return 0L;
+    }
+
     /**
      * 按经营主体 scope 列出商户（merchants.business_entity_id = token scope）。
      * 商户面数据：经营主体登录只能看到归属本主体的商户。默认在内存过滤，JdbcPlatformRepository 用 SQL 谓词下推。
