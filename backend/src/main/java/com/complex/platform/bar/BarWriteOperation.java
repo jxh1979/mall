@@ -40,7 +40,13 @@ enum BarWriteOperation implements AuditedOperation {
     REDEEM_DRINK_ENTITLEMENT("bar.entitlement_redeemed", "bar.entitlement_redeem_failed", "bar.entitlement.redeem", "bar_gift_redemption"),
     ISSUE_INVITATION("bar.reservation_invitation_issued", "bar.reservation_invitation_issue_failed", "bar.reservation.invitation.manage", "bar_reservation"),
     REVOKE_INVITATION("bar.reservation_invitation_revoked", "bar.reservation_invitation_revoke_failed", "bar.reservation.invitation.manage", "bar_reservation"),
-    ENTER_INVITATION("bar.reservation_invitation_entered", "bar.reservation_invitation_entry_failed", "bar.table.guest_checkin", "bar_reservation");
+    ENTER_INVITATION("bar.reservation_invitation_entered", "bar.reservation_invitation_entry_failed", "bar.table.guest_checkin", "bar_reservation"),
+    REQUEST_DELETE_BAR_CATEGORY("bar.category.delete_requested", "bar.category.delete_request_failed", "bar.category.manage", "bar_product_category"),
+    APPROVE_DELETE_BAR_CATEGORY("bar.category.delete_approved", "bar.category.delete_approve_failed", "bar.category.approve", "bar_product_category"),
+    REQUEST_DELETE_BAR_PRODUCT("bar.product.delete_requested", "bar.product.delete_request_failed", "bar.product.manage", "bar_product"),
+    APPROVE_DELETE_BAR_PRODUCT("bar.product.delete_approved", "bar.product.delete_approve_failed", "bar.product.approve", "bar_product"),
+    REQUEST_DELETE_BAR_COMBO("bar.combo.delete_requested", "bar.combo.delete_request_failed", "bar.combo.manage", "bar_combo"),
+    APPROVE_DELETE_BAR_COMBO("bar.combo.delete_approved", "bar.combo.delete_approve_failed", "bar.combo.approve", "bar_combo");
 
     private final String successEvent;
     private final String failureEvent;

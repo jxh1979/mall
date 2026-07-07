@@ -11,7 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 图形化点单 POS 目录服务（V256/V257 阶段1）：分类 CRUD、套餐 CRUD、给 SKU 设分类/图片、按分类列 SKU。
- * 目录属后台配置（非移动资金的 POS 交易），走轻量 CRUD，不套 BarOperationExecutor 的幂等/凭证机制。
+ * 目录属后台配置（非移动资金的 POS 交易），可逆编辑（create/archive/unarchive）走轻量 CRUD 不套幂等；
+ * 但【删除生命周期 request/approve】走 BarOperationExecutor 记审计留痕（物理删除不可逆，须可追溯谁申请/为何/谁批准）。
  * 租户隔离：写入时 merchant_id 取当前 scope；读取按 scope 过滤；跨商户改分类/套餐/商品统一 checkOwnership 兜底。
  *
  * V262 数据存档与审批后删除范式（照 V255 通票权益模板先例）：分类/套餐/商品均可存档（软下线可恢复）、
@@ -22,11 +23,14 @@ public class BarPosCatalogService {
 
     private final JdbcBarPosCatalogRepository repository;
     private final AuthorizationService authorizationService;
+    private final BarOperationExecutor operations;
 
     public BarPosCatalogService(JdbcBarPosCatalogRepository repository,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            BarOperationExecutor operations) {
         this.repository = repository;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     // ---------- 分类 ----------
@@ -205,6 +209,10 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarProductCategoryRecord requestDeleteCategory(String id, BarCatalogDeleteRequest request) {
+        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_CATEGORY, () -> doRequestDeleteCategory(id, request));
+    }
+
+    private BarProductCategoryRecord doRequestDeleteCategory(String id, BarCatalogDeleteRequest request) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarProductCategoryRecord c = requireCategory(id);
         checkOwnership(scope, c.merchantId());
@@ -221,6 +229,10 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarCatalogDeleteDecision approveDeleteCategory(String id, BarCatalogDeleteApprovalRequest request) {
+        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_CATEGORY, () -> doApproveDeleteCategory(id, request));
+    }
+
+    private BarCatalogDeleteDecision doApproveDeleteCategory(String id, BarCatalogDeleteApprovalRequest request) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarProductCategoryRecord c = requireCategory(id);
         checkOwnership(scope, c.merchantId());
@@ -256,6 +268,10 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarProductRecord requestDeleteProduct(String id, BarCatalogDeleteRequest request) {
+        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_PRODUCT, () -> doRequestDeleteProduct(id, request));
+    }
+
+    private BarProductRecord doRequestDeleteProduct(String id, BarCatalogDeleteRequest request) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarProductRecord product = requireProduct(id);
         checkOwnership(scope, product.merchantId());
@@ -273,6 +289,10 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarCatalogDeleteDecision approveDeleteProduct(String id, BarCatalogDeleteApprovalRequest request) {
+        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_PRODUCT, () -> doApproveDeleteProduct(id, request));
+    }
+
+    private BarCatalogDeleteDecision doApproveDeleteProduct(String id, BarCatalogDeleteApprovalRequest request) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarProductRecord product = requireProduct(id);
         checkOwnership(scope, product.merchantId());
@@ -308,6 +328,10 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarComboRecord requestDeleteCombo(String id, BarCatalogDeleteRequest request) {
+        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_COMBO, () -> doRequestDeleteCombo(id, request));
+    }
+
+    private BarComboRecord doRequestDeleteCombo(String id, BarCatalogDeleteRequest request) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarComboRecord combo = requireCombo(id);
         checkOwnership(scope, combo.merchantId());
@@ -324,6 +348,10 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarCatalogDeleteDecision approveDeleteCombo(String id, BarCatalogDeleteApprovalRequest request) {
+        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_COMBO, () -> doApproveDeleteCombo(id, request));
+    }
+
+    private BarCatalogDeleteDecision doApproveDeleteCombo(String id, BarCatalogDeleteApprovalRequest request) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarComboRecord combo = requireCombo(id);
         checkOwnership(scope, combo.merchantId());

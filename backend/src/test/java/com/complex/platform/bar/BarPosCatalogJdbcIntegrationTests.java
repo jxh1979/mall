@@ -35,6 +35,9 @@ class BarPosCatalogJdbcIntegrationTests {
     @Autowired
     private BarOrderService barOrderService;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     private BarProductRecord newProduct(String id, String barId, String name) {
         Instant now = Instant.now();
         return new BarProductRecord(id, barId, "merchant_pos_test", name, "spirit", 5000L, "CNY",
@@ -538,5 +541,26 @@ class BarPosCatalogJdbcIntegrationTests {
         } finally {
             com.complex.platform.support.TestSecurityActors.clear();
         }
+    }
+
+    @Test
+    void productReferenceGuardListStaysInSyncWithSchemaForeignKeys() {
+        // 守护:countProductReferences 用显式清单 {bar_order_items, bar_combo_items}(因 product_id 是通用列名,
+        // 元数据驱动会误算别域同名列)。若将来有新表加外键引用 bar_products(id),此测试红→强制同步清单,
+        // 否则漏表会导致该商品删除后订单/明细成孤儿。
+        java.util.List<String> referencing = jdbcTemplate.queryForList("""
+                SELECT DISTINCT tc.table_name
+                  FROM information_schema.table_constraints tc
+                  JOIN information_schema.constraint_column_usage ccu
+                    ON tc.constraint_name = ccu.constraint_name
+                   AND tc.table_schema = ccu.table_schema
+                 WHERE tc.constraint_type = 'FOREIGN KEY'
+                   AND tc.table_schema = 'public'
+                   AND ccu.table_name = 'bar_products'
+                   AND ccu.column_name = 'id'
+                """, String.class);
+        org.assertj.core.api.Assertions.assertThat(referencing)
+                .as("引用 bar_products(id) 的外键表集合须与 countProductReferences 显式清单一致;新增引用表请同步 JdbcBarPosCatalogRepository.countProductReferences")
+                .containsExactlyInAnyOrder("bar_order_items", "bar_combo_items");
     }
 }

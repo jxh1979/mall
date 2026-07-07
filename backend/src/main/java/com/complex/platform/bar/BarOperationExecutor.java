@@ -41,6 +41,13 @@ public class BarOperationExecutor {
         );
     }
 
+    /** 只审计留痕、不套幂等键的写。用于目录删除生命周期(request/approve):
+     *  物理删除不可逆须可追溯(谁申请/为何/谁批准),但删除审批无客户端幂等键;
+     *  状态机天然防重放(删后重放 404、驳回后重放 400),故豁免幂等。 */
+    <T> T auditedWrite(BarWriteOperation operation, java.util.function.Supplier<T> action) {
+        return operations.readSingle(operation, action, this::businessId);
+    }
+
     String requireText(String value, String fieldName) {
         return operations.requireText(value, fieldName);
     }
@@ -66,6 +73,9 @@ public class BarOperationExecutor {
         if (value instanceof BarCommissionCalculationRecord record) return record.id();
         if (value instanceof BarGiftRedemptionRecord record) return record.id();
         if (value instanceof PaymentIntentRecord record) return record.id();
+        if (value instanceof BarProductCategoryRecord record) return record.id();
+        if (value instanceof BarComboRecord record) return record.id();
+        if (value instanceof BarCatalogDeleteDecision record) return record.id();
         return null;
     }
 }
