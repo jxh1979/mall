@@ -339,21 +339,6 @@ export type BarComboRow = {
   deleteStatus?: string;
 };
 
-/** V263 酒吧门店主数据：独立门店实体，挂项目（综合体），可选绑经营商户与所在空间。 */
-export type BarVenueRow = {
-  id: string;
-  projectId?: string | null;
-  merchantId?: string | null;
-  spaceId?: string | null;
-  barName?: string;
-  barCode?: string | null;
-  minimumSpendCent?: number | null;
-  status?: string;
-  /** V262 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。 */
-  archivedAt?: string | null;
-  deleteStatus?: string;
-};
-
 export type StoredWineRow = {
   id: string;
   savedNo?: string;

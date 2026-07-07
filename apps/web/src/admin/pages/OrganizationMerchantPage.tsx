@@ -22,7 +22,7 @@ const TEXT = {
   focusClear: "清除筛选，返回全部",
 };
 
-const MERCHANT_TYPES = ["tenant", "retail", "catering", "entertainment", "service"];
+const MERCHANT_TYPES = ["tenant", "retail", "catering", "entertainment", "service", "bar"];
 const COOPERATION_FORMS = ["fixed_rent_plus_commission", "revenue_share", "fixed_rent"];
 
 function display(value: unknown) {

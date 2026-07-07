@@ -21,7 +21,7 @@ const COMBOS: BarComboRow[] = [
 function makeApi(post = vi.fn().mockResolvedValue({ id: "combo-2" })): AdminApiClient {
   const get = vi.fn().mockImplementation((path: string) =>
     Promise.resolve(
-      path.startsWith("/api/v1/bar/venues") ? [{ id: "bar-main", barName: "主酒吧" }]
+      path.startsWith("/api/v1/platform/merchants") ? [{ id: "bar-main", merchantName: "主酒吧", merchantType: "bar" }]
         : path.includes("/combos") ? COMBOS
         : PRODUCTS));
   return {

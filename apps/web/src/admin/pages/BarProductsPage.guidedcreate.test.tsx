@@ -6,12 +6,12 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-// V263：所属酒吧从手填输入改为下拉选择（BarVenueSelect 拉 /api/v1/bar/venues）。
-// 测试用路径感知的 get mock 返回一个 id=bar-main 的门店，使 fireEvent.change 能选中该 option。
-const VENUES = [{ id: "bar-main", barName: "主酒吧" }];
+// V267：所属酒吧＝业态为「酒吧」的商户（BarVenueSelect 拉 /api/v1/platform/merchants 过滤 merchantType===bar）。
+// 测试用路径感知的 get mock 返回一个 id=bar-main 的酒吧商户，使 fireEvent.change 能选中该 option。
+const VENUES = [{ id: "bar-main", merchantName: "主酒吧", merchantType: "bar" }];
 function venueAwareGet() {
   return vi.fn().mockImplementation((path: string) =>
-    Promise.resolve(path.startsWith("/api/v1/bar/venues") ? VENUES : []));
+    Promise.resolve(path.startsWith("/api/v1/platform/merchants") ? VENUES : []));
 }
 
 function makeApi(post = vi.fn().mockResolvedValue({ id: "prod-new" })): AdminApiClient {

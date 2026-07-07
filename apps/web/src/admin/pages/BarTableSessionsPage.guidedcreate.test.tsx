@@ -9,7 +9,7 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 function makeApi(post = vi.fn().mockResolvedValue({ id: "tbl-new" })): AdminApiClient {
   return {
     get: vi.fn().mockImplementation((path: string) =>
-      Promise.resolve(path.startsWith("/api/v1/bar/venues") ? [{ id: "bar-main", barName: "主酒吧" }] : [])),
+      Promise.resolve(path.startsWith("/api/v1/platform/merchants") ? [{ id: "bar-main", merchantName: "主酒吧", merchantType: "bar" }] : [])),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post,
     put: vi.fn().mockResolvedValue({}),
