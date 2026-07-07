@@ -1,6 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
-import { formatPermissionDomain } from "../i18n/permissionDomainLabels";
+import { adminRoutes } from "../adminRoutes";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { PermissionButton } from "../security/Can";
@@ -114,12 +114,26 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
   }, [targetUsersText, users]);
 
   const groupedPermissions = React.useMemo(() => {
+    // 权限分组与左侧菜单对应:从 adminRoutes 派生「权限域→菜单模块」,并按菜单模块出现顺序排列,
+    // 使管理员按左侧目录的思路勾选权限。未匹配任何菜单的域归入「其他」置末。
+    const domainToModule = new Map<string, string>();
+    const moduleOrder: string[] = [];
+    for (const route of adminRoutes) {
+      if (!moduleOrder.includes(route.module)) moduleOrder.push(route.module);
+      for (const code of route.requiredPermissions ?? []) {
+        const dom = code.split(".")[0];
+        if (dom && !domainToModule.has(dom)) domainToModule.set(dom, route.module);
+      }
+    }
     const groups = new Map<string, PermissionDefinitionRow[]>();
     for (const row of permissions) {
       const domain = row.domain ?? permissionCode(row).split(".")[0] ?? "other";
-      groups.set(domain, [...(groups.get(domain) ?? []), row]);
+      const moduleName = domainToModule.get(domain) ?? "其他";
+      groups.set(moduleName, [...(groups.get(moduleName) ?? []), row]);
     }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return [...moduleOrder, "其他"]
+      .filter((m) => groups.has(m))
+      .map((m) => [m, groups.get(m)!] as [string, PermissionDefinitionRow[]]);
   }, [permissions]);
 
   function startNewTemplate() {
@@ -334,9 +348,9 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
         {formError ? <div className="admin-inline-error" data-testid="permission-templates-error">{formError}</div> : null}
 
         <div className="admin-permission-grid" data-testid="permission-template-permission-grid">
-          {groupedPermissions.map(([domain, items]) => (
-            <fieldset key={domain} className="admin-permission-domain">
-              <legend>{formatPermissionDomain(domain)}</legend>
+          {groupedPermissions.map(([moduleName, items]) => (
+            <fieldset key={moduleName} className="admin-permission-domain">
+              <legend>{moduleName}</legend>
               {items.map((item) => {
                 const code = permissionCode(item);
                 return (
