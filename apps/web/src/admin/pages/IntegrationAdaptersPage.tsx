@@ -5,11 +5,15 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, ProviderAdapterRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [rows, setRows] = React.useState<ProviderAdapterRow[]>([]);
   const [credentialRef, setCredentialRef] = React.useState("");
   const [formError, setFormError] = React.useState("");
+  // 引导式流程 phase-6：新增供应商适配器收起为主按钮 + 分步引导弹窗（Mock 测试是动作不动）。
+  const [adapterOpen, setAdapterOpen] = React.useState(false);
+  const [adapterSubmitting, setAdapterSubmitting] = React.useState(false);
   // 行明细抽屉：整行可点 → 该适配器完整字段（生产就绪中文·凭证仅显引用不显明文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -22,15 +26,30 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
     { onError: setGlobalError, fallbackMessage: "供应商适配器读取失败" },
   );
 
+  // 凭证校验（步内 + 提交双保险）：只允许 cred:// 凭证引用，不允许明文密钥。
+  function credentialInvalid() {
+    return !credentialRef.startsWith("cred://");
+  }
+
   async function saveAdapter() {
-    if (!credentialRef.startsWith("cred://")) {
+    if (credentialInvalid()) {
       setFormError("只能填写 credential_ref 凭证引用，不允许明文密钥。");
       return;
     }
     setFormError("");
-    const adapter = await api.post<ProviderAdapterRow>("/api/v1/integration/provider-adapters", { providerCode: "provider-admin", adapterType: "reservation_resource", credentialSecretRef: credentialRef });
-    setRows((current) => [...current, adapter]);
-    setActionResult({ action: "adapter_saved", provider: adapter.providerCode, adapter });
+    setAdapterSubmitting(true);
+    try {
+      const adapter = await api.post<ProviderAdapterRow>("/api/v1/integration/provider-adapters", { providerCode: "provider-admin", adapterType: "reservation_resource", credentialSecretRef: credentialRef });
+      setRows((current) => [...current, adapter]);
+      setActionResult({ action: "adapter_saved", provider: adapter.providerCode, adapter });
+      setAdapterOpen(false);
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "新增供应商适配器失败";
+      setFormError(message);
+      setGlobalError(message);
+    } finally {
+      setAdapterSubmitting(false);
+    }
   }
 
   async function testMock() {
@@ -77,13 +96,41 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
   return (
     <section data-testid="integration-adapters-page">
       <AdminPageHeader title="供应商适配器" description="双向开放配置只保存 endpoint、字段映射、签名方式和凭证引用；真实密钥不入库。" />
+      <div className="admin-form-row" data-testid="integration-adapter-form">
+        <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.create"]} data-testid="integration-create-open" onClick={() => { setFormError(""); setAdapterOpen(true); }}>＋ 新增供应商适配器</PermissionButton>
+        <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.test"]} data-testid="integration-test-mock" onClick={() => void testMock()}>Mock 测试</PermissionButton>
+        <span className="admin-muted-action">只填 cred:// 凭证引用，真实密钥不入库。</span>
+      </div>
+      {formError && !adapterOpen ? <div data-testid="integration-error" className="admin-inline-error">{formError}</div> : null}
+      <GuidedFlowModal
+        open={adapterOpen}
+        title="新增供应商适配器"
+        testId="integration"
+        submitTestId="integration-save"
+        submitLabel="保存适配器"
+        submitting={adapterSubmitting}
+        error={formError || undefined}
+        onClose={() => setAdapterOpen(false)}
+        onSubmit={() => void saveAdapter()}
+        steps={[
+          {
+            title: "凭证引用",
+            description: "填写供应商凭证引用（cred://...），真实密钥不入库。",
+            validate: () => (credentialInvalid() ? "只能填写 credential_ref 凭证引用，不允许明文密钥。" : null),
+            content: (
+              <>
+                <label>凭证引用<input data-testid="integration-credential-ref" value={credentialRef} onChange={(event) => setCredentialRef(event.target.value)} placeholder="cred://..." /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "供应商", value: "provider-admin" },
+          { label: "适配器类型", value: "预定资源" },
+          { label: "凭证引用", value: credentialRef.trim() || "未填写" },
+        ]}
+      />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
-        <div className="admin-form-row">
-          <input data-testid="integration-credential-ref" value={credentialRef} onChange={(event) => setCredentialRef(event.target.value)} placeholder="cred://..." />
-          <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.create"]} data-testid="integration-save" onClick={() => void saveAdapter()}>保存适配器</PermissionButton>
-          <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.test"]} data-testid="integration-test-mock" onClick={() => void testMock()}>Mock 测试</PermissionButton>
-        </div>
-        {formError ? <div data-testid="integration-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="integration-adapters-table">
             <thead><tr><th>供应商</th><th>适配器类型</th><th>生产就绪</th></tr></thead>

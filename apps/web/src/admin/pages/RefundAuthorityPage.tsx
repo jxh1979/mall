@@ -6,6 +6,7 @@ import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 // 退款分级授权配置行（后端 RefundAuthorityLimitRecord / RefundAutoRuleRecord，客户端 unwrap 已 camel 化）。
 type RefundLimitRow = {
@@ -38,7 +39,11 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
   // 行明细抽屉：整行可点 -> 该额度/规则完整字段（主体/退款域/规则类型均中文·金额¥）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   const [limitForm, setLimitForm] = React.useState({ subjectId: "", refundDomain: "all", limitYuan: "" });
-  const [ruleForm, setRuleForm] = React.useState({ refundDomain: "all", ruleType: "expired_unused" });
+  const [ruleForm, setRuleForm] = React.useState({ refundDomain: "all", ruleType: "" });
+  // 引导式流程 phase-6：新增退款规则收起为主按钮 + 分步引导弹窗（退款额度表单不动）。
+  const [ruleOpen, setRuleOpen] = React.useState(false);
+  const [ruleError, setRuleError] = React.useState("");
+  const [ruleSubmitting, setRuleSubmitting] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -83,6 +88,38 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
     });
     setActionResult({ action: "refund_rule_saved", ruleType: target.ruleType.trim(), enabled });
     reload();
+  }
+
+  // 新增退款规则校验（步内 + 提交双保险）：规则类型非空。
+  function ruleFormInvalid() {
+    return !ruleForm.ruleType.trim();
+  }
+
+  async function saveRuleFromForm() {
+    if (ruleFormInvalid()) {
+      setRuleError("请填写规则类型，如 expired_unused");
+      return;
+    }
+    setRuleSubmitting(true);
+    try {
+      await api.post("/api/v1/finance/refund-authority/rules", {
+        refundDomain: ruleForm.refundDomain,
+        ruleType: ruleForm.ruleType.trim(),
+        enabled: true,
+        status: "active",
+      });
+      setActionResult({ action: "refund_rule_saved", ruleType: ruleForm.ruleType.trim(), enabled: true });
+      setRuleForm({ refundDomain: "all", ruleType: "" });
+      setRuleError("");
+      setRuleOpen(false);
+      reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "新增退款规则失败";
+      setRuleError(message);
+      setGlobalError(message);
+    } finally {
+      setRuleSubmitting(false);
+    }
   }
 
   function openLimitDetail(row: RefundLimitRow) {
@@ -218,33 +255,48 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
             </tbody>
           </table>
         </div>
-        <div className="admin-inline-form" data-testid="refund-rule-form">
-          <select
-            aria-label="规则退款域"
-            value={ruleForm.refundDomain}
-            onChange={(event) => setRuleForm({ ...ruleForm, refundDomain: event.target.value })}
-          >
-            {DOMAINS.map((domain) => (
-              <option key={domain} value={domain}>
-                {domain}
-              </option>
-            ))}
-          </select>
-          <input
-            aria-label="规则类型"
-            placeholder="规则类型，如 expired_unused"
-            value={ruleForm.ruleType}
-            onChange={(event) => setRuleForm({ ...ruleForm, ruleType: event.target.value })}
-          />
+        <div className="admin-form-row" data-testid="refund-rule-form">
           <PermissionButton
             permissionsState={effectivePermissions}
             permissions={MANAGE}
-            data-testid="refund-rule-add"
-            onClick={() => void saveRule(true, ruleForm)}
+            data-testid="refund-rule-create-open"
+            onClick={() => { setRuleError(""); setRuleOpen(true); }}
           >
-            启用规则
+            ＋ 新增退款规则
           </PermissionButton>
+          <span className="admin-muted-action">新增自动放行规则：满足条件的退款额度内自助放行、超额复核。</span>
         </div>
+        <GuidedFlowModal
+          open={ruleOpen}
+          title="新增退款规则"
+          testId="refund-rule-guided"
+          submitTestId="refund-rule-add"
+          submitLabel="启用规则"
+          submitting={ruleSubmitting}
+          error={ruleError || undefined}
+          onClose={() => setRuleOpen(false)}
+          onSubmit={() => void saveRuleFromForm()}
+          steps={[
+            {
+              title: "规则设置",
+              description: "选择退款域并填写规则类型。",
+              validate: () => (ruleFormInvalid() ? "请填写规则类型，如 expired_unused" : null),
+              content: (
+                <>
+                  <label>退款域<select aria-label="规则退款域" value={ruleForm.refundDomain} onChange={(event) => setRuleForm({ ...ruleForm, refundDomain: event.target.value })}>
+                    {DOMAINS.map((domain) => (<option key={domain} value={domain}>{domain}</option>))}
+                  </select></label>
+                  <label>规则类型<input aria-label="规则类型" placeholder="规则类型，如 expired_unused" value={ruleForm.ruleType} onChange={(event) => setRuleForm({ ...ruleForm, ruleType: event.target.value })} /></label>
+                </>
+              ),
+            },
+          ]}
+          summary={[
+            { label: "退款域", value: formatBusinessStatus(ruleForm.refundDomain) },
+            { label: "规则类型", value: ruleForm.ruleType.trim() || "未填写" },
+            { label: "启用", value: "是" },
+          ]}
+        />
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>

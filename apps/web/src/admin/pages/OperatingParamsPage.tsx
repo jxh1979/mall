@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
 // 综合体经营参数行（后端 OperatingParamsRecord，客户端 unwrap 已 camel 化）。
@@ -53,7 +54,11 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
   const [fetchUrl, setFetchUrl] = React.useState("");
   const [highEdit, setHighEdit] = React.useState("");
   const [cutoffEdits, setCutoffEdits] = React.useState<Record<string, string>>({});
-  const [form, setForm] = React.useState({ projectId: "project_1", areaSqm: "" });
+  const [form, setForm] = React.useState({ projectId: "", areaSqm: "" });
+  // 引导式流程 phase-6：运营参数录入收起为主按钮 + 分步引导弹窗（日切/异常/节假日等其余表单不动）。
+  const [paramsOpen, setParamsOpen] = React.useState(false);
+  const [paramsError, setParamsError] = React.useState("");
+  const [paramsSubmitting, setParamsSubmitting] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -73,20 +78,37 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
     { onError: setGlobalError, fallbackMessage: "综合体经营参数读取失败" },
   );
 
+  // 面积校验（步内 + 提交双保险）：综合体 id 非空 + 可经营面积为大于 0 的数。
+  function areaInvalid() {
+    const area = Number(form.areaSqm);
+    return !form.projectId.trim() || !Number.isFinite(area) || area <= 0;
+  }
+
   async function saveArea() {
     const area = Number(form.areaSqm);
-    if (!form.projectId.trim() || !Number.isFinite(area) || area <= 0) {
-      setGlobalError("请填写综合体 id 与大于 0 的可经营面积（㎡）");
+    if (areaInvalid()) {
+      setParamsError("请填写综合体 id 与大于 0 的可经营面积（㎡）");
       return;
     }
-    await api.post("/api/v1/analytics/operating-params", {
-      projectId: form.projectId.trim(),
-      operatingAreaSqm: area,
-      status: "active",
-    });
-    setActionResult({ action: "operating_params_saved", projectId: form.projectId.trim(), operatingAreaSqm: area });
-    setForm({ projectId: form.projectId.trim(), areaSqm: "" });
-    reload();
+    setParamsSubmitting(true);
+    try {
+      await api.post("/api/v1/analytics/operating-params", {
+        projectId: form.projectId.trim(),
+        operatingAreaSqm: area,
+        status: "active",
+      });
+      setActionResult({ action: "operating_params_saved", projectId: form.projectId.trim(), operatingAreaSqm: area });
+      setForm({ projectId: "", areaSqm: "" });
+      setParamsError("");
+      setParamsOpen(false);
+      reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "运营参数录入失败";
+      setParamsError(message);
+      setGlobalError(message);
+    } finally {
+      setParamsSubmitting(false);
+    }
   }
 
   async function saveCutoff(domain: string) {
@@ -165,30 +187,45 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
             </tbody>
           </table>
         </div>
-        <div className="admin-inline-form" data-testid="operating-params-form">
-          <input
-            aria-label="综合体 id"
-            placeholder="综合体 id"
-            value={form.projectId}
-            onChange={(event) => setForm({ ...form, projectId: event.target.value })}
-          />
-          <input
-            aria-label="可经营面积（㎡）"
-            type="number"
-            min="0"
-            placeholder="可经营面积（㎡）"
-            value={form.areaSqm}
-            onChange={(event) => setForm({ ...form, areaSqm: event.target.value })}
-          />
+        <div className="admin-form-row" data-testid="operating-params-form">
           <PermissionButton
             permissionsState={effectivePermissions}
             permissions={MANAGE}
-            data-testid="operating-params-save"
-            onClick={() => void saveArea()}
+            data-testid="operating-params-create-open"
+            onClick={() => { setParamsError(""); setParamsOpen(true); }}
           >
-            保存面积
+            ＋ 录入运营参数
           </PermissionButton>
+          <span className="admin-muted-action">配置综合体可经营面积（㎡），坪效 = 净收入 / 可经营面积 据此派生。</span>
         </div>
+        <GuidedFlowModal
+          open={paramsOpen}
+          title="录入运营参数"
+          testId="operating-params-guided"
+          submitTestId="operating-params-save"
+          submitLabel="保存面积"
+          submitting={paramsSubmitting}
+          error={paramsError || undefined}
+          onClose={() => setParamsOpen(false)}
+          onSubmit={() => void saveArea()}
+          steps={[
+            {
+              title: "运营面积",
+              description: "填写综合体 id 与大于 0 的可经营面积（㎡）。",
+              validate: () => (areaInvalid() ? "请填写综合体 id 与大于 0 的可经营面积（㎡）" : null),
+              content: (
+                <>
+                  <label>综合体 id<input aria-label="综合体 id" placeholder="综合体 id" value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })} /></label>
+                  <label>可经营面积（㎡）<input aria-label="可经营面积（㎡）" type="number" min="0" placeholder="可经营面积（㎡）" value={form.areaSqm} onChange={(event) => setForm({ ...form, areaSqm: event.target.value })} /></label>
+                </>
+              ),
+            },
+          ]}
+          summary={[
+            { label: "综合体 id", value: form.projectId.trim() || "未填写" },
+            { label: "可经营面积（㎡）", value: form.areaSqm.trim() || "未填写" },
+          ]}
+        />
         <h3>经营日切分(各业务的「一天」从几点切)</h3>
         <div className="admin-muted-action">酒吧=6 点(晚 6 点到次日早 6 点算一天)、零售/餐饮商户=10 点、其余=4 点;「平台汇总基准」行影响全场对账口径,改动一分钟内生效。</div>
         <div className="admin-table-scroll">
