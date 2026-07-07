@@ -690,9 +690,7 @@ test.describe("full admin remaining pages acceptance", () => {
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-INV-001")!);
     await page.getByTestId("inventory-movement-open").click();
-    await page.getByTestId("inventory-movement-guided-next").click();
     await page.getByTestId("inventory-movement-quantity").fill("1");
-    await page.getByTestId("inventory-movement-guided-next").click();
     await page.getByTestId("inventory-movement-submit").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("inventory_stock_movement_created");
     await expect(page.getByTestId("admin-action-result")).toContainText("from_location_id");
@@ -764,9 +762,7 @@ test.describe("full admin remaining pages acceptance", () => {
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-RISK-001")!);
     await page.getByTestId("risk-alert-create-open").click();
-    await page.getByTestId("risk-alert-guided-next").click();
     await page.getByTestId("risk-alert-summary-input").fill("员工异常折扣触发高风险预警");
-    await page.getByTestId("risk-alert-guided-next").click();
     await page.getByTestId("risk-alert-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("risk_alert_created");
     await expect(page.getByTestId("admin-action-result")).toContainText("att-risk-alert-create");

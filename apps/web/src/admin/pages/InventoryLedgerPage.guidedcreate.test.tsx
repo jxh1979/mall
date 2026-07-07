@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { InventoryLedgerPage } from "./InventoryLedgerPage";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 引导式：登记库存移动收起为入口按钮 → 两步引导（位置 / 数量与追踪）→ 确认页提交。
+// 单页表单弹窗：登记库存移动收起为入口按钮 → 一屏表单（位置/数量/追踪）→ 提交。
 const ITEMS = [{ id: "i-1", itemCode: "SKU-1", itemName: "威士忌", category: "spirits", unit: "瓶", status: "active" }];
 
 function makeApi(post = vi.fn().mockResolvedValue({})): AdminApiClient {
@@ -34,7 +34,7 @@ function renderPage(api: AdminApiClient) {
   render(<InventoryLedgerPage {...props} />);
 }
 
-describe("InventoryLedgerPage 引导式登记库存移动", () => {
+describe("InventoryLedgerPage 单页表单登记库存移动", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     window.history.replaceState({}, "", "/admin/inventory/ledger");
@@ -46,20 +46,14 @@ describe("InventoryLedgerPage 引导式登记库存移动", () => {
     expect(screen.queryByTestId("inventory-movement-guided")).toBeNull();
   });
 
-  it("入口→两步→确认提交：POST /stock-movements 带选中物料，成功后关弹窗", async () => {
+  it("入口→一屏填→提交：POST /stock-movements 带选中物料，成功后关弹窗", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("inventory-movement-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("inventory-movement-open"));
 
-    await waitFor(() => expect(screen.getByTestId("inventory-movement-from")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("inventory-movement-guided-next"));
-
     await waitFor(() => expect(screen.getByTestId("inventory-movement-quantity")).toBeTruthy());
     fireEvent.change(screen.getByTestId("inventory-movement-quantity"), { target: { value: "2" } });
-    fireEvent.click(screen.getByTestId("inventory-movement-guided-next"));
-
-    await waitFor(() => expect(screen.getByTestId("inventory-movement-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("inventory-movement-submit"));
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
@@ -71,17 +65,15 @@ describe("InventoryLedgerPage 引导式登记库存移动", () => {
     await waitFor(() => expect(screen.queryByTestId("inventory-movement-guided")).toBeNull());
   });
 
-  it("第二步校验拦截：数量为 0 不到确认页、不提交", async () => {
+  it("校验拦截：数量为 0 提交被拦、不发请求", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("inventory-movement-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("inventory-movement-open"));
-    fireEvent.click(screen.getByTestId("inventory-movement-guided-next"));
     await waitFor(() => expect(screen.getByTestId("inventory-movement-quantity")).toBeTruthy());
     fireEvent.change(screen.getByTestId("inventory-movement-quantity"), { target: { value: "0" } });
-    fireEvent.click(screen.getByTestId("inventory-movement-guided-next"));
+    fireEvent.click(screen.getByTestId("inventory-movement-submit"));
     expect(screen.getByTestId("inventory-movement-guided-error").textContent).toBeTruthy();
-    expect(screen.queryByTestId("inventory-movement-guided-summary")).toBeNull();
     expect(post).not.toHaveBeenCalled();
   });
 });
