@@ -8,6 +8,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { Tabs } from "antd";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -499,6 +500,13 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       {focusObjectId && (
         <div className="admin-state" data-testid="ticketing-policies-focus">已从下钻定位到票种：{focusObjectId}（下表高亮行）</div>
       )}
+      <div className="admin-preview" data-testid="ticketing-workflow-guide">
+        <strong>怎么用这一页（票务策略配置流程）：</strong>① 先在「票种 / 通票」建好票种并发布 → ② 建「权益模板」（入园 / 酒水兑换 / 游乐等可复用的权益）→ ③ 用「通票组装」把票种绑上权益，或用「组合式套票配置」一次性给一张通票配好跨酒吧 / 游乐 / 餐饮的套票权益 → ④ 最后配「派生价规则」（新人 / 学生 / 多人 / 渠道 / 会员的折扣或固定价）。切换下方标签逐步配置。
+      </div>
+      <Tabs
+        data-testid="ticketing-tabs"
+        items={[
+          { key: "types", label: "① 票种 / 通票", forceRender: true, children: (<>
       <h3>票种 / 通票</h3>
       <label className="admin-inline-check" data-testid="ticket-catalog-show-archived">
         <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
@@ -595,6 +603,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         ]}
       />
 
+          </>) },
+          { key: "combo", label: "② 组合式套票配置", forceRender: true, children: (<>
       <h3>组合式配置策略（一次性给通票配跨酒吧/游乐/餐饮的权益）</h3>
       <div className="admin-preview">
         选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施、加餐饮项（餐厅/价格/折扣/内部结算价），点「组合配置到通票」一次性写入。
@@ -695,6 +705,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       </div>
       {comboError ? <div data-testid="combo-error" className="admin-inline-error">{comboError}</div> : null}
 
+          </>) },
+          { key: "templates", label: "③ 权益模板", forceRender: true, children: (<>
       <h3>权益模板</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="entitlement-templates-table">
@@ -732,6 +744,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </PermissionButton>
       </div>
 
+          </>) },
+          { key: "assemble", label: "④ 通票组装", forceRender: true, children: (<>
       <h3>通票组装（票种绑权益）</h3>
       <div className="admin-inline-form" data-testid="ticket-bind-form">
         <select aria-label="票种" value={bindForm.ticketTypeId} onChange={(event) => setBindForm({ ...bindForm, ticketTypeId: event.target.value })}>
@@ -754,6 +768,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </PermissionButton>
       </div>
 
+          </>) },
+          { key: "pricing", label: "⑤ 派生价规则", forceRender: true, children: (<>
       <h3>派生价规则</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="price-rules-table">
@@ -810,6 +826,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           新建派生价
         </PermissionButton>
       </div>
+          </>) },
+        ]}
+      />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );
