@@ -183,15 +183,24 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
 
   async function archiveMerchant(id: string, archive: boolean) {
     setGlobalError(null);
+    let reason: string | undefined;
+    if (archive) {
+      const r = window.prompt("存档（下线）理由：");
+      if (r === null) return;
+      if (!r.trim()) { setGlobalError("存档理由必填"); return; }
+      reason = r.trim();
+    }
     await api.post(`/api/v1/platform/merchants/${id}/${archive ? "archive" : "unarchive"}`, {
       idempotencyKey: `merchant-${archive ? "archive" : "unarchive"}-${id}-${Date.now()}`,
+      ...(reason ? { reason } : {}),
     });
     setActionResult({ action: archive ? "merchant_archived" : "merchant_unarchived", id });
     await reload();
   }
 
   async function requestDeleteMerchant(id: string) {
-    const reason = window.prompt("删除理由（提交后需上级审批）：") ?? "";
+    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    if (reason === null || !reason.trim()) { setGlobalError("删除理由必填"); return; }
     setGlobalError(null);
     await api.post(`/api/v1/platform/merchants/${id}/delete-request`, {
       idempotencyKey: `merchant-delete-request-${id}-${Date.now()}`,

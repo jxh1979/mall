@@ -86,7 +86,14 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
 
   async function archiveCombo(id: string, archive: boolean) {
     try {
-      await api.post(`/api/v1/bar/catalog/combos/${id}/${archive ? "archive" : "unarchive"}`, {});
+      let reason: string | undefined;
+      if (archive) {
+        const r = window.prompt("存档（下线）理由：");
+        if (r === null) return;
+        if (!r.trim()) { setGlobalError("存档理由必填"); return; }
+        reason = r.trim();
+      }
+      await api.post(`/api/v1/bar/catalog/combos/${id}/${archive ? "archive" : "unarchive"}`, reason ? { reason } : {});
       setActionResult({ action: `bar_combo_${archive ? "archived" : "unarchived"}`, id });
       await reload();
     } catch (e) {
