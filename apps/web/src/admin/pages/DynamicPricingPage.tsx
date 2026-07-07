@@ -8,6 +8,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps, TicketDynamicPricingRuleRow, TicketDynamicPricingSimulationResult } from "../types";
 
 // 后端写权限码（TicketingController：/dynamic-pricing-rules/{id}/publish）
@@ -89,6 +90,8 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该动态定价规则完整字段（渠道/状态中文·生效期中文日期）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-3：新建定价规则（创建草稿）收起为主按钮，点击弹出分步引导；仿真/发布仍留原表单区（对已存在规则的操作，非创建流）。
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   function openRuleDetail(rule: TicketDynamicPricingRuleRow) {
     setDetail({
@@ -166,7 +169,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
       setFormError(TEXT.nameRequired);
       return;
     }
-    await runAction("ticket_dynamic_rule_created", () => api.post("/api/v1/ticketing/dynamic-pricing-rules", {
+    const result = await runAction("ticket_dynamic_rule_created", () => api.post("/api/v1/ticketing/dynamic-pricing-rules", {
       ticketTypeId: "ticket-1",
       ruleName,
       priority: 10,
@@ -181,6 +184,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
       operatorNote: TEXT.createNote,
       evidenceAttachmentIds: ["att-dynamic-admin-1"],
     }));
+    if (result) setCreateOpen(false);
   }
 
   async function simulate() {
@@ -235,11 +239,10 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
         </div>
 
         <div className="admin-form-row" data-testid="dynamic-pricing-form">
-          <input data-testid="dynamic-pricing-rule-name" value={ruleName} onChange={(event) => setRuleName(event.target.value)} placeholder={TEXT.ruleName} />
+          {/* 引导式流程 phase-3：新建定价规则入口按钮（权限门仍由发布环节的 HighRiskConfirm 把守；创建草稿为低风险操作）。 */}
+          <button type="button" data-testid="dynamic-pricing-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ 新建定价规则</button>
           <input data-testid="dynamic-pricing-channel" value={salesChannel} onChange={(event) => setSalesChannel(event.target.value)} placeholder={TEXT.channel} />
-          <input data-testid="dynamic-pricing-adjustment-rate" value={adjustmentRate} onChange={(event) => setAdjustmentRate(event.target.value)} placeholder={TEXT.adjustmentRate} />
           <input data-testid="dynamic-pricing-visit-date" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} placeholder={TEXT.visitDate} />
-          <button type="button" data-testid="dynamic-pricing-create" disabled={busyAction !== ""} onClick={() => void createDraft()}>{TEXT.createDraft}</button>
           <button type="button" data-testid="dynamic-pricing-simulate" disabled={busyAction !== ""} onClick={() => void simulate()}>{TEXT.simulate}</button>
           <HighRiskConfirm
             label={TEXT.publish}
@@ -252,6 +255,43 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
             data-testid="dynamic-pricing-publish"
           />
         </div>
+        <GuidedFlowModal
+          open={createOpen}
+          title="新建定价规则"
+          testId="dynamic-pricing-guided"
+          submitTestId="dynamic-pricing-create"
+          submitLabel={TEXT.createDraft}
+          submitting={busyAction !== ""}
+          error={formError}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={() => void createDraft()}
+          steps={[
+            {
+              title: "基本信息",
+              description: "填写规则名称与适用渠道。",
+              validate: () => (ruleName.trim() ? null : TEXT.nameRequired),
+              content: (
+                <>
+                  <label><span>{TEXT.ruleName}</span><input data-testid="dynamic-pricing-rule-name" value={ruleName} onChange={(event) => setRuleName(event.target.value)} placeholder={TEXT.ruleName} /></label>
+                  <label><span>{TEXT.channel}</span><input data-testid="dynamic-pricing-guided-channel" value={salesChannel} onChange={(event) => setSalesChannel(event.target.value)} placeholder={TEXT.channel} /></label>
+                </>
+              ),
+            },
+            {
+              title: "调价",
+              description: "百分比调整幅度（正值上浮、负值下调）。",
+              validate: () => (Number.isFinite(Number(adjustmentRate)) ? null : "百分比调整必须为数字。"),
+              content: (
+                <label><span>{TEXT.adjustmentRate}</span><input data-testid="dynamic-pricing-adjustment-rate" value={adjustmentRate} onChange={(event) => setAdjustmentRate(event.target.value)} placeholder={TEXT.adjustmentRate} /></label>
+              ),
+            },
+          ]}
+          summary={[
+            { label: TEXT.ruleName, value: ruleName.trim() || "未填写" },
+            { label: TEXT.channel, value: salesChannel.trim() || "未填写" },
+            { label: TEXT.adjustmentRate, value: adjustmentRate.trim() || "未填写" },
+          ]}
+        />
         {formError ? <div data-testid="dynamic-pricing-error" className="admin-inline-error">{formError}</div> : null}
         </>
         )}
