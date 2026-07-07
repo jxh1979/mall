@@ -33,7 +33,7 @@ export function RowActions({ actions, permissionsState, testId, triggerLabel = "
   if (allowed.length === 1) {
     const a = allowed[0]!;
     return (
-      <Button size="small" danger={a.danger} data-testid={a.testId} onClick={a.onClick}>{a.label}</Button>
+      <Button danger={a.danger} data-testid={a.testId} onClick={a.onClick}>{a.label}</Button>
     );
   }
   const items = allowed.map((a) => ({
@@ -46,7 +46,7 @@ export function RowActions({ actions, permissionsState, testId, triggerLabel = "
       trigger={["click"]}
       menu={{ items, onClick: ({ key }) => allowed.find((a) => a.key === key)?.onClick() }}
     >
-      <Button size="small" data-testid={testId}>{triggerLabel} ▾</Button>
+      <Button data-testid={testId}>{triggerLabel} ▾</Button>
     </Dropdown>
   );
 }
