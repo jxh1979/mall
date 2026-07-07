@@ -4,6 +4,7 @@ import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
+import { RowActions, type RowAction } from "../components/RowActions";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
@@ -554,13 +555,17 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
                 <td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)}{row.overtime ? "（已逾期）" : ""}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td><td>{row.satisfaction ?? "-"}</td>
                 <td onClick={(event) => event.stopPropagation()}>
-                  {row.status === "pending_assign" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-assign-${row.id}`} onClick={() => void assignWorkOrder(row.id)}>派单</PermissionButton> : null}
-                  {row.status === "assigned" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-start-${row.id}`} onClick={() => void workOrderActionPost(row.id, "start")}>开始</PermissionButton> : null}
-                  {row.status === "processing" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-complete-${row.id}`} onClick={() => void workOrderActionPost(row.id, "complete")}>完成</PermissionButton> : null}
-                  {row.status === "pending_acceptance" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-accept-${row.id}`} onClick={() => void workOrderActionPost(row.id, "accept")}>验收</PermissionButton> : null}
-                  {row.status === "pending_review" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-review-${row.id}`} onClick={() => void workOrderActionPost(row.id, "review")}>回访</PermissionButton> : null}
-                  {row.status !== "closed" && row.status !== "suspended" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-suspend-${row.id}`} onClick={() => void workOrderActionPost(row.id, "suspend")}>挂起</PermissionButton> : null}
-                  {row.status === "suspended" ? <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid={`facility-work-order-resume-${row.id}`} onClick={() => void workOrderActionPost(row.id, "resume")}>恢复</PermissionButton> : null}
+                  {(() => {
+                    const wo: RowAction[] = [];
+                    if (row.status === "pending_assign") wo.push({ key: "assign", label: "派单", permissions: WORK_ORDER, onClick: () => void assignWorkOrder(row.id), testId: `facility-work-order-assign-${row.id}` });
+                    if (row.status === "assigned") wo.push({ key: "start", label: "开始", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "start"), testId: `facility-work-order-start-${row.id}` });
+                    if (row.status === "processing") wo.push({ key: "complete", label: "完成", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "complete"), testId: `facility-work-order-complete-${row.id}` });
+                    if (row.status === "pending_acceptance") wo.push({ key: "accept", label: "验收", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "accept"), testId: `facility-work-order-accept-${row.id}` });
+                    if (row.status === "pending_review") wo.push({ key: "review", label: "回访", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "review"), testId: `facility-work-order-review-${row.id}` });
+                    if (row.status !== "closed" && row.status !== "suspended") wo.push({ key: "suspend", label: "挂起", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "suspend"), testId: `facility-work-order-suspend-${row.id}` });
+                    if (row.status === "suspended") wo.push({ key: "resume", label: "恢复", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "resume"), testId: `facility-work-order-resume-${row.id}` });
+                    return <RowActions actions={wo} permissionsState={effectivePermissions} testId={`facility-work-order-actions-${row.id}`} />;
+                  })()}
                 </td>
               </tr>
             ))}</tbody>
