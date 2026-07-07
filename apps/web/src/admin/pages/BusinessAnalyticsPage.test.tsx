@@ -55,10 +55,14 @@ describe("BusinessAnalyticsPage 复盘锁定真落库(V216)", () => {
     expect(screen.getByTestId("business-analytics-review-locks-list").textContent).toContain("上周复盘锁定");
   });
 
-  it("锁定按钮调用 POST /review-locks(带幂等键),成功后刷新", async () => {
+  it("锁定按钮调用 POST /review-locks(带幂等键),成功后刷新(引导式:入口→确认→提交)", async () => {
     const post = vi.fn().mockResolvedValue({ id: "brl-new" });
     renderPage(makeApi(getResolver(), post));
-    await waitFor(() => expect(screen.getByTestId("business-analytics-lock-snapshot")).toBeTruthy());
+    // 引导式 phase-9：先点主按钮开弹窗，翻到确认页再点提交（默认复盘说明已带值）。
+    await waitFor(() => expect(screen.getByTestId("business-analytics-lock-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("business-analytics-lock-open"));
+    fireEvent.click(screen.getByTestId("business-analytics-lock-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("business-analytics-lock-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("business-analytics-lock-snapshot"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/analytics/review-locks",
@@ -66,13 +70,15 @@ describe("BusinessAnalyticsPage 复盘锁定真落库(V216)", () => {
     ));
   });
 
-  it("复盘说明为空时不发请求,提示错误", async () => {
+  it("复盘说明为空时步内拦截不发请求,弹窗内提示错误", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(getResolver(), post));
-    await waitFor(() => expect(screen.getByTestId("business-analytics-lock-note")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("business-analytics-lock-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("business-analytics-lock-open"));
     fireEvent.change(screen.getByTestId("business-analytics-lock-note"), { target: { value: "   " } });
-    fireEvent.click(screen.getByTestId("business-analytics-lock-snapshot"));
-    await waitFor(() => expect(screen.getByTestId("business-analytics-form-error")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("business-analytics-lock-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("business-analytics-lock-guided-error")).toBeTruthy());
+    expect(screen.queryByTestId("business-analytics-lock-guided-summary")).toBeNull();
     expect(post).not.toHaveBeenCalled();
   });
 });

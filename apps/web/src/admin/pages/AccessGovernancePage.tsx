@@ -5,6 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AccessUserRow, AdminPageProps } from "../types";
 
 type RoleRow = { id: string; roleName?: string | null; roleCode?: string | null; status?: string | null; permissionCodes?: string[] };
@@ -75,6 +76,10 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
   const [reviewForm, setReviewForm] = React.useState({ comment: "", evidenceAttachmentIds: "" });
   // 行明细抽屉：三张业务表（岗位模板/授权申请/智能总结）整行可点 → 该行完整字段（枚举中文·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-9：岗位角色模板收起为主按钮 + 分步引导弹窗（其余授权申请/审批工作流原样不动）。
+  const [templateOpen, setTemplateOpen] = React.useState(false);
+  const [templateError, setTemplateError] = React.useState("");
+  const [templateSaving, setTemplateSaving] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -119,11 +124,17 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
       status: row.status ?? "active",
     });
     setPositionForm((current) => ({ ...current, positionCode: row.positionCode, staffLevelId: row.staffLevelId }));
+    // 选中=编辑该模板：直接打开引导弹窗（此时 id 非空走 PUT 更新）。
+    setTemplateError("");
+    setTemplateOpen(true);
   }
+
+  const TEMPLATE_REQUIRED = "岗位模板需填写岗位、职级，并至少绑定 roleId 或 templateId";
 
   async function savePositionTemplate() {
     if (!templateForm.positionCode.trim() || !templateForm.staffLevelId.trim() || (!templateForm.roleId.trim() && !templateForm.templateId.trim())) {
-      setGlobalError("岗位模板需填写岗位、职级，并至少绑定 roleId 或 templateId");
+      setTemplateError(TEMPLATE_REQUIRED);
+      setGlobalError(TEMPLATE_REQUIRED);
       return;
     }
     const body = {
@@ -134,12 +145,25 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
       status: templateForm.status,
       operatorNote: "后台岗位角色模板维护",
     };
-    const saved = templateForm.id
-      ? await api.put<PositionRoleTemplateRow>(`/api/v1/access/position-role-templates/${encodeURIComponent(templateForm.id)}`, body)
-      : await api.post<PositionRoleTemplateRow>("/api/v1/access/position-role-templates", body);
-    setActionResult({ action: "access_position_role_template_saved", templateId: saved.id });
-    setTemplateForm({ ...templateForm, id: "" });
-    await reload();
+    // 提交失败留弹窗内显错（templateError），成功才关弹窗（照 phase-8 范式）。
+    setTemplateError("");
+    setGlobalError(null);
+    setTemplateSaving(true);
+    try {
+      const saved = templateForm.id
+        ? await api.put<PositionRoleTemplateRow>(`/api/v1/access/position-role-templates/${encodeURIComponent(templateForm.id)}`, body)
+        : await api.post<PositionRoleTemplateRow>("/api/v1/access/position-role-templates", body);
+      setActionResult({ action: "access_position_role_template_saved", templateId: saved.id });
+      setTemplateForm({ ...templateForm, id: "" });
+      setTemplateOpen(false);
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "岗位角色模板保存失败";
+      setTemplateError(message);
+      setGlobalError(message);
+    } finally {
+      setTemplateSaving(false);
+    }
   }
 
   async function deletePositionTemplate(id: string) {
@@ -298,14 +322,14 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
             ))}</tbody>
           </table>
         </div>
-        <div className="admin-inline-form" data-testid="access-position-role-template-form">
-          <input aria-label="模板 id" placeholder="模板 id(选中后更新)" value={templateForm.id} onChange={(event) => setTemplateForm({ ...templateForm, id: event.target.value })} />
-          <input aria-label="岗位编码" placeholder="岗位编码" value={templateForm.positionCode} onChange={(event) => setTemplateForm({ ...templateForm, positionCode: event.target.value })} />
-          <input aria-label="职级 id" placeholder="职级 id" value={templateForm.staffLevelId} onChange={(event) => setTemplateForm({ ...templateForm, staffLevelId: event.target.value })} />
-          <select aria-label="角色 id" value={templateForm.roleId} onChange={(event) => setTemplateForm({ ...templateForm, roleId: event.target.value })}><option value="">不绑定角色</option>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select>
-          <input aria-label="权限模板 id" placeholder="权限模板 id" value={templateForm.templateId} onChange={(event) => setTemplateForm({ ...templateForm, templateId: event.target.value })} />
-          <select aria-label="模板状态" value={templateForm.status} onChange={(event) => setTemplateForm({ ...templateForm, status: event.target.value })}><option value="active">启用</option><option value="inactive">停用</option></select>
-          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid="access-position-role-template-save" onClick={() => void savePositionTemplate()}>保存映射</PermissionButton>
+        <div className="admin-form-row" data-testid="access-position-role-template-form">
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={ASSIGN}
+            data-testid="access-position-role-template-create-open"
+            onClick={() => { setTemplateForm({ id: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", roleId: roles[0]?.id ?? "", templateId: "", status: "active" }); setTemplateError(""); setTemplateOpen(true); }}
+          >＋ 新增岗位角色模板</PermissionButton>
+          <span className="admin-muted-action">表内「选中」可编辑既有模板（走更新）。</span>
         </div>
 
         <h3>给用户定职位自动适配</h3>
@@ -379,6 +403,51 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
         </div>
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={templateOpen}
+        title={templateForm.id ? "编辑岗位角色模板" : "新增岗位角色模板"}
+        testId="access-position-role-template-guided"
+        submitTestId="access-position-role-template-save"
+        submitLabel="保存映射"
+        submitting={templateSaving}
+        error={templateError || undefined}
+        onClose={() => setTemplateOpen(false)}
+        onSubmit={() => void savePositionTemplate()}
+        steps={[
+          {
+            title: "岗位与职级",
+            description: "岗位、职级必填，并至少绑定一个角色或权限模板；用户定岗后按此映射自动装配权限。",
+            validate: () => {
+              if (!templateForm.positionCode.trim() || !templateForm.staffLevelId.trim() || (!templateForm.roleId.trim() && !templateForm.templateId.trim())) {
+                return TEMPLATE_REQUIRED;
+              }
+              return null;
+            },
+            content: (
+              <>
+                <label>岗位编码<input data-testid="access-position-role-template-position" aria-label="岗位编码" placeholder="岗位编码" value={templateForm.positionCode} onChange={(event) => setTemplateForm({ ...templateForm, positionCode: event.target.value })} /></label>
+                <label>职级 id<input data-testid="access-position-role-template-level" aria-label="职级 id" placeholder="职级 id" value={templateForm.staffLevelId} onChange={(event) => setTemplateForm({ ...templateForm, staffLevelId: event.target.value })} /></label>
+                <label>角色<select data-testid="access-position-role-template-role" aria-label="角色 id" value={templateForm.roleId} onChange={(event) => setTemplateForm({ ...templateForm, roleId: event.target.value })}><option value="">不绑定角色</option>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select></label>
+                <label>权限模板 id<input data-testid="access-position-role-template-template-id" aria-label="权限模板 id" placeholder="权限模板 id" value={templateForm.templateId} onChange={(event) => setTemplateForm({ ...templateForm, templateId: event.target.value })} /></label>
+              </>
+            ),
+          },
+          {
+            title: "状态",
+            content: (
+              <label>模板状态<select data-testid="access-position-role-template-status" aria-label="模板状态" value={templateForm.status} onChange={(event) => setTemplateForm({ ...templateForm, status: event.target.value })}><option value="active">启用</option><option value="inactive">停用</option></select></label>
+            ),
+          },
+        ]}
+        summary={[
+          { label: templateForm.id ? "模板编号" : "操作", value: templateForm.id || "新增" },
+          { label: "岗位", value: templateForm.positionCode.trim() || "未填写" },
+          { label: "职级", value: templateForm.staffLevelId.trim() || "未填写" },
+          { label: "角色", value: templateForm.roleId ? roleLabel(roles.find((r) => r.id === templateForm.roleId)) : "不绑定" },
+          { label: "权限模板", value: templateForm.templateId.trim() || "—" },
+          { label: "状态", value: templateForm.status === "active" ? "启用" : "停用" },
+        ]}
+      />
     </section>
   );
 }

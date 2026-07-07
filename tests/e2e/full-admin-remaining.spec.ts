@@ -546,7 +546,10 @@ test.describe("full admin remaining pages acceptance", () => {
         await page.getByTestId("business-analytics-domain-filter").selectOption("bar");
         await expect(page.getByTestId("business-analytics-table")).toContainText("bar_order_count");
         await page.getByTestId("business-analytics-domain-filter").selectOption("all");
+        // 引导式 phase-9：新建复盘锁改分步弹窗（入口→填说明→确认→提交）。
+        await page.getByTestId("business-analytics-lock-open").click();
         await page.getByTestId("business-analytics-lock-note").fill("总控周会复盘锁定");
+        await page.getByTestId("business-analytics-lock-guided-next").click();
         await page.getByTestId("business-analytics-lock-snapshot").click();
         await expect(page.getByTestId("admin-action-result")).toContainText("business_snapshot_locked");
         // V216 复盘锁真落库后不再返回 management_review_ready 状态,以审计键为准
@@ -617,7 +620,10 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant-1");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-005")!);
+    // 引导式 phase-9：登记证据事件改分步弹窗（入口→填原因→确认→提交）。
+    await page.getByTestId("admission-audits-create-open").click();
     await page.getByTestId("admission-audits-export-reason").fill("总控导出准入审计片段");
+    await page.getByTestId("admission-audits-guided-next").click();
     await page.getByTestId("admission-audits-export").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("admission_audit_exported");
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant_admission_trace_ready");

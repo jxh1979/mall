@@ -6,6 +6,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { Sparkline, MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps, BusinessMetricSnapshotRow, BusinessReviewLockRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
 import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -95,6 +96,8 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
   // V216 真落库：加载时读回已锁定复盘（刷新/换人后仍可见），锁定按钮走后端接口。
   const [reviewLocks, setReviewLocks] = React.useState<BusinessReviewLockRow[]>([]);
   const [locking, setLocking] = React.useState(false);
+  // 引导式流程 phase-9：新建复盘锁收起为主按钮 + 分步引导弹窗（业务域/说明分步核对后提交）。
+  const [lockOpen, setLockOpen] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 指标快照/定义/异常完整字段（域/趋势/风险/状态中文·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -261,9 +264,13 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
         anomalyCount: null,
         result: saved,
       });
+      // 成功才关弹窗（照 phase-8 范式）；失败留弹窗内显错（formError）。
+      setLockOpen(false);
       await reload();
     } catch (error) {
-      setGlobalError(error instanceof Error ? error.message : "锁定复盘失败");
+      const message = error instanceof Error ? error.message : "锁定复盘失败";
+      setFormError(message);
+      setGlobalError(message);
     } finally {
       setLocking(false);
     }
@@ -294,10 +301,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             {!kpiFocus && (<>
             <div className="admin-form-grid" data-testid="business-analytics-controls">
               <label>{TEXT.domain}<select data-testid="business-analytics-domain-filter" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}><option value="all">{TEXT.allDomains}</option>{domains.map((domain) => <option key={domain} value={domain}>{formatMetricDomain(domain)}</option>)}</select></label>
-              <label>{TEXT.lockNote}<input data-testid="business-analytics-lock-note" value={lockNote} onChange={(event) => setLockNote(event.target.value)} /></label>
             </div>
             <div className="admin-form-row">
-              <button type="button" data-testid="business-analytics-lock-snapshot" onClick={lockSnapshot} disabled={locking}>{locking ? TEXT.locking : TEXT.lockSnapshot}</button>
+              <button type="button" data-testid="business-analytics-lock-open" onClick={() => { setFormError(""); setLockOpen(true); }} disabled={locking}>＋ {TEXT.lockSnapshot}</button>
               <span className="admin-muted-action" data-testid="business-analytics-boundary">{TEXT.boundary}</span>
             </div>
             {formError ? <div data-testid="business-analytics-form-error" className="admin-inline-error">{formError}</div> : null}
@@ -414,6 +420,32 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
         )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={lockOpen}
+        title={TEXT.lockSnapshot}
+        testId="business-analytics-lock-guided"
+        submitTestId="business-analytics-lock-snapshot"
+        submitLabel={locking ? TEXT.locking : TEXT.lockSnapshot}
+        submitting={locking}
+        error={formError || undefined}
+        onClose={() => setLockOpen(false)}
+        onSubmit={lockSnapshot}
+        steps={[
+          {
+            title: TEXT.lockNote,
+            description: `将当前业务域「${domainFilter === "all" ? TEXT.allDomains : formatMetricDomain(domainFilter)}」下 ${filteredSnapshots.length} 项指标快照锁定为一次复盘。请填写复盘说明作为审计留痕。`,
+            validate: () => (lockNote.trim() ? null : "复盘说明不能为空。"),
+            content: (
+              <label>{TEXT.lockNote}<input data-testid="business-analytics-lock-note" value={lockNote} onChange={(event) => setLockNote(event.target.value)} /></label>
+            ),
+          },
+        ]}
+        summary={[
+          { label: TEXT.domain, value: domainFilter === "all" ? TEXT.allDomains : formatMetricDomain(domainFilter) },
+          { label: "指标数", value: `${filteredSnapshots.length} 项` },
+          { label: TEXT.lockNote, value: lockNote.trim() || "未填写" },
+        ]}
+      />
     </section>
   );
 }

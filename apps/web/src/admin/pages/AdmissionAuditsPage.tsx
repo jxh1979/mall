@@ -9,6 +9,7 @@ import type { AdminPageProps, ContractRow, MerchantAdmissionRow, SubjectBindingR
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 const EVIDENCE_CREATE = ["evidence.event.create"];
 
@@ -65,6 +66,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-9：登记证据事件收起为主按钮 + 分步引导弹窗（KPI 聚焦/导出原因分步核对后提交）。
+  const [exportOpen, setExportOpen] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -137,14 +141,26 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         occurredAt: new Date().toISOString(),
       }],
     };
-    const result = await api.post<unknown>("/api/v1/evidence/events", payload);
-    setActionResult({
-      action: "admission_audit_exported",
-      audit: "merchant_admission_trace_ready",
-      evidenceAttachmentIds,
-      request: payload,
-      result,
-    });
+    // 提交失败留弹窗内显错（formError），成功才关闭弹窗（照 phase-8 范式）。
+    setExporting(true);
+    try {
+      const result = await api.post<unknown>("/api/v1/evidence/events", payload);
+      setActionResult({
+        action: "admission_audit_exported",
+        audit: "merchant_admission_trace_ready",
+        evidenceAttachmentIds,
+        request: payload,
+        result,
+      });
+      setExportOpen(false);
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "登记证据事件失败";
+      setFormError(message);
+      setGlobalError(message);
+      setActionResult({ action: "admission_audit_exported", status: "failed", message });
+    } finally {
+      setExporting(false);
+    }
   }
 
   function openMerchantDetail(row: MerchantAdmissionRow) {
@@ -264,11 +280,8 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
               <div className="admin-kpi-card"><span>准入闭环</span><strong>{closedLoopCount}</strong><small>档案+绑定+合同</small></div>
             </div>
 
-            <div className="admin-form-grid">
-              <label>导出原因<input data-testid="admission-audits-export-reason" value={exportReason} onChange={(event) => setExportReason(event.target.value)} /></label>
-            </div>
             <div className="admin-form-row">
-              <PermissionButton permissionsState={effectivePermissions} permissions={EVIDENCE_CREATE} data-testid="admission-audits-export" onClick={() => void exportAdmissionAudit()}>导出准入审计片段</PermissionButton>
+              <PermissionButton permissionsState={effectivePermissions} permissions={EVIDENCE_CREATE} data-testid="admission-audits-create-open" onClick={() => { setFormError(""); setExportOpen(true); }}>＋ 登记证据事件</PermissionButton>
               <span className="admin-muted-action" data-testid="admission-audits-boundary">{TEXT.boundary}</span>
             </div>
 
@@ -283,6 +296,34 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={exportOpen}
+        title="登记证据事件"
+        testId="admission-audits-guided"
+        submitTestId="admission-audits-export"
+        submitLabel="登记并导出"
+        submitting={exporting}
+        error={formError || undefined}
+        onClose={() => setExportOpen(false)}
+        onSubmit={() => void exportAdmissionAudit()}
+        steps={[
+          {
+            title: "导出原因",
+            description: `将当前商户档案（${merchants.length}）、主体绑定（${bindings.length}）、合同审批（${contracts.length}）与准入闭环（${closedLoopCount}）打包登记为一条证据事件。请填写导出原因，作为审计留痕。`,
+            validate: () => (exportReason.trim() ? null : TEXT.exportReasonRequired),
+            content: (
+              <label>导出原因<input data-testid="admission-audits-export-reason" value={exportReason} onChange={(event) => setExportReason(event.target.value)} /></label>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "导出原因", value: exportReason.trim() || "未填写" },
+          { label: "商户档案", value: `${merchants.length} 户` },
+          { label: "主体绑定", value: `${bindings.length} 条` },
+          { label: "合同审批", value: `${contracts.length} 份` },
+          { label: "准入闭环", value: `${closedLoopCount} 户` },
+        ]}
+      />
     </section>
   );
 }
