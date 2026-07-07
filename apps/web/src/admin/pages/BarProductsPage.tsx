@@ -135,7 +135,14 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
 
   async function archiveEntity(kind: "products" | "categories", id: string, archive: boolean) {
     try {
-      await api.post(`/api/v1/bar/catalog/${kind}/${id}/${archive ? "archive" : "unarchive"}`, {});
+      let reason: string | undefined;
+      if (archive) {
+        const r = window.prompt("存档（下线）理由：");
+        if (r === null) return;
+        if (!r.trim()) { setGlobalError("存档理由必填"); return; }
+        reason = r.trim();
+      }
+      await api.post(`/api/v1/bar/catalog/${kind}/${id}/${archive ? "archive" : "unarchive"}`, reason ? { reason } : {});
       setActionResult({ action: `bar_${kind}_${archive ? "archived" : "unarchived"}`, id });
       await reload();
     } catch (e) {

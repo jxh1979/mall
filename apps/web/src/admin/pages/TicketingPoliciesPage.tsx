@@ -198,8 +198,16 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
 
   async function archiveCatalog(kind: "ticket-types" | "price-rules", id: string, archive: boolean) {
     setGlobalError(null);
+    let reason: string | undefined;
+    if (archive) {
+      const r = window.prompt("存档（下线）理由：");
+      if (r === null) return;
+      if (!r.trim()) { setGlobalError("存档理由必填"); return; }
+      reason = r.trim();
+    }
     await api.post(`/api/v1/ticketing/${kind}/${id}/${archive ? "archive" : "unarchive"}`, {
       idempotencyKey: `${kind}-${archive ? "archive" : "unarchive"}-${id}-${Date.now()}`,
+      ...(reason ? { reason } : {}),
     });
     setActionResult({ action: `${kind === "ticket-types" ? "ticket_type" : "price_rule"}_${archive ? "archived" : "unarchived"}`, id });
     await reload();
