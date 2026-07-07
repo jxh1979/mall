@@ -2,6 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { Tabs } from "antd";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
@@ -321,6 +322,13 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         description="起草 → 分组并行审批（业务/财务/法务并行 → 总经理终审，按综合体可配）→ 生效固化收益快照 + 绑铺位 → 变更/退租逐例结算。转租不支持。"
       />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        <div className="admin-preview" data-testid="contract-workbench-guide">
+          <strong>这一页做什么：</strong>合同全生命周期——① 合同（起草 / 审批 / 生效 / 排租金 AR）② 审批与配置（审批链、铺位到期着色）③ 变更与结算（合同变更、退租结算，点合同「明细」联动）④ 铺位平面图。切换标签操作。
+        </div>
+        <Tabs
+          data-testid="contract-workbench-tabs"
+          items={[
+            { key: "contracts", label: "① 合同", forceRender: true, children: (<>
         <h3>合同</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contracts-table">
@@ -443,6 +451,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <CnDatePicker mode="month" aria-label="排租金AR账期" data-testid="contract-bill-period" value={billPeriod} onChange={setBillPeriod} />
         </div>
 
+          </>) },
+          { key: "config", label: "② 审批与配置", forceRender: true, children: (<>
         <h3>审批链（分组并行，按综合体可配）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contract-flow-table">
@@ -484,6 +494,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             data-testid="contract-color-add" onClick={() => void addColorRule()}>新增着色分类</PermissionButton>
         </div>
 
+          </>) },
+          { key: "changes", label: "③ 变更与结算", forceRender: true, children: (<>
         <h3>合同变更（6 类，走同一审批链）{selectedId ? <span className="admin-id-cell" title={selectedId}> · {shortId(selectedId)}</span> : "（点合同『明细』选）"}</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contract-changes-table">
@@ -543,6 +555,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
           </table>
         </div>
 
+          </>) },
+          { key: "floorplan", label: "④ 铺位平面图", forceRender: true, children: (<>
         <h3>铺位平面图（6 态着色）</h3>
         <div data-testid="contract-floorplan" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {spaceRental.map((sp) => (
@@ -556,6 +570,9 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
           ))}
           {spaceRental.length === 0 && <span className="admin-muted">暂无铺位</span>}
         </div>
+          </>) },
+        ]}
+      />
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
