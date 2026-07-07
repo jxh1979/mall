@@ -7,6 +7,11 @@ import java.util.Optional;
 public interface MerchantServiceRepository {
     List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, int limit);
 
+    /** V264：列表按 scope，includeArchived=false 时默认排除已存档/已审批删除的工单。默认委托旧签名（内存桩无存档概念）。 */
+    default List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, boolean includeArchived, int limit) {
+        return findWorkOrdersByScope(merchantScope, limit);
+    }
+
     Optional<MerchantWorkOrderRecord> findWorkOrderById(String id);
 
     /**
@@ -24,6 +29,18 @@ public interface MerchantServiceRepository {
      * 不改变 status（升级是横切标记，非状态迁移）。
      */
     int markSlaBreachedIfNotEscalated(String id, java.time.Instant now);
+
+    /**
+     * V264：活引用计数（=1 拒删）。工单子表 merchant_service_work_order_actions 走 ON DELETE CASCADE 不算活引用；
+     * 真正的“在用”判定是工单非终态（status 不在 closed/cancelled）——非终态工单不得硬删，须先流转关闭再删。
+     */
+    default long countWorkOrderReferences(String id) {
+        return 0L;
+    }
+
+    /** V264：物理删除工单（子表 actions 随 CASCADE 清除）。 */
+    default void deleteWorkOrder(String id) {
+    }
 
     MerchantWorkOrderActionRecord saveAction(MerchantWorkOrderActionRecord record);
 

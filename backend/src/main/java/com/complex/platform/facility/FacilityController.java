@@ -32,9 +32,39 @@ public class FacilityController {
     }
 
     @GetMapping
-    public ApiResponse<PageResponse<FacilityEquipmentRecord>> list() {
+    public ApiResponse<PageResponse<FacilityEquipmentRecord>> list(
+            @RequestParam(value = "include_archived", required = false, defaultValue = "false") boolean includeArchived) {
         requireReadPermission();
-        return ApiResponse.ok(service.listEquipment());
+        return ApiResponse.ok(service.listEquipment(includeArchived));
+    }
+
+    // ── V264 设施设备存档与审批后删除 ──────────────────────────────────
+    @PostMapping("/{equipment_id}/archive")
+    public ApiResponse<FacilityEquipmentRecord> archive(@PathVariable("equipment_id") String equipmentId) {
+        authorizationService.requirePermission(PERM);
+        return ApiResponse.ok(service.archive(equipmentId, true));
+    }
+
+    @PostMapping("/{equipment_id}/unarchive")
+    public ApiResponse<FacilityEquipmentRecord> unarchive(@PathVariable("equipment_id") String equipmentId) {
+        authorizationService.requirePermission(PERM);
+        return ApiResponse.ok(service.archive(equipmentId, false));
+    }
+
+    @PostMapping("/{equipment_id}/delete-request")
+    public ApiResponse<FacilityEquipmentRecord> requestDelete(
+            @PathVariable("equipment_id") String equipmentId,
+            @RequestBody(required = false) com.complex.platform.facility.dto.FacilityEquipmentDeleteRequest request) {
+        authorizationService.requirePermission(PERM);
+        return ApiResponse.ok(service.requestDelete(equipmentId, request));
+    }
+
+    @PostMapping("/{equipment_id}/delete-approve")
+    public ApiResponse<com.complex.platform.facility.dto.FacilityEquipmentDeleteDecision> approveDelete(
+            @PathVariable("equipment_id") String equipmentId,
+            @RequestBody(required = false) com.complex.platform.facility.dto.FacilityEquipmentDeleteApprovalRequest request) {
+        authorizationService.requirePermission("facility.equipment.approve");
+        return ApiResponse.ok(service.approveDelete(equipmentId, request));
     }
 
     @GetMapping("/maintenance-due")

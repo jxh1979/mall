@@ -223,10 +223,93 @@ public class StaffService {
 
     @GuardedAction(permission = "staff.profile.view")
     public PageResponse<StaffProfileRecord> listProfiles() {
-        List<StaffProfileRecord> profiles = repository.listProfiles(merchantScopeOrNull());
+        return listProfiles(false);
+    }
+
+    /** V264：includeArchived=false（默认）排除已存档档案；true 供后台管理存档件。 */
+    public PageResponse<StaffProfileRecord> listProfiles(boolean includeArchived) {
+        List<StaffProfileRecord> profiles = repository.listProfiles(merchantScopeOrNull(), includeArchived);
         auditEventService.recordSuccess("staff.profile.viewed", "staff.profile.view",
                 "staff_profile", "all", null, null, Map.of("count", profiles.size()));
         return page(profiles);
+    }
+
+    // ================= V264 员工档案：存档与审批后删除 =================
+
+    /** 当前操作者 id（存档/删除留痕 + 自审校验）；无鉴权上下文（测试/内部）回退 null。 */
+    private String archiveActorId() {
+        try {
+            return authorizationService.currentActor().id();
+        } catch (RuntimeException unauthenticated) {
+            return null;
+        }
+    }
+
+    @GuardedAction(permission = "staff.profile.review")
+    @org.springframework.transaction.annotation.Transactional
+    public StaffProfileRecord archiveProfile(String id, boolean archive) {
+        StaffProfileRecord profile = requireProfileInScope(id);
+        Instant now = Instant.now();
+        StaffProfileRecord updated = archive
+                ? profile.withArchive(now, archiveActorId(), now)
+                : profile.withArchive(null, null, now).withDelete("none", null, null, null, now);
+        StaffProfileRecord saved = repository.saveProfile(updated);
+        auditEventService.recordSuccess(archive ? "staff.profile.archived" : "staff.profile.unarchived",
+                "staff.profile.review", "staff_profile", id, null, null, Map.of("archived", archive));
+        return saved;
+    }
+
+    @GuardedAction(permission = "staff.profile.review")
+    @org.springframework.transaction.annotation.Transactional
+    public StaffProfileRecord requestDeleteProfile(String id,
+            com.complex.platform.access.staff.dto.StaffProfileDeleteRequest request) {
+        StaffProfileRecord profile = requireProfileInScope(id);
+        if (profile.archivedAt() == null) {
+            throw ApiException.badRequest("STAFF_PROFILE_NOT_ARCHIVED", "员工档案必须先存档才能申请删除");
+        }
+        if ("pending".equals(profile.deleteStatus())) {
+            throw ApiException.conflict("STAFF_PROFILE_DELETE_ALREADY_PENDING", "该员工档案已有待审批的删除申请");
+        }
+        Instant now = Instant.now();
+        String reason = request == null ? null : trimToNull(request.reason());
+        StaffProfileRecord saved = repository.saveProfile(profile.withDelete("pending", archiveActorId(), now, reason, now));
+        auditEventService.recordSuccess("staff.profile.delete_requested", "staff.profile.review",
+                "staff_profile", id, null, null, Map.of());
+        return saved;
+    }
+
+    @GuardedAction(permission = "staff.profile.approve")
+    @org.springframework.transaction.annotation.Transactional
+    public com.complex.platform.access.staff.dto.StaffProfileDeleteDecision approveDeleteProfile(String id,
+            com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest request) {
+        StaffProfileRecord profile = requireProfileInScope(id);
+        if (!"pending".equals(profile.deleteStatus())) {
+            throw ApiException.badRequest("STAFF_PROFILE_DELETE_NOT_PENDING", "该员工档案没有待审批的删除申请");
+        }
+        String decision = request == null || request.decision() == null
+                ? null : request.decision().trim().toLowerCase(Locale.ROOT);
+        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        String actor = archiveActorId();
+        if (actor != null && actor.equals(profile.deleteRequestedBy())) {
+            throw ApiException.forbidden("STAFF_PROFILE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
+        }
+        if ("rejected".equals(decision)) {
+            repository.saveProfile(profile.withDelete("none", null, null, null, Instant.now()));
+            auditEventService.recordSuccess("staff.profile.delete_rejected", "staff.profile.approve",
+                    "staff_profile", id, null, null, Map.of());
+            return new com.complex.platform.access.staff.dto.StaffProfileDeleteDecision(id, "rejected", false);
+        }
+        long refs = repository.countProfileReferences(id);
+        if (refs > 0) {
+            throw ApiException.conflict("STAFF_PROFILE_IN_USE",
+                    "员工仍挂有 " + refs + " 条考勤/请假/职级薪资记录，不可删除");
+        }
+        repository.deleteProfile(id);
+        auditEventService.recordSuccess("staff.profile.delete_approved", "staff.profile.approve",
+                "staff_profile", id, null, null, Map.of());
+        return new com.complex.platform.access.staff.dto.StaffProfileDeleteDecision(id, "approved", true);
     }
 
     // ============================================================ 设备凭证：绑定 / 换机

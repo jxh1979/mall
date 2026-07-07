@@ -9,6 +9,9 @@ import com.complex.platform.merchantservice.dto.MerchantWorkOrderActionRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderAssignRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCreateRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteApprovalRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteDecision;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteRequest;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -63,8 +66,14 @@ public class MerchantServiceService {
     }
 
     public PageResponse<MerchantWorkOrderRecord> listWorkOrders() {
+        return listWorkOrders(false);
+    }
+
+    /** V264：includeArchived=false（默认）排除已存档工单；true 时含存档（供后台管理存档件）。 */
+    public PageResponse<MerchantWorkOrderRecord> listWorkOrders(boolean includeArchived) {
         Optional<String> scope = authorizationService.currentMerchantScope();
-        List<MerchantWorkOrderRecord> records = repository.findWorkOrdersByScope(scope, DEFAULT_PAGE_LIMIT);
+        List<MerchantWorkOrderRecord> records =
+                repository.findWorkOrdersByScope(scope, includeArchived, DEFAULT_PAGE_LIMIT);
         auditEventService.recordSuccess(
                 "merchant_service.work_order.viewed",
                 "merchant.service_work_order.view",
@@ -348,6 +357,85 @@ public class MerchantServiceService {
                 Map.of("status", closed.status())
         );
         return closed;
+    }
+
+    // ================= V264 数据存档与审批后删除范式 =================
+
+    /** 当前操作者 id（存档/删除留痕 + 自审校验）；无鉴权上下文（测试/内部）回退 null。 */
+    private String actorId() {
+        try {
+            return authorizationService.currentActor().id();
+        } catch (RuntimeException unauthenticated) {
+            return null;
+        }
+    }
+
+    /** 存档/取消存档工单（软标记，可逆；列表默认过滤已存档）。取消存档时把 pending 删除申请回退 none。 */
+    @Transactional
+    public MerchantWorkOrderRecord archiveWorkOrder(String id, boolean archive) {
+        MerchantWorkOrderRecord order = findWorkOrder(id);
+        checkMerchantOwnership(order.merchantId());
+        Instant now = Instant.now();
+        MerchantWorkOrderRecord updated = archive
+                ? order.withArchive(now, actorId(), now)
+                : order.withArchive(null, null, now).withDelete("none", null, null, null, now);
+        MerchantWorkOrderRecord saved = repository.saveWorkOrder(updated);
+        auditEventService.recordSuccess(archive ? "merchant_service.work_order.archived" : "merchant_service.work_order.unarchived",
+                "merchant.service_work_order.close", BUSINESS_TYPE, id, requestId(), null,
+                Map.of("archived", archive));
+        return saved;
+    }
+
+    /** 发起删除申请：须先存档，记 requested_by/at/reason，状态置 pending。 */
+    @Transactional
+    public MerchantWorkOrderRecord requestDeleteWorkOrder(String id, MerchantWorkOrderDeleteRequest request) {
+        MerchantWorkOrderRecord order = findWorkOrder(id);
+        checkMerchantOwnership(order.merchantId());
+        if (order.archivedAt() == null) {
+            throw ApiException.badRequest("WORK_ORDER_NOT_ARCHIVED", "工单必须先存档才能申请删除");
+        }
+        if ("pending".equals(order.deleteStatus())) {
+            throw ApiException.conflict("WORK_ORDER_DELETE_ALREADY_PENDING", "该工单已有待审批的删除申请");
+        }
+        Instant now = Instant.now();
+        String reason = request == null ? null : trimToNull(request.reason());
+        MerchantWorkOrderRecord saved = repository.saveWorkOrder(order.withDelete("pending", actorId(), now, reason, now));
+        auditEventService.recordSuccess("merchant_service.work_order.delete_requested",
+                "merchant.service_work_order.close", BUSINESS_TYPE, id, requestId(), null, Map.of());
+        return saved;
+    }
+
+    /** 审批删除申请。approved 且无活引用（工单已终态）→ 物理删除；rejected → 回 none。禁自审。 */
+    @Transactional
+    public MerchantWorkOrderDeleteDecision approveDeleteWorkOrder(String id, MerchantWorkOrderDeleteApprovalRequest request) {
+        MerchantWorkOrderRecord order = findWorkOrder(id);
+        checkMerchantOwnership(order.merchantId());
+        if (!"pending".equals(order.deleteStatus())) {
+            throw ApiException.badRequest("WORK_ORDER_DELETE_NOT_PENDING", "该工单没有待审批的删除申请");
+        }
+        String decision = request == null || request.decision() == null
+                ? null : request.decision().trim().toLowerCase(Locale.ROOT);
+        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        String actor = actorId();
+        if (actor != null && actor.equals(order.deleteRequestedBy())) {
+            throw ApiException.forbidden("WORK_ORDER_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
+        }
+        if ("rejected".equals(decision)) {
+            repository.saveWorkOrder(order.withDelete("none", null, null, null, Instant.now()));
+            auditEventService.recordSuccess("merchant_service.work_order.delete_rejected",
+                    "merchant.service_work_order.approve", BUSINESS_TYPE, id, requestId(), null, Map.of());
+            return new MerchantWorkOrderDeleteDecision(id, "rejected", false);
+        }
+        long refs = repository.countWorkOrderReferences(id);
+        if (refs > 0) {
+            throw ApiException.conflict("WORK_ORDER_IN_USE", "工单未终结（须先关闭或取消），不可删除");
+        }
+        repository.deleteWorkOrder(id);
+        auditEventService.recordSuccess("merchant_service.work_order.delete_approved",
+                "merchant.service_work_order.approve", BUSINESS_TYPE, id, requestId(), null, Map.of());
+        return new MerchantWorkOrderDeleteDecision(id, "approved", true);
     }
 
     private MerchantWorkOrderRecord findWorkOrder(String id) {

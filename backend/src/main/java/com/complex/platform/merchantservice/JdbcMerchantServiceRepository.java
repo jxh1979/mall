@@ -35,7 +35,9 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                     SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                            title, description, reported_by_user_id, reported_channel, owner_department,
                            owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                           evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
+                           evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                           archived_at, archived_by, delete_status, delete_requested_by,
+                           delete_requested_at, delete_reason
                       FROM merchant_service_work_orders
                      WHERE merchant_id = :merchant_id
                      ORDER BY created_at DESC, id
@@ -46,11 +48,37 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                        title, description, reported_by_user_id, reported_channel, owner_department,
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by,
+                       delete_requested_at, delete_reason
                   FROM merchant_service_work_orders
                  ORDER BY created_at DESC, id
                  LIMIT :limit
                 """, Map.of("limit", limit), this::mapWorkOrder);
+    }
+
+    @Override
+    public List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, boolean includeArchived, int limit) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
+                       title, description, reported_by_user_id, reported_channel, owner_department,
+                       owner_user_id, due_at, closed_at, resolution, satisfaction_score,
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by,
+                       delete_requested_at, delete_reason
+                  FROM merchant_service_work_orders
+                 WHERE delete_status <> 'approved'
+                """);
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("limit", limit);
+        if (merchantScope.isPresent()) {
+            sql.append(" AND merchant_id = :merchant_id");
+            params.addValue("merchant_id", merchantScope.get());
+        }
+        if (!includeArchived) {
+            sql.append(" AND archived_at IS NULL");
+        }
+        sql.append(" ORDER BY created_at DESC, id LIMIT :limit");
+        return jdbcTemplate.query(sql.toString(), params, this::mapWorkOrder);
     }
 
     @Override
@@ -59,7 +87,9 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                        title, description, reported_by_user_id, reported_channel, owner_department,
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by,
+                       delete_requested_at, delete_reason
                   FROM merchant_service_work_orders
                  WHERE id = :id
                 """, Map.of("id", id), this::mapWorkOrder).stream().findFirst();
@@ -71,7 +101,9 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                        title, description, reported_by_user_id, reported_channel, owner_department,
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by,
+                       delete_requested_at, delete_reason
                   FROM merchant_service_work_orders
                  WHERE due_at IS NOT NULL
                    AND due_at <= :now
@@ -105,13 +137,15 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                     id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                     title, description, reported_by_user_id, reported_channel, owner_department,
                     owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                    evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
+                    evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                 )
                 VALUES (
                     :id, :merchant_id, :space_id, :contract_id, :work_order_type, :priority, :status,
                     :title, :description, :reported_by_user_id, :reported_channel, :owner_department,
                     :owner_user_id, :due_at, :closed_at, :resolution, :satisfaction_score,
-                    CAST(:evidence_attachment_ids AS jsonb), :sla_breached, :escalated_at, :created_at, :updated_at
+                    CAST(:evidence_attachment_ids AS jsonb), :sla_breached, :escalated_at, :created_at, :updated_at,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     space_id = EXCLUDED.space_id,
@@ -129,7 +163,13 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
                     sla_breached = EXCLUDED.sla_breached,
                     escalated_at = EXCLUDED.escalated_at,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason
                 """, workOrderParameters(record));
         return record;
     }
@@ -160,6 +200,22 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 """, Map.of("work_order_id", workOrderId), this::mapAction);
     }
 
+    @Override
+    public long countWorkOrderReferences(String id) {
+        // 子表 actions 走 ON DELETE CASCADE，不算活引用；活引用=工单非终态（未 closed/cancelled）。
+        // 非终态返回 1（拒删：须先流转关闭再删），终态返回 0（可删）。
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1) FROM merchant_service_work_orders
+                 WHERE id = :id AND status NOT IN ('closed','cancelled')
+                """, Map.of("id", id), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public void deleteWorkOrder(String id) {
+        jdbcTemplate.update("DELETE FROM merchant_service_work_orders WHERE id = :id", Map.of("id", id));
+    }
+
     private MapSqlParameterSource workOrderParameters(MerchantWorkOrderRecord record) {
         return new MapSqlParameterSource()
                 .addValue("id", record.id())
@@ -183,7 +239,13 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 .addValue("sla_breached", record.slaBreached())
                 .addValue("escalated_at", timestampWithTimeZone(record.escalatedAt()))
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(record.updatedAt()))
+                .addValue("archived_at", timestampWithTimeZone(record.archivedAt()))
+                .addValue("archived_by", record.archivedBy())
+                .addValue("delete_status", record.deleteStatus() == null ? "none" : record.deleteStatus())
+                .addValue("delete_requested_by", record.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(record.deleteRequestedAt()))
+                .addValue("delete_reason", record.deleteReason());
     }
 
     private MapSqlParameterSource actionParameters(MerchantWorkOrderActionRecord record) {
@@ -222,7 +284,13 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 resultSet.getBoolean("sla_breached"),
                 nullableInstant(resultSet, "escalated_at"),
                 resultSet.getTimestamp("created_at").toInstant(),
-                resultSet.getTimestamp("updated_at").toInstant()
+                resultSet.getTimestamp("updated_at").toInstant(),
+                nullableInstant(resultSet, "archived_at"),
+                resultSet.getString("archived_by"),
+                resultSet.getString("delete_status"),
+                resultSet.getString("delete_requested_by"),
+                nullableInstant(resultSet, "delete_requested_at"),
+                resultSet.getString("delete_reason")
         );
     }
 

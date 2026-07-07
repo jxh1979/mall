@@ -30,7 +30,21 @@ public interface BarRepository {
 
     List<BarReservationRecord> listReservations(Optional<String> merchantScope);
 
+    /** V264：includeArchived=false（默认）排除已存档预订。默认委托给旧签名（内存桩无存档概念，返回全量）。 */
+    default List<BarReservationRecord> listReservations(Optional<String> merchantScope, boolean includeArchived) {
+        return listReservations(merchantScope);
+    }
+
     Optional<BarReservationRecord> findReservationById(String id);
+
+    /** V264：预订活引用计数（订单/账单/桌位调整/邀请函成员）；&gt;0 拒删。内存桩默认 0。 */
+    default long countReservationReferences(String id) {
+        return 0L;
+    }
+
+    /** V264：物理删除预订（子表 guest_checkins 随 CASCADE 清除）。内存桩默认无操作。 */
+    default void deleteReservation(String id) {
+    }
 
     /**
      * 卡座免通票入场名额核销前锁定 reservation 行，保证并发工作手机不会同时读到相同剩余额度。

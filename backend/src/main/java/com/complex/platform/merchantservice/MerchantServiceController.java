@@ -9,11 +9,15 @@ import com.complex.platform.merchantservice.dto.MerchantWorkOrderActionRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderAssignRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCreateRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteApprovalRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteDecision;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -32,9 +36,10 @@ public class MerchantServiceController {
     }
 
     @GetMapping("/work-orders")
-    public ApiResponse<PageResponse<MerchantWorkOrderRecord>> listWorkOrders() {
+    public ApiResponse<PageResponse<MerchantWorkOrderRecord>> listWorkOrders(
+            @RequestParam(value = "include_archived", required = false, defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("merchant.service_work_order.view");
-        return ApiResponse.ok(service.listWorkOrders());
+        return ApiResponse.ok(service.listWorkOrders(includeArchived));
     }
 
     @PostMapping("/work-orders")
@@ -72,5 +77,32 @@ public class MerchantServiceController {
         authorizationService.requirePermission("merchant.service_work_order.close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.closeWorkOrder(id, request));
+    }
+
+    // ── V264 数据存档与审批后删除 ──────────────────────────────────────────
+    @PostMapping("/work-orders/{id}/archive")
+    public ApiResponse<MerchantWorkOrderRecord> archiveWorkOrder(@PathVariable String id) {
+        authorizationService.requirePermission("merchant.service_work_order.close");
+        return ApiResponse.ok(service.archiveWorkOrder(id, true));
+    }
+
+    @PostMapping("/work-orders/{id}/unarchive")
+    public ApiResponse<MerchantWorkOrderRecord> unarchiveWorkOrder(@PathVariable String id) {
+        authorizationService.requirePermission("merchant.service_work_order.close");
+        return ApiResponse.ok(service.archiveWorkOrder(id, false));
+    }
+
+    @PostMapping("/work-orders/{id}/delete-request")
+    public ApiResponse<MerchantWorkOrderRecord> requestDeleteWorkOrder(
+            @PathVariable String id, @RequestBody(required = false) MerchantWorkOrderDeleteRequest request) {
+        authorizationService.requirePermission("merchant.service_work_order.close");
+        return ApiResponse.ok(service.requestDeleteWorkOrder(id, request));
+    }
+
+    @PostMapping("/work-orders/{id}/delete-approve")
+    public ApiResponse<MerchantWorkOrderDeleteDecision> approveDeleteWorkOrder(
+            @PathVariable String id, @RequestBody(required = false) MerchantWorkOrderDeleteApprovalRequest request) {
+        authorizationService.requirePermission("merchant.service_work_order.approve");
+        return ApiResponse.ok(service.approveDeleteWorkOrder(id, request));
     }
 }

@@ -66,7 +66,13 @@ final class JdbcBarRowMapper {
                 resultSet.getString("invitation_signature"),
                 resultSet.getObject("invitation_capacity", Integer.class),
                 resultSet.getString("invitation_status"),
-                nullableInstant(resultSet, "invitation_issued_at")
+                nullableInstant(resultSet, "invitation_issued_at"),
+                nullableInstant(resultSet, "archived_at"),
+                resultSet.getString("archived_by"),
+                resultSet.getString("delete_status"),
+                resultSet.getString("delete_requested_by"),
+                nullableInstant(resultSet, "delete_requested_at"),
+                resultSet.getString("delete_reason")
         );
     }
 

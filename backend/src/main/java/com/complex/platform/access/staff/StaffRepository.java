@@ -17,6 +17,18 @@ public interface StaffRepository {
     /** merchantScope=null 见全量；非空仅见 merchant_id=该值的行。 */
     List<StaffProfileRecord> listProfiles(String merchantScope);
 
+    /** V264：includeArchived=false（默认）排除已存档/已审批删除的档案。 */
+    List<StaffProfileRecord> listProfiles(String merchantScope, boolean includeArchived);
+
+    /**
+     * V264：员工档案活引用计数（&gt;0 拒删）。子表 staff_device_credentials / employee_notices 走 ON DELETE CASCADE
+     * 不算活引用；真正的“在用”是该员工 user_id 仍挂着考勤/请假/职级薪资记录（按 user_id，不随档案删除级联，删则孤儿）。
+     */
+    long countProfileReferences(String id);
+
+    /** V264：物理删除员工档案（子表凭证/通知随 CASCADE 清除）。 */
+    void deleteProfile(String id);
+
     // --- F批 薪资/请假(2026-07-02 拍板) ---
     void upsertBaseSalary(String userId, long monthlySalaryCent, String updatedBy, java.time.Instant now);
 

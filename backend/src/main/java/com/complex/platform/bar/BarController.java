@@ -284,9 +284,38 @@ public class BarController {
     }
 
     @GetMapping("/reservations")
-    public ApiResponse<PageResponse<BarReservationRecord>> listReservations() {
+    public ApiResponse<PageResponse<BarReservationRecord>> listReservations(
+            @org.springframework.web.bind.annotation.RequestParam(value = "include_archived", required = false, defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("bar.reservation.view");
-        return ApiResponse.ok(service.listReservations());
+        return ApiResponse.ok(service.listReservations(includeArchived));
+    }
+
+    @PostMapping("/reservations/{id}/archive")
+    public ApiResponse<BarReservationRecord> archiveReservation(@PathVariable String id) {
+        authorizationService.requirePermission("bar.reservation.manage");
+        return ApiResponse.ok(service.archiveReservation(id, true));
+    }
+
+    @PostMapping("/reservations/{id}/unarchive")
+    public ApiResponse<BarReservationRecord> unarchiveReservation(@PathVariable String id) {
+        authorizationService.requirePermission("bar.reservation.manage");
+        return ApiResponse.ok(service.archiveReservation(id, false));
+    }
+
+    @PostMapping("/reservations/{id}/delete-request")
+    public ApiResponse<BarReservationRecord> requestDeleteReservation(
+            @PathVariable String id,
+            @RequestBody(required = false) BarCatalogDeleteRequest request) {
+        authorizationService.requirePermission("bar.reservation.manage");
+        return ApiResponse.ok(service.requestDeleteReservation(id, request));
+    }
+
+    @PostMapping("/reservations/{id}/delete-approve")
+    public ApiResponse<BarCatalogDeleteDecision> approveDeleteReservation(
+            @PathVariable String id,
+            @RequestBody(required = false) BarCatalogDeleteApprovalRequest request) {
+        authorizationService.requirePermission("bar.reservation.approve");
+        return ApiResponse.ok(service.approveDeleteReservation(id, request));
     }
 
     @PostMapping("/reservations")

@@ -3,6 +3,7 @@ package com.complex.platform.bar;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 final class JdbcBarCatalogRepository {
@@ -159,7 +160,8 @@ final class JdbcBarCatalogRepository {
                     evidence_attachment_ids, created_at, updated_at, deposit_rule,
                     deposit_intent_id, deposit_paid_at, deposit_settlement,
                     invitation_token, invitation_signature, invitation_capacity,
-                    invitation_status, invitation_issued_at
+                    invitation_status, invitation_issued_at,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_id, :customer_id, :reserved_at, :guest_count,
@@ -168,7 +170,8 @@ final class JdbcBarCatalogRepository {
                     CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :deposit_rule,
                     :deposit_intent_id, :deposit_paid_at, :deposit_settlement,
                     :invitation_token, :invitation_signature, :invitation_capacity,
-                    :invitation_status, :invitation_issued_at
+                    :invitation_status, :invitation_issued_at,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -195,7 +198,13 @@ final class JdbcBarCatalogRepository {
                     invitation_signature = EXCLUDED.invitation_signature,
                     invitation_capacity = EXCLUDED.invitation_capacity,
                     invitation_status = EXCLUDED.invitation_status,
-                    invitation_issued_at = EXCLUDED.invitation_issued_at
+                    invitation_issued_at = EXCLUDED.invitation_issued_at,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason
                 """, parameterSource.reservationParameters(reservation));
         return reservation;
     }
@@ -273,19 +282,38 @@ final class JdbcBarCatalogRepository {
     }
 
     public List<BarReservationRecord> listReservations(Optional<String> merchantScope) {
-        if (merchantScope.isEmpty()) {
-            return jdbcTemplate.query("""
-                    SELECT *
-                      FROM bar_reservations
-                     ORDER BY created_at DESC, id
-                    """, rowMapper::mapReservation);
+        return listReservations(merchantScope, false);
+    }
+
+    // V264：includeArchived=false（默认）排除已存档/已审批删除的预订，与列表偏索引口径一致。
+    public List<BarReservationRecord> listReservations(Optional<String> merchantScope, boolean includeArchived) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM bar_reservations WHERE delete_status <> 'approved'");
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (merchantScope.isPresent()) {
+            sql.append(" AND merchant_id = :merchant_id");
+            params.addValue("merchant_id", merchantScope.get());
         }
-        return jdbcTemplate.query("""
-                SELECT *
-                  FROM bar_reservations
-                 WHERE merchant_id = :merchant_id
-                 ORDER BY created_at DESC, id
-                """, Map.of("merchant_id", merchantScope.get()), rowMapper::mapReservation);
+        if (!includeArchived) {
+            sql.append(" AND archived_at IS NULL");
+        }
+        sql.append(" ORDER BY created_at DESC, id");
+        return jdbcTemplate.query(sql.toString(), params, rowMapper::mapReservation);
+    }
+
+    public long countReservationReferences(String id) {
+        // 活引用（拒删）：有订单/账单/桌位会话/邀请函成员挂在该预订上（均为 ON DELETE NO ACTION 外键）。
+        // bar_table_guest_checkins 走 ON DELETE CASCADE，不算活引用（照范式）。
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT (SELECT COUNT(1) FROM bar_orders WHERE reservation_id = :id)
+                     + (SELECT COUNT(1) FROM bar_bills WHERE reservation_id = :id)
+                     + (SELECT COUNT(1) FROM bar_table_sessions WHERE reservation_id = :id)
+                     + (SELECT COUNT(1) FROM bar_reservation_invitation_members WHERE reservation_id = :id)
+                """, Map.of("id", id), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    public void deleteReservation(String id) {
+        jdbcTemplate.update("DELETE FROM bar_reservations WHERE id = :id", Map.of("id", id));
     }
 
     public Optional<BarReservationRecord> findReservationById(String id) {
