@@ -53,6 +53,11 @@ public interface CustomerRepository {
         return Optional.empty();
     }
 
+    /** 按综合体(project_id)隔离列积分规则（后台项目级管理员只见本项目）。JdbcCustomerRepository 覆盖。 */
+    default List<CustomerPointsRuleRecord> listPointsRulesByProject(String projectId) {
+        return List.of();
+    }
+
     List<CustomerBarReservationOptionResponse> listBarReservationOptions();
 
     Optional<BarTableRecord> findActiveBarTableForReservation(String barId, String tableId, String tableType);
