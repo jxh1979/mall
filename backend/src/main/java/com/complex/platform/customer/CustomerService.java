@@ -765,7 +765,8 @@ public class CustomerService {
             throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "scan order requires an open table session");
         }
         List<CustomerBarMenuItemResponse> items = barRepository.listProducts(Optional.ofNullable(session.merchantId())).stream()
-                .filter(p -> session.barId().equals(p.barId()) && "active".equals(p.status()))
+                // V262：已存档/待删除商品不上扫码点单菜单（下单 API 另有 BAR_PRODUCT_NOT_SELLABLE 兜底）。
+                .filter(p -> session.barId().equals(p.barId()) && "active".equals(p.status()) && p.archivedAt() == null)
                 .map(p -> new CustomerBarMenuItemResponse(
                         p.id(), p.productName(), p.productType(), p.priceCent(), p.currency(), p.soldOut()))
                 .toList();

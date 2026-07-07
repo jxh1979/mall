@@ -78,6 +78,16 @@ public class BarOrderService {
         if (internalPrice != null && internalPrice < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "internal_settlement_price_cent must be >= 0");
         }
+        // V262 引用侧守卫（saveProduct 路径）：新商品不可挂到已存档/待删除分类（与 assignCategory 同口径）。
+        String categoryId = trimToNull(actual.categoryId());
+        if (categoryId != null && catalogRepository != null) {
+            BarProductCategoryRecord assignTarget = catalogRepository.findCategory(categoryId)
+                    .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "category not found"));
+            if (assignTarget.archivedAt() != null || !"none".equals(assignTarget.deleteStatus())) {
+                throw ApiException.conflict("BAR_CATEGORY_NOT_ASSIGNABLE",
+                        "cannot assign product to an archived or delete-pending category");
+            }
+        }
         return repository.saveProduct(new BarProductRecord(
                 "product_" + slug(actual.idempotencyKey()),
                 requireText(actual.barId(), "bar_id"),
@@ -99,7 +109,7 @@ public class BarOrderService {
                 null,
                 null,
                 internalPrice,
-                trimToNull(actual.categoryId()),
+                categoryId,
                 trimToNull(actual.imageUrl())
         ));
     }
@@ -231,7 +241,9 @@ public class BarOrderService {
         if (!barId.equals(combo.barId())) {
             throw ApiException.conflict("BAR_SCOPE_MISMATCH", "combo is not in this bar");
         }
-        if (!"active".equals(combo.status())) {
+        // V262 引用侧守卫：停用、已存档或待删除的套餐都不可下单（直传 combo_id 也拒）。
+        if (!"active".equals(combo.status()) || combo.archivedAt() != null
+                || (combo.deleteStatus() != null && !"none".equals(combo.deleteStatus()))) {
             throw ApiException.conflict("BAR_COMBO_NOT_SELLABLE", "bar combo is not sellable");
         }
         if (combo.items() == null || combo.items().isEmpty()) {
@@ -790,6 +802,13 @@ public class BarOrderService {
     private void requireProductSellable(BarProductRecord product) {
         if (product.soldOut()) {
             throw ApiException.conflict("PRODUCT_SOLD_OUT", "bar product is sold out (86) and cannot be ordered");
+        }
+        // V262 引用侧守卫：已存档/待删除商品不可再被下单——扫码菜单隐藏之外，直传 product_id 也拒。
+        // 所有下单入口（createOrder/addOrderItem/套餐 expandCombo 逐 SKU）都汇到此处，单点收口。
+        if (product.archivedAt() != null
+                || (product.deleteStatus() != null && !"none".equals(product.deleteStatus()))) {
+            throw ApiException.conflict("BAR_PRODUCT_NOT_SELLABLE",
+                    "bar product is archived or pending deletion and cannot be ordered");
         }
     }
 

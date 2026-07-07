@@ -30,9 +30,13 @@ class JdbcBarPosCatalogRepository {
 
     // ---------- 分类 ----------
 
-    List<BarProductCategoryRecord> listCategories(Optional<String> merchantScope, String barId) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM bar_product_categories WHERE 1=1");
+    List<BarProductCategoryRecord> listCategories(Optional<String> merchantScope, String barId, boolean includeArchived) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT * FROM bar_product_categories WHERE delete_status <> 'approved'");
         MapSqlParameterSource p = new MapSqlParameterSource();
+        if (!includeArchived) {
+            sql.append(" AND archived_at IS NULL");
+        }
         if (barId != null && !barId.isBlank()) {
             sql.append(" AND bar_id = :bar_id");
             p.addValue("bar_id", barId);
@@ -53,14 +57,24 @@ class JdbcBarPosCatalogRepository {
     BarProductCategoryRecord saveCategory(BarProductCategoryRecord c) {
         jdbcTemplate.update("""
                 INSERT INTO bar_product_categories (
-                    id, bar_id, merchant_id, category_name, sort_order, status, created_at, updated_at
+                    id, bar_id, merchant_id, category_name, sort_order, status,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                    created_at, updated_at
                 ) VALUES (
-                    :id, :bar_id, :merchant_id, :category_name, :sort_order, :status, :created_at, :updated_at
+                    :id, :bar_id, :merchant_id, :category_name, :sort_order, :status,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
+                    :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     category_name = EXCLUDED.category_name,
                     sort_order = EXCLUDED.sort_order,
                     status = EXCLUDED.status,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason,
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("id", c.id())
@@ -69,12 +83,32 @@ class JdbcBarPosCatalogRepository {
                 .addValue("category_name", c.categoryName())
                 .addValue("sort_order", c.sortOrder())
                 .addValue("status", c.status())
+                .addValue("archived_at", timestampWithTimeZone(c.archivedAt()))
+                .addValue("archived_by", c.archivedBy())
+                .addValue("delete_status", c.deleteStatus() == null ? "none" : c.deleteStatus())
+                .addValue("delete_requested_by", c.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(c.deleteRequestedAt()))
+                .addValue("delete_reason", c.deleteReason())
                 .addValue("created_at", timestampWithTimeZone(c.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(c.updatedAt())));
         return c;
     }
 
-    // ---------- 商品：设分类/图片、按分类列 ----------
+    void deleteCategory(String id) {
+        jdbcTemplate.update("DELETE FROM bar_product_categories WHERE id = :id", Map.of("id", id));
+    }
+
+    /** 分类引用：任何仍挂在该分类下的商品数——含已存档商品。fk_bar_products_category 无 ON DELETE
+     *  动作，只要还有商品行（哪怕已存档）指着该分类，物理 DELETE 必然 FK 违约，故一律计为引用，
+     *  须先给商品改挂/清空分类再删。 */
+    long countCategoryReferences(String id) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM bar_products WHERE category_id = :id",
+                Map.of("id", id), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    // ---------- 商品：设分类/图片、按分类列、存档/删除 ----------
 
     Optional<BarProductRecord> findProduct(String id) {
         return jdbcTemplate.query("SELECT * FROM bar_products WHERE id = :id",
@@ -99,9 +133,51 @@ class JdbcBarPosCatalogRepository {
                 .addValue("id", productId));
     }
 
-    /** 按分类列某吧台 SKU（供 POS 拉菜单）。categoryId 空=列未分类商品。 */
+    /** 存档/删除范式：整体覆盖 6 列（targeted UPDATE，不触碰商品其余字段，语义清晰）。 */
+    void updateProductArchiveDelete(BarProductRecord product) {
+        jdbcTemplate.update("""
+                UPDATE bar_products SET
+                    archived_at = :archived_at,
+                    archived_by = :archived_by,
+                    delete_status = :delete_status,
+                    delete_requested_by = :delete_requested_by,
+                    delete_requested_at = :delete_requested_at,
+                    delete_reason = :delete_reason,
+                    updated_at = :updated_at
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("archived_at", timestampWithTimeZone(product.archivedAt()))
+                .addValue("archived_by", product.archivedBy())
+                .addValue("delete_status", product.deleteStatus() == null ? "none" : product.deleteStatus())
+                .addValue("delete_requested_by", product.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(product.deleteRequestedAt()))
+                .addValue("delete_reason", product.deleteReason())
+                .addValue("updated_at", timestampWithTimeZone(product.updatedAt()))
+                .addValue("id", product.id()));
+    }
+
+    void deleteProduct(String id) {
+        jdbcTemplate.update("DELETE FROM bar_products WHERE id = :id", Map.of("id", id));
+    }
+
+    /** 商品活引用：被订单明细(bar_order_items)或套餐明细(bar_combo_items)引用的行数之和。
+     *  为何不照票种版(V260)走 information_schema 元数据驱动：ticket_type_id 是域限定列名，而 product_id
+     *  是通用列名——2026-07-06 实查 public schema 带 product_id 列的基表仅 bar_order_items/bar_combo_items
+     *  两张（均酒吧域），但未来别域（零售/库存等）完全可能新增同名列，元数据驱动会把别域引用误算进来。
+     *  故取显式清单；新增酒吧侧商品引用表时须同步补此清单。 */
+    long countProductReferences(String id) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT (SELECT COUNT(1) FROM bar_order_items WHERE product_id = :id)
+                     + (SELECT COUNT(1) FROM bar_combo_items WHERE product_id = :id)
+                """, Map.of("id", id), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    /** 按分类列某吧台 SKU（供 POS 拉菜单）。categoryId 空=列未分类商品。存档/待删商品不上菜单。 */
     List<BarProductRecord> listProductsByCategory(Optional<String> merchantScope, String barId, String categoryId) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM bar_products WHERE bar_id = :bar_id");
+        StringBuilder sql = new StringBuilder(
+                "SELECT * FROM bar_products WHERE bar_id = :bar_id"
+                + " AND archived_at IS NULL AND delete_status <> 'approved'");
         MapSqlParameterSource p = new MapSqlParameterSource().addValue("bar_id", barId);
         if (categoryId == null || categoryId.isBlank()) {
             sql.append(" AND category_id IS NULL");
@@ -119,9 +195,12 @@ class JdbcBarPosCatalogRepository {
 
     // ---------- 套餐 ----------
 
-    List<BarComboRecord> listCombos(Optional<String> merchantScope, String barId) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM bar_combos WHERE 1=1");
+    List<BarComboRecord> listCombos(Optional<String> merchantScope, String barId, boolean includeArchived) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM bar_combos WHERE delete_status <> 'approved'");
         MapSqlParameterSource p = new MapSqlParameterSource();
+        if (!includeArchived) {
+            sql.append(" AND archived_at IS NULL");
+        }
         if (barId != null && !barId.isBlank()) {
             sql.append(" AND bar_id = :bar_id");
             p.addValue("bar_id", barId);
@@ -144,10 +223,14 @@ class JdbcBarPosCatalogRepository {
         jdbcTemplate.update("""
                 INSERT INTO bar_combos (
                     id, bar_id, merchant_id, combo_name, price_cent, internal_settlement_price_cent,
-                    image_url, status, created_at, updated_at
+                    image_url, status,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                    created_at, updated_at
                 ) VALUES (
                     :id, :bar_id, :merchant_id, :combo_name, :price_cent, :internal_settlement_price_cent,
-                    :image_url, :status, :created_at, :updated_at
+                    :image_url, :status,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
+                    :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     combo_name = EXCLUDED.combo_name,
@@ -155,6 +238,12 @@ class JdbcBarPosCatalogRepository {
                     internal_settlement_price_cent = EXCLUDED.internal_settlement_price_cent,
                     image_url = EXCLUDED.image_url,
                     status = EXCLUDED.status,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason,
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("id", combo.id())
@@ -165,6 +254,12 @@ class JdbcBarPosCatalogRepository {
                 .addValue("internal_settlement_price_cent", combo.internalSettlementPriceCent())
                 .addValue("image_url", combo.imageUrl())
                 .addValue("status", combo.status())
+                .addValue("archived_at", timestampWithTimeZone(combo.archivedAt()))
+                .addValue("archived_by", combo.archivedBy())
+                .addValue("delete_status", combo.deleteStatus() == null ? "none" : combo.deleteStatus())
+                .addValue("delete_requested_by", combo.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(combo.deleteRequestedAt()))
+                .addValue("delete_reason", combo.deleteReason())
                 .addValue("created_at", timestampWithTimeZone(combo.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(combo.updatedAt())));
         // 明细整体替换：先删后插（套餐编辑=重设组合，语义清晰）。
@@ -185,6 +280,11 @@ class JdbcBarPosCatalogRepository {
                 () -> ApiException.conflict("BAR_COMBO_SAVE_FAILED", "combo not readable after save"));
     }
 
+    void deleteCombo(String id) {
+        // bar_combo_items 走 ON DELETE CASCADE（V257），子表明细随套餐一并删除。
+        jdbcTemplate.update("DELETE FROM bar_combos WHERE id = :id", Map.of("id", id));
+    }
+
     private BarComboRecord withItems(BarComboRecord combo) {
         List<BarComboItemRecord> items = jdbcTemplate.query("""
                 SELECT ci.id, ci.combo_id, ci.product_id, ci.quantity, p.product_name
@@ -197,14 +297,18 @@ class JdbcBarPosCatalogRepository {
                 rs.getString("product_name"), rs.getInt("quantity")));
         return new BarComboRecord(combo.id(), combo.barId(), combo.merchantId(), combo.comboName(),
                 combo.priceCent(), combo.internalSettlementPriceCent(), combo.imageUrl(), combo.status(),
-                combo.createdAt(), combo.updatedAt(), items);
+                combo.createdAt(), combo.updatedAt(), items,
+                combo.archivedAt(), combo.archivedBy(), combo.deleteStatus(),
+                combo.deleteRequestedBy(), combo.deleteRequestedAt(), combo.deleteReason());
     }
 
     private BarProductCategoryRecord mapCategory(ResultSet rs, int rowNum) throws SQLException {
         return new BarProductCategoryRecord(
                 rs.getString("id"), rs.getString("bar_id"), rs.getString("merchant_id"),
                 rs.getString("category_name"), rs.getInt("sort_order"), rs.getString("status"),
-                instantOf(rs, "created_at"), instantOf(rs, "updated_at"));
+                instantOf(rs, "created_at"), instantOf(rs, "updated_at"),
+                instantOf(rs, "archived_at"), rs.getString("archived_by"), rs.getString("delete_status"),
+                rs.getString("delete_requested_by"), instantOf(rs, "delete_requested_at"), rs.getString("delete_reason"));
     }
 
     private BarComboRecord mapCombo(ResultSet rs, int rowNum) throws SQLException {
@@ -213,7 +317,9 @@ class JdbcBarPosCatalogRepository {
                 rs.getString("combo_name"), rs.getLong("price_cent"),
                 rs.getObject("internal_settlement_price_cent", Long.class), rs.getString("image_url"),
                 rs.getString("status"), instantOf(rs, "created_at"), instantOf(rs, "updated_at"),
-                List.of());
+                List.of(),
+                instantOf(rs, "archived_at"), rs.getString("archived_by"), rs.getString("delete_status"),
+                rs.getString("delete_requested_by"), instantOf(rs, "delete_requested_at"), rs.getString("delete_reason"));
     }
 
     private static Instant instantOf(ResultSet rs, String col) throws SQLException {

@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -267,10 +268,11 @@ public class BarController {
     }
 
     @GetMapping("/products")
-    public ApiResponse<PageResponse<BarProductRecord>> listProducts() {
+    public ApiResponse<PageResponse<BarProductRecord>> listProducts(
+            @RequestParam(value = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
         // 商品目录含敏感内部结算价（V152），查看独立授权（不再搭便车 bar.order.create）。
         authorizationService.requirePermission("bar.product.view");
-        return ApiResponse.ok(service.listProducts());
+        return ApiResponse.ok(service.listProducts(includeArchived));
     }
 
     @PostMapping("/products")

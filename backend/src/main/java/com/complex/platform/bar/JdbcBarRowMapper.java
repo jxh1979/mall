@@ -175,7 +175,14 @@ final class JdbcBarRowMapper {
                 resultSet.getString("sold_out_reason"),
                 resultSet.getObject("internal_settlement_price_cent", Long.class),
                 resultSet.getString("category_id"),
-                resultSet.getString("image_url")
+                resultSet.getString("image_url"),
+                // V262 存档/删除范式 6 列。
+                nullableInstant(resultSet, "archived_at"),
+                resultSet.getString("archived_by"),
+                resultSet.getString("delete_status"),
+                resultSet.getString("delete_requested_by"),
+                nullableInstant(resultSet, "delete_requested_at"),
+                resultSet.getString("delete_reason")
         );
     }
 
