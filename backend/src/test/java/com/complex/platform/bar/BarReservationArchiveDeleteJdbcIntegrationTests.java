@@ -61,7 +61,7 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
     void archiveThenApproveDeleteSucceedsWhenNoReferences() {
         TestSecurityActors.asPlatformAdmin();
         seedReservation("barresv_del");
-        service.archiveReservation("barresv_del", true);
+        service.archiveReservation("barresv_del", true, "测试存档理由");
         service.requestDeleteReservation("barresv_del", new BarCatalogDeleteRequest("取消"));
         TestSecurityActors.asPlatformAdmin("usr_approver");
         BarCatalogDeleteDecision decision = service.approveDeleteReservation(
@@ -83,7 +83,7 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
     void approveDeleteRejectedWhenReferencedByOrder() {
         TestSecurityActors.asPlatformAdmin();
         seedReservation("barresv_use");
-        service.archiveReservation("barresv_use", true);
+        service.archiveReservation("barresv_use", true, "测试存档理由");
         service.requestDeleteReservation("barresv_use", new BarCatalogDeleteRequest("试删"));
         // 挂一个订单形成活引用（bar_orders.reservation_id）。
         Instant now = Instant.now();
@@ -103,7 +103,7 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
     void selfApproveForbidden() {
         TestSecurityActors.asPlatformAdmin("usr_same");
         seedReservation("barresv_self");
-        service.archiveReservation("barresv_self", true);
+        service.archiveReservation("barresv_self", true, "测试存档理由");
         service.requestDeleteReservation("barresv_self", new BarCatalogDeleteRequest("x"));
         assertThatThrownBy(() -> service.approveDeleteReservation("barresv_self",
                 new BarCatalogDeleteApprovalRequest("approved", null)))

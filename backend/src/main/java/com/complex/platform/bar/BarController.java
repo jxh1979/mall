@@ -291,15 +291,16 @@ public class BarController {
     }
 
     @PostMapping("/reservations/{id}/archive")
-    public ApiResponse<BarReservationRecord> archiveReservation(@PathVariable String id) {
+    public ApiResponse<BarReservationRecord> archiveReservation(@PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) BarCatalogArchiveRequest request) {
         authorizationService.requirePermission("bar.reservation.manage");
-        return ApiResponse.ok(service.archiveReservation(id, true));
+        return ApiResponse.ok(service.archiveReservation(id, true, request == null ? null : request.reason()));
     }
 
     @PostMapping("/reservations/{id}/unarchive")
     public ApiResponse<BarReservationRecord> unarchiveReservation(@PathVariable String id) {
         authorizationService.requirePermission("bar.reservation.manage");
-        return ApiResponse.ok(service.archiveReservation(id, false));
+        return ApiResponse.ok(service.archiveReservation(id, false, null));
     }
 
     @PostMapping("/reservations/{id}/delete-request")

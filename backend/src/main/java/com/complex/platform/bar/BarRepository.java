@@ -251,4 +251,7 @@ public interface BarRepository {
     ) {
         return BarShiftReconciliationSnapshot.empty();
     }
+
+    /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
+    void setReservationArchiveReason(String id, String reason);
 }

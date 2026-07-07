@@ -105,4 +105,7 @@ public interface StaffRepository {
 
     /** merchantScope=null 见全量；非空仅见所属 staff_profile.merchant_id=该值的通知。 */
     List<EmployeeNoticeRecord> listNotices(String merchantScope);
+
+    /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
+    void setStaffProfileArchiveReason(String id, String reason);
 }

@@ -1127,4 +1127,22 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
 
+
+    @Override
+    public void setEntitlementTemplateArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE entitlement_templates SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
+
+    @Override
+    public void setTicketTypeArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE ticket_types SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
+
+    @Override
+    public void setPriceRuleArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE ticket_price_rules SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
 }

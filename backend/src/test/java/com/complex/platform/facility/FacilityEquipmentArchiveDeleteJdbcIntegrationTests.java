@@ -48,7 +48,7 @@ class FacilityEquipmentArchiveDeleteJdbcIntegrationTests {
     void archiveThenApproveDeleteSucceedsWhenNoReferences() {
         TestSecurityActors.asPlatformAdmin();
         seed("feq_del");
-        service.archive("feq_del", true);
+        service.archive("feq_del", true, "测试存档理由");
         service.requestDelete("feq_del", new FacilityEquipmentDeleteRequest("报废"));
         TestSecurityActors.asPlatformAdmin("usr_approver");
         FacilityEquipmentDeleteDecision decision = service.approveDelete(
@@ -79,7 +79,7 @@ class FacilityEquipmentArchiveDeleteJdbcIntegrationTests {
     void approveDeleteRejectedWhenReferencedByWorkOrder() {
         TestSecurityActors.asPlatformAdmin();
         seed("feq_use");
-        service.archive("feq_use", true);
+        service.archive("feq_use", true, "测试存档理由");
         service.requestDelete("feq_use", new FacilityEquipmentDeleteRequest("试删"));
         Instant now = Instant.now();
         jdbcTemplate.update("""
@@ -97,7 +97,7 @@ class FacilityEquipmentArchiveDeleteJdbcIntegrationTests {
     void selfApproveForbidden() {
         TestSecurityActors.asPlatformAdmin("usr_same");
         seed("feq_self");
-        service.archive("feq_self", true);
+        service.archive("feq_self", true, "测试存档理由");
         service.requestDelete("feq_self", new FacilityEquipmentDeleteRequest("x"));
         assertThatThrownBy(() -> service.approveDelete("feq_self",
                 new FacilityEquipmentDeleteApprovalRequest("approved", null)))

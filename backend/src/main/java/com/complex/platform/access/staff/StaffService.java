@@ -247,13 +247,15 @@ public class StaffService {
 
     @GuardedAction(permission = "staff.profile.review")
     @org.springframework.transaction.annotation.Transactional
-    public StaffProfileRecord archiveProfile(String id, boolean archive) {
+    public StaffProfileRecord archiveProfile(String id, boolean archive, String reason) {
         StaffProfileRecord profile = requireProfileInScope(id);
+        String r = archive ? requireText(reason, "reason") : null;
         Instant now = Instant.now();
         StaffProfileRecord updated = archive
                 ? profile.withArchive(now, archiveActorId(), now)
                 : profile.withArchive(null, null, now).withDelete("none", null, null, null, now);
         StaffProfileRecord saved = repository.saveProfile(updated);
+        repository.setStaffProfileArchiveReason(id, r);
         auditEventService.recordSuccess(archive ? "staff.profile.archived" : "staff.profile.unarchived",
                 "staff.profile.review", "staff_profile", id, null, null, Map.of("archived", archive));
         return saved;
@@ -271,7 +273,7 @@ public class StaffService {
             throw ApiException.conflict("STAFF_PROFILE_DELETE_ALREADY_PENDING", "该员工档案已有待审批的删除申请");
         }
         Instant now = Instant.now();
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         StaffProfileRecord saved = repository.saveProfile(profile.withDelete("pending", archiveActorId(), now, reason, now));
         auditEventService.recordSuccess("staff.profile.delete_requested", "staff.profile.review",
                 "staff_profile", id, null, null, Map.of());
@@ -1125,5 +1127,13 @@ public class StaffService {
             return apiException.code();
         }
         return exception.getClass().getSimpleName();
+    }
+
+    private String requireText(String value, String field) {
+        String trimmed = value == null ? null : value.trim();
+        if (trimmed == null || trimmed.isEmpty()) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", field + " is required");
+        }
+        return trimmed;
     }
 }

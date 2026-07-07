@@ -86,4 +86,7 @@ public interface PlatformRepository {
 
 
 
+
+    /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
+    void setMerchantArchiveReason(String id, String reason);
 }

@@ -81,15 +81,16 @@ public class MerchantServiceController {
 
     // ── V264 数据存档与审批后删除 ──────────────────────────────────────────
     @PostMapping("/work-orders/{id}/archive")
-    public ApiResponse<MerchantWorkOrderRecord> archiveWorkOrder(@PathVariable String id) {
+    public ApiResponse<MerchantWorkOrderRecord> archiveWorkOrder(@PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) com.complex.platform.merchantservice.dto.MerchantWorkOrderArchiveRequest request) {
         authorizationService.requirePermission("merchant.service_work_order.close");
-        return ApiResponse.ok(service.archiveWorkOrder(id, true));
+        return ApiResponse.ok(service.archiveWorkOrder(id, true, request == null ? null : request.reason()));
     }
 
     @PostMapping("/work-orders/{id}/unarchive")
     public ApiResponse<MerchantWorkOrderRecord> unarchiveWorkOrder(@PathVariable String id) {
         authorizationService.requirePermission("merchant.service_work_order.close");
-        return ApiResponse.ok(service.archiveWorkOrder(id, false));
+        return ApiResponse.ok(service.archiveWorkOrder(id, false, null));
     }
 
     @PostMapping("/work-orders/{id}/delete-request")

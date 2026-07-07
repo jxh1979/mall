@@ -372,14 +372,16 @@ public class MerchantServiceService {
 
     /** 存档/取消存档工单（软标记，可逆；列表默认过滤已存档）。取消存档时把 pending 删除申请回退 none。 */
     @Transactional
-    public MerchantWorkOrderRecord archiveWorkOrder(String id, boolean archive) {
+    public MerchantWorkOrderRecord archiveWorkOrder(String id, boolean archive, String reason) {
         MerchantWorkOrderRecord order = findWorkOrder(id);
         checkMerchantOwnership(order.merchantId());
+        String r = archive ? requireText(reason, "reason") : null;
         Instant now = Instant.now();
         MerchantWorkOrderRecord updated = archive
                 ? order.withArchive(now, actorId(), now)
                 : order.withArchive(null, null, now).withDelete("none", null, null, null, now);
         MerchantWorkOrderRecord saved = repository.saveWorkOrder(updated);
+        repository.setWorkOrderArchiveReason(id, r);
         auditEventService.recordSuccess(archive ? "merchant_service.work_order.archived" : "merchant_service.work_order.unarchived",
                 "merchant.service_work_order.close", BUSINESS_TYPE, id, requestId(), null,
                 Map.of("archived", archive));
@@ -398,7 +400,7 @@ public class MerchantServiceService {
             throw ApiException.conflict("WORK_ORDER_DELETE_ALREADY_PENDING", "该工单已有待审批的删除申请");
         }
         Instant now = Instant.now();
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         MerchantWorkOrderRecord saved = repository.saveWorkOrder(order.withDelete("pending", actorId(), now, reason, now));
         auditEventService.recordSuccess("merchant_service.work_order.delete_requested",
                 "merchant.service_work_order.close", BUSINESS_TYPE, id, requestId(), null, Map.of());

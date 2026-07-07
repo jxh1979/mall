@@ -54,13 +54,14 @@ public class StaffController {
 
     // ── V264 员工档案存档与审批后删除 ──────────────────────────────────
     @PostMapping("/profiles/{id}/archive")
-    public ApiResponse<StaffProfileRecord> archiveProfile(@PathVariable String id) {
-        return ApiResponse.ok(service.archiveProfile(id, true));
+    public ApiResponse<StaffProfileRecord> archiveProfile(@PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) com.complex.platform.access.staff.dto.StaffProfileArchiveRequest request) {
+        return ApiResponse.ok(service.archiveProfile(id, true, request == null ? null : request.reason()));
     }
 
     @PostMapping("/profiles/{id}/unarchive")
     public ApiResponse<StaffProfileRecord> unarchiveProfile(@PathVariable String id) {
-        return ApiResponse.ok(service.archiveProfile(id, false));
+        return ApiResponse.ok(service.archiveProfile(id, false, null));
     }
 
     @PostMapping("/profiles/{id}/delete-request")

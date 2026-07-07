@@ -195,16 +195,21 @@ public class BarPosCatalogService {
     // ---------- 分类：存档/删除 ----------
 
     @Transactional
-    public BarProductCategoryRecord archiveCategory(String id, boolean archive) {
+    public BarProductCategoryRecord archiveCategory(String id, boolean archive, String reason) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarProductCategoryRecord c = requireCategory(id);
         checkOwnership(scope, c.merchantId());
         Instant now = Instant.now();
         if (archive) {
-            return repository.saveCategory(c.withArchive(now, actorId(), now));
+            String r = requireText(reason, "reason");
+            BarProductCategoryRecord saved = repository.saveCategory(c.withArchive(now, actorId(), now));
+            repository.setCategoryArchiveReason(id, r);
+            return saved;
         }
         // 取消存档：清空存档标记，并把 pending 删除申请回退 none（复核教训②）。
-        return repository.saveCategory(c.withArchive(null, null, now).withDelete("none", null, null, null, now));
+        BarProductCategoryRecord unsaved = repository.saveCategory(c.withArchive(null, null, now).withDelete("none", null, null, null, now));
+        repository.setCategoryArchiveReason(id, null);
+        return unsaved;
     }
 
     @Transactional
@@ -223,7 +228,7 @@ public class BarPosCatalogService {
             throw ApiException.conflict("BAR_CATEGORY_DELETE_ALREADY_PENDING", "a delete request is already pending");
         }
         Instant now = Instant.now();
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         return repository.saveCategory(c.withDelete("pending", actorId(), now, reason, now));
     }
 
@@ -254,15 +259,17 @@ public class BarPosCatalogService {
     // ---------- 商品：存档/删除 ----------
 
     @Transactional
-    public BarProductRecord archiveProduct(String id, boolean archive) {
+    public BarProductRecord archiveProduct(String id, boolean archive, String reason) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarProductRecord product = requireProduct(id);
         checkOwnership(scope, product.merchantId());
         Instant now = Instant.now();
+        String r = archive ? requireText(reason, "reason") : null;
         BarProductRecord updated = archive
                 ? product.withArchive(now, actorId(), now)
                 : product.withArchive(null, null, now).withDelete("none", null, null, null, now);
         repository.updateProductArchiveDelete(updated);
+        repository.setProductArchiveReason(id, r);
         return repository.findProduct(id).orElseThrow();
     }
 
@@ -282,7 +289,7 @@ public class BarPosCatalogService {
             throw ApiException.conflict("BAR_PRODUCT_DELETE_ALREADY_PENDING", "a delete request is already pending");
         }
         Instant now = Instant.now();
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         repository.updateProductArchiveDelete(product.withDelete("pending", actorId(), now, reason, now));
         return repository.findProduct(id).orElseThrow();
     }
@@ -315,15 +322,20 @@ public class BarPosCatalogService {
     // ---------- 套餐：存档/删除 ----------
 
     @Transactional
-    public BarComboRecord archiveCombo(String id, boolean archive) {
+    public BarComboRecord archiveCombo(String id, boolean archive, String reason) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         BarComboRecord combo = requireCombo(id);
         checkOwnership(scope, combo.merchantId());
         Instant now = Instant.now();
         if (archive) {
-            return repository.saveCombo(combo.withArchive(now, actorId(), now));
+            String r = requireText(reason, "reason");
+            BarComboRecord saved = repository.saveCombo(combo.withArchive(now, actorId(), now));
+            repository.setComboArchiveReason(id, r);
+            return saved;
         }
-        return repository.saveCombo(combo.withArchive(null, null, now).withDelete("none", null, null, null, now));
+        BarComboRecord unsaved = repository.saveCombo(combo.withArchive(null, null, now).withDelete("none", null, null, null, now));
+        repository.setComboArchiveReason(id, null);
+        return unsaved;
     }
 
     @Transactional
@@ -342,7 +354,7 @@ public class BarPosCatalogService {
             throw ApiException.conflict("BAR_COMBO_DELETE_ALREADY_PENDING", "a delete request is already pending");
         }
         Instant now = Instant.now();
-        String reason = request == null ? null : trimToNull(request.reason());
+        String reason = requireText(request == null ? null : request.reason(), "reason");
         return repository.saveCombo(combo.withDelete("pending", actorId(), now, reason, now));
     }
 

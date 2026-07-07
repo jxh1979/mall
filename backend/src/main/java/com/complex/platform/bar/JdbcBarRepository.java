@@ -418,4 +418,9 @@ class JdbcBarRepository implements BarRepository {
     public PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent) {
         return inventoryPayment.savePaymentIntent(paymentIntent);
     }
+
+    @Override
+    public void setReservationArchiveReason(String id, String reason) {
+        catalog.setReservationArchiveReason(id, reason);
+    }
 }

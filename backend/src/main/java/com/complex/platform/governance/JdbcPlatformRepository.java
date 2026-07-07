@@ -691,4 +691,10 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
             throw new IllegalStateException("contract attachment_ids is not readable", exception);
         }
     }
+
+    @Override
+    public void setMerchantArchiveReason(String id, String reason) {
+        jdbcTemplate.update("UPDATE merchants SET archive_reason = :reason WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
 }

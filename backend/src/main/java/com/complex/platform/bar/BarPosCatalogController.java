@@ -59,15 +59,16 @@ public class BarPosCatalogController {
     }
 
     @PostMapping("/categories/{id}/archive")
-    public ApiResponse<BarProductCategoryRecord> archiveCategory(@PathVariable("id") String id) {
+    public ApiResponse<BarProductCategoryRecord> archiveCategory(@PathVariable("id") String id,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) BarCatalogArchiveRequest request) {
         authorizationService.requirePermission("bar.category.manage");
-        return ApiResponse.ok(service.archiveCategory(id, true));
+        return ApiResponse.ok(service.archiveCategory(id, true, request == null ? null : request.reason()));
     }
 
     @PostMapping("/categories/{id}/unarchive")
     public ApiResponse<BarProductCategoryRecord> unarchiveCategory(@PathVariable("id") String id) {
         authorizationService.requirePermission("bar.category.manage");
-        return ApiResponse.ok(service.archiveCategory(id, false));
+        return ApiResponse.ok(service.archiveCategory(id, false, null));
     }
 
     @PostMapping("/categories/{id}/delete-request")
@@ -103,15 +104,16 @@ public class BarPosCatalogController {
     }
 
     @PostMapping("/products/{id}/archive")
-    public ApiResponse<BarProductRecord> archiveProduct(@PathVariable("id") String id) {
+    public ApiResponse<BarProductRecord> archiveProduct(@PathVariable("id") String id,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) BarCatalogArchiveRequest request) {
         authorizationService.requirePermission("bar.product.manage");
-        return ApiResponse.ok(service.archiveProduct(id, true));
+        return ApiResponse.ok(service.archiveProduct(id, true, request == null ? null : request.reason()));
     }
 
     @PostMapping("/products/{id}/unarchive")
     public ApiResponse<BarProductRecord> unarchiveProduct(@PathVariable("id") String id) {
         authorizationService.requirePermission("bar.product.manage");
-        return ApiResponse.ok(service.archiveProduct(id, false));
+        return ApiResponse.ok(service.archiveProduct(id, false, null));
     }
 
     @PostMapping("/products/{id}/delete-request")
@@ -146,15 +148,16 @@ public class BarPosCatalogController {
     }
 
     @PostMapping("/combos/{id}/archive")
-    public ApiResponse<BarComboRecord> archiveCombo(@PathVariable("id") String id) {
+    public ApiResponse<BarComboRecord> archiveCombo(@PathVariable("id") String id,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) BarCatalogArchiveRequest request) {
         authorizationService.requirePermission("bar.combo.manage");
-        return ApiResponse.ok(service.archiveCombo(id, true));
+        return ApiResponse.ok(service.archiveCombo(id, true, request == null ? null : request.reason()));
     }
 
     @PostMapping("/combos/{id}/unarchive")
     public ApiResponse<BarComboRecord> unarchiveCombo(@PathVariable("id") String id) {
         authorizationService.requirePermission("bar.combo.manage");
-        return ApiResponse.ok(service.archiveCombo(id, false));
+        return ApiResponse.ok(service.archiveCombo(id, false, null));
     }
 
     @PostMapping("/combos/{id}/delete-request")

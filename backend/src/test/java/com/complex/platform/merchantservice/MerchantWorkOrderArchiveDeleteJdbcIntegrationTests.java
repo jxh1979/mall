@@ -48,7 +48,7 @@ class MerchantWorkOrderArchiveDeleteJdbcIntegrationTests {
     void archiveThenApproveDeleteSucceedsWhenTerminal() {
         TestSecurityActors.asPlatformAdmin();
         seed("mswo_del", "closed");
-        service.archiveWorkOrder("mswo_del", true);
+        service.archiveWorkOrder("mswo_del", true, "测试存档理由");
         service.requestDeleteWorkOrder("mswo_del", new MerchantWorkOrderDeleteRequest("过期"));
         TestSecurityActors.asPlatformAdmin("usr_approver");
         MerchantWorkOrderDeleteDecision decision =
@@ -70,7 +70,7 @@ class MerchantWorkOrderArchiveDeleteJdbcIntegrationTests {
     void approveDeleteRejectedWhenNonTerminal() {
         TestSecurityActors.asPlatformAdmin();
         seed("mswo_use", "processing");
-        service.archiveWorkOrder("mswo_use", true);
+        service.archiveWorkOrder("mswo_use", true, "测试存档理由");
         service.requestDeleteWorkOrder("mswo_use", new MerchantWorkOrderDeleteRequest("试删"));
         TestSecurityActors.asPlatformAdmin("usr_approver");
         assertThatThrownBy(() -> service.approveDeleteWorkOrder("mswo_use",
@@ -83,7 +83,7 @@ class MerchantWorkOrderArchiveDeleteJdbcIntegrationTests {
     void selfApproveForbidden() {
         TestSecurityActors.asPlatformAdmin("usr_same");
         seed("mswo_self", "closed");
-        service.archiveWorkOrder("mswo_self", true);
+        service.archiveWorkOrder("mswo_self", true, "测试存档理由");
         service.requestDeleteWorkOrder("mswo_self", new MerchantWorkOrderDeleteRequest("x"));
         // 同一 actor 审批自己的申请 → 禁止。
         assertThatThrownBy(() -> service.approveDeleteWorkOrder("mswo_self",

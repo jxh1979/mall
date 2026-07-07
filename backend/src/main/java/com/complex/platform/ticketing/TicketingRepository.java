@@ -218,4 +218,13 @@ public interface TicketingRepository {
     boolean tryLockOrderForIssuance(String orderId);
 
     String findLatestFlywayVersion();
+
+    /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
+    void setEntitlementTemplateArchiveReason(String id, String reason);
+
+    /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
+    void setTicketTypeArchiveReason(String id, String reason);
+
+    /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
+    void setPriceRuleArchiveReason(String id, String reason);
 }

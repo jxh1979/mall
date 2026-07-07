@@ -43,4 +43,7 @@ public interface FacilityRepository {
     /** V264：物理删除设备。内存桩默认无操作。 */
     default void deleteEquipment(String id) {
     }
+
+    /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
+    void setEquipmentArchiveReason(String id, String reason);
 }
