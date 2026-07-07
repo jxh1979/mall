@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField, cnDate } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps } from "../types";
 
 // 企微合规域内枚举中文（风险等级/复核处置/留存到期动作/scope，页内映射；状态码走全局表兜底）。
@@ -51,6 +52,10 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
   const [reviewForm, setReviewForm] = React.useState({ status: "reviewing", reviewNote: "" });
   const [policyForm, setPolicyForm] = React.useState({ scopeType: "global", scopeId: "", retentionDays: "180", expiryAction: "archive", enabled: true });
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式「新增留存策略」弹窗状态（范式：字段留页面持有，弹窗只编排；风险命中复核动作不动）。
+  const [policyOpen, setPolicyOpen] = React.useState(false);
+  const [policyError, setPolicyError] = React.useState("");
+  const [policySaving, setPolicySaving] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -75,15 +80,20 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
     } catch (e) { setGlobalError((e as Error).message); }
   };
 
+  // 提交在确认步触发；接口失败弹窗留开显错（policyError），成功才关。原接口/请求体保留。
   const upsertPolicy = async () => {
+    setPolicySaving(true);
+    setPolicyError("");
+    setGlobalError(null);
     try {
       await api.post("/api/v1/compliance/wecom/retention-policies", {
         idempotency_key: `wrp-${Date.now()}`, scope_type: policyForm.scopeType, scope_id: policyForm.scopeId || null,
         retention_days: Number(policyForm.retentionDays) || 180, expiry_action: policyForm.expiryAction, enabled: policyForm.enabled,
       });
       setActionResult({ action: "wecom_retention_policy_saved", scopeType: policyForm.scopeType });
+      setPolicyOpen(false);
       reload();
-    } catch (e) { setGlobalError((e as Error).message); }
+    } catch (e) { setPolicyError((e as Error).message); } finally { setPolicySaving(false); }
   };
 
   function openHitDetail(row: RiskHit) {
@@ -161,21 +171,9 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
         </div>
 
         <h3>会话留存策略</h3>
-        <div className="admin-form-grid" data-testid="wecom-policy-form">
-          <label>适用范围
-            <select data-testid="wecom-policy-scope" value={policyForm.scopeType} onChange={(e) => setPolicyForm({ ...policyForm, scopeType: e.target.value })}>
-              {Object.entries(SCOPE_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-            </select>
-          </label>
-          <label>范围 ID（全局留空）<input data-testid="wecom-policy-scope-id" value={policyForm.scopeId} onChange={(e) => setPolicyForm({ ...policyForm, scopeId: e.target.value })} /></label>
-          <label>保留天数<input data-testid="wecom-policy-days" value={policyForm.retentionDays} onChange={(e) => setPolicyForm({ ...policyForm, retentionDays: e.target.value })} /></label>
-          <label>到期动作
-            <select data-testid="wecom-policy-action" value={policyForm.expiryAction} onChange={(e) => setPolicyForm({ ...policyForm, expiryAction: e.target.value })}>
-              {Object.entries(EXPIRY_ACTION_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-            </select>
-          </label>
-          <label>启用<input type="checkbox" data-testid="wecom-policy-enabled" checked={policyForm.enabled} onChange={(e) => setPolicyForm({ ...policyForm, enabled: e.target.checked })} /></label>
-          <PermissionButton permissionsState={effectivePermissions} permissions={RETENTION_MANAGE} data-testid="wecom-policy-save" onClick={() => void upsertPolicy()}>保存留存策略</PermissionButton>
+        <div className="admin-form-row" data-testid="wecom-policy-form">
+          <PermissionButton permissionsState={effectivePermissions} permissions={RETENTION_MANAGE} data-testid="wecom-policy-create-open"
+            onClick={() => { setPolicyError(""); setPolicyOpen(true); }}>＋ 新增留存策略</PermissionButton>
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="wecom-retention-policies-table">
@@ -194,6 +192,60 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
         </div>
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={policyOpen}
+        title="新增留存策略"
+        testId="wecom-policy-guided"
+        submitTestId="wecom-policy-save"
+        submitLabel="保存留存策略"
+        submitting={policySaving}
+        error={policyError || undefined}
+        onClose={() => setPolicyOpen(false)}
+        onSubmit={() => void upsertPolicy()}
+        steps={[
+          {
+            title: "适用范围与天数",
+            description: "选择留存策略适用范围（全局/综合体/商户）；非全局须填范围 ID；保留天数为正整数。",
+            validate: () => {
+              if (policyForm.scopeType !== "global" && !policyForm.scopeId.trim()) return "非全局范围须填写范围 ID";
+              const days = Number(policyForm.retentionDays);
+              if (!Number.isFinite(days) || days <= 0) return "保留天数须为正整数";
+              return null;
+            },
+            content: (
+              <>
+                <label>适用范围
+                  <select data-testid="wecom-policy-scope" value={policyForm.scopeType} onChange={(e) => setPolicyForm({ ...policyForm, scopeType: e.target.value })}>
+                    {Object.entries(SCOPE_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                  </select>
+                </label>
+                <label>范围 ID（全局留空）<input data-testid="wecom-policy-scope-id" value={policyForm.scopeId} onChange={(e) => setPolicyForm({ ...policyForm, scopeId: e.target.value })} /></label>
+                <label>保留天数<input data-testid="wecom-policy-days" value={policyForm.retentionDays} onChange={(e) => setPolicyForm({ ...policyForm, retentionDays: e.target.value })} /></label>
+              </>
+            ),
+          },
+          {
+            title: "到期动作与启用",
+            description: "到期动作：归档/删除/匿名化；可先停用再启用。",
+            content: (
+              <>
+                <label>到期动作
+                  <select data-testid="wecom-policy-action" value={policyForm.expiryAction} onChange={(e) => setPolicyForm({ ...policyForm, expiryAction: e.target.value })}>
+                    {Object.entries(EXPIRY_ACTION_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                  </select>
+                </label>
+                <label>启用<input type="checkbox" data-testid="wecom-policy-enabled" checked={policyForm.enabled} onChange={(e) => setPolicyForm({ ...policyForm, enabled: e.target.checked })} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "适用范围", value: `${SCOPE_LABELS[policyForm.scopeType] ?? policyForm.scopeType}${policyForm.scopeId.trim() ? `：${policyForm.scopeId.trim()}` : ""}` },
+          { label: "保留天数", value: `${policyForm.retentionDays || "—"} 天` },
+          { label: "到期动作", value: EXPIRY_ACTION_LABELS[policyForm.expiryAction] ?? policyForm.expiryAction },
+          { label: "启用", value: policyForm.enabled ? "启用" : "停用" },
+        ]}
+      />
     </section>
   );
 }
