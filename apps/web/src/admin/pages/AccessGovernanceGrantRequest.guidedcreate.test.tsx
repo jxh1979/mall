@@ -1,0 +1,115 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { AccessGovernancePage } from "./AccessGovernancePage";
+import { AdminApi } from "../client/adminClient";
+import type { AdminPageProps, EffectivePermissionsState } from "../types";
+
+// 引导式流程 phase-11：新建授权申请(grant-requests)改分步引导弹窗（入口→步进→提交带正确 body + 步内校验拦截不提交）。
+// 只覆盖「授权申请」主创建流；岗位角色模板弹窗(phase-9)/审批/定岗/装配角色不在本期改造范围。
+const USERS = [{ id: "u-1", username: "张三", account_type: "staff", status: "active" }];
+const ROLES = [{ id: "role-1", role_name: "运营经理", role_code: "ops", status: "active" }];
+
+function envelope(items: unknown[]): Response {
+  return new Response(
+    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page: 1, page_size: 50, total: items.length } }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+function raw(data: unknown): Response {
+  return new Response(
+    JSON.stringify({ success: true, code: "OK", message: "success", data }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
+let lastPostBody: unknown = null;
+let lastPostUrl = "";
+function makeApi(): AdminApi {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET").toUpperCase() === "POST" && url.endsWith("/grant-requests")) {
+        lastPostUrl = url;
+        lastPostBody = init?.body ? JSON.parse(String(init.body)) : null;
+        return Promise.resolve(raw({ id: "gr-new", status: "pending" }));
+      }
+      if (url.includes("grant-requests/summary")) return Promise.resolve(raw({ position_recommendations: [], user_anomalies: [] }));
+      if (url.includes("grant-requests")) return Promise.resolve(envelope([]));
+      if (url.includes("position-role-templates")) return Promise.resolve(envelope([]));
+      if (url.includes("access/roles")) return Promise.resolve(envelope(ROLES));
+      if (url.includes("access/users")) return Promise.resolve(envelope(USERS));
+      return Promise.resolve(envelope([]));
+    }),
+  );
+  return new AdminApi("test-token");
+}
+
+const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
+
+function renderPage() {
+  const setActionResult = vi.fn();
+  const props: AdminPageProps = {
+    api: makeApi(),
+    user: { id: "u1", username: "admin", accountType: "platform_admin" },
+    setActionResult,
+    setGlobalError: vi.fn(),
+    effectivePermissions: ADMIN_PERMS,
+  };
+  render(<AccessGovernancePage {...props} />);
+  return { setActionResult };
+}
+
+describe("AccessGovernancePage 引导式新建授权申请(phase-11)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    lastPostBody = null;
+    lastPostUrl = "";
+  });
+
+  it("页面默认只留入口按钮，不展示授权申请字段", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    expect(screen.queryByLabelText("临时权限码")).toBeNull();
+    expect(screen.queryByTestId("access-grant-request-guided")).toBeNull();
+    // 岗位角色模板弹窗入口仍在（phase-9 未被本期触碰）。
+    expect(screen.getByTestId("access-position-role-template-create-open")).toBeTruthy();
+  });
+
+  it("入口→填权限码/过期时间→步进→提交：POST 带 requestType/targetUserId/permissionCodes，成功后关闭弹窗", async () => {
+    const { setActionResult } = renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    // 等用户名单加载，弹窗打开时 targetUserId 默认落到首个用户。
+    await waitFor(() => expect(screen.getByTestId("access-grant-review-form")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next")); // 步1→步2（类型默认临时权限，目标已默认首个用户）
+    fireEvent.change(screen.getByLabelText("临时权限码"), { target: { value: "access.role.assign,finance.view" } });
+    fireEvent.change(screen.getByLabelText("过期时间"), { target: { value: "2026-09-01T10:00" } });
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next")); // 步2→确认
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create"));
+
+    await waitFor(() => expect(lastPostBody).toBeTruthy());
+    expect(lastPostUrl).toContain("/grant-requests");
+    expect((lastPostBody as { request_type: string }).request_type).toBe("temporary_permission");
+    expect((lastPostBody as { target_user_id: string }).target_user_id).toBe("u-1");
+    expect((lastPostBody as { permission_codes: string[] }).permission_codes).toEqual(["access.role.assign", "finance.view"]);
+    await waitFor(() => expect(screen.queryByTestId("access-grant-request-guided")).toBeNull());
+    expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "access_grant_request_applied" }));
+  });
+
+  it("步内校验拦截：临时权限缺权限码/过期时间则不进确认、不提交", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("access-grant-request-create-open")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("access-grant-review-form")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("access-grant-request-create-open"));
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next")); // 步1→步2
+    // 临时权限码/过期时间留空 → 步2 校验拦截。
+    fireEvent.click(screen.getByTestId("access-grant-request-guided-next"));
+    expect(screen.getByTestId("access-grant-request-guided-error").textContent).toContain("权限码");
+    expect(screen.queryByTestId("access-grant-request-guided-summary")).toBeNull();
+    expect(lastPostBody).toBeNull();
+  });
+});

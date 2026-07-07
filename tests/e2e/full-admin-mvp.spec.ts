@@ -60,16 +60,26 @@ test.describe("full admin MVP acceptance", () => {
 
     await page.getByTestId("admin-nav-ADM-ACC-002").click();
     await expect(page).toHaveURL(/\/admin\/access\/permission-templates$/);
+    // 引导式流程 phase-11：新建权限模板改为「＋新建权限模板」按钮 → 分步弹窗（模板信息→选权限→确认）。
+    await page.getByTestId("permission-template-create-open").click();
+    // 步1 模板信息：临时模板须填截止时间，单次有效。
     await page.getByTestId("permission-template-name").fill("普通员工01");
     await page.getByTestId("permission-template-type").selectOption("temporary");
     await page.getByTestId("permission-template-valid-until").fill("2026-07-01T10:00");
     await page.getByTestId("permission-template-single-use").check();
-    await page.getByTestId("permission-code-access.permission_template.view").check();
-    await page.getByTestId("permission-code-bar.table_session.view").check();
+    await page.getByTestId("permission-template-create-guided-next").click();
+    // 步2 选权限：至少选一个权限点。
+    await page.getByTestId("permission-template-new-code-access.permission_template.view").check();
+    await page.getByTestId("permission-template-new-code-bar.table_session.view").check();
+    await page.getByTestId("permission-template-create-guided-next").click();
+    // 确认步提交。
+    await expect(page.getByTestId("permission-template-create-guided-summary")).toBeVisible();
     await page.getByTestId("permission-template-save").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("保存权限模板");
     await page.getByTestId("permission-template-copy").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("复制模板");
+    // 应用动作按内联「选中编辑」表单的单次有效开关决定 append/single_use；勾上以单次有效方式应用。
+    await page.getByTestId("permission-template-edit-single-use").check();
     await page.getByTestId("permission-template-target-users").fill("user-1,user-2");
     await page.getByTestId("permission-template-apply").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("单次有效");

@@ -8,6 +8,7 @@ import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps } from "../types";
 
 type VendorSiteEntryRow = {
@@ -59,16 +60,18 @@ function readKpiFocusFromUrl(): KpiFocus | null {
 export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorSiteEntryRow[]>([]);
   const [selectedId, setSelectedId] = React.useState("");
+  // 引导式「新建进场报备」弹窗：必填项（项目/空间/施工范围）默认留空，避免默认值让缺字段拦截失效。
   const [form, setForm] = React.useState({
-    projectId: "venue-1",
-    spaceId: "area-1",
-    workScope: "店铺装修围挡施工",
+    projectId: "",
+    spaceId: "",
+    workScope: "",
     plannedStartDate: "2026-06-20",
     plannedEndDate: "2026-06-22",
     crewCount: "4",
     contactName: "王工",
     contactPhone: "13800000000",
   });
+  const [createOpen, setCreateOpen] = React.useState(false);
   const [submitNote, setSubmitNote] = React.useState("进场施工");
   const [completionNote, setCompletionNote] = React.useState("施工已完工，材料已上传");
   const [completionAttachments, setCompletionAttachments] = React.useState("att-site-completion");
@@ -125,6 +128,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  // 提交在确认步触发；runAction 成功返回 true 才关弹窗，失败留弹窗内显错（formError）。原接口/请求体/双保险校验保留。
   async function createEntry() {
     if (!form.projectId.trim() || !form.spaceId.trim() || !form.workScope.trim()) {
       setFormError("项目、空间和施工范围不能为空");
@@ -141,7 +145,8 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
       contactName: form.contactName.trim(),
       contactPhone: form.contactPhone.trim(),
     };
-    await runAction("vendor_site_entry_created", request, () => api.post("/api/v1/facility/site-entry-reports", request));
+    const ok = await runAction("vendor_site_entry_created", request, () => api.post("/api/v1/facility/site-entry-reports", request));
+    if (ok) setCreateOpen(false);
   }
 
   async function submitEntry() {
@@ -248,21 +253,17 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
               <div className="admin-kpi-card"><span>当前报备</span><strong className="admin-kpi-value--text" title={selected?.workScope ?? selected?.id ?? "-"}>{selected?.workScope ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.status)}</small></div>
             </div>
 
-            <div className="admin-form-grid" data-testid="vendor-site-entry-create-form">
-              <label>项目 id<input data-testid="vendor-site-entry-project" value={form.projectId} onChange={(event) => setField("projectId", event.target.value)} /></label>
-              <label>空间 id<input data-testid="vendor-site-entry-space" value={form.spaceId} onChange={(event) => setField("spaceId", event.target.value)} /></label>
-              <label>施工范围<input data-testid="vendor-site-entry-scope" value={form.workScope} onChange={(event) => setField("workScope", event.target.value)} /></label>
-              <label>开始日期<CnDatePicker data-testid="vendor-site-entry-start" value={form.plannedStartDate} onChange={(v) => setField("plannedStartDate", v)} /></label>
-              <label>结束日期<CnDatePicker data-testid="vendor-site-entry-end" value={form.plannedEndDate} onChange={(v) => setField("plannedEndDate", v)} /></label>
-              <label>人数<input data-testid="vendor-site-entry-crew" value={form.crewCount} onChange={(event) => setField("crewCount", event.target.value)} /></label>
-              <label>联系人<input data-testid="vendor-site-entry-contact" value={form.contactName} onChange={(event) => setField("contactName", event.target.value)} /></label>
-              <label>电话<input data-testid="vendor-site-entry-phone" value={form.contactPhone} onChange={(event) => setField("contactPhone", event.target.value)} /></label>
+            <div className="admin-form-row" data-testid="vendor-site-entry-create-form">
+              <PermissionButton permissionsState={effectivePermissions} permissions={CREATE} data-testid="vendor-site-entry-create-open" disabled={busyAction !== ""}
+                onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ 新建进场报备</PermissionButton>
+              <span className="admin-muted-action">选中下方一条报备后，可提交或上传完工材料。</span>
+            </div>
+            <div className="admin-form-grid" data-testid="vendor-site-entry-followup-form">
               <label>提交备注<input data-testid="vendor-site-entry-submit-note" value={submitNote} onChange={(event) => setSubmitNote(event.target.value)} /></label>
               <label>完工说明<input data-testid="vendor-site-entry-completion-note" value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} /></label>
               <label>完工附件引用<input data-testid="vendor-site-entry-completion-attachments" value={completionAttachments} onChange={(event) => setCompletionAttachments(event.target.value)} /></label>
             </div>
             <div className="admin-form-row" data-testid="vendor-site-entry-actions">
-              <PermissionButton permissionsState={effectivePermissions} permissions={CREATE} data-testid="vendor-site-entry-create" disabled={busyAction !== ""} onClick={() => void createEntry()}>创建</PermissionButton>
               <PermissionButton permissionsState={effectivePermissions} permissions={SUBMIT} data-testid="vendor-site-entry-submit" disabled={busyAction !== ""} onClick={() => void submitEntry()}>提交</PermissionButton>
               <PermissionButton permissionsState={effectivePermissions} permissions={UPLOAD_COMPLETION} data-testid="vendor-site-entry-completion-upload" disabled={busyAction !== "" || !canUploadCompletion} onClick={() => void uploadCompletion()}>完工材料上传</PermissionButton>
             </div>
@@ -273,6 +274,52 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
         )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={createOpen}
+        title="新建进场报备"
+        testId="vendor-site-entry-create-guided"
+        submitTestId="vendor-site-entry-create"
+        submitLabel="创建"
+        submitting={busyAction !== ""}
+        error={createOpen ? (formError || undefined) : undefined}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={() => void createEntry()}
+        steps={[
+          {
+            title: "施工基本信息",
+            description: "项目、空间和施工范围必填；只能创建归属自己的进场报备，审核验收由平台角色处理。",
+            validate: () => (form.projectId.trim() && form.spaceId.trim() && form.workScope.trim() ? null : "项目、空间和施工范围不能为空"),
+            content: (
+              <>
+                <label>项目 id<input data-testid="vendor-site-entry-project" value={form.projectId} onChange={(event) => setField("projectId", event.target.value)} /></label>
+                <label>空间 id<input data-testid="vendor-site-entry-space" value={form.spaceId} onChange={(event) => setField("spaceId", event.target.value)} /></label>
+                <label>施工范围<input data-testid="vendor-site-entry-scope" value={form.workScope} onChange={(event) => setField("workScope", event.target.value)} /></label>
+              </>
+            ),
+          },
+          {
+            title: "计划与联系人",
+            description: "计划日期、人数与现场联系人。",
+            content: (
+              <>
+                <label>开始日期<CnDatePicker data-testid="vendor-site-entry-start" value={form.plannedStartDate} onChange={(v) => setField("plannedStartDate", v)} /></label>
+                <label>结束日期<CnDatePicker data-testid="vendor-site-entry-end" value={form.plannedEndDate} onChange={(v) => setField("plannedEndDate", v)} /></label>
+                <label>人数<input data-testid="vendor-site-entry-crew" value={form.crewCount} onChange={(event) => setField("crewCount", event.target.value)} /></label>
+                <label>联系人<input data-testid="vendor-site-entry-contact" value={form.contactName} onChange={(event) => setField("contactName", event.target.value)} /></label>
+                <label>电话<input data-testid="vendor-site-entry-phone" value={form.contactPhone} onChange={(event) => setField("contactPhone", event.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "项目", value: form.projectId.trim() || "未填写" },
+          { label: "空间", value: form.spaceId.trim() || "未填写" },
+          { label: "施工范围", value: form.workScope.trim() || "未填写" },
+          { label: "计划日期", value: `${cnDate(form.plannedStartDate)} ~ ${cnDate(form.plannedEndDate)}` },
+          { label: "人数", value: form.crewCount || "1" },
+          { label: "联系人", value: `${form.contactName.trim() || "—"} / ${form.contactPhone.trim() || "—"}` },
+        ]}
+      />
     </section>
   );
 }

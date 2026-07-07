@@ -80,6 +80,10 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
   const [templateOpen, setTemplateOpen] = React.useState(false);
   const [templateError, setTemplateError] = React.useState("");
   const [templateSaving, setTemplateSaving] = React.useState(false);
+  // 引导式流程 phase-11：授权申请收起为主按钮 + 分步引导弹窗（岗位模板弹窗/审批/定岗/装配角色原样不动）。
+  const [grantOpen, setGrantOpen] = React.useState(false);
+  const [grantError, setGrantError] = React.useState("");
+  const [grantSaving, setGrantSaving] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -204,29 +208,45 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
     await reload();
   }
 
+  const GRANT_USER_REQUIRED = "授权申请需填写目标用户";
+  const GRANT_TEMP_REQUIRED = "临时高危授权需填写权限码和过期时间";
+
+  // 提交在确认步触发；校验失败/接口失败弹窗留开显错（grantError），成功才关。原接口/请求体/双保险校验保留。
   async function applyGrantRequest() {
     if (!grantForm.targetUserId.trim()) {
-      setGlobalError("授权申请需填写目标用户");
+      setGrantError(GRANT_USER_REQUIRED);
       return;
     }
     if (grantForm.requestType === "temporary_permission" && (!grantForm.permissionCodes.trim() || !grantForm.expiresAt)) {
-      setGlobalError("临时高危授权需填写权限码和过期时间");
+      setGrantError(GRANT_TEMP_REQUIRED);
       return;
     }
-    const result = await api.post<AccessGrantRequestRow>("/api/v1/access/grant-requests", {
-      requestType: grantForm.requestType,
-      targetUserId: grantForm.targetUserId.trim(),
-      roleId: grantForm.requestType === "user_role" ? grantForm.roleId.trim() || undefined : undefined,
-      positionCode: grantForm.requestType === "user_position" ? grantForm.positionCode.trim() : undefined,
-      staffLevelId: grantForm.requestType === "user_position" ? grantForm.staffLevelId.trim() : undefined,
-      permissionCodes: grantForm.requestType === "temporary_permission" ? splitTokens(grantForm.permissionCodes) : undefined,
-      expiresAt: grantForm.requestType === "temporary_permission" ? toIso(grantForm.expiresAt) : undefined,
-      singleUse: grantForm.requestType === "temporary_permission" ? grantForm.singleUse : undefined,
-      reason: grantForm.reason.trim() || "后台高危授权申请",
-      operatorNote: grantForm.reason.trim() || "后台高危授权申请",
-    });
-    setActionResult({ action: "access_grant_request_applied", requestId: result.id, status: result.status });
-    await reload();
+    setGrantError("");
+    setGlobalError(null);
+    setGrantSaving(true);
+    try {
+      const result = await api.post<AccessGrantRequestRow>("/api/v1/access/grant-requests", {
+        requestType: grantForm.requestType,
+        targetUserId: grantForm.targetUserId.trim(),
+        roleId: grantForm.requestType === "user_role" ? grantForm.roleId.trim() || undefined : undefined,
+        positionCode: grantForm.requestType === "user_position" ? grantForm.positionCode.trim() : undefined,
+        staffLevelId: grantForm.requestType === "user_position" ? grantForm.staffLevelId.trim() : undefined,
+        permissionCodes: grantForm.requestType === "temporary_permission" ? splitTokens(grantForm.permissionCodes) : undefined,
+        expiresAt: grantForm.requestType === "temporary_permission" ? toIso(grantForm.expiresAt) : undefined,
+        singleUse: grantForm.requestType === "temporary_permission" ? grantForm.singleUse : undefined,
+        reason: grantForm.reason.trim() || "后台高危授权申请",
+        operatorNote: grantForm.reason.trim() || "后台高危授权申请",
+      });
+      setActionResult({ action: "access_grant_request_applied", requestId: result.id, status: result.status });
+      setGrantOpen(false);
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "高危授权申请失败";
+      setGrantError(message);
+      setGlobalError(message);
+    } finally {
+      setGrantSaving(false);
+    }
   }
 
   async function reviewGrant(row: AccessGrantRequestRow, decision: "approve" | "reject") {
@@ -353,21 +373,10 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
         </div>
 
         <h3>高危授权审批</h3>
-        <div className="admin-inline-form" data-testid="access-grant-request-form">
-          <select aria-label="申请类型" value={grantForm.requestType} onChange={(event) => setGrantForm({ ...grantForm, requestType: event.target.value })}>
-            <option value="temporary_permission">临时权限</option>
-            <option value="user_role">用户角色</option>
-            <option value="user_position">用户职位</option>
-          </select>
-          <select aria-label="目标用户" value={grantForm.targetUserId} onChange={(event) => setGrantForm({ ...grantForm, targetUserId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
-          <select aria-label="申请角色" value={grantForm.roleId} onChange={(event) => setGrantForm({ ...grantForm, roleId: event.target.value })}>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select>
-          <input aria-label="申请岗位" placeholder="岗位编码" value={grantForm.positionCode} onChange={(event) => setGrantForm({ ...grantForm, positionCode: event.target.value })} />
-          <input aria-label="申请职级" placeholder="职级 id" value={grantForm.staffLevelId} onChange={(event) => setGrantForm({ ...grantForm, staffLevelId: event.target.value })} />
-          <input aria-label="临时权限码" placeholder="权限码，逗号分隔" value={grantForm.permissionCodes} onChange={(event) => setGrantForm({ ...grantForm, permissionCodes: event.target.value })} />
-          <input aria-label="过期时间" type="datetime-local" value={grantForm.expiresAt} onChange={(event) => setGrantForm({ ...grantForm, expiresAt: event.target.value })} />
-          <label><input type="checkbox" checked={grantForm.singleUse} onChange={(event) => setGrantForm({ ...grantForm, singleUse: event.target.checked })} />单次有效</label>
-          <input aria-label="申请原因" placeholder="申请原因" value={grantForm.reason} onChange={(event) => setGrantForm({ ...grantForm, reason: event.target.value })} />
-          <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_APPLY} data-testid="access-grant-request-create" onClick={() => void applyGrantRequest()}>发起申请</PermissionButton>
+        <div className="admin-form-row" data-testid="access-grant-request-form">
+          <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_APPLY} data-testid="access-grant-request-create-open"
+            onClick={() => { setGrantError(""); setGrantOpen(true); }}>＋ 发起授权申请</PermissionButton>
+          <span className="admin-muted-action">下方表格「通过/驳回」为审批动作，不受本弹窗影响。</span>
         </div>
         <div className="admin-inline-form" data-testid="access-grant-review-form">
           <input aria-label="审批意见" placeholder="审批意见" value={reviewForm.comment} onChange={(event) => setReviewForm({ ...reviewForm, comment: event.target.value })} />
@@ -446,6 +455,65 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           { label: "角色", value: templateForm.roleId ? roleLabel(roles.find((r) => r.id === templateForm.roleId)) : "不绑定" },
           { label: "权限模板", value: templateForm.templateId.trim() || "—" },
           { label: "状态", value: templateForm.status === "active" ? "启用" : "停用" },
+        ]}
+      />
+      <GuidedFlowModal
+        open={grantOpen}
+        title="发起授权申请"
+        testId="access-grant-request-guided"
+        submitTestId="access-grant-request-create"
+        submitLabel="发起申请"
+        submitting={grantSaving}
+        error={grantError || undefined}
+        onClose={() => setGrantOpen(false)}
+        onSubmit={() => void applyGrantRequest()}
+        steps={[
+          {
+            title: "类型与对象",
+            description: "选择申请类型与目标用户；临时权限走高危审批流。",
+            validate: () => (grantForm.targetUserId.trim() ? null : GRANT_USER_REQUIRED),
+            content: (
+              <>
+                <label>申请类型
+                  <select aria-label="申请类型" value={grantForm.requestType} onChange={(event) => setGrantForm({ ...grantForm, requestType: event.target.value })}>
+                    <option value="temporary_permission">临时权限</option>
+                    <option value="user_role">用户角色</option>
+                    <option value="user_position">用户职位</option>
+                  </select>
+                </label>
+                <label>目标用户<select aria-label="目标用户" value={grantForm.targetUserId} onChange={(event) => setGrantForm({ ...grantForm, targetUserId: event.target.value })}><option value="">请选择目标用户</option>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select></label>
+              </>
+            ),
+          },
+          {
+            title: "授权明细",
+            description: "按申请类型填写：用户角色填角色；用户职位填岗位/职级；临时权限填权限码与过期时间（必填）。",
+            validate: () => {
+              if (grantForm.requestType === "temporary_permission" && (!grantForm.permissionCodes.trim() || !grantForm.expiresAt)) return GRANT_TEMP_REQUIRED;
+              return null;
+            },
+            content: (
+              <>
+                <label>申请角色<select aria-label="申请角色" value={grantForm.roleId} onChange={(event) => setGrantForm({ ...grantForm, roleId: event.target.value })}>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select></label>
+                <label>申请岗位<input aria-label="申请岗位" placeholder="岗位编码" value={grantForm.positionCode} onChange={(event) => setGrantForm({ ...grantForm, positionCode: event.target.value })} /></label>
+                <label>申请职级<input aria-label="申请职级" placeholder="职级 id" value={grantForm.staffLevelId} onChange={(event) => setGrantForm({ ...grantForm, staffLevelId: event.target.value })} /></label>
+                <label>临时权限码<input aria-label="临时权限码" placeholder="权限码，逗号分隔" value={grantForm.permissionCodes} onChange={(event) => setGrantForm({ ...grantForm, permissionCodes: event.target.value })} /></label>
+                <label>过期时间<input aria-label="过期时间" type="datetime-local" value={grantForm.expiresAt} onChange={(event) => setGrantForm({ ...grantForm, expiresAt: event.target.value })} /></label>
+                <label><input type="checkbox" checked={grantForm.singleUse} onChange={(event) => setGrantForm({ ...grantForm, singleUse: event.target.checked })} />单次有效</label>
+                <label>申请原因<input aria-label="申请原因" placeholder="申请原因" value={grantForm.reason} onChange={(event) => setGrantForm({ ...grantForm, reason: event.target.value })} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "申请类型", value: formatBusinessStatus(grantForm.requestType) },
+          { label: "目标用户", value: grantForm.targetUserId.trim() || "未选择" },
+          { label: "角色", value: grantForm.requestType === "user_role" ? (grantForm.roleId ? roleLabel(roles.find((r) => r.id === grantForm.roleId)) : "未选择") : "—" },
+          { label: "岗位/职级", value: grantForm.requestType === "user_position" ? `${grantForm.positionCode.trim() || "—"} / ${grantForm.staffLevelId.trim() || "—"}` : "—" },
+          { label: "权限码", value: grantForm.requestType === "temporary_permission" ? (splitTokens(grantForm.permissionCodes).join("、") || "未填写") : "—" },
+          { label: "过期时间", value: grantForm.requestType === "temporary_permission" ? (grantForm.expiresAt ? cnDate(grantForm.expiresAt) : "未填写") : "—" },
+          { label: "单次有效", value: grantForm.requestType === "temporary_permission" ? (grantForm.singleUse ? "是" : "否") : "—" },
+          { label: "申请原因", value: grantForm.reason.trim() || "后台高危授权申请" },
         ]}
       />
     </section>
