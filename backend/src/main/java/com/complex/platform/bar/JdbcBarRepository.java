@@ -77,6 +77,21 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public List<BarReservationRecord> listReservations(Optional<String> merchantScope, boolean includeArchived) {
+        return catalog.listReservations(merchantScope, includeArchived);
+    }
+
+    @Override
+    public long countReservationReferences(String id) {
+        return catalog.countReservationReferences(id);
+    }
+
+    @Override
+    public void deleteReservation(String id) {
+        catalog.deleteReservation(id);
+    }
+
+    @Override
     public Optional<BarReservationRecord> findReservationById(String id) {
         return catalog.findReservationById(id);
     }

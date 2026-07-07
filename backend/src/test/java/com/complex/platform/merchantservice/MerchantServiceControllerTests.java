@@ -149,7 +149,7 @@ class MerchantServiceControllerTests {
 
     @Test
     void listUsesViewPermissionAndPageResponseShape() throws Exception {
-        when(service.listWorkOrders()).thenReturn(new PageResponse<>(List.of(record("mswo_1", "created")), 1, 50, 1));
+        when(service.listWorkOrders(false)).thenReturn(new PageResponse<>(List.of(record("mswo_1", "created")), 1, 50, 1));
 
         mockMvc.perform(get("/api/v1/merchant-service/work-orders")
                         .with(user("ops").roles("P0_SMOKE")))

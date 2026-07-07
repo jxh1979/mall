@@ -36,11 +36,11 @@ class FacilityControllerTests {
 
     @Test
     void outsourcedCanReadEquipmentWithViewPermissionButCannotWrite() {
-        when(service.listEquipment()).thenReturn(new PageResponse<>(List.of(), 1, 500, 0));
+        when(service.listEquipment(false)).thenReturn(new PageResponse<>(List.of(), 1, 500, 0));
         doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied: facility.equipment.manage"))
                 .when(authorizationService).requirePermission("facility.equipment.manage");
 
-        controller.list();
+        controller.list(false);
 
         verify(authorizationService).requirePermission("facility.equipment.view");
         controller.maintenanceDue();

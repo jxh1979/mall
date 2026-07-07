@@ -60,7 +60,13 @@ final class JdbcBarParameterSource {
                 .addValue("invitation_signature", reservation.invitationSignature())
                 .addValue("invitation_capacity", reservation.invitationCapacity())
                 .addValue("invitation_status", reservation.invitationStatus())
-                .addValue("invitation_issued_at", timestampWithTimeZone(reservation.invitationIssuedAt()));
+                .addValue("invitation_issued_at", timestampWithTimeZone(reservation.invitationIssuedAt()))
+                .addValue("archived_at", timestampWithTimeZone(reservation.archivedAt()))
+                .addValue("archived_by", reservation.archivedBy())
+                .addValue("delete_status", reservation.deleteStatus() == null ? "none" : reservation.deleteStatus())
+                .addValue("delete_requested_by", reservation.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(reservation.deleteRequestedAt()))
+                .addValue("delete_reason", reservation.deleteReason());
     }
 
     MapSqlParameterSource invitationMemberParameters(BarReservationInvitationMemberRecord member) {

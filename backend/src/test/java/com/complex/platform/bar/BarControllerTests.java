@@ -79,7 +79,7 @@ class BarControllerTests {
         when(service.transitionProductionTicket(eq("ticket_1"), any(BarProductionTicketTransitionRequest.class))).thenReturn(ticketReady());
         when(service.listProducts(false)).thenReturn(new PageResponse<>(List.of(product(false)), 1, 50, 1));
         when(service.createProduct(any(BarProductRequest.class))).thenReturn(product(false));
-        when(service.listReservations()).thenReturn(new PageResponse<>(List.of(reservation()), 1, 50, 1));
+        when(service.listReservations(false)).thenReturn(new PageResponse<>(List.of(reservation()), 1, 50, 1));
         when(service.createReservation(any(BarReservationRequest.class))).thenReturn(reservation());
         when(service.checkInReservationGuest(eq("reservation_1"), any(VerificationRequest.class))).thenReturn(checkin());
         when(service.verifyReservationEntryAllowance(eq("reservation_1"), any(VerificationRequest.class))).thenReturn(entryAllowance());

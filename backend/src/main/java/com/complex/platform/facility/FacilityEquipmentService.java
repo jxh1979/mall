@@ -45,11 +45,102 @@ public class FacilityEquipmentService {
     }
 
     public PageResponse<FacilityEquipmentRecord> listEquipment() {
+        return listEquipment(false);
+    }
+
+    /** V264：includeArchived=false（默认）排除已存档设备（外包商始终只看未存档本项目件）；true 供后台管理存档件。 */
+    public PageResponse<FacilityEquipmentRecord> listEquipment(boolean includeArchived) {
         AccessActor actor = authorizationService.currentActor();
-        List<FacilityEquipmentRecord> items = authorizationService.isOutsourcedVendor(actor)
-                ? repository.listEquipmentByProject(authorizationService.requireProjectScope(actor))
-                : repository.listEquipment();
+        List<FacilityEquipmentRecord> items;
+        if (authorizationService.isOutsourcedVendor(actor)) {
+            String project = authorizationService.requireProjectScope(actor);
+            items = repository.listEquipment(includeArchived).stream()
+                    .filter(e -> java.util.Objects.equals(project, e.projectId()))
+                    .toList();
+        } else {
+            items = repository.listEquipment(includeArchived);
+        }
         return new PageResponse<>(items, 1, 500, items.size());
+    }
+
+    // ================= V264 设施设备：存档与审批后删除 =================
+
+    /** 当前操作者 id（存档/删除留痕 + 自审校验）；无鉴权上下文（测试/内部）回退 null。 */
+    private String archiveActorId() {
+        try {
+            return authorizationService.currentActor().id();
+        } catch (RuntimeException unauthenticated) {
+            return null;
+        }
+    }
+
+    @Transactional
+    public FacilityEquipmentRecord archive(String id, boolean archive) {
+        authorizationService.requirePlatformScope();
+        FacilityEquipmentRecord cur = load(id);
+        Instant now = Instant.now();
+        FacilityEquipmentRecord updated = archive
+                ? cur.withArchive(now, archiveActorId(), now)
+                : cur.withArchive(null, null, now).withDelete("none", null, null, null, now);
+        repository.updateEquipment(updated);
+        auditEventService.recordSuccess(archive ? "facility.equipment_archived" : "facility.equipment_unarchived",
+                PERM, "facility_equipment", id, null, null, Map.of("archived", archive));
+        return updated;
+    }
+
+    @Transactional
+    public FacilityEquipmentRecord requestDelete(String id,
+            com.complex.platform.facility.dto.FacilityEquipmentDeleteRequest request) {
+        authorizationService.requirePlatformScope();
+        FacilityEquipmentRecord cur = load(id);
+        if (cur.archivedAt() == null) {
+            throw ApiException.badRequest("FACILITY_EQUIPMENT_NOT_ARCHIVED", "设备必须先存档才能申请删除");
+        }
+        if ("pending".equals(cur.deleteStatus())) {
+            throw ApiException.conflict("FACILITY_EQUIPMENT_DELETE_ALREADY_PENDING", "该设备已有待审批的删除申请");
+        }
+        Instant now = Instant.now();
+        String reason = request == null || request.reason() == null || request.reason().isBlank()
+                ? null : request.reason().trim();
+        FacilityEquipmentRecord updated = cur.withDelete("pending", archiveActorId(), now, reason, now);
+        repository.updateEquipment(updated);
+        auditEventService.recordSuccess("facility.equipment_delete_requested", PERM, "facility_equipment", id,
+                null, null, Map.of());
+        return updated;
+    }
+
+    @Transactional
+    public com.complex.platform.facility.dto.FacilityEquipmentDeleteDecision approveDelete(String id,
+            com.complex.platform.facility.dto.FacilityEquipmentDeleteApprovalRequest request) {
+        authorizationService.requirePermission("facility.equipment.approve");
+        FacilityEquipmentRecord cur = load(id);
+        if (!"pending".equals(cur.deleteStatus())) {
+            throw ApiException.badRequest("FACILITY_EQUIPMENT_DELETE_NOT_PENDING", "该设备没有待审批的删除申请");
+        }
+        String decision = request == null || request.decision() == null
+                ? null : request.decision().trim().toLowerCase(java.util.Locale.ROOT);
+        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        String actor = archiveActorId();
+        if (actor != null && actor.equals(cur.deleteRequestedBy())) {
+            throw ApiException.forbidden("FACILITY_EQUIPMENT_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
+        }
+        if ("rejected".equals(decision)) {
+            repository.updateEquipment(cur.withDelete("none", null, null, null, Instant.now()));
+            auditEventService.recordSuccess("facility.equipment_delete_rejected", "facility.equipment.approve",
+                    "facility_equipment", id, null, null, Map.of());
+            return new com.complex.platform.facility.dto.FacilityEquipmentDeleteDecision(id, "rejected", false);
+        }
+        long refs = repository.countEquipmentReferences(id);
+        if (refs > 0) {
+            throw ApiException.conflict("FACILITY_EQUIPMENT_IN_USE",
+                    "设备仍被 " + refs + " 条维保工单引用，不可删除");
+        }
+        repository.deleteEquipment(id);
+        auditEventService.recordSuccess("facility.equipment_delete_approved", "facility.equipment.approve",
+                "facility_equipment", id, null, null, Map.of());
+        return new com.complex.platform.facility.dto.FacilityEquipmentDeleteDecision(id, "approved", true);
     }
 
     public PageResponse<FacilityEquipmentRecord> listMaintenanceDue() {

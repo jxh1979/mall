@@ -170,10 +170,111 @@ public class BarService {
     }
 
     public PageResponse<BarReservationRecord> listReservations() {
+        return listReservations(false);
+    }
+
+    /** V264：includeArchived=false（默认）排除已存档预订；true 供后台管理存档件。 */
+    public PageResponse<BarReservationRecord> listReservations(boolean includeArchived) {
         return operations.readPage(
                 BarReadOperation.LIST_RESERVATIONS,
-                () -> repository.listReservations(authorizationService.currentMerchantScope())
+                () -> repository.listReservations(authorizationService.currentMerchantScope(), includeArchived)
         );
+    }
+
+    // ================= V264 卡座预订：存档与审批后删除 =================
+
+    /** 当前操作者 id（存档/删除留痕 + 自审校验）；无鉴权上下文（测试/内部）回退 null。 */
+    private String reservationActorId() {
+        try {
+            return authorizationService.currentActor().id();
+        } catch (RuntimeException unauthenticated) {
+            return null;
+        }
+    }
+
+    private BarReservationRecord requireReservationInScope(String id) {
+        BarReservationRecord reservation = repository.findReservationById(operations.requireText(id, "reservation_id"))
+                .orElseThrow(() -> com.complex.platform.common.api.ApiException.notFound(
+                        "BAR_RESERVATION_NOT_FOUND", "reservation not found"));
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(reservation.merchantId())) {
+                throw com.complex.platform.common.api.ApiException.forbidden(
+                        "BAR_MERCHANT_SCOPE", "reservation belongs to another merchant");
+            }
+        });
+        return reservation;
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
+    @Transactional
+    public BarReservationRecord archiveReservation(String reservationId, boolean archive) {
+        BarReservationRecord reservation = requireReservationInScope(reservationId);
+        java.time.Instant now = java.time.Instant.now();
+        BarReservationRecord updated = archive
+                ? reservation.withArchive(now, reservationActorId(), now)
+                : reservation.withArchive(null, null, now).withDelete("none", null, null, null, now);
+        return repository.saveReservation(updated);
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
+    @Transactional
+    public BarReservationRecord requestDeleteReservation(String reservationId, BarCatalogDeleteRequest request) {
+        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_RESERVATION,
+                () -> doRequestDeleteReservation(reservationId, request));
+    }
+
+    private BarReservationRecord doRequestDeleteReservation(String reservationId, BarCatalogDeleteRequest request) {
+        BarReservationRecord reservation = requireReservationInScope(reservationId);
+        if (reservation.archivedAt() == null) {
+            throw com.complex.platform.common.api.ApiException.badRequest(
+                    "BAR_RESERVATION_NOT_ARCHIVED", "reservation must be archived before requesting deletion");
+        }
+        if ("pending".equals(reservation.deleteStatus())) {
+            throw com.complex.platform.common.api.ApiException.conflict(
+                    "BAR_RESERVATION_DELETE_ALREADY_PENDING", "a delete request is already pending");
+        }
+        java.time.Instant now = java.time.Instant.now();
+        String reason = request == null ? null : request.reason();
+        return repository.saveReservation(reservation.withDelete("pending", reservationActorId(), now,
+                reason == null || reason.isBlank() ? null : reason.trim(), now));
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.approve")
+    @Transactional
+    public BarCatalogDeleteDecision approveDeleteReservation(String reservationId, BarCatalogDeleteApprovalRequest request) {
+        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_RESERVATION,
+                () -> doApproveDeleteReservation(reservationId, request));
+    }
+
+    private BarCatalogDeleteDecision doApproveDeleteReservation(String reservationId, BarCatalogDeleteApprovalRequest request) {
+        BarReservationRecord reservation = requireReservationInScope(reservationId);
+        if (!"pending".equals(reservation.deleteStatus())) {
+            throw com.complex.platform.common.api.ApiException.badRequest(
+                    "BAR_RESERVATION_DELETE_NOT_PENDING", "no pending delete request");
+        }
+        String decision = request == null || request.decision() == null
+                ? null : request.decision().trim().toLowerCase(java.util.Locale.ROOT);
+        if (!"approved".equals(decision) && !"rejected".equals(decision)) {
+            throw com.complex.platform.common.api.ApiException.badRequest(
+                    "VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        String actor = reservationActorId();
+        if (actor != null && actor.equals(reservation.deleteRequestedBy())) {
+            throw com.complex.platform.common.api.ApiException.forbidden(
+                    "BAR_RESERVATION_SELF_APPROVE_FORBIDDEN", "the initiator of a delete request cannot approve it");
+        }
+        if ("rejected".equals(decision)) {
+            repository.saveReservation(reservation.withDelete("none", null, null, null, java.time.Instant.now()));
+            return new BarCatalogDeleteDecision(reservationId, "rejected", false);
+        }
+        long refs = repository.countReservationReferences(reservationId);
+        if (refs > 0) {
+            throw com.complex.platform.common.api.ApiException.conflict(
+                    "BAR_RESERVATION_IN_USE", "reservation is still referenced by " + refs
+                            + " orders/bills/adjustments/invitation members");
+        }
+        repository.deleteReservation(reservationId);
+        return new BarCatalogDeleteDecision(reservationId, "approved", true);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.create")

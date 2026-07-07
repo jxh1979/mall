@@ -47,8 +47,34 @@ public class StaffController {
     }
 
     @GetMapping("/profiles")
-    public ApiResponse<PageResponse<StaffProfileRecord>> listProfiles() {
-        return ApiResponse.ok(service.listProfiles());
+    public ApiResponse<PageResponse<StaffProfileRecord>> listProfiles(
+            @org.springframework.web.bind.annotation.RequestParam(value = "include_archived", required = false, defaultValue = "false") boolean includeArchived) {
+        return ApiResponse.ok(service.listProfiles(includeArchived));
+    }
+
+    // ── V264 员工档案存档与审批后删除 ──────────────────────────────────
+    @PostMapping("/profiles/{id}/archive")
+    public ApiResponse<StaffProfileRecord> archiveProfile(@PathVariable String id) {
+        return ApiResponse.ok(service.archiveProfile(id, true));
+    }
+
+    @PostMapping("/profiles/{id}/unarchive")
+    public ApiResponse<StaffProfileRecord> unarchiveProfile(@PathVariable String id) {
+        return ApiResponse.ok(service.archiveProfile(id, false));
+    }
+
+    @PostMapping("/profiles/{id}/delete-request")
+    public ApiResponse<StaffProfileRecord> requestDeleteProfile(
+            @PathVariable String id,
+            @RequestBody(required = false) com.complex.platform.access.staff.dto.StaffProfileDeleteRequest request) {
+        return ApiResponse.ok(service.requestDeleteProfile(id, request));
+    }
+
+    @PostMapping("/profiles/{id}/delete-approve")
+    public ApiResponse<com.complex.platform.access.staff.dto.StaffProfileDeleteDecision> approveDeleteProfile(
+            @PathVariable String id,
+            @RequestBody(required = false) com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest request) {
+        return ApiResponse.ok(service.approveDeleteProfile(id, request));
     }
 
     @PostMapping("/device-credentials")

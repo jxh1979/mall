@@ -19,7 +19,8 @@ class JdbcFacilityRepository implements FacilityRepository {
     private static final String EQUIP_COLS = """
             id, name, equipment_type, space_id, brand, model, vendor, responsible_user_id, status,
             maintenance_cycle_days, last_maintenance_at, next_maintenance_due, install_date, warranty_until,
-            alarm_source, alarm_note, alarm_raised_at, project_id, merchant_id, created_at, updated_at
+            alarm_source, alarm_note, alarm_raised_at, project_id, merchant_id, created_at, updated_at,
+            archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -32,6 +33,28 @@ class JdbcFacilityRepository implements FacilityRepository {
     public List<FacilityEquipmentRecord> listEquipment() {
         return jdbcTemplate.query("SELECT " + EQUIP_COLS + " FROM facility_equipment ORDER BY created_at DESC, id",
                 this::mapEquipment);
+    }
+
+    @Override
+    public List<FacilityEquipmentRecord> listEquipment(boolean includeArchived) {
+        String sql = "SELECT " + EQUIP_COLS + " FROM facility_equipment WHERE delete_status <> 'approved'"
+                + (includeArchived ? "" : " AND archived_at IS NULL")
+                + " ORDER BY created_at DESC, id";
+        return jdbcTemplate.query(sql, this::mapEquipment);
+    }
+
+    @Override
+    public long countEquipmentReferences(String id) {
+        // 关联工单 facility_work_orders.equipment_id 为活引用（不级联），有则拒删。
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM facility_work_orders WHERE equipment_id = :id",
+                new MapSqlParameterSource("id", id), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public void deleteEquipment(String id) {
+        jdbcTemplate.update("DELETE FROM facility_equipment WHERE id = :id", new MapSqlParameterSource("id", id));
     }
 
     @Override
@@ -54,10 +77,12 @@ class JdbcFacilityRepository implements FacilityRepository {
         jdbcTemplate.update("""
                 INSERT INTO facility_equipment (id, name, equipment_type, space_id, brand, model, vendor,
                     responsible_user_id, status, maintenance_cycle_days, last_maintenance_at, next_maintenance_due,
-                    install_date, warranty_until, alarm_source, alarm_note, alarm_raised_at, project_id, merchant_id)
+                    install_date, warranty_until, alarm_source, alarm_note, alarm_raised_at, project_id, merchant_id,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason)
                 VALUES (:id, :name, :equipment_type, :space_id, :brand, :model, :vendor,
                     :responsible_user_id, :status, :maintenance_cycle_days, :last_maintenance_at, :next_maintenance_due,
-                    :install_date, :warranty_until, :alarm_source, :alarm_note, :alarm_raised_at, :project_id, :merchant_id)
+                    :install_date, :warranty_until, :alarm_source, :alarm_note, :alarm_raised_at, :project_id, :merchant_id,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason)
                 """, params(r));
     }
 
@@ -69,7 +94,10 @@ class JdbcFacilityRepository implements FacilityRepository {
                     status=:status, maintenance_cycle_days=:maintenance_cycle_days, last_maintenance_at=:last_maintenance_at,
                     next_maintenance_due=:next_maintenance_due, install_date=:install_date, warranty_until=:warranty_until,
                     alarm_source=:alarm_source, alarm_note=:alarm_note, alarm_raised_at=:alarm_raised_at,
-                    project_id=:project_id, merchant_id=:merchant_id, updated_at=now()
+                    project_id=:project_id, merchant_id=:merchant_id, updated_at=now(),
+                    archived_at=:archived_at, archived_by=:archived_by, delete_status=:delete_status,
+                    delete_requested_by=:delete_requested_by, delete_requested_at=:delete_requested_at,
+                    delete_reason=:delete_reason
                  WHERE id=:id
                 """, params(r));
     }
@@ -107,7 +135,14 @@ class JdbcFacilityRepository implements FacilityRepository {
                 .addValue("install_date", r.installDate()).addValue("warranty_until", r.warrantyUntil())
                 .addValue("alarm_source", r.alarmSource()).addValue("alarm_note", r.alarmNote())
                 .addValue("alarm_raised_at", r.alarmRaisedAt() == null ? null : timestampWithTimeZone(r.alarmRaisedAt()))
-                .addValue("project_id", r.projectId()).addValue("merchant_id", r.merchantId());
+                .addValue("project_id", r.projectId()).addValue("merchant_id", r.merchantId())
+                .addValue("archived_at", r.archivedAt() == null ? null : timestampWithTimeZone(r.archivedAt()))
+                .addValue("archived_by", r.archivedBy())
+                .addValue("delete_status", r.deleteStatus() == null ? "none" : r.deleteStatus())
+                .addValue("delete_requested_by", r.deleteRequestedBy())
+                .addValue("delete_requested_at",
+                        r.deleteRequestedAt() == null ? null : timestampWithTimeZone(r.deleteRequestedAt()))
+                .addValue("delete_reason", r.deleteReason());
     }
 
     private FacilityEquipmentRecord mapEquipment(ResultSet rs, int n) throws SQLException {
@@ -120,6 +155,9 @@ class JdbcFacilityRepository implements FacilityRepository {
                 rs.getObject("warranty_until", LocalDate.class), rs.getString("alarm_source"),
                 rs.getString("alarm_note"), nullableInstant(rs, "alarm_raised_at"),
                 rs.getString("project_id"), rs.getString("merchant_id"),
-                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"),
+                nullableInstant(rs, "archived_at"), rs.getString("archived_by"), rs.getString("delete_status"),
+                rs.getString("delete_requested_by"), nullableInstant(rs, "delete_requested_at"),
+                rs.getString("delete_reason"));
     }
 }

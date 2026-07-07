@@ -48,7 +48,9 @@ enum BarWriteOperation implements AuditedOperation {
     REQUEST_DELETE_BAR_COMBO("bar.combo.delete_requested", "bar.combo.delete_request_failed", "bar.combo.manage", "bar_combo"),
     APPROVE_DELETE_BAR_COMBO("bar.combo.delete_approved", "bar.combo.delete_approve_failed", "bar.combo.approve", "bar_combo"),
     REQUEST_DELETE_BAR_VENUE("bar.venue.delete_requested", "bar.venue.delete_request_failed", "bar.venue.manage", "bar"),
-    APPROVE_DELETE_BAR_VENUE("bar.venue.delete_approved", "bar.venue.delete_approve_failed", "bar.venue.approve", "bar");
+    APPROVE_DELETE_BAR_VENUE("bar.venue.delete_approved", "bar.venue.delete_approve_failed", "bar.venue.approve", "bar"),
+    REQUEST_DELETE_BAR_RESERVATION("bar.reservation.delete_requested", "bar.reservation.delete_request_failed", "bar.reservation.manage", "bar_reservation"),
+    APPROVE_DELETE_BAR_RESERVATION("bar.reservation.delete_approved", "bar.reservation.delete_approve_failed", "bar.reservation.approve", "bar_reservation");
 
     private final String successEvent;
     private final String failureEvent;

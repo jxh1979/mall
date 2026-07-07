@@ -9,6 +9,11 @@ import java.util.Optional;
 public interface FacilityRepository {
     List<FacilityEquipmentRecord> listEquipment();
 
+    /** V264：includeArchived=false（默认）排除已存档/已审批删除的设备。默认委托旧签名（内存桩无存档概念）。 */
+    default List<FacilityEquipmentRecord> listEquipment(boolean includeArchived) {
+        return listEquipment();
+    }
+
     default List<FacilityEquipmentRecord> listEquipmentByProject(String projectId) {
         return listEquipment().stream()
                 .filter(record -> Objects.equals(projectId, record.projectId()))
@@ -28,5 +33,14 @@ public interface FacilityRepository {
         return listMaintenanceDue(asOf).stream()
                 .filter(record -> Objects.equals(projectId, record.projectId()))
                 .toList();
+    }
+
+    /** V264：设备活引用计数（&gt;0 拒删）；关联工单 facility_work_orders.equipment_id 为活引用（不级联）。内存桩默认 0。 */
+    default long countEquipmentReferences(String id) {
+        return 0L;
+    }
+
+    /** V264：物理删除设备。内存桩默认无操作。 */
+    default void deleteEquipment(String id) {
     }
 }

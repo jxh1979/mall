@@ -546,11 +546,13 @@ class JdbcStaffRepository implements StaffRepository {
         jdbcTemplate.update("""
                 INSERT INTO staff_profiles (
                     id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
-                    registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at
+                    registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                 )
                 VALUES (
                     :id, :project_id, :merchant_id, :user_id, :name, :phone_hash, :id_doc_hash, :staff_level_id,
-                    :registration_status, :approved_by, :approved_at, :reject_reason, :status, :created_at, :updated_at
+                    :registration_status, :approved_by, :approved_at, :reject_reason, :status, :created_at, :updated_at,
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = EXCLUDED.project_id,
@@ -565,7 +567,13 @@ class JdbcStaffRepository implements StaffRepository {
                     approved_at = EXCLUDED.approved_at,
                     reject_reason = EXCLUDED.reject_reason,
                     status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    archived_at = EXCLUDED.archived_at,
+                    archived_by = EXCLUDED.archived_by,
+                    delete_status = EXCLUDED.delete_status,
+                    delete_requested_by = EXCLUDED.delete_requested_by,
+                    delete_requested_at = EXCLUDED.delete_requested_at,
+                    delete_reason = EXCLUDED.delete_reason
                 """, new MapSqlParameterSource()
                 .addValue("id", profile.id())
                 .addValue("project_id", profile.projectId())
@@ -581,7 +589,13 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("reject_reason", profile.rejectReason())
                 .addValue("status", profile.status())
                 .addValue("created_at", timestampWithTimeZone(profile.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(profile.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(profile.updatedAt()))
+                .addValue("archived_at", timestampWithTimeZone(profile.archivedAt()))
+                .addValue("archived_by", profile.archivedBy())
+                .addValue("delete_status", profile.deleteStatus() == null ? "none" : profile.deleteStatus())
+                .addValue("delete_requested_by", profile.deleteRequestedBy())
+                .addValue("delete_requested_at", timestampWithTimeZone(profile.deleteRequestedAt()))
+                .addValue("delete_reason", profile.deleteReason()));
         return profile;
     }
 
@@ -589,7 +603,8 @@ class JdbcStaffRepository implements StaffRepository {
     public Optional<StaffProfileRecord> findProfileById(String id) {
         List<StaffProfileRecord> result = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
-                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at
+                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM staff_profiles
                  WHERE id = :id
                 """, Map.of("id", id), this::mapProfile);
@@ -601,25 +616,68 @@ class JdbcStaffRepository implements StaffRepository {
         if (merchantScope == null) {
             return jdbcTemplate.query("""
                     SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
-                           registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at
+                           registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
+                           archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                       FROM staff_profiles
                      ORDER BY created_at DESC, id
                     """, this::mapProfile);
         }
         return jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
-                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at
+                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM staff_profiles
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantScope), this::mapProfile);
     }
 
+    @Override
+    public List<StaffProfileRecord> listProfiles(String merchantScope, boolean includeArchived) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
+                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                  FROM staff_profiles
+                 WHERE delete_status <> 'approved'
+                """);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (merchantScope != null) {
+            sql.append(" AND merchant_id = :merchant_id");
+            params.addValue("merchant_id", merchantScope);
+        }
+        if (!includeArchived) {
+            sql.append(" AND archived_at IS NULL");
+        }
+        sql.append(" ORDER BY created_at DESC, id");
+        return jdbcTemplate.query(sql.toString(), params, this::mapProfile);
+    }
+
+    @Override
+    public long countProfileReferences(String id) {
+        // 子表 credentials/notices 走 CASCADE 不算活引用；活引用=该员工 user_id 仍挂考勤/请假/职级薪资记录。
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT (SELECT COUNT(1) FROM staff_attendance_records a
+                          JOIN staff_profiles p ON p.user_id = a.user_id WHERE p.id = :id)
+                     + (SELECT COUNT(1) FROM staff_leave_requests l
+                          JOIN staff_profiles p ON p.user_id = l.user_id WHERE p.id = :id)
+                     + (SELECT COUNT(1) FROM staff_level_assignments la
+                          JOIN staff_profiles p ON p.user_id = la.user_id WHERE p.id = :id)
+                """, Map.of("id", id), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public void deleteProfile(String id) {
+        jdbcTemplate.update("DELETE FROM staff_profiles WHERE id = :id", Map.of("id", id));
+    }
+
     // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
     public List<StaffProfileRecord> listProfilesByProject(String projectId) {
         return jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
-                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at
+                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM staff_profiles
                  WHERE project_id = :project_id
                  ORDER BY created_at DESC, id
@@ -785,7 +843,13 @@ class JdbcStaffRepository implements StaffRepository {
                 rs.getString("reject_reason"),
                 rs.getString("status"),
                 nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at")
+                nullableInstant(rs, "updated_at"),
+                nullableInstant(rs, "archived_at"),
+                rs.getString("archived_by"),
+                rs.getString("delete_status"),
+                rs.getString("delete_requested_by"),
+                nullableInstant(rs, "delete_requested_at"),
+                rs.getString("delete_reason")
         );
     }
 
