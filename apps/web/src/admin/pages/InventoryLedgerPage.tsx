@@ -6,7 +6,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { formatLocation, KNOWN_LOCATIONS } from "../i18n/locationLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { FormModal } from "../components/FormModal";
 import { PermissionButton } from "../security/Can";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -226,53 +226,30 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         <span className="admin-muted-action" data-testid="inventory-ledger-boundary">{TEXT.boundary}</span>
       </div>
       {formError ? <div data-testid="inventory-ledger-error" className="admin-inline-error">{formError}</div> : null}
-      <GuidedFlowModal
+      <FormModal
         open={createOpen}
         title={TEXT.submit}
+        description={selectedItem ? `物料：${selectedItem.itemName ?? selectedItem.itemCode ?? selectedItem.id}（出入库位置/数量/追踪一屏填完提交）` : TEXT.noItem}
         testId="inventory-movement-guided"
         submitTestId="inventory-movement-submit"
         submitLabel={TEXT.submit}
         submitting={submitting}
         error={formError || undefined}
+        validate={() => {
+          const q = Number(quantity);
+          if (!selectedItem) return TEXT.noItem;
+          return !Number.isFinite(q) || q <= 0 ? TEXT.quantityInvalid : null;
+        }}
         onClose={() => setCreateOpen(false)}
         onSubmit={() => void submitMovement()}
-        steps={[
-          {
-            title: "出入库位置",
-            description: selectedItem ? `物料：${selectedItem.itemName ?? selectedItem.itemCode ?? selectedItem.id}` : TEXT.noItem,
-            content: (
-              <>
-                <label>{TEXT.fromLocation}<input list="inventory-location-options" data-testid="inventory-movement-from" value={fromLocation} onChange={(event) => setFromLocation(event.target.value)} /></label>
-                <label>{TEXT.toLocation}<input list="inventory-location-options" data-testid="inventory-movement-to" value={toLocation} onChange={(event) => setToLocation(event.target.value)} /></label>
-                <datalist id="inventory-location-options">{KNOWN_LOCATIONS.map((loc) => <option key={loc.code} value={loc.code}>{loc.name}</option>)}</datalist>
-              </>
-            ),
-          },
-          {
-            title: "数量与追踪",
-            description: TEXT.boundary,
-            validate: () => {
-              const q = Number(quantity);
-              if (!selectedItem) return TEXT.noItem;
-              return !Number.isFinite(q) || q <= 0 ? TEXT.quantityInvalid : null;
-            },
-            content: (
-              <>
-                <label>{TEXT.quantity}<input data-testid="inventory-movement-quantity" type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-                <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
-                <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
-              </>
-            ),
-          },
-        ]}
-        summary={[
-          { label: TEXT.items, value: selectedItem?.itemName ?? selectedItem?.itemCode ?? selectedItem?.id ?? TEXT.noItem },
-          { label: TEXT.fromLocation, value: formatLocation(fromLocation) },
-          { label: TEXT.toLocation, value: formatLocation(toLocation) },
-          { label: TEXT.quantity, value: quantity },
-          { label: TEXT.traceCode, value: traceCode || "-" },
-        ]}
-      />
+      >
+        <label>{TEXT.fromLocation}<input list="inventory-location-options" data-testid="inventory-movement-from" value={fromLocation} onChange={(event) => setFromLocation(event.target.value)} /></label>
+        <label>{TEXT.toLocation}<input list="inventory-location-options" data-testid="inventory-movement-to" value={toLocation} onChange={(event) => setToLocation(event.target.value)} /></label>
+        <datalist id="inventory-location-options">{KNOWN_LOCATIONS.map((loc) => <option key={loc.code} value={loc.code}>{loc.name}</option>)}</datalist>
+        <label>{TEXT.quantity}<input data-testid="inventory-movement-quantity" type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
+        <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
+        <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
+      </FormModal>
       <h3>{TEXT.items}</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-items-table">

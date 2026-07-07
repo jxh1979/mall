@@ -5,7 +5,7 @@ import { RiskAlertsPage } from "./RiskAlertsPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 引导式流程：创建预警收起为「＋ 创建预警」入口 → 两步引导（分类 / 对象与摘要）→ 确认页提交。
+// 单页表单弹窗：创建预警收起为「＋ 创建预警」入口 → 一屏表单 → 提交。
 const ALERTS = [
   { id: "ra-1", alert_type: "staff_behavior", risk_level: "high", object_type: "bar_order", object_id: "o-1", summary: "异常折扣", status: "open" },
 ];
@@ -47,7 +47,7 @@ function postCalls(fetchMock: ReturnType<typeof vi.fn>) {
   return fetchMock.mock.calls.filter((c) => String(c[0]).includes("/analytics/risk-alerts") && !String(c[0]).includes("/resolve") && (c[1]?.method ?? "GET") === "POST");
 }
 
-describe("RiskAlertsPage 引导式创建预警", () => {
+describe("RiskAlertsPage 单页表单创建预警", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/admin/risk/alerts");
@@ -59,38 +59,28 @@ describe("RiskAlertsPage 引导式创建预警", () => {
     expect(screen.queryByTestId("risk-alert-guided")).toBeNull();
   });
 
-  it("入口→两步→确认提交：POST /risk-alerts 且成功后关闭弹窗", async () => {
+  it("入口→一屏填→提交：POST /risk-alerts 且成功后关闭弹窗", async () => {
     const { fetchMock } = renderPage();
     await waitFor(() => expect(screen.getByTestId("risk-alert-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("risk-alert-create-open"));
 
-    // 第一步：分类（默认值即合法）
-    await waitFor(() => expect(screen.getByTestId("risk-alert-type")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("risk-alert-guided-next"));
-
-    // 第二步：对象与摘要
+    // 单页表单：所有字段一屏，填摘要后直接提交
     await waitFor(() => expect(screen.getByTestId("risk-alert-summary-input")).toBeTruthy());
     fireEvent.change(screen.getByTestId("risk-alert-summary-input"), { target: { value: "复核异常折扣" } });
-    fireEvent.click(screen.getByTestId("risk-alert-guided-next"));
-
-    // 确认页
-    await waitFor(() => expect(screen.getByTestId("risk-alert-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("risk-alert-create"));
 
     await waitFor(() => expect(postCalls(fetchMock).length).toBe(1));
     await waitFor(() => expect(screen.queryByTestId("risk-alert-guided")).toBeNull());
   });
 
-  it("第二步校验拦截：摘要清空不到确认页、不提交", async () => {
+  it("校验拦截：摘要清空提交被拦、不发请求", async () => {
     const { fetchMock } = renderPage();
     await waitFor(() => expect(screen.getByTestId("risk-alert-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("risk-alert-create-open"));
-    fireEvent.click(screen.getByTestId("risk-alert-guided-next"));
     await waitFor(() => expect(screen.getByTestId("risk-alert-summary-input")).toBeTruthy());
     fireEvent.change(screen.getByTestId("risk-alert-summary-input"), { target: { value: "   " } });
-    fireEvent.click(screen.getByTestId("risk-alert-guided-next"));
+    fireEvent.click(screen.getByTestId("risk-alert-create"));
     expect(screen.getByTestId("risk-alert-guided-error").textContent).toBeTruthy();
-    expect(screen.queryByTestId("risk-alert-guided-summary")).toBeNull();
     expect(postCalls(fetchMock).length).toBe(0);
   });
 });
