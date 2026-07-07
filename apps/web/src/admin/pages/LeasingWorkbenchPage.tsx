@@ -132,7 +132,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [signEffectiveDate, setSignEffectiveDate] = React.useState("2026-07-01");
   const [signExpiryDate, setSignExpiryDate] = React.useState("2027-06-30");
   // 品牌表单
-  const [brandName, setBrandName] = React.useState("示例品牌");
+  const [brandName, setBrandName] = React.useState("");
   const [brandType, setBrandType] = React.useState("chain");
   const [brandBusinessType, setBrandBusinessType] = React.useState("retail");
   const [blacklistReason, setBlacklistReason] = React.useState("资质异常");
