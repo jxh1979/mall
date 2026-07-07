@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 
 const WO_CREATE = ["merchant.service_work_order.create"];
@@ -83,6 +84,8 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该工单完整字段（类型/优先级/状态中文·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-8：新建工单收起为主按钮 + 分步引导弹窗（派单/处理等由平台侧闭环，不改）。
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   function openWorkOrderDetail(row: MerchantWorkOrderRow) {
     setDetail({
@@ -157,9 +160,13 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
       description,
       reportedChannel: "merchant_portal",
     };
-    await runAction("merchant_zone_work_order_submitted", request, () => api.post("/api/v1/merchant-service/work-orders", request));
-    setTitle("");
-    setDescription("");
+    const ok = await runAction("merchant_zone_work_order_submitted", request, () => api.post("/api/v1/merchant-service/work-orders", request));
+    // 成功才关弹窗并清空标题/描述；失败留弹窗内显错（formError 已由 runAction 置）。
+    if (ok) {
+      setTitle("");
+      setDescription("");
+      setCreateOpen(false);
+    }
   }
 
   const openCount = rows.filter(nonTerminal).length;
@@ -172,23 +179,14 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="merchant_service.work_order.viewed / merchant_service.work_order.created" />
       <div className="admin-form-row" data-testid="merchant-zone-work-order-form">
-        <label>类型<select data-testid="merchant-zone-work-order-type" value={workOrderType} onChange={(event) => setWorkOrderType(event.target.value)}>
-          {Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select></label>
-        <label>优先级<select data-testid="merchant-zone-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}>
-          {Object.entries(PRIORITY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select></label>
-        <label>标题<input data-testid="merchant-zone-work-order-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="如:空调漏水" /></label>
-        <label>问题描述<input data-testid="merchant-zone-work-order-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="现场情况与期望处理" /></label>
         <PermissionButton
           permissionsState={effectivePermissions}
           permissions={WO_CREATE}
-          data-testid="merchant-zone-work-order-submit"
-          disabled={busyAction === "merchant_zone_work_order_submitted"}
-          onClick={submitWorkOrder}
-        >{TEXT.submit}</PermissionButton>
+          data-testid="merchant-zone-work-order-create-open"
+          onClick={() => { setFormError(""); setCreateOpen(true); }}
+        >＋ 新建工单</PermissionButton>
       </div>
-      {formError ? <div className="admin-form-error" data-testid="merchant-zone-work-order-form-error">{formError}</div> : null}
+      {formError ? <div className="admin-form-error" data-testid="merchant-zone-work-order-page-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
         <div className="admin-state" data-testid="merchant-zone-work-orders-kpi-focus-banner">
@@ -226,6 +224,46 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
         </div>
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={createOpen}
+        title="新建工单"
+        testId="merchant-zone-work-order-guided"
+        submitTestId="merchant-zone-work-order-submit"
+        submitLabel={TEXT.submit}
+        submitting={busyAction === "merchant_zone_work_order_submitted"}
+        error={formError || undefined}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={submitWorkOrder}
+        steps={[
+          {
+            title: "工单信息",
+            description: "选择工单类型与优先级，填写标题与问题描述（标题、描述必填）。",
+            validate: () => {
+              if (!title.trim()) return TEXT.titleRequired;
+              if (!description.trim()) return TEXT.descriptionRequired;
+              return null;
+            },
+            content: (
+              <>
+                <label>类型<select data-testid="merchant-zone-work-order-type" value={workOrderType} onChange={(event) => setWorkOrderType(event.target.value)}>
+                  {Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select></label>
+                <label>优先级<select data-testid="merchant-zone-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}>
+                  {Object.entries(PRIORITY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select></label>
+                <label>标题<input data-testid="merchant-zone-work-order-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="如:空调漏水" /></label>
+                <label>问题描述<input data-testid="merchant-zone-work-order-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="现场情况与期望处理" /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "类型", value: TYPE_LABELS[workOrderType] ?? workOrderType },
+          { label: "优先级", value: PRIORITY_LABELS[priority] ?? priority },
+          { label: "标题", value: title.trim() || "未填写" },
+          { label: "问题描述", value: description.trim() || "未填写" },
+        ]}
+      />
     </section>
   );
 }

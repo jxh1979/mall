@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type {
   AdminPageProps,
   GovernanceProjectRow,
@@ -68,6 +69,8 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
   const [selectedMerchants, setSelectedMerchants] = React.useState<Record<string, boolean>>({});
 
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 引导式流程 phase-8：新增物业费率收起为主按钮 + 分步引导弹窗（账单生成是动作，不改）。
+  const [rateOpen, setRateOpen] = React.useState(false);
 
   // 项目 + 商户名单（下拉/勾选用）——一次拉齐；费率随所选项目按需刷新。
   const { loading, error, reload } = useAdminResource(
@@ -127,9 +130,13 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
       ratePerSquareMeterCent: Math.round(numericRate * 100),
       status: "active",
     };
-    await runAction("property_fee_rate_saved", request,
+    const ok = await runAction("property_fee_rate_saved", request,
       () => api.post("/api/v1/finance/property-fee/rates", request));
-    setRateYuan("");
+    // 成功才关弹窗并清单价；失败留弹窗内显错（formError 已由 runAction 置）。
+    if (ok) {
+      setRateYuan("");
+      setRateOpen(false);
+    }
   }
 
   async function runBill() {
@@ -204,21 +211,19 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
       <AuditTrailHint event="finance_property_fee.rate_set / finance_property_fee.billed" />
 
       {/* ── 费率设置 ───────────────────────────────────────────── */}
+      {/* 项目公司选择器留在页面（既是下方费率表的筛选，也是新增费率的归属，弹窗内复用同一 projectId）。 */}
       <h3>物业费费率设置</h3>
       <div className="admin-form-row" data-testid="property-fee-rate-form">
         <label>项目公司<select data-testid="property-fee-project" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
           {projects.length === 0 ? <option value="">（暂无项目）</option> : null}
           {projects.map((project) => <option key={project.id} value={project.id}>{projectLabel(project)}</option>)}
         </select></label>
-        <label>生效期（空=默认费率）<input data-testid="property-fee-rate-period" type="month" value={effectivePeriod} onChange={(event) => setEffectivePeriod(event.target.value)} /></label>
-        <label>每平米单价（元/㎡/期）<input data-testid="property-fee-rate-amount" type="number" min={0} step="0.01" value={rateYuan} onChange={(event) => setRateYuan(event.target.value)} placeholder="如 25.00" /></label>
         <PermissionButton
           permissionsState={effectivePermissions}
           permissions={MANAGE_PERMS}
-          data-testid="property-fee-rate-save"
-          disabled={busyAction === "property_fee_rate_saved"}
-          onClick={saveRate}
-        >{TEXT.saveRate}</PermissionButton>
+          data-testid="property-fee-rate-create-open"
+          onClick={() => { setFormError(""); setRateOpen(true); }}
+        >＋ 新增物业费率</PermissionButton>
       </div>
 
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
@@ -303,6 +308,40 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
 
       {formError ? <div className="admin-form-error" data-testid="property-fee-form-error">{formError}</div> : null}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <GuidedFlowModal
+        open={rateOpen}
+        title="新增物业费率"
+        testId="property-fee-rate-guided"
+        submitTestId="property-fee-rate-save"
+        submitLabel={TEXT.saveRate}
+        submitting={busyAction === "property_fee_rate_saved"}
+        error={formError || undefined}
+        onClose={() => setRateOpen(false)}
+        onSubmit={saveRate}
+        steps={[
+          {
+            title: "费率信息",
+            description: `归属项目：${projects.find((p) => p.id === projectId) ? projectLabel(projects.find((p) => p.id === projectId)!) : "请先在页面选择项目公司"}。生效期留空=该项目默认费率；单价按每平米元填写（不小于 0）。`,
+            validate: () => {
+              if (!projectId) return TEXT.projectRequired;
+              const numericRate = Number(rateYuan);
+              if (!Number.isFinite(numericRate) || numericRate < 0) return TEXT.rateRequired;
+              return null;
+            },
+            content: (
+              <>
+                <label>生效期（空=默认费率）<input data-testid="property-fee-rate-period" type="month" value={effectivePeriod} onChange={(event) => setEffectivePeriod(event.target.value)} /></label>
+                <label>每平米单价（元/㎡/期）<input data-testid="property-fee-rate-amount" type="number" min={0} step="0.01" value={rateYuan} onChange={(event) => setRateYuan(event.target.value)} placeholder="如 25.00" /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "归属项目", value: projects.find((p) => p.id === projectId) ? projectLabel(projects.find((p) => p.id === projectId)!) : (projectId || "未选择") },
+          { label: "生效期", value: effectivePeriod.trim() || "默认费率" },
+          { label: "每平米单价", value: rateYuan.trim() ? `¥${rateYuan.trim()} / ㎡ / 期` : "未填写" },
+        ]}
+      />
     </section>
   );
 }

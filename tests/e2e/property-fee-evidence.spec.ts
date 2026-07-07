@@ -22,10 +22,14 @@ test("ADM-FIN-004 物业费管理：费率设置 + 账单生成走通", async ({
   await expect(page.getByTestId("property-fee-rates-table")).toContainText("默认");
   await page.screenshot({ path: "playwright-report/property-fee-01-landing.png", fullPage: true });
 
-  // 设费率：填单价 → 保存
+  // 设费率：引导式流程 phase-8 —— 点入口开弹窗 → 填单价 → 下一步 → 确认保存
+  await page.getByTestId("property-fee-rate-create-open").click();
   await page.getByTestId("property-fee-rate-amount").fill("28.50");
+  await page.getByTestId("property-fee-rate-guided-next").click();
+  await expect(page.getByTestId("property-fee-rate-guided-summary")).toBeVisible();
   await page.getByTestId("property-fee-rate-save").click();
-  await expect(page.getByTestId("property-fee-rate-amount")).toHaveValue("");
+  // 成功后弹窗关闭（字段随弹窗卸载）。
+  await expect(page.getByTestId("property-fee-rate-guided")).toHaveCount(0);
   await page.screenshot({ path: "playwright-report/property-fee-02-rate-saved.png", fullPage: true });
 
   // 出账：填期 + 勾商户 → 生成
