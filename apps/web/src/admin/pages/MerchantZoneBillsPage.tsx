@@ -31,6 +31,8 @@ const FEE_TYPE_LABELS: Record<string, string> = {
   cam: "公摊",
   deposit: "保证金",
   other: "其他",
+  manual: "手工登记",
+  contract: "合同",
 };
 
 function money(cent: number | undefined, currency?: string) {

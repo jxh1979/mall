@@ -113,7 +113,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
       const entries = await api.get<VendorSiteEntryRow[]>("/api/v1/facility/site-entry-reports");
       setRows(entries ?? []);
     },
-    { onError: setGlobalError, fallbackMessage: "外包进场报备读取失败", onStart: () => setGlobalError(null) },
+    { onError: () => {}, fallbackMessage: "外包进场报备读取失败", onStart: () => setGlobalError(null) },
   );
 
   const { busyAction, formError, setFormError, runAction } = useAdminAction({
