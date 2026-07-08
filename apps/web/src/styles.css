@@ -2233,7 +2233,16 @@ body {
 .admin-kpi-value:hover { color: var(--adm-accent, #F59E0B); }
 .admin-kpi-value:focus-visible { outline: 2px solid #F59E0B; outline-offset: 3px; }
 /* KPI 点击后被定位表区块的高亮（区块级，区别于 .admin-row-selected 的行级） */
-.admin-section-highlight { outline: 2px solid #F59E0B; outline-offset: 4px; border-radius: 8px; }
+.admin-section-highlight {
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius);
+  box-shadow: var(--adm-shadow-sm);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.admin-section-highlight .admin-section-highlight { box-shadow: none; background: var(--adm-surface-2); }
+.admin-section-highlight > h2 { margin: 0 0 12px; font-size: 15px; }
 
 /* ============================================================
    横排表单容器兜底(admin-form-grid / admin-toolbar 原先无样式→字段溢出)
