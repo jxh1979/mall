@@ -1471,24 +1471,6 @@ class FinanceServiceTests {
     // ─── F-OPS-08 物业费固定计费（替代已废止 CAM 权重分摊 + 年度 true-up）──────────────
 
     @Test
-    void camAllocateAndTrueUpAreAbolished() {
-        // CAM 权重分摊 + 年度 true-up 已废止，调用即返明确弃用错误码（引导改用物业费计费）。
-        assertThatThrownBy(() -> service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
-                "cam-x", "note", List.of(), "2026-06", 100000L, LocalDate.parse("2026-07-10"),
-                List.of(new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 10000)))))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("CAM_ALLOCATION_ABOLISHED");
-
-        assertThatThrownBy(() -> service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
-                "cam-trueup-x", "note", List.of(), "2026", 18000L, LocalDate.parse("2027-01-31"),
-                List.of(new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 10000)))))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("CAM_TRUEUP_ABOLISHED");
-    }
-
-    @Test
     void propertyFeeBilledAtFixedRatePerSquareMeter() {
         // 费率 1000 分/㎡（10 元）；商户面积 120.50 ㎡ → 应收 = 1000 × 120.50 = 120500 分。
         service.createPropertyFeeRate(new PropertyFeeRateRequest(
@@ -2008,7 +1990,6 @@ class FinanceServiceTests {
         private final Map<String, TurnoverRentRuleRecord> turnoverRentRules = new LinkedHashMap<>();
         private final Map<String, Long> reflowTurnoverByMerchant = new LinkedHashMap<>();
         private final List<DepositLedgerRecord> depositLedger = new ArrayList<>();
-        private final List<CamAllocationRecord> camAllocations = new ArrayList<>();
 
         @Override
         public Optional<TurnoverRentRuleRecord> findTurnoverRentRuleById(String id) {
@@ -2041,43 +2022,6 @@ class FinanceServiceTests {
         public long currentDepositBalanceForUpdate(String merchantId) {
             forUpdateBalanceReads.add(merchantId);
             return currentDepositBalance(merchantId);
-        }
-
-        @Override
-        public CamAllocationRecord saveCamAllocation(CamAllocationRecord allocation) {
-            camAllocations.add(allocation);
-            return allocation;
-        }
-
-        // ── P2#④ CAM 年度 true-up ───────────────────────────────────────────
-        private final List<CamTrueUpRunRecord> camTrueUpRuns = new ArrayList<>();
-        private final List<CamTrueUpLineRecord> camTrueUpLines = new ArrayList<>();
-        private final java.util.Set<String> truedUpPeriods = new java.util.LinkedHashSet<>();
-
-        @Override
-        public long sumCamPrepaidByMerchantAndPeriod(String merchantId, String settlementPeriod) {
-            // 在内存双子中以 period 等价 settlement_period（与 V118 回填 settlement_period=period 一致）。
-            return camAllocations.stream()
-                    .filter(a -> merchantId.equals(a.merchantId()) && settlementPeriod.equals(a.period()))
-                    .mapToLong(CamAllocationRecord::allocatedAmountCent)
-                    .sum();
-        }
-
-        @Override
-        public void markCamAllocationsTruedUp(String settlementPeriod) {
-            truedUpPeriods.add(settlementPeriod);
-        }
-
-        @Override
-        public CamTrueUpRunRecord saveCamTrueUpRun(CamTrueUpRunRecord run) {
-            camTrueUpRuns.add(run);
-            return run;
-        }
-
-        @Override
-        public CamTrueUpLineRecord saveCamTrueUpLine(CamTrueUpLineRecord line) {
-            camTrueUpLines.add(line);
-            return line;
         }
 
         // ── F-OPS-08 物业费固定计费 ─────────────────────────────────────────────

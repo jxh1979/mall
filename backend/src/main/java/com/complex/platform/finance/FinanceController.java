@@ -9,8 +9,6 @@ import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
-import com.complex.platform.finance.dto.CamAllocationRequest;
-import com.complex.platform.finance.dto.CamTrueUpRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.DepositActionRequest;
 import com.complex.platform.finance.dto.InventoryVariancePostRequest;
@@ -184,23 +182,6 @@ public class FinanceController {
         authorizationService.requirePermission("finance.deposit.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.recordDepositAction(request));
-    }
-
-    // F-OPS-08 已废止：CAM 权重分摊 + 年度 true-up 由物业费每平米固定计费（不退不补）取代。
-    // 两端点保留仅为对旧客户端返回明确弃用错误码（CAM_ALLOCATION_ABOLISHED / CAM_TRUEUP_ABOLISHED）；
-    // 改用下方 /property-fee/* 端点。
-    @PostMapping("/cam/allocations")
-    public ApiResponse<List<CamAllocationRecord>> allocateCam(@RequestBody @jakarta.validation.Valid CamAllocationRequest request) {
-        authorizationService.requirePermission("finance.cam.allocate");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.allocateCam(request));
-    }
-
-    @PostMapping("/cam/trueups")
-    public ApiResponse<CamTrueUpRunRecord> runCamTrueUp(@RequestBody @jakarta.validation.Valid CamTrueUpRequest request) {
-        authorizationService.requirePermission("finance.cam.trueup");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.runCamTrueUp(request));
     }
 
     // ── F-OPS-08 物业费固定计费（每平米固定单价 × 商户面积，按期不退不补）─────────────

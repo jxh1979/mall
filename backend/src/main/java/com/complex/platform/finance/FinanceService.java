@@ -10,8 +10,6 @@ import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
-import com.complex.platform.finance.dto.CamAllocationRequest;
-import com.complex.platform.finance.dto.CamTrueUpRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
@@ -650,45 +648,6 @@ public class FinanceService {
     }
 
     // ── P1#14 CAM 权重分摊 ───────────────────────────────────────────────────────
-
-    /** CAM 公共区域维护费按权重分摊：逐商户生成应收 ar_ap_items(source_type='cam')，返回分摊明细。 */
-    @com.complex.platform.gate.GuardedAction(capability = "finance.cam.allocate", admissionAction = "finance.cam_allocate", objectType = "cam_allocation")
-    @Transactional
-    public List<CamAllocationRecord> allocateCam(CamAllocationRequest request) {
-        @SuppressWarnings("unchecked")
-        List<CamAllocationRecord> result = executeWrite(
-                "allocateCam",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                (Class<List<CamAllocationRecord>>) (Class<?>) List.class,
-                "finance_cam.allocated",
-                "finance_cam.allocate_failed",
-                "finance.cam.allocate",
-                "cam_allocation",
-                () -> allocateCamInternal(request));
-        return result;
-    }
-
-    // ── P2#④ CAM 年度 true-up（多退少补）─────────────────────────────────────────
-
-    /**
-     * CAM 年度 true-up：对某 settlementPeriod 已预收做对账，
-     * 逐户「实际应摊 − 已预收」差额 → 少收补应收 / 多收退应付（source_type='cam'），返回批次明细。
-     */
-    @com.complex.platform.gate.GuardedAction(capability = "finance.cam.trueup", admissionAction = "finance.cam_trueup", objectType = "cam_trueup_run")
-    @Transactional
-    public CamTrueUpRunRecord runCamTrueUp(CamTrueUpRequest request) {
-        return executeWrite(
-                "runCamTrueUp",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                CamTrueUpRunRecord.class,
-                "finance_cam.trued_up",
-                "finance_cam.trueup_failed",
-                "finance.cam.trueup",
-                "cam_trueup_run",
-                () -> runCamTrueUpInternal(request));
-    }
 
     // ── F-OPS-08 物业费固定计费（替代已废止 CAM）─────────────────────────────────
 
@@ -1463,22 +1422,6 @@ public class FinanceService {
                 now));
     }
 
-    private List<CamAllocationRecord> allocateCamInternal(CamAllocationRequest request) {
-        // F-OPS-08（用户 2026-06 裁决）：CAM 权重分摊已废止，物业费改为每平米固定计费、不退不补。
-        // 旧 cam_allocations 表与历史数据保留只读；此处对旧客户端返回明确弃用错误码，引导改用 billPropertyFee。
-        throw ApiException.conflict("CAM_ALLOCATION_ABOLISHED",
-                "CAM weight allocation is abolished; use fixed per-square-meter property fee billing "
-                        + "(POST /finance/property-fee/bills)");
-    }
-
-    private CamTrueUpRunRecord runCamTrueUpInternal(CamTrueUpRequest request) {
-        // F-OPS-08（用户 2026-06 裁决）：CAM 年度 true-up（多退少补）随固定计费废止——物业费按每平米固定收、不退不补，
-        // 无"实际 vs 预收"差额对账。旧 cam_trueup_runs/lines 表与历史数据保留只读；此处返回明确弃用错误码。
-        throw ApiException.conflict("CAM_TRUEUP_ABOLISHED",
-                "CAM annual true-up is abolished; property fee is a fixed per-square-meter charge with no "
-                        + "over/under settlement");
-    }
-
     /**
      * 由派生计费/差异流程直接生成一条 ar_ap_items（不经请求体 createItem，但同样遵守锁定经营日硬拦截）。
      * dueDate 取当日（经营日落账），sourceType ∈ SOURCE_TYPES。
@@ -1804,12 +1747,6 @@ public class FinanceService {
             return record.id();
         }
         if (value instanceof DepositLedgerRecord record) {
-            return record.id();
-        }
-        if (value instanceof CamAllocationRecord record) {
-            return record.id();
-        }
-        if (value instanceof CamTrueUpRunRecord record) {
             return record.id();
         }
         return null;
