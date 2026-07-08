@@ -1340,6 +1340,13 @@ public class InventoryService {
         return stockMovementService.createTypedStockMovement(movementType, request);
     }
 
+    /** 券核销领取查商品在库位的可用量(缺货则退积分)。 */
+    public int availableStock(String itemId, String locationId) {
+        return repository.findStockBalance(itemId, locationId)
+                .map(StockBalanceRecord::availableQuantity)
+                .orElse(0);
+    }
+
     public PageResponse<InventorySupplierRecord> listInventorySuppliers() {
         return readPage(
                 "inventory.supplier_viewed",
