@@ -17,6 +17,7 @@ import com.complex.platform.contract.dto.SpaceExpiryColorRuleRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.governance.PlatformRepository;
+import com.complex.platform.governance.SpaceRecord;
 import com.complex.platform.merchantbilling.MerchantFeeNotificationRecipientResolver;
 import com.complex.platform.notification.NotificationService;
 import java.time.Instant;
@@ -65,24 +66,35 @@ public class ContractService {
     private final NotificationService notificationService;
     private final PlatformRepository platformRepository;
     private final MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver;
+    // 批2b:提成端口(finance 实现)。构造注入(@Lazy 防潜在初始化环);旧构造传 null=收租方式退化纯月租。
+    private final com.complex.platform.finance.TurnoverRentPort turnoverRentPort;
 
     @Autowired
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository,
-            MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver) {
+            MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver,
+            @org.springframework.context.annotation.Lazy com.complex.platform.finance.TurnoverRentPort turnoverRentPort) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.notificationService = notificationService;
         this.platformRepository = platformRepository;
         this.merchantFeeRecipientResolver = merchantFeeRecipientResolver;
+        this.turnoverRentPort = turnoverRentPort;
+    }
+
+    public ContractService(ContractRepository repository, AuditEventService auditEventService,
+            AuthorizationService authorizationService, NotificationService notificationService,
+            PlatformRepository platformRepository,
+            MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver) {
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, merchantFeeRecipientResolver, null);
     }
 
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository) {
-        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null);
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null, null);
     }
 
     // ============ 起草 ============
@@ -290,11 +302,13 @@ public class ContractService {
             }
         }
         repository.bindContractSpaces(contractId, spaceIds, contract.projectId());
+        // 批2b:每平米租金生效固化——用绑定铺位登记面积×每平米单价算月租(baseRentCent)固化进生效快照。
+        ContractRecord contractEff = withRentTerms(contract, resolvePerSqmBaseRent(contract.rentTerms(), spaceIds));
         ContractRecord effective = repository.saveContract(new ContractRecord(
-                contract.id(), contract.merchantId(), contract.contractSubjectId(), contract.operationSubjectId(),
-                contract.settlementSubjectId(), contract.effectiveDate(), contract.expiryDate(), contract.rentTerms(),
-                contract.commissionMode(), contract.energyFeeBasis(), contract.depositCent(), contract.penaltyTerms(),
-                contract.settlementRules(), buildSnapshot(contract), contract.shareholderRatioForReport(),
+                contractEff.id(), contractEff.merchantId(), contractEff.contractSubjectId(), contractEff.operationSubjectId(),
+                contractEff.settlementSubjectId(), contractEff.effectiveDate(), contractEff.expiryDate(), contractEff.rentTerms(),
+                contractEff.commissionMode(), contractEff.energyFeeBasis(), contractEff.depositCent(), contractEff.penaltyTerms(),
+                contractEff.settlementRules(), buildSnapshot(contractEff), contractEff.shareholderRatioForReport(),
                 contract.attachmentIds(), "effective", contract.projectId(), null, null,
                 contract.renewedFromContractId(), contract.createdAt(), Instant.now()));
         // P1-A 收入闭环：生效即按整租期逐期幂等排租金/物业/能源 AR（base+递增−免租，免租/0 跳过）。
@@ -708,9 +722,10 @@ public class ContractService {
         if (repository.rentBillExists(contractId, period, "rent")) {
             throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "rent already billed for " + period);
         }
-        long amountCent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
+        long baseRent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
+        long amountCent = resolveBillingRent(c, c.rentTerms() == null ? Map.of() : c.rentTerms(), period, baseRent);
         if (amountCent <= 0) {
-            return null;   // 免租期 / 生效前：无应收
+            return null;   // 免租期 / 生效前 / 收租方式组合后仍为 0：无应收
         }
         return genFeeBill(c, period, "rent", amountCent, dueDateOf(period), actual.idempotencyKey());
     }
@@ -742,7 +757,8 @@ public class ContractService {
     private List<ContractRentBillRecord> billPeriodFees(ContractRecord c, String period, String idemKey) {
         Map<String, Object> rt = c.rentTerms() == null ? Map.of() : c.rentTerms();
         LocalDate dueDate = dueDateOf(period);
-        long rent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
+        long baseRent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
+        long rent = resolveBillingRent(c, rt, period, baseRent);
         long property = numLong(rt.get("propertyFeeCent"));
         List<ContractRentBillRecord> out = new ArrayList<>();
         ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent, dueDate, idemKey);
@@ -775,6 +791,54 @@ public class ContractService {
     private LocalDate dueDateOf(String period) {
         String[] ym = period.split("-");
         return LocalDate.of(Integer.parseInt(ym[0]), Integer.parseInt(ym[1]), 1);
+    }
+
+    /** 批2b:按合同「收租方式」组合月租(baseRent)与提成。fixed_only/空=纯月租;其余需提成端口(缺则退月租)。 */
+    private long resolveBillingRent(ContractRecord c, Map<String, Object> rt, String period, long baseRent) {
+        String mode = strVal(rt.get("rentBillingMode"));
+        if (mode == null || "fixed_only".equals(mode)) {
+            return baseRent;
+        }
+        long turnover = turnoverRentPort == null ? 0L
+                : turnoverRentPort.computePeriodTurnoverRent(c.merchantId(), c.id(), period);
+        return switch (mode) {
+            case "turnover_only" -> turnover;
+            case "higher_of" -> Math.max(baseRent, turnover);
+            case "sum" -> baseRent + turnover;
+            default -> baseRent;
+        };
+    }
+
+    /** 每平米生效固化:rentMode=per_sqm 时用绑定铺位登记面积×单价算 baseRentCent,写回 rentTerms 副本;否则原样返回。 */
+    private Map<String, Object> resolvePerSqmBaseRent(Map<String, Object> rentTerms, List<String> spaceIds) {
+        if (rentTerms == null || !"per_sqm".equals(strVal(rentTerms.get("rentMode")))) {
+            return rentTerms;
+        }
+        long perSqm = numLong(rentTerms.get("perSqmRentCent"));
+        if (perSqm <= 0 || platformRepository == null) {
+            return rentTerms;
+        }
+        java.math.BigDecimal totalArea = java.math.BigDecimal.ZERO;
+        for (String sid : spaceIds) {
+            java.math.BigDecimal a = platformRepository.findSpaceById(sid).map(SpaceRecord::areaSquareMeter).orElse(null);
+            if (a != null) {
+                totalArea = totalArea.add(a);
+            }
+        }
+        long baseRent = totalArea.multiply(java.math.BigDecimal.valueOf(perSqm))
+                .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact();
+        Map<String, Object> out = new HashMap<>(rentTerms);
+        out.put("baseRentCent", baseRent);
+        out.put("resolvedAreaSqm", totalArea.toPlainString());
+        return out;
+    }
+
+    private String strVal(Object o) {
+        if (o == null) {
+            return null;
+        }
+        String s = o.toString().trim();
+        return s.isEmpty() ? null : s;
     }
 
     private long numLong(Object o) {
