@@ -361,6 +361,14 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public boolean terminalDeviceExists(String deviceId) {
+        Boolean exists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS(SELECT 1 FROM terminal_devices WHERE id = :id)",
+                Map.of("id", deviceId), Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
     public VerificationRecord saveVerification(VerificationRecord verification) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_verifications (

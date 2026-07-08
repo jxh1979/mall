@@ -49,6 +49,7 @@ class TicketVerificationMdmGateTests {
     @Test
     void unmanagedDeviceVerificationIsBlockedByMdmGateAndDoesNotConsumeEntitlement() {
         TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.terminalDeviceExists(any())).thenReturn(true);
         MdmService mdmService = mock(MdmService.class);
         when(repository.findIssuedEntitlementByCode(ENTITLEMENT_CODE))
                 .thenReturn(Optional.of(activeEntitlement()));
@@ -72,6 +73,7 @@ class TicketVerificationMdmGateTests {
     @Test
     void managedDevicePassesGateAndConsumesEntitlement() {
         TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.terminalDeviceExists(any())).thenReturn(true);
         MdmService mdmService = mock(MdmService.class);
         IssuedEntitlementRecord entitlement = activeEntitlement();
         when(repository.findIssuedEntitlementByCode(ENTITLEMENT_CODE))
@@ -97,6 +99,7 @@ class TicketVerificationMdmGateTests {
     @Test
     void legacyConstructorWithoutMdmServiceSkipsGate() {
         TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.terminalDeviceExists(any())).thenReturn(true);
         IssuedEntitlementRecord entitlement = activeEntitlement();
         when(repository.findIssuedEntitlementByCode(ENTITLEMENT_CODE))
                 .thenReturn(Optional.of(entitlement));
@@ -112,5 +115,27 @@ class TicketVerificationMdmGateTests {
         VerificationResponse response = service.createVerification(verifyRequest());
 
         assertThat(response.status()).isEqualTo("success");
+    }
+
+    @Test
+    void unregisteredDeviceRejectedCleanlyBeforeAnyInsert() {
+        // 健壮性修复：device_id 不在 terminal_devices 时，核销前置校验抛干净 DEVICE_NOT_REGISTERED(400)，
+        // 而非等到 saveVerification 违反 FK 使事务中止后返回脏 500。不消费权益、不落核销记录。
+        TicketingRepository repository = mock(TicketingRepository.class);
+        MdmService mdmService = mock(MdmService.class);
+        when(repository.findIssuedEntitlementByCode(ENTITLEMENT_CODE))
+                .thenReturn(Optional.of(activeEntitlement()));
+        when(repository.terminalDeviceExists(any())).thenReturn(false);
+
+        TicketVerificationService service = new TicketVerificationService(
+                repository, mock(ApplicationEventPublisher.class), mdmService);
+
+        assertThatThrownBy(() -> service.createVerification(verifyRequest()))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DEVICE_NOT_REGISTERED");
+
+        verify(repository, never()).atomicUseEntitlement(any(), any());
+        verify(repository, never()).saveVerification(any());
     }
 }
