@@ -435,6 +435,17 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public java.util.Optional<CustomerPointsRedemptionRecord> findPointsRedemptionById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, customer_id, catalog_item_id, item_name, quantity,
+                       points_cost, total_points, inventory_item_id, stock_location_id,
+                       stock_quantity, source_terminal, status, created_at, updated_at
+                  FROM customer_points_redemptions
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapPointsRedemption).stream().findFirst();
+    }
+
+    @Override
     public List<CustomerBarReservationOptionResponse> listBarReservationOptions() {
         return jdbcTemplate.query("""
                 SELECT bar_id, id AS table_id, table_type, table_name, capacity,

@@ -430,19 +430,13 @@ public class CustomerService {
                         throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
                     }
                     String redemptionId = "redemption_" + slug(key);
-                    // 兑换扣库存使用 redeem_consume 类型移动，从礼物绑定的库位扣减；语义正确、可与损耗/报废区分对账。
-                    inventoryService.createTypedStockMovement("redeem_consume", new StockMovementRequest(
-                            "points-redemption-" + key,
-                            "customer points redemption " + redemptionId,
-                            List.of(),
-                            item.stockLocationId(),
-                            null,
-                            List.of(Map.of(
-                                    "item_id", item.inventoryItemId(),
-                                    "quantity", item.stockQuantity() * quantity
-                            )),
-                            "points_redemption:" + redemptionId
-                    ));
+                    // 虚拟券模式(2026-07-08 用户裁决):积分兑换只产出"虚拟券"(本兑换记录即券),此处不扣库存、不结算。
+                    // 实物扣库存 + 与商户/外部伙伴的内部结算,移到"券核销领取"阶段,由有商户范围的店员操作。
+                    // 客人自身无商户范围,此前在此调 createTypedStockMovement(强制要求商户范围)必崩——客人兑实物一直走不通。
+                    // 见 memory: complex-management-points-redemption-voucher-model(券三类核销 + 内部结算,待完整立项)。
+                    org.springframework.util.Assert.isTrue(
+                            quantity > 0 && item.inventoryItemId() != null && item.stockLocationId() != null,
+                            "redemption voucher must reference a positive quantity and a stocked item");
                     long balanceAfter = account.balance() - totalPoints;
                     // FIFO 消耗获取批次剩余，使过期清零只清未用部分。
                     consumeFifoBatches(customer.id(), totalPoints);
@@ -493,6 +487,78 @@ public class CustomerService {
                             "pending_pickup",
                             now,
                             now
+                    ));
+                }
+        );
+    }
+
+    /**
+     * 券核销领取(店员端·有商户范围):库存足则扣库存标 picked_up;缺货则退回积分标 refunded。
+     * 客人兑换只发券(pending_pickup·不碰库存),真正扣库存/退积分发生在此。见 memory points-redemption-voucher-model。
+     */
+    public CustomerPointsRedemptionRecord fulfillPointsRedemption(String redemptionId) {
+        String id = requireText(redemptionId, "redemption_id");
+        return executeWrite(
+                "fulfillPointsRedemption:" + id,
+                id,
+                id,
+                CustomerPointsRedemptionRecord.class,
+                "customer.points_voucher_fulfilled",
+                "customer.points_voucher_fulfill_failed",
+                "not_applicable",
+                "customer_points_redemption",
+                () -> {
+                    Instant now = Instant.now();
+                    CustomerPointsRedemptionRecord voucher = repository.findPointsRedemptionById(id)
+                            .orElseThrow(() -> ApiException.notFound("REDEMPTION_NOT_FOUND", "redemption voucher not found"));
+                    if (!"pending_pickup".equals(voucher.status())) {
+                        throw ApiException.conflict("REDEMPTION_NOT_PENDING", "voucher is not pending pickup");
+                    }
+                    int available = inventoryService.availableStock(voucher.inventoryItemId(), voucher.stockLocationId());
+                    String resultStatus;
+                    if (available >= voucher.stockQuantity()) {
+                        // 库存足:店员扣库存领实物(店员有商户范围,避开客人无范围的老崩溃点)。
+                        inventoryService.createTypedStockMovement("redeem_consume", new com.complex.platform.inventory.dto.StockMovementRequest(
+                                "voucher-fulfill-" + id,
+                                "points voucher fulfillment " + id,
+                                List.of(),
+                                voucher.stockLocationId(),
+                                null,
+                                List.of(Map.of(
+                                        "item_id", voucher.inventoryItemId(),
+                                        "quantity", voucher.stockQuantity()
+                                )),
+                                "points_redemption:" + id
+                        ));
+                        resultStatus = "picked_up";
+                    } else {
+                        // 缺货:退回积分(兑换时已向客人说明可退)。余额+回、正向流水入账。
+                        CustomerPointsAccountRecord account = loadOrCreatePointsAccountForUpdate(voucher.customerId());
+                        long balanceAfter = account.balance() + voucher.totalPoints();
+                        repository.savePoints(new CustomerPointsAccountRecord(
+                                account.id(), account.customerId(), balanceAfter, account.level(),
+                                Map.of("last_voucher_refund_id", id, "last_refunded_points", voucher.totalPoints()),
+                                account.frozenPoints(), account.accountStatus(), account.levelPeriodStart(),
+                                account.keepThresholdProgress(), account.graceUntil(), account.lastCheckInDate(),
+                                account.checkInStreak(), account.createdAt(), now
+                        ));
+                        repository.savePointsLedger(new CustomerPointsLedgerRecord(
+                                "ledger_voucher_refund_" + id,
+                                voucher.customerId(),
+                                voucher.totalPoints(),
+                                balanceAfter,
+                                "points_voucher_refund",
+                                id,
+                                "Voucher out of stock, points refunded: " + voucher.itemName(),
+                                null, null, false, now
+                        ));
+                        resultStatus = "refunded";
+                    }
+                    return repository.savePointsRedemption(new CustomerPointsRedemptionRecord(
+                            voucher.id(), voucher.customerId(), voucher.catalogItemId(), voucher.itemName(),
+                            voucher.quantity(), voucher.pointsCost(), voucher.totalPoints(),
+                            voucher.inventoryItemId(), voucher.stockLocationId(), voucher.stockQuantity(),
+                            voucher.sourceTerminal(), resultStatus, voucher.createdAt(), now
                     ));
                 }
         );

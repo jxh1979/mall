@@ -29,13 +29,24 @@ public class LoyaltyController {
     private final MembershipService membershipService;
     private final StoredValueService storedValueService;
     private final CustomerRepository repository;
+    private final CustomerService customerService;
 
     public LoyaltyController(LoyaltyService service, MembershipService membershipService,
-                             StoredValueService storedValueService, CustomerRepository repository) {
+                             StoredValueService storedValueService, CustomerRepository repository,
+                             CustomerService customerService) {
         this.service = service;
         this.membershipService = membershipService;
         this.storedValueService = storedValueService;
         this.repository = repository;
+        this.customerService = customerService;
+    }
+
+    /** 积分虚拟券核销领取(店员端):库存足则扣库存领实物,缺货则退回积分。 */
+    @PostMapping("/points-redemptions/{redemption_id}/fulfill")
+    public ApiResponse<CustomerPointsRedemptionRecord> fulfillRedemption(
+            @PathVariable("redemption_id") String redemptionId
+    ) {
+        return ApiResponse.ok(customerService.fulfillPointsRedemption(redemptionId));
     }
 
     @GetMapping("/member-levels")

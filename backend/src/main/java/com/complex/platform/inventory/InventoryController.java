@@ -21,6 +21,7 @@ import com.complex.platform.inventory.dto.HighValueReviewDecisionRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest;
 import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
+import com.complex.platform.inventory.dto.SavedBottleTransferRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
@@ -149,6 +150,16 @@ public class InventoryController {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createSavedBottle(request));
+    }
+
+    @PostMapping("/saved-bottles/{id}/transfer")
+    public ApiResponse<SavedBottleTransferRecord> transferSavedBottle(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid SavedBottleTransferRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.transferSavedBottle(id, request));
     }
 
     @PostMapping("/saved-bottles/{id}/claim")

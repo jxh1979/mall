@@ -141,6 +141,14 @@ public class TicketingController {
         return ApiResponse.ok(service.approveDeletePriceRule(id, request));
     }
 
+    @PostMapping("/ticketing/distribution-merchant-rates")
+    public ApiResponse<TicketDistributionMerchantRateRecord> createDistributionMerchantRate(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.ticketing.dto.TicketDistributionMerchantRateRequest request) {
+        authorizationService.requirePermission("ticket.price_variant.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createDistributionMerchantRate(request));
+    }
+
     @PostMapping("/ticketing/price-rules")
     public ApiResponse<TicketPriceRuleRecord> createTicketPriceRule(@RequestBody @jakarta.validation.Valid TicketPriceRuleRequest request) {
         authorizationService.requirePermission("ticket.price_variant.manage");

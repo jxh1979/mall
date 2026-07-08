@@ -21,6 +21,7 @@ import com.complex.platform.inventory.dto.PurchaseRequestCreate;
 import com.complex.platform.inventory.dto.RegisterTraceCodeRequest;
 import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
+import com.complex.platform.inventory.dto.SavedBottleTransferRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
@@ -518,6 +519,60 @@ public class InventoryService {
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_claim", objectType = "saved_bottle")
     @Transactional
+    public SavedBottleTransferRecord transferSavedBottle(String savedBottleId, SavedBottleTransferRequest request) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return executeWrite(
+                "transferSavedBottle:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleTransferRecord.class,
+                "bar.saved_bottle_transferred",
+                "bar.saved_bottle.transfer_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle_transfer",
+                () -> {
+                    SavedBottleTransferRequest actual = requireRequest(request);
+                    String toName = requireText(actual.toNameOrNickname(), "to_name_or_nickname");
+                    // 转让须经出让人(原持有人)手机短信验证码确认(用户 2026-07-08 裁决)。当前校验验证码必填;
+                    // 与客人 OTP 的"发码+核验"绑定为后续(依赖短信服务商,同客人登录环境约束)。
+                    requireText(actual.verificationCode(), "verification_code");
+                    SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(id)
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    if (scope.isPresent() && !scope.get().equals(bottle.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                "saved bottle does not belong to your merchant");
+                    }
+                    if (!"stored".equals(bottle.status())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_NOT_TRANSFERABLE", "saved bottle is not transferable");
+                    }
+                    if (bottle.expireAt() != null && bottle.expireAt().isBefore(Instant.now())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "saved bottle is expired");
+                    }
+                    int qty = actual.transferQuantity() == null ? bottle.remainingQuantity() : actual.transferQuantity();
+                    if (qty <= 0 || qty > bottle.remainingQuantity()) {
+                        throw ApiException.badRequest("VALIDATION_FAILED",
+                                "transfer_quantity must be within remaining quantity");
+                    }
+                    Instant now = Instant.now();
+                    String toPhone = trimToNull(actual.toPhone());
+                    String toPhoneHash = phoneHash(toPhone);
+                    // 记录转让目标到存酒(供后续新持有人取酒核身)。
+                    repository.saveSavedBottle(new SavedBottleRecord(
+                            bottle.id(), bottle.customerId(), bottle.barProjectId(), bottle.itemId(), bottle.bottleName(),
+                            bottle.initialQuantity(), bottle.remainingQuantity(), bottle.unit(), bottle.expireAt(),
+                            bottle.status(), bottle.evidenceAttachmentIds(), bottle.createdAt(), now, bottle.merchantId(),
+                            bottle.isHighValue(), bottle.highValueThresholdCents(), bottle.bottleLabelValue(),
+                            bottle.customerNameOrNickname(), bottle.customerPhone(), bottle.customerPhoneHash(),
+                            bottle.registrationPhotoRefs(), bottle.manualNote(), now, toName, toPhone, toPhoneHash));
+                    return repository.saveSavedBottleTransfer(new SavedBottleTransferRecord(
+                            "transfer_" + slug(actual.idempotencyKey()),
+                            bottle.id(), bottle.customerId(), bottle.customerNameOrNickname(),
+                            toName, toPhone, toPhoneHash, qty, null, "transferred",
+                            safeList(actual.evidenceAttachmentIds()), now));
+                });
+    }
+
     public SavedBottleClaimRecord claimSavedBottle(String savedBottleId, SavedBottleClaimRequest request) {
         String id = requireText(savedBottleId, "saved_bottle_id");
         return executeWrite(
@@ -1283,6 +1338,13 @@ public class InventoryService {
     @Transactional
     public StockMovementRecord createTypedStockMovement(String movementType, StockMovementRequest request) {
         return stockMovementService.createTypedStockMovement(movementType, request);
+    }
+
+    /** 券核销领取查商品在库位的可用量(缺货则退积分)。 */
+    public int availableStock(String itemId, String locationId) {
+        return repository.findStockBalance(itemId, locationId)
+                .map(StockBalanceRecord::availableQuantity)
+                .orElse(0);
     }
 
     public PageResponse<InventorySupplierRecord> listInventorySuppliers() {

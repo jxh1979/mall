@@ -40,6 +40,11 @@ public interface CustomerRepository {
 
     List<CustomerPointsRedemptionRecord> listPointsRedemptionsByCustomerId(String customerId);
 
+    /** 券核销领取按id读兑换记录;默认空以不破坏测试替身。 */
+    default java.util.Optional<CustomerPointsRedemptionRecord> findPointsRedemptionById(String id) {
+        return java.util.Optional.empty();
+    }
+
     /** 积分规则引擎（REQ-12, P0-6）。默认空/抛出，JdbcCustomerRepository 覆盖。 */
     default CustomerPointsRuleRecord savePointsRule(CustomerPointsRuleRecord rule) {
         throw new UnsupportedOperationException("savePointsRule not supported by this repository");
