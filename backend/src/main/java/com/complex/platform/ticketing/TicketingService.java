@@ -275,6 +275,33 @@ public class TicketingService {
 
     @com.complex.platform.gate.GuardedAction(capability = "ticket.price_variant.manage")
     @Transactional
+    public TicketDistributionMerchantRateRecord createDistributionMerchantRate(
+            com.complex.platform.ticketing.dto.TicketDistributionMerchantRateRequest request) {
+        if (request == null || request.merchantId() == null || request.merchantId().isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id is required");
+        }
+        if (request.perGuestCent() == null && request.fixedAmountCent() == null) {
+            throw ApiException.badRequest(
+                    "VALIDATION_FAILED", "per_guest_cent or fixed_amount_cent is required");
+        }
+        java.time.Instant now = java.time.Instant.now();
+        String id = "dmr_" + distributionRateHash(request.projectId(), request.merchantId());
+        return repository.saveDistributionMerchantRate(new TicketDistributionMerchantRateRecord(
+                id, request.projectId(), request.merchantId(), request.perGuestCent(), request.fixedAmountCent(),
+                request.status() == null || request.status().isBlank() ? "active" : request.status(),
+                Boolean.TRUE.equals(request.isDraft()), actorId(), now));
+    }
+
+    private static String distributionRateHash(String projectId, String merchantId) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest((String.valueOf(projectId) + ":" + merchantId).getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                    .substring(0, 32);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("distribution rate id hashing unavailable", e);
+        }
+    }
+
     public TicketPriceRuleRecord createTicketPriceRule(TicketPriceRuleRequest request) {
         return operations.executeWrite(
                 "createTicketPriceRule",

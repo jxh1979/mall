@@ -127,6 +127,11 @@ public interface TicketingRepository {
 
     TicketPriceRuleRecord savePriceRule(TicketPriceRuleRecord rule);
 
+    /** upsert 分销商户费率。default 原样返回兼容测试双子。 */
+    default TicketDistributionMerchantRateRecord saveDistributionMerchantRate(TicketDistributionMerchantRateRecord rate) {
+        return rate;
+    }
+
     List<TicketPriceRuleRecord> listPriceRules(boolean includeArchived);
 
     default List<TicketPriceRuleRecord> listPriceRules() {

@@ -477,6 +477,35 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public TicketDistributionMerchantRateRecord saveDistributionMerchantRate(TicketDistributionMerchantRateRecord rate) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_distribution_merchant_rates (
+                    id, project_id, merchant_id, per_guest_cent, fixed_amount_cent, status, is_draft, updated_by, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :merchant_id, :per_guest_cent, :fixed_amount_cent, :status, :is_draft, :updated_by, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    per_guest_cent = EXCLUDED.per_guest_cent,
+                    fixed_amount_cent = EXCLUDED.fixed_amount_cent,
+                    status = EXCLUDED.status,
+                    is_draft = EXCLUDED.is_draft,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", rate.id())
+                .addValue("project_id", rate.projectId())
+                .addValue("merchant_id", rate.merchantId())
+                .addValue("per_guest_cent", rate.perGuestCent())
+                .addValue("fixed_amount_cent", rate.fixedAmountCent())
+                .addValue("status", rate.status())
+                .addValue("is_draft", rate.isDraft())
+                .addValue("updated_by", rate.updatedBy())
+                .addValue("updated_at", rate.updatedAt().atOffset(java.time.ZoneOffset.UTC)));
+        return rate;
+    }
+
+    @Override
     public TicketPriceRuleRecord savePriceRule(TicketPriceRuleRecord rule) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_price_rules (
