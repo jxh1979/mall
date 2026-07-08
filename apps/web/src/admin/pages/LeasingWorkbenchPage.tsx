@@ -14,6 +14,8 @@ import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { shortId } from "../format/ids";
+import type { GovernanceSpaceRow, BusinessEntityRow, AccessUserRow } from "../types";
 
 // 招商前漏斗行类型（后端 leasing.* 记录的前端视图，camelCase 由 adminClient 统一转换）。
 interface LeasingLeadRow {
@@ -122,13 +124,18 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [contactPhone, setContactPhone] = React.useState("13800000000");
   const [source, setSource] = React.useState("exhibition");
   const [intendedBusinessType, setIntendedBusinessType] = React.useState("retail");
-  const [intendedSpaceId, setIntendedSpaceId] = React.useState("space-1");
-  const [ownerUserId, setOwnerUserId] = React.useState("staff_sales");
+  const [intendedSpaceId, setIntendedSpaceId] = React.useState("");
+  const [ownerUserId, setOwnerUserId] = React.useState("");
   const [leadStatus, setLeadStatus] = React.useState("following_up");
   // 意向表单
-  const [intentSpaceId, setIntentSpaceId] = React.useState("space-1");
+  const [intentSpaceId, setIntentSpaceId] = React.useState("");
   const [targetStage, setTargetStage] = React.useState("negotiation");
-  const [signMerchantId, setSignMerchantId] = React.useState("merchant-1");
+  const [signMerchantId, setSignMerchantId] = React.useState("");
+  const [signSubjectId, setSignSubjectId] = React.useState("");
+  const [spaces, setSpaces] = React.useState<GovernanceSpaceRow[]>([]);
+  const [merchantList, setMerchantList] = React.useState<Array<{ id: string; displayName?: string; companyName?: string; merchantName?: string }>>([]);
+  const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
+  const [salesUsers, setSalesUsers] = React.useState<AccessUserRow[]>([]);
   const [signEffectiveDate, setSignEffectiveDate] = React.useState("2026-07-01");
   const [signExpiryDate, setSignExpiryDate] = React.useState("2027-06-30");
   // 品牌表单
@@ -184,6 +191,15 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       setIntents(i);
       setBrands(b);
       setFollowUps(f);
+      try {
+        const [sp, mc, en, us] = await Promise.all([
+          api.get<GovernanceSpaceRow[]>("/api/v1/platform/spaces"),
+          api.get<Array<{ id: string; displayName?: string; companyName?: string; merchantName?: string }>>("/api/v1/platform/merchants"),
+          api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities"),
+          api.get<AccessUserRow[]>("/api/v1/access/users"),
+        ]);
+        setSpaces(sp ?? []); setMerchantList(mc ?? []); setEntities(en ?? []); setSalesUsers(us ?? []);
+      } catch { /* 无权限→保持空字典 */ }
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -342,12 +358,14 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       setFormError(TEXT.noIntent);
       return;
     }
+    if (!signMerchantId) { setFormError("请选择签约商户。"); return; }
+    if (!signSubjectId) { setFormError("请选择合同主体（经营主体），不能用商户 id 顶替。"); return; }
     const request = {
       idempotencyKey: nextKey("leasing-intent-sign"),
       merchantId: signMerchantId,
-      contractSubjectId: signMerchantId,
-      operationSubjectId: signMerchantId,
-      settlementSubjectId: signMerchantId,
+      contractSubjectId: signSubjectId,
+      operationSubjectId: signSubjectId,
+      settlementSubjectId: signSubjectId,
       effectiveDate: signEffectiveDate,
       expiryDate: signExpiryDate,
     };
@@ -494,7 +512,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
 
             {/* 线索动作 */}
             <div className="admin-form-grid" data-testid="leasing-lead-action-form">
-              <label>负责人<input data-testid="leasing-lead-owner" value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)} /></label>
+              <label>负责人<select data-testid="leasing-lead-owner" value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)}><option value="">请选择负责人（可空）</option>{salesUsers.map((x) => <option key={x.id} value={x.id}>{(x.username ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>线索状态<select data-testid="leasing-lead-status" value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)}><option value="following_up">跟进中</option><option value="converted_to_intent">已转意向</option><option value="negotiating">谈判中</option><option value="lost">流失</option><option value="on_hold">暂缓</option></select></label>
               <label>跟进方式<select data-testid="leasing-follow-method" value={followMethod} onChange={(e) => setFollowMethod(e.target.value)}><option value="phone">电话</option><option value="visit">拜访</option><option value="wechat">微信</option></select></label>
               <label>跟进内容<input data-testid="leasing-follow-content" value={followContent} onChange={(e) => setFollowContent(e.target.value)} /></label>
@@ -507,9 +525,10 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
 
             {/* 意向 + 签约 */}
             <div className="admin-form-grid" data-testid="leasing-intent-form">
-              <label>意向空间<input data-testid="leasing-intent-space" value={intentSpaceId} onChange={(e) => setIntentSpaceId(e.target.value)} /></label>
+              <label>意向空间<select data-testid="leasing-intent-space" value={intentSpaceId} onChange={(e) => setIntentSpaceId(e.target.value)}><option value="">请选择空间</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>推进阶段<select data-testid="leasing-intent-stage" value={targetStage} onChange={(e) => setTargetStage(e.target.value)}><option value="requirement_confirmed">需求确认</option><option value="proposal_quoted">方案报价</option><option value="negotiation">商务谈判</option><option value="pending_signing">待签约</option></select></label>
-              <label>签约商户<input data-testid="leasing-sign-merchant" value={signMerchantId} onChange={(e) => setSignMerchantId(e.target.value)} /></label>
+              <label>签约商户<select data-testid="leasing-sign-merchant" value={signMerchantId} onChange={(e) => setSignMerchantId(e.target.value)}><option value="">请选择商户</option>{merchantList.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.merchantName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+              <label>合同主体<select data-testid="leasing-sign-subject" value={signSubjectId} onChange={(e) => setSignSubjectId(e.target.value)}><option value="">请选择经营主体</option>{entities.map((x) => <option key={x.id} value={x.id}>{(x.entityName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>合同生效日<CnDatePicker data-testid="leasing-sign-effective-date" value={signEffectiveDate} onChange={setSignEffectiveDate} /></label>
               <label>合同到期日<CnDatePicker data-testid="leasing-sign-expiry-date" value={signExpiryDate} onChange={setSignExpiryDate} /></label>
             </div>
@@ -584,7 +603,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <>
                 <label>来源<select data-testid="leasing-lead-source" value={source} onChange={(e) => setSource(e.target.value)}><option value="outbound">外拓</option><option value="online_inquiry">线上咨询</option><option value="referral">转介绍</option><option value="exhibition">展会</option></select></label>
                 <label>意向业态<input data-testid="leasing-lead-business-type" value={intendedBusinessType} onChange={(e) => setIntendedBusinessType(e.target.value)} /></label>
-                <label>意向空间<input data-testid="leasing-lead-space" value={intendedSpaceId} onChange={(e) => setIntendedSpaceId(e.target.value)} /></label>
+                <label>意向空间<select data-testid="leasing-lead-space" value={intendedSpaceId} onChange={(e) => setIntendedSpaceId(e.target.value)}><option value="">请选择空间（可空）</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               </>
             ),
           },
