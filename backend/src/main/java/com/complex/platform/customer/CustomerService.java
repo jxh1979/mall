@@ -430,19 +430,13 @@ public class CustomerService {
                         throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
                     }
                     String redemptionId = "redemption_" + slug(key);
-                    // 兑换扣库存使用 redeem_consume 类型移动，从礼物绑定的库位扣减；语义正确、可与损耗/报废区分对账。
-                    inventoryService.createTypedStockMovement("redeem_consume", new StockMovementRequest(
-                            "points-redemption-" + key,
-                            "customer points redemption " + redemptionId,
-                            List.of(),
-                            item.stockLocationId(),
-                            null,
-                            List.of(Map.of(
-                                    "item_id", item.inventoryItemId(),
-                                    "quantity", item.stockQuantity() * quantity
-                            )),
-                            "points_redemption:" + redemptionId
-                    ));
+                    // 虚拟券模式(2026-07-08 用户裁决):积分兑换只产出"虚拟券"(本兑换记录即券),此处不扣库存、不结算。
+                    // 实物扣库存 + 与商户/外部伙伴的内部结算,移到"券核销领取"阶段,由有商户范围的店员操作。
+                    // 客人自身无商户范围,此前在此调 createTypedStockMovement(强制要求商户范围)必崩——客人兑实物一直走不通。
+                    // 见 memory: complex-management-points-redemption-voucher-model(券三类核销 + 内部结算,待完整立项)。
+                    org.springframework.util.Assert.isTrue(
+                            quantity > 0 && item.inventoryItemId() != null && item.stockLocationId() != null,
+                            "redemption voucher must reference a positive quantity and a stocked item");
                     long balanceAfter = account.balance() - totalPoints;
                     // FIFO 消耗获取批次剩余，使过期清零只清未用部分。
                     consumeFifoBatches(customer.id(), totalPoints);
