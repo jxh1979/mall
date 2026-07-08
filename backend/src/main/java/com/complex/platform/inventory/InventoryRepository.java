@@ -15,6 +15,18 @@ public interface InventoryRepository {
 
     List<InventorySupplierRecord> listInventorySuppliers();
 
+    // ── V277 跨主体流转:default 以不破坏测试替身 ──
+    default SupplyEntityRecord saveSupplyEntity(SupplyEntityRecord entity) { throw new UnsupportedOperationException(); }
+    default List<SupplyEntityRecord> listSupplyEntities() { return java.util.List.of(); }
+    default java.util.Optional<SupplyEntityRecord> findSupplyEntityById(String id) { return java.util.Optional.empty(); }
+    default InventoryTransferOrderRecord saveTransferOrder(InventoryTransferOrderRecord order) { throw new UnsupportedOperationException(); }
+    default void saveTransferLine(InventoryTransferLineRecord line) { }
+    default java.util.Optional<InventoryTransferOrderRecord> findTransferOrderById(String id) { return java.util.Optional.empty(); }
+    default List<InventoryTransferOrderRecord> listTransferOrders() { return java.util.List.of(); }
+    default List<InventoryTransferLineRecord> listTransferLinesByOrder(String orderId) { return java.util.List.of(); }
+    default void saveTraceOwnershipHistory(InventoryTraceOwnershipHistoryRecord history) { }
+    default int updateTraceCodeOwnerIfExists(String traceCode, String ownerType, String ownerId, java.time.Instant now) { return 0; }
+
     PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord request);
 
     List<PurchaseRequestRecord> listPurchaseRequests();

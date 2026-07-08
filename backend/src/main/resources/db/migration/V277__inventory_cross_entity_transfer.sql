@@ -77,3 +77,17 @@ GRANT SELECT, INSERT, UPDATE ON inventory_transfer_orders TO complex_app;
 GRANT SELECT, INSERT, UPDATE ON inventory_transfer_lines TO complex_app;
 GRANT SELECT, INSERT ON inventory_trace_ownership_history TO complex_app;
 GRANT UPDATE ON inventory_trace_codes TO complex_app;
+
+-- 7) 权限点(V196/V206 范式:高危管理点独立·平台管理员直授)。
+INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status) VALUES
+    ('inventory.supply_entity.manage', 'Manage platform supply entities', 'inventory', 'high', FALSE, 'active'),
+    ('inventory.supply_entity.view',   'View platform supply entities',    'inventory', 'low',  FALSE, 'active'),
+    ('inventory.transfer_order.manage','Manage cross-entity transfer orders', 'inventory', 'high', FALSE, 'active'),
+    ('inventory.transfer_order.view',  'View cross-entity transfer orders', 'inventory', 'low',  FALSE, 'active')
+ON CONFLICT (permission_code) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_code)
+SELECT 'role_platform_admin', code FROM (VALUES
+    ('inventory.supply_entity.manage'), ('inventory.supply_entity.view'),
+    ('inventory.transfer_order.manage'), ('inventory.transfer_order.view')) AS p(code)
+ON CONFLICT (role_id, permission_code) DO NOTHING;

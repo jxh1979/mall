@@ -1363,6 +1363,148 @@ public class InventoryService {
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.supplier.manage")
     @Transactional
+    // ── V277 跨主体流转:供货主体 + 流转单(建单→发货→扫码收货+溯源归属变更) ──
+    public SupplyEntityRecord createSupplyEntity(com.complex.platform.inventory.dto.SupplyEntityRequest request) {
+        return executeWrite("createSupplyEntity", request == null ? null : request.idempotencyKey(), request,
+                SupplyEntityRecord.class, "inventory.supply_entity_changed", "inventory.supply_entity_change_failed",
+                "inventory.supply_entity.manage", "supply_entity",
+                () -> {
+                    com.complex.platform.inventory.dto.SupplyEntityRequest actual = requireRequest(request);
+                    Instant now = Instant.now();
+                    return repository.saveSupplyEntity(new SupplyEntityRecord(
+                            "supply_" + slug(actual.idempotencyKey()),
+                            requireText(actual.name(), "name"),
+                            trimToDefault(actual.entityType(), "liquor"),
+                            "platform",
+                            trimToDefault(actual.status(), "active"),
+                            trimToNull(actual.settlementAccount()),
+                            null, now, now));
+                });
+    }
+
+    public PageResponse<SupplyEntityRecord> listSupplyEntities() {
+        authorizationService.requirePermission("inventory.supply_entity.view");
+        List<SupplyEntityRecord> rows = repository.listSupplyEntities();
+        return new PageResponse<>(rows, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, rows.size());
+    }
+
+    public InventoryTransferOrderRecord createTransferOrder(com.complex.platform.inventory.dto.CreateTransferOrderRequest request) {
+        return executeWrite("createTransferOrder", request == null ? null : request.idempotencyKey(), request,
+                InventoryTransferOrderRecord.class, "inventory.transfer_order_created", "inventory.transfer_order_create_failed",
+                "inventory.transfer_order.manage", "inventory_transfer_order",
+                () -> {
+                    com.complex.platform.inventory.dto.CreateTransferOrderRequest actual = requireRequest(request);
+                    String transferType = requireText(actual.transferType(), "transfer_type");
+                    if (!"supply".equals(transferType) && !"lending".equals(transferType)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "transfer_type must be supply or lending");
+                    }
+                    String fromType = requireText(actual.fromOwnerType(), "from_owner_type");
+                    String fromId = requireText(actual.fromOwnerId(), "from_owner_id");
+                    String toType = requireText(actual.toOwnerType(), "to_owner_type");
+                    String toId = requireText(actual.toOwnerId(), "to_owner_id");
+                    if ("supply".equals(transferType)) {
+                        if (!"supply_entity".equals(fromType)) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "supply transfer must originate from a supply_entity");
+                        }
+                        repository.findSupplyEntityById(fromId).orElseThrow(() ->
+                                ApiException.notFound("SUPPLY_ENTITY_NOT_FOUND", "supply entity not found"));
+                    }
+                    if (actual.lines() == null || actual.lines().isEmpty()) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "transfer must have at least one line");
+                    }
+                    Instant now = Instant.now();
+                    String orderId = "trf_" + slug(actual.idempotencyKey());
+                    InventoryTransferOrderRecord order = new InventoryTransferOrderRecord(orderId, transferType,
+                            trimToNull(actual.lendingMode()), fromType, fromId, toType, toId,
+                            trimToNull(actual.fromLocationId()), trimToNull(actual.toLocationId()),
+                            "created", trimToNull(actual.operatorNote()), null, now, now, List.of());
+                    repository.saveTransferOrder(order);
+                    int idx = 0;
+                    for (com.complex.platform.inventory.dto.TransferLineRequest lr : actual.lines()) {
+                        int qty = lr.quantity() == null ? 0 : lr.quantity();
+                        if (qty <= 0) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "line quantity must be positive");
+                        }
+                        repository.saveTransferLine(new InventoryTransferLineRecord(
+                                orderId + "_l" + (idx++), orderId, requireText(lr.itemId(), "item_id"), qty,
+                                lr.traceCodes() == null ? List.of() : lr.traceCodes(),
+                                lr.unitPriceCent() == null ? 0L : lr.unitPriceCent(), now));
+                    }
+                    return order;
+                });
+    }
+
+    public InventoryTransferOrderRecord shipTransferOrder(String orderId) {
+        String id = requireText(orderId, "order_id");
+        return executeWrite("shipTransferOrder:" + id, id, id,
+                InventoryTransferOrderRecord.class, "inventory.transfer_order_shipped", "inventory.transfer_order_ship_failed",
+                "inventory.transfer_order.manage", "inventory_transfer_order",
+                () -> {
+                    InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                    if (!"created".equals(o.status())) {
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_CREATED", "only created orders can be shipped");
+                    }
+                    return repository.saveTransferOrder(withTransferStatus(o, "shipped"));
+                });
+    }
+
+    public InventoryTransferOrderRecord receiveTransferOrder(String orderId, com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+        String id = requireText(orderId, "order_id");
+        return executeWrite("receiveTransferOrder:" + id, id, request == null ? id : request,
+                InventoryTransferOrderRecord.class, "inventory.transfer_order_received", "inventory.transfer_order_receive_failed",
+                "inventory.transfer_order.manage", "inventory_transfer_order",
+                () -> {
+                    InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                    if (!"shipped".equals(o.status())) {
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_SHIPPED", "only shipped orders can be received");
+                    }
+                    Instant now = Instant.now();
+                    java.util.LinkedHashSet<String> orderCodes = new java.util.LinkedHashSet<>();
+                    for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
+                        orderCodes.addAll(l.traceCodes());
+                    }
+                    List<String> scanned = request == null || request.scannedTraceCodes() == null ? List.of() : request.scannedTraceCodes();
+                    for (String code : scanned) {
+                        if (!orderCodes.contains(code)) {
+                            throw ApiException.badRequest("TRACE_CODE_MISMATCH", "scanned trace code does not belong to this transfer: " + code);
+                        }
+                    }
+                    // 溯源归属 from->to:写归属变更台账(防调包+对账)+尽力更新溯源码归属(存在则更新)。
+                    int seq = 0;
+                    for (String code : orderCodes) {
+                        repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
+                                o.id() + "_h" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
+                                o.toOwnerType(), o.toOwnerId(), o.id(), now));
+                        repository.updateTraceCodeOwnerIfExists(code, o.toOwnerType(), o.toOwnerId(), now);
+                    }
+                    // ponytail: P1 只做归属变更+台账;收货方库存入账/供货方库存扣减留 P2(供货主体库存需 warehouse owner 泛化,两侧同期做更一致)。
+                    return repository.saveTransferOrder(withTransferStatus(o, "received"));
+                });
+    }
+
+    public InventoryTransferOrderRecord getTransferOrder(String orderId) {
+        authorizationService.requirePermission("inventory.transfer_order.view");
+        InventoryTransferOrderRecord o = repository.findTransferOrderById(requireText(orderId, "order_id")).orElseThrow(() ->
+                ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+        return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
+                o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
+                o.createdBy(), o.createdAt(), o.updatedAt(), repository.listTransferLinesByOrder(o.id()));
+    }
+
+    public PageResponse<InventoryTransferOrderRecord> listTransferOrders() {
+        authorizationService.requirePermission("inventory.transfer_order.view");
+        List<InventoryTransferOrderRecord> rows = repository.listTransferOrders();
+        return new PageResponse<>(rows, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, rows.size());
+    }
+
+    private InventoryTransferOrderRecord withTransferStatus(InventoryTransferOrderRecord o, String status) {
+        return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
+                o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), status, o.operatorNote(),
+                o.createdBy(), o.createdAt(), Instant.now(), o.lines());
+    }
+
     public InventorySupplierRecord createInventorySupplier(InventorySupplierRequest request) {
         return executeWrite(
                 "createInventorySupplier",

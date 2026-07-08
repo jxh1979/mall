@@ -355,6 +355,50 @@ public class InventoryController {
         return ApiResponse.ok(service.createInventorySupplier(request));
     }
 
+    // ── V277 跨主体流转:供货主体 + 流转单 ──
+    @GetMapping("/supply-entities")
+    public ApiResponse<PageResponse<SupplyEntityRecord>> listSupplyEntities() {
+        return ApiResponse.ok(service.listSupplyEntities());
+    }
+
+    @PostMapping("/supply-entities")
+    public ApiResponse<SupplyEntityRecord> createSupplyEntity(@RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SupplyEntityRequest request) {
+        authorizationService.requirePermission("inventory.supply_entity.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createSupplyEntity(request));
+    }
+
+    @GetMapping("/transfer-orders")
+    public ApiResponse<PageResponse<InventoryTransferOrderRecord>> listTransferOrders() {
+        return ApiResponse.ok(service.listTransferOrders());
+    }
+
+    @GetMapping("/transfer-orders/{order_id}")
+    public ApiResponse<InventoryTransferOrderRecord> getTransferOrder(@PathVariable("order_id") String orderId) {
+        return ApiResponse.ok(service.getTransferOrder(orderId));
+    }
+
+    @PostMapping("/transfer-orders")
+    public ApiResponse<InventoryTransferOrderRecord> createTransferOrder(@RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.CreateTransferOrderRequest request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createTransferOrder(request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/ship")
+    public ApiResponse<InventoryTransferOrderRecord> shipTransferOrder(@PathVariable("order_id") String orderId) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        return ApiResponse.ok(service.shipTransferOrder(orderId));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/receive")
+    public ApiResponse<InventoryTransferOrderRecord> receiveTransferOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        return ApiResponse.ok(service.receiveTransferOrder(orderId, request));
+    }
+
     // ── V128 / REQ-39：溯源码主数据 CRUD（贴码登记 → 出库打印 → 责任链查询/列表）。 ──
     @GetMapping("/trace-codes")
     public ApiResponse<PageResponse<InventoryTraceCodeRecord>> listTraceCodes() {
