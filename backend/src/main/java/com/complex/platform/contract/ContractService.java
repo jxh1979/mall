@@ -66,28 +66,35 @@ public class ContractService {
     private final NotificationService notificationService;
     private final PlatformRepository platformRepository;
     private final MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver;
-    // 批2b:提成端口(finance 实现)。可选注入(测试/兼容构造 null=收租方式退化为纯月租)。@Lazy 防潜在初始化环。
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    @org.springframework.context.annotation.Lazy
-    private com.complex.platform.finance.TurnoverRentPort turnoverRentPort;
+    // 批2b:提成端口(finance 实现)。构造注入(@Lazy 防潜在初始化环);旧构造传 null=收租方式退化纯月租。
+    private final com.complex.platform.finance.TurnoverRentPort turnoverRentPort;
 
     @Autowired
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository,
-            MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver) {
+            MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver,
+            @org.springframework.context.annotation.Lazy com.complex.platform.finance.TurnoverRentPort turnoverRentPort) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.notificationService = notificationService;
         this.platformRepository = platformRepository;
         this.merchantFeeRecipientResolver = merchantFeeRecipientResolver;
+        this.turnoverRentPort = turnoverRentPort;
+    }
+
+    public ContractService(ContractRepository repository, AuditEventService auditEventService,
+            AuthorizationService authorizationService, NotificationService notificationService,
+            PlatformRepository platformRepository,
+            MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver) {
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, merchantFeeRecipientResolver, null);
     }
 
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository) {
-        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null);
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null, null);
     }
 
     // ============ 起草 ============
@@ -715,9 +722,10 @@ public class ContractService {
         if (repository.rentBillExists(contractId, period, "rent")) {
             throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "rent already billed for " + period);
         }
-        long amountCent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
+        long baseRent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
+        long amountCent = resolveBillingRent(c, c.rentTerms() == null ? Map.of() : c.rentTerms(), period, baseRent);
         if (amountCent <= 0) {
-            return null;   // 免租期 / 生效前：无应收
+            return null;   // 免租期 / 生效前 / 收租方式组合后仍为 0：无应收
         }
         return genFeeBill(c, period, "rent", amountCent, dueDateOf(period), actual.idempotencyKey());
     }
