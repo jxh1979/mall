@@ -5,8 +5,12 @@ import { cnDate } from "./RowDetailDrawer";
 // （mm/dd/yyyy、July 2026），HTML 改不动 → 自研零依赖组件替换，落实「所有终端零英文」。
 // 对外契约与原生一致：value=YYYY-MM-DD（月模式 YYYY-MM），onChange 回传同格式串，调用点最小改动。
 // 样式见 styles.css .cn-date-*，复用 --adm 变量。
+// 交互（2026-07-08 用户反馈）：日/月标题可点下钻——日视图点标题→选月，月视图点标题→选年，
+//   不必一个月一个月往前后挪；弹层层级提到引导弹窗之上（原 z-index 40 被 modal 1000 盖穿=「透明」根因）。
 
 type Mode = "date" | "month";
+// 面板层级：day=选日、month=选月、year=选年。date 模式三级都用，month 模式只用 month/year。
+type Panel = "day" | "month" | "year";
 
 type Props = {
   value: string;
@@ -28,6 +32,8 @@ const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 const MONTHS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 // ponytail: 无 value 且无 today 时的兜底视图年月，仅决定日历初始翻到哪一页，不参与取值。
 const FALLBACK_VIEW = { year: 2025, month: 1 };
+// 年面板一页显示多少年（3 行 × 4 列）。
+const YEAR_PAGE = 12;
 
 /** 从 YYYY-MM(-DD) 串取 {year, month, day}，非法返回 null。纯字符串解析，不构造 Date。 */
 function parseParts(value?: string): { year: number; month: number; day: number | null } | null {
@@ -68,14 +74,21 @@ export function CnDatePicker({
   const testId = rest["data-testid"];
   const ariaLabel = rest["aria-label"];
   const [open, setOpen] = React.useState(false);
+  const [panel, setPanel] = React.useState<Panel>(mode === "month" ? "month" : "day");
   const rootRef = React.useRef<HTMLDivElement>(null);
 
   const anchor = parseParts(value) ?? parseParts(today) ?? { ...FALLBACK_VIEW, day: null };
   const [view, setView] = React.useState({ year: anchor.year, month: anchor.month });
+  // 年面板起始年（含 anchor.year，居中偏前 5 年）。
+  const [yearStart, setYearStart] = React.useState(anchor.year - 5);
 
-  // 打开时把视图对齐到当前值/锚点。
+  // 打开时把视图对齐到当前值/锚点，并回到该模式的初始面板。
   React.useEffect(() => {
-    if (open) setView({ year: anchor.year, month: anchor.month });
+    if (open) {
+      setView({ year: anchor.year, month: anchor.month });
+      setPanel(mode === "month" ? "month" : "day");
+      setYearStart(anchor.year - 5);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -111,9 +124,22 @@ export function CnDatePicker({
     setOpen(false);
   };
 
+  // 选月：月模式=最终取值并关闭；日模式=只切视图到该月、下钻回选日。
   const pickMonth = (month: number) => {
-    onChange(`${view.year}-${pad(month)}`);
-    setOpen(false);
+    if (mode === "month") {
+      onChange(`${view.year}-${pad(month)}`);
+      setOpen(false);
+      return;
+    }
+    setView((v) => ({ ...v, month }));
+    setPanel("day");
+  };
+
+  // 选年：切视图到该年，回到选月面板（月模式再选月取值，日模式再选月→选日）。
+  const pickYear = (year: number) => {
+    setView((v) => ({ ...v, year }));
+    setYearStart(year - 5);
+    setPanel("month");
   };
 
   const toggle = () => {
@@ -150,11 +176,36 @@ export function CnDatePicker({
 
       {open && (
         <div className="cn-date-pop" role="dialog" aria-label={ariaLabel ?? (mode === "month" ? "选择月份" : "选择日期")}>
-          {mode === "month" ? (
+          {panel === "year" ? (
+            <>
+              <div className="cn-date-head">
+                <button type="button" className="cn-date-nav" aria-label="上一页年份" onClick={() => setYearStart((s) => s - YEAR_PAGE)}>◀</button>
+                <span className="cn-date-title">{yearStart}–{yearStart + YEAR_PAGE - 1}</span>
+                <button type="button" className="cn-date-nav" aria-label="下一页年份" onClick={() => setYearStart((s) => s + YEAR_PAGE)}>▶</button>
+              </div>
+              <div className="cn-date-years">
+                {Array.from({ length: YEAR_PAGE }).map((_, i) => {
+                  const year = yearStart + i;
+                  const isSel = selected?.year === year;
+                  return (
+                    <button
+                      key={year}
+                      type="button"
+                      className={`cn-date-cell${isSel ? " is-selected" : ""}`}
+                      aria-pressed={isSel}
+                      onClick={() => pickYear(year)}
+                    >
+                      {year}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : panel === "month" ? (
             <>
               <div className="cn-date-head">
                 <button type="button" className="cn-date-nav" aria-label="上一年" onClick={() => setView((v) => ({ ...v, year: v.year - 1 }))}>◀</button>
-                <span className="cn-date-title">{view.year}年</span>
+                <button type="button" className="cn-date-title cn-date-title-btn" aria-label="选择年份" onClick={() => { setYearStart(view.year - 5); setPanel("year"); }}>{view.year}年</button>
                 <button type="button" className="cn-date-nav" aria-label="下一年" onClick={() => setView((v) => ({ ...v, year: v.year + 1 }))}>▶</button>
               </div>
               <div className="cn-date-months">
@@ -179,7 +230,7 @@ export function CnDatePicker({
             <>
               <div className="cn-date-head">
                 <button type="button" className="cn-date-nav" aria-label="上个月" onClick={() => shiftMonth(-1)}>◀</button>
-                <span className="cn-date-title">{view.year}年{view.month}月</span>
+                <button type="button" className="cn-date-title cn-date-title-btn" aria-label="选择年月" onClick={() => setPanel("month")}>{view.year}年{view.month}月</button>
                 <button type="button" className="cn-date-nav" aria-label="下个月" onClick={() => shiftMonth(1)}>▶</button>
               </div>
               <div className="cn-date-week">

@@ -2372,7 +2372,7 @@ body {
 .cn-date-caret { color: var(--adm-text-3); font-size: 11px; }
 .cn-date-pop {
   position: absolute;
-  z-index: 40;
+  z-index: 1100;
   top: calc(100% + 6px);
   left: 0;
   padding: 10px;
@@ -2413,6 +2413,11 @@ body {
 }
 .cn-date-grid { display: grid; grid-template-columns: repeat(7, 32px); }
 .cn-date-months { display: grid; grid-template-columns: repeat(4, 56px); gap: 4px; }
+.cn-date-years { display: grid; grid-template-columns: repeat(4, 56px); gap: 4px; }
+/* 可点的年/月标题：看起来可交互（悬停高亮），保持标题字号不变 */
+.cn-date-title-btn { appearance: none; border: 1px solid transparent; background: none; cursor: pointer; padding: 2px 8px; border-radius: 6px; }
+.cn-date-title-btn:hover { background: var(--adm-surface-3); }
+.cn-date-title-btn:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
 .cn-date-blank { width: 32px; height: 30px; }
 .cn-date-cell {
   appearance: none;
