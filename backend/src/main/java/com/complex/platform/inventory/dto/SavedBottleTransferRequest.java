@@ -14,6 +14,8 @@ public record SavedBottleTransferRequest(
         String toNameOrNickname,
         String toPhone,
         Integer transferQuantity,
-        String reason
+        String reason,
+        // 出让人手机短信验证码(店员收集原持有人手机收到的码录入,授权本次转让)。
+        String verificationCode
 ) {
 }

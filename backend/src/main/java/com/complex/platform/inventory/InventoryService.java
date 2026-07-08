@@ -533,6 +533,9 @@ public class InventoryService {
                 () -> {
                     SavedBottleTransferRequest actual = requireRequest(request);
                     String toName = requireText(actual.toNameOrNickname(), "to_name_or_nickname");
+                    // 转让须经出让人(原持有人)手机短信验证码确认(用户 2026-07-08 裁决)。当前校验验证码必填;
+                    // 与客人 OTP 的"发码+核验"绑定为后续(依赖短信服务商,同客人登录环境约束)。
+                    requireText(actual.verificationCode(), "verification_code");
                     SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
                     Optional<String> scope = authorizationService.currentMerchantScope();
