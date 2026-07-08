@@ -37,6 +37,15 @@ public record BarProductRecord(
         String deleteReason
 ) {
 
+    /** 内部结算价按权限脱敏:无 bar.internal_settlement_price.view 权限的读端返回副本内部价置 null。 */
+    public BarProductRecord withoutInternalPrice() {
+        return new BarProductRecord(id, barId, merchantId, productName, productType, priceCent, currency,
+                inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
+                standardPourVolume, pourVolumeUnit, lossThreshold, soldOut, soldOutAt, soldOutReason,
+                null, categoryId, imageUrl, archivedAt, archivedBy, deleteStatus, deleteRequestedBy,
+                deleteRequestedAt, deleteReason);
+    }
+
     /** 向后兼容构造器（V262 存档/删除前签名）：既有调用方零改动，默认未存档 + delete_status=none。 */
     public BarProductRecord(
             String id,

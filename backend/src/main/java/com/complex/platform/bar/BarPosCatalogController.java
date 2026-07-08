@@ -100,7 +100,11 @@ public class BarPosCatalogController {
             @RequestParam("bar_id") String barId,
             @RequestParam(value = "category_id", required = false) String categoryId) {
         authorizationService.requirePermission("bar.product.view");
-        return ApiResponse.ok(service.listProductsByCategory(barId, categoryId));
+        java.util.List<BarProductRecord> products = service.listProductsByCategory(barId, categoryId);
+        if (!authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
+            products = products.stream().map(BarProductRecord::withoutInternalPrice).toList();
+        }
+        return ApiResponse.ok(products);
     }
 
     @PostMapping("/products/{id}/archive")
@@ -137,7 +141,11 @@ public class BarPosCatalogController {
             @RequestParam(value = "bar_id", required = false) String barId,
             @RequestParam(value = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("bar.combo.view");
-        return ApiResponse.ok(service.listCombos(barId, includeArchived));
+        java.util.List<BarComboRecord> combos = service.listCombos(barId, includeArchived);
+        if (!authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
+            combos = combos.stream().map(BarComboRecord::withoutInternalPrice).toList();
+        }
+        return ApiResponse.ok(combos);
     }
 
     @PostMapping("/combos")

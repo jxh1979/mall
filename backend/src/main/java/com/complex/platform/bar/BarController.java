@@ -272,7 +272,12 @@ public class BarController {
             @RequestParam(value = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
         // 商品目录含敏感内部结算价（V152），查看独立授权（不再搭便车 bar.order.create）。
         authorizationService.requirePermission("bar.product.view");
-        return ApiResponse.ok(service.listProducts(includeArchived));
+        PageResponse<BarProductRecord> page = service.listProducts(includeArchived);
+        if (!authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
+            page = new PageResponse<>(page.items().stream().map(BarProductRecord::withoutInternalPrice).toList(),
+                    page.page(), page.pageSize(), page.total());
+        }
+        return ApiResponse.ok(page);
     }
 
     @PostMapping("/products")

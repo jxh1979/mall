@@ -33,6 +33,12 @@ public record BarComboRecord(
                 createdAt, updatedAt, items, null, null, "none", null, null, null);
     }
 
+    /** 内部结算价按权限脱敏:无权限读端返回副本内部价置 null。 */
+    public BarComboRecord withoutInternalPrice() {
+        return new BarComboRecord(id, barId, merchantId, comboName, priceCent, null, imageUrl, status,
+                createdAt, updatedAt, items);
+    }
+
     public BarComboRecord withArchive(Instant archivedAt, String archivedBy, Instant updatedAt) {
         return new BarComboRecord(id, barId, merchantId, comboName, priceCent, internalSettlementPriceCent, imageUrl,
                 status, createdAt, updatedAt, items,
