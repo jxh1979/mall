@@ -10,7 +10,7 @@ import type { AdminPageProps } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
-import { Tabs } from "antd";
+import { Tabs, Switch } from "antd";
 
 type EnergyMeterRow = {
   id: string; name: string; meterType: string; parentMeterId?: string | null; gatherObject: string;
@@ -323,7 +323,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
                   <label><span>商户 id（可空）</span><input data-testid="energy-meter-guided-merchant" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })} /></label>
                   <label><span>项目 id（可空）</span><input data-testid="energy-meter-guided-project" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })} /></label>
                   <label><span>读数方式</span><select data-testid="energy-meter-guided-readmode" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select></label>
-                  <label className="admin-inline-check"><input type="checkbox" data-testid="energy-meter-guided-active" checked={meterForm.active} onChange={(event) => setMeterForm({ ...meterForm, active: event.target.checked })} />启用</label>
+                  <label className="admin-inline-check"><Switch size="default" data-testid="energy-meter-guided-active" checked={meterForm.active} onChange={(checked) => setMeterForm({ ...meterForm, active: checked })} /><span>启用</span></label>
                 </>
               ),
             },
@@ -347,7 +347,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           <input aria-label="商户 id" placeholder="商户 id" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })} />
           <input aria-label="项目 id" placeholder="项目 id" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })} />
           <select aria-label="读数方式" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select>
-          <label><input type="checkbox" checked={meterForm.active} onChange={(event) => setMeterForm({ ...meterForm, active: event.target.checked })} />启用</label>
+          <label className="admin-inline-check"><Switch size="default" checked={meterForm.active} onChange={(checked) => setMeterForm({ ...meterForm, active: checked })} /><span>启用</span></label>
           <PermissionButton permissionsState={effectivePermissions} permissions={METER} data-testid="energy-meter-update" onClick={() => void saveMeter()}>保存表计</PermissionButton>
         </div>
 

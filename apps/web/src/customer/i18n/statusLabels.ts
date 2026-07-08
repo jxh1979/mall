@@ -77,6 +77,8 @@ const STATUS_LABELS: Record<string, string> = {
   staff: "普通员工",
   sales: "销售人员",
   supervisor: "主管",
+  platform_admin: "平台管理员",
+  outsourced_vendor: "外包账号",
   merchant_admin: "商户管理员",
   merchant: "商户员工",
   invited: "待激活",

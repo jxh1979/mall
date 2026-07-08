@@ -2526,3 +2526,24 @@ body {
 .admin-topbar button.admin-theme-toggle:hover {
   background: var(--adm-surface-3); border-color: var(--adm-border-strong);
 }
+
+/* 空表占位行(2026-07-07 空状态统一) */
+.admin-empty-cell {
+  text-align: center;
+  color: var(--adm-text-3);
+  padding: 22px 12px;
+  font-size: 13px;
+}
+/* 内联开关+文字对齐 */
+.admin-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* 顶栏窄屏:隐藏「营业中」标签、用户名截断,避免溢出横滚 */
+@media (max-width: 640px) {
+  .admin-topbar-store { display: none; }
+  .admin-topbar .admin-user-chip {
+    max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+}

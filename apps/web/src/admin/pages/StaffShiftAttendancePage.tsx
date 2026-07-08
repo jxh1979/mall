@@ -147,6 +147,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
                   <td>{row.note ?? "—"}</td>
                 </tr>
               ))}
+              {shifts.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">本日暂无排班，点「＋ 新增排班」开始</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -167,6 +168,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
                   <td>{row.spaceId ?? "—"}</td>
                 </tr>
               ))}
+              {attendance.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">本日暂无考勤记录</td></tr> : null}
             </tbody>
           </table>
         </div>

@@ -169,6 +169,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
               </tr>
             </thead>
             <tbody>
+              {limits.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">暂无额度配置，点「新增额度」开始</td></tr> : null}
               {limits.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`refund-limit-${row.id}`}
                   onClick={() => openLimitDetail(row)}
@@ -232,6 +233,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
               </tr>
             </thead>
             <tbody>
+              {rules.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">暂无规则配置</td></tr> : null}
               {rules.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`refund-rule-${row.id}`}
                   onClick={() => openRuleDetail(row)}
