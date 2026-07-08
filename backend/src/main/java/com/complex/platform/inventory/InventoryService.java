@@ -1492,6 +1492,12 @@ public class InventoryService {
                     // 溯源归属 from->to:写归属变更台账(防调包+对账)+尽力更新溯源码归属(存在则更新)。
                     int seq = 0;
                     for (String code : orderCodes) {
+                        // 防调包:溯源码若已存在且归属第三方(非出让方)→拒收货,且不伪造归属历史。
+                        // 不存在(P1 随货新码·归属登记泛化待 P2)或归属出让方/无主→放行。
+                        if (repository.countTraceCodeOwnedByOther(code, o.fromOwnerId()) > 0) {
+                            throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
+                                    "trace code belongs to another party, cannot receive: " + code);
+                        }
                         repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
                                 o.id() + "_h" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
                                 o.toOwnerType(), o.toOwnerId(), o.id(), now));

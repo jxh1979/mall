@@ -1906,6 +1906,15 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
+    public int countTraceCodeOwnedByOther(String traceCode, String fromOwnerId) {
+        Integer c = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM inventory_trace_codes
+                 WHERE trace_code = :tc AND owner_id IS NOT NULL AND owner_id <> :fromId
+                """, new MapSqlParameterSource().addValue("tc", traceCode).addValue("fromId", fromOwnerId), Integer.class);
+        return c == null ? 0 : c;
+    }
+
+    @Override
     public int updateTraceCodeOwnerIfExists(String traceCode, String fromOwnerId, String ownerType, String ownerId, Instant now) {
         return jdbcTemplate.update("""
                 UPDATE inventory_trace_codes SET owner_type = :ot, owner_id = :oid, updated_at = :now

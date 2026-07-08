@@ -26,6 +26,7 @@ public interface InventoryRepository {
     default List<InventoryTransferLineRecord> listTransferLinesByOrder(String orderId) { return java.util.List.of(); }
     default void saveTraceOwnershipHistory(InventoryTraceOwnershipHistoryRecord history) { }
     default int updateTraceCodeOwnerIfExists(String traceCode, String fromOwnerId, String ownerType, String ownerId, java.time.Instant now) { return 0; }
+    default int countTraceCodeOwnedByOther(String traceCode, String fromOwnerId) { return 0; }
 
     PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord request);
 
