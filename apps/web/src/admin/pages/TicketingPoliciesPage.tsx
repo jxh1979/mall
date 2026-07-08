@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { CnDatePicker } from "../components/CnDatePicker";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
@@ -111,6 +112,36 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1" });
   // 区4 派生价规则
   const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "0.8", fixedYuan: "" });
+  // 批3 第三方券:把权益模板配成第三方券 + 对账文件核销回流导入。
+  const [pvConfig, setPvConfig] = React.useState({ templateId: "", settlementMode: "free_marketing", partnerKind: "merchant", partnerId: "", internalYuan: "" });
+  const [pvRedeem, setPvRedeem] = React.useState({ code: "", redeemedDate: "", externalRef: "" });
+  const submitPvConfig = async () => {
+    if (!pvConfig.templateId || !pvConfig.partnerId.trim()) { setGlobalError("第三方券配置需选权益模板并填第三方"); return; }
+    if (pvConfig.settlementMode === "internal_purchased" && !pvConfig.internalYuan.trim()) { setGlobalError("内部价采购券需填内部结算价"); return; }
+    try {
+      await api.post("/api/v1/ticketing/partner-vouchers/configs", {
+        entitlementTemplateId: pvConfig.templateId,
+        settlementMode: pvConfig.settlementMode,
+        partnerKind: pvConfig.partnerKind,
+        partnerId: pvConfig.partnerId.trim(),
+        internalPriceCent: pvConfig.settlementMode === "internal_purchased" ? Math.round(Number(pvConfig.internalYuan) * 100) : null,
+      });
+      setActionResult({ action: "partner_voucher_config_created", templateId: pvConfig.templateId });
+    } catch (e) { setGlobalError(e instanceof Error ? e.message : String(e)); }
+  };
+  const submitPvRedeem = async () => {
+    if (!pvRedeem.code.trim() || !pvRedeem.externalRef.trim()) { setGlobalError("核销回流需填券码和外部核销单号"); return; }
+    try {
+      await api.post("/api/v1/ticketing/partner-vouchers/redemptions", {
+        entitlementCode: pvRedeem.code.trim(),
+        redeemedAt: pvRedeem.redeemedDate ? `${pvRedeem.redeemedDate}T00:00:00Z` : null,
+        externalRedemptionRef: pvRedeem.externalRef.trim(),
+        source: "reconciliation_file",
+      });
+      setActionResult({ action: "partner_voucher_redeemed", code: pvRedeem.code.trim() });
+      setPvRedeem({ code: "", redeemedDate: "", externalRef: "" });
+    } catch (e) { setGlobalError(e instanceof Error ? e.message : String(e)); }
+  };
 
   // 组合式配置策略（新）：选一张通票 → 多选酒吧（每个配权益：兑换/次数/面值）+ 多选游乐设施 → 一次性组合创建。
   const [comboTicketId, setComboTicketId] = React.useState("");
@@ -732,6 +763,46 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <input aria-label="默认面值（元）" type="number" min={0} step="0.01" value={tplForm.valueYuan} onChange={(event) => setTplForm({ ...tplForm, valueYuan: event.target.value })} placeholder="默认面值（元，可空）" />
         <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid="entitlement-template-create" onClick={() => void createTemplate()}>
           新建模板
+        </PermissionButton>
+      </div>
+
+      <h3>第三方券（餐厅券 · 通票包含）</h3>
+      <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>把某个权益模板配成第三方券：免费营销券核销不结算；内部价采购券每核销一张按内部结算价给第三方挂应付。客人买含该权益的通票即附赠此券，到餐厅由餐厅自己系统核销，再经对账文件回流。</p>
+      <div className="admin-inline-form" data-testid="partner-voucher-config-form">
+        <select aria-label="第三方券-权益模板" value={pvConfig.templateId} onChange={(e) => setPvConfig({ ...pvConfig, templateId: e.target.value })}>
+          <option value="">选择权益模板</option>
+          {templates.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
+        </select>
+        <select aria-label="结算模式" value={pvConfig.settlementMode} onChange={(e) => setPvConfig({ ...pvConfig, settlementMode: e.target.value })}>
+          <option value="free_marketing">免费营销券（核销不结算）</option>
+          <option value="internal_purchased">内部价采购券（核销挂应付）</option>
+        </select>
+        <select aria-label="第三方类型" value={pvConfig.partnerKind} onChange={(e) => setPvConfig({ ...pvConfig, partnerKind: e.target.value, partnerId: "" })}>
+          <option value="merchant">入驻商户</option>
+          <option value="external_partner">外部合作餐厅</option>
+        </select>
+        {pvConfig.partnerKind === "merchant" ? (
+          <select aria-label="第三方商户" value={pvConfig.partnerId} onChange={(e) => setPvConfig({ ...pvConfig, partnerId: e.target.value })}>
+            <option value="">选择商户</option>
+            {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
+          </select>
+        ) : (
+          <input aria-label="外部餐厅id" placeholder="外部合作餐厅 id" value={pvConfig.partnerId} onChange={(e) => setPvConfig({ ...pvConfig, partnerId: e.target.value })} />
+        )}
+        {pvConfig.settlementMode === "internal_purchased" ? (
+          <input aria-label="内部结算价（元）" type="number" min={0} step="0.01" placeholder="内部结算价（元）" value={pvConfig.internalYuan} onChange={(e) => setPvConfig({ ...pvConfig, internalYuan: e.target.value })} />
+        ) : null}
+        <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid="partner-voucher-config-submit" onClick={() => void submitPvConfig()}>
+          配为第三方券
+        </PermissionButton>
+      </div>
+      <h4>核销回流导入（餐厅对账文件）</h4>
+      <div className="admin-inline-form" data-testid="partner-voucher-redeem-form">
+        <input aria-label="券码" placeholder="券码" value={pvRedeem.code} onChange={(e) => setPvRedeem({ ...pvRedeem, code: e.target.value })} />
+        <label>核销日期<CnDatePicker aria-label="核销日期" value={pvRedeem.redeemedDate} onChange={(v) => setPvRedeem({ ...pvRedeem, redeemedDate: v })} /></label>
+        <input aria-label="外部核销单号" placeholder="餐厅侧核销单号" value={pvRedeem.externalRef} onChange={(e) => setPvRedeem({ ...pvRedeem, externalRef: e.target.value })} />
+        <PermissionButton permissionsState={effectivePermissions} permissions={["verification.execute"]} data-testid="partner-voucher-redeem-submit" onClick={() => void submitPvRedeem()}>
+          导入核销
         </PermissionButton>
       </div>
 

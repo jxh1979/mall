@@ -35,7 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class FinanceService implements TurnoverRentPort {
+public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -1415,6 +1415,14 @@ public class FinanceService implements TurnoverRentPort {
         return tiers.isEmpty()
                 ? clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent())
                 : TurnoverRentMath.tieredRent(turnover, tiers, rule.minAmountCent());
+    }
+
+    /** 批3:内部价采购券核销回流 -> 按内部结算价给第三方挂应付(payable, counterparty=partnerId)。 */
+    @Override
+    public String createPartnerVoucherPayable(String partnerId, long internalPriceCent, String idempotencyKey) {
+        ArApItemRecord item = persistDerivedArApItem(
+                "payable", partnerId, "partner_voucher", idempotencyKey, internalPriceCent, idempotencyKey, null);
+        return item.id();
     }
 
     private ArApItemRecord billTurnoverRentInternal(TurnoverRentBillRequest request) {

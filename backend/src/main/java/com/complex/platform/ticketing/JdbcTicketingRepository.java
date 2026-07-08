@@ -369,6 +369,60 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public PartnerVoucherConfigRecord savePartnerVoucherConfig(PartnerVoucherConfigRecord c) {
+        jdbcTemplate.update("""
+                INSERT INTO partner_voucher_configs (entitlement_template_id, settlement_mode, partner_kind, partner_id, internal_price_cent)
+                VALUES (:tid, :mode, :kind, :pid, :price)
+                ON CONFLICT (entitlement_template_id) DO UPDATE SET
+                    settlement_mode = EXCLUDED.settlement_mode, partner_kind = EXCLUDED.partner_kind,
+                    partner_id = EXCLUDED.partner_id, internal_price_cent = EXCLUDED.internal_price_cent
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("tid", c.entitlementTemplateId()).addValue("mode", c.settlementMode())
+                .addValue("kind", c.partnerKind()).addValue("pid", c.partnerId()).addValue("price", c.internalPriceCent()));
+        return c;
+    }
+
+    @Override
+    public Optional<PartnerVoucherConfigRecord> findPartnerVoucherConfig(String entitlementTemplateId) {
+        return jdbcTemplate.query("""
+                SELECT entitlement_template_id, settlement_mode, partner_kind, partner_id, internal_price_cent, created_at
+                  FROM partner_voucher_configs WHERE entitlement_template_id = :tid
+                """, Map.of("tid", entitlementTemplateId), (rs, n) -> new PartnerVoucherConfigRecord(
+                rs.getString("entitlement_template_id"), rs.getString("settlement_mode"), rs.getString("partner_kind"),
+                rs.getString("partner_id"), (Long) rs.getObject("internal_price_cent"),
+                rs.getObject("created_at", java.time.OffsetDateTime.class).toInstant())).stream().findFirst();
+    }
+
+    @Override
+    public PartnerVoucherRedemptionRecord savePartnerVoucherRedemption(PartnerVoucherRedemptionRecord r) {
+        jdbcTemplate.update("""
+                INSERT INTO partner_voucher_redemptions (id, issued_entitlement_id, entitlement_code, partner_kind, partner_id,
+                    settlement_mode, redeemed_at, external_redemption_ref, settlement_amount_cent, ar_ap_item_id, source)
+                VALUES (:id, :eid, :code, :kind, :pid, :mode, :rat, :ref, :amt, :arap, :src)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", r.id()).addValue("eid", r.issuedEntitlementId()).addValue("code", r.entitlementCode())
+                .addValue("kind", r.partnerKind()).addValue("pid", r.partnerId()).addValue("mode", r.settlementMode())
+                .addValue("rat", java.sql.Timestamp.from(r.redeemedAt())).addValue("ref", r.externalRedemptionRef())
+                .addValue("amt", r.settlementAmountCent()).addValue("arap", r.arApItemId()).addValue("src", r.source()));
+        return r;
+    }
+
+    @Override
+    public Optional<PartnerVoucherRedemptionRecord> findPartnerVoucherRedemptionByExternalRef(String partnerId, String externalRef) {
+        if (externalRef == null) { return Optional.empty(); }
+        return jdbcTemplate.query("""
+                SELECT id, issued_entitlement_id, entitlement_code, partner_kind, partner_id, settlement_mode,
+                       redeemed_at, external_redemption_ref, settlement_amount_cent, ar_ap_item_id, source, created_at
+                  FROM partner_voucher_redemptions WHERE partner_id = :pid AND external_redemption_ref = :ref
+                """, Map.of("pid", partnerId, "ref", externalRef), (rs, n) -> new PartnerVoucherRedemptionRecord(
+                rs.getString("id"), rs.getString("issued_entitlement_id"), rs.getString("entitlement_code"),
+                rs.getString("partner_kind"), rs.getString("partner_id"), rs.getString("settlement_mode"),
+                rs.getObject("redeemed_at", java.time.OffsetDateTime.class).toInstant(), rs.getString("external_redemption_ref"),
+                (Long) rs.getObject("settlement_amount_cent"), rs.getString("ar_ap_item_id"), rs.getString("source"),
+                rs.getObject("created_at", java.time.OffsetDateTime.class).toInstant())).stream().findFirst();
+    }
+
+    @Override
     public VerificationRecord saveVerification(VerificationRecord verification) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_verifications (
