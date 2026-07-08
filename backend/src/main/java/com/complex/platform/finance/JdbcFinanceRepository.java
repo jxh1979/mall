@@ -897,6 +897,18 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public Optional<TurnoverRentRuleRecord> findActiveTurnoverRentRuleByContract(String contractId) {
+        return jdbcTemplate.query("""
+                SELECT id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, max_amount_cent,
+                       effective_from, effective_to, status, created_at
+                  FROM turnover_rent_rules
+                 WHERE contract_id = :contract_id AND status = 'active'
+                 ORDER BY effective_from DESC, created_at DESC
+                 LIMIT 1
+                """, Map.of("contract_id", contractId), this::mapTurnoverRentRule).stream().findFirst();
+    }
+
+    @Override
     public TurnoverRentRuleRecord saveTurnoverRentRule(TurnoverRentRuleRecord rule) {
         jdbcTemplate.update("""
                 INSERT INTO turnover_rent_rules (

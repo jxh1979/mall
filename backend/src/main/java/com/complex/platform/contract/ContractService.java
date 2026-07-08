@@ -792,7 +792,7 @@ public class ContractService {
             return baseRent;
         }
         long turnover = turnoverRentPort == null ? 0L
-                : turnoverRentPort.computePeriodTurnoverRent(c.merchantId(), strVal(rt.get("turnoverRentRuleId")), period);
+                : turnoverRentPort.computePeriodTurnoverRent(c.merchantId(), c.id(), period);
         return switch (mode) {
             case "turnover_only" -> turnover;
             case "higher_of" -> Math.max(baseRent, turnover);

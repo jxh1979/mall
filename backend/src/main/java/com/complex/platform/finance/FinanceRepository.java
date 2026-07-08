@@ -37,6 +37,11 @@ public interface FinanceRepository {
         return Optional.empty();
     }
 
+    /** 按合同查其生效(active)提成规则,取最新生效。default 空兼容测试双子。 */
+    default Optional<TurnoverRentRuleRecord> findActiveTurnoverRentRuleByContract(String contractId) {
+        return Optional.empty();
+    }
+
     /** 保存提成租金规则。default no-op 兼容测试双子。 */
     default TurnoverRentRuleRecord saveTurnoverRentRule(TurnoverRentRuleRecord rule) {
         return rule;

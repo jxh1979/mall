@@ -1396,14 +1396,14 @@ public class FinanceService implements TurnoverRentPort {
         return rule;
     }
 
-    /** 提成端口实现:该商户该自然月回流营业额 × 规则阶梯(或单一费率) → 提成额(分)。供合同域收租方式组合调用。 */
+    /** 提成端口实现:按合同查其生效提成规则,该商户该自然月回流营业额 × 规则阶梯 → 提成额(分)。合同无生效规则返 0。 */
     @Override
-    public long computePeriodTurnoverRent(String merchantId, String ruleId, String period) {
-        if (ruleId == null || ruleId.isBlank() || merchantId == null || period == null || !period.matches("\\d{4}-\\d{2}")) {
+    public long computePeriodTurnoverRent(String merchantId, String contractId, String period) {
+        if (contractId == null || contractId.isBlank() || merchantId == null || period == null || !period.matches("\\d{4}-\\d{2}")) {
             return 0L;
         }
-        TurnoverRentRuleRecord rule = repository.findTurnoverRentRuleById(ruleId).orElse(null);
-        if (rule == null || !"active".equals(rule.status())) {
+        TurnoverRentRuleRecord rule = repository.findActiveTurnoverRentRuleByContract(contractId).orElse(null);
+        if (rule == null) {
             return 0L;
         }
         String[] ym = period.split("-");
@@ -1411,7 +1411,7 @@ public class FinanceService implements TurnoverRentPort {
         Instant from = businessDayResolver.startInstant(monthStart);
         Instant to = businessDayResolver.startInstant(monthStart.plusMonths(1));
         long turnover = repository.aggregateMerchantReflowTurnover(merchantId, from, to);
-        List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(ruleId);
+        List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(rule.id());
         return tiers.isEmpty()
                 ? clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent())
                 : TurnoverRentMath.tieredRent(turnover, tiers, rule.minAmountCent());

@@ -75,11 +75,41 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [colorRules, setColorRules] = React.useState<ColorRule[]>([]);
   const [draft, setDraft] = React.useState({
     merchantId: "", contractSubjectId: "", settlementSubjectId: "", effectiveDate: "", expiryDate: "",
-    baseRentYuan: "", commissionMode: "fixed_ratio", energyFeeBasis: "by_area",
+    baseRentYuan: "", perSqmYuan: "", rentMode: "monthly_fixed", rentBillingMode: "fixed_only",
+    commissionMode: "fixed_ratio", energyFeeBasis: "by_area",
   });
   const [spaceId, setSpaceId] = React.useState("");
   const [billPeriod, setBillPeriod] = React.useState("");
   const [colorForm, setColorForm] = React.useState({ categoryName: "", color: "#F59E0B", thresholdDays: "30" });
+  // 批2b: 提成规则(阶梯超额累进)配置——填合同条款时建，挂 contract_id。
+  const [turnoverForm, setTurnoverForm] = React.useState({ contractId: "", merchantId: "", ruleName: "", minYuan: "", effectiveFrom: "", effectiveTo: "" });
+  const [turnoverTiers, setTurnoverTiers] = React.useState<Array<{ upperWan: string; ratePct: string }>>([{ upperWan: "", ratePct: "" }]);
+  const submitTurnoverRule = async () => {
+    if (!turnoverForm.contractId.trim() || !turnoverForm.merchantId.trim() || !turnoverForm.ruleName.trim() || !turnoverForm.effectiveFrom) {
+      setGlobalError("建提成规则需填：合同 id、商户 id、规则名、生效日期");
+      return;
+    }
+    const tiers = turnoverTiers.map((t, i) => ({
+      upperBoundCent: i === turnoverTiers.length - 1 ? null : Math.round(Number(t.upperWan) * 1_000_000),
+      rateBps: Math.round(Number(t.ratePct) * 100),
+    }));
+    try {
+      await api.post("/api/v1/finance/turnover-rent/rules", {
+        contractId: turnoverForm.contractId.trim(),
+        merchantId: turnoverForm.merchantId.trim(),
+        ruleName: turnoverForm.ruleName.trim(),
+        minAmountCent: turnoverForm.minYuan.trim() ? Math.round(Number(turnoverForm.minYuan) * 100) : null,
+        effectiveFrom: turnoverForm.effectiveFrom,
+        effectiveTo: turnoverForm.effectiveTo || null,
+        tiers,
+      });
+      setActionResult({ action: "turnover_rule_created", contractId: turnoverForm.contractId.trim() });
+      setTurnoverTiers([{ upperWan: "", ratePct: "" }]);
+      setTurnoverForm({ ...turnoverForm, ruleName: "", minYuan: "" });
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : String(e));
+    }
+  };
   const [selectedId, setSelectedId] = React.useState("");
   const [changes, setChanges] = React.useState<ChangeRow[]>([]);
   const [settlements, setSettlements] = React.useState<SettlementRow[]>([]);
@@ -141,6 +171,13 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
       return;
     }
     const cent = Math.round(Number(draft.baseRentYuan) * 100);
+    const perSqmCent = Math.round(Number(draft.perSqmYuan) * 100);
+    const rentTerms: Record<string, unknown> = { rentMode: draft.rentMode, rentBillingMode: draft.rentBillingMode };
+    if (draft.rentMode === "per_sqm") {
+      if (Number.isFinite(perSqmCent) && perSqmCent > 0) rentTerms.perSqmRentCent = perSqmCent;
+    } else if (Number.isFinite(cent) && cent > 0) {
+      rentTerms.baseRentCent = cent;
+    }
     try {
       await api.post("/api/v1/contracts", {
         merchantId: draft.merchantId.trim(),
@@ -148,12 +185,12 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         settlementSubjectId: (draft.settlementSubjectId.trim() || draft.contractSubjectId.trim()),
         effectiveDate: draft.effectiveDate,
         expiryDate: draft.expiryDate,
-        rentTerms: Number.isFinite(cent) && cent > 0 ? { baseRentCent: cent } : {},
+        rentTerms,
         commissionMode: draft.commissionMode,
         energyFeeBasis: draft.energyFeeBasis,
       });
       setActionResult({ action: "contract_drafted", merchantId: draft.merchantId.trim() });
-      setDraft({ ...draft, merchantId: "", baseRentYuan: "" });
+      setDraft({ ...draft, merchantId: "", baseRentYuan: "", perSqmYuan: "" });
       setCreateOpen(false);
       reload();
     } catch (createError) {
@@ -425,7 +462,27 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                 <>
                   <label>生效日期<CnDatePicker aria-label="生效日期" value={draft.effectiveDate} onChange={(v) => setDraft({ ...draft, effectiveDate: v })} /></label>
                   <label>到期日期<CnDatePicker aria-label="到期日期" value={draft.expiryDate} onChange={(v) => setDraft({ ...draft, expiryDate: v })} /></label>
-                  <label>月租金（元）<input aria-label="月租金（元）" type="number" min="0" placeholder="月租金（元）" value={draft.baseRentYuan} onChange={(e) => setDraft({ ...draft, baseRentYuan: e.target.value })} /></label>
+                  <label>租金口径
+                    <select aria-label="租金口径" value={draft.rentMode} onChange={(e) => setDraft({ ...draft, rentMode: e.target.value })}>
+                      <option value="monthly_fixed">按月租金</option>
+                      <option value="per_sqm">按每平米单价</option>
+                    </select>
+                  </label>
+                  {draft.rentMode === "monthly_fixed" ? (
+                    <label>月租金（元）<input aria-label="月租金（元）" type="number" min="0" placeholder="月租金（元）" value={draft.baseRentYuan} onChange={(e) => setDraft({ ...draft, baseRentYuan: e.target.value })} /></label>
+                  ) : (
+                    <label>每平米单价（元/㎡）<input aria-label="每平米单价（元/㎡）" type="number" min="0" placeholder="每平米单价（元/㎡）" value={draft.perSqmYuan} onChange={(e) => setDraft({ ...draft, perSqmYuan: e.target.value })} /></label>
+                  )}
+                  {draft.rentMode === "per_sqm" ? <small style={{ color: "var(--adm-text-3)" }}>月租金 = 每平米单价 × 铺位登记面积，合同生效绑定铺位时自动固化。</small> : null}
+                  <label>收租方式
+                    <select aria-label="收租方式" value={draft.rentBillingMode} onChange={(e) => setDraft({ ...draft, rentBillingMode: e.target.value })}>
+                      <option value="fixed_only">纯月租（只收月租）</option>
+                      <option value="turnover_only">纯提成（只按营业额提成）</option>
+                      <option value="higher_of">取高（月租与提成谁高收谁）</option>
+                      <option value="sum">叠加（月租 + 提成都收）</option>
+                    </select>
+                  </label>
+                  {draft.rentBillingMode !== "fixed_only" ? <small style={{ color: "var(--adm-text-3)" }}>提成规则（阶梯档位）在合同生效后于「审批与配置」页按合同配置。</small> : null}
                 </>
               ),
             },
@@ -483,6 +540,37 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-inline-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={FLOW_CFG}
             data-testid="contract-flow-reset" onClick={() => void resetFlowToDefault()}>重置为默认链(①业务/财务/法务并行→②总经理)</PermissionButton>
+        </div>
+
+        <h3>提成租金规则（阶梯超额累进，挂合同）</h3>
+        <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>按月销售额分档，每档只对落在本档区间的销售额用本档费率（像个税）；保底=提成下限（可空），无封顶。合同「收租方式」选纯提成/取高/叠加时按此规则出账。</p>
+        <div className="admin-inline-form">
+          <input aria-label="提成-合同id" placeholder="合同 id" value={turnoverForm.contractId} onChange={(e) => setTurnoverForm({ ...turnoverForm, contractId: e.target.value })} />
+          <input aria-label="提成-商户id" placeholder="商户 id" value={turnoverForm.merchantId} onChange={(e) => setTurnoverForm({ ...turnoverForm, merchantId: e.target.value })} />
+          <input aria-label="提成-规则名" placeholder="规则名" value={turnoverForm.ruleName} onChange={(e) => setTurnoverForm({ ...turnoverForm, ruleName: e.target.value })} />
+          <input aria-label="提成-保底额（元，可空）" type="number" min="0" placeholder="保底额（元，可空）" value={turnoverForm.minYuan} onChange={(e) => setTurnoverForm({ ...turnoverForm, minYuan: e.target.value })} />
+          <label>生效起<CnDatePicker aria-label="提成生效起" value={turnoverForm.effectiveFrom} onChange={(v) => setTurnoverForm({ ...turnoverForm, effectiveFrom: v })} /></label>
+          <label>生效止（可空）<CnDatePicker aria-label="提成生效止" value={turnoverForm.effectiveTo} onChange={(v) => setTurnoverForm({ ...turnoverForm, effectiveTo: v })} /></label>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="turnover-tier-table">
+            <thead><tr><th>档序</th><th>销售额上限（万元，末档留空=无上限）</th><th>该段提成率（%）</th><th>操作</th></tr></thead>
+            <tbody>
+              {turnoverTiers.map((t, i) => (
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td><input aria-label={`提成档${i + 1}上限万元`} type="number" min="0" placeholder={i === turnoverTiers.length - 1 ? "末档无上限" : "上限（万元）"} value={t.upperWan} disabled={i === turnoverTiers.length - 1} onChange={(e) => setTurnoverTiers(turnoverTiers.map((x, j) => (j === i ? { ...x, upperWan: e.target.value } : x)))} /></td>
+                  <td><input aria-label={`提成档${i + 1}费率`} type="number" min="0" placeholder="提成率（%）" value={t.ratePct} onChange={(e) => setTurnoverTiers(turnoverTiers.map((x, j) => (j === i ? { ...x, ratePct: e.target.value } : x)))} /></td>
+                  <td><button type="button" onClick={() => setTurnoverTiers(turnoverTiers.filter((_, j) => j !== i))} disabled={turnoverTiers.length <= 1}>删</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-inline-form">
+          <button type="button" onClick={() => setTurnoverTiers([...turnoverTiers, { upperWan: "", ratePct: "" }])}>＋ 加一档</button>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["finance.turnover_rent.bill"]}
+            data-testid="turnover-rule-create" onClick={() => void submitTurnoverRule()}>建提成规则</PermissionButton>
         </div>
 
         <h3>铺位到期着色分类</h3>
