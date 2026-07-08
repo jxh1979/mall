@@ -120,6 +120,19 @@ public class TicketVerificationService {
         });
     }
 
+    /**
+     * 健壮性修复：核销落库前校验 device_id 已注册（terminal_devices.id）。未注册设备写 ticket_verifications
+     * 会违反 FK fk_ticket_verifications_device 使事务中止，连带失败留痕(audit)也在已中止事务里级联失败，
+     * 返回脏 500 掩盖原始业务错。此处先抛干净业务错 DEVICE_NOT_REGISTERED(400)，避免 FK 违反污染事务。
+     */
+    private void requireRegisteredDevice(VerificationRequest request) {
+        String deviceId = requireText(request == null ? null : request.deviceId(), "device_id");
+        if (!repository.terminalDeviceExists(deviceId)) {
+            throw ApiException.badRequest(
+                    "DEVICE_NOT_REGISTERED", "device is not registered: " + deviceId);
+        }
+    }
+
     TicketCredentialResponse refreshCredential(String ticketId, String customerId) {
         IssuedEntitlementRecord entitlement = repository.findIssuedEntitlementById(requireText(ticketId, "ticket_id"))
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
@@ -209,6 +222,7 @@ public class TicketVerificationService {
      * 对齐权威状态/事件 verification.manual_overridden。放行不自动扣减权益（是否扣减为后续策略）；权限在端点层按主管权限码控制。
      */
     VerificationResponse manualOverride(VerificationRequest request, String reason) {
+        requireRegisteredDevice(request);
         TicketCredentialRecord credential = credentialByPayload(request == null ? null : request.credentialPayload()).orElse(null);
         IssuedEntitlementRecord entitlement = credential == null
                 ? entitlementByCredential(request)
@@ -350,6 +364,8 @@ public class TicketVerificationService {
     }
 
     private VerificationResponse verifyEntitlement(VerificationRequest request, String sourceType, String clientTaskId) {
+        // 健壮性修复：先校验核销设备已注册，未注册直接干净 400，杜绝 FK 违反中止事务后的脏 500。
+        requireRegisteredDevice(request);
         // P1 清单#19：动态二维码核销取凭证不在此处因过窗口抛异常，改由下方按 window_started_at+refresh_interval
         // 真实判定刷新窗口，过窗口落 status=failed/result_reason=window_expired、window_valid=false（截图重放被拒、可追溯）。
         TicketCredentialRecord credential = credentialForVerification(request == null ? null : request.credentialPayload()).orElse(null);

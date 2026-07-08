@@ -109,6 +109,16 @@ public interface TicketingRepository {
 
     VerificationRecord saveVerification(VerificationRecord verification);
 
+    /**
+     * 健壮性修复：核销写 ticket_verifications 前校验 device_id 是否已注册（terminal_devices.id）。
+     * FK fk_ticket_verifications_device (device_id -> terminal_devices.id, NOT VALID) 对新插入强制；
+     * 未注册设备会在 INSERT 时违反 FK 使事务中止、进而连累失败留痕，掩盖原始业务错。
+     * 默认放行（=true，供内存测试替身不改）；JdbcTicketingRepository 用真实 EXISTS 查询覆写。
+     */
+    default boolean terminalDeviceExists(String deviceId) {
+        return true;
+    }
+
     List<VerificationRecord> listVerifications();
 
     Optional<VerificationRecord> findVerificationById(String id);

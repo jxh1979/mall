@@ -83,6 +83,7 @@ class TicketCredentialSignatureTests {
     @Test
     void refreshCredentialSignsCredential() {
         TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.terminalDeviceExists(any())).thenReturn(true);
         when(repository.findIssuedEntitlementById(ENTITLEMENT_ID)).thenReturn(Optional.of(activeEntitlement()));
         when(repository.findTicketTypeById(any())).thenReturn(Optional.empty()); // 默认刷新窗口 60s
         when(repository.saveTicketCredential(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -107,6 +108,7 @@ class TicketCredentialSignatureTests {
     @Test
     void refreshCredentialWithoutSignerLeavesSignatureNull() {
         TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.terminalDeviceExists(any())).thenReturn(true);
         when(repository.findIssuedEntitlementById(ENTITLEMENT_ID)).thenReturn(Optional.of(activeEntitlement()));
         when(repository.findTicketTypeById(any())).thenReturn(Optional.empty());
         when(repository.saveTicketCredential(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -133,6 +135,7 @@ class TicketCredentialSignatureTests {
         TicketCredentialRecord credential = signedCredential(now, expiresAt, signer.sign(canonical));
 
         TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.terminalDeviceExists(any())).thenReturn(true);
         IssuedEntitlementRecord entitlement = activeEntitlement();
         when(repository.findTicketCredentialByToken(TOKEN)).thenReturn(Optional.of(credential));
         when(repository.findIssuedEntitlementById(ENTITLEMENT_ID)).thenReturn(Optional.of(entitlement));
@@ -161,6 +164,7 @@ class TicketCredentialSignatureTests {
         TicketCredentialRecord tampered = signedCredential(now, tamperedExpiry, signer.sign(canonical));
 
         TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.terminalDeviceExists(any())).thenReturn(true);
         when(repository.findTicketCredentialByToken(TOKEN)).thenReturn(Optional.of(tampered));
         when(repository.findIssuedEntitlementById(ENTITLEMENT_ID)).thenReturn(Optional.of(activeEntitlement()));
         when(repository.saveVerification(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -187,6 +191,7 @@ class TicketCredentialSignatureTests {
         TicketCredentialRecord unsigned = signedCredential(now, now.plusSeconds(60), null);
 
         TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.terminalDeviceExists(any())).thenReturn(true);
         when(repository.findTicketCredentialByToken(TOKEN)).thenReturn(Optional.of(unsigned));
         when(repository.findIssuedEntitlementById(ENTITLEMENT_ID)).thenReturn(Optional.of(activeEntitlement()));
         when(repository.saveVerification(any())).thenAnswer(inv -> inv.getArgument(0));
