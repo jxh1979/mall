@@ -396,6 +396,7 @@ public class InventoryController {
             @PathVariable("order_id") String orderId,
             @RequestBody(required = false) com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
         authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.receiveTransferOrder(orderId, request));
     }
 

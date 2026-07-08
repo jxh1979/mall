@@ -302,6 +302,8 @@ public class TicketingService {
         }
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.price_variant.manage")
+    @Transactional
     public TicketPriceRuleRecord createTicketPriceRule(TicketPriceRuleRequest request) {
         return operations.executeWrite(
                 "createTicketPriceRule",

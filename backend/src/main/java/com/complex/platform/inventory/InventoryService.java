@@ -1364,9 +1364,8 @@ public class InventoryService {
         );
     }
 
-    @com.complex.platform.gate.GuardedAction(capability = "inventory.supplier.manage")
-    @Transactional
     // ── V277 跨主体流转:供货主体 + 流转单(建单→发货→扫码收货+溯源归属变更) ──
+    @Transactional
     public SupplyEntityRecord createSupplyEntity(com.complex.platform.inventory.dto.SupplyEntityRequest request) {
         return executeWrite("createSupplyEntity", request == null ? null : request.idempotencyKey(), request,
                 SupplyEntityRecord.class, "inventory.supply_entity_changed", "inventory.supply_entity_change_failed",
@@ -1412,6 +1411,12 @@ public class InventoryService {
                         repository.findSupplyEntityById(fromId).orElseThrow(() ->
                                 ApiException.notFound("SUPPLY_ENTITY_NOT_FOUND", "supply entity not found"));
                     }
+                    if (!"merchant".equals(toType)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "to_owner_type must be merchant");
+                    }
+                    if ("lending".equals(transferType) && !"merchant".equals(fromType)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "lending must be between merchants");
+                    }
                     if (actual.lines() == null || actual.lines().isEmpty()) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "transfer must have at least one line");
                     }
@@ -1428,10 +1433,14 @@ public class InventoryService {
                         if (qty <= 0) {
                             throw ApiException.badRequest("VALIDATION_FAILED", "line quantity must be positive");
                         }
+                        long unitPrice = lr.unitPriceCent() == null ? 0L : lr.unitPriceCent();
+                        if (unitPrice < 0L) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "line unit_price_cent must be non-negative");
+                        }
                         repository.saveTransferLine(new InventoryTransferLineRecord(
                                 orderId + "_l" + (idx++), orderId, requireText(lr.itemId(), "item_id"), qty,
                                 lr.traceCodes() == null ? List.of() : lr.traceCodes(),
-                                lr.unitPriceCent() == null ? 0L : lr.unitPriceCent(), now));
+                                unitPrice, now));
                     }
                     return order;
                 });
@@ -1455,7 +1464,7 @@ public class InventoryService {
 
     public InventoryTransferOrderRecord receiveTransferOrder(String orderId, com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
         String id = requireText(orderId, "order_id");
-        return executeWrite("receiveTransferOrder:" + id, id, request == null ? id : request,
+        return executeWrite("receiveTransferOrder:" + id, request == null ? null : request.idempotencyKey(), request,
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_received", "inventory.transfer_order_receive_failed",
                 "inventory.transfer_order.manage", "inventory_transfer_order",
                 () -> {
@@ -1475,13 +1484,18 @@ public class InventoryService {
                             throw ApiException.badRequest("TRACE_CODE_MISMATCH", "scanned trace code does not belong to this transfer: " + code);
                         }
                     }
+                    // 防调包:本单有随货溯源码时,收货必须逐码扫齐(空扫/漏扫拒绝),扫描集须与本单集完全一致。
+                    if (!orderCodes.isEmpty() && !new java.util.HashSet<>(scanned).equals(new java.util.HashSet<>(orderCodes))) {
+                        throw ApiException.badRequest("TRACE_CODE_INCOMPLETE",
+                                "scanned trace codes must exactly match this transfer's codes; expected " + orderCodes.size());
+                    }
                     // 溯源归属 from->to:写归属变更台账(防调包+对账)+尽力更新溯源码归属(存在则更新)。
                     int seq = 0;
                     for (String code : orderCodes) {
                         repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
                                 o.id() + "_h" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
                                 o.toOwnerType(), o.toOwnerId(), o.id(), now));
-                        repository.updateTraceCodeOwnerIfExists(code, o.toOwnerType(), o.toOwnerId(), now);
+                        repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
                     }
                     // ponytail: P1 只做归属变更+台账;收货方库存入账/供货方库存扣减留 P2(供货主体库存需 warehouse owner 泛化,两侧同期做更一致)。
                     return repository.saveTransferOrder(withTransferStatus(o, "received"));
@@ -1515,7 +1529,7 @@ public class InventoryService {
         }
         long amountCent = 0L;
         for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
-            amountCent += (long) l.quantity() * l.unitPriceCent();
+            amountCent = Math.addExact(amountCent, Math.multiplyExact((long) l.quantity(), l.unitPriceCent()));
         }
         if (amountCent <= 0L) {
             return;
@@ -1537,6 +1551,8 @@ public class InventoryService {
                 o.createdBy(), o.createdAt(), Instant.now(), o.lines());
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.supplier.manage")
+    @Transactional
     public InventorySupplierRecord createInventorySupplier(InventorySupplierRequest request) {
         return executeWrite(
                 "createInventorySupplier",

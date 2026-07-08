@@ -496,6 +496,7 @@ public class CustomerService {
      * 券核销领取(店员端·有商户范围):库存足则扣库存标 picked_up;缺货则退回积分标 refunded。
      * 客人兑换只发券(pending_pickup·不碰库存),真正扣库存/退积分发生在此。见 memory points-redemption-voucher-model。
      */
+    @com.complex.platform.gate.GuardedAction(permission = "customer.loyalty.manage")
     public CustomerPointsRedemptionRecord fulfillPointsRedemption(String redemptionId) {
         String id = requireText(redemptionId, "redemption_id");
         return executeWrite(
@@ -505,7 +506,7 @@ public class CustomerService {
                 CustomerPointsRedemptionRecord.class,
                 "customer.points_voucher_fulfilled",
                 "customer.points_voucher_fulfill_failed",
-                "not_applicable",
+                "customer.loyalty.manage",
                 "customer_points_redemption",
                 () -> {
                     Instant now = Instant.now();

@@ -1897,6 +1897,7 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_trace_ownership_history (id, trace_code, from_owner_type, from_owner_id, to_owner_type, to_owner_id, transfer_order_id, changed_at)
                 VALUES (:id, :trace_code, :from_owner_type, :from_owner_id, :to_owner_type, :to_owner_id, :transfer_order_id, :changed_at)
+                ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", h.id()).addValue("trace_code", h.traceCode())
                 .addValue("from_owner_type", h.fromOwnerType()).addValue("from_owner_id", h.fromOwnerId())
@@ -1905,11 +1906,12 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
-    public int updateTraceCodeOwnerIfExists(String traceCode, String ownerType, String ownerId, Instant now) {
+    public int updateTraceCodeOwnerIfExists(String traceCode, String fromOwnerId, String ownerType, String ownerId, Instant now) {
         return jdbcTemplate.update("""
-                UPDATE inventory_trace_codes SET owner_type = :ot, owner_id = :oid, updated_at = :now WHERE trace_code = :tc
+                UPDATE inventory_trace_codes SET owner_type = :ot, owner_id = :oid, updated_at = :now
+                 WHERE trace_code = :tc AND (owner_id = :fromId OR owner_id IS NULL)
                 """, new MapSqlParameterSource().addValue("ot", ownerType).addValue("oid", ownerId)
-                .addValue("now", offset(now)).addValue("tc", traceCode));
+                .addValue("now", offset(now)).addValue("tc", traceCode).addValue("fromId", fromOwnerId));
     }
 
     private Instant toInstant(java.sql.ResultSet rs, String col) throws java.sql.SQLException {
