@@ -87,12 +87,57 @@ public class ServiceOrderService {
 
     public PageResponse<ServiceCatalogItemRecord> listCatalog() {
         authorizationService.requirePermission("service.order.create");
-        return page(repository.listCatalog(true));
+        return page(repository.listCatalog(true, false));
     }
 
     public PageResponse<ServiceCatalogItemRecord> listCatalogAll() {
         authorizationService.requirePermission("service.catalog.manage");
-        return page(repository.listCatalog(false));
+        return page(repository.listCatalog(false, true));
+    }
+
+    public ServiceCatalogItemRecord archiveCatalogItem(String id, boolean archive, String reason) {
+        return withFailureAudit("service.catalog.archive_failed", "service.catalog.manage", "service_catalog_item", id, null, () -> {
+            authorizationService.requirePermission("service.catalog.manage");
+            repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "catalog item not found"));
+            var actor = authorizationService.currentActor();
+            String r = null;
+            if (archive) {
+                if (reason == null || reason.isBlank()) throw ApiException.badRequest("VALIDATION_FAILED", "\u5b58\u6863\u7406\u7531\u4e0d\u80fd\u4e3a\u7a7a");
+                r = reason.trim();
+            }
+            repository.archiveCatalogItem(id, archive, r, actor == null ? null : actor.id());
+            auditEventService.recordSuccess("service.catalog." + (archive ? "archived" : "unarchived"), "service.catalog.manage",
+                    "service_catalog_item", id, null, null, Map.of());
+            return repository.findCatalogItem(id).orElseThrow();
+        });
+    }
+
+    public ServiceCatalogItemRecord requestDeleteCatalogItem(String id, String reason) {
+        return withFailureAudit("service.catalog.delete_request_failed", "service.catalog.manage", "service_catalog_item", id, null, () -> {
+            authorizationService.requirePermission("service.catalog.manage");
+            var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "catalog item not found"));
+            if (item.archivedAt() == null) throw ApiException.badRequest("VALIDATION_FAILED", "\u8bf7\u5148\u5b58\u6863\u518d\u7533\u8bf7\u5220\u9664");
+            if (reason == null || reason.isBlank()) throw ApiException.badRequest("VALIDATION_FAILED", "\u5220\u9664\u7406\u7531\u4e0d\u80fd\u4e3a\u7a7a");
+            var actor = authorizationService.currentActor();
+            repository.requestDeleteCatalogItem(id, reason.trim(), actor == null ? null : actor.id());
+            auditEventService.recordSuccess("service.catalog.delete_requested", "service.catalog.manage", "service_catalog_item", id, null, null, Map.of());
+            return repository.findCatalogItem(id).orElseThrow();
+        });
+    }
+
+    public ServiceCatalogItemRecord approveDeleteCatalogItem(String id, String decision) {
+        return withFailureAudit("service.catalog.delete_approve_failed", "service.catalog.approve", "service_catalog_item", id, null, () -> {
+            authorizationService.requirePermission("service.catalog.approve");
+            var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "catalog item not found"));
+            if (!"pending".equals(item.deleteStatus())) throw ApiException.badRequest("VALIDATION_FAILED", "\u8be5\u9879\u65e0\u5f85\u5ba1\u6279\u5220\u9664");
+            var actor = authorizationService.currentActor();
+            if (actor != null && actor.id() != null && actor.id().equals(item.deleteRequestedBy()))
+                throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN", "\u4e0d\u80fd\u5ba1\u6279\u81ea\u5df1\u53d1\u8d77\u7684\u5220\u9664\u7533\u8bf7");
+            boolean approved = "approved".equals(decision);
+            repository.approveDeleteCatalogItem(id, approved);
+            auditEventService.recordSuccess("service.catalog.delete_" + (approved ? "approved" : "rejected"), "service.catalog.approve", "service_catalog_item", id, null, null, Map.of());
+            return item;
+        });
     }
 
     /** 口径④:履约人录入自己的固定收款码(存二维码内容链接,App 端重绘 QR)。 */
