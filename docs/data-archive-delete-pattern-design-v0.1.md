@@ -207,3 +207,30 @@ pending --reject[需 approve 权限]--> none
 
 ### 12.4 深色模式（PR #78 + 修 #79）
 右上角 🌙/☀ 切换按钮（localStorage 记忆选择，首次进入跟随系统 `prefers-color-scheme`）；`<html>` 打 `data-theme`；`:root[data-theme="dark"] .admin-shell/.admin-auth-shell` 覆盖全套 `--adm-*` 令牌（强调色用暖金 `#d99a2b`，呼应服务业暖调、与浅色中性深色区分）；引入 `--adm-on-accent` 令主按钮字色随主题翻转；antd 组件经 `ConfigProvider` 切 `defaultAlgorithm ↔ darkAlgorithm` 一并主题化（含 portal 内 Modal/Dropdown/Switch/Tabs）。**坑：`--adm-*` 令牌定义在 `.admin-shell` 而非 `:root`，深色覆盖须写 `:root[data-theme=dark] .admin-shell` 提高特异性，否则被更近的 `.admin-shell` 本地令牌遮蔽（内容区不变暗，只有 antd portal 变暗）。**
+
+
+## 13. 全站引导页对抗式 UI/UX 复核 + 修复(2026-07-07)
+
+对 39 个后台页做对抗式真机复核(Playwright 无头 · 1440 浅/深 + 375 · 打开创建弹窗 · 对比度/console/横滚探针),并修复发现项。
+
+### 13.1 覆盖与方法
+- **平台 32 页**(深度 14 + 广度 18)以 admin 直审。
+- **账号态守卫 7 页**(商户专区 5 + 外包 2)用**临时账号 + 临时数据法**审计,全程可逆、审后清零:
+  - 商户:存原 `password_hash` → 临时改成 admin 的 hash + 向 `user_permission_overrides` 插 `grant` 权限 → 插 `merchant_bills`/`contracts`/`contract_settlements`/`merchant_fee_notification_recipient` 各一行(scope=商户 merchant-1)→ 审填充后布局 → 删数据/删覆盖/还原 hash。
+  - 外包:库中无 `outsourced_vendor` 账号,临时建 `external_partner_orgs` + 外包账号(**`organization_id` = 项目范围**,`requireProjectScope` 读的就是它)+ 凭证 + 权限 + 插 `site_entry_reports`(`project_id=organization_id` 且 `vendor_user_id` 匹配才显)→ 审 → 全删。
+  - **清零校验**:9 张表 tmpaudit 残留全 0、覆盖表归 0、商户 hash 还原。
+- **结论**:无 Critical/High、无发布阻断;账号态守卫 + 权限门工作正确无越权;本会话交互改造(单屏/操作▾/深色/触摸/标签)零回归。
+
+### 13.2 已修复(PR #85 + #86,609 单测绿,真机验证生效)
+1. 账号类型 `platform_admin`→**平台管理员**、`outsourced_vendor`→**外包账号**(`customer/i18n/statusLabels.ts`,admin 侧 re-export)。
+2. 账单费用构成 `manual`→**手工登记**、`contract`→**合同**(`FEE_TYPE_LABELS`)。
+3. 排班/考勤/退款额度/退款规则 空表加「暂无 X」占位(`colSpan={99}` + `.admin-empty-cell`),替代裸表头。
+4. 能耗「启用」原生 `checkbox`→**antd Switch**(与新交互范式一致)。
+5. 外包进场报备**去双重报错**(`onError` 改 no-op,只留 `AdminDataState` 内联「读取失败 + 重试」卡片,不再叠加顶部全局横幅)。
+6. 顶栏窄屏(≤640px)隐藏「营业中」标签 + 用户名截断,消除长用户名下的溢出横滚。
+7. 访问治理**岗位码中文化**(auditor_internal/external、outsourced_construction/facility/security_cleaning、ops_manager → 中文)+ **职级** `lvl_m<N>_<lower/upper>` → `M<N>·初级/高级`(`AccessGovernancePage` 内 `POSITION_LABELS` + `zhPosition`/`zhLevel`)。
+
+### 13.3 本批修复(B/C/D)
+- **B 角色/权限模板显示英文(数据侧)**:`roles.role_name` 被种成 `platform_admin`/`OPS_MANAGER` 等英文码 → **数据订正**为中文名(仅英文/全大写码类,按 id 语义映射)。
+- **C 表格 UUID 截断不统一**:新增共享 `shortId()` 显示助手(长 id 显尾段 + 悬停看全),统一 id 列展示,消除「有的截断有的显全串」。
+- **D 测试脏数据**:清理 `ticket_types` 的「B1P345 Type」占位、`service_catalog` 的 AuditDance/dbg 测试项等明显测试污染(仅按明确测试标识,不碰真实业务数据)。
