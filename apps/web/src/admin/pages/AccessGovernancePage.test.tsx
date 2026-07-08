@@ -68,7 +68,7 @@ describe("AccessGovernancePage 行明细抽屉 + 零英文", () => {
     await waitFor(() => expect(screen.getByTestId("access-position-role-template-prt-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("access-position-role-template-prt-1"));
     const drawer = screen.getByTestId("row-detail-drawer");
-    expect(drawer.textContent).toContain("ops_manager");
+    expect(drawer.textContent).not.toContain("ops_manager"); // 岗位码已中文化
     expect(drawer.textContent).toContain("运营经理");
     expect(drawer.textContent).toContain("有效");
     expect(drawer.textContent).not.toContain("active");
