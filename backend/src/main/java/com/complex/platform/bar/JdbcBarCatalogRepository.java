@@ -367,26 +367,6 @@ final class JdbcBarCatalogRepository {
         return checkin;
     }
 
-    public BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification) {
-        jdbcTemplate.update("""
-                INSERT INTO bar_age_verifications (
-                    id, business_id, credential_payload, device_id, staff_id,
-                    result, provider_code, review_status, evidence_attachment_ids, created_at
-                )
-                VALUES (
-                    :id, :business_id, :credential_payload, :device_id, :staff_id,
-                    :result, :provider_code, :review_status,
-                    CAST(:evidence_attachment_ids AS jsonb), :created_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    result = EXCLUDED.result,
-                    provider_code = EXCLUDED.provider_code,
-                    review_status = EXCLUDED.review_status,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
-                """, parameterSource.ageVerificationParameters(verification));
-        return verification;
-    }
-
     public BarProductRecord saveProduct(BarProductRecord product) {
         jdbcTemplate.update("""
                 INSERT INTO bar_products (

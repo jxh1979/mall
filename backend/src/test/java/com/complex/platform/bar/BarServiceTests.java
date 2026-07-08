@@ -3183,11 +3183,6 @@ class BarServiceTests {
         }
 
         @Override
-        public BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification) {
-            return verification;
-        }
-
-        @Override
         public BarProductRecord saveProduct(BarProductRecord product) {
             products.put(product.id(), product);
             return product;
