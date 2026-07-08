@@ -88,6 +88,7 @@ public class InventoryService {
     private final RiskAlertService riskAlertService;
     private final NotificationService notificationService;
     private final CustomerRepository customerRepository;
+    private final com.complex.platform.finance.FinanceRepository financeRepository;
 
     // 本域风险级 → 统一表 RISK_LEVELS({normal,suspicious,high,critical}) 映射。
     // inventory 用的 medium 在统一表无对应枚举，必须映射为 suspicious，否则 report 抛 VALIDATION_FAILED。
@@ -105,7 +106,7 @@ public class InventoryService {
             TraceabilityService traceabilityService
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, null, null, null);
+                terminalSwitchGuard, traceabilityService, null, null, null, null);
     }
 
     public InventoryService(
@@ -118,7 +119,7 @@ public class InventoryService {
             RiskAlertService riskAlertService
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, riskAlertService, null, null);
+                terminalSwitchGuard, traceabilityService, riskAlertService, null, null, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -131,7 +132,8 @@ public class InventoryService {
             TraceabilityService traceabilityService,
             RiskAlertService riskAlertService,
             NotificationService notificationService,
-            CustomerRepository customerRepository
+            CustomerRepository customerRepository,
+            com.complex.platform.finance.FinanceRepository financeRepository
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
@@ -142,6 +144,7 @@ public class InventoryService {
         this.riskAlertService = riskAlertService;
         this.notificationService = notificationService;
         this.customerRepository = customerRepository;
+        this.financeRepository = financeRepository;
         this.highValueReviewService = new InventoryHighValueReviewService(
                 repository, idempotencyService, auditEventService, authorizationService);
         this.stockMovementService = new InventoryStockMovementService(
@@ -1359,6 +1362,199 @@ public class InventoryService {
                                 .orElseGet(repository::listInventorySuppliers);
                 }
         );
+    }
+
+    // ── V277 跨主体流转:供货主体 + 流转单(建单→发货→扫码收货+溯源归属变更) ──
+    @Transactional
+    public SupplyEntityRecord createSupplyEntity(com.complex.platform.inventory.dto.SupplyEntityRequest request) {
+        return executeWrite("createSupplyEntity", request == null ? null : request.idempotencyKey(), request,
+                SupplyEntityRecord.class, "inventory.supply_entity_changed", "inventory.supply_entity_change_failed",
+                "inventory.supply_entity.manage", "supply_entity",
+                () -> {
+                    com.complex.platform.inventory.dto.SupplyEntityRequest actual = requireRequest(request);
+                    Instant now = Instant.now();
+                    return repository.saveSupplyEntity(new SupplyEntityRecord(
+                            "supply_" + slug(actual.idempotencyKey()),
+                            requireText(actual.name(), "name"),
+                            trimToDefault(actual.entityType(), "liquor"),
+                            "platform",
+                            trimToDefault(actual.status(), "active"),
+                            trimToNull(actual.settlementAccount()),
+                            null, now, now));
+                });
+    }
+
+    public PageResponse<SupplyEntityRecord> listSupplyEntities() {
+        authorizationService.requirePermission("inventory.supply_entity.view");
+        List<SupplyEntityRecord> rows = repository.listSupplyEntities();
+        return new PageResponse<>(rows, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, rows.size());
+    }
+
+    public InventoryTransferOrderRecord createTransferOrder(com.complex.platform.inventory.dto.CreateTransferOrderRequest request) {
+        return executeWrite("createTransferOrder", request == null ? null : request.idempotencyKey(), request,
+                InventoryTransferOrderRecord.class, "inventory.transfer_order_created", "inventory.transfer_order_create_failed",
+                "inventory.transfer_order.manage", "inventory_transfer_order",
+                () -> {
+                    com.complex.platform.inventory.dto.CreateTransferOrderRequest actual = requireRequest(request);
+                    String transferType = requireText(actual.transferType(), "transfer_type");
+                    if (!"supply".equals(transferType) && !"lending".equals(transferType)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "transfer_type must be supply or lending");
+                    }
+                    String fromType = requireText(actual.fromOwnerType(), "from_owner_type");
+                    String fromId = requireText(actual.fromOwnerId(), "from_owner_id");
+                    String toType = requireText(actual.toOwnerType(), "to_owner_type");
+                    String toId = requireText(actual.toOwnerId(), "to_owner_id");
+                    if ("supply".equals(transferType)) {
+                        if (!"supply_entity".equals(fromType)) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "supply transfer must originate from a supply_entity");
+                        }
+                        repository.findSupplyEntityById(fromId).orElseThrow(() ->
+                                ApiException.notFound("SUPPLY_ENTITY_NOT_FOUND", "supply entity not found"));
+                    }
+                    if (!"merchant".equals(toType)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "to_owner_type must be merchant");
+                    }
+                    if ("lending".equals(transferType) && !"merchant".equals(fromType)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "lending must be between merchants");
+                    }
+                    if (actual.lines() == null || actual.lines().isEmpty()) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "transfer must have at least one line");
+                    }
+                    Instant now = Instant.now();
+                    String orderId = "trf_" + slug(actual.idempotencyKey());
+                    InventoryTransferOrderRecord order = new InventoryTransferOrderRecord(orderId, transferType,
+                            trimToNull(actual.lendingMode()), fromType, fromId, toType, toId,
+                            trimToNull(actual.fromLocationId()), trimToNull(actual.toLocationId()),
+                            "created", trimToNull(actual.operatorNote()), null, now, now, List.of());
+                    repository.saveTransferOrder(order);
+                    int idx = 0;
+                    for (com.complex.platform.inventory.dto.TransferLineRequest lr : actual.lines()) {
+                        int qty = lr.quantity() == null ? 0 : lr.quantity();
+                        if (qty <= 0) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "line quantity must be positive");
+                        }
+                        long unitPrice = lr.unitPriceCent() == null ? 0L : lr.unitPriceCent();
+                        if (unitPrice < 0L) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "line unit_price_cent must be non-negative");
+                        }
+                        repository.saveTransferLine(new InventoryTransferLineRecord(
+                                orderId + "_l" + (idx++), orderId, requireText(lr.itemId(), "item_id"), qty,
+                                lr.traceCodes() == null ? List.of() : lr.traceCodes(),
+                                unitPrice, now));
+                    }
+                    return order;
+                });
+    }
+
+    public InventoryTransferOrderRecord shipTransferOrder(String orderId) {
+        String id = requireText(orderId, "order_id");
+        return executeWrite("shipTransferOrder:" + id, id, id,
+                InventoryTransferOrderRecord.class, "inventory.transfer_order_shipped", "inventory.transfer_order_ship_failed",
+                "inventory.transfer_order.manage", "inventory_transfer_order",
+                () -> {
+                    InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                    if (!"created".equals(o.status())) {
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_CREATED", "only created orders can be shipped");
+                    }
+                    recordTransferSettlementOnShip(o, Instant.now());
+                    return repository.saveTransferOrder(withTransferStatus(o, "shipped"));
+                });
+    }
+
+    public InventoryTransferOrderRecord receiveTransferOrder(String orderId, com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+        String id = requireText(orderId, "order_id");
+        return executeWrite("receiveTransferOrder:" + id, request == null ? null : request.idempotencyKey(), request,
+                InventoryTransferOrderRecord.class, "inventory.transfer_order_received", "inventory.transfer_order_receive_failed",
+                "inventory.transfer_order.manage", "inventory_transfer_order",
+                () -> {
+                    InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                    if (!"shipped".equals(o.status())) {
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_SHIPPED", "only shipped orders can be received");
+                    }
+                    Instant now = Instant.now();
+                    java.util.LinkedHashSet<String> orderCodes = new java.util.LinkedHashSet<>();
+                    for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
+                        orderCodes.addAll(l.traceCodes());
+                    }
+                    List<String> scanned = request == null || request.scannedTraceCodes() == null ? List.of() : request.scannedTraceCodes();
+                    for (String code : scanned) {
+                        if (!orderCodes.contains(code)) {
+                            throw ApiException.badRequest("TRACE_CODE_MISMATCH", "scanned trace code does not belong to this transfer: " + code);
+                        }
+                    }
+                    // 防调包:本单有随货溯源码时,收货必须逐码扫齐(空扫/漏扫拒绝),扫描集须与本单集完全一致。
+                    if (!orderCodes.isEmpty() && !new java.util.HashSet<>(scanned).equals(new java.util.HashSet<>(orderCodes))) {
+                        throw ApiException.badRequest("TRACE_CODE_INCOMPLETE",
+                                "scanned trace codes must exactly match this transfer's codes; expected " + orderCodes.size());
+                    }
+                    // 溯源归属 from->to:写归属变更台账(防调包+对账)+尽力更新溯源码归属(存在则更新)。
+                    int seq = 0;
+                    for (String code : orderCodes) {
+                        // 防调包(原子):CAS 只在归属=出让方或无主时翻转;命中0行且码已存在=归属第三方(或并发被改走)→拒并回滚。
+                        // 命中0行且码不存在=P1 随货新码(归属登记泛化待 P2)→放行。CAS 结果即业务判定,消除 check-then-act 竞态。
+                        int affected = repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
+                        if (affected == 0 && repository.traceCodeExists(code)) {
+                            throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
+                                    "trace code belongs to another party, cannot receive: " + code);
+                        }
+                        repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
+                                o.id() + "_h" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
+                                o.toOwnerType(), o.toOwnerId(), o.id(), now));
+                    }
+                    // ponytail: P1 只做归属变更+台账;收货方库存入账/供货方库存扣减留 P2(供货主体库存需 warehouse owner 泛化,两侧同期做更一致)。
+                    return repository.saveTransferOrder(withTransferStatus(o, "received"));
+                });
+    }
+
+    public InventoryTransferOrderRecord getTransferOrder(String orderId) {
+        authorizationService.requirePermission("inventory.transfer_order.view");
+        InventoryTransferOrderRecord o = repository.findTransferOrderById(requireText(orderId, "order_id")).orElseThrow(() ->
+                ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+        return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
+                o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
+                o.createdBy(), o.createdAt(), o.updatedAt(), repository.listTransferLinesByOrder(o.id()));
+    }
+
+    public PageResponse<InventoryTransferOrderRecord> listTransferOrders() {
+        authorizationService.requirePermission("inventory.transfer_order.view");
+        List<InventoryTransferOrderRecord> rows = repository.listTransferOrders();
+        return new PageResponse<>(rows, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, rows.size());
+    }
+
+    /**
+     * 发货即记结算(2026-07-08 用户拍板:发货时即生成应付·借调"借"默认不计占用费=不记)。并入现有应收应付台账。
+     * 供货调拨/借调买断→按货款(Σ 数量×单价)生成"收货方应付出让方"应付项;金额为0(免费供货/未定价)或借用型=不记。
+     */
+    private void recordTransferSettlementOnShip(InventoryTransferOrderRecord o, Instant now) {
+        boolean billable = "supply".equals(o.transferType())
+                || ("lending".equals(o.transferType()) && "purchase".equals(o.lendingMode()));
+        if (!billable || financeRepository == null) {
+            return;
+        }
+        long amountCent = 0L;
+        for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
+            amountCent = Math.addExact(amountCent, Math.multiplyExact((long) l.quantity(), l.unitPriceCent()));
+        }
+        if (amountCent <= 0L) {
+            return;
+        }
+        String itemId = "arap_trf_" + o.id();
+        financeRepository.saveArApItem(new com.complex.platform.finance.ArApItemRecord(
+                itemId, "ARAP-TRF-" + o.id(), "payable",
+                o.fromOwnerId(), "inventory_transfer", o.id(),
+                amountCent, 0L, amountCent, "CNY",
+                java.time.LocalDate.now(java.time.ZoneOffset.UTC), null, "pending_payment",
+                now, now, o.toOwnerId()));
+        financeRepository.saveArApItemSource(new com.complex.platform.finance.ArApItemSourceRecord(
+                "arap_src_trf_" + o.id(), itemId, "inventory_transfer", o.id(), amountCent, now));
+    }
+
+    private InventoryTransferOrderRecord withTransferStatus(InventoryTransferOrderRecord o, String status) {
+        return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
+                o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), status, o.operatorNote(),
+                o.createdBy(), o.createdAt(), Instant.now(), o.lines());
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.supplier.manage")

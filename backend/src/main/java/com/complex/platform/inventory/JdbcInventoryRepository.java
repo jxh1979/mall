@@ -1785,6 +1785,157 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("bound_ref", boundRef));
     }
 
+    // ── V277 跨主体流转 ──
+    @Override
+    public SupplyEntityRecord saveSupplyEntity(SupplyEntityRecord e) {
+        jdbcTemplate.update("""
+                INSERT INTO supply_entities (id, name, entity_type, level, status, settlement_account, created_by, created_at, updated_at)
+                VALUES (:id, :name, :entity_type, :level, :status, :settlement_account, :created_by, :created_at, :updated_at)
+                ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name, entity_type = EXCLUDED.entity_type, status = EXCLUDED.status,
+                    settlement_account = EXCLUDED.settlement_account, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", e.id()).addValue("name", e.name()).addValue("entity_type", e.entityType())
+                .addValue("level", e.level()).addValue("status", e.status())
+                .addValue("settlement_account", e.settlementAccount()).addValue("created_by", e.createdBy())
+                .addValue("created_at", offset(e.createdAt())).addValue("updated_at", offset(e.updatedAt())));
+        return e;
+    }
+
+    @Override
+    public List<SupplyEntityRecord> listSupplyEntities() {
+        return jdbcTemplate.query("""
+                SELECT id, name, entity_type, level, status, settlement_account, created_by, created_at, updated_at
+                  FROM supply_entities ORDER BY created_at DESC, id
+                """, (rs, n) -> mapSupplyEntity(rs));
+    }
+
+    @Override
+    public Optional<SupplyEntityRecord> findSupplyEntityById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, name, entity_type, level, status, settlement_account, created_by, created_at, updated_at
+                  FROM supply_entities WHERE id = :id
+                """, Map.of("id", id), (rs, n) -> mapSupplyEntity(rs)).stream().findFirst();
+    }
+
+    private SupplyEntityRecord mapSupplyEntity(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new SupplyEntityRecord(rs.getString("id"), rs.getString("name"), rs.getString("entity_type"),
+                rs.getString("level"), rs.getString("status"), rs.getString("settlement_account"),
+                rs.getString("created_by"), toInstant(rs, "created_at"), toInstant(rs, "updated_at"));
+    }
+
+    @Override
+    public InventoryTransferOrderRecord saveTransferOrder(InventoryTransferOrderRecord o) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_transfer_orders (id, transfer_type, lending_mode, from_owner_type, from_owner_id,
+                    to_owner_type, to_owner_id, from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at)
+                VALUES (:id, :transfer_type, :lending_mode, :from_owner_type, :from_owner_id,
+                    :to_owner_type, :to_owner_id, :from_location_id, :to_location_id, :status, :operator_note, :created_by, :created_at, :updated_at)
+                ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, operator_note = EXCLUDED.operator_note, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", o.id()).addValue("transfer_type", o.transferType()).addValue("lending_mode", o.lendingMode())
+                .addValue("from_owner_type", o.fromOwnerType()).addValue("from_owner_id", o.fromOwnerId())
+                .addValue("to_owner_type", o.toOwnerType()).addValue("to_owner_id", o.toOwnerId())
+                .addValue("from_location_id", o.fromLocationId()).addValue("to_location_id", o.toLocationId())
+                .addValue("status", o.status()).addValue("operator_note", o.operatorNote()).addValue("created_by", o.createdBy())
+                .addValue("created_at", offset(o.createdAt())).addValue("updated_at", offset(o.updatedAt())));
+        return o;
+    }
+
+    @Override
+    public void saveTransferLine(InventoryTransferLineRecord l) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_transfer_lines (id, transfer_order_id, item_id, quantity, trace_codes, unit_price_cent, created_at)
+                VALUES (:id, :transfer_order_id, :item_id, :quantity, CAST(:trace_codes AS jsonb), :unit_price_cent, :created_at)
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", l.id()).addValue("transfer_order_id", l.transferOrderId()).addValue("item_id", l.itemId())
+                .addValue("quantity", l.quantity()).addValue("trace_codes", writeList(l.traceCodes()))
+                .addValue("unit_price_cent", l.unitPriceCent()).addValue("created_at", offset(l.createdAt())));
+    }
+
+    @Override
+    public Optional<InventoryTransferOrderRecord> findTransferOrderById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, transfer_type, lending_mode, from_owner_type, from_owner_id, to_owner_type, to_owner_id,
+                       from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at
+                  FROM inventory_transfer_orders WHERE id = :id
+                """, Map.of("id", id), (rs, n) -> mapTransferOrder(rs)).stream().findFirst();
+    }
+
+    @Override
+    public List<InventoryTransferOrderRecord> listTransferOrders() {
+        return jdbcTemplate.query("""
+                SELECT id, transfer_type, lending_mode, from_owner_type, from_owner_id, to_owner_type, to_owner_id,
+                       from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at
+                  FROM inventory_transfer_orders ORDER BY created_at DESC, id
+                """, (rs, n) -> mapTransferOrder(rs));
+    }
+
+    @Override
+    public List<InventoryTransferLineRecord> listTransferLinesByOrder(String orderId) {
+        return jdbcTemplate.query("""
+                SELECT id, transfer_order_id, item_id, quantity, trace_codes, unit_price_cent, created_at
+                  FROM inventory_transfer_lines WHERE transfer_order_id = :oid ORDER BY created_at, id
+                """, Map.of("oid", orderId), (rs, n) -> mapTransferLine(rs));
+    }
+
+    private InventoryTransferOrderRecord mapTransferOrder(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new InventoryTransferOrderRecord(rs.getString("id"), rs.getString("transfer_type"), rs.getString("lending_mode"),
+                rs.getString("from_owner_type"), rs.getString("from_owner_id"), rs.getString("to_owner_type"), rs.getString("to_owner_id"),
+                rs.getString("from_location_id"), rs.getString("to_location_id"), rs.getString("status"), rs.getString("operator_note"),
+                rs.getString("created_by"), toInstant(rs, "created_at"), toInstant(rs, "updated_at"), List.of());
+    }
+
+    private InventoryTransferLineRecord mapTransferLine(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new InventoryTransferLineRecord(rs.getString("id"), rs.getString("transfer_order_id"), rs.getString("item_id"),
+                rs.getInt("quantity"), readStringList(rs.getString("trace_codes")), rs.getLong("unit_price_cent"), toInstant(rs, "created_at"));
+    }
+
+    @Override
+    public void saveTraceOwnershipHistory(InventoryTraceOwnershipHistoryRecord h) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_trace_ownership_history (id, trace_code, from_owner_type, from_owner_id, to_owner_type, to_owner_id, transfer_order_id, changed_at)
+                VALUES (:id, :trace_code, :from_owner_type, :from_owner_id, :to_owner_type, :to_owner_id, :transfer_order_id, :changed_at)
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", h.id()).addValue("trace_code", h.traceCode())
+                .addValue("from_owner_type", h.fromOwnerType()).addValue("from_owner_id", h.fromOwnerId())
+                .addValue("to_owner_type", h.toOwnerType()).addValue("to_owner_id", h.toOwnerId())
+                .addValue("transfer_order_id", h.transferOrderId()).addValue("changed_at", offset(h.changedAt())));
+    }
+
+    @Override
+    public boolean traceCodeExists(String traceCode) {
+        Boolean e = jdbcTemplate.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM inventory_trace_codes WHERE trace_code = :tc)
+                """, new MapSqlParameterSource().addValue("tc", traceCode), Boolean.class);
+        return Boolean.TRUE.equals(e);
+    }
+
+    @Override
+    public int updateTraceCodeOwnerIfExists(String traceCode, String fromOwnerId, String ownerType, String ownerId, Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE inventory_trace_codes SET owner_type = :ot, owner_id = :oid, updated_at = :now
+                 WHERE trace_code = :tc AND (owner_id = :fromId OR owner_id IS NULL)
+                """, new MapSqlParameterSource().addValue("ot", ownerType).addValue("oid", ownerId)
+                .addValue("now", offset(now)).addValue("tc", traceCode).addValue("fromId", fromOwnerId));
+    }
+
+    private Instant toInstant(java.sql.ResultSet rs, String col) throws java.sql.SQLException {
+        OffsetDateTime v = rs.getObject(col, OffsetDateTime.class);
+        return v == null ? null : v.toInstant();
+    }
+
+    private List<String> readStringList(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("transfer line trace_codes not deserializable", e);
+        }
+    }
+
     private String writeList(List<String> value) {
         try {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);
