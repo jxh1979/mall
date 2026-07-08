@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { shortId } from "../format/ids";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
@@ -280,7 +281,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-meter-${row.id}`}
                 onClick={() => openMeterDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMeterDetail(row); } }}>
-                <td>{row.id}</td><td>{row.name}</td><td>{zh(row.meterType)}</td><td>{zh(row.gatherObject)}</td><td>{row.parentMeterId ?? "-"}</td>
+                <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.meterType)}</td><td>{zh(row.gatherObject)}</td><td>{row.parentMeterId ?? "-"}</td>
                 <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink></td><td>{zh(row.readMode)}</td><td>{row.active === false ? "停用" : "启用"}</td>
                 <td onClick={(event) => event.stopPropagation()}><IconButton icon={<SelectOutlined />} tip="选中该表计填入表单" onClick={() => selectMeter(row)} testId={`energy-meter-select-${row.id}`} /></td>
               </tr>
@@ -372,7 +373,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-reading-${row.id}`}
                 onClick={() => openReadingDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openReadingDetail(row); } }}>
-                <td>{row.id}</td><td>{row.meterId}</td><td>{row.period}</td>
+                <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.meterId}</td><td>{row.period}</td>
                 <td>{numberText(row.readingValue)} / {numberText(row.prevReadingValue)} / {numberText(row.consumption)}</td>
                 <td>{statusBadge(row.status)}</td><td>{row.abnormalReason ?? "-"}</td>
                 <td>{row.readerId ?? "-"} / {row.reviewedBy ?? "-"}</td>
@@ -409,7 +410,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-settlement-${row.id}`}
                 onClick={() => openSettlementDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSettlementDetail(row); } }}>
-                <td>{row.id}</td>
+                <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td>
                 <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink></td>
                 <td>{row.period}</td><td>{zh(row.energyFeeBasis)}</td><td>{yuanFromCent(row.amountCent)}</td><td>{row.arApItemId ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td>
               </tr>

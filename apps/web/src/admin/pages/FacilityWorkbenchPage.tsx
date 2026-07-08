@@ -2,6 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { shortId } from "../format/ids";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
@@ -466,7 +467,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-equipment-${row.id}`}
                 onClick={() => openEquipmentDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEquipmentDetail(row); } }}>
-                <td>{row.id}</td><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{statusBadge(row.status)}</td>
+                <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{statusBadge(row.status)}</td>
                 <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td><td>{cnDate(row.nextMaintenanceDue)}</td>
                 <td>{zh(row.alarmSource)} {row.alarmNote ?? ""}</td>
                 <td onClick={(event) => event.stopPropagation()}>
@@ -614,7 +615,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-templates-table">
             <thead><tr><th>id</th><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>状态</th></tr></thead>
-            <tbody>{inspectionTemplates.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-template-${row.id}`} onClick={() => openInspectionTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionTemplateDetail(row); } }}><td>{row.id}</td><td>{row.name}</td><td>{zh(row.inspectionType)}</td><td>{row.cycleDays ?? "-"}</td><td>{zh(row.abnormalMode)}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
+            <tbody>{inspectionTemplates.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-template-${row.id}`} onClick={() => openInspectionTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionTemplateDetail(row); } }}><td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.inspectionType)}</td><td>{row.cycleDays ?? "-"}</td><td>{zh(row.abnormalMode)}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-inspection-template-form">
@@ -642,7 +643,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-task-${row.id}`}
                 onClick={() => openInspectionTaskDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionTaskDetail(row); } }}>
-                <td>{row.id}</td><td>{row.title}</td><td>{zh(row.inspectionType)} / {zh(row.scheduleMode)}</td><td>{statusBadge(row.status)}</td><td><span onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></span> / {cnDate(row.dueDate ?? row.scheduledDate)}</td><td>{row.workOrderId ?? "-"}</td>
+                <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.title}</td><td>{zh(row.inspectionType)} / {zh(row.scheduleMode)}</td><td>{statusBadge(row.status)}</td><td><span onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></span> / {cnDate(row.dueDate ?? row.scheduledDate)}</td><td>{row.workOrderId ?? "-"}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`facility-inspection-select-task-${row.id}`} onClick={() => void selectInspectionTask(row.id)}>记录</button>
                   {row.status === "pending" ? <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid={`facility-inspection-start-${row.id}`} onClick={() => void startInspectionTask(row.id)}>开始</PermissionButton> : null}
@@ -664,7 +665,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-records-table">
             <thead><tr><th>记录</th><th>任务</th><th>结果</th><th>巡检人</th><th>异常</th><th>时间</th></tr></thead>
-            <tbody>{inspectionRecords.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-record-${row.id}`} onClick={() => openInspectionRecordDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionRecordDetail(row); } }}><td>{row.id}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{cnDate(row.recordedAt)}</td></tr>)}</tbody>
+            <tbody>{inspectionRecords.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-record-${row.id}`} onClick={() => openInspectionRecordDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionRecordDetail(row); } }}><td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{cnDate(row.recordedAt)}</td></tr>)}</tbody>
           </table>
         </div>
           </>) },
