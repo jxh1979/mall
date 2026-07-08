@@ -40,12 +40,16 @@ describe("AmusementSafetyPage 引导式新建巡检", () => {
     fireEvent.click(screen.getByTestId("amusement-safety-create-open"));
     // 检查项默认值即可，改为自定义
     fireEvent.change(screen.getByTestId("amusement-safety-create-title"), { target: { value: "开放前护栏检查" } });
+    // 选真实项目/设备(get mock 返回 [ROW]，故项目下拉含 insp-1)。
+    fireEvent.change(screen.getByTestId("amusement-safety-create-project"), { target: { value: "insp-1" } });
+    fireEvent.change(screen.getByTestId("amusement-safety-create-device"), { target: { value: "DEV-1" } });
+    fireEvent.change(screen.getByTestId("amusement-safety-create-result"), { target: { value: "fail" } });
     fireEvent.click(screen.getByTestId("amusement-safety-guided-next"));
     // 确认步 → 提交
     fireEvent.click(screen.getByTestId("amusement-safety-create"));
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/amusement/safety-inspections")).toBe(true));
     const call = post.mock.calls.find((c) => c[0] === "/api/v1/amusement/safety-inspections");
-    expect(call?.[1]).toMatchObject({ overallResult: "pending_rectification", items: [{ itemName: "开放前护栏检查", itemCode: "guardrail" }] });
+    expect(call?.[1]).toMatchObject({ projectId: "insp-1", deviceId: "DEV-1", overallResult: "fail", items: [{ itemName: "开放前护栏检查", itemCode: "guardrail" }] });
     await waitFor(() => expect(screen.queryByTestId("amusement-safety-guided")).toBeNull());
   });
 
@@ -54,6 +58,7 @@ describe("AmusementSafetyPage 引导式新建巡检", () => {
     renderPage(makeApi(post));
     await waitFor(() => expect(screen.getByTestId("amusement-safety-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("amusement-safety-create-open"));
+    fireEvent.change(screen.getByTestId("amusement-safety-create-project"), { target: { value: "insp-1" } });
     fireEvent.change(screen.getByTestId("amusement-safety-create-title"), { target: { value: "" } });
     fireEvent.click(screen.getByTestId("amusement-safety-guided-next"));
     await waitFor(() => expect(screen.getByTestId("amusement-safety-guided-error").textContent).toContain("检查项"));
