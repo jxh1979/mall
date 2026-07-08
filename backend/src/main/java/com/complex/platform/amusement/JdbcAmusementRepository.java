@@ -1346,7 +1346,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                     :id, :project_id, :device_id, :provider_code, :status, :last_seen_at,
                     CAST(:raw_status_json AS jsonb), :created_at, :updated_at
                 )
-                ON CONFLICT (id) DO UPDATE SET
+                ON CONFLICT (device_id) DO UPDATE SET
                     provider_code = EXCLUDED.provider_code,
                     status = EXCLUDED.status,
                     last_seen_at = EXCLUDED.last_seen_at,

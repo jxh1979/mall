@@ -127,6 +127,12 @@ final class AmusementMaintenanceService {
         // submitted=待确认前置；pass 进入待主管确认，fail 保持已提交（不可进入确认流程）。
         String status = "pass".equals(result) ? "pending_confirm" : "submitted";
         Instant now = Instant.now();
+        // 接线:登记维保记录 → 设备进入维护状态。
+        String maintDeviceId = trimToNull(actual.deviceId());
+        if (maintDeviceId != null) {
+            repository.saveDeviceStatus(new AmusementDeviceStatusRecord(
+                    "devstat_" + maintDeviceId, projectId, maintDeviceId, "internal", "maintenance", now, java.util.Map.of(), now, now));
+        }
         return repository.saveMaintenanceRecord(new AmusementMaintenanceRecord(
                 "maintenance_" + slug(actual.idempotencyKey()),
                 projectId,
@@ -172,6 +178,11 @@ final class AmusementMaintenanceService {
             throw ApiException.conflict("PROJECT_NOT_IN_MAINTENANCE", "project is not in maintenance");
         }
         Instant now = Instant.now();
+        // 接线:复工 → 设备恢复运行状态。
+        if (existing.deviceId() != null && !existing.deviceId().isBlank()) {
+            repository.saveDeviceStatus(new AmusementDeviceStatusRecord(
+                    "devstat_" + existing.deviceId(), existing.projectId(), existing.deviceId(), "internal", "operational", now, java.util.Map.of(), now, now));
+        }
         return repository.saveMaintenanceRecord(new AmusementMaintenanceRecord(
                 existing.id(),
                 existing.projectId(),

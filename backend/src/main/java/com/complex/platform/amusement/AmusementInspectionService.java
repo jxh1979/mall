@@ -193,6 +193,13 @@ final class AmusementInspectionService {
         // V114 结构化补强：巡检人结构化落库；inspection_result 直接派生自 overall_result（同枚举域，便于看板/审计读结构化字段）；
         // 异常标记：overall 非 pass 即异常，abnormal_note 取请求填报。
         boolean abnormal = !"pass".equals(overall);
+        // 接线:巡检结果确定 → 更新设备运行状态台账(合格=运行·否则=待整改)。
+        String inspectedDeviceId = trimToNull(actual.deviceId());
+        if (inspectedDeviceId != null) {
+            repository.saveDeviceStatus(new AmusementDeviceStatusRecord(
+                    "devstat_" + inspectedDeviceId, projectId, inspectedDeviceId, "internal",
+                    "pass".equals(overall) ? "operational" : "inspection_failed", now, java.util.Map.of(), now, now));
+        }
         return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 "inspection_" + slug(actual.idempotencyKey()),
                 projectId,
