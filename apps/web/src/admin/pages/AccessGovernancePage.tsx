@@ -31,6 +31,26 @@ type AccessGrantSummary = {
 };
 
 const ASSIGN = ["access.role.assign"];
+
+// 岗位/职级码中文化（对抗审计 #4：访问治理表原显英文机读码）。岗位码有限、职级码按 lvl_m<N>_<lower/upper> 规则解析。
+const POSITION_LABELS: Record<string, string> = {
+  auditor_internal: "内部审计",
+  auditor_external: "外部审计",
+  outsourced_construction: "外包施工",
+  outsourced_facility: "外包设施",
+  outsourced_security_cleaning: "外包安保保洁",
+  ops_manager: "运营经理",
+};
+function zhPosition(code?: string | null): string {
+  if (!code) return "—";
+  return POSITION_LABELS[code] ?? code;
+}
+function zhLevel(code?: string | null): string {
+  if (!code) return "—";
+  const m = /^lvl_m(\d+)(?:_(lower|upper))?$/.exec(code);
+  if (m) return m[2] ? `M${m[1]}·${m[2] === "lower" ? "初级" : "高级"}` : `M${m[1]}`;
+  return code;
+}
 const GRANT_APPLY = ["access.grant_request.apply"];
 const GRANT_VIEW = ["access.grant_request.view"];
 const GRANT_REVIEW = ["access.grant_request.review", "governance.supervisor_review.approve"];
@@ -265,10 +285,10 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
   function openTemplateDetail(row: PositionRoleTemplateRow) {
     const role = roles.find((item) => item.id === row.roleId);
     setDetail({
-      title: `岗位角色模板 · ${row.positionCode}`,
+      title: `岗位角色模板 · ${zhPosition(row.positionCode)}`,
       fields: [
-        { label: "岗位", value: row.positionCode },
-        { label: "职级", value: row.staffLevelId },
+        { label: "岗位", value: zhPosition(row.positionCode) },
+        { label: "职级", value: zhLevel(row.staffLevelId) },
         { label: "角色", value: role ? roleLabel(role) : (row.roleId ?? "—") },
         { label: "权限模板", value: row.templateId ?? "—" },
         { label: "组织", value: row.organizationId ?? "—" },
@@ -286,7 +306,7 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
         { label: "类型", value: formatBusinessStatus(row.requestType) },
         { label: "目标用户", value: row.targetUserId },
         { label: "角色", value: row.targetRoleId ?? "—" },
-        { label: "岗位", value: row.positionCode ? `${row.positionCode} / ${row.staffLevelId ?? "—"}` : "—" },
+        { label: "岗位", value: row.positionCode ? `${zhPosition(row.positionCode)} / ${zhLevel(row.staffLevelId)}` : "—" },
         { label: "权限码", value: row.permissionCodes?.length ? row.permissionCodes.join("、") : "—" },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "单次有效", value: row.singleUse ? "是" : "否" },
@@ -302,10 +322,10 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
 
   function openSummaryPositionDetail(row: AccessGrantPositionSummaryRow) {
     setDetail({
-      title: `岗位授权建议 · ${row.positionCode}`,
+      title: `岗位授权建议 · ${zhPosition(row.positionCode)}`,
       fields: [
         { label: "类型", value: "岗位" },
-        { label: "岗位", value: `${row.positionCode} / ${row.staffLevelId ?? "—"}` },
+        { label: "岗位", value: `${zhPosition(row.positionCode)} / ${zhLevel(row.staffLevelId)}` },
         { label: "权限", value: row.permissionCode ?? "—" },
         { label: "次数", value: row.requestCount },
         { label: "建议", value: row.recommendation ?? "—" },
@@ -342,7 +362,7 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
             <thead><tr><th>编号</th><th>岗位</th><th>职级</th><th>角色</th><th>权限模板</th><th>组织</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>{positionTemplates.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`access-position-role-template-${row.id}`} onClick={() => openTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
-                <td>{row.id}</td><td>{row.positionCode}</td><td>{row.staffLevelId}</td><td>{row.roleId ?? "-"}</td><td>{row.templateId ?? "-"}</td><td>{row.organizationId ?? "-"}</td><td>{statusBadge(row.status)}</td>
+                <td>{row.id}</td><td>{zhPosition(row.positionCode)}</td><td>{zhLevel(row.staffLevelId)}</td><td>{row.roleId ?? "-"}</td><td>{row.templateId ?? "-"}</td><td>{row.organizationId ?? "-"}</td><td>{statusBadge(row.status)}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`access-position-role-template-select-${row.id}`} onClick={() => selectTemplate(row)}>选中</button>
                   <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN} data-testid={`access-position-role-template-delete-${row.id}`} onClick={() => void deletePositionTemplate(row.id)}>删除</PermissionButton>
@@ -398,7 +418,7 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
             <thead><tr><th>申请</th><th>类型</th><th>目标</th><th>角色/岗位</th><th>权限码</th><th>状态</th><th>过期</th><th>操作</th></tr></thead>
             <tbody>{grantRequests.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-request-${row.id}`} onClick={() => openGrantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openGrantDetail(row); } }}>
-                <td>{row.id}</td><td>{formatBusinessStatus(row.requestType)}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {row.positionCode ?? "-"}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status)}</td><td>{cnDate(row.expiresAt)}</td>
+                <td>{row.id}</td><td>{formatBusinessStatus(row.requestType)}</td><td>{row.targetUserId}</td><td>{row.targetRoleId ?? "-"} / {zhPosition(row.positionCode)}</td><td>{row.permissionCodes?.join(", ") || "-"}</td><td>{statusBadge(row.status)}</td><td>{cnDate(row.expiresAt)}</td>
                 <td onClick={(event) => event.stopPropagation()}>{(() => {
                   const acts: RowAction[] = [];
                   if (row.status === "pending") {
@@ -420,7 +440,7 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           <table className="admin-table" data-testid="access-grant-summary-table">
             <thead><tr><th>类型</th><th>对象</th><th>权限</th><th>次数</th><th>建议</th></tr></thead>
             <tbody>
-              {(summary?.positionRecommendations ?? []).map((row) => <tr key={`position-${row.positionCode}-${row.permissionCode}`} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-summary-position-${row.positionCode}`} onClick={() => openSummaryPositionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSummaryPositionDetail(row); } }}><td>岗位</td><td>{row.positionCode} / {row.staffLevelId ?? "-"}</td><td>{row.permissionCode ?? "-"}</td><td>{row.requestCount}</td><td>{row.recommendation ?? "-"}</td></tr>)}
+              {(summary?.positionRecommendations ?? []).map((row) => <tr key={`position-${row.positionCode}-${row.permissionCode}`} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-summary-position-${row.positionCode}`} onClick={() => openSummaryPositionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSummaryPositionDetail(row); } }}><td>岗位</td><td>{zhPosition(row.positionCode)} / {zhLevel(row.staffLevelId)}</td><td>{row.permissionCode ?? "-"}</td><td>{row.requestCount}</td><td>{row.recommendation ?? "-"}</td></tr>)}
               {(summary?.userAnomalies ?? []).map((row) => <tr key={`user-${row.userId}`} className="admin-row-clickable" tabIndex={0} data-testid={`access-grant-summary-user-${row.userId}`} onClick={() => openSummaryUserDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSummaryUserDetail(row); } }}><td>用户</td><td>{row.userId}</td><td>-</td><td>{row.requestCount}</td><td>{row.summary ?? "-"}</td></tr>)}
             </tbody>
           </table>
