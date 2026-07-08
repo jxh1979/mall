@@ -88,6 +88,7 @@ public class InventoryService {
     private final RiskAlertService riskAlertService;
     private final NotificationService notificationService;
     private final CustomerRepository customerRepository;
+    private final com.complex.platform.finance.FinanceRepository financeRepository;
 
     // 本域风险级 → 统一表 RISK_LEVELS({normal,suspicious,high,critical}) 映射。
     // inventory 用的 medium 在统一表无对应枚举，必须映射为 suspicious，否则 report 抛 VALIDATION_FAILED。
@@ -105,7 +106,7 @@ public class InventoryService {
             TraceabilityService traceabilityService
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, null, null, null);
+                terminalSwitchGuard, traceabilityService, null, null, null, null);
     }
 
     public InventoryService(
@@ -118,7 +119,7 @@ public class InventoryService {
             RiskAlertService riskAlertService
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, riskAlertService, null, null);
+                terminalSwitchGuard, traceabilityService, riskAlertService, null, null, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -131,7 +132,8 @@ public class InventoryService {
             TraceabilityService traceabilityService,
             RiskAlertService riskAlertService,
             NotificationService notificationService,
-            CustomerRepository customerRepository
+            CustomerRepository customerRepository,
+            com.complex.platform.finance.FinanceRepository financeRepository
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
@@ -142,6 +144,7 @@ public class InventoryService {
         this.riskAlertService = riskAlertService;
         this.notificationService = notificationService;
         this.customerRepository = customerRepository;
+        this.financeRepository = financeRepository;
         this.highValueReviewService = new InventoryHighValueReviewService(
                 repository, idempotencyService, auditEventService, authorizationService);
         this.stockMovementService = new InventoryStockMovementService(
@@ -1445,6 +1448,7 @@ public class InventoryService {
                     if (!"created".equals(o.status())) {
                         throw ApiException.conflict("TRANSFER_ORDER_NOT_CREATED", "only created orders can be shipped");
                     }
+                    recordTransferSettlementOnShip(o, Instant.now());
                     return repository.saveTransferOrder(withTransferStatus(o, "shipped"));
                 });
     }
@@ -1497,6 +1501,34 @@ public class InventoryService {
         authorizationService.requirePermission("inventory.transfer_order.view");
         List<InventoryTransferOrderRecord> rows = repository.listTransferOrders();
         return new PageResponse<>(rows, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, rows.size());
+    }
+
+    /**
+     * 发货即记结算(2026-07-08 用户拍板:发货时即生成应付·借调"借"默认不计占用费=不记)。并入现有应收应付台账。
+     * 供货调拨/借调买断→按货款(Σ 数量×单价)生成"收货方应付出让方"应付项;金额为0(免费供货/未定价)或借用型=不记。
+     */
+    private void recordTransferSettlementOnShip(InventoryTransferOrderRecord o, Instant now) {
+        boolean billable = "supply".equals(o.transferType())
+                || ("lending".equals(o.transferType()) && "purchase".equals(o.lendingMode()));
+        if (!billable || financeRepository == null) {
+            return;
+        }
+        long amountCent = 0L;
+        for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
+            amountCent += (long) l.quantity() * l.unitPriceCent();
+        }
+        if (amountCent <= 0L) {
+            return;
+        }
+        String itemId = "arap_trf_" + o.id();
+        financeRepository.saveArApItem(new com.complex.platform.finance.ArApItemRecord(
+                itemId, "ARAP-TRF-" + o.id(), "payable",
+                o.fromOwnerId(), "inventory_transfer", o.id(),
+                amountCent, 0L, amountCent, "CNY",
+                java.time.LocalDate.now(java.time.ZoneOffset.UTC), null, "pending_payment",
+                now, now, o.toOwnerId()));
+        financeRepository.saveArApItemSource(new com.complex.platform.finance.ArApItemSourceRecord(
+                "arap_src_trf_" + o.id(), itemId, "inventory_transfer", o.id(), amountCent, now));
     }
 
     private InventoryTransferOrderRecord withTransferStatus(InventoryTransferOrderRecord o, String status) {
