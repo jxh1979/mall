@@ -73,8 +73,8 @@ const SOURCE_LABELS: Record<string, string> = { outbound: "外拓", online_inqui
 // 线索 7 态（后端 LEAD_STATUSES，全局状态表未含，页内映射；表格+抽屉状态列共用）。
 const LEAD_STATUS_LABELS: Record<string, string> = { pending_follow_up: "待跟进", following_up: "跟进中", converted_to_intent: "已转意向", negotiating: "谈判中", signed: "已签约", lost: "流失", on_hold: "暂缓" };
 const STAGE_LABELS: Record<string, string> = { requirement_confirmed: "需求确认", proposal_quoted: "方案报价", negotiation: "商务谈判", pending_signing: "待签约" };
-const BRAND_TYPE_LABELS: Record<string, string> = { chain: "连锁", single: "单店", flagship: "旗舰", franchise: "加盟" };
-const BUSINESS_TYPE_LABELS: Record<string, string> = { retail: "零售", catering: "餐饮", entertainment: "娱乐", service: "服务" };
+const BRAND_TYPE_LABELS: Record<string, string> = { intentional: "意向品牌", prospective: "潜在品牌", partner: "合作品牌", blacklist: "黑名单" };
+const BUSINESS_TYPE_LABELS: Record<string, string> = { retail: "零售", catering: "餐饮", entertainment: "娱乐", service: "服务", bar: "酒吧" };
 const METHOD_LABELS: Record<string, string> = { phone: "电话", visit: "拜访", wechat: "微信" };
 const REF_TYPE_LABELS: Record<string, string> = { lead: "线索", intent: "意向" };
 function label(map: Record<string, string>, code: string | null | undefined): string {
@@ -140,7 +140,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [signExpiryDate, setSignExpiryDate] = React.useState("2027-06-30");
   // 品牌表单
   const [brandName, setBrandName] = React.useState("");
-  const [brandType, setBrandType] = React.useState("chain");
+  const [brandType, setBrandType] = React.useState("intentional");
   const [brandBusinessType, setBrandBusinessType] = React.useState("retail");
   const [blacklistReason, setBlacklistReason] = React.useState("资质异常");
   // 跟进表单
@@ -635,8 +635,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             content: (
               <>
                 <label>品牌名称<input data-testid="leasing-brand-name" value={brandName} onChange={(e) => setBrandName(e.target.value)} /></label>
-                <label>品牌类型<input data-testid="leasing-brand-type" value={brandType} onChange={(e) => setBrandType(e.target.value)} /></label>
-                <label>业态<input data-testid="leasing-brand-business" value={brandBusinessType} onChange={(e) => setBrandBusinessType(e.target.value)} /></label>
+                <label>品牌类型<select data-testid="leasing-brand-type" value={brandType} onChange={(e) => setBrandType(e.target.value)}><option value="intentional">意向品牌</option><option value="prospective">潜在品牌</option><option value="partner">合作品牌</option></select></label>
+                <label>业态<select data-testid="leasing-brand-business" value={brandBusinessType} onChange={(e) => setBrandBusinessType(e.target.value)}><option value="bar">酒吧</option><option value="catering">餐饮</option><option value="retail">零售</option><option value="entertainment">娱乐</option><option value="service">服务</option></select></label>
               </>
             ),
           },
