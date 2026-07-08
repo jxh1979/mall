@@ -1492,16 +1492,16 @@ public class InventoryService {
                     // 溯源归属 from->to:写归属变更台账(防调包+对账)+尽力更新溯源码归属(存在则更新)。
                     int seq = 0;
                     for (String code : orderCodes) {
-                        // 防调包:溯源码若已存在且归属第三方(非出让方)→拒收货,且不伪造归属历史。
-                        // 不存在(P1 随货新码·归属登记泛化待 P2)或归属出让方/无主→放行。
-                        if (repository.countTraceCodeOwnedByOther(code, o.fromOwnerId()) > 0) {
+                        // 防调包(原子):CAS 只在归属=出让方或无主时翻转;命中0行且码已存在=归属第三方(或并发被改走)→拒并回滚。
+                        // 命中0行且码不存在=P1 随货新码(归属登记泛化待 P2)→放行。CAS 结果即业务判定,消除 check-then-act 竞态。
+                        int affected = repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
+                        if (affected == 0 && repository.traceCodeExists(code)) {
                             throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
                                     "trace code belongs to another party, cannot receive: " + code);
                         }
                         repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
                                 o.id() + "_h" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
                                 o.toOwnerType(), o.toOwnerId(), o.id(), now));
-                        repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
                     }
                     // ponytail: P1 只做归属变更+台账;收货方库存入账/供货方库存扣减留 P2(供货主体库存需 warehouse owner 泛化,两侧同期做更一致)。
                     return repository.saveTransferOrder(withTransferStatus(o, "received"));
