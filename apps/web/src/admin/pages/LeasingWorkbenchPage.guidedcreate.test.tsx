@@ -7,7 +7,7 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 // AdminDataState empty 需三表任一 ≥1 行才渲染非聚焦创建入口（否则空态遮住按钮）。
-const BRAND = { id: "br-1", brandName: "示例品牌", brandType: "chain", businessType: "retail" };
+const BRAND = { id: "br-1", brandName: "示例品牌", brandType: "intentional", businessType: "retail" };
 
 function makeApi(post = vi.fn().mockResolvedValue({ id: "br-new" })): AdminApiClient {
   return {
@@ -45,7 +45,7 @@ describe("LeasingWorkbenchPage 引导式录入品牌", () => {
     fireEvent.click(screen.getByTestId("leasing-brand-create"));
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/leasing/brands")).toBe(true));
     const call = post.mock.calls.find((c) => c[0] === "/api/v1/leasing/brands");
-    expect(call?.[1]).toMatchObject({ brandName: "星海连锁", brandType: "chain", businessType: "retail" });
+    expect(call?.[1]).toMatchObject({ brandName: "星海连锁", brandType: "intentional", businessType: "retail" });
     // 成功后弹窗关闭
     await waitFor(() => expect(screen.queryByTestId("leasing-brand-flow")).toBeNull());
   });
