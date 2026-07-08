@@ -1362,7 +1362,7 @@ class MainActivity : Activity() {
       }
     }
 
-    fun card(name: String, priceCent: Long, imageUrl: String?, soldOut: Boolean, cartKey: String, mk: () -> PosCartLine): View {
+    fun card(name: String, priceCent: Long, internalPriceCent: Long?, imageUrl: String?, soldOut: Boolean, cartKey: String, mk: () -> PosCartLine): View {
       val box = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         setPadding(dp(10), dp(10), dp(10), dp(10))
@@ -1377,6 +1377,7 @@ class MainActivity : Activity() {
       val text = TextView(this).apply {
         this.text = buildString {
           append(name).append('\n').append("¥").append("%.2f".format(priceCent / 100.0))
+          if (internalPriceCent != null) append("　内部价 ¥").append("%.2f".format(internalPriceCent / 100.0))
           if (soldOut) append("  [沽清]")
         }
         textSize = 15f
@@ -1417,7 +1418,7 @@ class MainActivity : Activity() {
           if (products.isEmpty()) { cardsContainer.addView(statusText("该分类暂无商品")) }
           products.forEach { p ->
             cardsContainer.addView(
-              card(p.productName, p.priceCent, p.imageUrl, p.soldOut, "sku:${p.id}") {
+              card(p.productName, p.priceCent, p.internalSettlementPriceCent, p.imageUrl, p.soldOut, "sku:${p.id}") {
                 PosCartLine(productId = p.id, comboId = null, name = p.productName, unitPriceCent = p.priceCent, qty = 0)
               },
               LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) },
@@ -1439,7 +1440,7 @@ class MainActivity : Activity() {
           combos.forEach { c ->
             val itemsDesc = c.items.joinToString("、") { "${it.productName ?: it.productId}×${it.quantity}" }
             cardsContainer.addView(
-              card("${c.comboName}（含 $itemsDesc）", c.priceCent, c.imageUrl, c.status != null && c.status != "active", "combo:${c.id}") {
+              card("${c.comboName}（含 $itemsDesc）", c.priceCent, c.internalSettlementPriceCent, c.imageUrl, c.status != null && c.status != "active", "combo:${c.id}") {
                 PosCartLine(productId = null, comboId = c.id, name = c.comboName, unitPriceCent = c.priceCent, qty = 0)
               },
               LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) },

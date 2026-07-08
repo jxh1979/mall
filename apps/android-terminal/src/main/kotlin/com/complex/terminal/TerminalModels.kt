@@ -499,6 +499,7 @@ data class BarProduct(
   val productName: String = "",
   val productType: String? = null,
   val priceCent: Long = 0,
+  val internalSettlementPriceCent: Long? = null,
   val currency: String? = null,
   val soldOut: Boolean = false,
   val status: String? = null,
