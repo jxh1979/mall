@@ -13,7 +13,7 @@ const INTENTS = [
   { id: "in-1", lead_id: "l-1", stage: "negotiation", intended_space_id: "space-1", last_stage_change_at: "2026-06-25T10:00:00Z" },
 ];
 const BRANDS = [
-  { id: "br-1", brand_name: "示例品牌", brand_type: "chain", business_type: "retail", blacklist_reason: "" },
+  { id: "br-1", brand_name: "示例品牌", brand_type: "intentional", business_type: "retail", blacklist_reason: "" },
 ];
 const FOLLOW_UPS = [
   { id: "fu-1", ref_type: "lead", ref_id: "l-1", method: "phone", content: "已沟通", next_plan_at: "2026-07-10" },
@@ -111,7 +111,7 @@ describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("leasing-leads-table").textContent).toContain("展会"); // source exhibition
     expect(screen.getByTestId("leasing-leads-table").textContent).not.toContain("exhibition");
     expect(screen.getByTestId("leasing-intents-table").textContent).toContain("商务谈判"); // stage negotiation
-    expect(screen.getByTestId("leasing-brands-table").textContent).toContain("连锁"); // brandType chain
+    expect(screen.getByTestId("leasing-brands-table").textContent).toContain("意向品牌"); // brandType chain
     expect(screen.getByTestId("leasing-follow-ups-table").textContent).toContain("电话"); // method phone
     expect(screen.getByTestId("leasing-follow-ups-table").textContent).toContain("线索"); // refType lead
   });
@@ -161,9 +161,9 @@ describe("LeasingWorkbenchPage 行明细抽屉 + 零英文", () => {
     await waitFor(() => expect(screen.getByTestId("leasing-brand-row-br-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("leasing-brand-row-br-1"));
     const drawer = screen.getByTestId("row-detail-drawer");
-    expect(drawer.textContent).toContain("连锁"); // brandType chain
+    expect(drawer.textContent).toContain("意向品牌"); // brandType chain
     expect(drawer.textContent).toContain("零售"); // businessType retail
-    expect(drawer.textContent).not.toContain("chain");
+    expect(drawer.textContent).not.toContain("intentional");
   });
 
   it("点跟进行 → 抽屉方式/对象类型中文、下次计划时间中文", async () => {
