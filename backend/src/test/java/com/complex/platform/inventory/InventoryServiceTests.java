@@ -1628,11 +1628,12 @@ class InventoryServiceTests {
     void registerTraceCodeStartsRegisteredAndIsIdempotent() {
         InventoryItemRecord item = createItem("tc-item");
         RegisterTraceCodeRequest request = new RegisterTraceCodeRequest(
-                "tc-reg-1", item.id(), "BATCH-1", "TRC-ABC");
+                "tc-reg-1", item.id(), "BATCH-1", "TRC-ABC", "m_a");
         InventoryTraceCodeRecord first = service.registerTraceCode(request);
         InventoryTraceCodeRecord second = service.registerTraceCode(request);
 
-        assertThat(second).isEqualTo(first);
+        // merchantId 是 @JsonIgnore 内部归属列,幂等重放经响应体反序列化不携带;按对外可见字段比对幂等一致性。
+        assertThat(second).usingRecursiveComparison().ignoringFields("merchantId").isEqualTo(first);
         assertThat(first.status()).isEqualTo("registered");
         assertThat(first.traceCode()).isEqualTo("TRC-ABC");
         assertThat(first.itemId()).isEqualTo(item.id());
@@ -1647,7 +1648,7 @@ class InventoryServiceTests {
     void registerTraceCodeGeneratesCodeWhenAbsent() {
         InventoryItemRecord item = createItem("tc-gen-item");
         InventoryTraceCodeRecord traceCode = service.registerTraceCode(
-                new RegisterTraceCodeRequest("tc-gen", item.id(), null, null));
+                new RegisterTraceCodeRequest("tc-gen", item.id(), null, null, "m_a"));
 
         assertThat(traceCode.traceCode()).isNotBlank();
         assertThat(traceCode.status()).isEqualTo("registered");
@@ -1665,11 +1666,11 @@ class InventoryServiceTests {
     @Test
     void registerTraceCodeRejectsDuplicateTraceCode() {
         InventoryItemRecord item = createItem("tc-dup-item");
-        service.registerTraceCode(new RegisterTraceCodeRequest("tc-dup-1", item.id(), null, "TRC-DUP"));
+        service.registerTraceCode(new RegisterTraceCodeRequest("tc-dup-1", item.id(), null, "TRC-DUP", "m_a"));
 
         // 不同幂等键但同 trace_code → 唯一冲突拒绝。
         assertThatThrownBy(() -> service.registerTraceCode(
-                new RegisterTraceCodeRequest("tc-dup-2", item.id(), null, "TRC-DUP")))
+                new RegisterTraceCodeRequest("tc-dup-2", item.id(), null, "TRC-DUP", "m_a")))
                 .isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).code())
                 .isEqualTo("TRACE_CODE_DUPLICATE");
@@ -1679,7 +1680,7 @@ class InventoryServiceTests {
     void printTraceCodeTransitionsRegisteredToPrintedAndRecordsTimestamp() {
         InventoryItemRecord item = createItem("tc-print-item");
         InventoryTraceCodeRecord registered = service.registerTraceCode(
-                new RegisterTraceCodeRequest("tc-print", item.id(), null, "TRC-PRINT"));
+                new RegisterTraceCodeRequest("tc-print", item.id(), null, "TRC-PRINT", "m_a"));
 
         InventoryTraceCodeRecord printed = service.printTraceCode(registered.id(),
                 new com.complex.platform.inventory.dto.PrintTraceCodeRequest("tc-print-do"));
@@ -1695,7 +1696,7 @@ class InventoryServiceTests {
     void printTraceCodeRejectsDuplicatePrintOnNonRegistered() {
         InventoryItemRecord item = createItem("tc-reprint-item");
         InventoryTraceCodeRecord registered = service.registerTraceCode(
-                new RegisterTraceCodeRequest("tc-reprint", item.id(), null, "TRC-REPRINT"));
+                new RegisterTraceCodeRequest("tc-reprint", item.id(), null, "TRC-REPRINT", "m_a"));
         service.printTraceCode(registered.id(),
                 new com.complex.platform.inventory.dto.PrintTraceCodeRequest("tc-reprint-1"));
 
@@ -1711,7 +1712,7 @@ class InventoryServiceTests {
     void getTraceCodeResolvesByIdOrTraceCode() {
         InventoryItemRecord item = createItem("tc-get-item");
         InventoryTraceCodeRecord registered = service.registerTraceCode(
-                new RegisterTraceCodeRequest("tc-get", item.id(), null, "TRC-GET"));
+                new RegisterTraceCodeRequest("tc-get", item.id(), null, "TRC-GET", "m_a"));
 
         assertThat(service.getTraceCode(registered.id()).id()).isEqualTo(registered.id());
         assertThat(service.getTraceCode("TRC-GET").id()).isEqualTo(registered.id());
