@@ -28,7 +28,8 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   const [consentReference, setConsentReference] = React.useState("");
   const [evidenceAttachmentIds, setEvidenceAttachmentIds] = React.useState("");
   const [organizationId, setOrganizationId] = React.useState("org-1");
-  const [merchantId, setMerchantId] = React.useState("merchant-1");
+  const [merchantId, setMerchantId] = React.useState("");
+  const [merchants, setMerchants] = React.useState<Array<{ id: string; displayName?: string; companyName?: string }>>([]);
   const [status, setStatus] = React.useState("active");
   const [selectedTemplateId, setSelectedTemplateId] = React.useState("");
   // 组织 / 商户显名字典（页面级拉取，失败降级回 ID）。
@@ -59,6 +60,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         ]);
         setOrgNames(Object.fromEntries((entities ?? []).filter((e) => e.name || e.code).map((e) => [e.id, (e.name ?? e.code) as string])));
         setMerchantNames(Object.fromEntries((merchants ?? []).filter((m) => m.displayName || m.companyName).map((m) => [m.id, (m.displayName ?? m.companyName) as string])));
+        setMerchants(merchants ?? []);
       } catch {
         /* 无权限或接口失败 → 保持空字典，表格回退 ID */
       }
@@ -239,7 +241,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
             content: (
               <>
                 <label>所属组织<input data-testid="access-user-org" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} placeholder="组织 ID" /></label>
-                <label>所属商户<input data-testid="access-user-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)} placeholder="商户 ID（销售/商户账号必填）" /></label>
+                <label>所属商户<select data-testid="access-user-merchant" value={merchantId} onChange={(event) => setMerchantId(event.target.value)}><option value="">不绑定 / 平台账号</option>{merchants.map((m) => <option key={m.id} value={m.id}>{(m.displayName ?? m.companyName ?? m.id)}（{shortId(m.id)}）</option>)}</select></label>
                 <label>授权凭据<input data-testid="access-user-consent" value={consentReference} onChange={(event) => setConsentReference(event.target.value)} placeholder="同意/授权凭据编号（可选）" /></label>
                 <label>证据附件<input data-testid="access-user-evidence" value={evidenceAttachmentIds} onChange={(event) => setEvidenceAttachmentIds(event.target.value)} placeholder="附件 ID，逗号分隔（可选）" /></label>
               </>
