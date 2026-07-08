@@ -150,6 +150,16 @@ final class BarBillRecords {
                 .replaceAll("^_+|_+$", "");
         String fallback = UUID.randomUUID().toString().replace("-", "");
         String resolved = slug.isEmpty() ? fallback : slug;
-        return resolved.length() > 40 ? resolved.substring(0, 40) : resolved;
+        // 单号唯一性:前截断会把账单号后的区分符(:split:/:merge:/幂等键)截掉,导致同一账单多次操作
+        // 生成同一单号→撞主键。改为 >40 用 SHA-256 定长32哈希(保唯一+定长≤64),短的保持可读。
+        if (resolved.length() > 40) {
+            try {
+                return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(resolved.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 32);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new IllegalStateException("billSlug hashing unavailable", e);
+            }
+        }
+        return resolved;
     }
 }
