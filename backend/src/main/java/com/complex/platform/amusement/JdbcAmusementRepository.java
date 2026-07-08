@@ -860,8 +860,8 @@ class JdbcAmusementRepository implements AmusementRepository {
                  LIMIT 1
                 """, new MapSqlParameterSource()
                 .addValue("project_id", context.projectId())
-                .addValue("point_id", context.locationPointId())
-                .addValue("device_id", context.deviceId()),
+                .addValue("point_id", context.locationPointId(), java.sql.Types.VARCHAR)
+                .addValue("device_id", context.deviceId(), java.sql.Types.VARCHAR),
                 (rs, n) -> rs.getInt("max_concurrent")).stream().findFirst().orElse(null);
     }
 
