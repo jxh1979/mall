@@ -1054,7 +1054,13 @@ public class InventoryService {
                     repository.findInventoryItemById(itemId)
                             .orElseThrow(() -> ApiException.notFound(
                                     "INVENTORY_ITEM_NOT_FOUND", "inventory item not found"));
-                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
+                    // 归属隔离:商户范围用户强制用自身商户;平台管理员(无范围)代登记须在请求指定归属商户,
+                    // 二者皆无则返回干净业务错(而非 NOT NULL 崩溃)。
+                    String merchantId = authorizationService.currentMerchantScope()
+                            .orElseGet(() -> trimToNull(actual.merchantId()));
+                    if (merchantId == null) {
+                        throw ApiException.badRequest("MERCHANT_REQUIRED", "平台代登记溯源码需先选定所属商户");
+                    }
                     String slug = slug(actual.idempotencyKey());
                     // trace_code 缺省服务端生成（基于幂等键稳定，重复提交命中幂等不重复建）。
                     String traceCode = trimToDefault(actual.traceCode(), "TRC-" + slug.toUpperCase(Locale.ROOT));
