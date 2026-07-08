@@ -245,3 +245,31 @@ pending --reject[需 approve 权限]--> none
 
 ### 13.5 收口
 对抗审计发现 A/B/C/D 四类**全部修复 + 真机验证**(PR #85–89);唯一诚实残留=访问治理表格「角色」列显 roleId(机读标识可留,roleName 已中文化并在下拉等处生效)。全程 609 单测绿、临时账号/临时数据审计零残留、数据订正按软删铁律可恢复。
+
+
+## 14. 端到端 onboarding 真机审计 + 修复(2026-07-07)
+
+模拟真实新用户走完整业务链(账号→商户→招商→合同→酒吧建立),留完整数据链,第一性原理 + 对抗式审计,并修复。
+
+### 14.1 对抗发现 → 已修(PR #92,真机验证)
+- **#1 招商幻影默认致 onboarding 开箱即断**:线索/意向的「意向空间」「签约商户」「负责人」默认硬编码不存在的 id(space-1/merchant-1/staff_sales)→ 真实用户按默认提交即被后端拒（`intended space does not exist: space-1`）。改默认为空串。
+- **#3 招商外键手打 id → 下拉**:意向空间/线索空间→`platform/spaces`、签约商户→`platform/merchants`、负责人→`access/users`(字典失败不阻断)。
+- **#2 签约合同主体误用商户 id**:`signIntent` 的 contractSubjectId/operationSubjectId/settlementSubjectId 原全 = 商户 id（而商户 id 非 business_entity → 下游结算引用无效主体）。新增「合同主体」下拉（business-entities）+ 校验必选，主体用真实经营主体，merchantId 仍为商户。验证:新合同 subj=settle=be_（exists_in_business_entities=true）。
+
+### 14.2 合同/能耗创建外键手打 id → 下拉(PR #89)
+合同起草(商户/合同主体/结算主体)、能耗新增仪表(上级总表/空间/商户/项目)由手打 id 文本框改原生 `<select>`（显名称+短 id）。
+
+### 14.3 账号商户字段 + BarVenueSelect 加载态(PR #93)
+- 账号「所属商户」去幻影默认 merchant-1、手打 id → merchants 下拉。
+- 卡座/商品「所属酒吧」`BarVenueSelect` 加载 `/platform/merchants`(约 2.5s)期间误显「请先设为酒吧」→ 加 loading 态,拉取中显「加载中…」,加载完才判空(不做缓存,新建酒吧需即时出现)。
+
+### 14.4 服务目录软删框架(V272,PR #94/#95)
+补 §13.3 列出的删除/存档缺口:`service_catalog_items`(服务点单配置)此前无软删。
+- 迁移 V272 加 archived_at/archived_by/archive_reason/delete_status/delete_requested_by/delete_requested_at/delete_reason + `service.catalog.approve` 权限。
+- 后端:存档必填理由、删除须先存档、审批禁自审、`delete_status='approved'` 作墓碑(全查询过滤·不硬删·留痕);4 端点(archive/unarchive/delete-request/delete-approve)。
+- 前端:服务目录表加「存档状态」列 + RowActions(存档/取消存档/申请删除/批准/驳回)。真机验证:建项生效中→存档已存档。
+- **剩余同类缺口**:游乐配置(amusement_projects/safety_templates/sessions/devices)仍缺软删,可仿此补。
+
+### 14.5 部署注意
+- 后端 `deploy-api.sh` 有 prod 安全闸(禁开发默认 DB 密码 complex_dev_pwd);.160 测试实例正是 prod profile + 该密码,故走手动热替换(mvn package → 新 release → 切 current → 重启,Flyway 自动应用迁移;回滚锚点保留旧 release)。
+- web 部署 predeploy 有 `verify:data-isolation-spec`;加迁移后须 `npm run docs:data-isolation-spec` 重生成隔离规范基线,否则闸红拒部署。
