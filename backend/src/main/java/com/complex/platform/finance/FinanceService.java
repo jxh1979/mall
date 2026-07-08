@@ -1483,6 +1483,20 @@ public class FinanceService {
      * 由派生计费/差异流程直接生成一条 ar_ap_items（不经请求体 createItem，但同样遵守锁定经营日硬拦截）。
      * dueDate 取当日（经营日落账），sourceType ∈ SOURCE_TYPES。
      */
+    // ponytail: 派生 AR/AP item id="arap_"+slug;物业费出账的 idempotencyKey 含 projectId|period|merchantId 长键→
+    // slug 过长会溢出 ar_ap_items.id varchar(64)。仅对超长 slug 哈希封顶(短 slug 不变→其它调用方 id 格式不动)。
+    private static String boundedArApSlug(String rawSlug) {
+        if (rawSlug.length() <= 48) {
+            return rawSlug;
+        }
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(rawSlug.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 40);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("ar/ap slug hashing unavailable", e);
+        }
+    }
+
     private ArApItemRecord persistDerivedArApItem(
             String direction,
             String counterpartyId,
@@ -1499,7 +1513,7 @@ public class FinanceService {
                     "business date " + dueDate + " is locked; use the backfill adjustment workflow");
         }
         Instant now = Instant.now();
-        String slug = slug(sourceType + "_" + idempotencyKey);
+        String slug = boundedArApSlug(slug(sourceType + "_" + idempotencyKey));
         String id = "arap_" + slug;
         // internal_accounting（内部核算损耗/归集）非对外债权债务：登记即已确认，paid=amount、unpaid=0、settled；
         // receivable/payable 维持待收/待付（unpaid=amount）。
