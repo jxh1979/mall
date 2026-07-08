@@ -234,3 +234,14 @@ pending --reject[需 approve 权限]--> none
 - **B 角色/权限模板显示英文(数据侧)**:`roles.role_name` 被种成 `platform_admin`/`OPS_MANAGER` 等英文码 → **数据订正**为中文名(仅英文/全大写码类,按 id 语义映射)。
 - **C 表格 UUID 截断不统一**:新增共享 `shortId()` 显示助手(长 id 显尾段 + 悬停看全),统一 id 列展示,消除「有的截断有的显全串」。
 - **D 测试脏数据**:清理 `ticket_types` 的「B1P345 Type」占位、`service_catalog` 的 AuditDance/dbg 测试项等明显测试污染(仅按明确测试标识,不碰真实业务数据)。
+
+
+### 13.4 外键下拉(A,PR #89 · 真机验证)
+消除创建表单「手打外键 ID」高错率——改为原生 `<select>` 下拉,显示「名称（短 id）」:
+- **合同起草**:商户(`/platform/merchants`)、合同主体 / 结算主体(`/platform/business-entities`,结算主体可缺省=合同主体)。
+- **能耗新增仪表**:上级总表(已加载 meters)、空间(`/platform/spaces`)、商户(`/platform/merchants`)、项目(`/platform/projects`)四个可空归属字段;引导弹窗 + 内联表单共 8 处。
+- 归属字典拉取失败不阻断(降级为无选项);用**原生 select** 保留 `aria-label`/`data-testid`,`fireEvent.change` 测试兼容(合同 guidedcreate 测试 mock 补 merchant-1/subject-1)。
+- 真机验证:合同 3 下拉(商户/主体各有选项)、能耗 4 下拉(上级总表/空间/商户有选项,项目库空仅「不选」),609 单测绿。
+
+### 13.5 收口
+对抗审计发现 A/B/C/D 四类**全部修复 + 真机验证**(PR #85–89);唯一诚实残留=访问治理表格「角色」列显 roleId(机读标识可留,roleName 已中文化并在下拉等处生效)。全程 609 单测绿、临时账号/临时数据审计零残留、数据订正按软删铁律可恢复。
