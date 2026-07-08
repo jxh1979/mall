@@ -119,6 +119,23 @@ public interface TicketingRepository {
         return true;
     }
 
+    /** 批3:第三方券配置 upsert。default no-op 兼容测试双子。 */
+    default PartnerVoucherConfigRecord savePartnerVoucherConfig(PartnerVoucherConfigRecord config) {
+        return config;
+    }
+
+    default Optional<PartnerVoucherConfigRecord> findPartnerVoucherConfig(String entitlementTemplateId) {
+        return Optional.empty();
+    }
+
+    default PartnerVoucherRedemptionRecord savePartnerVoucherRedemption(PartnerVoucherRedemptionRecord redemption) {
+        return redemption;
+    }
+
+    default Optional<PartnerVoucherRedemptionRecord> findPartnerVoucherRedemptionByExternalRef(String partnerId, String externalRef) {
+        return Optional.empty();
+    }
+
     List<VerificationRecord> listVerifications();
 
     Optional<VerificationRecord> findVerificationById(String id);
