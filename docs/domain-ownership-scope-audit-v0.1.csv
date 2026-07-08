@@ -286,6 +286,7 @@ ticket_refunds,direct,merchant_id,merchant_id column on ticket_refunds,ready for
 ticket_type_entitlements,inherited,ticket_type_id,ticket_type_id -> ticket_types -> project scope,must join through scope path before multi-complex rollout,covered
 ticket_types,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 ticket_verifications,direct,merchant_id,merchant_id column on ticket_verifications,ready for project/merchant scoped query enforcement,covered
+turnover_rent_rule_tiers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 turnover_rent_rules,direct,merchant_id,merchant_id column on turnover_rent_rules,ready for project/merchant scoped query enforcement,covered
 user_permission_overrides,inherited,user_id,user_id -> access_users -> organization scope,must join through scope path before multi-complex rollout,covered
 user_position_assignments,direct,merchant_id,merchant_id column on user_position_assignments,ready for project/merchant scoped query enforcement,covered
