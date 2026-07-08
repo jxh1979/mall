@@ -8,8 +8,9 @@ import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import type { AdminPageProps } from "../types";
+import { RowActions, type RowAction } from "../components/RowActions";
 
-type CatalogRow = { id: string; name?: string; priceCent?: number; durationMinutes?: number; active?: boolean };
+type CatalogRow = { id: string; name?: string; priceCent?: number; durationMinutes?: number; active?: boolean; archivedAt?: string | null; deleteStatus?: string | null };
 type OrderRow = { id: string; itemName?: string; priceCent?: number; tableId?: string; performerUserId?: string; orderedBy?: string; status?: string; cancelReason?: string; paidAt?: string; mgmtFeeCent?: number; dancerShareCent?: number; createdAt?: string };
 
 const TEXT = {
@@ -48,7 +49,7 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function ServiceOrdersPage({ api, setGlobalError, setActionResult, navigateTo }: AdminPageProps) {
+export function ServiceOrdersPage({ api, setGlobalError, setActionResult, navigateTo, effectivePermissions }: AdminPageProps) {
   const [date, setDate] = React.useState(today);
   const [catalog, setCatalog] = React.useState<CatalogRow[]>([]);
   const [orders, setOrders] = React.useState<OrderRow[]>([]);
@@ -87,6 +88,37 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
     window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
     setKpiFocus(null);
     (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
+  }
+
+  async function catalogArchive(id: string, archive: boolean) {
+    let reason: string | undefined;
+    if (archive) {
+      const r = window.prompt("存档（下线）理由：");
+      if (r === null) return;
+      if (!r.trim()) { setGlobalError("存档理由不能为空"); return; }
+      reason = r.trim();
+    }
+    try {
+      await api.post(`/api/v1/services/catalog/${id}/${archive ? "archive" : "unarchive"}`, reason ? { reason } : {});
+      setActionResult({ action: archive ? "service_catalog_archived" : "service_catalog_unarchived", id });
+      reload();
+    } catch (e) { setGlobalError(e instanceof Error ? e.message : "操作失败"); }
+  }
+  async function catalogRequestDelete(id: string) {
+    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    if (reason === null) return;
+    try {
+      await api.post(`/api/v1/services/catalog/${id}/delete-request`, { reason });
+      setActionResult({ action: "service_catalog_delete_requested", id });
+      reload();
+    } catch (e) { setGlobalError(e instanceof Error ? e.message : "操作失败"); }
+  }
+  async function catalogApproveDelete(id: string, decision: "approved" | "rejected") {
+    try {
+      await api.post(`/api/v1/services/catalog/${id}/delete-approve`, { decision });
+      setActionResult({ action: "service_catalog_delete_" + decision, id });
+      reload();
+    } catch (e) { setGlobalError(e instanceof Error ? e.message : "操作失败"); }
   }
 
   const { loading, error, reload } = useAdminResource(
@@ -260,7 +292,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="service-catalog-table">
-            <thead><tr><th>服务</th><th>参考价</th><th>时长</th><th>状态</th></tr></thead>
+            <thead><tr><th>服务</th><th>参考价</th><th>时长</th><th>状态</th><th>存档</th><th>操作</th></tr></thead>
             <tbody>
               {catalog.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`service-catalog-row-${row.id}`}
@@ -270,6 +302,20 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
                   <td>{money(row.priceCent)}</td>
                   <td>{row.durationMinutes ? `${row.durationMinutes} 分钟` : "—"}</td>
                   <td>{row.active ? "上架" : "下架"}</td>
+                  <td>{row.deleteStatus === "pending" ? "待审批删除" : (row.archivedAt ? "已存档" : "生效中")}</td>
+                  <td onClick={(event) => event.stopPropagation()}>{(() => {
+                    const acts: RowAction[] = [];
+                    if (row.deleteStatus === "pending") {
+                      acts.push({ key: "approve", label: "批准删除", permissions: ["service.catalog.approve"], onClick: () => void catalogApproveDelete(row.id, "approved"), testId: `svc-catalog-delete-approve-${row.id}` });
+                      acts.push({ key: "reject", label: "驳回", permissions: ["service.catalog.approve"], danger: true, onClick: () => void catalogApproveDelete(row.id, "rejected"), testId: `svc-catalog-delete-reject-${row.id}` });
+                    } else if (row.archivedAt) {
+                      acts.push({ key: "unarchive", label: "取消存档", permissions: ["service.catalog.manage"], onClick: () => void catalogArchive(row.id, false), testId: `svc-catalog-unarchive-${row.id}` });
+                      acts.push({ key: "delete-request", label: "申请删除", permissions: ["service.catalog.manage"], danger: true, onClick: () => void catalogRequestDelete(row.id), testId: `svc-catalog-delete-request-${row.id}` });
+                    } else {
+                      acts.push({ key: "archive", label: "存档", permissions: ["service.catalog.manage"], onClick: () => void catalogArchive(row.id, true), testId: `svc-catalog-archive-${row.id}` });
+                    }
+                    return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`svc-catalog-actions-${row.id}`} />;
+                  })()}</td>
                 </tr>
               ))}
             </tbody>

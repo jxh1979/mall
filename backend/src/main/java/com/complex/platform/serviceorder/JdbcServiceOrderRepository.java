@@ -42,28 +42,66 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
     }
 
     @Override
-    public List<ServiceCatalogItemRecord> listCatalog(boolean activeOnly) {
+    public List<ServiceCatalogItemRecord> listCatalog(boolean activeOnly, boolean includeArchived) {
         return jdbcTemplate.query("""
-                SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at
+                SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at,
+                       archived_at, archived_by, archive_reason, delete_status, delete_requested_by, delete_requested_at, delete_reason
                   FROM service_catalog_items
-                 WHERE (:active_only = FALSE OR active = TRUE)
+                 WHERE delete_status <> 'approved'
+                   AND (:active_only = FALSE OR active = TRUE)
+                   AND (:include_archived = TRUE OR archived_at IS NULL)
                  ORDER BY name
-                """, new MapSqlParameterSource().addValue("active_only", activeOnly), this::mapItem);
+                """, new MapSqlParameterSource().addValue("active_only", activeOnly).addValue("include_archived", includeArchived), this::mapItem);
+    }
+
+    @Override
+    public void archiveCatalogItem(String id, boolean archive, String reason, String actorId) {
+        jdbcTemplate.update("""
+                UPDATE service_catalog_items
+                   SET archived_at = :archived_at, archived_by = :archived_by, archive_reason = :reason, updated_at = now()
+                 WHERE id = :id AND delete_status <> 'approved'
+                """, new MapSqlParameterSource().addValue("id", id)
+                .addValue("archived_at", archive ? java.sql.Timestamp.from(java.time.Instant.now()) : null)
+                .addValue("archived_by", archive ? actorId : null)
+                .addValue("reason", archive ? reason : null));
+    }
+
+    @Override
+    public void requestDeleteCatalogItem(String id, String reason, String actorId) {
+        jdbcTemplate.update("""
+                UPDATE service_catalog_items
+                   SET delete_status = 'pending', delete_requested_by = :by, delete_requested_at = now(), delete_reason = :reason, updated_at = now()
+                 WHERE id = :id AND delete_status <> 'approved'
+                """, new MapSqlParameterSource().addValue("id", id).addValue("by", actorId).addValue("reason", reason));
+    }
+
+    @Override
+    public void approveDeleteCatalogItem(String id, boolean approved) {
+        jdbcTemplate.update("""
+                UPDATE service_catalog_items SET delete_status = :status, updated_at = now()
+                 WHERE id = :id AND delete_status = 'pending'
+                """, new MapSqlParameterSource().addValue("id", id).addValue("status", approved ? "approved" : "none"));
     }
 
     @Override
     public Optional<ServiceCatalogItemRecord> findCatalogItem(String id) {
         return jdbcTemplate.query("""
-                SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at
-                  FROM service_catalog_items WHERE id = :id
+                SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at,
+                       archived_at, archived_by, archive_reason, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                  FROM service_catalog_items WHERE id = :id AND delete_status <> 'approved'
                 """, new MapSqlParameterSource().addValue("id", id), this::mapItem).stream().findFirst();
     }
 
     private ServiceCatalogItemRecord mapItem(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        java.sql.Timestamp arch = rs.getTimestamp("archived_at");
+        java.sql.Timestamp delReq = rs.getTimestamp("delete_requested_at");
         return new ServiceCatalogItemRecord(rs.getString("id"), rs.getString("name"), rs.getLong("price_cent"),
                 (Integer) rs.getObject("duration_minutes"), rs.getBoolean("active"),
                 rs.getString("mgmt_fee_mode"), rs.getLong("mgmt_fee_value"), rs.getString("updated_by"),
-                rs.getTimestamp("updated_at").toInstant());
+                rs.getTimestamp("updated_at").toInstant(),
+                arch == null ? null : arch.toInstant(), rs.getString("archived_by"), rs.getString("archive_reason"),
+                rs.getString("delete_status"), rs.getString("delete_requested_by"),
+                delReq == null ? null : delReq.toInstant(), rs.getString("delete_reason"));
     }
 
     @Override

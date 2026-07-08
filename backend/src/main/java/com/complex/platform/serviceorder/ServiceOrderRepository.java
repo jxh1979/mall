@@ -9,7 +9,13 @@ public interface ServiceOrderRepository {
 
     ServiceCatalogItemRecord upsertCatalogItem(ServiceCatalogItemRecord item);
 
-    List<ServiceCatalogItemRecord> listCatalog(boolean activeOnly);
+    List<ServiceCatalogItemRecord> listCatalog(boolean activeOnly, boolean includeArchived);
+
+    void archiveCatalogItem(String id, boolean archive, String reason, String actorId);
+
+    void requestDeleteCatalogItem(String id, String reason, String actorId);
+
+    void approveDeleteCatalogItem(String id, boolean approved);
 
     Optional<ServiceCatalogItemRecord> findCatalogItem(String id);
 

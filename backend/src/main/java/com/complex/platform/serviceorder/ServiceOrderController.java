@@ -62,6 +62,29 @@ public class ServiceOrderController {
         return ApiResponse.ok(service.listCatalogAll());
     }
 
+    @PostMapping("/catalog/{id}/archive")
+    public ApiResponse<ServiceCatalogItemRecord> archiveCatalog(@org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody(required = false) com.complex.platform.serviceorder.dto.ServiceCatalogMutationRequest request) {
+        return ApiResponse.ok(service.archiveCatalogItem(id, true, request == null ? null : request.reason()));
+    }
+
+    @PostMapping("/catalog/{id}/unarchive")
+    public ApiResponse<ServiceCatalogItemRecord> unarchiveCatalog(@org.springframework.web.bind.annotation.PathVariable("id") String id) {
+        return ApiResponse.ok(service.archiveCatalogItem(id, false, null));
+    }
+
+    @PostMapping("/catalog/{id}/delete-request")
+    public ApiResponse<ServiceCatalogItemRecord> deleteRequestCatalog(@org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody(required = false) com.complex.platform.serviceorder.dto.ServiceCatalogMutationRequest request) {
+        return ApiResponse.ok(service.requestDeleteCatalogItem(id, request == null ? null : request.reason()));
+    }
+
+    @PostMapping("/catalog/{id}/delete-approve")
+    public ApiResponse<ServiceCatalogItemRecord> deleteApproveCatalog(@org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody(required = false) com.complex.platform.serviceorder.dto.ServiceCatalogMutationRequest request) {
+        return ApiResponse.ok(service.approveDeleteCatalogItem(id, request == null ? null : request.decision()));
+    }
+
     @PostMapping("/catalog")
     public ApiResponse<ServiceCatalogItemRecord> upsertCatalogItem(
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest request) {
