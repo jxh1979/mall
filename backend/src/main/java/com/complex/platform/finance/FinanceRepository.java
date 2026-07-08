@@ -37,6 +37,21 @@ public interface FinanceRepository {
         return Optional.empty();
     }
 
+    /** 保存提成租金规则。default no-op 兼容测试双子。 */
+    default TurnoverRentRuleRecord saveTurnoverRentRule(TurnoverRentRuleRecord rule) {
+        return rule;
+    }
+
+    /** 保存提成租金阶梯档位。default no-op 兼容测试双子。 */
+    default TurnoverRentRuleTierRecord saveTurnoverRentRuleTier(TurnoverRentRuleTierRecord tier) {
+        return tier;
+    }
+
+    /** 列某规则阶梯档位(seq 升序)。default 空兼容测试双子。 */
+    default List<TurnoverRentRuleTierRecord> listTurnoverRentRuleTiers(String ruleId) {
+        return List.of();
+    }
+
     /**
      * 回流营业额取数：只读 integration_order_syncs，聚合该商户在 [from, to) 经营日窗口的回流 order 金额（分）。
      * default 返回 0 兼容既有测试双子。

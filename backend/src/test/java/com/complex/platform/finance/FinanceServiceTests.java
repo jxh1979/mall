@@ -2101,7 +2101,7 @@ class FinanceServiceTests {
 
         void seedTurnoverRule(String id, String merchantId, int rateBps, Long minAmountCent, Long maxAmountCent) {
             turnoverRentRules.put(id, new TurnoverRentRuleRecord(
-                    id, merchantId, "rule " + id, rateBps, minAmountCent, maxAmountCent,
+                    id, null, merchantId, "rule " + id, rateBps, minAmountCent, maxAmountCent,
                     LocalDate.parse("2026-01-01"), null, "active", Instant.now()));
         }
     }

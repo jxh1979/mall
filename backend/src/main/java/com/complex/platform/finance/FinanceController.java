@@ -13,6 +13,7 @@ import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.DepositActionRequest;
 import com.complex.platform.finance.dto.InventoryVariancePostRequest;
 import com.complex.platform.finance.dto.TurnoverRentBillRequest;
+import com.complex.platform.finance.dto.TurnoverRentRuleRequest;
 import java.util.List;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
@@ -175,6 +176,13 @@ public class FinanceController {
         authorizationService.requirePermission("finance.turnover_rent.bill");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.billTurnoverRent(request));
+    }
+
+    @PostMapping("/turnover-rent/rules")
+    public ApiResponse<TurnoverRentRuleRecord> createTurnoverRentRule(@RequestBody @jakarta.validation.Valid TurnoverRentRuleRequest request) {
+        authorizationService.requirePermission("finance.turnover_rent.bill");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createTurnoverRentRule(request));
     }
 
     @PostMapping("/deposits/actions")

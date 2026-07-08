@@ -16,6 +16,7 @@ import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.DepositActionRequest;
 import com.complex.platform.finance.dto.InventoryVariancePostRequest;
 import com.complex.platform.finance.dto.TurnoverRentBillRequest;
+import com.complex.platform.finance.dto.TurnoverRentRuleRequest;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
@@ -627,6 +628,20 @@ public class FinanceService {
                 "finance.turnover_rent.bill",
                 "ar_ap_item",
                 () -> billTurnoverRentInternal(request));
+    }
+
+    /** 建提成租金规则(填合同条款时):挂合同 + 阶梯超额累进 + 保底(无封顶)。 */
+    public TurnoverRentRuleRecord createTurnoverRentRule(TurnoverRentRuleRequest request) {
+        return executeWrite(
+                "createTurnoverRentRule",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TurnoverRentRuleRecord.class,
+                "finance_turnover_rent_rule.created",
+                "finance_turnover_rent_rule.create_failed",
+                "finance.turnover_rent.bill",
+                "turnover_rent_rule",
+                () -> createTurnoverRentRuleInternal(request));
     }
 
     // ── P1#14 保证金四动作台账 ───────────────────────────────────────────────────
@@ -1324,6 +1339,63 @@ public class FinanceService {
         return saved;
     }
 
+    private TurnoverRentRuleRecord createTurnoverRentRuleInternal(TurnoverRentRuleRequest request) {
+        TurnoverRentRuleRequest actual = requireRequest(request);
+        String merchantId = requireText(actual.merchantId(), "merchant_id");
+        checkMerchantOwnership(merchantId);
+        String ruleName = requireText(actual.ruleName(), "rule_name");
+        LocalDate effectiveFrom = requireDate(actual.effectiveFrom(), "effective_from");
+        LocalDate effectiveTo = actual.effectiveTo();
+        if (effectiveTo != null && effectiveTo.isBefore(effectiveFrom)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "effective_to must not be before effective_from");
+        }
+        List<TurnoverRentRuleRequest.TierInput> tierInputs = actual.tiers();
+        if (tierInputs == null || tierInputs.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "at least one tier is required");
+        }
+        long prevUpper = 0L;
+        for (int i = 0; i < tierInputs.size(); i++) {
+            TurnoverRentRuleRequest.TierInput t = tierInputs.get(i);
+            boolean last = i == tierInputs.size() - 1;
+            Integer rate = t.rateBps();
+            if (rate == null || rate < 0 || rate > 10000) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "tier rate_bps must be within 0..10000");
+            }
+            if (last) {
+                if (t.upperBoundCent() != null) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "the top tier must have no upper bound");
+                }
+            } else {
+                Long upper = t.upperBoundCent();
+                if (upper == null || upper <= prevUpper) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "tier upper_bound_cent must be ascending and positive");
+                }
+                prevUpper = upper;
+            }
+        }
+        Instant now = Instant.now();
+        String ruleId = "trr_" + slug(merchantId + "_" + actual.idempotencyKey());
+        TurnoverRentRuleRecord rule = repository.saveTurnoverRentRule(new TurnoverRentRuleRecord(
+                ruleId,
+                actual.contractId(),
+                merchantId,
+                ruleName,
+                0,
+                actual.minAmountCent(),
+                null,
+                effectiveFrom,
+                effectiveTo,
+                "active",
+                now));
+        int seq = 1;
+        for (TurnoverRentRuleRequest.TierInput t : tierInputs) {
+            repository.saveTurnoverRentRuleTier(new TurnoverRentRuleTierRecord(
+                    ruleId + "_t" + seq, ruleId, seq, t.upperBoundCent(), t.rateBps()));
+            seq++;
+        }
+        return rule;
+    }
+
     private ArApItemRecord billTurnoverRentInternal(TurnoverRentBillRequest request) {
         TurnoverRentBillRequest actual = requireRequest(request);
         String ruleId = requireText(actual.ruleId(), "rule_id");
@@ -1346,7 +1418,11 @@ public class FinanceService {
         Instant to = businessDayResolver.startInstant(periodEnd.plusDays(1));
         long turnover = repository.aggregateMerchantReflowTurnover(rule.merchantId(), from, to);
 
-        long rent = clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent());
+        // 阶梯超额累进优先；无阶梯(旧规则)回退单一费率 clampRent(兼容)。无封顶。
+        List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(rule.id());
+        long rent = tiers.isEmpty()
+                ? clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent())
+                : TurnoverRentMath.tieredRent(turnover, tiers, rule.minAmountCent());
         if (rent <= 0) {
             throw ApiException.badRequest("TURNOVER_RENT_ZERO",
                     "computed turnover rent is zero (turnover=" + turnover + "); nothing to bill");

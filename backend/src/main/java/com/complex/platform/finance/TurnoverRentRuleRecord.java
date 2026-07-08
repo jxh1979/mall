@@ -9,6 +9,7 @@ import java.time.LocalDate;
  */
 public record TurnoverRentRuleRecord(
         String id,
+        String contractId,
         @JsonIgnore String merchantId,
         String ruleName,
         int rateBps,

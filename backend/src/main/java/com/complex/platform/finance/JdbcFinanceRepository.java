@@ -889,16 +889,68 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public Optional<TurnoverRentRuleRecord> findTurnoverRentRuleById(String id) {
         return jdbcTemplate.query("""
-                SELECT id, merchant_id, rule_name, rate_bps, min_amount_cent, max_amount_cent,
+                SELECT id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, max_amount_cent,
                        effective_from, effective_to, status, created_at
                   FROM turnover_rent_rules
                  WHERE id = :id
                 """, Map.of("id", id), this::mapTurnoverRentRule).stream().findFirst();
     }
 
+    @Override
+    public TurnoverRentRuleRecord saveTurnoverRentRule(TurnoverRentRuleRecord rule) {
+        jdbcTemplate.update("""
+                INSERT INTO turnover_rent_rules (
+                    id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, max_amount_cent,
+                    effective_from, effective_to, status, created_at, updated_at
+                ) VALUES (
+                    :id, :contract_id, :merchant_id, :rule_name, :rate_bps, :min_amount_cent, :max_amount_cent,
+                    :effective_from, :effective_to, :status, :created_at, :created_at
+                )
+                """, new MapSqlParameterSource()
+                .addValue("id", rule.id())
+                .addValue("contract_id", rule.contractId())
+                .addValue("merchant_id", rule.merchantId())
+                .addValue("rule_name", rule.ruleName())
+                .addValue("rate_bps", rule.rateBps())
+                .addValue("min_amount_cent", rule.minAmountCent())
+                .addValue("max_amount_cent", rule.maxAmountCent())
+                .addValue("effective_from", rule.effectiveFrom())
+                .addValue("effective_to", rule.effectiveTo())
+                .addValue("status", rule.status())
+                .addValue("created_at", timestampWithTimeZone(rule.createdAt())));
+        return rule;
+    }
+
+    @Override
+    public TurnoverRentRuleTierRecord saveTurnoverRentRuleTier(TurnoverRentRuleTierRecord tier) {
+        jdbcTemplate.update("""
+                INSERT INTO turnover_rent_rule_tiers (id, rule_id, seq, upper_bound_cent, rate_bps)
+                VALUES (:id, :rule_id, :seq, :upper_bound_cent, :rate_bps)
+                """, new MapSqlParameterSource()
+                .addValue("id", tier.id())
+                .addValue("rule_id", tier.ruleId())
+                .addValue("seq", tier.seq())
+                .addValue("upper_bound_cent", tier.upperBoundCent())
+                .addValue("rate_bps", tier.rateBps()));
+        return tier;
+    }
+
+    @Override
+    public List<TurnoverRentRuleTierRecord> listTurnoverRentRuleTiers(String ruleId) {
+        return jdbcTemplate.query("""
+                SELECT id, rule_id, seq, upper_bound_cent, rate_bps
+                  FROM turnover_rent_rule_tiers
+                 WHERE rule_id = :rule_id
+                 ORDER BY seq
+                """, Map.of("rule_id", ruleId), (rs, n) -> new TurnoverRentRuleTierRecord(
+                rs.getString("id"), rs.getString("rule_id"), rs.getInt("seq"),
+                nullableLong(rs, "upper_bound_cent"), rs.getInt("rate_bps")));
+    }
+
     private TurnoverRentRuleRecord mapTurnoverRentRule(ResultSet rs, int rowNumber) throws SQLException {
         return new TurnoverRentRuleRecord(
                 rs.getString("id"),
+                rs.getString("contract_id"),
                 rs.getString("merchant_id"),
                 rs.getString("rule_name"),
                 rs.getInt("rate_bps"),
