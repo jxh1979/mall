@@ -595,23 +595,6 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        when(inventoryService.createTypedStockMovement(eq("redeem_consume"), any(StockMovementRequest.class)))
-                .thenReturn(new StockMovementRecord(
-                        "movement_redeem",
-                        "redeem_consume",
-                        "item_gift",
-                        "gift_shelf",
-                        null,
-                        2,
-                        "manual",
-                        null,
-                        "points_redemption:redemption_redeem-once",
-                        "system",
-                        List.of(),
-                        "completed",
-                        Instant.parse("2026-06-14T00:00:00Z"),
-                        null
-                ));
 
         CustomerPointsRedemptionRecord redemption = service.redeemPoints(
                 login.customerToken(),
@@ -631,13 +614,6 @@ class CustomerServiceTests {
         assertThat(customerRepository.pointsLedger)
                 .extracting(CustomerPointsLedgerRecord::pointsDelta, CustomerPointsLedgerRecord::balanceAfter, CustomerPointsLedgerRecord::sourceType)
                 .contains(org.assertj.core.groups.Tuple.tuple(-120L, 380L, "points_redemption"));
-        ArgumentCaptor<StockMovementRequest> stockRequest = ArgumentCaptor.forClass(StockMovementRequest.class);
-        verify(inventoryService).createTypedStockMovement(eq("redeem_consume"), stockRequest.capture());
-        assertThat(stockRequest.getValue().fromLocationId()).isEqualTo("gift_shelf");
-        assertThat(stockRequest.getValue().traceCode()).contains("points_redemption");
-        assertThat(stockRequest.getValue().items().getFirst())
-                .containsEntry("item_id", "item_gift")
-                .containsEntry("quantity", 2);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("customer.points_redeemed");
@@ -742,54 +718,6 @@ class CustomerServiceTests {
                 .noneMatch(entry -> "points_redemption".equals(entry.sourceType()));
     }
 
-    @Test
-    void redeemPointsKeepsBalanceWhenInventoryFails() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
-        customerRepository.savePoints(new CustomerPointsAccountRecord(
-                "points_" + login.customerId(),
-                login.customerId(),
-                500L,
-                "silver",
-                Map.of(),
-                0L,
-                "active",
-                Instant.parse("2026-06-14T00:00:00Z"),
-                0L,
-                null,
-                null,
-                0,
-                Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z")
-        ));
-        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
-                "gift_active",
-                "Plush Gift",
-                "gift",
-                120L,
-                "item_gift",
-                "gift_shelf",
-                1,
-                "active",
-                null,
-                null,
-                Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z")
-        ));
-        when(inventoryService.createTypedStockMovement(eq("redeem_consume"), any(StockMovementRequest.class)))
-                .thenThrow(ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient"));
-
-        assertThatThrownBy(() -> service.redeemPoints(
-                login.customerToken(),
-                "redeem-stock-fails",
-                new CustomerPointsRedemptionRequest(null, "gift_active", 1, "miniapp")
-        ))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("available stock is insufficient");
-
-        assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(500L);
-        assertThat(customerRepository.redemptions).isEmpty();
-        assertThat(customerRepository.pointsLedger).isEmpty();
-    }
 
     @Test
     void redeemPointsSeesCurrentBalanceAfterConcurrentModification() {

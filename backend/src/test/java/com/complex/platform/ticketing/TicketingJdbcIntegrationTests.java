@@ -40,7 +40,6 @@ class TicketingJdbcIntegrationTests {
         assertThat(regclass("terminal_sync_tasks")).isEqualTo("terminal_sync_tasks");
         assertThat(regclass("ticket_price_rules")).isEqualTo("ticket_price_rules");
         assertThat(regclass("ticket_orders")).isEqualTo("ticket_orders");
-        assertThat(regclass("ticket_order_items")).isEqualTo("ticket_order_items");
         assertThat(regclass("ticket_credentials")).isEqualTo("ticket_credentials");
         assertThat(regclass("ticket_refunds")).isEqualTo("ticket_refunds");
         assertThat(regclass("ticket_refund_lines")).isEqualTo("ticket_refund_lines");

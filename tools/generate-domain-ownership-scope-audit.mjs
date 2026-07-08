@@ -25,7 +25,6 @@ const inheritedRules = [
   { pattern: /^bar_table_guest_checkins$/, source: "reservation/table linkage", path: "reservation_id/table_id -> bar_reservations/bar_tables -> venue/project scope" },
   { pattern: /^bar_commission_calculations$/, source: "bill_id", path: "bill_id -> bar_bills -> bar_orders -> venue/project scope" },
   { pattern: /^saved_bottle_claims$/, source: "saved_bottle_id", path: "saved_bottle_id -> saved_bottles -> merchant/customer scope" },
-  { pattern: /^ticket_order_items$/, source: "order_id", path: "order_id -> ticket_orders -> ticket_type/project scope" },
   { pattern: /^ticket_credentials$/, source: "order_id/entitlement_id", path: "order_id/entitlement_id -> ticket_orders/issued_entitlements -> ticket_type/project scope" },
   { pattern: /^ticket_payment_intents$/, source: "order_id", path: "order_id -> ticket_orders -> ticket_type/project scope" },
   { pattern: /^ticket_refund_lines$/, source: "refund_id", path: "refund_id -> ticket_refunds -> order_id -> ticket_orders" },
@@ -88,6 +87,11 @@ function collectDefinitions(migrations) {
     while ((match = alterPattern.exec(migration.text)) !== null) {
       const table = match[1];
       definitions.set(table, `${definitions.get(table) ?? ""}\n-- ${migration.name}\n${match[0]}`);
+    }
+    // 审计 P1-1:识别 DROP TABLE,从最终 schema 排除已删表(迁移已按版本号排序,DROP 在 CREATE 之后生效)。
+    const dropPattern = /DROP TABLE(?: IF EXISTS)?\s+([a-zA-Z0-9_]+)/gi;
+    while ((match = dropPattern.exec(migration.text)) !== null) {
+      definitions.delete(match[1]);
     }
   }
   return definitions;
