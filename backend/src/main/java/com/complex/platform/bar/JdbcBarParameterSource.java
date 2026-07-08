@@ -116,20 +116,6 @@ final class JdbcBarParameterSource {
                 .addValue("created_at", timestampWithTimeZone(checkin.createdAt()));
     }
 
-    MapSqlParameterSource ageVerificationParameters(BarAgeVerificationRecord verification) {
-        return new MapSqlParameterSource()
-                .addValue("id", verification.id())
-                .addValue("business_id", verification.businessId())
-                .addValue("credential_payload", verification.credentialPayload())
-                .addValue("device_id", verification.deviceId())
-                .addValue("staff_id", verification.staffId())
-                .addValue("result", verification.result())
-                .addValue("provider_code", verification.providerCode())
-                .addValue("review_status", verification.reviewStatus())
-                .addValue("evidence_attachment_ids", writeJson(verification.evidenceAttachmentIds()))
-                .addValue("created_at", timestampWithTimeZone(verification.createdAt()));
-    }
-
     MapSqlParameterSource productParameters(BarProductRecord product) {
         return new MapSqlParameterSource()
                 .addValue("id", product.id())

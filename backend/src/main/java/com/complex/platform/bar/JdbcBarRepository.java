@@ -137,11 +137,6 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
-    public BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification) {
-        return catalog.saveAgeVerification(verification);
-    }
-
-    @Override
     public BarProductRecord saveProduct(BarProductRecord product) {
         return catalog.saveProduct(product);
     }

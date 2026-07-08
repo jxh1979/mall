@@ -84,8 +84,6 @@ public interface BarRepository {
         return List.of();
     }
 
-    BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification);
-
     BarProductRecord saveProduct(BarProductRecord product);
 
     List<BarProductRecord> listProducts(Optional<String> merchantScope);

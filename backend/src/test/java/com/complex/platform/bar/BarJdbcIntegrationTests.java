@@ -105,7 +105,6 @@ class BarJdbcIntegrationTests {
         assertThat(regclass("bar_tables")).isEqualTo("bar_tables");
         assertThat(regclass("bar_reservations")).isEqualTo("bar_reservations");
         assertThat(regclass("bar_table_guest_checkins")).isEqualTo("bar_table_guest_checkins");
-        assertThat(regclass("bar_age_verifications")).isEqualTo("bar_age_verifications");
         assertThat(regclass("bar_products")).isEqualTo("bar_products");
         assertThat(regclass("bar_orders")).isEqualTo("bar_orders");
         assertThat(regclass("bar_order_items")).isEqualTo("bar_order_items");

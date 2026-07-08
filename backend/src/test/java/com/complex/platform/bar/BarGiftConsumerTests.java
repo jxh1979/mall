@@ -359,7 +359,6 @@ class BarGiftConsumerTests {
         @Override public Optional<BarReservationRecord> findReservationById(String id) { return Optional.empty(); }
         @Override public int countGuestCheckins(String reservationId) { return 0; }
         @Override public BarTableGuestCheckinRecord saveGuestCheckin(BarTableGuestCheckinRecord checkin) { return checkin; }
-        @Override public BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification) { return verification; }
         @Override public BarProductRecord saveProduct(BarProductRecord product) { return product; }
         @Override public List<BarProductRecord> listProducts(Optional<String> merchantScope) { return List.of(); }
         @Override public Optional<BarProductRecord> findProductById(String id) { return Optional.empty(); }

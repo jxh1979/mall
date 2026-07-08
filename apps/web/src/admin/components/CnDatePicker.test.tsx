@@ -60,4 +60,27 @@ describe("CnDatePicker", () => {
     render(<CnDatePicker mode="month" value="" onChange={() => {}} data-testid="m" />);
     expect(screen.getByTestId("m").textContent).toContain("选择月份");
   });
+
+  it("日模式点标题下钻选年→选月→选日，快速跳到远期日期", () => {
+    const onChange = vi.fn();
+    render(<CnDatePicker value="2026-07-05" onChange={onChange} data-testid="d" />);
+    fireEvent.click(screen.getByTestId("d"));
+    fireEvent.click(screen.getByRole("button", { name: "选择年月" }));
+    expect(screen.getByText("2026年")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "选择年份" }));
+    fireEvent.click(screen.getByRole("button", { name: "2030" }));
+    fireEvent.click(screen.getByRole("button", { name: "8月" }));
+    fireEvent.click(screen.getByRole("button", { name: "15" }));
+    expect(onChange).toHaveBeenCalledWith("2030-08-15");
+  });
+
+  it("月模式点年标题下钻选年再选月回传 YYYY-MM", () => {
+    const onChange = vi.fn();
+    render(<CnDatePicker mode="month" value="2026-07" onChange={onChange} data-testid="m" />);
+    fireEvent.click(screen.getByTestId("m"));
+    fireEvent.click(screen.getByRole("button", { name: "选择年份" }));
+    fireEvent.click(screen.getByRole("button", { name: "2028" }));
+    fireEvent.click(screen.getByRole("button", { name: "5月" }));
+    expect(onChange).toHaveBeenCalledWith("2028-05");
+  });
 });
