@@ -186,6 +186,30 @@ public class AuthorizationService implements CallerScopeResolver {
         }
     }
 
+    /** 当前主体是否持有某权限(布尔·不抛错):用于按权限脱敏字段(如内部结算价)。 */
+    public boolean currentActorHasPermission(String permissionCode) {
+        try {
+            if (!knownPermission(permissionCode)) {
+                return false;
+            }
+            AccessActor actor = currentActor();
+            if (isPlatformAdminBridge(actor)) {
+                return true;
+            }
+            Instant checkedAt = Instant.now();
+            List<AccessRepository.PermissionEffect> effects = accessRepository.findPermissionEffects(actor.id(), checkedAt).stream()
+                    .filter(effect -> permissionCode.equals(effect.permissionCode()))
+                    .filter(effect -> isActive(effect, checkedAt))
+                    .toList();
+            if (effects.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.DENY)) {
+                return false;
+            }
+            return effects.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT);
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
     public boolean isPlatformAdmin(AccessActor actor) {
         return isPlatformAdminBridge(actor);
     }
