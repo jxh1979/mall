@@ -35,7 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class FinanceService {
+public class FinanceService implements TurnoverRentPort {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -1394,6 +1394,27 @@ public class FinanceService {
             seq++;
         }
         return rule;
+    }
+
+    /** 提成端口实现:该商户该自然月回流营业额 × 规则阶梯(或单一费率) → 提成额(分)。供合同域收租方式组合调用。 */
+    @Override
+    public long computePeriodTurnoverRent(String merchantId, String ruleId, String period) {
+        if (ruleId == null || ruleId.isBlank() || merchantId == null || period == null || !period.matches("\\d{4}-\\d{2}")) {
+            return 0L;
+        }
+        TurnoverRentRuleRecord rule = repository.findTurnoverRentRuleById(ruleId).orElse(null);
+        if (rule == null || !"active".equals(rule.status())) {
+            return 0L;
+        }
+        String[] ym = period.split("-");
+        LocalDate monthStart = LocalDate.of(Integer.parseInt(ym[0]), Integer.parseInt(ym[1]), 1);
+        Instant from = businessDayResolver.startInstant(monthStart);
+        Instant to = businessDayResolver.startInstant(monthStart.plusMonths(1));
+        long turnover = repository.aggregateMerchantReflowTurnover(merchantId, from, to);
+        List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(ruleId);
+        return tiers.isEmpty()
+                ? clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent())
+                : TurnoverRentMath.tieredRent(turnover, tiers, rule.minAmountCent());
     }
 
     private ArApItemRecord billTurnoverRentInternal(TurnoverRentBillRequest request) {
