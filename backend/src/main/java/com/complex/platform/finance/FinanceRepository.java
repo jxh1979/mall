@@ -64,43 +64,6 @@ public interface FinanceRepository {
         return currentDepositBalance(merchantId);
     }
 
-    /** 写一条 CAM 分摊行。default 空实现兼容既有测试双子。 */
-    default CamAllocationRecord saveCamAllocation(CamAllocationRecord allocation) {
-        return allocation;
-    }
-
-    // ── P2#④ CAM 年度 true-up（V118）：已预收归集 + 差额台账 ─────────────────────
-
-    /**
-     * 该商户在某 settlementPeriod 的 CAM 已预收合计（分）：按 cam_allocations.settlement_period 归集 allocated_amount_cent。
-     * default 返回 0 兼容既有测试双子。
-     */
-    default long sumCamPrepaidByMerchantAndPeriod(String merchantId, String settlementPeriod) {
-        return 0L;
-    }
-
-    /** 标记某 settlementPeriod 既有 CAM 预收行已被 true-up 纳入对账（trued_up=TRUE，防重复）。default 空实现兼容测试双子。 */
-    default void markCamAllocationsTruedUp(String settlementPeriod) {
-    }
-
-    /**
-     * P0 资金修复：某 settlementPeriod 已存在的 CAM true-up 批次数。
-     * 用于阻断同期重复 true-up（同幂等键重放已被外层幂等短路，再次进入必为不同键）。default 返回 0 兼容测试双子。
-     */
-    default long countCamTrueUpRunsForPeriod(String settlementPeriod) {
-        return 0L;
-    }
-
-    /** 写一条 CAM true-up 批次。default 原样返回兼容既有测试双子。 */
-    default CamTrueUpRunRecord saveCamTrueUpRun(CamTrueUpRunRecord run) {
-        return run;
-    }
-
-    /** 写一条 CAM true-up 逐户差额行。default 原样返回兼容既有测试双子。 */
-    default CamTrueUpLineRecord saveCamTrueUpLine(CamTrueUpLineRecord line) {
-        return line;
-    }
-
     // ── F-OPS-08 物业费固定计费（V150，替代已废止 CAM）────────────────────────────
 
     /** upsert 物业费费率（ON CONFLICT(id) 更新单价/状态）。default 原样返回兼容既有测试双子。 */

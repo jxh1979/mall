@@ -11,6 +11,12 @@ public record RegisterTraceCodeRequest(
         String idempotencyKey,
         String itemId,
         String batchId,
-        String traceCode
+        String traceCode,
+        // 平台管理员代登记时须指定归属商户(商户范围用户忽略此字段·强制用自身范围·防跨商户)。
+        String merchantId
 ) {
+    // 向后兼容 4 参构造(merchantId 默认 null → 用认证上下文的商户范围)。
+    public RegisterTraceCodeRequest(String idempotencyKey, String itemId, String batchId, String traceCode) {
+        this(idempotencyKey, itemId, batchId, traceCode, null);
+    }
 }

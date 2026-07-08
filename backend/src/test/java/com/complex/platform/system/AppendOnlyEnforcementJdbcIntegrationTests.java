@@ -60,7 +60,7 @@ class AppendOnlyEnforcementJdbcIntegrationTests {
                 "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid "
                         + "WHERE t.tgname = 'trg_append_only_ud' AND c.relname IN "
                         + "('audit_events','evidence_events','customer_stored_value_transactions','deposit_ledger',"
-                        + "'risk_alert_actions','ar_ap_payments','cam_trueup_runs','cam_trueup_lines')",
+                        + "'risk_alert_actions','ar_ap_payments')",
                 Integer.class);
         assertThat(count).isEqualTo(8);
     }

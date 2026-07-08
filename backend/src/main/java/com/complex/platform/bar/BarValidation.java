@@ -121,7 +121,18 @@ final class BarValidation {
         if (source == null) {
             source = UUID.randomUUID().toString();
         }
-        return source.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_|_$", "");
+        String normalized = source.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_|_$", "");
+        // 单号防溢出:拼接型输入(账单号+商品号+套餐号…)normalized 会很长,超出 id 字段上限(varchar 64)。
+        // >40 时改用定长哈希(酒吧单号前缀最长约17字符,17+32=49<=64),短 slug 保持可读不变(零兼容影响)。
+        if (normalized.length() > 40) {
+            try {
+                return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(normalized.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 32);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new IllegalStateException("slug hashing unavailable", e);
+            }
+        }
+        return normalized;
     }
 
     static String jsonText(String value) {
