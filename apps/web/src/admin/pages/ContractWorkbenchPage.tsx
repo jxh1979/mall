@@ -4,7 +4,7 @@ import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Tabs } from "antd";
 import { useAdminResource } from "../hooks/useAdminResource";
-import type { AdminPageProps } from "../types";
+import type { AdminPageProps, BusinessEntityRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -88,6 +88,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [disputeReason, setDisputeReason] = React.useState("");
   // 商户显名字典（页面级拉取，失败降级回 ID）。
   const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
+  const [merchants, setMerchants] = React.useState<Array<{ id: string; displayName?: string; companyName?: string }>>([]);
+  const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。合同/变更/退租结算三张业务表接入。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-2：起草合同收起为主按钮，点击弹出分步引导（GuidedFlowModal）。
@@ -110,6 +112,9 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
       try {
         const merchants = await api.get<Array<{ id: string; displayName?: string; companyName?: string }>>("/api/v1/platform/merchants");
         setMerchantNames(Object.fromEntries((merchants ?? []).filter((m) => m.displayName || m.companyName).map((m) => [m.id, (m.displayName ?? m.companyName) as string])));
+        setMerchants(merchants ?? []);
+        const ents = await api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities");
+        setEntities(ents ?? []);
       } catch {
         /* 无权限或接口失败 → 保持空字典 */
       }
@@ -393,9 +398,18 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
               },
               content: (
                 <>
-                  <label>商户 id<input aria-label="商户 id" placeholder="商户 id" value={draft.merchantId} onChange={(e) => setDraft({ ...draft, merchantId: e.target.value })} /></label>
-                  <label>合同主体 id<input aria-label="合同主体 id" placeholder="合同主体 id" value={draft.contractSubjectId} onChange={(e) => setDraft({ ...draft, contractSubjectId: e.target.value })} /></label>
-                  <label>结算主体 id<input aria-label="结算主体 id" placeholder="结算主体 id(缺省=合同主体)" value={draft.settlementSubjectId} onChange={(e) => setDraft({ ...draft, settlementSubjectId: e.target.value })} /></label>
+                  <label>商户<select aria-label="商户 id" value={draft.merchantId} onChange={(e) => setDraft({ ...draft, merchantId: e.target.value })}>
+                    <option value="">请选择商户</option>
+                    {merchants.map((m) => <option key={m.id} value={m.id}>{(m.displayName ?? m.companyName ?? m.id)}（{shortId(m.id)}）</option>)}
+                  </select></label>
+                  <label>合同主体<select aria-label="合同主体 id" value={draft.contractSubjectId} onChange={(e) => setDraft({ ...draft, contractSubjectId: e.target.value })}>
+                    <option value="">请选择合同主体</option>
+                    {entities.map((en) => <option key={en.id} value={en.id}>{(en.entityName ?? en.id)}（{shortId(en.id)}）</option>)}
+                  </select></label>
+                  <label>结算主体<select aria-label="结算主体 id" value={draft.settlementSubjectId} onChange={(e) => setDraft({ ...draft, settlementSubjectId: e.target.value })}>
+                    <option value="">缺省 = 合同主体</option>
+                    {entities.map((en) => <option key={en.id} value={en.id}>{(en.entityName ?? en.id)}（{shortId(en.id)}）</option>)}
+                  </select></label>
                 </>
               ),
             },

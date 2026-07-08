@@ -7,7 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { IconButton } from "../components/IconButton";
 import { SelectOutlined } from "@ant-design/icons";
-import type { AdminPageProps } from "../types";
+import type { AdminPageProps, GovernanceSpaceRow, GovernanceProjectRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
@@ -82,6 +82,9 @@ function statusBadge(status?: string | null) {
 export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [meters, setMeters] = React.useState<EnergyMeterRow[]>([]);
   const [readings, setReadings] = React.useState<EnergyReadingRow[]>([]);
+  const [spaces, setSpaces] = React.useState<GovernanceSpaceRow[]>([]);
+  const [merchants, setMerchants] = React.useState<Array<{ id: string; displayName?: string; companyName?: string }>>([]);
+  const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
   const [difference, setDifference] = React.useState<EnergyDifferenceRow | null>(null);
   const [settlements, setSettlements] = React.useState<EnergySettlementRow[]>([]);
   const [period, setPeriod] = React.useState("2026-06");
@@ -107,6 +110,15 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
       ]);
       setMeters(meterRows ?? []);
       setReadings(readingRows ?? []);
+      // 归属下拉字典（失败不阻断主流程）。
+      try {
+        const [sp, mc, pj] = await Promise.all([
+          api.get<GovernanceSpaceRow[]>("/api/v1/platform/spaces"),
+          api.get<Array<{ id: string; displayName?: string; companyName?: string }>>("/api/v1/platform/merchants"),
+          api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
+        ]);
+        setSpaces(sp ?? []); setMerchants(mc ?? []); setProjects(pj ?? []);
+      } catch { /* 无权限→保持空字典，降级为无选项 */ }
     },
     { onError: setGlobalError, fallbackMessage: "能源抄表数据读取失败", onStart: () => setGlobalError(null) },
   );
@@ -319,10 +331,10 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
               description: "可选填上级总表、空间/商户/项目归属，选择读数方式与启用状态。",
               content: (
                 <>
-                  <label><span>上级总表 id（可空）</span><input data-testid="energy-meter-guided-parent" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })} /></label>
-                  <label><span>空间 id（可空）</span><input data-testid="energy-meter-guided-space" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })} /></label>
-                  <label><span>商户 id（可空）</span><input data-testid="energy-meter-guided-merchant" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })} /></label>
-                  <label><span>项目 id（可空）</span><input data-testid="energy-meter-guided-project" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })} /></label>
+                  <label><span>上级总表 id（可空）</span><select data-testid="energy-meter-guided-parent" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })}><option value="">— 不选 —</option>{meters.map((m) => <option key={m.id} value={m.id}>{(m.name ?? m.id)}（{shortId(m.id)}）</option>)}</select></label>
+                  <label><span>空间 id（可空）</span><select data-testid="energy-meter-guided-space" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })}><option value="">— 不选 —</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+                  <label><span>商户 id（可空）</span><select data-testid="energy-meter-guided-merchant" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })}><option value="">— 不选 —</option>{merchants.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+                  <label><span>项目 id（可空）</span><select data-testid="energy-meter-guided-project" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })}><option value="">— 不选 —</option>{projects.map((x) => <option key={x.id} value={x.id}>{(x.name ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
                   <label><span>读数方式</span><select data-testid="energy-meter-guided-readmode" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select></label>
                   <label className="admin-inline-check"><Switch size="default" data-testid="energy-meter-guided-active" checked={meterForm.active} onChange={(checked) => setMeterForm({ ...meterForm, active: checked })} /><span>启用</span></label>
                 </>
@@ -342,11 +354,11 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           <input aria-label="表计 id" placeholder="表计 id(选中后更新)" value={meterForm.id} onChange={(event) => setMeterForm({ ...meterForm, id: event.target.value })} />
           <input aria-label="表计名称" placeholder="表计名称" value={meterForm.name} onChange={(event) => setMeterForm({ ...meterForm, name: event.target.value })} />
           <select aria-label="表计类型" value={meterForm.meterType} onChange={(event) => setMeterForm({ ...meterForm, meterType: event.target.value })}>{METER_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <input aria-label="上级总表 id" placeholder="上级总表 id" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })} />
+          <select aria-label="上级总表 id" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })}><option value="">上级总表（可空）</option>{meters.map((m) => <option key={m.id} value={m.id}>{(m.name ?? m.id)}（{shortId(m.id)}）</option>)}</select>
           <select aria-label="归集对象" value={meterForm.gatherObject} onChange={(event) => setMeterForm({ ...meterForm, gatherObject: event.target.value })}>{GATHER_OBJECTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <input aria-label="空间 id" placeholder="空间 id" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })} />
-          <input aria-label="商户 id" placeholder="商户 id" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })} />
-          <input aria-label="项目 id" placeholder="项目 id" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })} />
+          <select aria-label="空间 id" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })}><option value="">空间（可空）</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select>
+          <select aria-label="商户 id" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })}><option value="">商户（可空）</option>{merchants.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.id)}（{shortId(x.id)}）</option>)}</select>
+          <select aria-label="项目 id" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })}><option value="">项目（可空）</option>{projects.map((x) => <option key={x.id} value={x.id}>{(x.name ?? x.id)}（{shortId(x.id)}）</option>)}</select>
           <select aria-label="读数方式" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select>
           <label className="admin-inline-check"><Switch size="default" checked={meterForm.active} onChange={(checked) => setMeterForm({ ...meterForm, active: checked })} /><span>启用</span></label>
           <PermissionButton permissionsState={effectivePermissions} permissions={METER} data-testid="energy-meter-update" onClick={() => void saveMeter()}>保存表计</PermissionButton>

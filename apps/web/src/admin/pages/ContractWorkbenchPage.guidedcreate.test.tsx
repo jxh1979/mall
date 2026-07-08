@@ -20,7 +20,8 @@ function makeApi(): AdminApi {
     if (url.includes("/contracts/approval-flow")) return Promise.resolve(envelope([]));
     if (url.includes("/contracts/expiry-color-rules")) return Promise.resolve(envelope([]));
     if (url.includes("/contracts/space-rental-status")) return Promise.resolve(envelope([]));
-    if (url.includes("/platform/merchants")) return Promise.resolve(envelope([]));
+    if (url.includes("/platform/business-entities")) return Promise.resolve(envelope([{ id: "subject-1", entityName: "测试主体1" }]));
+    if (url.includes("/platform/merchants")) return Promise.resolve(envelope([{ id: "merchant-1", displayName: "测试商户1" }]));
     if (url.endsWith("/api/v1/contracts")) return Promise.resolve(envelope([]));
     return Promise.resolve(envelope([]));
   }));
