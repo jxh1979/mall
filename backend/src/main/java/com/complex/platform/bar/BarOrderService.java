@@ -847,7 +847,7 @@ public class BarOrderService {
             if (!increased) {
                 throw ApiException.conflict("STOCK_BALANCE_NOT_FOUND", "stock balance not found for return-to-stock");
             }
-            inventoryMovementId = "movement_" + slug(order.id() + ":void:" + item.id() + ":" + idempotencyKey);
+            inventoryMovementId = boundedAdjustmentId("movement_", order.id() + ":void:" + item.id() + ":" + idempotencyKey);
             repository.saveStockMovement(new StockMovementSnapshot(
                     inventoryMovementId,
                     "inbound",
@@ -894,7 +894,7 @@ public class BarOrderService {
         boolean approvalRequired = true;
         String initialStatus = approvalRequired ? "pending" : "applied";
         BarOrderItemVoidRecord voidRecord = repository.saveOrderItemVoid(new BarOrderItemVoidRecord(
-                "void_" + slug(item.id() + ":" + idempotencyKey),
+                boundedAdjustmentId("void_", item.id() + ":" + idempotencyKey),
                 item.id(),
                 order.id(),
                 order.barId(),
@@ -1052,7 +1052,7 @@ public class BarOrderService {
                     throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
                 }
                 repository.saveStockMovement(new StockMovementSnapshot(
-                        "movement_" + slug(current.id() + ":void_reject:" + item.id() + ":" + current.idempotencyKey()),
+                        boundedAdjustmentId("movement_", current.id() + ":void_reject:" + item.id() + ":" + current.idempotencyKey()),
                         "outbound",
                         inventoryItemId,
                         stockLocationId,
@@ -1082,8 +1082,7 @@ public class BarOrderService {
                 String reversalIdempotencyKey = current.idempotencyKey() + ":void_reject";
                 // 已结退款过账冲正：过一条对冲应收，财务退款台账净额归零。
                 String reversalArApItemId = null;
-                String reversalAdjustmentId = "bill_adjustment_void_reject_"
-                        + slug(bill.id() + ":" + item.id() + ":" + reversalIdempotencyKey);
+                String reversalAdjustmentId = boundedAdjustmentId("bill_adjustment_void_reject_", bill.id() + ":" + item.id() + ":" + reversalIdempotencyKey);
                 if (settled) {
                     BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
                             .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
@@ -1188,7 +1187,7 @@ public class BarOrderService {
                     .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
             arApItemId = receivableLedgerService.createRefundPayable(
                     bill, refundOrder,
-                    "bill_adjustment_void_" + slug(bill.id() + ":" + item.id() + ":" + idempotencyKey),
+                    boundedAdjustmentId("bill_adjustment_void_", bill.id() + ":" + item.id() + ":" + idempotencyKey),
                     amount, idempotencyKey, reason, safeList(request.evidenceAttachmentIds()));
         }
         repository.saveBill(com.complex.platform.bar.BarBillRecords.billWithAmounts(
@@ -1201,7 +1200,7 @@ public class BarOrderService {
                 bill.paymentStatus(),
                 bill.settlementStatus(),
                 now));
-        String adjustmentId = "bill_adjustment_void_" + slug(bill.id() + ":" + item.id() + ":" + idempotencyKey);
+        String adjustmentId = boundedAdjustmentId("bill_adjustment_void_", bill.id() + ":" + item.id() + ":" + idempotencyKey);
         repository.saveBillAdjustment(new BarBillAdjustmentRecord(
                 adjustmentId,
                 bill.id(),
@@ -1221,6 +1220,18 @@ public class BarOrderService {
                 now,
                 refundedAt));
         return adjustmentId;
+    }
+
+    // ponytail: 退菜/调账 id 由长账单id+商品项id无界拼接会溢出 varchar(64);哈希封顶到 前缀+32 保证 <=64 且 collision-safe。
+    private static String boundedAdjustmentId(String prefix, String seed) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            String hex = java.util.HexFormat.of().formatHex(
+                    digest.digest(seed.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            return prefix + hex.substring(0, 32);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("adjustment id hashing unavailable", e);
+        }
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {
