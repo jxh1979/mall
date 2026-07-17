@@ -107,6 +107,12 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   const [rows, setRows] = React.useState<AmusementSafetyInspectionRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [createTitle, setCreateTitle] = React.useState("开放前护栏检查");
+  const [projects, setProjects] = React.useState<Array<{ id: string; projectName?: string }>>([]);
+  const [templates, setTemplates] = React.useState<Array<{ id: string; templateName?: string }>>([]);
+  const [createForm, setCreateForm] = React.useState({ projectId: "", deviceId: "", templateId: "", overallResult: "pass" });
+  const [maintRows, setMaintRows] = React.useState<Array<{ id: string; projectId?: string; deviceId?: string; result?: string; status?: string }>>([]);
+  const [maintForm, setMaintForm] = React.useState({ projectId: "", deviceId: "", vendorId: "", engineerName: "", result: "pass", exceptionNote: "" });
+  const [resumeSupervisor, setResumeSupervisor] = React.useState("");
   const [rectifyNote, setRectifyNote] = React.useState("已更换防护垫并上传照片");
   // 行明细抽屉：整行可点 → 该巡检完整字段（结果/状态中文·时间中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -142,7 +148,16 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      setRows(await api.get<AmusementSafetyInspectionRow[]>("/api/v1/amusement/safety-inspections"));
+      const [inspections, projectRows, templateRows, maintenanceRows] = await Promise.all([
+        api.get<AmusementSafetyInspectionRow[]>("/api/v1/amusement/safety-inspections"),
+        api.get<Array<{ id: string; projectName?: string }>>("/api/v1/amusement/projects").catch(() => []),
+        api.get<Array<{ id: string; templateName?: string }>>("/api/v1/amusement/safety-templates").catch(() => []),
+        api.get<Array<{ id: string; projectId?: string; deviceId?: string; result?: string; status?: string }>>("/api/v1/amusement/maintenance-records").catch(() => []),
+      ]);
+      setRows(inspections);
+      setProjects(projectRows ?? []);
+      setTemplates(templateRows ?? []);
+      setMaintRows(maintenanceRows ?? []);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -168,22 +183,58 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   });
 
   async function createInspection() {
+    if (!createForm.projectId) {
+      setFormError("请先选择巡检项目。");
+      return;
+    }
     if (!createTitle.trim()) {
       setFormError(TEXT.createTitleRequired);
       return;
     }
+    const pass = createForm.overallResult === "pass";
     const request = {
       idempotencyKey: nextKey("amusement-safety-create"),
-      operatorNote: "完整后台创建开放前安全巡检",
-      evidenceAttachmentIds: ["att-amusement-safety-create"],
-      projectId: "amuse-1",
-      templateId: "safety-template-1",
-      overallResult: "pending_rectification",
+      operatorNote: "开放前安全巡检",
+      // 合格必须带证据(后端 SAFETY_INSPECTION_EVIDENCE_REQUIRED);不合格/待整改可不带。
+      evidenceAttachmentIds: pass ? ["att-amusement-safety-create"] : [],
+      projectId: createForm.projectId,
+      deviceId: createForm.deviceId.trim() || undefined,
+      templateId: createForm.templateId || undefined,
+      overallResult: createForm.overallResult,
       inspectedAt: "2026-06-16T10:00:00.000Z",
-      items: [{ itemCode: "guardrail", itemName: createTitle, result: "fail", severity: "high" }],
+      items: [{ itemCode: "guardrail", itemName: createTitle, result: pass ? "pass" : "fail", severity: "high" }],
     };
     const ok = await runAction("amusement_safety_inspection_created", request, () => api.post("/api/v1/amusement/safety-inspections", request));
     if (ok) setCreateOpen(false);
+  }
+
+  async function submitMaintenance() {
+    if (!maintForm.projectId || !maintForm.vendorId.trim()) {
+      setGlobalError("提交检修需选择项目并填写维保供应商 id。");
+      return;
+    }
+    const request = {
+      idempotencyKey: nextKey("amusement-maintenance"),
+      projectId: maintForm.projectId,
+      deviceId: maintForm.deviceId.trim() || undefined,
+      maintenanceVendorId: maintForm.vendorId.trim(),
+      engineerName: maintForm.engineerName.trim() || undefined,
+      result: maintForm.result,
+      exceptionNote: maintForm.result === "fail" ? (maintForm.exceptionNote.trim() || "设备异常待整改") : undefined,
+      sourceTerminal: "kiosk",
+    };
+    const ok = await runAction("amusement_maintenance_submitted", request, () => api.post("/api/v1/amusement/maintenance-records", request));
+    if (ok) reload();
+  }
+
+  async function confirmResume(id: string) {
+    if (!resumeSupervisor.trim()) {
+      setGlobalError("确认复工需填写主管 id。");
+      return;
+    }
+    const request = { idempotencyKey: nextKey("amusement-maintenance-resume"), supervisorConfirmedBy: resumeSupervisor.trim() };
+    const ok = await runAction("amusement_maintenance_resumed", request, () => api.post(`/api/v1/amusement/maintenance-records/${id}/confirm-resume`, request));
+    if (ok) reload();
   }
 
   async function submitInspection() {
@@ -340,9 +391,25 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
                 {
                   title: "巡检项",
                   description: "填写开放前安全巡检的检查项说明。",
-                  validate: () => (createTitle.trim() ? null : TEXT.createTitleRequired),
+                  validate: () => (!createForm.projectId ? "请先选择巡检项目。" : createTitle.trim() ? null : TEXT.createTitleRequired),
                   content: (
-                    <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
+                    <>
+                      <label>巡检项目<select data-testid="amusement-safety-create-project" value={createForm.projectId} onChange={(e) => setCreateForm({ ...createForm, projectId: e.target.value })}>
+                        <option value="">选择项目</option>
+                        {projects.map((p) => (<option key={p.id} value={p.id}>{p.projectName ?? p.id}</option>))}
+                      </select></label>
+                      <label>巡检模板<select data-testid="amusement-safety-create-template" value={createForm.templateId} onChange={(e) => setCreateForm({ ...createForm, templateId: e.target.value })}>
+                        <option value="">选择模板（可空）</option>
+                        {templates.map((t) => (<option key={t.id} value={t.id}>{t.templateName ?? t.id}</option>))}
+                      </select></label>
+                      <label>设备码<input data-testid="amusement-safety-create-device" placeholder="设备码（可空=项目级巡检）" value={createForm.deviceId} onChange={(e) => setCreateForm({ ...createForm, deviceId: e.target.value })} /></label>
+                      <label>巡检结果<select data-testid="amusement-safety-create-result" value={createForm.overallResult} onChange={(e) => setCreateForm({ ...createForm, overallResult: e.target.value })}>
+                        <option value="pass">合格</option>
+                        <option value="fail">不合格</option>
+                        <option value="pending_rectification">待整改</option>
+                      </select></label>
+                      <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
+                    </>
                   ),
                 },
               ]}
@@ -358,6 +425,43 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
               <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.approve_reopen"]} data-testid="amusement-safety-approve-reopen" disabled={busyAction !== ""} onClick={() => void approveReopen()}>{TEXT.approveReopen}</PermissionButton>
             </div>
             <div className="admin-muted-action" data-testid="amusement-safety-boundary">{TEXT.boundary}</div>
+            <h3>定期检修 / 主管恢复营业</h3>
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="amusement-maintenance-table">
+                <thead><tr><th>项目</th><th>设备</th><th>检修结果</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  {maintRows.map((r) => (
+                    <tr key={r.id} data-testid={`amusement-maintenance-${r.id}`}>
+                      <td>{r.projectId ?? "-"}</td>
+                      <td>{r.deviceId ?? "-"}</td>
+                      <td>{formatBusinessStatus(r.result)}</td>
+                      <td>{formatBusinessStatus(r.status)}</td>
+                      <td>{r.result === "pass" && r.status !== "confirmed" ? (
+                        <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.maintenance.confirm"]} data-testid={`amusement-maintenance-resume-${r.id}`} onClick={() => void confirmResume(r.id)}>确认复工</PermissionButton>
+                      ) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="admin-inline-form" data-testid="amusement-maintenance-form">
+              <select aria-label="检修项目" value={maintForm.projectId} onChange={(e) => setMaintForm({ ...maintForm, projectId: e.target.value })}>
+                <option value="">选择项目</option>
+                {projects.map((p) => (<option key={p.id} value={p.id}>{p.projectName ?? p.id}</option>))}
+              </select>
+              <input aria-label="检修设备码" placeholder="设备码（可空）" value={maintForm.deviceId} onChange={(e) => setMaintForm({ ...maintForm, deviceId: e.target.value })} />
+              <input aria-label="维保供应商id" placeholder="维保供应商 id" value={maintForm.vendorId} onChange={(e) => setMaintForm({ ...maintForm, vendorId: e.target.value })} />
+              <input aria-label="工程师" placeholder="工程师（可空）" value={maintForm.engineerName} onChange={(e) => setMaintForm({ ...maintForm, engineerName: e.target.value })} />
+              <select aria-label="检修结果" value={maintForm.result} onChange={(e) => setMaintForm({ ...maintForm, result: e.target.value })}>
+                <option value="pass">合格（可复工）</option>
+                <option value="fail">不合格</option>
+              </select>
+              {maintForm.result === "fail" ? (<input aria-label="异常说明" placeholder="异常说明" value={maintForm.exceptionNote} onChange={(e) => setMaintForm({ ...maintForm, exceptionNote: e.target.value })} />) : null}
+              <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.maintenance.submit"]} data-testid="amusement-maintenance-submit" onClick={() => void submitMaintenance()}>提交检修</PermissionButton>
+            </div>
+            <div className="admin-inline-form">
+              <input aria-label="复工主管id" placeholder="确认复工主管 id" value={resumeSupervisor} onChange={(e) => setResumeSupervisor(e.target.value)} />
+            </div>
             {formError ? <div data-testid="amusement-safety-error" className="admin-inline-error">{formError}</div> : null}
 
             {inspectionsTable}

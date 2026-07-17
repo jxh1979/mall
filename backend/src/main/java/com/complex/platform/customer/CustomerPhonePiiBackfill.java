@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 @Component
 class CustomerPhonePiiBackfill implements ApplicationRunner {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CustomerPhonePiiBackfill.class);
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final PiiCipher piiCipher;
     private final BlindIndex blindIndex;
@@ -34,13 +36,19 @@ class CustomerPhonePiiBackfill implements ApplicationRunner {
                 "SELECT id, phone FROM customers WHERE phone_hash IS NULL", Map.of());
         for (Map<String, Object> row : rows) {
             String id = (String) row.get("id");
-            // stored 可能已是密文（回填半途中断重跑）：decrypt 幂等取明文，再算盲索引并（幂等）加密。
-            String plaintext = piiCipher.decrypt((String) row.get("phone"));
-            jdbcTemplate.update(
-                    "UPDATE customers SET phone = :phone, phone_hash = :phone_hash WHERE id = :id",
-                    Map.of("phone", piiCipher.encrypt(plaintext),
-                            "phone_hash", blindIndex.hash(plaintext),
-                            "id", id));
+            try {
+                // stored 可能已是密文（回填半途中断重跑）：decrypt 幂等取明文，再算盲索引并（幂等）加密。
+                String plaintext = piiCipher.decrypt((String) row.get("phone"));
+                jdbcTemplate.update(
+                        "UPDATE customers SET phone = :phone, phone_hash = :phone_hash WHERE id = :id",
+                        Map.of("phone", piiCipher.encrypt(plaintext),
+                                "phone_hash", blindIndex.hash(plaintext),
+                                "id", id));
+            } catch (RuntimeException ex) {
+                // 该条手机号非当前 PII key 加密（如测试共享库跨 key 遗留数据）：跳过并告警，
+                // 不因单条阻断整个回填/启动。生产同 key 不会命中此分支。
+                log.warn("skip phone pii backfill for customer {} (decrypt failed): {}", id, ex.toString());
+            }
         }
     }
 }

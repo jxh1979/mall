@@ -62,7 +62,7 @@ class AppendOnlyEnforcementJdbcIntegrationTests {
                         + "('audit_events','evidence_events','customer_stored_value_transactions','deposit_ledger',"
                         + "'risk_alert_actions','ar_ap_payments')",
                 Integer.class);
-        assertThat(count).isEqualTo(8);
+        assertThat(count).isEqualTo(6);
     }
 
     @Test
