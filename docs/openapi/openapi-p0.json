@@ -14371,234 +14371,6 @@
         }
       }
     },
-    "/api/v1/finance/cam/allocations": {
-      "post": {
-        "tags": [
-          "finance"
-        ],
-        "operationId": "allocateCam",
-        "summary": "（已废止）CAM 权重分摊 → 改用物业费固定计费；调用返回 409 CAM_ALLOCATION_ABOLISHED",
-        "x-auth-context": "staff-token",
-        "x-permission": "finance.cam.allocate",
-        "x-data-scope": "platform",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "finance.cam.allocated",
-        "x-audit-event-failure": "finance.cam.allocate_failed",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "required": [
-                  "idempotency_key",
-                  "period",
-                  "total_amount_cent",
-                  "due_date",
-                  "shares"
-                ],
-                "properties": {
-                  "idempotency_key": {
-                    "type": "string",
-                    "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
-                    "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
-                  "period": {
-                    "type": "string",
-                    "description": "计费周期标识。",
-                    "maxLength": 255
-                  },
-                  "total_amount_cent": {
-                    "type": "integer",
-                    "description": "待分摊总额。（单位：分，禁止浮点）",
-                    "minimum": 0,
-                    "maximum": 999999999999
-                  },
-                  "due_date": {
-                    "type": "string",
-                    "format": "date",
-                    "description": "应收到期日。"
-                  },
-                  "shares": {
-                    "type": "array",
-                    "description": "分摊明细列表。",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "merchant_id",
-                        "weight_bps"
-                      ],
-                      "properties": {
-                        "merchant_id": {
-                          "type": "string",
-                          "description": "商户 ID。",
-                          "maxLength": 64
-                        },
-                        "weight_bps": {
-                          "type": "integer",
-                          "description": "分摊权重（基点，万分比）。",
-                          "minimum": 0
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "deprecated": true
-      }
-    },
-    "/api/v1/finance/cam/trueups": {
-      "post": {
-        "tags": [
-          "finance"
-        ],
-        "operationId": "trueUpCam",
-        "summary": "（已废止）CAM 年度 true-up → 物业费不退不补、无对账；调用返回 409 CAM_TRUEUP_ABOLISHED",
-        "x-auth-context": "staff-token",
-        "x-permission": "finance.cam.trueup",
-        "x-data-scope": "platform",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "finance.cam.trued_up",
-        "x-audit-event-failure": "finance.cam.trueup_failed",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "required": [
-                  "idempotency_key",
-                  "settlement_period",
-                  "actual_total_amount_cent",
-                  "due_date",
-                  "shares"
-                ],
-                "properties": {
-                  "idempotency_key": {
-                    "type": "string",
-                    "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
-                    "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
-                  "settlement_period": {
-                    "type": "string",
-                    "description": "结算周期标识。",
-                    "maxLength": 255
-                  },
-                  "actual_total_amount_cent": {
-                    "type": "integer",
-                    "description": "实际总额。（单位：分，禁止浮点）",
-                    "minimum": 0,
-                    "maximum": 999999999999
-                  },
-                  "due_date": {
-                    "type": "string",
-                    "format": "date",
-                    "description": "应收/应退到期日。"
-                  },
-                  "shares": {
-                    "type": "array",
-                    "description": "分摊明细列表。",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "merchant_id",
-                        "weight_bps"
-                      ],
-                      "properties": {
-                        "merchant_id": {
-                          "type": "string",
-                          "description": "商户 ID。",
-                          "maxLength": 64
-                        },
-                        "weight_bps": {
-                          "type": "integer",
-                          "description": "分摊权重（基点）。",
-                          "minimum": 0
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "deprecated": true
-      }
-    },
     "/api/v1/finance/deposits/actions": {
       "post": {
         "tags": [
@@ -26295,13 +26067,13 @@
         }
       }
     },
-    "/api/v1/customer-accounts": {
-      "get": {
+    "/api/v1/customer-accounts/lookup": {
+      "post": {
         "tags": [
           "customer"
         ],
         "operationId": "lookupCustomerAccountByPhone",
-        "summary": "按手机号精确查客人账号（盲索引，返回安全投影，明文手机号不出网）",
+        "summary": "按手机号精确查客人账号（盲索引，返回安全投影；手机号走请求体不入 URL）",
         "x-permission": "customer.account.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -26310,17 +26082,25 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.account.viewed",
         "x-audit-event-failure": "customer.account.view_failed",
-        "parameters": [
-          {
-            "name": "phone",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "客人完整手机号（精确匹配，经盲索引查询，不支持模糊搜索）"
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string",
+                    "description": "客人完整手机号（精确匹配，经盲索引查询，不支持模糊搜索）；PII 走请求体不入 URL query"
+                  }
+                }
+              }
+            }
           }
-        ],
+        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"

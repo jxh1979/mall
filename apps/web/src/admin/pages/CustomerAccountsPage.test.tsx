@@ -16,7 +16,11 @@ function makeApi(overrides: Partial<AdminApiClient> = {}): AdminApiClient {
   return {
     get: vi.fn().mockResolvedValue([ACCOUNT]),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
-    post: vi.fn().mockResolvedValue({ ...ACCOUNT, status: "blacklisted" }),
+    post: vi.fn().mockImplementation((url: string) =>
+      url === "/api/v1/customer-accounts/lookup"
+        ? Promise.resolve([ACCOUNT])
+        : Promise.resolve({ ...ACCOUNT, status: "blacklisted" }),
+    ),
     put: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
@@ -54,13 +58,13 @@ describe("CustomerAccountsPage", () => {
     const { api } = renderPage();
     await searchFor("13900001234");
 
-    expect(api.get).toHaveBeenCalledWith("/api/v1/customer-accounts?phone=13900001234");
+    expect(api.post).toHaveBeenCalledWith("/api/v1/customer-accounts/lookup", { phone: "13900001234" });
     expect(screen.getByText("139****1234")).toBeInTheDocument();
     expect(screen.getByTestId("customer-account-status").textContent).toBe("正常");
   });
 
   it("查无此人给出空态而非报错", async () => {
-    renderPage({ api: makeApi({ get: vi.fn().mockResolvedValue([]) }) });
+    renderPage({ api: makeApi({ post: vi.fn().mockResolvedValue([]) }) });
     fireEvent.change(screen.getByLabelText("客人手机号"), { target: { value: "13900009999" } });
     fireEvent.click(screen.getByTestId("customer-account-search-button"));
     await screen.findByTestId("customer-account-empty");
@@ -72,15 +76,15 @@ describe("CustomerAccountsPage", () => {
 
     fireEvent.click(screen.getByTestId("customer-account-suspend"));
     expect(setGlobalError).toHaveBeenCalledWith(expect.stringContaining("封禁到期日"));
-    expect(api.post).not.toHaveBeenCalled();
+    expect(api.post).toHaveBeenCalledTimes(1); // 仅 searchFor 触发的 lookup，未发出 suspend
 
     fireEvent.click(screen.getByLabelText("封禁到期日")); // 打开中文日期选择器
     fireEvent.click(screen.getByRole("button", { name: "15" })); // 选一天 → 回填 YYYY-MM-DD
     fireEvent.change(screen.getByLabelText("封禁原因"), { target: { value: "risk" } });
     fireEvent.click(screen.getByTestId("customer-account-suspend"));
 
-    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
-    const [url, body] = (api.post as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+    const [url, body] = (api.post as ReturnType<typeof vi.fn>).mock.calls[1]!;
     expect(url).toBe("/api/v1/customer-accounts/cust_1/suspend");
     expect(body.reason).toBe("risk");
     expect(new Date(body.suspendedUntil).toISOString()).toBe(body.suspendedUntil); // 合法 ISO 时刻

@@ -188,6 +188,21 @@ class CustomerServiceTests {
     }
 
     @Test
+    void logoutRevokesServerSideSessionAndIsIdempotent() {
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp"));
+        assertThat(customerRepository.findSessionByToken(login.customerToken())).isPresent();
+
+        service.logout(login.customerToken());
+
+        // AUD-030：登出后服务端会话置 logged_out，凭该 token 的后续动作按失效拒绝（不再靠客户端丢弃本地凭证）。
+        assertThatThrownBy(() -> service.listOrders(login.customerToken()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_UNAUTHENTICATED"));
+        // 幂等：重复登出与空 token 不报错。
+        service.logout(login.customerToken());
+        service.logout(null);
+    }
+
+    @Test
     void suspensionAutoRestoresWhenExpiredOnNextLogin() {
         // V194：封禁到期(until 早于 fixed clock 2026-06-14) → 下次登录 lazy 自动恢复 active。
         CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900005678", "000000", "miniapp"));
@@ -822,6 +837,17 @@ class CustomerServiceTests {
         @Override
         public Optional<CustomerSessionRecord> findSessionByToken(String token) {
             return Optional.ofNullable(sessions.get(token));
+        }
+
+        @Override
+        public int revokeSessionByToken(String token) {
+            CustomerSessionRecord session = sessions.get(token);
+            if (session == null || !"active".equals(session.status())) {
+                return 0;
+            }
+            sessions.put(token, new CustomerSessionRecord(session.id(), session.customerId(), session.customerToken(),
+                    session.scene(), session.issuedAt(), session.expiresAt(), "logged_out"));
+            return 1;
         }
 
         @Override

@@ -532,6 +532,7 @@ class MemberWalletServiceTests {
         @Override public CustomerRecord saveCustomer(CustomerRecord c) { customers.put(c.id(), c); return c; }
         @Override public CustomerSessionRecord saveSession(CustomerSessionRecord s) { return s; }
         @Override public Optional<CustomerSessionRecord> findSessionByToken(String t) { return Optional.empty(); }
+        @Override public int revokeSessionByToken(String t) { return 0; }
         @Override public CustomerConsentRecord saveConsent(CustomerConsentRecord c) { return c; }
         @Override public Optional<CustomerPointsAccountRecord> findPointsByCustomerId(String id) {
             return Optional.ofNullable(points.get(id));

@@ -55,10 +55,16 @@ public class CustomerController {
         return ApiResponse.ok(login);
     }
 
-    /** 3.3 免登录：登出——清除会话 cookie（头 token 调用方丢弃本地 token 即可，端点幂等）。 */
+    /** 3.3 免登录：登出——撤销服务端会话（AUD-030）并清除会话 cookie；端点幂等（无 token 也返回成功）。 */
     @PostMapping("/auth/logout")
-    public ApiResponse<Void> logout(jakarta.servlet.http.HttpServletRequest httpRequest,
+    public ApiResponse<Void> logout(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            jakarta.servlet.http.HttpServletRequest httpRequest,
             jakarta.servlet.http.HttpServletResponse httpResponse) {
+        // 头 token（App/小程序）或 cookie（web，经 CustomerSessionCookieFilter 桥接为 X-Customer-Token）都撤销服务端会话，
+        // 令泄漏/复制的 token 在登出后立即失效，而非仅靠客户端丢弃本地凭证。
+        service.logout(resolveCustomerToken(customerToken, authorization));
         httpResponse.addHeader("Set-Cookie", sessionCookie("", 0, forceSecureCookie || httpRequest.isSecure()));
         return ApiResponse.ok(null);
     }

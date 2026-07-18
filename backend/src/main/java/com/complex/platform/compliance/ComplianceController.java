@@ -11,10 +11,12 @@ import com.complex.platform.compliance.dto.ContractKeyDateRequest;
 import com.complex.platform.compliance.dto.WecomConversationSyncRequest;
 import com.complex.platform.compliance.dto.WecomRetentionPolicyRequest;
 import com.complex.platform.compliance.dto.WecomRiskHitReviewRequest;
+import com.complex.platform.gate.TerminalSwitchGuard;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,15 +28,21 @@ public class ComplianceController {
     private final ComplianceService service;
     private final WecomConversationService wecomConversationService;
     private final AuthorizationService authorizationService;
+    private final WecomWebhookSignatureVerifier wecomWebhookSignatureVerifier;
+    private final TerminalSwitchGuard terminalSwitchGuard;
 
     public ComplianceController(
             ComplianceService service,
             WecomConversationService wecomConversationService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            WecomWebhookSignatureVerifier wecomWebhookSignatureVerifier,
+            TerminalSwitchGuard terminalSwitchGuard
     ) {
         this.service = service;
         this.wecomConversationService = wecomConversationService;
         this.authorizationService = authorizationService;
+        this.wecomWebhookSignatureVerifier = wecomWebhookSignatureVerifier;
+        this.terminalSwitchGuard = terminalSwitchGuard;
     }
 
     @GetMapping("/contract-key-dates")
@@ -79,10 +87,21 @@ public class ComplianceController {
     // ---------------------------------------------------------------- R5 T8 企微会话合规链
 
     @PostMapping("/wecom/conversations/sync")
-    public ApiResponse<WecomSyncResult> syncWecomConversation(@RequestBody @jakarta.validation.Valid WecomConversationSyncRequest request) {
-        // 同步入站受 T2 开关 integration.wecom.sync 编程式门控（在 service 内 check，关→TERMINAL_DISABLED）。
+    public ApiResponse<WecomSyncResult> syncWecomConversation(
+            @RequestHeader(value = "X-Wecom-Signature", required = false) String signature,
+            @RequestHeader(value = "X-Wecom-Timestamp", required = false) Long timestamp,
+            @RequestHeader(value = "X-Wecom-Nonce", required = false) String nonce,
+            @RequestBody @jakarta.validation.Valid WecomConversationSyncRequest request) {
         // 鉴权上下文 = webhook-signature（企微回调/拉取通道），不走 staff 权限闸。
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        // AUD-001：先过 T2 开关 integration.wecom.sync（关→TERMINAL_DISABLED），再做 HMAC 签名 + 时间窗 + nonce 校验，
+        // 令未签名/伪造/过期请求 fail-closed，不再仅凭任意已认证员工放行；签名是该端点真实鉴权闸。
+        terminalSwitchGuard.check(WecomConversationService.SYNC_CAPABILITY);
+        wecomWebhookSignatureVerifier.verify(
+                signature, timestamp, nonce,
+                request == null ? null : request.idempotencyKey(),
+                request == null ? null : request.externalConversationId(),
+                request == null ? null : request.projectId());
         return ApiResponse.ok(wecomConversationService.syncConversation(request));
     }
 

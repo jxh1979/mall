@@ -17,6 +17,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.compliance.dto.ComplianceReminderScanRequest;
 import com.complex.platform.compliance.dto.ContractKeyDateRequest;
 import com.complex.platform.config.SecurityConfig;
+import com.complex.platform.gate.TerminalSwitchGuard;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -224,6 +225,16 @@ class ComplianceControllerTests {
         @Bean
         WecomConversationService wecomConversationService() {
             return Mockito.mock(WecomConversationService.class);
+        }
+
+        @Bean
+        WecomWebhookSignatureVerifier wecomWebhookSignatureVerifier() {
+            return Mockito.mock(WecomWebhookSignatureVerifier.class);
+        }
+
+        @Bean
+        TerminalSwitchGuard terminalSwitchGuard() {
+            return Mockito.mock(TerminalSwitchGuard.class);
         }
 
         @Bean

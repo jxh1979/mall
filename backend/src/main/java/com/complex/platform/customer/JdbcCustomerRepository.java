@@ -104,6 +104,19 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public int revokeSessionByToken(String token) {
+        if (token == null || token.isBlank()) {
+            return 0;
+        }
+        return jdbcTemplate.update("""
+                UPDATE customer_sessions
+                   SET status = 'logged_out'
+                 WHERE customer_token_hash = :customer_token_hash
+                   AND status = 'active'
+                """, Map.of("customer_token_hash", sha256(token)));
+    }
+
+    @Override
     public CustomerConsentRecord saveConsent(CustomerConsentRecord consent) {
         jdbcTemplate.update("""
                 INSERT INTO customer_consents (

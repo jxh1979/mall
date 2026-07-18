@@ -18,6 +18,9 @@ public interface CustomerRepository {
 
     Optional<CustomerSessionRecord> findSessionByToken(String token);
 
+    /** AUD-030：按 token 撤销会话（活动会话置 logged_out），登出后 token 立即失效。返回受影响行数（幂等：0=无匹配活动会话）。 */
+    int revokeSessionByToken(String token);
+
     CustomerConsentRecord saveConsent(CustomerConsentRecord consent);
 
     Optional<CustomerPointsAccountRecord> findPointsByCustomerId(String customerId);

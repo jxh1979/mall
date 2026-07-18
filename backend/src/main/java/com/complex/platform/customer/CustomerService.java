@@ -880,6 +880,23 @@ public class CustomerService {
         return new CustomerSessionInfoResponse(customer.id(), customer.maskedPhone(), expiresAt);
     }
 
+    /**
+     * AUD-030 登出：撤销服务端会话（凭 token 命中活动会话即置 logged_out），令登出后 token 立即失效，
+     * 而非仅靠客户端丢弃本地凭证。端点幂等：token 缺失/已失效均静默返回。
+     */
+    @Transactional
+    public void logout(String customerToken) {
+        String token = trimToNull(customerToken);
+        if (token == null) {
+            return;
+        }
+        int revoked = repository.revokeSessionByToken(token);
+        if (revoked > 0) {
+            auditEventService.recordSuccess("customer.auth.logout", "public", "customer",
+                    null, null, null, Map.of());
+        }
+    }
+
     private CustomerRecord requireCustomer(String customerToken) {
         String token = trimToNull(customerToken);
         if (token == null) {
