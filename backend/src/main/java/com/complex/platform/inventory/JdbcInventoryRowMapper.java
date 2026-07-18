@@ -247,6 +247,9 @@ final class JdbcInventoryRowMapper {
                 resultSet.getString("source_location_id"),
                 resultSet.getString("target_location_id"),
                 resultSet.getInt("quantity"),
+                // V296 成本列：NULL=无成本基准，须保持 null 语义（不得折成 0）。
+                resultSet.getObject("unit_cost_cent", Long.class),
+                resultSet.getObject("total_cost_cent", Long.class),
                 resultSet.getString("business_type"),
                 resultSet.getString("business_id"),
                 resultSet.getString("trace_code"),

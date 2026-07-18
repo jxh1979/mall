@@ -89,6 +89,9 @@ public class InventoryService {
     private final NotificationService notificationService;
     private final CustomerRepository customerRepository;
     private final com.complex.platform.finance.FinanceRepository financeRepository;
+    // V296 期间成本汇总的经营日切分（与财务日结/跨域汇总同口径）。可为 null（旧构造器/单测），
+    // 使用处回落全局默认切分（fail-safe，不阻塞查询）。
+    private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
     // 本域风险级 → 统一表 RISK_LEVELS({normal,suspicious,high,critical}) 映射。
     // inventory 用的 medium 在统一表无对应枚举，必须映射为 suspicious，否则 report 抛 VALIDATION_FAILED。
@@ -122,7 +125,7 @@ public class InventoryService {
                 terminalSwitchGuard, traceabilityService, riskAlertService, null, null, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    // 向后兼容旧 10 参构造器：未注入经营日切分（businessDayResolver=null），成本汇总回落全局默认切分。
     public InventoryService(
             InventoryRepository repository,
             IdempotencyService idempotencyService,
@@ -135,6 +138,25 @@ public class InventoryService {
             CustomerRepository customerRepository,
             com.complex.platform.finance.FinanceRepository financeRepository
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService,
+                terminalSwitchGuard, traceabilityService, riskAlertService, notificationService,
+                customerRepository, financeRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public InventoryService(
+            InventoryRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            TerminalSwitchGuard terminalSwitchGuard,
+            TraceabilityService traceabilityService,
+            RiskAlertService riskAlertService,
+            NotificationService notificationService,
+            CustomerRepository customerRepository,
+            com.complex.platform.finance.FinanceRepository financeRepository,
+            com.complex.platform.common.BusinessDayResolver businessDayResolver
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
@@ -145,6 +167,7 @@ public class InventoryService {
         this.notificationService = notificationService;
         this.customerRepository = customerRepository;
         this.financeRepository = financeRepository;
+        this.businessDayResolver = businessDayResolver;
         this.highValueReviewService = new InventoryHighValueReviewService(
                 repository, idempotencyService, auditEventService, authorizationService);
         this.stockMovementService = new InventoryStockMovementService(
@@ -974,6 +997,9 @@ public class InventoryService {
                                         null,
                                         targetLocation,
                                         delta,
+                                        // V296：盘盈无进货价（成本由仓储层按当前均价自动计入）。
+                                        null,
+                                        null,
                                         "inventory_variance",
                                         variance.id(),
                                         null,
@@ -1002,6 +1028,9 @@ public class InventoryService {
                                                 row.locationId(),
                                                 null,
                                                 take,
+                                                // V296：盘亏出库成本由仓储层按移动加权均价自动定稿。
+                                                null,
+                                                null,
                                                 "inventory_variance",
                                                 variance.id(),
                                                 null,
@@ -1323,6 +1352,78 @@ public class InventoryService {
 
     public PageResponse<StockMovementRecord> listStockMovements(int page, int size) {
         return stockMovementService.listStockMovements(page, size);
+    }
+
+    /**
+     * V296 成本流水分页：库存流水含移动加权成本列（unit_cost_cent/total_cost_cent，NULL=无成本基准）。
+     * 租户口径与 listStockMovements 一致：商户员工看本商户，项目员工看本项目，平台管理员看全量。
+     */
+    public PageResponse<StockMovementRecord> listCostLedger(String itemId, int page, int size) {
+        try {
+            Optional<String> merchantScope = authorizationService.currentMerchantScope();
+            String merchantId = merchantScope.orElse(null);
+            String projectId = merchantId != null ? null
+                    : authorizationService.currentProjectScopeQuietly().orElse(null);
+            PageResponse<StockMovementRecord> result =
+                    repository.listCostLedgerPaged(merchantId, projectId, trimToNull(itemId), page, size);
+            auditEventService.recordSuccess(
+                    "inventory.cost_ledger.viewed", "inventory.stock.view", "inventory_stock_movement",
+                    "all", null, null, Map.of("count", result.total()));
+            return result;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "inventory.cost_ledger.view_failed", "inventory.stock.view", "inventory_stock_movement",
+                    "all", null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /**
+     * V296 期间出库成本汇总（分红引擎成本侧取数点）：按商户+期间返回出库成本合计。
+     * 窗口 = [periodStart 经营日起, periodEnd+1 经营日起)，与财务日结/跨域汇总同一切分基准。
+     * 商户员工强制按自身商户；merchant_id 参数仅对平台/项目管理员生效（可空=范围内全量）。
+     */
+    public InventoryCostSummaryRecord getCostSummary(String merchantIdParam, String periodStart, String periodEnd) {
+        try {
+            LocalDate start = requireIsoDate(periodStart, "period_start");
+            LocalDate end = requireIsoDate(periodEnd, "period_end");
+            if (end.isBefore(start)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "period_end must not be before period_start");
+            }
+            String scope = authorizationService.currentMerchantScope().orElse(null);
+            String merchantId = scope != null ? scope : trimToNull(merchantIdParam);
+            String projectId = scope != null ? null
+                    : authorizationService.currentProjectScopeQuietly().orElse(null);
+            com.complex.platform.common.BusinessDayResolver resolver = businessDayResolver != null
+                    ? businessDayResolver
+                    : new com.complex.platform.common.BusinessDayResolver(4);
+            InventoryCostSummaryRecord summary = repository.sumOutboundCost(
+                    merchantId, projectId, start.toString(), end.toString(),
+                    resolver.startInstant(start), resolver.startInstant(end.plusDays(1)));
+            auditEventService.recordSuccess(
+                    "inventory.cost_summary.viewed", "inventory.stock.view", "inventory_stock_movement",
+                    "all", null, null,
+                    Map.of("total_cost_cent", summary.outboundTotalCostCent(),
+                            "movement_count", summary.outboundMovementCount()));
+            return summary;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "inventory.cost_summary.view_failed", "inventory.stock.view", "inventory_stock_movement",
+                    "all", null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private LocalDate requireIsoDate(String value, String fieldName) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
+        }
+        try {
+            return LocalDate.parse(trimmed);
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be an ISO date (yyyy-MM-dd)");
+        }
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")

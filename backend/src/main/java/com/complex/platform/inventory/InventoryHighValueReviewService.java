@@ -237,6 +237,9 @@ public class InventoryHighValueReviewService {
                     adjustment.locationId(),
                     null,
                     adjustment.quantity(),
+                    // V296：高价值报损/盘点差异为出库，成本由仓储层按移动加权均价自动定稿（不用申报单价）。
+                    null,
+                    null,
                     "inventory_stock_adjustment",
                     adjustment.id(),
                     null,

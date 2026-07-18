@@ -68,6 +68,29 @@ public interface InventoryRepository {
 
     StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId);
 
+    // ── V296 成本台账：default 以不破坏测试替身（同 V277 先例）。 ──
+    /** 状态行缺席时按物料归属商户初始化（INSERT..SELECT ON CONFLICT DO NOTHING）。 */
+    default void initCostStateIfAbsent(String itemId) { }
+
+    /** SELECT FOR UPDATE 行锁读取成本状态行，串行化同物料并发出入库的均价更新。 */
+    default Optional<InventoryItemCostStateRecord> lockCostStateForUpdate(String itemId) {
+        return Optional.empty();
+    }
+
+    default void updateCostState(InventoryItemCostStateRecord state) { }
+
+    /** 成本流水分页（含成本列；itemId 可空=不过滤）。 */
+    default com.complex.platform.common.api.PageResponse<StockMovementRecord> listCostLedgerPaged(
+            String merchantId, String projectId, String itemId, int page, int size) {
+        return new com.complex.platform.common.api.PageResponse<>(List.of(), 1, size, 0L);
+    }
+
+    /** 期间出库成本汇总：[from, to) 半开窗口，出库行=仅源库位。periodStart/periodEnd 仅用于回显。 */
+    default InventoryCostSummaryRecord sumOutboundCost(
+            String merchantId, String projectId, String periodStart, String periodEnd, Instant from, Instant to) {
+        return new InventoryCostSummaryRecord(merchantId, periodStart, periodEnd, 0L, 0L, 0L);
+    }
+
     List<StockMovementRecord> listStockMovements();
 
     com.complex.platform.common.api.PageResponse<StockMovementRecord> listStockMovementsPaged(

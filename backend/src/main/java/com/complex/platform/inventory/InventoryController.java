@@ -334,6 +334,25 @@ public class InventoryController {
         return ApiResponse.ok(service.transferStockMovement(request));
     }
 
+    // ── V296 成本台账：成本流水分页 + 期间出库成本汇总（分红引擎成本侧取数点）。 ──
+    @GetMapping("/cost-ledger")
+    public ApiResponse<PageResponse<StockMovementRecord>> listInventoryCostLedger(
+            @RequestParam(value = "item_id", required = false) String itemId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        authorizationService.requirePermission("inventory.stock.view");
+        return ApiResponse.ok(service.listCostLedger(itemId, page, size));
+    }
+
+    @GetMapping("/cost-summary")
+    public ApiResponse<InventoryCostSummaryRecord> getInventoryCostSummary(
+            @RequestParam("period_start") String periodStart,
+            @RequestParam("period_end") String periodEnd,
+            @RequestParam(value = "merchant_id", required = false) String merchantId) {
+        authorizationService.requirePermission("inventory.stock.view");
+        return ApiResponse.ok(service.getCostSummary(merchantId, periodStart, periodEnd));
+    }
+
     @PostMapping("/stock-movements/{movement_type}")
     public ApiResponse<StockMovementRecord> createTypedStockMovement(
             @PathVariable("movement_type") String movementType,

@@ -150,6 +150,7 @@ public class PurchaseRequestService {
                     String operator = authorizationService.currentActor().id();
                     Instant now = Instant.now();
                     // received 生成入库流水（inbound）：落 location + 可空 warehouse_id + 采购数量，关联采购单。
+                    // V296：unit_cost_cent（进货单价，可空）随入库确认录入，滚动移动加权均价。
                     stockMovementService.createPurchaseInbound(
                             actual.idempotencyKey(),
                             current.id(),
@@ -157,6 +158,7 @@ public class PurchaseRequestService {
                             locationId,
                             warehouseId,
                             current.quantity(),
+                            actual.unitCostCent(),
                             actual.evidenceAttachmentIds());
                     PurchaseRequestRecord updated = withReceived(current, operator, now);
                     recordEvent(current.id(), current.status(), "received", operator, trimToNull(actual.note()), now);

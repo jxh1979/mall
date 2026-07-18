@@ -117,6 +117,8 @@ class InventoryJdbcIntegrationTests {
                 null,
                 "warehouse_jdbc",
                 10,
+                null,
+                null,
                 "purchase",
                 "purchase_jdbc",
                 "TRACE-JDBC",
@@ -541,10 +543,10 @@ class InventoryJdbcIntegrationTests {
         Instant now = Instant.parse("2026-07-05T00:00:00Z");
 
         repository.saveStockMovement(new StockMovementRecord(
-                "mv_pa", "inbound", "item_ma", null, "loc_ma", 10,
+                "mv_pa", "inbound", "item_ma", null, "loc_ma", 10, null, null,
                 "purchase", null, null, null, List.of(), "completed", now, "m_a"), "proj_a");
         repository.saveStockMovement(new StockMovementRecord(
-                "mv_pb", "inbound", "item_mb", null, "loc_mb", 20,
+                "mv_pb", "inbound", "item_mb", null, "loc_mb", 20, null, null,
                 "purchase", null, null, null, List.of(), "completed", now, "m_b"), "proj_b");
         repository.saveStockBatch(new InventoryStockBatchRecord(
                 "bt_pa", "item_ma", "loc_ma", "B-PA", null, 10, null, "active", List.of(), now, now, "m_a"), "proj_a");

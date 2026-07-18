@@ -12,13 +12,18 @@ const BALANCES = [
 ];
 const MOVEMENTS = [
   { id: "sm-1", itemId: "i-1", quantity: 3, status: "processed", createdAt: "2026-07-01T10:00:00Z" },
+  // V296：带成本列的流水（移动加权定稿）。
+  { id: "sm-2", itemId: "i-1", quantity: 3, status: "processed", createdAt: "2026-07-02T10:00:00Z", unitCostCent: 500, totalCostCent: 1500 },
 ];
+// V296 本月出库成本汇总。
+const COST_SUMMARY = { outboundTotalCostCent: 12345, outboundMovementCount: 3, noCostBasisCount: 1 };
 
 function getResolver() {
   return vi.fn().mockImplementation((path: string) => {
     if (path.includes("/inventory/items")) return Promise.resolve(ITEMS);
     if (path.includes("/inventory/stock-balances")) return Promise.resolve(BALANCES);
     if (path.includes("/inventory/stock-movements")) return Promise.resolve(MOVEMENTS);
+    if (path.includes("/inventory/cost-summary")) return Promise.resolve(COST_SUMMARY);
     return Promise.resolve([]);
   });
 }
@@ -152,5 +157,52 @@ describe("InventoryLedgerPage 行明细抽屉（整行可点·时间中文）", 
     await waitFor(() => expect(screen.getByTestId("inventory-item-row-i-1")).toBeTruthy());
     fireEvent.click(screen.getByLabelText("选择物料 SKU-1"));
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});
+
+describe("InventoryLedgerPage 成本台账（V296 移动加权）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin/inventory/ledger");
+  });
+
+  it("流水表成本列：有成本显示金额，无成本显示“无成本基准”（不编造数字）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("inventory-ledger-movements-table")).toBeTruthy());
+    const movements = screen.getByTestId("inventory-ledger-movements-table").textContent ?? "";
+    expect(movements).toContain("¥15.00");
+    expect(movements).toContain("无成本基准");
+  });
+
+  it("本月出库成本汇总小卡：合计金额 + 出库笔数 + 无成本基准笔数", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("inventory-cost-summary-card")).toBeTruthy());
+    expect(screen.getByTestId("inventory-cost-summary-total").textContent).toBe("¥123.45");
+    const card = screen.getByTestId("inventory-cost-summary-card").textContent ?? "";
+    expect(card).toContain("出库 3 笔");
+    expect(card).toContain("无成本基准 1 笔");
+  });
+
+  it("汇总接口失败降级为“暂无数据”，台账主链不受影响", async () => {
+    const failing = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/inventory/items")) return Promise.resolve(ITEMS);
+      if (path.includes("/inventory/stock-balances")) return Promise.resolve(BALANCES);
+      if (path.includes("/inventory/stock-movements")) return Promise.resolve(MOVEMENTS);
+      if (path.includes("/inventory/cost-summary")) return Promise.reject(new Error("boom"));
+      return Promise.resolve([]);
+    });
+    renderPage(makeApi(failing));
+    await waitFor(() => expect(screen.getByTestId("inventory-cost-summary-card")).toBeTruthy());
+    expect(screen.getByTestId("inventory-cost-summary-total").textContent).toBe("—");
+    expect(screen.getByTestId("inventory-ledger-movements-table")).toBeTruthy();
+  });
+
+  it("流水行抽屉包含单价与成本字段", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("inventory-movement-row-sm-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("inventory-movement-row-sm-2"));
+    const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(drawer).toContain("¥5.00");
+    expect(drawer).toContain("¥15.00");
   });
 });

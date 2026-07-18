@@ -384,7 +384,7 @@ class InventoryControllerTests {
 
     private StockMovementRecord stockMovement(String movementType) {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new StockMovementRecord("movement_1", movementType, "item_1", "wh_1", "bar_1", 1, "manual", null, null, null, List.of(), "completed", now, null);
+        return new StockMovementRecord("movement_1", movementType, "item_1", "wh_1", "bar_1", 1, null, null, "manual", null, null, null, List.of(), "completed", now, null);
     }
 
     private StockAdjustmentRecord stockAdjustment() {

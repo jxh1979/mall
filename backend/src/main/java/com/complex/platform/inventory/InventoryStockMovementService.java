@@ -125,6 +125,8 @@ final class InventoryStockMovementService {
                             adjustmentIncrease ? null : locationId,
                             adjustmentIncrease ? locationId : null,
                             quantity,
+                            // V296：报溢(gain)=入库，携带申报单价滚动均价；减少类出库成本按均价自动计，不用申报价。
+                            adjustmentIncrease ? unitCostCents : null,
                             "inventory_stock_adjustment",
                             adjustmentId,
                             null,
@@ -188,6 +190,8 @@ final class InventoryStockMovementService {
                                 null,
                                 warehouseId,
                                 quantity,
+                                // V296：入库行可携带进货单价 item.unit_cost_cent（可空，兼容存量调用）。
+                                parseOptionalUnitCostCent(item),
                                 requireText(actual.sourceType(), "source_type"),
                                 trimToNull(actual.sourceId()),
                                 null,
@@ -215,6 +219,8 @@ final class InventoryStockMovementService {
             String locationId,
             String warehouseId,
             int quantity,
+            // V296：采购入库进货单价（整数分，可空）——入库确认时录入，滚动移动加权均价。
+            Long unitCostCent,
             List<String> evidenceAttachmentIds
     ) {
         // 盘点期冻结：盘点进行中（counting/reviewing）的库房/库位不得经采购到货入库污染盘点基线。
@@ -231,6 +237,7 @@ final class InventoryStockMovementService {
                 null,
                 locationId,
                 quantity,
+                unitCostCent,
                 "purchase_request",
                 purchaseRequestId,
                 null,
@@ -343,6 +350,8 @@ final class InventoryStockMovementService {
                     sourceLocationId,
                     targetLocationId,
                     quantity,
+                    // V296：出库/调拨不携带单价，成本由移动加权均价自动定稿。
+                    null,
                     "manual",
                     null,
                     trimToNull(actual.traceCode()),
@@ -360,6 +369,8 @@ final class InventoryStockMovementService {
             String sourceLocationId,
             String targetLocationId,
             int quantity,
+            // V296：入库进货单价（整数分，可空）。出库/调拨恒传 null，成本由仓储层按移动加权自动定稿。
+            Long unitCostCent,
             String businessType,
             String businessId,
             String traceCode,
@@ -373,6 +384,8 @@ final class InventoryStockMovementService {
                 sourceLocationId,
                 targetLocationId,
                 quantity,
+                unitCostCent,
+                null,
                 businessType,
                 businessId,
                 traceCode,
@@ -426,6 +439,24 @@ final class InventoryStockMovementService {
                 now,
                 now,
                 merchantId), authorizationService.currentProjectScopeQuietly().orElse(null));
+    }
+
+    // V296：从入库 item map 读取可选进货单价 unit_cost_cent（整数分）；缺省 → null（无成本基准，不编造）；
+    // 非法/负数 → 400（钱不允许静默吞坏值）。
+    private Long parseOptionalUnitCostCent(Map<String, Object> item) {
+        String raw = textFromItem(item, "unit_cost_cent");
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            long value = Long.parseLong(raw.trim());
+            if (value < 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "unit_cost_cent must be non-negative");
+            }
+            return value;
+        } catch (NumberFormatException exception) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "unit_cost_cent must be an integer (cents)");
+        }
     }
 
     // 从入库 item map 读取可选 expire_at（ISO-8601 instant，如 2026-12-31T00:00:00Z）；缺省/非法 → null（退化 FIFO）。
