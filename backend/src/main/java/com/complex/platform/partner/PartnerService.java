@@ -107,11 +107,10 @@ public class PartnerService {
             String trimmedUserId = userId.trim();
             repository.findAccessUserAccountType(trimmedUserId)
                     .orElseThrow(() -> ApiException.notFound("ACCESS_USER_NOT_FOUND", "access user not found"));
-            String boundOrgId = repository.findPartnerOrgIdForUser(trimmedUserId).orElse(null);
-            if (!orgId.equals(boundOrgId)) {
+            // CAS 解绑（复核建议）：条件更新原子判定「当前绑的就是该机构」，0 行=未绑/已被并发换绑,409。
+            if (repository.unbindUserPartnerOrg(trimmedUserId, orgId) == 0) {
                 throw ApiException.conflict("PARTNER_ORG_USER_NOT_BOUND", "user is not bound to this partner org");
             }
-            repository.updateUserPartnerOrg(trimmedUserId, null);
             auditEventService.recordSuccess("partner.org.user_unbound", "partner.org.manage",
                     "external_partner_org", orgId, null, null,
                     Map.of("user_id", trimmedUserId));

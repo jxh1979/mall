@@ -91,9 +91,10 @@ class PartnerServiceTests {
         // 2026-07-18 收尾:解绑=bind 逆操作;机构非 active 也允许解绑(停用/过期机构要能清挂靠)。
         when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "suspended", null)));
         when(repository.findAccessUserAccountType("u1")).thenReturn(Optional.of("outsourced_vendor"));
-        when(repository.findPartnerOrgIdForUser("u1")).thenReturn(Optional.of(ORG));
+        // CAS 解绑:条件更新原子判定当前绑定,1 行=成功。
+        when(repository.unbindUserPartnerOrg("u1", ORG)).thenReturn(1);
         service.unbindUserFromOrg(ORG, " u1 ");
-        verify(repository).updateUserPartnerOrg("u1", null);
+        verify(repository).unbindUserPartnerOrg("u1", ORG);
     }
 
     @Test
