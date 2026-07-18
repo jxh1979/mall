@@ -24,7 +24,7 @@ public record TicketTypeRequest(
         String barId,
         // AUD-004 有效期天数（可空=默认1天）：日/周/月/年票据此出票计算 valid_to；必须为正。
         Integer validityDays,
-        // AUD-004 动态码刷新秒数（可空=默认60）：仅允许 30/60。
+        // AUD-004/2026-07-18 拍板：动态码刷新秒数（可空=默认15）：仅允许 10/15/30/60。
         Integer refreshIntervalSeconds
 ) {
     // 2026-07-18 拍板：entitlementTemplateIds 死字段删除（权益统一走独立绑定端点 bindTicketTypeEntitlement）。
@@ -54,7 +54,7 @@ public record TicketTypeRequest(
                 status, stockQuantity, ticketCategory, refundable, barId, validityDays, refreshIntervalSeconds);
     }
 
-    /** AUD-004 前的 15 参全签名（无 validityDays/refreshIntervalSeconds）→ 均 null（默认1天/60秒）。 */
+    /** AUD-004 前的 15 参全签名（无 validityDays/refreshIntervalSeconds）→ 均 null（默认1天/15秒）。 */
     public TicketTypeRequest(
             String idempotencyKey,
             String operatorNote,

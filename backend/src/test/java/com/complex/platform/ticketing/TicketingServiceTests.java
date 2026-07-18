@@ -3267,6 +3267,33 @@ class TicketingServiceTests {
                         e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
     }
 
+    // 2026-07-18 拍板：验证二维码默认 15 秒动态刷新，白名单放宽为 {10,15,30,60}（V300）。
+    @Test
+    void createTicketTypeAcceptsFifteenSecondRefresh() {
+        TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
+                "qr15-ok", "create", List.of(), "十五秒票", "weekday_weekend_holiday",
+                9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 1, 15));
+        assertThat(tt.refreshIntervalSeconds()).isEqualTo(15);
+    }
+
+    @Test
+    void createTicketTypeRejectsFiveSecondRefresh() {
+        assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
+                "qr15-bad", "create", List.of(), "五秒票", "weekday_weekend_holiday",
+                9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 1, 5)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
+    }
+
+    // 票种未配置刷新秒数 → 凭证窗口回退新默认 15 秒（不再是 60）。
+    @Test
+    void credentialWindowDefaultsToFifteenSecondsWhenTicketTypeUnset() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("qr15-default");
+        TicketCredentialResponse credential = service.getTicketCredential(entitlement.id());
+        long windowSeconds = java.time.Duration.between(credential.issuedAt(), credential.expiresAt()).getSeconds();
+        assertThat(windowSeconds).isEqualTo(15L);
+    }
+
     @Test
     void weeklyMonthlyYearlyTicketsIssueWithConfiguredValidity() {
         for (int days : new int[]{7, 30, 365}) {

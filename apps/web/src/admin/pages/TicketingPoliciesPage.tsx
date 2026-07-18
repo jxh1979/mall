@@ -107,7 +107,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [stock, setStock] = React.useState("");
   // AUD-004/022：有效期天数/动态码刷新/可退票/单店酒吧 建票直配。
   const [validityDays, setValidityDays] = React.useState("1");
-  const [refreshSeconds, setRefreshSeconds] = React.useState("60");
+  const [refreshSeconds, setRefreshSeconds] = React.useState("15");
   const [refundable, setRefundable] = React.useState(false);
   const [barId, setBarId] = React.useState("");
   // AUD-015：建票=草稿→绑权益→带理由发布，一个向导内完成；createKey 固定一次，失败重试幂等复用同一草稿。
@@ -345,7 +345,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         holiday_price_cent: Math.round(prices.节假日价 * 100),
         stock_quantity: stock.trim() ? Number(stock) : null,
         validity_days: Number(validityDays) || 1,
-        refresh_interval_seconds: Number(refreshSeconds) || 60,
+        refresh_interval_seconds: Number(refreshSeconds) || 15,
         refundable,
         bar_id: barId || null,
       });
@@ -663,8 +663,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 </label>
                 <label>动态码刷新（秒）
                   <select data-testid="ticket-refresh-seconds" aria-label="动态码刷新（秒）" value={refreshSeconds} onChange={(event) => setRefreshSeconds(event.target.value)}>
-                    <option value="60">60 秒</option>
+                    <option value="10">10 秒</option>
+                    <option value="15">15 秒（默认）</option>
                     <option value="30">30 秒</option>
+                    <option value="60">60 秒</option>
                   </select>
                 </label>
                 <label>

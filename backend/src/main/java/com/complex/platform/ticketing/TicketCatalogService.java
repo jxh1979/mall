@@ -59,7 +59,7 @@ public class TicketCatalogService {
                 "draft",
                 // AUD-004：有效期天数进入建票链路（可空=默认1天；正数校验）。
                 requireValidityDays(actual.validityDays()),
-                // AUD-004：动态码刷新秒数（可空=默认60；仅允许 30/60）。
+                // AUD-004/2026-07-18 拍板：动态码刷新秒数（可空=默认15；仅允许 10/15/30/60）。
                 requireRefreshIntervalSeconds(actual.refreshIntervalSeconds()),
                 now,
                 now,
@@ -546,13 +546,13 @@ public class TicketCatalogService {
         return value;
     }
 
-    /** AUD-004：动态码刷新秒数可空（=默认60）；非空仅允许 30/60。 */
+    /** AUD-004/2026-07-18 拍板：动态码刷新秒数可空（=默认15）；非空仅允许 10/15/30/60。 */
     private Integer requireRefreshIntervalSeconds(Integer value) {
         if (value == null) {
             return null;
         }
-        if (value != 30 && value != 60) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "refresh_interval_seconds must be 30 or 60");
+        if (value != 10 && value != 15 && value != 30 && value != 60) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "refresh_interval_seconds must be one of 10/15/30/60");
         }
         return value;
     }

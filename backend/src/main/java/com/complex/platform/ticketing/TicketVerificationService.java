@@ -30,8 +30,8 @@ public class TicketVerificationService {
     // entitlement_type 以 "amusement" 开头视为游乐类，分流进游乐正路）。
     private static final String AMUSEMENT_ENTITLEMENT_TYPE_PREFIX = "amusement";
 
-    // P1 清单#19：票种未配置 refresh_interval_seconds 时的回退默认刷新窗口（秒），与 V064 默认对齐。
-    private static final int DEFAULT_REFRESH_INTERVAL_SECONDS = 60;
+    // 2026-07-18 拍板：验证二维码默认 15 秒动态刷新（V300 起与 DB 默认对齐）；票种未配置 refresh_interval_seconds 时回退此值。
+    private static final int DEFAULT_REFRESH_INTERVAL_SECONDS = 15;
 
     // 跨模块闭环②a：核销高风险动作类型（MDM 门控 actionType）。
     private static final String VERIFY_ACTION_TYPE = "ticket.verify";
@@ -163,7 +163,7 @@ public class TicketVerificationService {
         Instant now = Instant.now();
         String token = "cred_" + UUID.randomUUID().toString().replace("-", "");
         String nonce = UUID.randomUUID().toString().replace("-", "");
-        // P1 清单#19：刷新窗口接票种级 refresh_interval_seconds（{30,60}），替换硬编码；
+        // P1 清单#19：刷新窗口接票种级 refresh_interval_seconds（{10,15,30,60}），替换硬编码；
         // 票种未配置（为空）则回退默认 60 秒（向后兼容）。window_started_at=now，
         // 截图离线展示的旧 token 超过本窗口即过期被拒。
         int refreshIntervalSeconds = resolveRefreshIntervalSeconds(entitlement);
@@ -1142,7 +1142,7 @@ public class TicketVerificationService {
     }
 
     /**
-     * P1 清单#19：发凭证时按票种级 refresh_interval_seconds 取刷新窗口（{30,60}），票种未配置则回退默认 60 秒。
+     * P1 清单#19：发凭证时按票种级 refresh_interval_seconds 取刷新窗口（{10,15,30,60}），票种未配置则回退默认 15 秒。
      * 票种取自权益的 ticket_type_id。
      */
     private int resolveRefreshIntervalSeconds(IssuedEntitlementRecord entitlement) {
