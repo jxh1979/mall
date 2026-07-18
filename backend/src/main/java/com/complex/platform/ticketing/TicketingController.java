@@ -247,15 +247,8 @@ public class TicketingController {
         return ApiResponse.ok(service.bindTicketTypeEntitlement(id, request));
     }
 
-    @PostMapping("/ticketing/ticket-types/{id}/issue")
-    public ApiResponse<IssuedTicketResponse> issueTicketTypeDirectly(
-            @PathVariable String id,
-            @RequestBody @jakarta.validation.Valid TicketIssueRequest request
-    ) {
-        authorizationService.requirePermission("ticket.order.create");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.issueTicketTypeDirectly(id, request));
-    }
+    // AUD-019：direct 出票端点（POST /ticketing/ticket-types/{id}/issue）已退役——对假订单必 FK 回滚、
+    // 对真订单可绕过归属/票种/支付态校验错票占坑。统一走订单出票 POST /ticketing/orders/{order_id}/issue。
 
     @GetMapping("/ticketing/issued-entitlements")
     public ApiResponse<PageResponse<IssuedEntitlementRecord>> listIssuedEntitlements() {

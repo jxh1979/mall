@@ -324,10 +324,9 @@ public class TicketRefundService {
         if (order == null || !"paid".equals(order.payStatus()) || order.amountCent() <= 0) {
             return null;
         }
-        if (repository.sumApprovedRefundAmountByOrderId(order.id()) > 0
-                || repository.sumPendingRefundAmountByOrderId(order.id()) > 0) {
-            return null; // 已有退款（手动/自动）→ 幂等跳过。
-        }
+        // AUD-011：幂等改实例级——此前按订单级退款金额求和跳过，同单人工部分退款后其余完全未核销
+        // 到期票被整单跳过（既不退也不作废）。targets 只取 active 且完全未核销的实例
+        //（人工退款申请即冻结实例 refund_pending，天然被排除），实例级 CAS 兜并发。
         List<TicketInstanceRecord> allInstances = repository.listTicketInstancesByOrderId(order.id());
         if (allInstances.isEmpty()) {
             return null;
@@ -352,7 +351,8 @@ public class TicketRefundService {
             }
         }
         TicketRefundRecord refund = repository.saveTicketRefund(new TicketRefundRecord(
-                "ticket_refund_auto_expiry_" + slug(order.id()),
+                // AUD-011：同一订单可能分多轮自动退（前轮已退实例不同），id 掺入本轮首实例避免跨轮撞号。
+                "ticket_refund_auto_expiry_" + slug(order.id() + "_" + targets.get(0).id()),
                 order.id(),
                 amountCent,
                 "ticket expired unused — system auto refund (whole ticket)",

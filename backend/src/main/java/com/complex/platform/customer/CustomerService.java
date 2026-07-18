@@ -181,7 +181,8 @@ public class CustomerService {
                 "public",
                 "ticket_product",
                 () -> ticketingService.listTicketTypes().items().stream()
-                        .filter(ticketType -> "published".equals(ticketType.status()) || "active".equals(ticketType.status()))
+                        // AUD-015：公开列表只认已发布（过了权益绑定发布闸）的票种；历史 active 行由 V293 一次性归位。
+                        .filter(ticketType -> "published".equals(ticketType.status()))
                         .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
                         .map(this::toTicketProduct)
                         .toList()

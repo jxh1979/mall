@@ -22,7 +22,6 @@ enum TicketingWriteOperation implements AuditedOperation {
     REQUEST_DELETE_ENTITLEMENT_TEMPLATE("ticket_entitlement_template.delete_requested", "ticket_entitlement_template.delete_request_failed", "ticket.entitlement.manage", "entitlement_template"),
     APPROVE_DELETE_ENTITLEMENT_TEMPLATE("ticket_entitlement_template.delete_approved", "ticket_entitlement_template.delete_approve_failed", "ticket.entitlement.approve", "entitlement_template"),
     BIND_TICKET_TYPE_ENTITLEMENT("ticket_product_entitlement.bound", "ticket_product_entitlement.bound_failed", "ticket.product.manage", "ticket_type_entitlement"),
-    ISSUE_TICKET_TYPE_DIRECTLY("ticket_order.issued", "ticket_order.issued_failed", "ticket.order.create", "issued_entitlement"),
     CREATE_TICKET_ORDER("ticket_order.created", "ticket_order.create_failed", "ticket.order.create", "ticket_order"),
     CREATE_TICKET_ORDER_PAY_INTENT("payment.intent_created", "payment.intent_failed", "finance.payment_intent.create", "ticket_payment_intent"),
     CONFIRM_TICKET_ORDER_PAYMENT("ticket_order.payment_confirmed", "ticket_order.payment_confirm_failed", "finance.payment.register", "ticket_order"),
