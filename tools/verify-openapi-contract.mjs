@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import YAML from "yaml";
 
 const root = process.cwd();
 const openapiPath = path.join(root, "docs", "openapi", "openapi-p0.json");
+const openapiYamlPath = path.join(root, "docs", "openapi", "openapi-p0.yaml");
 const operationMethods = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
 const allowedAuthContexts = new Set([
   "public",
@@ -63,6 +65,77 @@ function checkNoQuestionPlaceholder(value, location) {
   for (const [key, child] of Object.entries(value)) {
     checkNoQuestionPlaceholder(child, `${location}.${key}`);
   }
+}
+
+function checkNoEmptyKeys(value, location) {
+  if (!value || typeof value !== "object") {
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "") {
+      fail(`${location}: empty object key (likely a lost "$ref")`);
+    }
+    if (child && typeof child === "object") {
+      checkNoEmptyKeys(child, `${location}.${key}`);
+    }
+  }
+}
+
+function resolvePointer(doc, ref) {
+  if (!ref.startsWith("#/")) {
+    return undefined;
+  }
+  let node = doc;
+  for (const rawSegment of ref.slice(2).split("/")) {
+    const segment = rawSegment.replaceAll("~1", "/").replaceAll("~0", "~");
+    if (!node || typeof node !== "object" || !(segment in node)) {
+      return undefined;
+    }
+    node = node[segment];
+  }
+  return node;
+}
+
+function checkRefsResolve(doc, value, location) {
+  if (!value || typeof value !== "object") {
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "$ref") {
+      if (typeof child !== "string" || !child.startsWith("#/")) {
+        fail(`${location}.$ref: must be an internal "#/..." reference, got ${JSON.stringify(child)}`);
+      } else if (resolvePointer(doc, child) === undefined) {
+        fail(`${location}.$ref: unresolvable reference ${child}`);
+      }
+    }
+    if (child && typeof child === "object") {
+      checkRefsResolve(doc, child, `${location}.${key}`);
+    }
+  }
+}
+
+function checkOperationIdUniqueness(doc, label) {
+  const seen = new Map();
+  for (const [apiPath, pathItem] of Object.entries(doc.paths ?? {})) {
+    for (const [method, operation] of Object.entries(pathItem ?? {})) {
+      if (!operationMethods.has(method) || !operation?.operationId) {
+        continue;
+      }
+      const existing = seen.get(operation.operationId);
+      const here = `${method.toUpperCase()} ${apiPath}`;
+      if (existing) {
+        fail(`${label}: duplicate operationId ${operation.operationId} (${existing} vs ${here})`);
+      } else {
+        seen.set(operation.operationId, here);
+      }
+    }
+  }
+}
+
+function checkDocumentIntegrity(doc, label) {
+  checkNoEmptyKeys(doc, label);
+  checkRefsResolve(doc, doc, label);
+  checkOperationIdUniqueness(doc, label);
 }
 
 function asArray(value) {
@@ -150,6 +223,7 @@ if (!fs.existsSync(openapiPath)) {
 } else {
   const openapi = JSON.parse(fs.readFileSync(openapiPath, "utf8"));
   checkNoQuestionPlaceholder(openapi, "openapi");
+  checkDocumentIntegrity(openapi, "openapi-p0.json");
 
   if (!openapi.openapi?.startsWith("3.")) {
     fail("OpenAPI version must be 3.x");
@@ -175,6 +249,17 @@ if (!fs.existsSync(openapiPath)) {
       }
       checkOperation(apiPath, method, operation);
     }
+  }
+}
+
+if (!fs.existsSync(openapiYamlPath)) {
+  fail(`OpenAPI YAML file not found: ${openapiYamlPath}`);
+} else {
+  try {
+    const openapiYaml = YAML.parse(fs.readFileSync(openapiYamlPath, "utf8"), { maxAliasCount: -1 });
+    checkDocumentIntegrity(openapiYaml, "openapi-p0.yaml");
+  } catch (error) {
+    fail(`openapi-p0.yaml: failed to parse (${error.message})`);
   }
 }
 
