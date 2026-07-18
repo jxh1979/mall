@@ -49,6 +49,7 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
                     () -> tx.execute(s -> repository.saveStockMovement(
                             inbound(itemId, "mv_cb_" + itemId, 10, 200L), null)));
             InventoryItemCostStateRecord state = lockFreeState(itemId);
+            assertThat(state).isNotNull();
             assertThat(state.onHandQuantity()).isEqualTo(20L);
             assertThat(state.totalCostCent()).isEqualTo(3000L);
             assertThat(state.avgUnitCostCent()).isEqualTo(150L);
@@ -74,6 +75,7 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
                     () -> tx.execute(s -> repository.saveStockMovement(
                             outbound(itemId, "mv_out_" + itemId, 5), null)));
             InventoryItemCostStateRecord state = lockFreeState(itemId);
+            assertThat(state).isNotNull();
             assertThat(state.onHandQuantity()).isEqualTo(15L);
             assertThat(state.totalCostCent()).isIn(3000L, 3500L);
             // 守恒：累计入 - 累计出 = 当前持有总成本（任一次序都必须成立，丢更新即破）。
@@ -106,6 +108,7 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
             assertThat(replayed.totalCostCent()).isEqualTo(1000L);
             // 状态行未二次滚动。
             InventoryItemCostStateRecord state = lockFreeState(itemId);
+            assertThat(state).isNotNull();
             assertThat(state.onHandQuantity()).isEqualTo(10L);
             assertThat(state.totalCostCent()).isEqualTo(1000L);
             assertThat(state.cumulativeInCostCent()).isEqualTo(1000L);
@@ -127,6 +130,7 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
                     .isInstanceOfSatisfying(ApiException.class, e ->
                             assertThat(e.code()).isEqualTo("STOCK_MOVEMENT_REPLAY_MISMATCH"));
             InventoryItemCostStateRecord state = lockFreeState(itemId);
+            assertThat(state).isNotNull();
             assertThat(state.onHandQuantity()).isEqualTo(10L);
             assertThat(state.totalCostCent()).isEqualTo(1000L);
             assertThat(state.cumulativeInCostCent()).isEqualTo(1000L);
@@ -176,10 +180,16 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
             Integer rows = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM inventory_stock_movements WHERE id = ?", Integer.class, movementId);
             assertThat(rows).isEqualTo(1);
+            // 输家的事务整体回滚:其锁/算阶段初始化的状态行一并回滚 → 恰一个物料有状态行(赢家),输家无行(按0计)。
             InventoryItemCostStateRecord stateA = lockFreeState(itemA);
             InventoryItemCostStateRecord stateB = lockFreeState(itemB);
-            assertThat(stateA.onHandQuantity() + stateB.onHandQuantity()).isEqualTo(10L);
-            assertThat(stateA.totalCostCent() + stateB.totalCostCent()).isIn(1000L, 2000L);
+            assertThat((stateA != null ? 1 : 0) + (stateB != null ? 1 : 0)).isEqualTo(1);
+            long onHandSum = (stateA != null ? stateA.onHandQuantity() : 0L)
+                    + (stateB != null ? stateB.onHandQuantity() : 0L);
+            long totalSum = (stateA != null ? stateA.totalCostCent() : 0L)
+                    + (stateB != null ? stateB.totalCostCent() : 0L);
+            assertThat(onHandSum).isEqualTo(10L);
+            assertThat(totalSum).isIn(1000L, 2000L);
         } finally {
             cleanup(itemA);
             cleanup(itemB);
@@ -196,8 +206,9 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
                 null, null, "manual", null, null, null, List.of(), "completed", Instant.now(), "m_cost_c");
     }
 
+    /** 缺行返回 null（输家事务整体回滚时其状态行不存在），调用方自行断言。 */
     private InventoryItemCostStateRecord lockFreeState(String itemId) {
-        return jdbcTemplate.queryForObject("""
+        return jdbcTemplate.query("""
                 SELECT item_id, merchant_id, on_hand_quantity, total_cost_cent, avg_unit_cost_cent,
                        cumulative_in_cost_cent, cumulative_out_cost_cent, cost_method, has_cost_basis, updated_at
                   FROM inventory_item_cost_state WHERE item_id = ?
@@ -206,7 +217,8 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
                         rs.getLong("total_cost_cent"), rs.getLong("avg_unit_cost_cent"),
                         rs.getLong("cumulative_in_cost_cent"), rs.getLong("cumulative_out_cost_cent"),
                         rs.getString("cost_method"), rs.getBoolean("has_cost_basis"),
-                        rs.getTimestamp("updated_at").toInstant()), itemId);
+                        rs.getTimestamp("updated_at").toInstant()), itemId)
+                .stream().findFirst().orElse(null);
     }
 
     private void runBoth(Callable<?> a, Callable<?> b) throws Exception {
