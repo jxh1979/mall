@@ -1601,6 +1601,19 @@ class BarServiceTests {
     }
 
     @Test
+    void zeroRemainingBillSettlesAsCloseWithoutNewSettlementRow() {
+        // 复核修正(P2):全额减免后应收=0 的账单必须能关——结账=关单,不产生收款流水。
+        BarBillRecord bill = billForOrder("waived-close", "staff_sales");
+        service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
+                "bill-waived-close", "full waiver", List.of(), "waiver", 128800L, "全额减免", null));
+        BarBillRecord closed = service.settleBill(bill.id(), new BarBillSettleRequest(
+                "wc-settle", null, List.of(), "pay_wc", null, "aggregate_pay"));
+        assertThat(closed.settlementStatus()).isEqualTo("settled");
+        assertThat(closed.paymentStatus()).isEqualTo("paid");
+        assertThat(closed.paidAmountCent()).isEqualTo(0L);
+    }
+
+    @Test
     void continuationSettlementAccumulatesPaidAmountAndSettlesAtTotal() {
         // AUD-009:续付按剩余校验并累计,不再覆盖首付;累计到总额即 settled。
         BarBillRecord bill = billForOrder("cont-settle", "staff_sales");

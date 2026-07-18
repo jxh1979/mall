@@ -317,7 +317,8 @@ public class TicketRefundService {
      * 金额=这些实例出票时定格分摊额合计；任一权益已核销的实例（部分使用）不在此退（由调用方作废，规则2口径）。
      * 直批生效（冻结权益 active→refunded、父票 refund_pending→refunded、按实例数回补名额、发打款事件）；
      * 全未核销无已确认积分 → 不发 points deduct；跳过商户闸（系统动作）。
-     * 非 paid / 0 元 / 无完全未核销实例 / 已有退款在途或完成 → 返回 null。{@code @Transactional} 保多写原子。
+     * 非 paid / 0 元 / 无完全未核销实例 → 返回 null（AUD-011 起幂等粒度=父票实例，不再按订单级退款金额跳过）。
+     * {@code @Transactional} 保多写原子；实例冻结 CAS 竞态时抛异常回滚整批，交下轮重试。
      */
     @Transactional
     public TicketRefundRecord autoRefundExpiredWholeTickets(TicketOrderRecord order, Instant now) {
@@ -345,14 +346,19 @@ public class TicketRefundService {
             return null;
         }
         // 申请即冻结（系统直批同样先置 refund_pending，复用 finalize 的 refund_pending→refunded CAS）。
+        // 复核修正（P2）：CAS 失败必须抛异常回滚整批——此前 return null 会把循环里已冻结成功的实例
+        // 连同事务一起提交，留下「refund_pending 且无退款单」的孤儿实例，任何路径都救不回。
         for (TicketInstanceRecord ti : targets) {
             if (repository.markTicketInstanceRefundPending(ti.id(), now) == 0) {
-                return null; // 并发抢先 → 让下轮/退款链处理。
+                throw new IllegalStateException(
+                        "ticket instance freeze race during auto refund; batch rolled back for next run: " + ti.id());
             }
         }
         TicketRefundRecord refund = repository.saveTicketRefund(new TicketRefundRecord(
                 // AUD-011：同一订单可能分多轮自动退（前轮已退实例不同），id 掺入本轮首实例避免跨轮撞号。
-                "ticket_refund_auto_expiry_" + slug(order.id() + "_" + targets.get(0).id()),
+                // 复核修正：订单id+实例id 拼接超 slug 40 字截断上限，前缀26字+40=66 > id 列宽 varchar(64)，
+                // 每笔自动退款必「value too long」——改定长哈希后缀（26+32=58），与酒吧 boundedAdjustmentId 同款修法。
+                "ticket_refund_auto_expiry_" + boundedBatchSuffix(order.id() + "_" + targets.get(0).id()),
                 order.id(),
                 amountCent,
                 "ticket expired unused — system auto refund (whole ticket)",
@@ -589,6 +595,16 @@ public class TicketRefundService {
     private String trimToNull(String value) {
         String trimmed = value == null ? "" : value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /** 复核修正（P1-A）：批次后缀定长 32 位哈希，保证退款单 id 恒 ≤64 字符且同批次确定可幂等。 */
+    private static String boundedBatchSuffix(String seed) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(seed.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 32);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 
     private String slug(String value) {

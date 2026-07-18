@@ -3315,6 +3315,29 @@ class TicketingServiceTests {
                 .extracting(TicketInstanceRecord::status).isEqualTo("refunded");
     }
 
+    @Test
+    void expiryLeavesEntitlementsOfManualRefundPendingInstancesToRefundChain() {
+        // 复核修正(P1-B):人工退款「申请即冻结」只冻父实例,子权益仍 active——到期作业作废它会让
+        // 审批冻结命中0行、退款单永远批不了。该类权益必须留给退款链。
+        java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        seedRefundableType("tt_rp");
+        ticketingRepository.ticketOrders.put("o_rp", new TicketOrderRecord(
+                "o_rp", "ON-RP", "c1", "tt_rp", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", past, past));
+        seedInstance("inst_rp", "o_rp", "tt_rp", 1, 1, 1, "refund_pending", null);
+        ticketingRepository.issuedEntitlements.put("e_rp",
+                seedEntitlement("e_rp", "o_rp", "tt_rp", 1, 0, "active", past, "inst_rp", 1));
+
+        int processed = service.processExpiredPaidEntitlements(now);
+
+        assertThat(processed).isEqualTo(0);
+        assertThat(ticketingRepository.issuedEntitlements.get("e_rp").status()).isEqualTo("active");
+        assertThat(ticketingRepository.refunds.values()).noneMatch(r -> "o_rp".equals(r.targetId()));
+        assertThat(ticketingRepository.findTicketInstanceById("inst_rp")).get()
+                .extracting(TicketInstanceRecord::status).isEqualTo("refund_pending");
+    }
+
     private IssuedEntitlementRecord issueSingleEntitlement(String key) {
         TicketTypeRecord ticketType = createTicketType(key + "-ticket");
         EntitlementTemplateRecord template = createTemplate(key + "-template", 2, 9900L);
@@ -3881,15 +3904,6 @@ class TicketingServiceTests {
             return refunds.values().stream()
                     .filter(r -> orderId.equals(r.targetId()))
                     .filter(r -> "requested".equals(r.status()) || "approved".equals(r.status()))
-                    .mapToLong(TicketRefundRecord::refundAmountCent)
-                    .sum();
-        }
-
-        @Override
-        public long sumApprovedRefundAmountByOrderId(String orderId) {
-            return refunds.values().stream()
-                    .filter(r -> orderId.equals(r.targetId()))
-                    .filter(r -> "approved".equals(r.status()))
                     .mapToLong(TicketRefundRecord::refundAmountCent)
                     .sum();
         }

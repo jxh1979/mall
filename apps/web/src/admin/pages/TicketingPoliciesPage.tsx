@@ -351,7 +351,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       });
       const ticketId = ticket.id ?? "ticket-1";
       await api.post(`/api/v1/ticketing/ticket-types/${ticketId}/entitlements`, {
-        idempotency_key: `${createKey}-bind`,
+        idempotency_key: `${createKey}-bind-${createTemplateId}`,
         entitlement_template_id: createTemplateId,
         quantity: 1,
         total_times: 1,

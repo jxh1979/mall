@@ -34960,7 +34960,7 @@
           },
           "status": {
             "type": "string",
-            "description": "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。",
+            "description": "AUD-015 起服务端不再采信该字段：建票固定 draft，须绑权益后经发布闸（理由必填）上架。保留仅为兼容旧客户端载荷。",
             "enum": [
               "draft",
               "active",
@@ -34990,6 +34990,20 @@
             "type": "string",
             "maxLength": 64,
             "description": "AUD-076 单店票挂酒吧：绑定的酒吧商户 id（可空=通票）。建票校验业态 bar 且未存档；建后不可变。"
+          },
+          "stock_quantity": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "按票种总量限量（可空=不限量）；下单原子扣减、超额拒绝。"
+          },
+          "ticket_category": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "new_person",
+              "student"
+            ],
+            "description": "资格/定价档分类标签（可空=标准）。仅分类/报表用，不碰定价。"
           }
         }
       },

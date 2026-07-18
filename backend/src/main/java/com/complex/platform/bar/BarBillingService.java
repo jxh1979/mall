@@ -167,6 +167,35 @@ public class BarBillingService {
         // 否则部分付款后二次付全额会超收（流水累计>应收但账单标 settled），或续付覆盖掉首付金额致账实不符。
         long existingPaid = bill.paidAmountCent();
         long remaining = settleTotal - existingPaid;
+        // 复核修正（P2）：全免单/押金全抵/减免后剩余应收≤0 的账单必须能关——此路径「结账=关单」，
+        // 不产生收款流水（0 元无收款），否则免单账单永远停在未结。
+        if (remaining <= 0) {
+            if (actual.settlementAmountCent() != null && actual.settlementAmountCent() != 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "settlement amount cannot exceed remaining unpaid amount");
+            }
+            Instant closeNow = Instant.now();
+            BarBillRecord closedBill = repository.saveBill(billWithAmounts(
+                    bill,
+                    bill.subtotalAmountCent(),
+                    bill.discountAmountCent(),
+                    bill.depositDeductAmountCent(),
+                    bill.payableAmountCent(),
+                    existingPaid,
+                    "paid",
+                    "settled",
+                    closeNow
+            ));
+            if (bill.orderId() != null) {
+                repository.findOrderById(bill.orderId())
+                        .filter(o -> o.paidAt() == null)
+                        .ifPresent(o -> repository.saveOrder(new BarOrderRecord(
+                                o.id(), o.barId(), o.merchantId(), o.tableId(), o.reservationId(), o.customerId(),
+                                o.orderSource(), o.status(), o.totalAmountCent(), o.currency(), o.createdTerminal(),
+                                o.deviceId(), o.salesStaffId(), o.createdAt(), o.updatedAt(), o.orderType(), closeNow)));
+            }
+            return closedBill;
+        }
         long settlementAmount = actual.settlementAmountCent() == null
                 ? remaining
                 : nonNegative(actual.settlementAmountCent(), "settlement_amount_cent");

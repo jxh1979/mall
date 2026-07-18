@@ -1230,17 +1230,6 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
-    public long sumApprovedRefundAmountByOrderId(String orderId) {
-        Long result = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(refund_amount_cent), 0)
-                  FROM ticket_refunds
-                 WHERE target_id = :order_id
-                   AND status = 'approved'
-                """, Map.of("order_id", orderId), Long.class);
-        return result == null ? 0L : result;
-    }
-
-    @Override
     public Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt) {
         // 2a-3 退款冻结：核销必须 status='active'（防退款冻结后经游乐 gateway 直连 atomicUseEntitlement 绕过 service 检查）。
         // AUD 复核：service 路径靠 requireParentTicketActive 挡冻结中的父票，但游乐 gateway 直连本方法绕过该守卫——
