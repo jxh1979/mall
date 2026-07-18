@@ -93,16 +93,20 @@ npm run verify:ui:real-backend:seeded   # 真实后端 E2E（带种子数据）
 npm run verify:closed-loop-runtime      # 闭环运行态总验收（后端测试 + 前端 typecheck/build + 常规与真实后端 UI）
 ```
 
-## 5. 当前基线（2026-06-30 本轮取证/现有报告）
+## 5. 当前基线（脚本自动回填，勿手改数字）
 
+本节数字由 `node tools/refresh-entry-doc-baseline.mjs` 从权威源（OpenAPI JSON、Flyway 迁移目录、surefire 报告）自动回填；`--check` 可校验漂移。
+
+<!-- baseline:auto-begin（tools/refresh-entry-doc-baseline.mjs 生成，手改会被覆盖） -->
 | 指标 | 当前值 | 取证方式 |
 |---|---|---|
-| Flyway 最新迁移 | **V182**（179 个迁移） | `backend/src/main/resources/db/migration` 本轮取证 |
-| OpenAPI operation 数 | **516** | `npm run verify:operation-matrix` / `npm run verify:openapi-closure` 当前口径 |
-| 后端测试 | **1606** tests（现有 surefire 报告） | `backend/target/surefire-reports/*.txt` 合计；不声明本轮刚完成全量测试 |
-| 前端 E2E | **31 tests in 5 files** | `npx playwright test --list` 默认列表；不声明本轮刚执行全量 E2E |
+| Flyway 最新迁移 | **V292**（286 个迁移） | `backend/src/main/resources/db/migration` 实时统计 |
+| OpenAPI operation 数 | **621** | `docs/openapi/openapi-p0.json` 方法统计（与 `npm run verify:operation-matrix` 同口径） |
+| 后端测试 | **1606** tests（现有 surefire 报告） | `backend/target/surefire-reports` 合计；无报告时保留上次快照，不声明刚完成全量测试 |
+| 前端 E2E | 以 `npx playwright test --list` 实时输出为准 | 不写死快照数 |
+<!-- baseline:auto-end -->
 
-> 历史快照（如 207/386/419 ops、52 迁移、579~1436 测试、V060/V124/V155）见各文档变更记录，均为旧基线。以上为本轮取证/现有报告口径；各项数字以 OpenAPI 文件、Flyway 迁移目录、Surefire 报告与 `npm run verify:*` 实时输出为最终权威。
+> 历史快照（如 207/386/419/516 ops、52/179 迁移、579~1606 测试、V060/V124/V155/V182、31 E2E）见各文档变更记录，均为旧基线。各项数字以 OpenAPI 文件、Flyway 迁移目录、Surefire 报告与 `npm run verify:*` 实时输出为最终权威。
 
 ## 6. 五类读者阅读路径
 

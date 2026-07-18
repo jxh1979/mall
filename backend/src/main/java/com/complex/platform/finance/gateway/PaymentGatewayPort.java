@@ -3,8 +3,8 @@ package com.complex.platform.finance.gateway;
 /**
  * 支付渠道端口（端口/适配器模式，用户口径：第三方/支付一律"预留接口 + 能力开关默认关"）。
  *
- * <p>所有真实第三方支付交互（收款下单、状态查询、退款打款、自动续费扣款）经此端口抽象，
- * 业务侧（finance 支付意图 / 退款、储值退款打款、付费会员自动续费扣款）只依赖本接口，
+ * <p>所有真实第三方支付交互（收款下单、状态查询、退款打款）经此端口抽象，
+ * 业务侧（finance 支付意图 / 退款、储值退款打款）只依赖本接口，
  * 不直接耦合任何厂商 SDK。
  *
  * <p>路由由 {@link PaymentGatewayRouter} 按能力开关 {@code payment.gateway.enabled} 决定：
@@ -25,7 +25,4 @@ public interface PaymentGatewayPort {
 
     /** 退款打款（储值退款 / finance 退款）。 */
     PaymentGatewayResult refund(PaymentGatewayRequest request);
-
-    /** 自动续费扣款（付费会员到期自动续费）。 */
-    PaymentGatewayResult autoRenewCharge(PaymentGatewayRequest request);
 }

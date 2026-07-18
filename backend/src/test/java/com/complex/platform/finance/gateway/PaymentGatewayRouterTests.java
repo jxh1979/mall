@@ -34,8 +34,6 @@ class PaymentGatewayRouterTests {
         assertThat(r.requiresInternalFallback()).isTrue();
         assertThat(router.refund(PaymentGatewayRequest.of("t", "id", 100L, null)).status())
                 .isEqualTo(PaymentGatewayResult.Status.RESERVED);
-        assertThat(router.autoRenewCharge(PaymentGatewayRequest.of("t", "id", 100L, null)).status())
-                .isEqualTo(PaymentGatewayResult.Status.RESERVED);
     }
 
     @Test
@@ -50,8 +48,6 @@ class PaymentGatewayRouterTests {
         assertThat(r.status()).isEqualTo(PaymentGatewayResult.Status.NOT_CONFIGURED);
         assertThat(r.requiresInternalFallback()).isTrue();
         assertThat(router.refund(PaymentGatewayRequest.of("t", "id", 100L, null)).status())
-                .isEqualTo(PaymentGatewayResult.Status.NOT_CONFIGURED);
-        assertThat(router.autoRenewCharge(PaymentGatewayRequest.of("t", "id", 100L, null)).status())
                 .isEqualTo(PaymentGatewayResult.Status.NOT_CONFIGURED);
     }
 

@@ -439,7 +439,8 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
             }
             return List.of();
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("rule_config_json is not readable", exception);
+            // AUD-020：库内坏 JSON 是服务端数据问题，须走 500 并记堆栈（IllegalArgumentException 会被全局映射 400 掩盖）。
+            throw new IllegalStateException("rule_config_json is not readable", exception);
         }
     }
 
@@ -498,11 +499,12 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
         );
     }
 
+    // AUD-020：同 readKeywords——序列化失败/库内坏 JSON 走 500 并记堆栈。
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("json field is not serializable", exception);
+            throw new IllegalStateException("json field is not serializable", exception);
         }
     }
 
@@ -510,7 +512,7 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
         try {
             return value == null ? List.of() : objectMapper.readValue(value, STRING_LIST_TYPE);
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("json string list is not readable", exception);
+            throw new IllegalStateException("json string list is not readable", exception);
         }
     }
 }

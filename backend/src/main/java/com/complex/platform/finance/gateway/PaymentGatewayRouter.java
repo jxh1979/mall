@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
  * <p>语义注意：T2 开关"无显式行=默认开启"（opt-out）。支付渠道要求"默认关"，故 V093 已显式 seed
  * enabled=FALSE 行；同时本路由对"读不到开关"采取 fail-safe→当作关（走内部占位回退，绝不误连渠道）。
  *
- * <p>本组件自身实现 {@link PaymentGatewayPort}：业务侧（finance/储值/会员）只注入本 bean，
+ * <p>本组件自身实现 {@link PaymentGatewayPort}：业务侧（finance/储值）只注入本 bean，
  * 每次调用按当前开关现选实现并委派——开关后台改动即时生效，无需重启。
  */
 @Component
@@ -74,10 +74,5 @@ public class PaymentGatewayRouter implements PaymentGatewayPort {
     @Override
     public PaymentGatewayResult refund(PaymentGatewayRequest request) {
         return active().refund(request);
-    }
-
-    @Override
-    public PaymentGatewayResult autoRenewCharge(PaymentGatewayRequest request) {
-        return active().autoRenewCharge(request);
     }
 }
