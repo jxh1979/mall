@@ -1932,7 +1932,7 @@ V111 把 V068 的 `chk_tcs_terminal_type` 收口对齐 D5 十端权威码：先 
 
 ### 11.15 票种刷新窗口列（V113 → `ticket_types.refresh_interval_seconds`）
 
-V113 给 `ticket_types` 增 `refresh_interval_seconds` INTEGER（可空），CHECK `chk_ticket_types_refresh_interval`（NULL 或 IN (30,60)）；发凭证按票种取值，为空回退默认 60（向后兼容 V064 凭证级配置）。
+V113 给 `ticket_types` 增 `refresh_interval_seconds` INTEGER（可空），CHECK `chk_ticket_types_refresh_interval`（NULL 或 IN (30,60)）；发凭证按票种取值，为空回退默认 60（向后兼容 V064 凭证级配置）。**2026-07-18 V300 上修**：两表 CHECK 放宽为 IN (10,15,30,60)，`ticket_credentials.refresh_interval_seconds` 列 DEFAULT 60→15，服务层回退默认同步 15；存量行取值不动。
 
 ### 11.16 游乐巡检结构化+项目入口点位列（V114 → `amusement_safety_inspections` + `amusement_projects` 改列）
 

@@ -13,8 +13,8 @@ type TicketQrViewProps = {
   ticketId: string;
 };
 
-// 防伪验票二维码展示 + 30/60 秒在线刷新（T4）。
-// 刷新间隔按凭证 issuedAt/expiresAt 推导（缺省 60s），每个窗口重新拉取，refreshedCount 递增。
+// 防伪验票二维码展示 + 10/15/30/60 秒在线刷新（T4；2026-07-18 拍板默认 15 秒）。
+// 刷新间隔按凭证 issuedAt/expiresAt 推导（缺省 15s），每个窗口重新拉取，refreshedCount 递增。
 // 截图无效：二维码原始值不持久化，只在线渲染。
 export function TicketQrView({ service, ticketId }: TicketQrViewProps): React.ReactElement {
   const [credential, setCredential] = useState<TicketCredential | null>(null);

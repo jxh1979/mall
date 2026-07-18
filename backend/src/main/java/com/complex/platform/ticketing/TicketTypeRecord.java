@@ -15,7 +15,7 @@ public record TicketTypeRecord(
         // 为空则回退默认 1 天（向后兼容）。
         Integer validityDays,
         // P1 清单#19：票种级二维码刷新窗口秒数（可空，取值 {10,15,30,60}）。发凭证时按此取值设刷新窗口；
-        // 为空则回退默认 60 秒（向后兼容）。
+        // 为空则回退默认 15 秒（2026-07-18 拍板）。
         Integer refreshIntervalSeconds,
         Instant createdAt,
         Instant updatedAt,

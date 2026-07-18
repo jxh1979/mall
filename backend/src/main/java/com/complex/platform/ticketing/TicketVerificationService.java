@@ -164,7 +164,7 @@ public class TicketVerificationService {
         String token = "cred_" + UUID.randomUUID().toString().replace("-", "");
         String nonce = UUID.randomUUID().toString().replace("-", "");
         // P1 清单#19：刷新窗口接票种级 refresh_interval_seconds（{10,15,30,60}），替换硬编码；
-        // 票种未配置（为空）则回退默认 60 秒（向后兼容）。window_started_at=now，
+        // 票种未配置（为空）则回退默认 15 秒（2026-07-18 拍板）。window_started_at=now，
         // 截图离线展示的旧 token 超过本窗口即过期被拒。
         int refreshIntervalSeconds = resolveRefreshIntervalSeconds(entitlement);
         Instant expiresAt = now.plusSeconds(refreshIntervalSeconds);
