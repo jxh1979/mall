@@ -30,6 +30,10 @@ import org.springframework.stereotype.Service;
  *   <li>票务出票（单店票挂酒吧商户）：域级比对，允许集须含 {@code ticketing}。</li>
  * </ul>
  *
+ * <p>天花板（I-2，有意）：品类级拦截依赖商品台账 product_type 的真实性——品类由商户建品时自报，
+ * 合同只许 snack 的商户把烈酒标成 snack 即可绕过品类比对。缓解：createProduct 已对新写入强制
+ * 8 值词表校验（BarOrderService）；「标错品类」的实物一致性属商品台账治理/巡检职责，不在下单侧闭环。
+ *
  * <p>fail-open 口径（有意为之）：拦截是合规增强，不能让主销售路径因合同数据缺失而不可用——
  * 找不到生效合同 / 同商户多份生效合同 / 合同查询抛异常，一律不拦截并记 WARN 日志留痕；
  * 存量合同（rent_terms 无 allowedCategories 键或为空数组）同样不拦截（只有配置了范围的合同才生效）。

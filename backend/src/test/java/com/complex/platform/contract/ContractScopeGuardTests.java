@@ -113,7 +113,8 @@ class ContractScopeGuardTests {
                 .thenReturn(List.of(effectiveWith(terms), effectiveWith(terms)));
         assertThatCode(() -> guard.requireBarSaleAllowed("mch_1", List.of("spirit")))
                 .doesNotThrowAnyException();
-        assertThat(warnings.list).anyMatch(e -> e.getLevel() == Level.WARN);
+        assertThat(warnings.list).anyMatch(e -> e.getLevel() == Level.WARN
+                && e.getFormattedMessage().contains("fail-open"));
     }
 
     @Test

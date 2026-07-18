@@ -117,6 +117,26 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     expect((change.body.payload as Record<string, unknown>).allowed_categories).toEqual(["spirit", "beer"]);
   });
 
+  it("经营范围变更：勾「清空经营范围」→ 发起变更载荷 allowed_categories 为空数组", async () => {
+    const posts: CapturedPost[] = [];
+    const props = baseProps();
+    props.api = makeApi(posts, [{ id: "ctr-3", merchant_id: "merchant-1", lifecycle_status: "terminated" }]);
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-detail-ctr-3")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-detail-ctr-3"));
+    fireEvent.change(screen.getByLabelText("变更类型"), { target: { value: "business_scope_change" } });
+    await waitFor(() => expect(screen.getByTestId("contract-change-scope-categories")).toBeTruthy());
+    // 先勾一个类目再勾清空：类目被清并禁用，载荷发空数组（显式清空≠未动）。
+    fireEvent.click(screen.getByLabelText("变更经营范围-啤酒"));
+    fireEvent.click(screen.getByLabelText("清空经营范围"));
+    expect((screen.getByLabelText("变更经营范围-啤酒") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("变更经营范围-啤酒") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId("contract-change-raise"));
+    await waitFor(() => expect(posts.some((p) => p.url.includes("/api/v1/contracts/ctr-3/changes"))).toBe(true));
+    const change = posts.find((p) => p.url.includes("/api/v1/contracts/ctr-3/changes"))!;
+    expect((change.body.payload as Record<string, unknown>).allowed_categories).toEqual([]);
+  });
+
   it("合同详情抽屉展示经营范围（中文显名）与文字描述", async () => {
     const props = baseProps();
     props.api = makeApi(undefined, [{

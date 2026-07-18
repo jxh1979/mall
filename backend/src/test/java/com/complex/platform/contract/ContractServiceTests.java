@@ -335,6 +335,24 @@ class ContractServiceTests {
     }
 
     @Test
+    void draftRejectsVocabularyBypassEmbeddedInRentTerms() {
+        // I-1: 直接把词表外 allowedCategories 塞进 rent_terms 整 Map（绕过专用字段）→ 同样拒；
+        // 合法内嵌值（含客户端蛇形键）则归一化入库。
+        assertThatThrownBy(() -> service.createDraft(new ContractDraftRequest("k_embed_bad", "mch_1", "subj_1",
+                null, "subj_1", LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                Map.of("allowedCategories", List.of("任意串")),
+                null, null, null, null, null, List.of(), null, null, null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        ContractRecord ok = service.createDraft(new ContractDraftRequest("k_embed_ok", "mch_1", "subj_1",
+                null, "subj_1", LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                Map.of("allowed_categories", List.of("beer")),
+                null, null, null, null, null, List.of(), null, null, null, null));
+        assertThat(ok.rentTerms()).containsEntry("allowedCategories", List.of("beer"));
+        assertThat(ok.rentTerms()).doesNotContainKey("allowed_categories");
+    }
+
+    @Test
     void businessScopeChangeUpdatesAllowedCategoriesAndGuardEnforcesAfterApproval() {
         // 变更后生效：走既有 business_scope_change 变更链，终审通过 payload 并入 rent_terms，拦截即读新范围。
         ContractRecord c = service.createDraft(new ContractDraftRequest("k_scope3", "mch_scope", "subj_1", null,

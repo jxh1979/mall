@@ -23,6 +23,12 @@ public class BarOrderService {
 
     private static final String CURRENCY_CNY = "CNY";
 
+    // I-2: 商品粗类别词表（与前端 BarProductsPage CATEGORY_LABELS / ContractScopeGuard 品类级同表）。
+    // 只校验新写入；生产存量词表外值（洋酒/鸡尾酒 中文字面）不迁移，见合同范围拦截交付报告。
+    // ponytail: 词表三处字面量并存，单一真源(S-4)留档下轮。
+    private static final Set<String> PRODUCT_CATEGORY_VOCAB = Set.of(
+            "spirit", "wine", "beer", "cocktail", "soft_drink", "mixer", "tea", "snack");
+
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
@@ -80,6 +86,12 @@ public class BarOrderService {
 
     BarProductRecord createProduct(BarProductRequest request) {
         BarProductRequest actual = requireRequest(request);
+        // I-2: 品类是合同经营范围拦截的比对基准——新建商品强制 8 值词表（否则商户可自报任意品类绕过拦截）。
+        String category = requireText(actual.category(), "category");
+        if (!PRODUCT_CATEGORY_VOCAB.contains(category)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "category 须为既有商品粗类别码值（spirit/wine/beer/cocktail/soft_drink/mixer/tea/snack）");
+        }
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         boolean stockManaged = Boolean.TRUE.equals(actual.stockDeductionRequired());
@@ -103,7 +115,7 @@ public class BarOrderService {
                 requireText(actual.barId(), "bar_id"),
                 merchantId,
                 requireText(actual.productName(), "product_name"),
-                requireText(actual.category(), "category"),
+                category,
                 nonNegative(actual.priceCent(), "price_cent"),
                 CURRENCY_CNY,
                 trimToNull(actual.inventoryItemId()),
@@ -455,7 +467,10 @@ public class BarOrderService {
                 repository.findProductById(requireItemText(item, "product_id", "sku_id", "skuId"))
                         .ifPresent(product -> scopeCategories.add(product.productType()));
             }
-            contractScopeGuard.requireBarSaleAllowed(order.merchantId(), scopeCategories);
+            // S-2: 与 createOrder 同口径——订单商户缺失（平台直营下单）时回退桌台归属商户查合同。
+            String scopeMerchantId = order.merchantId() != null ? order.merchantId()
+                    : repository.findTableById(order.tableId()).map(BarTableRecord::merchantId).orElse(null);
+            contractScopeGuard.requireBarSaleAllowed(scopeMerchantId, scopeCategories);
         }
         BarOrderItemRecord last = null;
         long total = order.totalAmountCent();

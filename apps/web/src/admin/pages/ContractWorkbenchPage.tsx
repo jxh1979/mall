@@ -127,7 +127,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [changes, setChanges] = React.useState<ChangeRow[]>([]);
   const [settlements, setSettlements] = React.useState<SettlementRow[]>([]);
   const [spaceRental, setSpaceRental] = React.useState<SpaceRental[]>([]);
-  const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "", allowedCategories: [] as string[] });
+  const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "", allowedCategories: [] as string[], clearScope: false });
   const [disputeReason, setDisputeReason] = React.useState("");
   // 商户显名字典（页面级拉取，失败降级回 ID）。
   const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
@@ -274,8 +274,11 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     }
     const payload: Record<string, unknown> = {};
     if (changeForm.note.trim()) payload.note = changeForm.note.trim();
-    if (changeForm.changeType === "business_scope_change" && changeForm.allowedCategories.length) {
-      payload.allowedCategories = changeForm.allowedCategories;
+    if (changeForm.changeType === "business_scope_change") {
+      // S-5: 显式清空 → 发空数组（审批通过后 rent_terms.allowedCategories=[]，下单不再拦截）；
+      // 未勾任何类目且未勾清空 → 不发键，审批通过后既有范围原样不动。
+      if (changeForm.clearScope) payload.allowedCategories = [];
+      else if (changeForm.allowedCategories.length) payload.allowedCategories = changeForm.allowedCategories;
     }
     await api.post(`/api/v1/contracts/${selectedId}/changes`, {
       changeType: changeForm.changeType, payload,
@@ -683,7 +686,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
               style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", width: "100%" }}>
               {SCOPE_CATEGORIES.map((c) => (
                 <label key={c.v} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  <input type="checkbox" aria-label={`变更经营范围-${c.l}`}
+                  <input type="checkbox" aria-label={`变更经营范围-${c.l}`} disabled={changeForm.clearScope}
                     checked={changeForm.allowedCategories.includes(c.v)}
                     onChange={(e) => setChangeForm({
                       ...changeForm,
@@ -694,6 +697,14 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                   {c.l}
                 </label>
               ))}
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 600 }}>
+                <input type="checkbox" aria-label="清空经营范围" checked={changeForm.clearScope}
+                  onChange={(e) => setChangeForm({
+                    ...changeForm, clearScope: e.target.checked,
+                    allowedCategories: e.target.checked ? [] : changeForm.allowedCategories,
+                  })} />
+                清空经营范围（审批通过后下单不再拦截）
+              </label>
             </div>
           ) : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={CHANGE_MANAGE}

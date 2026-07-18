@@ -137,8 +137,18 @@ public class ContractService {
         if (trimToNull(actual.businessScope()) != null) {
             rentTerms.put("businessScope", actual.businessScope().trim());   // 经营范围文字描述存 rent_terms
         }
+        // I-1: 堵校验绕过——客户端可不走专用字段、直接把 allowedCategories(或蛇形键)塞进 rent_terms 整 Map；
+        // 词表外值入库会让 guard 误拦全品类（错配 DoS），故内嵌键同样归一化+词表校验。
+        Object embedded = rentTerms.remove("allowed_categories");
+        if (embedded == null) {
+            embedded = rentTerms.get(ContractScopeGuard.RENT_TERMS_KEY);
+        }
+        List<String> embeddedCategories = ContractScopeGuard.validateAllowedCategories(embedded);
+        if (embeddedCategories != null) {
+            rentTerms.put(ContractScopeGuard.RENT_TERMS_KEY, embeddedCategories);
+        }
         // 经营范围结构化（2026-07-18 拍板）：取值校验限既有业务类目；存 rent_terms.allowedCategories，
-        // 下单侧（bar/票务）读此键拦超范围经营；空/缺省=不拦截（存量合同兼容）。
+        // 下单侧（bar/票务）读此键拦超范围经营；空/缺省=不拦截（存量合同兼容）。专用字段优先于内嵌键。
         List<String> allowedCategories = ContractScopeGuard.validateAllowedCategories(actual.allowedCategories());
         if (allowedCategories != null && !allowedCategories.isEmpty()) {
             rentTerms.put(ContractScopeGuard.RENT_TERMS_KEY, allowedCategories);
