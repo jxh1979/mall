@@ -434,6 +434,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         summary={[
           { label: "所属酒吧", value: newTable.barId.trim() || "未填写" },
           { label: "卡座名称", value: newTable.tableName.trim() || "未填写" },
+          { label: "桌台类型", value: newTable.tableType === "bar_counter" ? "吧台位（不走出品流转）" : newTable.tableType === "vip" ? "VIP 包坐" : "卡座" },
           { label: "可进人数", value: newTable.capacity.trim() || "未填写" },
           { label: "免通票入场人数", value: newTable.allowedFreeEntryCount.trim() || "0" },
           { label: "低消（元）", value: newTable.minimumSpendYuan.trim() || "0" },
