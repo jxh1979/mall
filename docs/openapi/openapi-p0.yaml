@@ -194,6 +194,8 @@ paths:
       tags:
         - access
       operationId: applyPermissionTemplate
+      x-failure-codes:
+        - GRANT_EXCEEDS_OWN_PERMISSIONS
       summary: 应用权限模板
       x-permission: access.permission_template.apply
       x-data-scope: project
@@ -295,6 +297,8 @@ paths:
       tags:
         - access
       operationId: createRole
+      x-failure-codes:
+        - GRANT_EXCEEDS_OWN_PERMISSIONS
       summary: 创建角色
       x-permission: access.role.manage
       x-data-scope: project
@@ -320,6 +324,8 @@ paths:
       tags:
         - access
       operationId: createTemporaryGrant
+      x-failure-codes:
+        - GRANT_EXCEEDS_OWN_PERMISSIONS
       summary: 临时授权
       x-permission: access.temporary_grant.create
       x-data-scope: project
@@ -2015,6 +2021,8 @@ paths:
       tags:
         - bar
       operationId: deliverBarOrder
+      x-failure-codes:
+        - BAR_ORDER_ITEM_VOIDED
       summary: 出酒或送达确认
       x-permission: bar.order.create
       x-data-scope: project-bar-table
@@ -9536,6 +9544,8 @@ paths:
       tags:
         - bar
       operationId: voidBarOrderItem
+      x-failure-codes:
+        - BAR_BILL_ORDER_MISMATCH
       summary: 退菜退酒
       x-permission: bar.order_item.void
       x-data-scope: project-bar-table

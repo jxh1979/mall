@@ -357,7 +357,10 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "GRANT_EXCEEDS_OWN_PERMISSIONS"
+        ]
       }
     },
     "/api/v1/access/permission-templates/{id}/copy": {
@@ -489,7 +492,10 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "GRANT_EXCEEDS_OWN_PERMISSIONS"
+        ]
       }
     },
     "/api/v1/access/temporary-grants": {
@@ -524,7 +530,10 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "GRANT_EXCEEDS_OWN_PERMISSIONS"
+        ]
       }
     },
     "/api/v1/access/temporary-grants/{id}/revoke": {
@@ -2868,7 +2877,10 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "BAR_ORDER_ITEM_VOIDED"
+        ]
       }
     },
     "/api/v1/bar/orders/{order_id}/items": {
@@ -12917,7 +12929,10 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "x-failure-codes": [
+          "BAR_BILL_ORDER_MISMATCH"
+        ]
       }
     },
     "/api/v1/bar/bills/{bill_id}/reopen": {
