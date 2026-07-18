@@ -52,7 +52,9 @@
             ticket：issued_entitlements.allocated_revenue_cent − ticket_refunds）    ← revenue.net 商户行级同谓词区间版
 − 销货成本 = V296 InventoryRepository.sumOutboundCost（仅源库位出库流水 total_cost_cent；
             无成本基准出库笔数 no_cost_basis_count 随单留痕，>0 提示成本或有低估）
-− 期间费用 = V297 merchant_expense_entries 按月份桶 × 计入类别净额（红字冲销行负值自然抵减）
+− 期间费用 = V297 merchant_expense_entries 按月份桶 × 计入类别净额（红字冲销行负值自然抵减；
+            含租金 rent_allocation——2026-07-18 拍板租金计入费用台账并默认扣减，auto_rent 自动挂接
+            覆盖 contract_rent 合同租金 + turnover_rent 营业额抽成两条出账路径）
 = 净利润 net_profit_cent
 可分配额 distributable = max(净利润, 0)          （亏损期不倒扣主理人现金）
 平台分成 platform_share = distributable × platform_share_bps / 10000   （整除链截断）
@@ -108,7 +110,9 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
 - **定时作业未上**：期末自动触发（定时器）依赖费用侧关账节奏，本期为手动触发端点；
   配套的**分红期间关账锁**（已核算月份禁止再动费用台账）在 V297 PRD §14 留档，一并后续实现。
 - **收入域默认不含合同租金**：租金是商户对平台的支出（费用侧 rent_allocation 类别），计入收入会与
-  费用侧重复；BI revenue.net 展示口径含租金分量，与分红基数口径有意不同。
+  费用侧重复；BI revenue.net 展示口径含租金分量，与分红基数口径有意不同。费用侧租金已默认计入
+  （2026-07-18 拍板：auto_rent 自动挂接，分红方案基数构成默认勾选 rent_allocation，可按方案关闭）；
+  turnover_rent 历史行（V299 前出账）无 accounting_period 期间标记，不自动挂接，需手工录入补齐。
 - **成本诚实边界**：存量库存未录进货价的出库成本为 NULL（V296 口径不编造），计算单以
   no_cost_basis_count 留痕提示或有低估；财务可在审阅时驳回、补录进货价后重算。
 - 计算单头金额列冻结靠服务层仓储纪律（无金额列 UPDATE 语句）+明细行 DB 级 append-only；
@@ -119,3 +123,4 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
 | 日期 | 类型 | 内容 | 原因/依据 |
 |---|---|---|---|
 | 2026-07-18 | 增 | v0.1 初版：收编拍板终稿（净利润制/股息红利 20%/季度+月预览/全可配）+ V299 实现细节（三表/恒等式 CHECK/append-only 明细/状态机/应付挂账/两页面/10 operations） | 2026-07-18 用户拍板；V296/V297 数据基建就绪后的分红引擎本体交付 |
+| 2026-07-18 复核 | 改 | C-1 状态机 UPDATE 全带期望前态守卫（0 行=业务 409，杜绝并发 approve×reject 双付窗口）；I-1 审批职责分离（提交人不得审批自己提交的单 SELF_APPROVAL_FORBIDDEN）；rejected_by/rejected_at 留痕；商户侧 DTO 脱敏（内部操作员/应付 id 不外发）；租金计入费用台账并默认扣减（auto_rent 挂接 contract_rent+turnover_rent，turnover_rent 出账起落 accounting_period） | 一轮复核 1C+1I+4S + 用户拍板租金计入分红基数 |

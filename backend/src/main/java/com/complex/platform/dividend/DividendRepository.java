@@ -23,7 +23,8 @@ public interface DividendRepository {
     /** 插入方案；同商户已有 active 方案时（部分唯一索引冲突）返回 false。 */
     boolean insertPlan(DividendPlanRecord plan);
 
-    void updatePlan(DividendPlanRecord plan);
+    /** 更新方案；ended 改回 active 撞同商户唯一生效索引时返回 false（insertPlan 同口径）。 */
+    boolean updatePlan(DividendPlanRecord plan);
 
     // ── 计算单 ────────────────────────────────────────────────
     PageResponse<DividendStatementRecord> pageStatements(
@@ -41,16 +42,24 @@ public interface DividendRepository {
     /** 明细行按单读取；merchantId 非空时叠加商户归属谓词（商户 scope 纵深）。 */
     List<DividendStatementLineRecord> listLines(String statementId, String merchantId);
 
-    /** 仅更新状态机/审批留痕列（金额列冻结：本仓储不提供任何金额列 UPDATE）。 */
-    void markVoided(String id, String actor, Instant now);
+    // 仅更新状态机/审批留痕列（金额列冻结：本仓储不提供任何金额列 UPDATE）。
+    // C-1 资金安全：每条 UPDATE 都带期望前态谓词（乐观守卫），返回影响行数；
+    // 0 行 = 并发下状态已被他人变更，调用方必须按业务冲突处理，禁止盲改。
 
-    void markSubmitted(String id, String actor, Instant now);
+    /** 作废：仅 preview/draft/rejected 可作废（进入审批流的单不作废）。返回影响行数。 */
+    int markVoided(String id, String actor, Instant now);
 
-    void markApproved(String id, String actor, String arApItemId, Instant now);
+    /** draft → pending_review。返回影响行数（0=当前非 draft）。 */
+    int markSubmitted(String id, String actor, Instant now);
 
-    void markRejected(String id, String actor, String reason, Instant now);
+    /** pending_review → approved。返回影响行数（0=当前非 pending_review）。 */
+    int markApproved(String id, String actor, String arApItemId, Instant now);
 
-    void markPaid(String id, String actor, Instant now);
+    /** pending_review → rejected（落 rejected_by/rejected_at）。返回影响行数（0=当前非 pending_review）。 */
+    int markRejected(String id, String actor, String reason, Instant now);
+
+    /** approved → paid。返回影响行数（0=当前非 approved）。 */
+    int markPaid(String id, String actor, Instant now);
 
     // ── 三来源期间取数（成本侧走 InventoryRepository.sumOutboundCost，不在本仓储）──
     /** 酒吧实收：bar_bill_settlements 结账流水（reversed=false），settled_at 落窗口（revenue.net 商户行级同谓词区间版）。 */

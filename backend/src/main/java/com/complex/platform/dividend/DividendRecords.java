@@ -67,6 +67,17 @@ public final class DividendRecords {
             Instant paidAt,
             Instant createdAt,
             Instant updatedAt) {
+
+        /** 商户侧（主理人视图）脱敏：内部操作员 id 与应付款项 id 不外发（平台侧照旧全量）。 */
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public DividendStatementRecord forMerchantView() {
+            return new DividendStatementRecord(id, merchantId, planId, kind, periodLabel, periodStart, periodEnd,
+                    principalUserId, platformShareBps, taxRateBps, revenueDomains, includeInventoryCost,
+                    expenseTypes, revenueCent, costCent, expenseCent, netProfitCent, distributableCent,
+                    platformShareCent, principalGrossCent, taxCent, principalNetCent, noCostBasisCount, status,
+                    rejectReason, null, null, null, submittedAt, null, approvedAt, null, paidAt,
+                    createdAt, updatedAt);
+        }
     }
 
     /** 算式明细行（append-only；detail 说明取数口径，可追溯到三个来源台账）。 */

@@ -37,6 +37,7 @@ const EXPENSE_TYPE_LABELS: Record<string, string> = {
 const SOURCE_LABELS: Record<string, string> = {
   auto_energy: "自动·能耗账单",
   auto_property: "自动·物业费账单",
+  auto_rent: "自动·租金账单",
   manual: "手工录入",
 };
 
@@ -301,8 +302,8 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
           data-testid="merchant-expense-sync-run"
           disabled={busyAction === "merchant_expense_auto_synced"}
           onClick={runSync}
-        >自动挂接能耗/物业费</PermissionButton>
-        <span className="admin-muted-action">自动挂接把所选月份已出账的能耗费应收、物业费账单与合同计费物业费（双路径均自动归集）汇入台账，重跑不重复计入；上游账单事后被更正的，挂接结果会附金额漂移提示。</span>
+        >自动挂接能耗/物业/租金</PermissionButton>
+        <span className="admin-muted-action">自动挂接把所选月份已出账的能耗费应收、物业费账单与合同计费物业费（双路径均自动归集）、租金（合同租金与营业额抽成，2026-07-18 拍板计入分红基数）汇入台账，重跑不重复计入；上游账单事后被更正的，挂接结果会附金额漂移提示。</span>
       </div>
 
       {/* ── 金额漂移提示（自动挂接响应附带；上游改账后台账不自动追改）──────── */}

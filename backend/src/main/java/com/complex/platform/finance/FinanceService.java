@@ -1547,7 +1547,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             throw ApiException.badRequest("TURNOVER_RENT_ZERO",
                     "computed turnover rent is zero (turnover=" + turnover + "); nothing to bill");
         }
-        // 营业额抽成应收：counterparty=商户。
+        // 营业额抽成应收：counterparty=商户。V299 起落 accounting_period=期间起始月——
+        // 租金自动挂接（费用台账→分红基数）按 accounting_period 归期；历史行无期间标记不挂接（如实边界）。
         return persistDerivedArApItem(
                 "receivable",
                 rule.merchantId(),
@@ -1555,7 +1556,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 rule.id(),
                 rent,
                 actual.idempotencyKey(),
-                rule.merchantId());
+                rule.merchantId(),
+                java.time.YearMonth.from(periodStart).toString());
     }
 
     /** rent = clamp(turnover × rateBps / 10000, min, max)。min/max 为 null 时不夹。 */
@@ -1644,6 +1646,19 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             long amountCent,
             String idempotencyKey,
             String merchantId) {
+        return persistDerivedArApItem(direction, counterpartyId, sourceType, sourceId, amountCent,
+                idempotencyKey, merchantId, null);
+    }
+
+    private ArApItemRecord persistDerivedArApItem(
+            String direction,
+            String counterpartyId,
+            String sourceType,
+            String sourceId,
+            long amountCent,
+            String idempotencyKey,
+            String merchantId,
+            String accountingPeriod) {
         LocalDate dueDate = LocalDate.now();
         // F-OPS-09：派生台账按本条目归属 merchantId 判锁（与下方 ArApItemRecord.merchantId 同口径）；
         // merchantId 为空（平台口径派生）则受任一封账约束。
@@ -1673,7 +1688,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 unpaidAmountCent,
                 CURRENCY_CNY,
                 dueDate,
-                null,
+                accountingPeriod,
                 status,
                 now,
                 now,

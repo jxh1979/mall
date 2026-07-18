@@ -820,6 +820,7 @@ export type MerchantExpenseSyncResult = {
   energyInserted?: number;
   propertyInserted?: number;
   contractPropertyInserted?: number;
+  rentInserted?: number;
   drift?: MerchantExpenseDriftRow[];
 };
 

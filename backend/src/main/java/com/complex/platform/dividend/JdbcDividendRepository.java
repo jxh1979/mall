@@ -114,8 +114,17 @@ class JdbcDividendRepository implements DividendRepository {
     }
 
     @Override
-    public void updatePlan(DividendPlanRecord plan) {
-        jdbcTemplate.update("""
+    public boolean updatePlan(DividendPlanRecord plan) {
+        try {
+            return doUpdatePlan(plan) > 0;
+        } catch (DuplicateKeyException conflict) {
+            // uq_dividend_plans_active_merchant：ended 改回 active 时同商户已有另一生效方案。
+            return false;
+        }
+    }
+
+    private int doUpdatePlan(DividendPlanRecord plan) {
+        return jdbcTemplate.update("""
                 UPDATE dividend_plans SET
                     principal_user_id = :principal_user_id,
                     principal_name = :principal_name,
@@ -304,44 +313,51 @@ class JdbcDividendRepository implements DividendRepository {
     }
 
     // ── 状态机列更新（金额列冻结：以下 UPDATE 只触状态/审批留痕列）──────────
+    // C-1 资金安全：每条 UPDATE 带期望前态谓词——READ_COMMITTED 下 approve×reject 并发若无守卫，
+    // 可造出「已驳回单挂着活应付」再重算重挂=同期双付。0 行由服务层抛 DIVIDEND_STATE_INVALID。
 
     @Override
-    public void markVoided(String id, String actor, Instant now) {
-        jdbcTemplate.update("""
+    public int markVoided(String id, String actor, Instant now) {
+        return jdbcTemplate.update("""
                 UPDATE dividend_statements SET status = 'voided', voided_by = :actor, voided_at = :now,
-                       updated_at = :now WHERE id = :id
+                       updated_at = :now
+                 WHERE id = :id AND status IN ('preview', 'draft', 'rejected')
                 """, statusParams(id, actor, now));
     }
 
     @Override
-    public void markSubmitted(String id, String actor, Instant now) {
-        jdbcTemplate.update("""
+    public int markSubmitted(String id, String actor, Instant now) {
+        return jdbcTemplate.update("""
                 UPDATE dividend_statements SET status = 'pending_review', submitted_by = :actor,
-                       submitted_at = :now, updated_at = :now WHERE id = :id
+                       submitted_at = :now, updated_at = :now
+                 WHERE id = :id AND status = 'draft'
                 """, statusParams(id, actor, now));
     }
 
     @Override
-    public void markApproved(String id, String actor, String arApItemId, Instant now) {
-        jdbcTemplate.update("""
+    public int markApproved(String id, String actor, String arApItemId, Instant now) {
+        return jdbcTemplate.update("""
                 UPDATE dividend_statements SET status = 'approved', approved_by = :actor, approved_at = :now,
-                       ar_ap_item_id = :ar_ap_item_id, updated_at = :now WHERE id = :id
+                       ar_ap_item_id = :ar_ap_item_id, updated_at = :now
+                 WHERE id = :id AND status = 'pending_review'
                 """, statusParams(id, actor, now).addValue("ar_ap_item_id", arApItemId, Types.VARCHAR));
     }
 
     @Override
-    public void markRejected(String id, String actor, String reason, Instant now) {
-        jdbcTemplate.update("""
-                UPDATE dividend_statements SET status = 'rejected', reject_reason = :reason, updated_at = :now
-                 WHERE id = :id
+    public int markRejected(String id, String actor, String reason, Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE dividend_statements SET status = 'rejected', reject_reason = :reason,
+                       rejected_by = :actor, rejected_at = :now, updated_at = :now
+                 WHERE id = :id AND status = 'pending_review'
                 """, statusParams(id, actor, now).addValue("reason", reason));
     }
 
     @Override
-    public void markPaid(String id, String actor, Instant now) {
-        jdbcTemplate.update("""
+    public int markPaid(String id, String actor, Instant now) {
+        return jdbcTemplate.update("""
                 UPDATE dividend_statements SET status = 'paid', paid_by = :actor, paid_at = :now,
-                       updated_at = :now WHERE id = :id
+                       updated_at = :now
+                 WHERE id = :id AND status = 'approved'
                 """, statusParams(id, actor, now));
     }
 

@@ -147,6 +147,45 @@ class MerchantExpenseJdbcIntegrationTests {
     }
 
     @Test
+    void attachContractRentCoversBothRentSourceTypesIdempotently() {
+        // 2026-07-18 拍板：租金计入费用台账。覆盖两条租金出账路径——
+        // contract_rent（合同租金，单期/批量都经 genFeeBill → insertRentBill）+ turnover_rent（营业额抽成，
+        // V299 起 accounting_period=期间起始月）；同上游单据重跑不重复计入。
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (
+                    id, item_no, direction, counterparty_id, source_type, source_id,
+                    amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
+                    status, created_at, updated_at, merchant_id
+                ) VALUES
+                ('arap_mex_rent_1', 'RENT-MEX-1', 'receivable', 'merchant_jdbc', 'contract_rent',
+                 'contract_mex|2026-07', 120000, 0, 120000, 'CNY', DATE '2026-07-01', '2026-07',
+                 'pending_collection', now(), now(), 'merchant_jdbc'),
+                ('arap_mex_rent_2', 'TRENT-MEX-1', 'receivable', 'merchant_jdbc', 'turnover_rent',
+                 'trr_mex_1', 35000, 0, 35000, 'CNY', DATE '2026-08-05', '2026-07',
+                 'pending_collection', now(), now(), 'merchant_jdbc')
+                ON CONFLICT (id) DO NOTHING
+                """);
+
+        int first = repository.attachContractRent("2026-07", "usr_test", now);
+        assertThat(first).isGreaterThanOrEqualTo(2);
+        assertThat(repository.attachContractRent("2026-07", "usr_test", now)).isZero();
+
+        MerchantExpenseEntryRecord contractRent = repository.findById("mex_arn_arap_mex_rent_1").orElseThrow();
+        assertThat(contractRent.expenseType()).isEqualTo("rent_allocation");
+        assertThat(contractRent.source()).isEqualTo("auto_rent");
+        assertThat(contractRent.amountCent()).isEqualTo(120000L);
+        MerchantExpenseEntryRecord turnoverRent = repository.findById("mex_arn_arap_mex_rent_2").orElseThrow();
+        assertThat(turnoverRent.amountCent()).isEqualTo(35000L);
+        // 汇总口径：rent_allocation 净额 = 两路租金合计（分红引擎费用侧取数点）。
+        assertThat(repository.summarize("2026-07", "merchant_jdbc"))
+                .anySatisfy(row -> {
+                    assertThat(row.expenseType()).isEqualTo("rent_allocation");
+                    assertThat(row.totalCent()).isEqualTo(155000L);
+                });
+    }
+
+    @Test
     void negativeReversalRowPassesRealCheckConstraints() {
         // 红字冲销行 = 负金额：必须能通过真实 CHECK（chk_mex_amount_nonzero 只拦 0，不拦负数）落库。
         repository.insertEntry(manualEntry("mex_jdbc_neg_orig", "merchant_jdbc", 300_00L));

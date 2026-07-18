@@ -93,8 +93,15 @@ class DividendServiceTests {
         }
 
         @Override
-        public void updatePlan(DividendPlanRecord plan) {
+        public boolean updatePlan(DividendPlanRecord plan) {
+            // uq_dividend_plans_active_merchant 内存版：ended 改回 active 时同商户已有另一生效方案 → false。
+            if ("active".equals(plan.status()) && plans.values().stream().anyMatch(p ->
+                    !p.id().equals(plan.id()) && p.merchantId().equals(plan.merchantId())
+                            && "active".equals(p.status()))) {
+                return false;
+            }
             plans.put(plan.id(), plan);
+            return true;
         }
 
         @Override
@@ -140,8 +147,15 @@ class DividendServiceTests {
                     .toList();
         }
 
-        private void mutateStatus(String id, java.util.function.UnaryOperator<DividendStatementRecord> mutation) {
-            statements.computeIfPresent(id, (key, s) -> mutation.apply(s));
+        /** C-1 内存版乐观守卫：仅当前态命中期望集合才变更并返回 1，否则返回 0（与 SQL AND status=... 同语义）。 */
+        private int mutateStatus(String id, java.util.Set<String> expectedStatuses,
+                java.util.function.UnaryOperator<DividendStatementRecord> mutation) {
+            DividendStatementRecord current = statements.get(id);
+            if (current == null || !expectedStatuses.contains(current.status())) {
+                return 0;
+            }
+            statements.put(id, mutation.apply(current));
+            return 1;
         }
 
         private static DividendStatementRecord withStatus(DividendStatementRecord s, String status,
@@ -160,28 +174,33 @@ class DividendServiceTests {
         }
 
         @Override
-        public void markVoided(String id, String actor, Instant now) {
-            mutateStatus(id, s -> withStatus(s, "voided", null, null, null, null, null));
+        public int markVoided(String id, String actor, Instant now) {
+            return mutateStatus(id, java.util.Set.of("preview", "draft", "rejected"),
+                    s -> withStatus(s, "voided", null, null, null, null, null));
         }
 
         @Override
-        public void markSubmitted(String id, String actor, Instant now) {
-            mutateStatus(id, s -> withStatus(s, "pending_review", null, null, null, actor, null));
+        public int markSubmitted(String id, String actor, Instant now) {
+            return mutateStatus(id, java.util.Set.of("draft"),
+                    s -> withStatus(s, "pending_review", null, null, null, actor, null));
         }
 
         @Override
-        public void markApproved(String id, String actor, String arApItemId, Instant now) {
-            mutateStatus(id, s -> withStatus(s, "approved", null, arApItemId, actor, null, null));
+        public int markApproved(String id, String actor, String arApItemId, Instant now) {
+            return mutateStatus(id, java.util.Set.of("pending_review"),
+                    s -> withStatus(s, "approved", null, arApItemId, actor, null, null));
         }
 
         @Override
-        public void markRejected(String id, String actor, String reason, Instant now) {
-            mutateStatus(id, s -> withStatus(s, "rejected", reason, null, null, null, null));
+        public int markRejected(String id, String actor, String reason, Instant now) {
+            return mutateStatus(id, java.util.Set.of("pending_review"),
+                    s -> withStatus(s, "rejected", reason, null, null, null, null));
         }
 
         @Override
-        public void markPaid(String id, String actor, Instant now) {
-            mutateStatus(id, s -> withStatus(s, "paid", null, null, null, null, actor));
+        public int markPaid(String id, String actor, Instant now) {
+            return mutateStatus(id, java.util.Set.of("approved"),
+                    s -> withStatus(s, "paid", null, null, null, null, actor));
         }
 
         @Override
@@ -243,14 +262,17 @@ class DividendServiceTests {
     private InventoryRepository inventoryRepository;
     private DividendPayoutPort payoutPort;
     private DividendService service;
+    // I-1 职责分离测试用：可切换当前操作人（提交与审批必须不同人）。
+    private final String[] actorId = {"usr_admin"};
 
     @BeforeEach
     void setUp() {
+        actorId[0] = "usr_admin";
         repository = new InMemoryRepo();
         authorizationService = mock(AuthorizationService.class);
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
-        when(authorizationService.currentActor()).thenReturn(
-                new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
+        when(authorizationService.currentActor()).thenAnswer(invocation ->
+                new AccessActor(actorId[0], "platform_admin_user", "platform_admin", "org_1", null, "active"));
         inventoryRepository = mock(InventoryRepository.class);
         when(inventoryRepository.sumOutboundCost(anyString(), any(), anyString(), anyString(), any(), any()))
                 .thenReturn(new InventoryCostSummaryRecord(MERCHANT, "2026-07-01", "2026-09-30", 0L, 0L, 0L));
@@ -328,22 +350,29 @@ class DividendServiceTests {
         repository.barRefund.put(MERCHANT, 50_000L);
         repository.ticketAllocated.put(MERCHANT, 300_000L);
         repository.ticketRefund.put(MERCHANT, 30_000L);
+        // 2026-07-18 拍板：租金计入费用台账（auto_rent 自动挂接 rent_allocation），默认方案默认扣减。
         repository.expenses.put(MERCHANT, List.of(
                 new ExpenseTypeSumRecord("labor", 200_000L),
-                new ExpenseTypeSumRecord("energy", 20_000L)));
+                new ExpenseTypeSumRecord("energy", 20_000L),
+                new ExpenseTypeSumRecord("property_fee", 30_000L),
+                new ExpenseTypeSumRecord("rent_allocation", 100_000L)));
         when(inventoryRepository.sumOutboundCost(anyString(), any(), anyString(), anyString(), any(), any()))
                 .thenReturn(new InventoryCostSummaryRecord(MERCHANT, "2026-07-01", "2026-09-30", 150_000L, 12L, 2L));
 
         DividendStatementRecord statement = computeOfficialQuarter();
-        // 收入 = (800000−50000)+(300000−30000)=1020000；净利 = 1020000−150000−220000 = 650000。
+        // 收入 = (800000−50000)+(300000−30000)=1020000；
+        // 净利 = 收入−成本−能耗−物业−人工−租金 = 1020000−150000−(200000+20000+30000+100000) = 520000。
         assertThat(statement.revenueCent()).isEqualTo(1_020_000L);
         assertThat(statement.costCent()).isEqualTo(150_000L);
-        assertThat(statement.expenseCent()).isEqualTo(220_000L);
-        assertThat(statement.netProfitCent()).isEqualTo(650_000L);
-        assertThat(statement.platformShareCent()).isEqualTo(520_000L);
-        assertThat(statement.principalGrossCent()).isEqualTo(130_000L);
-        assertThat(statement.taxCent()).isEqualTo(26_000L);
-        assertThat(statement.principalNetCent()).isEqualTo(104_000L);
+        assertThat(statement.expenseCent()).isEqualTo(350_000L);
+        assertThat(statement.netProfitCent()).isEqualTo(520_000L);
+        assertThat(statement.platformShareCent()).isEqualTo(416_000L);
+        assertThat(statement.principalGrossCent()).isEqualTo(104_000L);
+        assertThat(statement.taxCent()).isEqualTo(20_800L);
+        assertThat(statement.principalNetCent()).isEqualTo(83_200L);
+        // 租金以独立算式行留痕。
+        assertThat(repository.listLines(statement.id(), null))
+                .anyMatch(l -> l.lineType().equals("expense_rent_allocation") && l.amountCent() == -100_000L);
         assertThat(statement.noCostBasisCount()).isEqualTo(2L);
         assertThat(statement.status()).isEqualTo("draft");
         assertThat(statement.periodStart()).isEqualTo(java.time.LocalDate.parse("2026-07-01"));
@@ -443,6 +472,8 @@ class DividendServiceTests {
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_STATE_INVALID"));
         service.submit(statement.id(), new DividendActionRequest("s1", null));
+        // I-1 职责分离：审批人须与提交人不同。
+        actorId[0] = "usr_approver";
         DividendStatementRecord approved = service.approve(statement.id(), new DividendActionRequest("a1", null));
         assertThat(approved.status()).isEqualTo("approved");
         assertThat(approved.arApItemId()).isEqualTo("arap_div_1");
@@ -462,11 +493,67 @@ class DividendServiceTests {
         // 无任何收入 → 净利 0 → 净发放 0 → 不挂应付。
         DividendStatementRecord statement = computeOfficialQuarter();
         service.submit(statement.id(), new DividendActionRequest("s1", null));
+        actorId[0] = "usr_approver";
         DividendStatementRecord approved = service.approve(statement.id(), new DividendActionRequest("a1", null));
         assertThat(approved.status()).isEqualTo("approved");
         assertThat(approved.arApItemId()).isNull();
         verify(payoutPort, never()).createDividendPayoutPayable(anyString(), anyString(),
                 org.mockito.ArgumentMatchers.anyLong(), anyString());
+    }
+
+    @Test
+    void selfApprovalForbidden() {
+        // I-1：提交人不能审批自己提交的单（SELF_APPROVAL_FORBIDDEN，补录审批同范式）；换人后放行。
+        createDefaultPlan();
+        DividendStatementRecord statement = computeOfficialQuarter();
+        service.submit(statement.id(), new DividendActionRequest("s1", null));
+        assertThatThrownBy(() -> service.approve(statement.id(), new DividendActionRequest("a1", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("SELF_APPROVAL_FORBIDDEN"));
+        assertThat(repository.findStatementById(statement.id()).orElseThrow().status())
+                .isEqualTo("pending_review");
+        actorId[0] = "usr_approver";
+        assertThat(service.approve(statement.id(), new DividendActionRequest("a2", null)).status())
+                .isEqualTo("approved");
+    }
+
+    @Test
+    void concurrentGuardMissYieldsBusinessConflictNot500() {
+        // C-1：状态守卫 miss（UPDATE 影响 0 行，模拟 READ_COMMITTED 并发下已被他人驳回）→ 业务 409 非 500。
+        InMemoryRepo guarded = new InMemoryRepo() {
+            @Override
+            public int markApproved(String id, String actor, String arApItemId, Instant now) {
+                return 0; // 模拟并发窗口：读到 pending_review，UPDATE 时已被驳回。
+            }
+        };
+        AuditedOperationExecutor operations = new AuditedOperationExecutor(
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                mock(AuditEventService.class));
+        DividendService guardedService = new DividendService(guarded, inventoryRepository,
+                new BusinessDayResolver(4), authorizationService, operations, payoutPort);
+        repository = guarded;
+        service = guardedService;
+        createDefaultPlan();
+        DividendStatementRecord statement = computeOfficialQuarter();
+        service.submit(statement.id(), new DividendActionRequest("s1", null));
+        actorId[0] = "usr_approver";
+        assertThatThrownBy(() -> service.approve(statement.id(), new DividendActionRequest("a1", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_STATE_INVALID"));
+    }
+
+    @Test
+    void reactivatingPlanConflictsWithAnotherActivePlan() {
+        // S-2：停用后另建生效方案，再把旧方案改回 active → 撞唯一生效索引，业务 409（DIVIDEND_PLAN_EXISTS）。
+        DividendPlanRecord first = createDefaultPlan();
+        service.updatePlan(first.id(), new DividendPlanRequest("end-key", null, null, null, null, null,
+                null, null, null, null, null, "ended", null));
+        service.createPlan(new DividendPlanRequest("plan-key-2", MERCHANT, "usr_principal_2", null,
+                null, null, null, null, null, null, null, null, null));
+        assertThatThrownBy(() -> service.updatePlan(first.id(), new DividendPlanRequest("react-key", null,
+                null, null, null, null, null, null, null, null, null, "active", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_PLAN_EXISTS"));
     }
 
     @Test
@@ -507,11 +594,20 @@ class DividendServiceTests {
                 new DividendComputeRequest("compute-key-x", "2026-Q3", "official", null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
-        // 本商户详情可看（主理人视图）。
+        // 本商户详情可看（主理人视图），但 S-3 脱敏：内部操作员 id 与应付款项 id 不外发。
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of(MERCHANT));
         DividendStatementDetailRecord detail = service.getStatement(statement.id());
         assertThat(detail.statement().id()).isEqualTo(statement.id());
         assertThat(detail.lines()).isNotEmpty();
+        assertThat(detail.statement().computedBy()).isNull();
+        assertThat(detail.statement().submittedBy()).isNull();
+        assertThat(detail.statement().approvedBy()).isNull();
+        assertThat(detail.statement().arApItemId()).isNull();
+        // 金额与状态照常可见。
+        assertThat(detail.statement().principalNetCent()).isEqualTo(statement.principalNetCent());
+        PageResponse<DividendStatementRecord> ownPage = service.listStatements(null, null, null, null, 1, 50);
+        assertThat(ownPage.items()).isNotEmpty();
+        assertThat(ownPage.items().get(0).computedBy()).isNull();
     }
 
     @Test

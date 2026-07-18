@@ -15340,8 +15340,9 @@ paths:
             enum:
               - auto_energy
               - auto_property
+              - auto_rent
               - manual
-          description: 来源筛选：自动挂接（能耗/物业费）或手工录入。
+          description: 来源筛选：自动挂接（能耗/物业费/租金）或手工录入。
         - name: page
           in: query
           required: false
@@ -15457,7 +15458,7 @@ paths:
     post:
       tags: *mexp_tags
       operationId: syncMerchantExpenseAuto
-      summary: 自动挂接能耗费/物业费账单到费用台账（按期幂等可重跑）
+      summary: 自动挂接能耗费/物业费/租金账单到费用台账（按期幂等可重跑）
       x-auth-context: staff-token
       x-permission: finance.merchant_expense.manage
       x-data-scope: platform
@@ -22561,7 +22562,7 @@ paths:
       tags:
       - finance
       operationId: approveDividendStatement
-      summary: 审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）
+      summary: 审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）；提交人不得审批自己提交的单
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -22574,6 +22575,7 @@ paths:
       - DIVIDEND_STATEMENT_NOT_FOUND
       - DIVIDEND_STATE_INVALID
       - DIVIDEND_PREVIEW_NOT_APPROVABLE
+      - SELF_APPROVAL_FORBIDDEN
       requestBody:
         $ref: '#/components/requestBodies/DividendActionRequest'
       responses:
@@ -31254,8 +31256,7 @@ components:
           maxLength: 1000
     MerchantExpenseSyncRequest:
       type: object
-      description: 请求载荷 `MerchantExpenseSyncRequest`（自动挂接触发）：把 period 已出账的能耗费应收（ar_ap_items
-        source_type=energy_fee）与物业费账单（property_fee_bills）汇入费用台账；同商户同月同来源单据重跑不重复计入。
+      description: 请求载荷 `MerchantExpenseSyncRequest`（自动挂接触发）：把 period（如 2026-07）已出账的能耗费应收（ar_ap_items source_type=energy_fee）、物业费账单（property_fee_bills + 合同计费 contract_property_fee 双路径）与租金（ar_ap_items source_type ∈ contract_rent/turnover_rent，2026-07-18 拍板计入分红基数）汇入费用台账，幂等可重跑。
       additionalProperties: false
       required:
         - idempotency_key

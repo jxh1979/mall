@@ -57,6 +57,9 @@ class DividendJdbcIntegrationTests {
     private InventoryRepository inventoryRepository;
 
     @Autowired
+    private com.complex.platform.merchantexpense.MerchantExpenseRepository merchantExpenseRepository;
+
+    @Autowired
     private AuditedOperationExecutor operations;
 
     @Autowired
@@ -71,11 +74,12 @@ class DividendJdbcIntegrationTests {
     @Autowired
     private DataSource dataSource;
 
-    private DividendService serviceWithPlatformActor() {
+    /** I-1 职责分离：提交与审批必须不同人，测试里按动作分配不同 actor 的服务实例。 */
+    private DividendService serviceWithPlatformActor(String actorId) {
         AuthorizationService authorizationService = mock(AuthorizationService.class);
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
         when(authorizationService.currentActor()).thenReturn(
-                new AccessActor("usr_div_jdbc", "platform_admin_user", "platform_admin", "org_1", null, "active"));
+                new AccessActor(actorId, "platform_admin_user", "platform_admin", "org_1", null, "active"));
         return new DividendService(repository, inventoryRepository, businessDayResolver,
                 authorizationService, operations, payoutPort);
     }
@@ -249,24 +253,37 @@ class DividendJdbcIntegrationTests {
                 VALUES ('mex_div_jdbc', ?, '2026-07', 'labor', 30000, 'manual', NULL, '分红JDBC测试人工费',
                         'usr_div_jdbc', ?)
                 """, MERCHANT, ts);
+        // 费用·租金（2026-07-18 拍板计入分红基数）：合同租金应收单 400.00 → 真链路 attachContractRent 挂进台账。
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
+                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
+                        status, created_at, updated_at, merchant_id)
+                VALUES ('arap_rent_div_jdbc', 'RENT-DIV-JDBC', 'receivable', ?, 'contract_rent',
+                        'contract_div_jdbc|2026-07', 40000, 0, 40000, 'CNY', '2026-07-01', '2026-07',
+                        'pending_collection', ?, ?, ?)
+                """, MERCHANT, ts, ts, MERCHANT);
+        int rentAttached = merchantExpenseRepository.attachContractRent("2026-07", "usr_div_jdbc", inWindow);
+        assertThat(rentAttached).isEqualTo(1);
+        // 重跑幂等：同一租金应收单不重复计入。
+        assertThat(merchantExpenseRepository.attachContractRent("2026-07", "usr_div_jdbc", inWindow)).isZero();
 
         // ── 期间作业（月度正式方案，label=2026-07）────────────────────────────
-        DividendService service = serviceWithPlatformActor();
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
         repository.insertPlan(plan("divp_jdbc_e2e", "monthly"));
         DividendComputeResultRecord result = service.compute(
                 new DividendComputeRequest("div-jdbc-compute-1", "2026-07", "official", MERCHANT));
         assertThat(result.computed()).hasSize(1);
         DividendStatementRecord statement = result.computed().get(0);
 
-        // 数字恒等三来源：收入 = 250000−50000；成本 = 60000；费用 = 30000；净利 = 110000。
+        // 数字恒等三来源：收入 = 250000−50000；成本 = 60000；费用 = 人工30000+租金40000；净利 = 70000。
         assertThat(statement.revenueCent()).isEqualTo(200_000L);
         assertThat(statement.costCent()).isEqualTo(60_000L);
-        assertThat(statement.expenseCent()).isEqualTo(30_000L);
-        assertThat(statement.netProfitCent()).isEqualTo(110_000L);
-        assertThat(statement.platformShareCent()).isEqualTo(88_000L);
-        assertThat(statement.principalGrossCent()).isEqualTo(22_000L);
-        assertThat(statement.taxCent()).isEqualTo(4_400L);
-        assertThat(statement.principalNetCent()).isEqualTo(17_600L);
+        assertThat(statement.expenseCent()).isEqualTo(70_000L);
+        assertThat(statement.netProfitCent()).isEqualTo(70_000L);
+        assertThat(statement.platformShareCent()).isEqualTo(56_000L);
+        assertThat(statement.principalGrossCent()).isEqualTo(14_000L);
+        assertThat(statement.taxCent()).isEqualTo(2_800L);
+        assertThat(statement.principalNetCent()).isEqualTo(11_200L);
 
         // 三来源独立复核：单头金额与来源台账逐项一致。
         Long ticketAlloc = jdbcTemplate.queryForObject(
@@ -284,17 +301,25 @@ class DividendJdbcIntegrationTests {
         assertThat(statement.costCent()).isEqualTo(cost);
         assertThat(statement.expenseCent()).isEqualTo(expense);
 
-        // 明细行落表且来源行合计 = 净利润。
+        // 明细行落表且来源行合计 = 净利润（含独立的租金费用行）。
         List<DividendStatementLineRecord> lines = repository.listLines(statement.id(), null);
         long sourceSum = lines.stream()
                 .filter(l -> !List.of("net_profit", "platform_share", "principal_gross", "tax_withheld",
                         "principal_net").contains(l.lineType()))
                 .mapToLong(DividendStatementLineRecord::amountCent).sum();
         assertThat(sourceSum).isEqualTo(statement.netProfitCent());
+        assertThat(lines).anyMatch(l -> l.lineType().equals("expense_rent_allocation") && l.amountCent() == -40_000L);
 
         // ── 审批链：draft → pending_review → approved 挂应付（真 FinanceService 端口）──
+        // I-1 职责分离：提交与审批用不同 actor；同 actor 审批必须被拒。
         service.submit(statement.id(), new DividendActionRequest("div-jdbc-submit-1", null));
-        DividendStatementRecord approved = service.approve(statement.id(),
+        assertThatThrownBy(() -> service.approve(statement.id(),
+                new DividendActionRequest("div-jdbc-selfapprove-1", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
+                        .isEqualTo("SELF_APPROVAL_FORBIDDEN"));
+        DividendService approverService = serviceWithPlatformActor("usr_div_jdbc_approver");
+        DividendStatementRecord approved = approverService.approve(statement.id(),
                 new DividendActionRequest("div-jdbc-approve-1", null));
         assertThat(approved.status()).isEqualTo("approved");
         assertThat(approved.arApItemId()).isNotBlank();
@@ -305,11 +330,18 @@ class DividendJdbcIntegrationTests {
         assertThat(payable.get("counterparty_id")).isEqualTo("usr_principal_jdbc");
         assertThat(payable.get("source_type")).isEqualTo("dividend_payout");
         assertThat(payable.get("source_id")).isEqualTo(statement.id());
-        assertThat(((Number) payable.get("amount_cent")).longValue()).isEqualTo(17_600L);
+        assertThat(((Number) payable.get("amount_cent")).longValue()).isEqualTo(11_200L);
         assertThat(payable.get("status")).isEqualTo("pending_payment");
 
+        // C-1 状态守卫：已 approved 的单重复审批 → 0 行守卫 →业务 409（非 500）。
+        assertThatThrownBy(() -> approverService.approve(statement.id(),
+                new DividendActionRequest("div-jdbc-approve-2", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
+                        .isEqualTo("DIVIDEND_STATE_INVALID"));
+
         // 标记发放收口。
-        DividendStatementRecord paid = service.markPaid(statement.id(),
+        DividendStatementRecord paid = approverService.markPaid(statement.id(),
                 new DividendActionRequest("div-jdbc-paid-1", null));
         assertThat(paid.status()).isEqualTo("paid");
     }

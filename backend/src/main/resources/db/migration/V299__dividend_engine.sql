@@ -67,6 +67,8 @@ CREATE TABLE IF NOT EXISTS dividend_statements (
     no_cost_basis_count bigint NOT NULL DEFAULT 0,
     status varchar(24) NOT NULL,
     reject_reason varchar(1000),
+    rejected_by varchar(80),
+    rejected_at timestamptz,
     ar_ap_item_id varchar(64),
     computed_by varchar(80),
     submitted_by varchar(80),
@@ -143,7 +145,14 @@ BEGIN
     END IF;
 END $$;
 
--- ── 5. 权限种子（V279 范式）──────────────────────────────────────────────
+-- ── 5. 租金计入费用台账（2026-07-18 用户拍板）────────────────────────────
+-- V297 chk_mex_source 放宽：新增 auto_rent（租金自动挂接：contract_rent 合同租金 + turnover_rent 营业额抽成）。
+-- expense_type 白名单已含 rent_allocation，无需改动。
+ALTER TABLE merchant_expense_entries DROP CONSTRAINT IF EXISTS chk_mex_source;
+ALTER TABLE merchant_expense_entries ADD CONSTRAINT chk_mex_source
+    CHECK (source IN ('auto_energy', 'auto_property', 'auto_rent', 'manual'));
+
+-- ── 6. 权限种子（V279 范式）──────────────────────────────────────────────
 -- view=方案/计算单只读（商户 scope 账号被后端强制只看本商户）；manage=方案配置+算单+审批+发放（高危）。
 INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
 VALUES

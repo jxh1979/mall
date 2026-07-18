@@ -207,7 +207,11 @@ public class DividendService {
                 currentOperator(),
                 existing.createdAt(),
                 Instant.now());
-        repository.updatePlan(updated);
+        if (!repository.updatePlan(updated)) {
+            // ended 改回 active 撞同商户唯一生效索引（uq_dividend_plans_active_merchant）→ 业务 409 非 500。
+            throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
+                    "该商户已有另一生效中的分红方案，无法再启用本方案；请先停用另一方案");
+        }
         return repository.findPlanById(planId)
                 .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "dividend plan lost race"));
     }
@@ -264,7 +268,12 @@ public class DividendService {
                             "已有计算单进入审批流（" + existing.get().status() + "），不重算"));
                     continue;
                 }
-                repository.markVoided(existing.get().id(), operator, now);
+                // C-1：作废 UPDATE 带期望前态守卫（preview/draft/rejected）；0 行=并发下已进入审批流，跳过不重算。
+                if (repository.markVoided(existing.get().id(), operator, now) == 0) {
+                    skipped.add(new DividendComputeSkipRecord(plan.merchantId(),
+                            "计算单状态在重算期间被并发变更（已进入审批流），本次跳过"));
+                    continue;
+                }
             }
             computed.add(computeStatement(plan, kind, period, operator, now));
         }
@@ -393,8 +402,16 @@ public class DividendService {
                     }
                     int safePage = Math.max(page, 1);
                     int safeSize = Math.min(Math.max(pageSize, 1), 200);
-                    return repository.pageStatements(blankToNull(scopeMerchant(merchantId)), blankToNull(kind),
+                    PageResponse<DividendStatementRecord> pageResult = repository.pageStatements(
+                            blankToNull(scopeMerchant(merchantId)), blankToNull(kind),
                             blankToNull(periodLabel), blankToNull(status), safePage, safeSize);
+                    // S-3：商户 scope（主理人视图）不外发内部操作员 id 与应付款项 id（平台侧全量）。
+                    if (authorizationService.currentMerchantScope().isEmpty()) {
+                        return pageResult;
+                    }
+                    return new PageResponse<>(
+                            pageResult.items().stream().map(DividendStatementRecord::forMerchantView).toList(),
+                            pageResult.page(), pageResult.pageSize(), pageResult.total());
                 });
     }
 
@@ -408,7 +425,9 @@ public class DividendService {
                     DividendStatementRecord statement = requireStatement(statementId);
                     checkMerchantOwnership(statement.merchantId());
                     String scoped = authorizationService.currentMerchantScope().orElse(null);
-                    return new DividendStatementDetailRecord(statement,
+                    // S-3：商户 scope（主理人视图）不外发内部操作员 id 与应付款项 id（平台侧全量）。
+                    return new DividendStatementDetailRecord(
+                            scoped == null ? statement : statement.forMerchantView(),
                             repository.listLines(statement.id(), scoped));
                 },
                 result -> statementId);
@@ -423,13 +442,15 @@ public class DividendService {
                 AuditedOperation.of("dividend.submitted", "dividend.submit_failed", MANAGE_PERM, STMT_TYPE),
                 (statement, operator, now) -> {
                     requireStatus(statement, "draft", "只有草稿单可以提交审阅");
-                    repository.markSubmitted(statement.id(), operator, now);
+                    requireTransition(repository.markSubmitted(statement.id(), operator, now), "提交审阅");
                 });
     }
 
     /**
      * 审批通过：pending_review → approved；净发放额 > 0 时给主理人挂应付
      * （source_type='dividend_payout'，source_id=计算单 id，部分唯一索引防一单重挂）。
+     * C-1：先挂应付、后带守卫置 approved——守卫 0 行（并发被驳回等）抛冲突，事务整体回滚，应付不落地。
+     * I-1：职责分离——提交人不得审批自己提交的单（SELF_APPROVAL_FORBIDDEN，仓内补录审批同范式）。
      */
     @Transactional
     public DividendStatementRecord approve(String statementId, DividendActionRequest request) {
@@ -437,13 +458,17 @@ public class DividendService {
                 AuditedOperation.of("dividend.approved", "dividend.approve_failed", MANAGE_PERM, STMT_TYPE),
                 (statement, operator, now) -> {
                     requireStatus(statement, "pending_review", "只有待审批单可以审批通过");
+                    if (operator != null && operator.equals(statement.submittedBy())) {
+                        throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
+                                "分红计算单的提交人不能审批自己提交的单；请由另一位审批人处理");
+                    }
                     String arApItemId = null;
                     if (statement.principalNetCent() > 0) {
                         arApItemId = payoutPort.createDividendPayoutPayable(
                                 statement.principalUserId(), statement.merchantId(),
                                 statement.principalNetCent(), statement.id());
                     }
-                    repository.markApproved(statement.id(), operator, arApItemId, now);
+                    requireTransition(repository.markApproved(statement.id(), operator, arApItemId, now), "审批通过");
                 });
     }
 
@@ -455,7 +480,7 @@ public class DividendService {
                 (statement, operator, now) -> {
                     String reason = requireText(request.note(), "note");
                     requireStatus(statement, "pending_review", "只有待审批单可以驳回");
-                    repository.markRejected(statement.id(), operator, reason, now);
+                    requireTransition(repository.markRejected(statement.id(), operator, reason, now), "驳回");
                 });
     }
 
@@ -466,8 +491,16 @@ public class DividendService {
                 AuditedOperation.of("dividend.paid_marked", "dividend.mark_paid_failed", MANAGE_PERM, STMT_TYPE),
                 (statement, operator, now) -> {
                     requireStatus(statement, "approved", "只有审批通过的单可以标记发放");
-                    repository.markPaid(statement.id(), operator, now);
+                    requireTransition(repository.markPaid(statement.id(), operator, now), "标记发放");
                 });
+    }
+
+    /** C-1：状态 UPDATE 守卫 0 行=并发下状态已被变更，抛业务冲突（409），事务回滚（不产生半截副作用）。 */
+    private static void requireTransition(int updatedRows, String action) {
+        if (updatedRows == 0) {
+            throw ApiException.conflict("DIVIDEND_STATE_INVALID",
+                    action + "失败：计算单状态已被并发变更，请刷新后重试");
+        }
     }
 
     @FunctionalInterface
