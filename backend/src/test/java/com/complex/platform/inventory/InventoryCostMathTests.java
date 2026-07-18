@@ -118,4 +118,50 @@ class InventoryCostMathTests {
         assertThat(InventoryCostMath.direction("wh_1", null)).isEqualTo(InventoryCostMath.Direction.OUTBOUND);
         assertThat(InventoryCostMath.direction("wh_1", "bar_1")).isEqualTo(InventoryCostMath.Direction.TRANSFER);
     }
+
+    /** S-4 守恒不变式（跨序列属性断言）：任意出入库/调拨序列的每一步都满足 累计入−累计出=持有总成本。 */
+    @Test
+    void conservationInvariantHoldsAcrossMixedSequence() {
+        record Step(InventoryCostMath.Direction direction, int quantity, Long price) { }
+        java.util.List<Step> steps = java.util.List.of(
+                new Step(InventoryCostMath.Direction.INBOUND, 10, 100L),
+                new Step(InventoryCostMath.Direction.OUTBOUND, 3, null),
+                new Step(InventoryCostMath.Direction.INBOUND, 5, 250L),
+                new Step(InventoryCostMath.Direction.TRANSFER, 2, null),
+                new Step(InventoryCostMath.Direction.INBOUND, 4, null),
+                new Step(InventoryCostMath.Direction.OUTBOUND, 16, null));
+        InventoryItemCostStateRecord state = empty();
+        for (Step step : steps) {
+            InventoryCostMath.Result result = InventoryCostMath.apply(
+                    state, step.direction(), step.quantity(), step.price(), NOW);
+            if (result.newState() != null) {
+                state = result.newState();
+            }
+            assertThat(state.cumulativeInCostCent() - state.cumulativeOutCostCent())
+                    .as("守恒:累计入-累计出=持有总成本(步骤 %s)", step)
+                    .isEqualTo(state.totalCostCent());
+            assertThat(state.onHandQuantity()).isNotNegative();
+            assertThat(state.totalCostCent()).isNotNegative();
+        }
+        // 全部出清后:持有量 0、总成本精确归零。
+        assertThat(state.onHandQuantity()).isZero();
+        assertThat(state.totalCostCent()).isZero();
+    }
+
+    /** S-4 无基准稀释案例：无价存量之上首次带价入库，新货成本摊到全部持有量（见类头口径说明）。 */
+    @Test
+    void firstPricedInboundOnLegacyStockDilutesAverage() {
+        // 7 件无价存量（无基准）。
+        InventoryItemCostStateRecord legacy = InventoryCostMath.apply(
+                empty(), InventoryCostMath.Direction.INBOUND, 7, null, NOW).newState();
+        assertThat(legacy.hasCostBasis()).isFalse();
+        assertThat(legacy.onHandQuantity()).isEqualTo(7L);
+        // 首次带价入库 3 件@100 → 总成本 300 摊到 10 件，均价 30（被存量稀释，而非 100）。
+        InventoryCostMath.Result priced = InventoryCostMath.apply(
+                legacy, InventoryCostMath.Direction.INBOUND, 3, 100L, NOW);
+        assertThat(priced.newState().hasCostBasis()).isTrue();
+        assertThat(priced.newState().onHandQuantity()).isEqualTo(10L);
+        assertThat(priced.newState().totalCostCent()).isEqualTo(300L);
+        assertThat(priced.newState().avgUnitCostCent()).isEqualTo(30L);
+    }
 }

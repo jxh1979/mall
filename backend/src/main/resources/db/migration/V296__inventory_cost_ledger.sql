@@ -47,3 +47,14 @@ CREATE INDEX IF NOT EXISTS idx_inventory_item_cost_state_merchant
 CREATE INDEX IF NOT EXISTS idx_inventory_stock_movements_cost_summary
     ON inventory_stock_movements (merchant_id, created_at)
  WHERE source_location_id IS NOT NULL AND target_location_id IS NULL;
+
+-- 5) 成本=内部口径，沿用 2026-07-08 内部结算价拍板范式（V279）：独立高危权限，仅授权后台可见，
+--    店员 POS/终端不可见。无此权限的调用方：流水响应成本列脱敏置 NULL，成本两端点直接 403。
+--    平台管理员直授（V206 范式），其它角色按需另行授权。
+INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
+VALUES ('inventory.cost.view', 'View inventory cost ledger (moving average cost)', 'inventory', 'high', FALSE, 'active')
+ON CONFLICT (permission_code) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_code)
+SELECT 'role_platform_admin', 'inventory.cost.view'
+ON CONFLICT (role_id, permission_code) DO NOTHING;

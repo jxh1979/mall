@@ -89,8 +89,8 @@ public class InventoryService {
     private final NotificationService notificationService;
     private final CustomerRepository customerRepository;
     private final com.complex.platform.finance.FinanceRepository financeRepository;
-    // V296 期间成本汇总的经营日切分（与财务日结/跨域汇总同口径）。可为 null（旧构造器/单测），
-    // 使用处回落全局默认切分（fail-safe，不阻塞查询）。
+    // V296 期间成本汇总的经营日切分（与财务日结/跨域汇总同口径）。旧构造器（单测）下为 null，
+    // getCostSummary 使用时要求非空（S-2：不做硬编码兜底，防口径漂移）。
     private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
     // 本域风险级 → 统一表 RISK_LEVELS({normal,suspicious,high,critical}) 映射。
@@ -1394,12 +1394,14 @@ public class InventoryService {
             String merchantId = scope != null ? scope : trimToNull(merchantIdParam);
             String projectId = scope != null ? null
                     : authorizationService.currentProjectScopeQuietly().orElse(null);
-            com.complex.platform.common.BusinessDayResolver resolver = businessDayResolver != null
-                    ? businessDayResolver
-                    : new com.complex.platform.common.BusinessDayResolver(4);
+            // S-2：经营日切分必须来自注入的 bean（配置口径），不做硬编码兜底——分红成本侧取数点不许口径漂移。
+            if (businessDayResolver == null) {
+                throw new IllegalStateException(
+                        "BusinessDayResolver not injected; cost summary requires the configured business-day cutoff");
+            }
             InventoryCostSummaryRecord summary = repository.sumOutboundCost(
                     merchantId, projectId, start.toString(), end.toString(),
-                    resolver.startInstant(start), resolver.startInstant(end.plusDays(1)));
+                    businessDayResolver.startInstant(start), businessDayResolver.startInstant(end.plusDays(1)));
             auditEventService.recordSuccess(
                     "inventory.cost_summary.viewed", "inventory.stock.view", "inventory_stock_movement",
                     "all", null, null,

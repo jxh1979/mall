@@ -309,7 +309,7 @@ public class InventoryController {
     public ApiResponse<StockMovementRecord> createStockIn(@RequestBody @jakarta.validation.Valid StockInRequest request) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createStockIn(request));
+        return ApiResponse.ok(maskCostForUnauthorized(service.createStockIn(request)));
     }
 
     @GetMapping("/stock-movements")
@@ -317,30 +317,31 @@ public class InventoryController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int size) {
         authorizationService.requirePermission("inventory.stock.view");
-        return ApiResponse.ok(service.listStockMovements(page, size));
+        return ApiResponse.ok(maskCostsForUnauthorized(service.listStockMovements(page, size)));
     }
 
     @PostMapping("/stock-movements")
     public ApiResponse<StockMovementRecord> createStockMovement(@RequestBody @jakarta.validation.Valid StockMovementRequest request) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createStockMovement(request));
+        return ApiResponse.ok(maskCostForUnauthorized(service.createStockMovement(request)));
     }
 
     @PostMapping("/stock-movements/transfer")
     public ApiResponse<StockMovementRecord> transferStockMovement(@RequestBody @jakarta.validation.Valid StockMovementRequest request) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.transferStockMovement(request));
+        return ApiResponse.ok(maskCostForUnauthorized(service.transferStockMovement(request)));
     }
 
     // ── V296 成本台账：成本流水分页 + 期间出库成本汇总（分红引擎成本侧取数点）。 ──
+    // I-2：成本=内部口径（2026-07-08 内部结算价拍板范式），两端点要求独立高危权限 inventory.cost.view。
     @GetMapping("/cost-ledger")
     public ApiResponse<PageResponse<StockMovementRecord>> listInventoryCostLedger(
             @RequestParam(value = "item_id", required = false) String itemId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int size) {
-        authorizationService.requirePermission("inventory.stock.view");
+        authorizationService.requirePermission("inventory.cost.view");
         return ApiResponse.ok(service.listCostLedger(itemId, page, size));
     }
 
@@ -349,8 +350,25 @@ public class InventoryController {
             @RequestParam("period_start") String periodStart,
             @RequestParam("period_end") String periodEnd,
             @RequestParam(value = "merchant_id", required = false) String merchantId) {
-        authorizationService.requirePermission("inventory.stock.view");
+        authorizationService.requirePermission("inventory.cost.view");
         return ApiResponse.ok(service.getCostSummary(merchantId, periodStart, periodEnd));
+    }
+
+    // I-2(V296)：无 inventory.cost.view 权限的调用方，库存流水响应成本列脱敏置 null（店员端/终端不可见）。
+    private StockMovementRecord maskCostForUnauthorized(StockMovementRecord record) {
+        if (record == null || authorizationService.currentActorHasPermission("inventory.cost.view")) {
+            return record;
+        }
+        return record.withoutCosts();
+    }
+
+    private PageResponse<StockMovementRecord> maskCostsForUnauthorized(PageResponse<StockMovementRecord> page) {
+        if (authorizationService.currentActorHasPermission("inventory.cost.view")) {
+            return page;
+        }
+        return new PageResponse<>(
+                page.items().stream().map(StockMovementRecord::withoutCosts).toList(),
+                page.page(), page.pageSize(), page.total());
     }
 
     @PostMapping("/stock-movements/{movement_type}")
@@ -360,7 +378,7 @@ public class InventoryController {
     ) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createTypedStockMovement(movementType, request));
+        return ApiResponse.ok(maskCostForUnauthorized(service.createTypedStockMovement(movementType, request)));
     }
 
     @GetMapping("/suppliers")

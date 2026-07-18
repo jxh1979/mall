@@ -440,23 +440,6 @@ final class JdbcBarParameterSource {
                 .addValue("updated_at", timestampWithTimeZone(redemption.updatedAt()));
     }
 
-    MapSqlParameterSource stockMovementParameters(StockMovementSnapshot movement) {
-        return new MapSqlParameterSource()
-                .addValue("id", movement.id())
-                .addValue("movement_type", movement.movementType())
-                .addValue("item_id", movement.itemId())
-                .addValue("source_location_id", movement.sourceLocationId())
-                .addValue("target_location_id", movement.targetLocationId())
-                .addValue("quantity", movement.quantity())
-                .addValue("business_type", movement.businessType())
-                .addValue("business_id", movement.businessId())
-                .addValue("trace_code", movement.traceCode())
-                .addValue("operator_id", movement.operatorId())
-                .addValue("evidence_attachment_ids", writeJson(movement.evidenceAttachmentIds()))
-                .addValue("status", movement.status())
-                .addValue("created_at", timestampWithTimeZone(movement.createdAt()));
-    }
-
     MapSqlParameterSource paymentIntentParameters(PaymentIntentRecord paymentIntent) {
         return new MapSqlParameterSource()
                 .addValue("id", paymentIntent.id())

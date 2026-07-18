@@ -391,32 +391,8 @@ class JdbcInventoryRepository implements InventoryRepository {
         // 再查流水 id 是否已存在——幂等重放不得二次滚动状态、保留库中已定稿的成本列。
         initCostStateIfAbsent(movement.itemId());
         Optional<InventoryItemCostStateRecord> state = lockCostStateForUpdate(movement.itemId());
-        List<StockMovementRecord> existing = jdbcTemplate.query("""
-                SELECT unit_cost_cent, total_cost_cent FROM inventory_stock_movements WHERE id = :id
-                """, Map.of("id", movement.id()),
-                (rs, i) -> withCosts(movement, rs.getObject("unit_cost_cent", Long.class),
-                        rs.getObject("total_cost_cent", Long.class)));
-        StockMovementRecord stamped;
-        if (!existing.isEmpty()) {
-            // 重放：更新其余字段（既有 upsert 语义），成本列与状态行保持不动。
-            stamped = existing.getFirst();
-            jdbcTemplate.update("""
-                    UPDATE inventory_stock_movements SET
-                        movement_type = :movement_type,
-                        item_id = :item_id,
-                        source_location_id = :source_location_id,
-                        target_location_id = :target_location_id,
-                        quantity = :quantity,
-                        business_type = :business_type,
-                        business_id = :business_id,
-                        trace_code = :trace_code,
-                        operator_id = :operator_id,
-                        evidence_attachment_ids = CAST(:evidence_attachment_ids AS jsonb),
-                        status = :status,
-                        project_id = COALESCE(:project_id, project_id)
-                    WHERE id = :id
-                    """, stockMovementParameters(movement).addValue("project_id", projectId));
-            return stamped;
+        if (stockMovementRowExists(movement.id())) {
+            return replayExisting(movement, projectId);
         }
         InventoryCostMath.Result result = state
                 .map(current -> InventoryCostMath.apply(
@@ -430,23 +406,76 @@ class JdbcInventoryRepository implements InventoryRepository {
                         movement.unitCostCent(),
                         movement.unitCostCent() == null ? null : movement.unitCostCent() * movement.quantity(),
                         null));
-        stamped = withCosts(movement, result.unitCostCent(), result.totalCostCent());
-        jdbcTemplate.update("""
-                INSERT INTO inventory_stock_movements (
-                    id, movement_type, item_id, source_location_id, target_location_id, quantity,
-                    business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                    status, created_at, merchant_id, project_id, unit_cost_cent, total_cost_cent
-                )
-                VALUES (
-                    :id, :movement_type, :item_id, :source_location_id, :target_location_id, :quantity,
-                    :business_type, :business_id, :trace_code, :operator_id, CAST(:evidence_attachment_ids AS jsonb),
-                    :status, :created_at, :merchant_id, :project_id, :unit_cost_cent, :total_cost_cent
-                )
-                """, stockMovementParameters(stamped).addValue("project_id", projectId));
+        StockMovementRecord stamped = withCosts(movement, result.unitCostCent(), result.totalCostCent());
+        try {
+            jdbcTemplate.update("""
+                    INSERT INTO inventory_stock_movements (
+                        id, movement_type, item_id, source_location_id, target_location_id, quantity,
+                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
+                        status, created_at, merchant_id, project_id, unit_cost_cent, total_cost_cent
+                    )
+                    VALUES (
+                        :id, :movement_type, :item_id, :source_location_id, :target_location_id, :quantity,
+                        :business_type, :business_id, :trace_code, :operator_id, CAST(:evidence_attachment_ids AS jsonb),
+                        :status, :created_at, :merchant_id, :project_id, :unit_cost_cent, :total_cost_cent
+                    )
+                    """, stockMovementParameters(stamped).addValue("project_id", projectId));
+        } catch (org.springframework.dao.DuplicateKeyException exception) {
+            // I-3：并发同 id 先到先赢——插入撞主键（跨物料同 id 的边缘路径，同物料已被状态行锁串行化）
+            // 转幂等重放读回，状态行未滚动（插入失败先于 updateCostState）。
+            return replayExisting(movement, projectId);
+        }
         if (result.newState() != null) {
             updateCostState(result.newState());
         }
         return stamped;
+    }
+
+    private boolean stockMovementRowExists(String id) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_stock_movements WHERE id = :id", Map.of("id", id), Long.class);
+        return count != null && count > 0;
+    }
+
+    /** I-3 幂等重放护栏：既存行的 item/数量/方向必须与本次一致，否则 409（拒绝借同 id 静默改写台账语义）。 */
+    private record ReplayRow(String itemId, int quantity, String sourceLocationId, String targetLocationId,
+            Long unitCostCent, Long totalCostCent) {
+    }
+
+    private StockMovementRecord replayExisting(StockMovementRecord movement, String projectId) {
+        ReplayRow row = jdbcTemplate.query("""
+                SELECT item_id, quantity, source_location_id, target_location_id, unit_cost_cent, total_cost_cent
+                  FROM inventory_stock_movements
+                 WHERE id = :id
+                """, Map.of("id", movement.id()), (rs, i) -> new ReplayRow(
+                        rs.getString("item_id"),
+                        rs.getInt("quantity"),
+                        rs.getString("source_location_id"),
+                        rs.getString("target_location_id"),
+                        rs.getObject("unit_cost_cent", Long.class),
+                        rs.getObject("total_cost_cent", Long.class))).stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("stock movement row vanished during replay: " + movement.id()));
+        if (!row.itemId().equals(movement.itemId())
+                || row.quantity() != movement.quantity()
+                || !java.util.Objects.equals(row.sourceLocationId(), movement.sourceLocationId())
+                || !java.util.Objects.equals(row.targetLocationId(), movement.targetLocationId())) {
+            throw com.complex.platform.common.api.ApiException.conflict("STOCK_MOVEMENT_REPLAY_MISMATCH",
+                    "stock movement id already exists with different item/quantity/direction");
+        }
+        // 一致性通过：更新其余字段（既有 upsert 语义），成本列与状态行保持不动（不二次滚动）。
+        jdbcTemplate.update("""
+                UPDATE inventory_stock_movements SET
+                    movement_type = :movement_type,
+                    business_type = :business_type,
+                    business_id = :business_id,
+                    trace_code = :trace_code,
+                    operator_id = :operator_id,
+                    evidence_attachment_ids = CAST(:evidence_attachment_ids AS jsonb),
+                    status = :status,
+                    project_id = COALESCE(:project_id, project_id)
+                WHERE id = :id
+                """, stockMovementParameters(movement).addValue("project_id", projectId));
+        return withCosts(movement, row.unitCostCent(), row.totalCostCent());
     }
 
     private StockMovementRecord withCosts(StockMovementRecord movement, Long unitCostCent, Long totalCostCent) {

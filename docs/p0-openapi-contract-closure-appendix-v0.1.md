@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 622 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 309 | 人工权限矩阵正文未覆盖 206 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1244 | 人工事件矩阵正文未覆盖 1202 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 622 | 人工任务映射正文未逐项覆盖 616 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI operation 数 | 624 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 310 | 人工权限矩阵正文未覆盖 207 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1248 | 人工事件矩阵正文未覆盖 1206 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 624 | 人工任务映射正文未逐项覆盖 618 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 374 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -213,6 +213,7 @@
 | `integration.reconciliation.view` | staff-token | platform | 2 | listIntegrationReconciliationBatches, listIntegrationReconciliationDifferences | OpenAPI 补充，以本附录为准 |
 | `integration.retry.manage` | staff-token | platform | 3 | createRetryTask, runRetryTaskNow, recordIntegrationPollingCheck | OpenAPI 补充，以本附录为准 |
 | `integration.video.view` | staff-token | project | 1 | listIntegrationVideoAnchors | OpenAPI 补充，以本附录为准 |
+| `inventory.cost.view` | staff-token | project-warehouse | 2 | listInventoryCostLedger, getInventoryCostSummary | OpenAPI 补充，以本附录为准 |
 | `inventory.handover.review` | staff-token | project-warehouse-bar | 1 | reviewTraceHandoverException | OpenAPI 补充，以本附录为准 |
 | `inventory.handover.scan` | staff-token | project-warehouse-bar | 4 | scanTraceCodeHandover, createTraceHandover, scanTraceSegment, reportRobotSegment | OpenAPI 补充，以本附录为准 |
 | `inventory.high_value.review` | staff-token | project-warehouse-bar | 2 | listHighValueReviews, reviewHighValue | OpenAPI 补充，以本附录为准 |
@@ -1106,6 +1107,10 @@
 | `integration.wecom_risk_hit.viewed` | success | `listIntegrationWecomRiskHits` | `GET` | `/api/v1/integration/wecom/risk-hits` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.wecom_risk_hit.viewed_failed` | failure | `listIntegrationWecomRiskHits` | `GET` | `/api/v1/integration/wecom/risk-hits` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `inventory.adjustment_failed` | failure | `createStockAdjustment` | `POST` | `/api/v1/inventory/stock-adjustments` | INV-库存存酒 | `inventory.stock.adjust` | 接口级事件，以本附录为准 |
+| `inventory.cost_ledger.view_failed` | failure | `listInventoryCostLedger` | `GET` | `/api/v1/inventory/cost-ledger` | INV-库存存酒 | `inventory.cost.view` | 接口级事件，以本附录为准 |
+| `inventory.cost_ledger.viewed` | success | `listInventoryCostLedger` | `GET` | `/api/v1/inventory/cost-ledger` | INV-库存存酒 | `inventory.cost.view` | 接口级事件，以本附录为准 |
+| `inventory.cost_summary.view_failed` | failure | `getInventoryCostSummary` | `GET` | `/api/v1/inventory/cost-summary` | INV-库存存酒 | `inventory.cost.view` | 接口级事件，以本附录为准 |
+| `inventory.cost_summary.viewed` | success | `getInventoryCostSummary` | `GET` | `/api/v1/inventory/cost-summary` | INV-库存存酒 | `inventory.cost.view` | 接口级事件，以本附录为准 |
 | `inventory.counted` | success | `createStockAdjustment` | `POST` | `/api/v1/inventory/stock-adjustments` | INV-库存存酒 | `inventory.stock.adjust` | 已在事件矩阵正文出现 |
 | `inventory.handover_create_failed` | failure | `createTraceHandover` | `POST` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `inventory.handover_created` | success | `createTraceHandover` | `POST` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
@@ -1958,9 +1963,11 @@
 | INV-库存存酒 | `createTypedStockMovement` | `POST` | `/api/v1/inventory/stock-movements/{movement_type}` | 创建typed库存流水 | `inventory.stock.move` | `inventory.stock_movement.created` / `inventory.stock_movement.created_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | 创建结构化库房(六类) | `inventory.warehouse.manage` | `inventory.warehouse.created` / `inventory.warehouse.create_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `disputeSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/dispute` | 受理存酒争议 | `bar.saved_bottle.manage` | `bar.saved_bottle.dispute` / `bar.saved_bottle.dispute_failed` | tablet, web | operation 级补充 |
+| INV-库存存酒 | `getInventoryCostSummary` | `GET` | `/api/v1/inventory/cost-summary` | 期间出库成本汇总（分红成本侧取数点） | `inventory.cost.view` | `inventory.cost_summary.viewed` / `inventory.cost_summary.view_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | INV-库存存酒 | `getInventoryStocktake` | `GET` | `/api/v1/inventory/stocktakes/{id}` | 查询库存盘点单详情（含差异明细） | `inventory.stocktake.view` | `inventory.stocktake.detail_viewed` / `inventory.stocktake.detail_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | 查询溯源码责任链（按 id 或 trace_code） | `inventory.trace_code.view` | `inventory.trace_code.viewed` / `inventory.trace_code.view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listHighValueReviews` | `GET` | `/api/v1/inventory/high-value-reviews` | 查询库存域高价值复核单(报损/盘点差异/存酒作废) | `inventory.high_value.review` | `inventory.high_value_review.viewed` / `inventory.high_value_review.view_failed` | web, tablet, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `listInventoryCostLedger` | `GET` | `/api/v1/inventory/cost-ledger` | 查询库存成本流水（移动加权） | `inventory.cost.view` | `inventory.cost_ledger.viewed` / `inventory.cost_ledger.view_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | INV-库存存酒 | `listInventoryItems` | `GET` | `/api/v1/inventory/items` | 查询库存明细 | `inventory.stock.view` | `inventory.item.viewed` / `inventory.item.viewed_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listInventoryRiskAlerts` | `GET` | `/api/v1/inventory/risk-alerts` | 查询库存风险预警列表 | `inventory.risk_alert.view` | `inventory.risk_alert.list` / `inventory.risk_alert.list_failed` | web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listInventoryStockBatches` | `GET` | `/api/v1/inventory/stock-batches` | 查询库存批次列表 | `inventory.stock.view` | `inventory.stock_batch.list` / `inventory.stock_batch.list_failed` | web, mobile_admin | operation 级补充 |

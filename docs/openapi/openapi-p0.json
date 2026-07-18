@@ -30662,6 +30662,73 @@
           }
         }
       }
+    },
+    "/api/v1/inventory/cost-ledger": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "listInventoryCostLedger",
+        "summary": "查询库存成本流水（移动加权）",
+        "x-permission": "inventory.cost.view",
+        "x-data-scope": "project-warehouse",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "inventory.cost_ledger.viewed",
+        "x-audit-event-failure": "inventory.cost_ledger.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "description": "V296 成本台账：库存流水含移动加权成本列（unit_cost_cent/total_cost_cent，整数分；NULL=无成本基准，存量库存未录进货价不编造数字）。成本=内部口径：要求独立高危权限 inventory.cost.view（沿用内部结算价拍板范式，店员端/终端不可见；通用流水端点对无此权限的调用方把成本列脱敏置 null）。查询参数 page/size 分页、item_id 可选按物料过滤；租户口径与库存流水一致（商户员工看本商户，项目员工看本项目，平台管理员看全量）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+      }
+    },
+    "/api/v1/inventory/cost-summary": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "getInventoryCostSummary",
+        "summary": "期间出库成本汇总（分红成本侧取数点）",
+        "x-permission": "inventory.cost.view",
+        "x-data-scope": "project-warehouse",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "inventory.cost_summary.viewed",
+        "x-audit-event-failure": "inventory.cost_summary.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "description": "V296 成本台账：按商户+期间返回出库成本合计（持股分红净利润制的成本侧取数点）。成本=内部口径：要求独立高危权限 inventory.cost.view（仅授权后台可见）。查询参数 period_start/period_end 必填（yyyy-MM-dd，窗口=[period_start 经营日起, period_end+1 经营日起)，与财务日结同切分基准）；merchant_id 可选，仅对平台/项目管理员生效，商户员工强制按自身商户。返回 outbound_total_cost_cent 出库成本合计、outbound_movement_count 出库笔数、no_cost_basis_count 无成本基准笔数（提示合计存在低估）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+      }
     }
   },
   "components": {

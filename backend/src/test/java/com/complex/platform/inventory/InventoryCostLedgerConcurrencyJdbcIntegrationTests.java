@@ -136,8 +136,8 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
     }
 
     private void cleanup(String itemId) {
-        jdbcTemplate.update("DELETE FROM inventory_stock_movements WHERE item_id = ?", itemId);
+        // I-1：inventory_stock_movements 受 V140 append-only 触发器保护（owner 也 RAISE），不删流水；
+        // 物料行被流水 FK 引用，同样不删。两者均为随机 id，留痕不影响复跑。仅清成本状态行。
         jdbcTemplate.update("DELETE FROM inventory_item_cost_state WHERE item_id = ?", itemId);
-        jdbcTemplate.update("DELETE FROM inventory_items WHERE id = ?", itemId);
     }
 }
