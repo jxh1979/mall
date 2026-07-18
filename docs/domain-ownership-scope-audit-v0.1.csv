@@ -149,6 +149,7 @@ integration_video_access_approvals,inherited,provider_code/project linkage,provi
 integration_video_access_audits,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 integration_video_anchors,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 inventory_high_value_reviews,direct,merchant_id,merchant_id column on inventory_high_value_reviews,ready for project/merchant scoped query enforcement,covered
+inventory_item_cost_state,direct,merchant_id,merchant_id column on inventory_item_cost_state,ready for project/merchant scoped query enforcement,covered
 inventory_items,direct,merchant_id,merchant_id column on inventory_items,ready for project/merchant scoped query enforcement,covered
 inventory_purchase_request_events,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 inventory_purchase_requests,direct,merchant_id,merchant_id column on inventory_purchase_requests,ready for project/merchant scoped query enforcement,covered
