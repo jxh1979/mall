@@ -1,6 +1,7 @@
 package com.complex.platform.ticketing;
 
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
@@ -28,9 +29,18 @@ public class TicketCatalogService {
     private static final Set<String> TICKET_CATEGORIES = Set.of("standard", "new_person", "student");
 
     private final TicketingRepository repository;
+    // AUD-076：按 id 取酒吧商户（判业态/存档/取名）。可为 null=兼容既有单测（不校验酒吧、不解析名称）。
+    private final BarMerchantDirectory barDirectory;
 
-    public TicketCatalogService(TicketingRepository repository) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public TicketCatalogService(TicketingRepository repository, BarMerchantDirectory barDirectory) {
         this.repository = repository;
+        this.barDirectory = barDirectory;
+    }
+
+    // ponytail: 向后兼容构造——既有单测(InMemory 仓库、无商户目录)不建单店票，不校验酒吧归属。
+    public TicketCatalogService(TicketingRepository repository) {
+        this(repository, null);
     }
 
     TicketTypeRecord createTicketType(TicketTypeRequest request) {
@@ -57,7 +67,11 @@ public class TicketCatalogService {
                 actual.stockQuantity(),
                 0,
                 // 结算重构批4（V230）：资格/定价档分类标签（可空=标准；非空校验取值，DB 另有 CHECK 兜底）。
-                normalizeTicketCategory(actual.ticketCategory())
+                normalizeTicketCategory(actual.ticketCategory()),
+                // 方案2/规则2（V286）：是否可退票（可空=不可退，默认最安全）。
+                actual.refundable() != null && actual.refundable(),
+                // AUD-076 单店票挂酒吧：校验并挂定酒吧归属（非空必须是业态 bar 且未存档的商户；建后不可变）。
+                validateBarBinding(actual.barId())
         ));
     }
 
@@ -358,6 +372,16 @@ public class TicketCatalogService {
             throw ApiException.conflict("ENTITLEMENT_TEMPLATE_NOT_BINDABLE",
                     "已存档或待删除的权益模板不可绑定到票种");
         }
+        // AUD 复核 P2-5：单店票（票种 bar_id 非空）只能绑归属本店的权益模板——出票时权益 merchant 优先取 template.merchantId，
+        // 若模板 merchant_id 属他商户 B 而票种 bar_id=A，则出票权益 merchant=B/父票 bar=A 归属分裂（撤场按 A、结算按 B）。
+        // 模板 merchant_id 为空时出票回退酒吧归属，天然一致，放行；现无联合票类型故不开例外。
+        String bindTypeBarId = trimToNull(ticketType.barId());
+        String bindTemplateMerchantId = trimToNull(template.merchantId());
+        if (bindTypeBarId != null && bindTemplateMerchantId != null
+                && !bindTypeBarId.equals(bindTemplateMerchantId)) {
+            throw ApiException.conflict("BAR_TICKET_TEMPLATE_MERCHANT_MISMATCH",
+                    "单店票只能绑定归属本店的权益模板");
+        }
         Instant now = Instant.now();
         return repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "ticket_link_" + slug(actual.idempotencyKey()),
@@ -400,7 +424,11 @@ public class TicketCatalogService {
                 current.stockQuantity(),
                 current.soldQuantity(),
                 // 结算重构批4（V230）：发布时保留既有分类标签，避免被置空。
-                current.ticketCategory()
+                current.ticketCategory(),
+                // 方案2/规则2（V286）：发布时保留既有可退配置。
+                current.refundable(),
+                // AUD-076：发布时保留既有酒吧归属（不可变）。
+                current.barId()
         ));
     }
 
@@ -434,6 +462,35 @@ public class TicketCatalogService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
+    }
+
+    /**
+     * AUD-076 建票校验酒吧归属：null=通票直接放行；非空必须指向存在、业态 bar 且未存档的商户，否则拒 BAR_MERCHANT_INVALID。
+     * @return 规范化后的 bar_id（可空）。
+     */
+    private String validateBarBinding(String barId) {
+        String trimmed = trimToNull(barId);
+        if (trimmed == null) {
+            return null;
+        }
+        if (barDirectory == null) {
+            // 无商户目录：不静默放行，明确拒绝，避免单店票绑不到真实酒吧。
+            throw ApiException.badRequest("BAR_MERCHANT_INVALID", "无法校验酒吧商户，无法绑定单店票");
+        }
+        MerchantRecord bar = barDirectory.findMerchant(trimmed).orElse(null);
+        if (bar == null || !"bar".equals(bar.merchantType()) || bar.archivedAt() != null) {
+            throw ApiException.badRequest("BAR_MERCHANT_INVALID", "单店票必须绑定业态为酒吧且未存档的商户");
+        }
+        return trimmed;
+    }
+
+    /** AUD-076 展示层实时解析酒吧名（ID 快照、名字不快照）；barId 空/查不到/无目录时返回 null。 */
+    String resolveBarName(String barId) {
+        String trimmed = trimToNull(barId);
+        if (trimmed == null || barDirectory == null) {
+            return null;
+        }
+        return barDirectory.findMerchant(trimmed).map(MerchantRecord::merchantName).orElse(null);
     }
 
     /** 审计断层①:权益模板必须绑商户,否则核销结算款进不了月度账单(成孤儿)。 */

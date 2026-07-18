@@ -32,6 +32,10 @@ public class BarBillingService {
     RefundAuthorizationService refundAuthorizationService;
     @org.springframework.beans.factory.annotation.Value("${refund.tiered_authorization.enabled:false}")
     boolean tieredRefundEnabled;
+    // AUD-061 结账-储值支付：结账渠道选「储值支付」时扣发卡商户的储值卡余额（复用 StoredValueService.consumeInternal）。
+    // 字段注入（required=false）以免改构造点/单测；bar 依赖 customer 无构造环（StoredValueService 不依赖 bar bean）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.customer.StoredValueService storedValueService;
 
     public BarBillingService(
             BarRepository repository,
@@ -168,6 +172,20 @@ public class BarBillingService {
         Instant now = Instant.now();
         // A2/A3：结算渠道（统一词表，与 finance 对账归并）+ 现金/POS 收款留痕 + D4 权威事件。
         String channel = PaymentChannelPolicy.requireSettlementChannel(actual.paymentChannel(), "aggregate_pay");
+        // AUD-061 储值支付：扣该客人在本发卡商户的储值卡余额（复用 StoredValueService.consumeInternal；
+        // platform_collect 卡消费即逐笔挂应付商户，merchant_prepaid 卡无跨主体分录）。余额不足则整单结账失败（同事务回滚）。
+        if ("stored_value".equals(channel)) {
+            if (storedValueService == null) {
+                throw ApiException.conflict("STORED_VALUE_UNAVAILABLE", "stored-value payment is not available");
+            }
+            String svCustomerId = resolveBillCustomerId(bill);
+            if (svCustomerId == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "储值支付需先绑定客人（账单未关联客人，无法扣储值卡）");
+            }
+            storedValueService.consumeInternal(svCustomerId, null, bill.merchantId(), settlementAmount,
+                    "酒吧结账-储值支付 账单" + bill.id(), "barsv_" + slug(actual.idempotencyKey()));
+        }
         repository.saveBillSettlement(new BarBillSettlementRecord(
                 "settle_" + slug(actual.idempotencyKey()),
                 bill.id(),
@@ -210,6 +228,14 @@ public class BarBillingService {
                             o.deviceId(), o.salesStaffId(), o.createdAt(), o.updatedAt(), o.orderType(), now)));
         }
         return settledBill;
+    }
+
+    /** 结账-储值支付：账单本身不带 customerId，经链上订单解析下单客人。 */
+    private String resolveBillCustomerId(BarBillRecord bill) {
+        if (bill.orderId() == null) {
+            return null;
+        }
+        return repository.findOrderById(bill.orderId()).map(BarOrderRecord::customerId).orElse(null);
     }
 
     BarBillAdjustmentRecord applyBillAdjustment(String billId, BarBillAdjustmentRequest request) {

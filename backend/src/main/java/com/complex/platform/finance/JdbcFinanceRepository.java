@@ -2,6 +2,7 @@ package com.complex.platform.finance;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.api.ApiException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -976,22 +977,13 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
-        // 回流营业额取数：只读 integration_order_syncs（第三方回流标准模型）。以 external_business_id 前缀关联商户口径
-        // 尚未在该表落商户列，故按 provider_code 关联商户的取数留待资料到位；当前以 provider_code=merchant 作为约定键，
-        // 取 order 类、synced 状态、created_at 落 [from, to) 的金额合计（分）。无数据=0。跨域只读，不改其写。
-        Long total = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(amount_cent), 0)
-                  FROM integration_order_syncs
-                 WHERE sync_type = 'order'
-                   AND status = 'synced'
-                   AND provider_code = :merchant_id
-                   AND created_at >= :from
-                   AND created_at < :to
-                """, new MapSqlParameterSource()
-                .addValue("merchant_id", merchantId)
-                .addValue("from", timestampWithTimeZone(fromInclusive))
-                .addValue("to", timestampWithTimeZone(toExclusive)), Long.class);
-        return total == null ? 0L : total;
+        // AUD-011：回流营业额需按「商户」聚合，但 integration_order_syncs 尚未落商户关联列，
+        // 原 provider_code = :merchant_id 仅为占位约定键（provider_code 实为第三方渠道码 != merchantId），
+        // 几乎恒取 0 或误命中他人数据。在关联口径补齐前，此取数不可作为计费依据——显式拦截，
+        // 避免按占位键静默算 0 后被当作真实「无提成」计入结算（提成/月租均是钱路）。补齐商户列后恢复真实聚合。
+        throw ApiException.badRequest("REFLOW_TURNOVER_UNAVAILABLE",
+                "reflow turnover is not yet keyed to merchant (integration_order_syncs lacks merchant column); "
+                        + "turnover rent cannot be settled until the provider_code->merchant mapping is wired");
     }
 
     @Override

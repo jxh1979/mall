@@ -91,7 +91,7 @@ class CustomerControllerTests {
 
     @Test
     void ticketProductsArePublicAndDoNotRequireStaffPermission() throws Exception {
-        when(service.listTicketProducts()).thenReturn(new PageResponse<>(List.of(new CustomerTicketProductResponse(
+        when(service.listTicketProducts(any())).thenReturn(new PageResponse<>(List.of(new CustomerTicketProductResponse(
                 "ticket_type_1",
                 "P0 Pass",
                 9900L,

@@ -1,6 +1,7 @@
 package com.complex.platform.amusement;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -80,13 +81,13 @@ class AmusementControllerTests {
         when(service.getEntitlementSession("esession_1")).thenReturn(entitlementSession());
         when(service.claimEntitlementSession(eq("esession_1"), any(ClaimEntitlementSessionRequest.class)))
                 .thenReturn(claimedEntitlementSession());
-        when(service.listQueueEntries()).thenReturn(new PageResponse<>(List.of(queueEntry()), 1, 50, 1));
+        when(service.listQueueEntries(anyInt(), anyInt())).thenReturn(new PageResponse<>(List.of(queueEntry()), 1, 50, 1));
         when(service.createQueueEntry(any(AmusementQueueEntryRequest.class))).thenReturn(queueEntry());
         when(service.changeQueueEntryStatus(eq("queue_1"), any(StatusChangeRequest.class))).thenReturn(calledQueueEntry());
-        when(service.listReservations()).thenReturn(new PageResponse<>(List.of(reservation()), 1, 50, 1));
+        when(service.listReservations(anyInt(), anyInt())).thenReturn(new PageResponse<>(List.of(reservation()), 1, 50, 1));
         when(service.createReservation(any(AmusementReservationRequest.class))).thenReturn(reservation());
         when(service.changeReservationStatus(eq("reservation_1"), any(StatusChangeRequest.class))).thenReturn(completedReservation());
-        when(service.listGroupBookings()).thenReturn(new PageResponse<>(List.of(groupBooking()), 1, 50, 1));
+        when(service.listGroupBookings(anyInt(), anyInt())).thenReturn(new PageResponse<>(List.of(groupBooking()), 1, 50, 1));
         when(service.createGroupBooking(any(AmusementGroupBookingRequest.class))).thenReturn(groupBooking());
         when(service.approveGroupBooking(eq("group_booking_1"), any(AmusementGroupBookingApprovalRequest.class))).thenReturn(approvedGroupBooking());
         when(service.releaseGroupBooking(eq("group_booking_1"), any(AmusementGroupBookingReleaseRequest.class))).thenReturn(releasedGroupBooking());

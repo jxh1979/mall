@@ -497,6 +497,22 @@ class BarPosCatalogJdbcIntegrationTests {
     }
 
     @Test
+    void saveComboRejectsInternalPriceWithoutInternalPricePermission() {
+        // AUD-043 写侧门控：持 bar.combo.manage 但无 bar.internal_settlement_price.view 者，套餐录入成本价被拒。
+        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_pos_test");
+        try {
+            barRepository.saveProduct(newProduct("product_ipc", "bar_ipc", "带成本价商品"));
+            assertThatThrownBy(() -> service.saveCombo(new BarComboRequest(
+                    null, "bar_ipc", "成本价套餐", 5000L, 300L, null, "active",
+                    List.of(new BarComboRequest.Item("product_ipc", 1)))))
+                    .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                    .hasFieldOrPropertyWithValue("code", "BAR_INTERNAL_PRICE_FORBIDDEN");
+        } finally {
+            com.complex.platform.support.TestSecurityActors.clear();
+        }
+    }
+
+    @Test
     void archivedProductCannotBeOrderedDirectly() {
         // 引用侧守卫③：已存档商品不可下单——菜单隐藏之外，直传 product_id 也拒。
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();

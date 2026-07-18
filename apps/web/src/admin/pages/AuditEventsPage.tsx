@@ -409,7 +409,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                 <tr key={eventKey(row, index)} className="admin-row-clickable" tabIndex={0} data-testid={`audit-events-row-${index}`}
                   onClick={() => openEventDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEventDetail(row); } }}>
-                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`audit-events-select-${index}`} checked={selected === row} onChange={() => setSelectedIndex(index)} /></td>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择第 ${index + 1} 条审计事件`} data-testid={`audit-events-select-${index}`} checked={selected === row} onChange={() => setSelectedIndex(index)} /></td>
                   <td>{row.eventType ?? row.event_type ?? "-"}</td>
                   <td>{formatBusinessStatus(row.eventCategory ?? row.event_category)}</td>
                   <td>{formatBusinessStatus(row.result)}</td>

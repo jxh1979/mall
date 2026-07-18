@@ -3,8 +3,8 @@ package com.complex.platform.finance.gateway;
 /**
  * 支付渠道请求（端口入参，厂商无关）。
  *
- * @param businessOrderType 业务单据类型（stored_value_refund / membership_auto_renew / finance_refund 等）
- * @param businessOrderId   业务单据 id（支付意图 id / 账户 id / 会员 id 等）
+ * @param businessOrderType 业务单据类型（stored_value_refund / finance_refund 等）
+ * @param businessOrderId   业务单据 id（支付意图 id / 账户 id 等）
  * @param amountCent        金额（分，正数）
  * @param currency          币种（默认 CNY）
  * @param channel           渠道标识（wechat/alipay/... 仅作路由提示，真实路由由适配器决定）

@@ -59,9 +59,10 @@ export function CustomerAccountsPage({ api, setActionResult, setGlobalError, eff
     }
     setLoading(true);
     try {
-      const rows = await api.get<CustomerAccountRow[]>(
-        `/api/v1/customer-accounts?phone=${encodeURIComponent(trimmed)}`,
-      );
+      // AUD-020：手机号属 PII，走 POST body 传参，避免明文手机号进入 URL query string 落日志。
+      const rows = await api.post<CustomerAccountRow[]>("/api/v1/customer-accounts/lookup", {
+        phone: trimmed,
+      });
       setAccount(rows && rows.length > 0 ? rows[0] ?? null : null);
       setSearched(true);
     } catch (error) {

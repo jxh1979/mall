@@ -1321,8 +1321,8 @@ public class InventoryService {
         return stockMovementService.createStockIn(request);
     }
 
-    public PageResponse<StockMovementRecord> listStockMovements() {
-        return stockMovementService.listStockMovements();
+    public PageResponse<StockMovementRecord> listStockMovements(int page, int size) {
+        return stockMovementService.listStockMovements(page, size);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")
@@ -1506,6 +1506,80 @@ public class InventoryService {
                     // ponytail: P1 只做归属变更+台账;收货方库存入账/供货方库存扣减留 P2(供货主体库存需 warehouse owner 泛化,两侧同期做更一致)。
                     return repository.saveTransferOrder(withTransferStatus(o, "received"));
                 });
+    }
+
+    /** 借调归还(AUD-002/003)：借用型(lending+borrow)收货后归还,溯源码归属翻回出让方并置 returned。 */
+    public InventoryTransferOrderRecord returnTransferOrder(String orderId,
+            com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+        String id = requireText(orderId, "order_id");
+        return executeWrite("returnTransferOrder:" + id, request == null ? null : request.idempotencyKey(), request,
+                InventoryTransferOrderRecord.class, "inventory.transfer_order_returned",
+                "inventory.transfer_order_return_failed", "inventory.transfer_order.manage", "inventory_transfer_order",
+                () -> {
+                    InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                    if (!("lending".equals(o.transferType()) && "borrow".equals(o.lendingMode()))) {
+                        throw ApiException.badRequest("TRANSFER_NOT_RETURNABLE",
+                                "only borrowed lending orders can be returned");
+                    }
+                    if (!"received".equals(o.status())) {
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_RECEIVED", "only received orders can be returned");
+                    }
+                    Instant now = Instant.now();
+                    java.util.LinkedHashSet<String> orderCodes = new java.util.LinkedHashSet<>();
+                    for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
+                        orderCodes.addAll(l.traceCodes());
+                    }
+                    // 归属翻回 to->from:CAS 只在归属=借入方时翻回出让方;命中0且码存在=已被改走→拒并回滚。
+                    int seq = 0;
+                    for (String code : orderCodes) {
+                        int affected = repository.updateTraceCodeOwnerIfExists(
+                                code, o.toOwnerId(), o.fromOwnerType(), o.fromOwnerId(), now);
+                        if (affected == 0 && repository.traceCodeExists(code)) {
+                            throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
+                                    "trace code no longer belongs to borrower, cannot return: " + code);
+                        }
+                        repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
+                                o.id() + "_r" + (seq++), code, o.toOwnerType(), o.toOwnerId(),
+                                o.fromOwnerType(), o.fromOwnerId(), o.id(), now));
+                    }
+                    return repository.saveTransferOrder(withTransferStatus(o, "returned"));
+                });
+    }
+
+    /** 取消流转单(AUD-002/003)：created 直接取消;shipped 需冲销发货时挂的应付(未收款才可冲)。 */
+    public InventoryTransferOrderRecord cancelTransferOrder(String orderId,
+            com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+        String id = requireText(orderId, "order_id");
+        return executeWrite("cancelTransferOrder:" + id, request == null ? null : request.idempotencyKey(), request,
+                InventoryTransferOrderRecord.class, "inventory.transfer_order_cancelled",
+                "inventory.transfer_order_cancel_failed", "inventory.transfer_order.manage", "inventory_transfer_order",
+                () -> {
+                    InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                    if (!"created".equals(o.status()) && !"shipped".equals(o.status())) {
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_CANCELLABLE",
+                                "only created or shipped orders can be cancelled");
+                    }
+                    if ("shipped".equals(o.status()) && financeRepository != null) {
+                        reverseTransferSettlementOnCancel(o, Instant.now());
+                    }
+                    return repository.saveTransferOrder(withTransferStatus(o, "cancelled"));
+                });
+    }
+
+    /** 冲销发货时挂的应付:未收款才可冲(已收款需先退款);置 paid=0/unpaid=0/status=cancelled(金额留痕不改)。 */
+    private void reverseTransferSettlementOnCancel(InventoryTransferOrderRecord o, Instant now) {
+        financeRepository.findArApItemById("arap_trf_" + o.id()).ifPresent(item -> {
+            if (item.paidAmountCent() > 0L) {
+                throw ApiException.conflict("TRANSFER_PAYABLE_PARTIALLY_PAID",
+                        "transfer payable already has payments; refund before cancelling");
+            }
+            financeRepository.updateArApItemLedger(new com.complex.platform.finance.ArApItemRecord(
+                    item.id(), item.itemNo(), item.direction(), item.counterpartyId(), item.sourceType(), item.sourceId(),
+                    item.amountCent(), 0L, 0L, item.currency(), item.dueDate(), item.accountingPeriod(),
+                    "cancelled", item.createdAt(), now, item.merchantId(), item.projectId()));
+        });
     }
 
     public InventoryTransferOrderRecord getTransferOrder(String orderId) {

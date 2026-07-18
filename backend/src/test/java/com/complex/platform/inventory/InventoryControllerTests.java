@@ -1,6 +1,7 @@
 package com.complex.platform.inventory;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -94,7 +95,7 @@ class InventoryControllerTests {
         when(service.listStockBatches()).thenReturn(new PageResponse<>(List.of(stockBatch()), 1, 50, 1));
         when(service.listRiskAlerts()).thenReturn(new PageResponse<>(List.of(riskAlert()), 1, 50, 1));
         when(service.listSupplierReconciliations()).thenReturn(new PageResponse<>(List.of(supplierReconciliation()), 1, 50, 1));
-        when(service.listStockMovements()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+        when(service.listStockMovements(anyInt(), anyInt())).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.listInventorySuppliers()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.createInventoryItem(any(InventoryItemRequest.class))).thenReturn(item());
         when(service.createPurchaseRequest(any(PurchaseRequestCreate.class))).thenReturn(purchaseRequest());

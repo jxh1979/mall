@@ -1,4 +1,5 @@
 package com.complex.platform.settlement;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -35,21 +36,32 @@ public class SettlementExpiryJob {
 
     private final JdbcSettlementTransactionRepository repository;
     private final Clock clock;
+    private final boolean scheduledEnabled;
 
     @Autowired
-    public SettlementExpiryJob(JdbcSettlementTransactionRepository repository) {
-        this(repository, Clock.systemUTC());
+    public SettlementExpiryJob(
+            JdbcSettlementTransactionRepository repository,
+            @Value("${settlement.expiry.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(repository, Clock.systemUTC(), scheduledEnabled);
     }
 
     SettlementExpiryJob(JdbcSettlementTransactionRepository repository, Clock clock) {
+        this(repository, clock, true);
+    }
+
+    SettlementExpiryJob(JdbcSettlementTransactionRepository repository, Clock clock, boolean scheduledEnabled) {
         this.repository = repository;
         this.clock = clock;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     /** @Scheduled 薄包装:默认关闭,每日营业后(默认 02:30)归项目。 */
     @ConditionalOnProperty(name = "settlement.expiry.scheduled.enabled", havingValue = "true")
     @Scheduled(cron = "${settlement.expiry.scheduled.cron:0 30 2 * * *}")
     public void scheduledExpire() {
+        if (!scheduledEnabled) {
+            return;
+        }
         expireUnverified(Instant.now(clock));
     }
 

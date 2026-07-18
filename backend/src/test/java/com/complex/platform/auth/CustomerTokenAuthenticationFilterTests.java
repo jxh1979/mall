@@ -28,8 +28,8 @@ class CustomerTokenAuthenticationFilterTests {
         CustomerService customerService = mock(CustomerService.class);
         when(customerService.resolveCustomerIdQuietly("cust_token_1")).thenReturn(Optional.of("customer_1"));
         CustomerTokenAuthenticationFilter filter = filterWith(customerService);
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/customer/memberships");
-        request.setRequestURI("/api/v1/customer/memberships");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/customer/stored-value/accounts");
+        request.setRequestURI("/api/v1/customer/stored-value/accounts");
         request.addHeader("Authorization", "Bearer cust_token_1");
 
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
@@ -45,8 +45,8 @@ class CustomerTokenAuthenticationFilterTests {
         CustomerService customerService = mock(CustomerService.class);
         when(customerService.resolveCustomerIdQuietly("cust_header_token")).thenReturn(Optional.of("customer_2"));
         CustomerTokenAuthenticationFilter filter = filterWith(customerService);
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/customer/memberships");
-        request.setRequestURI("/api/v1/customer/memberships");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/customer/stored-value/accounts");
+        request.setRequestURI("/api/v1/customer/stored-value/accounts");
         request.addHeader("X-Customer-Token", " cust_header_token ");
         request.addHeader("Authorization", "Bearer cust_bearer_token");
 

@@ -39,12 +39,28 @@ export function cnDate(value?: string | null): string {
  */
 export function RowDetailDrawer({ open, title, fields, onClose }: Props) {
   const closeRef = React.useRef<HTMLButtonElement>(null);
+  const asideRef = React.useRef<HTMLElement>(null);
 
   React.useEffect(() => {
     if (!open) return;
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") { onClose(); return; }
+      if (event.key !== "Tab") return;
+      // 焦点陷阱：aria-modal 需配套 Tab 约束，否则焦点会漏到抽屉背后的页面。
+      const focusable = asideRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable || focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -55,6 +71,7 @@ export function RowDetailDrawer({ open, title, fields, onClose }: Props) {
   return (
     <div className="admin-drawer-overlay" data-testid="row-detail-overlay" onClick={onClose}>
       <aside
+        ref={asideRef}
         className="admin-drawer"
         role="dialog"
         aria-modal="true"

@@ -425,6 +425,36 @@ class JdbcInventoryRepository implements InventoryRepository {
                 """, rowMapper::mapStockMovement);
     }
 
+    // AUD-013 真分页: SQL 层 LIMIT/OFFSET + COUNT, total 取真值而非 items.size()。
+    // 租户谓词 (:x IS NULL OR col=:x) 与 listStockMovementsByMerchant/ByProject 同口径, 参数带 SQL 类型供 PG 推断 NULL 分支。
+    @Override
+    public com.complex.platform.common.api.PageResponse<StockMovementRecord> listStockMovementsPaged(
+            String merchantId, String projectId, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 50 : Math.min(size, 200);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_id", projectId, java.sql.Types.VARCHAR);
+        String where = """
+                 WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
+                   AND (:project_id IS NULL OR project_id = :project_id)
+                """;
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_stock_movements" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<StockMovementRecord> items = jdbcTemplate.query("""
+                SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
+                       business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
+                       status, created_at, merchant_id
+                  FROM inventory_stock_movements
+                """ + where + """
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, rowMapper::mapStockMovement);
+        return new com.complex.platform.common.api.PageResponse<>(
+                items, safePage, safeSize, total == null ? 0L : total);
+    }
+
     @Override
     public StockAdjustmentRecord saveStockAdjustment(StockAdjustmentRecord adjustment) {
         jdbcTemplate.update("""

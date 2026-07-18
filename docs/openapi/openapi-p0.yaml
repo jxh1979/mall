@@ -2740,6 +2740,14 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: customer.ticket_products_viewed
       x-audit-event-failure: customer.ticket_products_view_failed
+      parameters:
+        - name: bar_id
+          in: query
+          required: false
+          description: 酒吧唯一标识；专属入口锁定该酒吧单店票，不传=公共入口全量。
+          schema:
+            type: string
+            maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -2775,6 +2783,241 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+      x-auth-context: customer-token
+  /api/v1/customer/my-tickets:
+    get:
+      tags:
+      - customer
+      operationId: listMyTickets
+      summary: 我的票(持有人视角:自购未转+受赠,含转赠中标记)
+      x-permission: not_applicable
+      x-data-scope: customer
+      x-terminal-allowed:
+      - web
+      - miniapp
+      - app
+      x-idempotency-required: false
+      x-audit-event-success: customer.my_tickets_viewed
+      x-audit-event-failure: customer.my_tickets_view_failed
+      responses:
+        '200':
+          $ref: '#/components/responses/Page'
+        '401':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: customer-token
+  /api/v1/customer/ticket-transfers:
+    post:
+      tags:
+      - customer
+      operationId: initiateCustomerTicketTransfer
+      summary: 发起门票转赠(手机号/微信链接/二维码)
+      x-permission: not_applicable
+      x-data-scope: customer
+      x-terminal-allowed:
+      - web
+      - miniapp
+      - app
+      x-idempotency-required: true
+      x-audit-event-success: ticket_transfer.created
+      x-audit-event-failure: ticket_transfer.create_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - parent_ticket_id
+              - channel
+              properties:
+                idempotency_key:
+                  type: string
+                parent_ticket_id:
+                  type: string
+                  description: 父票实例 id
+                slot_index:
+                  type: integer
+                  description: 人员权益组槽位;单人/多次票可省略,多人票必填
+                channel:
+                  type: string
+                  enum:
+                  - phone
+                  - link
+                  description: phone=手机号定向;link=微信链接/二维码
+                receiver_phone:
+                  type: string
+                  description: channel=phone 时受赠人手机号
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: customer-token
+  /api/v1/customer/ticket-transfers/{transfer_id}/claim:
+    post:
+      tags:
+      - customer
+      operationId: claimCustomerTicketTransfer
+      summary: 确认领取转赠(手机号只指定人可领;链接/二维码先确认者得)
+      x-permission: not_applicable
+      x-data-scope: customer
+      x-terminal-allowed:
+      - web
+      - miniapp
+      - app
+      x-idempotency-required: true
+      x-audit-event-success: ticket_transfer.claimed
+      x-audit-event-failure: ticket_transfer.claim_failed
+      parameters:
+      - name: transfer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: []
+              properties:
+                idempotency_key:
+                  type: string
+                claim_code:
+                  type: string
+                  description: link 渠道领取码
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: customer-token
+  /api/v1/customer/ticket-transfers/{transfer_id}/revoke:
+    post:
+      tags:
+      - customer
+      operationId: revokeCustomerTicketTransfer
+      summary: 撤回转赠(领取前发起人可撤回)
+      x-permission: not_applicable
+      x-data-scope: customer
+      x-terminal-allowed:
+      - web
+      - miniapp
+      - app
+      x-idempotency-required: false
+      x-audit-event-success: ticket_transfer.revoked
+      x-audit-event-failure: ticket_transfer.revoke_failed
+      parameters:
+      - name: transfer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: customer-token
+  /api/v1/customer/ticket-transfers/preview:
+    get:
+      tags:
+      - customer
+      operationId: previewCustomerTicketTransfer
+      summary: 领取预览(打开链接/二维码,不算领取)
+      x-permission: not_applicable
+      x-data-scope: customer
+      x-terminal-allowed:
+      - web
+      - miniapp
+      - app
+      x-idempotency-required: false
+      x-audit-event-success: customer.ticket_transfer_preview_viewed
+      x-audit-event-failure: customer.ticket_transfer_preview_view_failed
+      parameters:
+      - name: claim_code
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: customer-token
+  /api/v1/customer/ticket-transfers/incoming:
+    get:
+      tags:
+      - customer
+      operationId: listIncomingCustomerTicketTransfers
+      summary: 待我领取的转赠(手机号渠道)
+      x-permission: not_applicable
+      x-data-scope: customer
+      x-terminal-allowed:
+      - web
+      - miniapp
+      - app
+      x-idempotency-required: false
+      x-audit-event-success: customer.ticket_transfer_incoming_viewed
+      x-audit-event-failure: customer.ticket_transfer_incoming_view_failed
+      responses:
+        '200':
+          $ref: '#/components/responses/Page'
+        '401':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: customer-token
+  /api/v1/customer/ticket-transfers/outgoing:
+    get:
+      tags:
+      - customer
+      operationId: listOutgoingCustomerTicketTransfers
+      summary: 我发起的转赠(撤回入口/状态查看)
+      x-permission: not_applicable
+      x-data-scope: customer
+      x-terminal-allowed:
+      - web
+      - miniapp
+      - app
+      x-idempotency-required: false
+      x-audit-event-success: customer.ticket_transfer_outgoing_viewed
+      x-audit-event-failure: customer.ticket_transfer_outgoing_view_failed
+      responses:
+        '200':
+          $ref: '#/components/responses/Page'
+        '401':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
       x-auth-context: customer-token
   /api/v1/evidence/attachments/upload-intents:
     post:
@@ -5216,6 +5459,112 @@ paths:
       x-auth-context: staff-token
       requestBody:
         $ref: "#/components/requestBodies/StockMovementRequest"
+  /api/v1/inventory/transfer-orders/{order_id}/return:
+    post:
+      tags:
+        - inventory
+      operationId: returnTransferOrder
+      summary: 借调归还
+      description: 借用型（lending/borrow）借调收货后归还，溯源码归属翻回出让方并置 returned。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      x-permission: inventory.transfer_order.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.transfer_order_returned
+      x-audit-event-failure: inventory.transfer_order_return_failed
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 借调流转单 ID 路径参数。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 幂等键（X-Idempotency-Key 请求体镜像）。
+                scanned_trace_codes:
+                  type: array
+                  items:
+                    type: string
+                  description: 随货溯源码清单（高价值必扫核对，防调包）。
+                operator_note:
+                  type: string
+                  maxLength: 500
+                  description: 操作备注。
+  /api/v1/inventory/transfer-orders/{order_id}/cancel:
+    post:
+      tags:
+        - inventory
+      operationId: cancelTransferOrder
+      summary: 取消借调单
+      description: 取消借调流转单：created 直接取消；shipped 需冲销发货时挂的应付（未收款才可冲）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      x-permission: inventory.transfer_order.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.transfer_order_cancelled
+      x-audit-event-failure: inventory.transfer_order_cancel_failed
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 借调流转单 ID 路径参数。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 幂等键（X-Idempotency-Key 请求体镜像）。
+                scanned_trace_codes:
+                  type: array
+                  items:
+                    type: string
+                  description: 随货溯源码清单（高价值必扫核对，防调包）。
+                operator_note:
+                  type: string
+                  maxLength: 500
+                  description: 操作备注。
   /api/v1/inventory/stock-movements/{movement_type}:
     post:
       tags:
@@ -6670,6 +7019,49 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/ticketing/ticket-instances:
+    get:
+      tags:
+        - ticketing
+      operationId: listTicketInstances
+      summary: 查询父票实例
+      description: 用于查询父票实例（订单每买 1 张票 = 1 条父票实例，多人票内每人一个权益组 slot；方案2 整票退款/方案3 转赠锚点）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: ticket.verify.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: ticket_instance.viewed
+      x-audit-event-failure: ticket_instance.viewed_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/ticket-transfers:
+    get:
+      tags:
+      - ticketing
+      operationId: listTicketTransfers
+      summary: 查询门票转赠记录(客服纠纷排查,只读)
+      x-permission: ticket.transfer.read
+      x-data-scope: project
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: false
+      x-audit-event-success: ticket_transfer.viewed
+      x-audit-event-failure: ticket_transfer.view_failed
+      responses:
+        '200':
+          $ref: '#/components/responses/Page'
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
   /api/v1/ticketing/issued-entitlements:
     get:
       tags:
@@ -6891,6 +7283,34 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: ticket_refund.approved
       x-audit-event-failure: ticket_refund.approve_failed
+      parameters:
+        - $ref: "#/components/parameters/RefundId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/StatusChange"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/refunds/{refund_id}/reject:
+    post:
+      tags:
+        - ticketing
+      operationId: rejectTicketRefund
+      summary: 退款驳回
+      x-permission: ticket.refund.approve
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_refund.rejected
+      x-audit-event-failure: ticket_refund.reject_failed
       parameters:
         - $ref: "#/components/parameters/RefundId"
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
@@ -8994,169 +9414,6 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
-  /api/v1/customer/memberships/subscribe:
-    post:
-      tags:
-        - customer
-      operationId: customerMembershipSubscribe
-      summary: 客人付费会员开通（绑支付意图）
-      x-permission: customer.membership.subscribe
-      x-data-scope: customer
-      x-terminal-allowed:
-        - web
-        - miniapp
-        - app
-      x-idempotency-required: false
-      x-audit-event-success: customer.membership.subscribe
-      x-audit-event-failure: customer.membership.subscribe_failed
-      requestBody:
-        $ref: "#/components/requestBodies/MembershipSubscribeRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: customer-token
-  /api/v1/customer/memberships:
-    get:
-      tags:
-        - customer
-      operationId: listCustomerMemberships
-      summary: 客人付费会员列表
-      x-permission: customer.membership.view
-      x-data-scope: customer
-      x-terminal-allowed:
-        - web
-        - miniapp
-        - app
-      x-idempotency-required: false
-      x-audit-event-success: customer.memberships_viewed
-      x-audit-event-failure: customer.memberships_viewed_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "401":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: customer-token
-  /api/v1/customer/membership-plans:
-    get:
-      tags:
-        - customer
-      operationId: listCustomerMembershipPlans
-      summary: 付费会员档位列表（客人端公开展示）
-      x-permission: public
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-        - miniapp
-        - app
-      x-idempotency-required: false
-      x-audit-event-success: customer.membership_plans_viewed
-      x-audit-event-failure: customer.membership_plans_viewed_failed
-      parameters:
-        - name: project_id
-          in: query
-          required: false
-          schema:
-            type: string
-          description: 综合体项目隔离键
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: public
-  /api/v1/customer/membership-benefits:
-    get:
-      tags:
-        - customer
-      operationId: customerMembershipBenefits
-      summary: 客人当前生效会员权益
-      x-permission: customer.membership.view
-      x-data-scope: customer
-      x-terminal-allowed:
-        - web
-        - miniapp
-        - app
-      x-idempotency-required: false
-      x-audit-event-success: customer.membership_benefits_viewed
-      x-audit-event-failure: customer.membership_benefits_viewed_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "401":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: customer-token
-  /api/v1/loyalty/membership-plans:
-    post:
-      tags:
-        - customer
-      operationId: saveMembershipPlan
-      summary: 保存付费会员档位（后台）
-      x-permission: customer.membership.manage
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: membership.plan_saved
-      x-audit-event-failure: membership.plan_saved_failed
-      requestBody:
-        $ref: "#/components/requestBodies/MembershipPlanRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-    get:
-      tags:
-        - customer
-      operationId: listMembershipPlans
-      summary: 付费会员档位列表（后台）
-      x-permission: customer.membership.view
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: customer.membership_plans_admin_viewed
-      x-audit-event-failure: customer.membership_plans_admin_viewed_failed
-      parameters:
-        - name: project_id
-          in: query
-          required: false
-          schema:
-            type: string
-          description: 综合体项目隔离键
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/loyalty/stored-value/{customer_id}/freeze:
     post:
       tags:
@@ -10294,176 +10551,6 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/finance/cam/allocations:
-    post:
-      tags:
-        - finance
-      operationId: allocateCam
-      summary: （已废止）CAM 权重分摊 → 改用物业费固定计费；调用返回 409 CAM_ALLOCATION_ABOLISHED
-      x-auth-context: staff-token
-      x-permission: finance.cam.allocate
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: finance.cam.allocated
-      x-audit-event-failure: finance.cam.allocate_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-              required:
-                - idempotency_key
-                - period
-                - total_amount_cent
-                - due_date
-                - shares
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
-                  maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
-                period:
-                  type: string
-                  description: 计费周期标识。
-                  maxLength: 255
-                total_amount_cent:
-                  type: integer
-                  description: 待分摊总额。（单位：分，禁止浮点）
-                  minimum: 0
-                  maximum: 999999999999
-                due_date:
-                  type: string
-                  format: date
-                  description: 应收到期日。
-                shares:
-                  type: array
-                  description: 分摊明细列表。
-                  items:
-                    type: object
-                    additionalProperties: false
-                    required:
-                      - merchant_id
-                      - weight_bps
-                    properties:
-                      merchant_id:
-                        type: string
-                        description: 商户 ID。
-                        maxLength: 64
-                      weight_bps:
-                        type: integer
-                        description: 分摊权重（基点，万分比）。
-                        minimum: 0
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      deprecated: true
-  /api/v1/finance/cam/trueups:
-    post:
-      tags:
-        - finance
-      operationId: trueUpCam
-      summary: （已废止）CAM 年度 true-up → 物业费不退不补、无对账；调用返回 409 CAM_TRUEUP_ABOLISHED
-      x-auth-context: staff-token
-      x-permission: finance.cam.trueup
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: finance.cam.trued_up
-      x-audit-event-failure: finance.cam.trueup_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-              required:
-                - idempotency_key
-                - settlement_period
-                - actual_total_amount_cent
-                - due_date
-                - shares
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
-                  maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
-                settlement_period:
-                  type: string
-                  description: 结算周期标识。
-                  maxLength: 255
-                actual_total_amount_cent:
-                  type: integer
-                  description: 实际总额。（单位：分，禁止浮点）
-                  minimum: 0
-                  maximum: 999999999999
-                due_date:
-                  type: string
-                  format: date
-                  description: 应收/应退到期日。
-                shares:
-                  type: array
-                  description: 分摊明细列表。
-                  items:
-                    type: object
-                    additionalProperties: false
-                    required:
-                      - merchant_id
-                      - weight_bps
-                    properties:
-                      merchant_id:
-                        type: string
-                        description: 商户 ID。
-                        maxLength: 64
-                      weight_bps:
-                        type: integer
-                        description: 分摊权重（基点）。
-                        minimum: 0
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      deprecated: true
   /api/v1/finance/deposits/actions:
     post:
       tags:
@@ -18846,12 +18933,12 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/customer-accounts:
-    get:
+  /api/v1/customer-accounts/lookup:
+    post:
       tags:
         - customer
       operationId: lookupCustomerAccountByPhone
-      summary: 按手机号精确查客人账号（盲索引，返回安全投影，明文手机号不出网）
+      summary: 按手机号精确查客人账号（盲索引，返回安全投影；手机号走请求体不入 URL）
       x-permission: customer.account.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -18859,13 +18946,18 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: customer.account.viewed
       x-audit-event-failure: customer.account.view_failed
-      parameters:
-        - name: phone
-          in: query
-          required: true
-          schema:
-            type: string
-          description: 客人完整手机号（精确匹配，经盲索引查询，不支持模糊搜索）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  description: 客人完整手机号（精确匹配，经盲索引查询，不支持模糊搜索）；PII 走请求体不入 URL query
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -22814,24 +22906,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StoredValueFreezeRequest"
-    MembershipPlanRequest:
-      required: false
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/MembershipPlanRequest"
-    MembershipSubscribeRequest:
-      required: false
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/MembershipSubscribeRequest"
-    MembershipActivateRequest:
-      required: false
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/MembershipActivateRequest"
     PointsTransferRequest:
       required: false
       content:
@@ -24825,6 +24899,9 @@ components:
             - paused
             - archived
           maxLength: 64
+        refundable:
+          type: boolean
+          description: 方案2/规则2：该票种是否可退票（可空=不可退，默认最安全）。true 才允许客人申请整票退款、到期未用自动退。
     TicketPriceRuleRequest:
       type: object
       description: 请求载荷 `TicketPriceRuleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -25012,7 +25089,6 @@ components:
       additionalProperties: false
       required:
         - target_id
-        - refund_amount_cent
         - reason
       properties:
         idempotency_key:
@@ -25036,7 +25112,8 @@ components:
           maxLength: 64
         refund_amount_cent:
           type: integer
-          description: "`refund_amount_cent` 金额字段，单位分；不得使用浮点数。"
+          description: 方案2 整票退款：金额由服务端按整票额算定，本字段可选；传入必须等于服务端算出的整票可退额合计，否则
+            400 REFUND_AMOUNT_MISMATCH；不传=服务端定额。单位分，不得使用浮点数。
           minimum: 1
           maximum: 999999999999
         reason:
@@ -25047,10 +25124,19 @@ components:
           type: string
           description: 金额字段，单位为分；必须为非负整数，所有展示层再转换为元。
           maxLength: 2048
-        entitlement_ids:
+        ticket_instance_ids:
           type: array
-          description: 票实例（issued_entitlements）ID 列表；按票实例选择要退该订单下的哪几张未核销票，可只退一张或退多张，不传则退该订单全部可退票；已核销的票实例不可退，传入将按票实例拒退
-            TICKET_ENTITLEMENT_VERIFIED_NO_REFUND。
+          description: 方案2 整票退款：要退该订单下哪几张父票实例（ticket_instances ID）；不传/空=退该订单全部“完全未核销”的票实例。
+            金额按各实例出票定格的实付分摊额算定；父票任一权益已核销则整张不可退（TICKET_INSTANCE_VERIFIED_NO_REFUND）。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 200
+        entitlement_ids:
+          deprecated: true
+          type: array
+          description: 已退役（方案2 AUD-006）：退款单位改为父票实例（见 ticket_instance_ids）。传入非空即
+            400 REFUND_UNIT_IS_TICKET（退款单位为整张票，请按票选择）。
           items:
             type: string
             maxLength: 64
@@ -25139,6 +25225,10 @@ components:
           type: string
           description: 说明文本；用于人工复核、异常处理或审计，不得写入敏感明文。
           maxLength: 1000
+        bar_id:
+          type: string
+          description: 酒吧唯一标识；单店票必填、通票必空；服务端据票种校验并快照。
+          maxLength: 64
     CustomerBarReservationRequest:
       type: object
       description: 请求载荷 `CustomerBarReservationRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -29133,75 +29223,6 @@ components:
           type: string
           description: B1d⑤ 储值卡范围：非空=商户级卡（只能在该发卡商户消费、按商户隔离）；空=综合体通用卡。
           maxLength: 64
-    MembershipPlanRequest:
-      type: object
-      description: 请求载荷 `MembershipPlanRequest`；付费会员档位配置（后台，权益 benefits 口径自定义）。
-      additionalProperties: false
-      properties:
-        project_id:
-          type: string
-          description: 综合体项目隔离键；空=综合体级全局档位。
-          maxLength: 255
-        plan_code:
-          type: string
-          description: 档位编码（项目内唯一）。
-          maxLength: 64
-        name:
-          type: string
-          description: 档位名称。
-          maxLength: 160
-        price_cent:
-          type: integer
-          format: int64
-          description: 档位价格（分），>=0。
-        duration_days:
-          type: integer
-          description: 权益时长（天），必须为正。
-        benefits:
-          type: object
-          additionalProperties: true
-          description: 权益配置（折扣/赠饮等口径，jsonb）。
-        status:
-          type: string
-          description: 档位状态：active/inactive/archived。
-          maxLength: 32
-    MembershipSubscribeRequest:
-      type: object
-      description: 请求载荷 `MembershipSubscribeRequest`；付费会员开通（绑 finance 支付意图，支付成功后再调生效）。
-      additionalProperties: false
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键；同键重复提交返回首次结果。
-          maxLength: 128
-        plan_id:
-          type: string
-          description: 会员档位 id。
-          maxLength: 64
-        channel:
-          type: string
-          description: 支付渠道编码；必须使用后端枚举/配置字典取值。
-          maxLength: 64
-    MembershipActivateRequest:
-      type: object
-      description: 请求载荷 `MembershipActivateRequest`；付费会员生效（校验支付意图已 succeeded、金额一致后生效）。
-      additionalProperties: false
-      properties:
-        plan_id:
-          type: string
-          description: 会员档位 id。
-          maxLength: 64
-        project_id:
-          type: string
-          description: 综合体项目隔离键；空=综合体级全局。
-          maxLength: 255
-        payment_intent_id:
-          type: string
-          description: 开通绑定的 finance 支付意图 id。
-          maxLength: 64
-        auto_renew:
-          type: boolean
-          description: 自动续费意向（实际扣款待支付渠道）。
     PointsTransferRequest:
       type: object
       description: 请求载荷 `PointsTransferRequest`；积分转赠（from=当前登录会员，风控防套现：日限额/日次数/冻结校验）。

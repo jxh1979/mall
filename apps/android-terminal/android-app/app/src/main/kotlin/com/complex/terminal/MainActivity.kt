@@ -14,6 +14,7 @@ import android.widget.ImageView
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -131,10 +132,15 @@ class MainActivity : Activity() {
     super.onNewIntent(intent)
     val target = nfcTarget ?: return
     val messages = intent.getParcelableArrayExtra(android.nfc.NfcAdapter.EXTRA_NDEF_MESSAGES)
+    // 正确解析 NDEF 文本记录:取第一条「知名类型·文本(RTD_TEXT)」记录,按 payload 结构
+    // [状态字节][语言码][正文]跳过状态字节+语言码,只留正文;避免旧写法把语言码"en"污染进点位ID。
     val ndefText = messages?.filterIsInstance<android.nfc.NdefMessage>()
       ?.flatMap { it.records.toList() }
-      ?.firstOrNull()
-      ?.let { record -> runCatching { String(record.payload).trim().dropWhile { !it.isLetterOrDigit() } }.getOrNull() }
+      ?.firstOrNull {
+        it.tnf == android.nfc.NdefRecord.TNF_WELL_KNOWN &&
+          it.type.contentEquals(android.nfc.NdefRecord.RTD_TEXT)
+      }
+      ?.let { record -> runCatching { decodeNdefTextPayload(record.payload) }.getOrNull() }
     val tag = intent.getParcelableExtra<android.nfc.Tag>(android.nfc.NfcAdapter.EXTRA_TAG)
     val uid = tag?.id?.joinToString("") { b -> "%02x".format(b) }
     val value = ndefText ?: uid
@@ -922,6 +928,7 @@ class MainActivity : Activity() {
     setContentView(screen(
       title = "我的薪资",
       children = listOf(status, month, queryButton, detail, secondaryButton("返回首页") { showHome() }),
+      secure = true,
     ))
   }
 
@@ -952,6 +959,7 @@ class MainActivity : Activity() {
     setContentView(screen(
       title = "考勤月视图",
       children = listOf(status, month, queryButton, list, secondaryButton("返回首页") { showHome() }),
+      secure = true,
     ))
   }
 
@@ -1090,6 +1098,7 @@ class MainActivity : Activity() {
       children = listOf(catalog, catalogList, itemId, performer, tableId, note, orderButton, status, qrImage,
         lastOrderId, paidButton, completeButton,
         secondaryButton("返回首页") { showHome() }),
+      secure = true,
     ))
   }
 
@@ -1148,6 +1157,7 @@ class MainActivity : Activity() {
       title = "我的服务任务",
       children = listOf(status, list, orderId, acceptButton, completeButton,
         secondaryButton("返回首页") { showHome() }),
+      secure = true,
     ))
   }
 
@@ -1165,10 +1175,10 @@ class MainActivity : Activity() {
           runCatching {
             qrImage.setImageBitmap(com.journeyapps.barcodescanner.BarcodeEncoder()
               .encodeBitmap(qr, com.google.zxing.BarcodeFormat.QR_CODE, 500, 500))
-          }
+          }.onFailure { status.text = "二维码渲染失败：${it.message}（可重新扫码或粘贴）" }
         }
       },
-      onError = { },
+      onError = { status.text = "收款码加载失败：${friendly(it)}（可手动扫码或粘贴后保存）" },
     )
     val saveButton = primaryButton("保存收款码") {
       val qr = qrInput.text.toString().trim()
@@ -1189,6 +1199,7 @@ class MainActivity : Activity() {
       title = "我的收款码(历史保留)",
       children = listOf(status, qrInput, scanButton, saveButton, qrImage,
         secondaryButton("返回首页") { showHome() }),
+      secure = true,
     ))
   }
 
@@ -1544,8 +1555,15 @@ class MainActivity : Activity() {
   private fun statusField(cents: Long): TextView =
     statusText("应收金额：¥${"%.2f".format(cents / 100.0)}（按订单金额结算，不可修改）")
 
-  private fun screen(title: String, children: List<View>, root: Boolean = false): View {
+  private fun screen(title: String, children: List<View>, root: Boolean = false, secure: Boolean = false): View {
     onRootScreen = root
+    // 防截屏:敏感屏(薪资/考勤/收款码/服务分账)设 FLAG_SECURE 挡截图/录屏/最近任务缩略图;
+    // 因是单 Activity 多屏切换,每次进屏按敏感与否设/清标记,离开敏感屏即恢复可截屏。
+    if (secure) {
+      window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+    } else {
+      window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
     val titleView = TextView(this).apply {
       text = title
       textSize = 22f

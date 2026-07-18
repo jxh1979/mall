@@ -1412,6 +1412,32 @@ class JdbcAmusementRepository implements AmusementRepository {
                 """, Map.of("merchant_id", merchantId), rowMapper::mapQueueEntry);
     }
 
+    // AUD-013 真分页: 商户维经 project_id 子查询下推, nullable -> 平台全量; total 取 COUNT 真值。
+    @Override
+    public com.complex.platform.common.api.PageResponse<AmusementQueueEntryRecord> listQueueEntriesPaged(
+            String merchantId, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 50 : Math.min(size, 200);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+        String where = """
+                 WHERE (:merchant_id IS NULL
+                        OR project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id))
+                """;
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM amusement_queue_entries" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<AmusementQueueEntryRecord> items = jdbcTemplate.query("""
+                SELECT id, project_id, session_id, customer_id, queue_no, status, created_at, updated_at
+                  FROM amusement_queue_entries
+                """ + where + """
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, rowMapper::mapQueueEntry);
+        return new com.complex.platform.common.api.PageResponse<>(
+                items, safePage, safeSize, total == null ? 0L : total);
+    }
+
     @Override
     public Optional<AmusementQueueEntryRecord> findQueueEntryById(String id) {
         return jdbcTemplate.query("""
@@ -1454,6 +1480,32 @@ class JdbcAmusementRepository implements AmusementRepository {
                  WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapReservation);
+    }
+
+    // AUD-013 真分页。
+    @Override
+    public com.complex.platform.common.api.PageResponse<AmusementReservationRecord> listReservationsPaged(
+            String merchantId, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 50 : Math.min(size, 200);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+        String where = """
+                 WHERE (:merchant_id IS NULL
+                        OR project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id))
+                """;
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM amusement_reservations" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<AmusementReservationRecord> items = jdbcTemplate.query("""
+                SELECT id, project_id, session_id, customer_id, reservation_status, created_at, updated_at
+                  FROM amusement_reservations
+                """ + where + """
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, rowMapper::mapReservation);
+        return new com.complex.platform.common.api.PageResponse<>(
+                items, safePage, safeSize, total == null ? 0L : total);
     }
 
     @Override
@@ -1598,6 +1650,34 @@ class JdbcAmusementRepository implements AmusementRepository {
                  WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapGroupBooking);
+    }
+
+    // AUD-013 真分页。
+    @Override
+    public com.complex.platform.common.api.PageResponse<AmusementGroupBookingRecord> listGroupBookingsPaged(
+            String merchantId, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 50 : Math.min(size, 200);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+        String where = """
+                 WHERE (:merchant_id IS NULL
+                        OR project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id))
+                """;
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM amusement_group_bookings" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<AmusementGroupBookingRecord> items = jdbcTemplate.query("""
+                SELECT id, project_id, session_id, booking_type, customer_name, contact_phone,
+                       party_size, reserved_capacity, booking_status, approval_note, operator_note,
+                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at, paid_at
+                  FROM amusement_group_bookings
+                """ + where + """
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, rowMapper::mapGroupBooking);
+        return new com.complex.platform.common.api.PageResponse<>(
+                items, safePage, safeSize, total == null ? 0L : total);
     }
 
     @Override

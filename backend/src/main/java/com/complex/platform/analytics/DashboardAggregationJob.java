@@ -1,4 +1,5 @@
 package com.complex.platform.analytics;
+import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
 import com.complex.platform.common.BusinessDayResolver;
@@ -108,31 +109,41 @@ public class DashboardAggregationJob {
     private final AnalyticsRepository repository;
     private final Clock clock;
     private final BusinessDayResolver businessDayResolver;
+    private final boolean scheduledEnabled;
 
     @Autowired
-    public DashboardAggregationJob(AnalyticsRepository repository, BusinessDayResolver businessDayResolver) {
-        this(repository, Clock.systemUTC(), businessDayResolver);
+    public DashboardAggregationJob(AnalyticsRepository repository, BusinessDayResolver businessDayResolver,
+            @Value("${analytics.dashboard-etl.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(repository, Clock.systemUTC(), businessDayResolver, scheduledEnabled);
     }
 
     // 测试便捷构造（默认 cutoff 经营日口径）。
     public DashboardAggregationJob(AnalyticsRepository repository) {
-        this(repository, Clock.systemUTC(), new BusinessDayResolver(4));
+        this(repository, Clock.systemUTC(), new BusinessDayResolver(4), true);
     }
 
     DashboardAggregationJob(AnalyticsRepository repository, Clock clock) {
-        this(repository, clock, new BusinessDayResolver(4));
+        this(repository, clock, new BusinessDayResolver(4), true);
     }
 
     DashboardAggregationJob(AnalyticsRepository repository, Clock clock, BusinessDayResolver businessDayResolver) {
+        this(repository, clock, businessDayResolver, true);
+    }
+
+    DashboardAggregationJob(AnalyticsRepository repository, Clock clock, BusinessDayResolver businessDayResolver, boolean scheduledEnabled) {
         this.repository = repository;
         this.clock = clock;
         this.businessDayResolver = businessDayResolver;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     /** @Scheduled 薄包装：默认关闭，仅在 analytics.dashboard-etl.scheduled.enabled=true 时注册。 */
     @ConditionalOnProperty(name = "analytics.dashboard-etl.scheduled.enabled", havingValue = "true")
     @Scheduled(fixedDelayString = "${analytics.dashboard-etl.scheduled.fixed-delay-ms:300000}")
     public void scheduledRefresh() {
+        if (!scheduledEnabled) {
+            return;
+        }
         refreshSnapshots(today());
     }
 

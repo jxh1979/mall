@@ -176,6 +176,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => { if (event.key === "Enter") submitSearch(); }}
+            aria-label="搜索凭证 / 方向 / 状态（回车查询）"
             placeholder="搜索凭证 / 方向 / 状态（回车查询）"
           />
           <button type="button" data-testid="finance-ledger-search-submit" onClick={submitSearch}>查询</button>

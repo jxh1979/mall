@@ -133,6 +133,10 @@ data class LocalTask(
   val payload: Map<String, String>,
   val occurredAt: String,
   val status: LocalTaskStatus = LocalTaskStatus.PENDING,
+  // 归属固化:任务创建时记录原操作员(staffId)与设备(deviceCode)。换人后新员工
+  // 同步时按 originStaffId 校验,不得把上一员工的待同步任务冒充自己身份上送。
+  val originStaffId: String? = null,
+  val originDeviceCode: String? = null,
 )
 
 @Serializable
@@ -707,3 +711,21 @@ data class PaymentCodeReq(
   val idempotencyKey: String,
   val qrContent: String,
 )
+
+/**
+ * 解析 NDEF 文本记录(RTD_TEXT)的 payload,取正文。
+ *
+ * NFC Forum 文本记录 payload 结构:[状态字节][语言码(ISO 639)][正文(UTF-8/UTF-16)]。
+ * 状态字节:最高位(0x80)=编码(0=UTF-8,1=UTF-16),低 6 位(0x3F)=语言码字节长度。
+ * 正文从 1 + 语言码长度 处开始。据此跳过状态字节与语言码,只返回正文(去首尾空白);
+ * 非法/空返回 null(避免旧写法 dropWhile 未剥语言码把"en"污染进点位ID)。
+ */
+fun decodeNdefTextPayload(payload: ByteArray): String? {
+  if (payload.isEmpty()) return null
+  val status = payload[0].toInt()
+  val langLen = status and 0x3F
+  if (payload.size < 1 + langLen) return null
+  val charset = if (status and 0x80 != 0) Charsets.UTF_16 else Charsets.UTF_8
+  return String(payload, 1 + langLen, payload.size - 1 - langLen, charset)
+    .trim().ifEmpty { null }
+}

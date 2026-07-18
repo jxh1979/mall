@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * 会员忠诚度 第2部分（V090）单测：储值充值（绑支付意图：无支付不加余额）/消费不足拒/冻结阻断；
- * 付费会员开通→生效期、到期→expired、续费；积分转赠原子 + 日限额拒 + 不足拒。
+ * 发卡资格/资金模式/代收应付/预收退卡。
  */
 class MemberWalletServiceTests {
 
@@ -122,6 +122,57 @@ class MemberWalletServiceTests {
         service.refund("c1", null, null, 5_000L, "refund all", true, "refund-1");
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
         assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("closed");
+        // AUD-060：渠道未兑付（开关关=RESERVED）→ 登记一笔 requested 退款待办，不得静默记成功。
+        assertThat(finance.payoutRefunds).hasSize(1);
+        assertThat(finance.payoutRefunds.get(0)).contains("5000");
+    }
+
+    @Test
+    void settleTopupRejectsWhenScopeDiffersFromTopupBinding() {
+        // AUD-058：入账只认充值时绑定的卡范围——指名商户卡/跨项目/他人 customerId 均拒，资金不入错卡。
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-scope");
+        finance.markPaymentIntentSucceeded(intent.id());
+
+        // 通用卡充值被指名入商户卡 → 拒（结算口径错位）。
+        assertThatThrownBy(() -> service.settleTopup("c1", null, "m1", intent.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_SCOPE_MISMATCH"));
+        // 跨项目 → 拒。
+        assertThatThrownBy(() -> service.settleTopup("c1", "p9", null, intent.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_SCOPE_MISMATCH"));
+        // 他人 customerId → 意图不属于该充值。
+        repo.saveCustomer(new CustomerRecord("c2", "139", "139", "active", null, T0, T0, T0));
+        assertThatThrownBy(() -> service.settleTopup("c2", null, null, intent.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        // 与绑定一致 → 照常入账。
+        service.settleTopup("c1", null, null, intent.id());
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(5_000L);
+    }
+
+    @Test
+    void refundFailedAtGatewayThrowsSoTransactionRollsBack() {
+        // AUD-060：渠道明确 FAILED → 抛异常（生产 @Transactional 整单回滚：余额不扣、不写流水），不得记成功。
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        com.complex.platform.finance.gateway.PaymentGatewayRouter failing =
+                org.mockito.Mockito.mock(com.complex.platform.finance.gateway.PaymentGatewayRouter.class);
+        org.mockito.Mockito.when(failing.refund(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new com.complex.platform.finance.gateway.PaymentGatewayResult(
+                        com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED,
+                        "prov", null, "declined"));
+        StoredValueService service = new StoredValueService(repo, finance, audit(), failing,
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-gwfail");
+        finance.markPaymentIntentSucceeded(intent.id());
+        service.settleTopup("c1", null, null, intent.id());
+
+        assertThatThrownBy(() -> service.refund("c1", null, null, 5_000L, "r", true, "rf-fail"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_REFUND_FAILED"));
+        // FAILED 不登记 requested 待办（余额回滚由生产事务保证，内存 repo 不模拟回滚故不断言余额）。
+        assertThat(finance.payoutRefunds).isEmpty();
     }
 
     @Test
@@ -135,6 +186,7 @@ class MemberWalletServiceTests {
         PaymentIntentRecord p = service.topup("c1", null, null, 8_000L, "wechat", "tp-prj");
         finance.markPaymentIntentSucceeded(p.id());
         service.settleTopup("c1", null, null, p.id());
+        service.configureMerchantCard("m1", true, "merchant_prepaid");
         PaymentIntentRecord m = service.topup("c1", null, "m1", 3_000L, "wechat", "tp-m1");
         finance.markPaymentIntentSucceeded(m.id());
         service.settleTopup("c1", null, "m1", m.id());
@@ -159,6 +211,7 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(),
                 Clock.fixed(T0, ZoneOffset.UTC));
+        service.configureMerchantCard("m1", true, "platform_collect");
         PaymentIntentRecord m = service.topup("c1", null, "m1", 5_000L, "wechat", "tp-m1r");
         finance.markPaymentIntentSucceeded(m.id());
         service.settleTopup("c1", null, "m1", m.id());
@@ -229,64 +282,7 @@ class MemberWalletServiceTests {
     }
 
     // ============================================================
-    // 付费会员：开通→生效期、到期→expired、续费
-    // ============================================================
-
-    @Test
-    void subscribeActivatesWithinValidityAndExpiresAfter() {
-        InMemoryRepo repo = seeded();
-        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
-                "plan1", null, "gold", "金卡", 9_900L, 30,
-                Map.of("discount_bp", 9000), "active", T0, T0));
-        FakeFinance finance = new FakeFinance();
-        MembershipService service = new MembershipService(repo, finance, audit(),
-                Clock.fixed(T0, ZoneOffset.UTC));
-
-        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-1");
-        assertThat(intent.amountCent()).isEqualTo(9_900L);
-        // 未支付不生效
-        assertThatThrownBy(() -> service.activate("c1", "plan1", null, intent.id(), false))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PAYMENT_NOT_SUCCEEDED"));
-
-        finance.markPaymentIntentSucceeded(intent.id());
-        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), false);
-        assertThat(m.status()).isEqualTo("active");
-        assertThat(m.expireAt()).isEqualTo(T0.plusSeconds(days(30)));
-
-        // 生效期内权益可用
-        assertThat(service.activeBenefits("c1")).containsEntry("discount_bp", 9000);
-
-        // 到期作业（在 T0+31d）→ expired
-        MembershipService later = new MembershipService(repo, finance, audit(),
-                Clock.fixed(T0.plusSeconds(days(31)), ZoneOffset.UTC));
-        int expired = later.expireMemberships(T0.plusSeconds(days(31)));
-        assertThat(expired).isEqualTo(1);
-        assertThat(repo.memberships.get(m.id()).status()).isEqualTo("expired");
-        // 过期后权益不可用
-        assertThat(later.activeBenefits("c1")).isEmpty();
-    }
-
-    @Test
-    void renewExtendsExpiry() {
-        InMemoryRepo repo = seeded();
-        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
-                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
-        FakeFinance finance = new FakeFinance();
-        MembershipService service = new MembershipService(repo, finance, audit(),
-                Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-2");
-        finance.markPaymentIntentSucceeded(intent.id());
-        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
-
-        PaymentIntentRecord renewIntent = finance.create("membership_subscribe", "c1", 9_900L, "renew-1");
-        finance.markPaymentIntentSucceeded(renewIntent.id());
-        CustomerMembershipRecord renewed = service.renew(m.id(), renewIntent.id());
-        // 生效期内续费：在原 expire 基础上 +30d
-        assertThat(renewed.expireAt()).isEqualTo(T0.plusSeconds(days(60)));
-    }
-
-    // ============================================================
-    // 支付渠道开关（V093）：会员自动续费扣款 / 储值退款打款
+    // 支付渠道开关（V093）：储值退款打款
     // ============================================================
 
     private com.complex.platform.finance.gateway.PaymentGatewayRouter gatewayRouter(boolean enabled) {
@@ -301,44 +297,6 @@ class MemberWalletServiceTests {
                         com.complex.platform.finance.gateway.PaymentGatewayRouter.CAPABILITY,
                         "global", "global", enabled, "test", T0, T0)));
         return new com.complex.platform.finance.gateway.PaymentGatewayRouter(terminalRepo);
-    }
-
-    @Test
-    void autoRenewChargeWithGatewayOffIsReservedDoesNotChargeOrExtend() {
-        InMemoryRepo repo = seeded();
-        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
-                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
-        FakeFinance finance = new FakeFinance();
-        MembershipService service = new MembershipService(repo, finance, audit(),
-                gatewayRouter(false), Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-ar1");
-        finance.markPaymentIntentSucceeded(intent.id());
-        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
-
-        MembershipService.AutoRenewOutcome outcome = service.autoRenewCharge(m.id());
-        assertThat(outcome.charged()).isFalse();
-        assertThat(outcome.gatewayStatus()).isEqualTo("RESERVED");
-        // 未实际扣款 → 未续期（expire 不变）。
-        assertThat(repo.memberships.get(m.id()).expireAt()).isEqualTo(T0.plusSeconds(days(30)));
-    }
-
-    @Test
-    void autoRenewChargeWithGatewayOnRoutesToPortNotConfiguredNoCrash() {
-        InMemoryRepo repo = seeded();
-        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
-                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
-        FakeFinance finance = new FakeFinance();
-        MembershipService service = new MembershipService(repo, finance, audit(),
-                gatewayRouter(true), Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-ar2");
-        finance.markPaymentIntentSucceeded(intent.id());
-        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
-
-        MembershipService.AutoRenewOutcome outcome = service.autoRenewCharge(m.id());
-        // 占位 NOT_CONFIGURED：不实际扣款、不续期、不崩。
-        assertThat(outcome.charged()).isFalse();
-        assertThat(outcome.gatewayStatus()).isEqualTo("NOT_CONFIGURED");
-        assertThat(repo.memberships.get(m.id()).expireAt()).isEqualTo(T0.plusSeconds(days(30)));
     }
 
     @Test
@@ -396,6 +354,101 @@ class MemberWalletServiceTests {
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(5_000L);
     }
 
+    // ============================================================
+    // AUD-058/059/060/061：发卡资格 / 资金模式定格 / 代收应付 / 预收退卡
+    // ============================================================
+
+    @Test
+    void merchantCardTopupRejectedWithoutIssuanceThenAllowedAfterPlatformEnables() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        assertThatThrownBy(() -> service.topup("c1", null, "mX", 5_000L, "wechat", "tp-noissue"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("STORED_VALUE_CARD_ISSUANCE_DISABLED"));
+        // 通用卡不受发卡资格约束。
+        service.topup("c1", null, null, 1_000L, "wechat", "tp-prjok");
+        // 平台开通发卡资格后 → 商户卡可充。
+        service.configureMerchantCard("mX", true, "merchant_prepaid");
+        PaymentIntentRecord m = service.topup("c1", null, "mX", 5_000L, "wechat", "tp-issued");
+        finance.markPaymentIntentSucceeded(m.id());
+        service.settleTopup("c1", null, "mX", m.id());
+        assertThat(repo.storedValue.get("c1|null|mX").balanceCent()).isEqualTo(5_000L);
+    }
+
+    @Test
+    void fundModeFrozenAtOpenAndPlatformOnly() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService platform = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        platform.configureMerchantCard("mX", true, "platform_collect");
+        PaymentIntentRecord m = platform.topup("c1", null, "mX", 5_000L, "wechat", "tp-frz");
+        finance.markPaymentIntentSucceeded(m.id());
+        platform.settleTopup("c1", null, "mX", m.id());
+        assertThat(repo.storedValue.get("c1|null|mX").fundOwnership()).isEqualTo("platform_collect");
+        // 后台改为商户预收 → 已发卡不变（仍 platform_collect）。
+        platform.configureMerchantCard("mX", true, "merchant_prepaid");
+        assertThat(repo.storedValue.get("c1|null|mX").fundOwnership()).isEqualTo("platform_collect");
+
+        // 仅平台可改：商户 scope 调用方改资金模式 → 拒（requirePlatformScope 抛 PLATFORM_SCOPE_REQUIRED）。
+        com.complex.platform.access.AuthorizationService merchantAuth =
+                org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
+        org.mockito.Mockito.doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "x"))
+                .when(merchantAuth).requirePlatformScope();
+        StoredValueService merchantSvc = new StoredValueService(repo, finance, audit(),
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), merchantAuth,
+                Clock.fixed(T0, ZoneOffset.UTC));
+        assertThatThrownBy(() -> merchantSvc.configureMerchantCard("mX", true, "platform_collect"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+    }
+
+    @Test
+    void platformCollectConsumeGeneratesMerchantPayableAndPrepaidDoesNot() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        service.configureMerchantCard("mPC", true, "platform_collect");
+        PaymentIntentRecord m = service.topup("c1", null, "mPC", 5_000L, "wechat", "tp-pc");
+        finance.markPaymentIntentSucceeded(m.id());
+        service.settleTopup("c1", null, "mPC", m.id());
+        CustomerStoredValueTransactionRecord consumed = service.consume("c1", null, "mPC", 2_000L, "buy", "cs-pc");
+        assertThat(finance.merchantPayables).containsExactly("mPC|" + consumed.id() + "|2000");
+
+        service.configureMerchantCard("mPP", true, "merchant_prepaid");
+        PaymentIntentRecord m2 = service.topup("c1", null, "mPP", 5_000L, "wechat", "tp-pp");
+        finance.markPaymentIntentSucceeded(m2.id());
+        service.settleTopup("c1", null, "mPP", m2.id());
+        service.consume("c1", null, "mPP", 1_000L, "buy", "cs-pp");
+        assertThat(finance.merchantPayables).hasSize(1);
+    }
+
+    @Test
+    void merchantPrepaidCardRefundRejectedOnlineWhilePlatformCollectAllowed() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        service.configureMerchantCard("mPP", true, "merchant_prepaid");
+        PaymentIntentRecord m = service.topup("c1", null, "mPP", 5_000L, "wechat", "tp-refuse");
+        finance.markPaymentIntentSucceeded(m.id());
+        service.settleTopup("c1", null, "mPP", m.id());
+        assertThatThrownBy(() -> service.refund("c1", null, "mPP", 1_000L, "r", false, "rf-prepaid"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("STORED_VALUE_MERCHANT_PREPAID_REFUND_IN_STORE"));
+        assertThat(repo.storedValue.get("c1|null|mPP").balanceCent()).isEqualTo(5_000L);
+
+        service.configureMerchantCard("mPC", true, "platform_collect");
+        PaymentIntentRecord m2 = service.topup("c1", null, "mPC", 5_000L, "wechat", "tp-pcref");
+        finance.markPaymentIntentSucceeded(m2.id());
+        service.settleTopup("c1", null, "mPC", m2.id());
+        service.refund("c1", null, "mPC", 5_000L, "refund", true, "rf-pc");
+        assertThat(repo.storedValue.get("c1|null|mPC").balanceCent()).isZero();
+    }
+
     // 积分转赠用例已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
     // InMemoryRepo 仍保留转赠 repo 桩方法以实现 CustomerRepository 接口（转赠 repo 方法留孤儿）。
 
@@ -449,6 +502,27 @@ class MemberWalletServiceTests {
             intents.put(id, s);
             return s;
         }
+
+        // AUD-060 储值退款未兑付登记退款待办：记录调用供断言（真实实现落 finance_refunds requested）。
+        final List<String> payoutRefunds = new ArrayList<>();
+
+        @Override
+        public String recordStoredValuePayoutRefund(String accountId, long payoutCent, String reason,
+                                                    String channel, String idempotencyKey) {
+            String id = "refund_sv_" + idempotencyKey;
+            payoutRefunds.add(id + "|" + accountId + "|" + payoutCent + "|" + channel);
+            return id;
+        }
+
+        // AUD-059 平台代收商户卡消费逐笔应付：记录调用供断言。
+        final List<String> merchantPayables = new ArrayList<>();
+
+        @Override
+        public com.complex.platform.finance.ArApItemRecord recordStoredValueMerchantPayable(
+                String merchantId, String consumeTxnId, long amountCent, String idempotencyKey) {
+            merchantPayables.add(merchantId + "|" + consumeTxnId + "|" + amountCent);
+            return null;
+        }
     }
 
     /** 复用 V090 相关方法的内存 repo（只实现本测试用到的方法）。 */
@@ -458,8 +532,6 @@ class MemberWalletServiceTests {
         final List<CustomerPointsLedgerRecord> pointsLedger = new ArrayList<>();
         final Map<String, CustomerStoredValueAccountRecord> storedValue = new java.util.LinkedHashMap<>();
         final List<CustomerStoredValueTransactionRecord> storedValueTxns = new ArrayList<>();
-        final Map<String, CustomerMembershipPlanRecord> plans = new java.util.LinkedHashMap<>();
-        final Map<String, CustomerMembershipRecord> memberships = new java.util.LinkedHashMap<>();
 
         @Override public Optional<CustomerRecord> findCustomerByPhone(String phone) {
             return customers.values().stream().filter(c -> phone.equals(c.phone())).findFirst();
@@ -470,6 +542,7 @@ class MemberWalletServiceTests {
         @Override public CustomerRecord saveCustomer(CustomerRecord c) { customers.put(c.id(), c); return c; }
         @Override public CustomerSessionRecord saveSession(CustomerSessionRecord s) { return s; }
         @Override public Optional<CustomerSessionRecord> findSessionByToken(String t) { return Optional.empty(); }
+        @Override public int revokeSessionByToken(String t) { return 0; }
         @Override public CustomerConsentRecord saveConsent(CustomerConsentRecord c) { return c; }
         @Override public Optional<CustomerPointsAccountRecord> findPointsByCustomerId(String id) {
             return Optional.ofNullable(points.get(id));
@@ -530,35 +603,24 @@ class MemberWalletServiceTests {
         @Override public boolean storedValueTransactionExistsForPaymentIntent(String pi) {
             return storedValueTxns.stream().anyMatch(t -> "topup".equals(t.txnType()) && pi.equals(t.paymentIntentId()));
         }
+        // AUD-058 充值支付意图 ↔ 卡范围绑定
+        final Map<String, StoredValueTopupIntentScope> topupIntents = new java.util.LinkedHashMap<>();
+        @Override public int bindStoredValueTopupIntent(String pi, String cid, String pjid, String mid, Instant at) {
+            StoredValueTopupIntentScope existing = topupIntents.get(pi);
+            if (existing != null
+                    && (!java.util.Objects.equals(existing.customerId(), cid)
+                        || !java.util.Objects.equals(existing.projectId(), pjid)
+                        || !java.util.Objects.equals(existing.merchantId(), mid))) {
+                return 0; // AUD 复核 P1-1②：同一支付意图已绑不同卡范围 → 冲突
+            }
+            topupIntents.put(pi, new StoredValueTopupIntentScope(pi, cid, pjid, mid));
+            return 1;
+        }
+        @Override public Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String pi) {
+            return Optional.ofNullable(topupIntents.get(pi));
+        }
         @Override public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accId) {
             return storedValueTxns.stream().filter(t -> accId.equals(t.accountId())).toList();
-        }
-
-        // V090 membership
-        @Override public CustomerMembershipPlanRecord saveMembershipPlan(CustomerMembershipPlanRecord p) {
-            plans.put(p.id(), p); return p;
-        }
-        @Override public Optional<CustomerMembershipPlanRecord> findMembershipPlanById(String id) {
-            return Optional.ofNullable(plans.get(id));
-        }
-        @Override public List<CustomerMembershipPlanRecord> listMembershipPlans(String pid) {
-            return plans.values().stream().filter(p -> "active".equals(p.status())).toList();
-        }
-        @Override public CustomerMembershipRecord saveMembership(CustomerMembershipRecord m) {
-            memberships.put(m.id(), m); return m;
-        }
-        @Override public Optional<CustomerMembershipRecord> findMembershipByIdForUpdate(String id) {
-            return Optional.ofNullable(memberships.get(id));
-        }
-        @Override public Optional<CustomerMembershipRecord> findMembershipByIdempotencyKey(String k) {
-            return memberships.values().stream().filter(m -> k != null && k.equals(m.idempotencyKey())).findFirst();
-        }
-        @Override public List<CustomerMembershipRecord> listMembershipsByCustomerId(String cid) {
-            return memberships.values().stream().filter(m -> cid.equals(m.customerId())).toList();
-        }
-        @Override public List<CustomerMembershipRecord> listActiveMembershipsExpiringBefore(Instant now) {
-            return memberships.values().stream()
-                    .filter(m -> "active".equals(m.status()) && !m.expireAt().isAfter(now)).toList();
         }
 
     }

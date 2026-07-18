@@ -38,7 +38,37 @@ public class TicketingService {
     private final TicketingOperationExecutor operations;
     // P1 越权修复：核销/权益列表按调用者商户范围过滤（记录含 merchant_id）。可为 null=兼容既有测试构造（不过滤）。
     private final AuthorizationService authorizationService;
+    // AUD-077 转赠链(可空=既有单元测试双子用 InMemory repo,不走转赠;生产由 @Autowired 主构造注入)。
+    private final TicketTransferService transferService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    public TicketingService(
+            TicketingRepository repository,
+            TicketCatalogService catalogService,
+            TicketPricingService pricingService,
+            TicketOrderService orderService,
+            TicketRefundService refundService,
+            TicketVerificationService verificationService,
+            TicketCredentialService credentialService,
+            TicketOfflinePackageService offlinePackageService,
+            TicketingOperationExecutor operations,
+            AuthorizationService authorizationService,
+            TicketTransferService transferService
+    ) {
+        this.repository = repository;
+        this.catalogService = catalogService;
+        this.pricingService = pricingService;
+        this.orderService = orderService;
+        this.refundService = refundService;
+        this.verificationService = verificationService;
+        this.credentialService = credentialService;
+        this.offlinePackageService = offlinePackageService;
+        this.operations = operations;
+        this.authorizationService = authorizationService;
+        this.transferService = transferService;
+    }
+
+    // 兼容既有单元测试(InMemory repo,不需要转赠链)。
     public TicketingService(
             TicketingRepository repository,
             TicketCatalogService catalogService,
@@ -51,16 +81,8 @@ public class TicketingService {
             TicketingOperationExecutor operations,
             AuthorizationService authorizationService
     ) {
-        this.repository = repository;
-        this.catalogService = catalogService;
-        this.pricingService = pricingService;
-        this.orderService = orderService;
-        this.refundService = refundService;
-        this.verificationService = verificationService;
-        this.credentialService = credentialService;
-        this.offlinePackageService = offlinePackageService;
-        this.operations = operations;
-        this.authorizationService = authorizationService;
+        this(repository, catalogService, pricingService, orderService, refundService, verificationService,
+                credentialService, offlinePackageService, operations, authorizationService, null);
     }
 
     /**
@@ -505,6 +527,18 @@ public class TicketingService {
      */
     public int processExpiredPaidEntitlements(java.time.Instant now) {
         List<IssuedEntitlementRecord> expired = repository.listExpiredUnusedActiveEntitlements(now);
+        // AUD-077 票到期先终止在途转赠(pending→voided,解冻退回原持票人),再走既有到期退款/作废规则。
+        if (transferService != null) {
+            java.util.Set<String> expiringParents = new java.util.LinkedHashSet<>();
+            for (IssuedEntitlementRecord e : expired) {
+                if (e.parentTicketId() != null) {
+                    expiringParents.add(e.parentTicketId());
+                }
+            }
+            for (String parentId : expiringParents) {
+                transferService.voidPendingTransfersForParent(parentId, "ticket_expired", now);
+            }
+        }
         java.util.Map<String, java.util.List<IssuedEntitlementRecord>> byOrder = new java.util.LinkedHashMap<>();
         int processed = 0;
         for (IssuedEntitlementRecord e : expired) {
@@ -516,21 +550,36 @@ public class TicketingService {
         }
         for (var entry : byOrder.entrySet()) {
             String orderId = entry.getKey();
-            // F-TXN-03 按票实例（2026-06-29 裁决）：到期未核销票逐张原渠道自动退款，**不再因同单有核销而连坐作废**；
+            java.util.List<IssuedEntitlementRecord> expiredUnused = entry.getValue();
             // 已有退款在途/完成则交由退款链、跳过。
             TicketOrderRecord order = repository.findTicketOrderById(orderId).orElse(null);
             if (order != null && (repository.sumApprovedRefundAmountByOrderId(orderId) > 0
                     || repository.sumPendingRefundAmountByOrderId(orderId) > 0)) {
                 continue;
             }
-            TicketRefundRecord refund = refundService.autoRefundExpiredUnusedTickets(order, entry.getValue(), now);
-            if (refund != null) {
-                processed += entry.getValue().size();
-            } else {
-                // 0 元 / 非 paid 无可退 → 作废到期未用权益，避免反复扫描。
-                for (IssuedEntitlementRecord e : entry.getValue()) {
+            // 规则2 可退配置：票种默认不可退 → 到期直接作废不退（客人到期无退款）。
+            TicketTypeRecord ticketType = order == null
+                    ? null : repository.findTicketTypeById(order.ticketTypeId()).orElse(null);
+            boolean refundable = ticketType != null && ticketType.refundable();
+            if (!refundable) {
+                for (IssuedEntitlementRecord e : expiredUnused) {
                     processed += repository.forfeitEntitlement(e.id(), now);
                 }
+                continue;
+            }
+            // 可退票整票口径（方案2）：完全未核销的父票实例整张自动退；部分使用实例的到期未核销权益 → 作废不退。
+            TicketRefundRecord refund = refundService.autoRefundExpiredWholeTickets(order, now);
+            java.util.Set<String> refundedEntIds = refund == null ? java.util.Set.of()
+                    : repository.listTicketRefundLines(refund.id()).stream()
+                            .map(TicketRefundLineRecord::entitlementId)
+                            .filter(java.util.Objects::nonNull)
+                            .collect(java.util.stream.Collectors.toSet());
+            for (IssuedEntitlementRecord e : expiredUnused) {
+                if (refundedEntIds.contains(e.id())) {
+                    processed += 1; // 已随整票退款冻结，计入处理数。
+                    continue;
+                }
+                processed += repository.forfeitEntitlement(e.id(), now); // 部分使用实例的剩余到期票 → 作废不退。
             }
         }
         return processed;
@@ -564,10 +613,36 @@ public class TicketingService {
         );
     }
 
+    /** AUD-076 展示层实时解析酒吧名（供客人端商品/订单/我的票展示；ID 快照、名字实时 join）。 */
+    public String resolveBarName(String barId) {
+        return catalogService.resolveBarName(barId);
+    }
+
+    /**
+     * AUD-076 酒吧撤场提前到期：把该酒吧单店票已售权益 valid_to 提前到截止营业时刻（effectiveAt），
+     * 由 processExpiredPaidEntitlements 走方案2到期规则处置（可退未用自动退/不可退作废）。返回受影响权益数。
+     * 由 PlatformService.archiveMerchant（撤场=商户存档）在被存档商户为酒吧时调用。
+     */
+    @Transactional
+    public int expireBarSingleStoreTickets(String barId, java.time.Instant effectiveAt) {
+        if (barId == null || barId.isBlank()) {
+            return 0;
+        }
+        return repository.expireBarEntitlements(barId, effectiveAt, java.time.Instant.now());
+    }
+
     public PageResponse<IssuedEntitlementRecord> listIssuedEntitlements() {
         return operations.readPage(
                 TicketingReadOperation.LIST_ISSUED_ENTITLEMENTS,
                 () -> filterByMerchantScope(repository.listIssuedEntitlements(), IssuedEntitlementRecord::merchantId)
+        );
+    }
+
+    // AUD-066 父票实例查询（后台核销台账/退款审阅锚点）：沿 ticket.verify.view 权限、project scope。
+    public PageResponse<TicketInstanceRecord> listTicketInstances() {
+        return operations.readPage(
+                TicketingReadOperation.LIST_TICKET_INSTANCES,
+                repository::listTicketInstances
         );
     }
 
@@ -594,8 +669,12 @@ public class TicketingService {
         }
         String ticketName = repository.findTicketTypeById(order.ticketTypeId())
                 .map(TicketTypeRecord::ticketName).orElse(null);
+        // AUD-066：父票号供"我的票"按父票聚合展示（parent_ticket_id -> ticket_no）。
+        java.util.Map<String, String> ticketNoByParent = repository.listTicketInstancesByOrderId(resolvedOrderId).stream()
+                .collect(java.util.stream.Collectors.toMap(TicketInstanceRecord::id, TicketInstanceRecord::ticketNo, (a, b) -> a));
         return repository.listIssuedEntitlementsByOrderId(resolvedOrderId).stream()
-                .map(entitlement -> CustomerTicketResponse.of(entitlement, ticketName))
+                .map(entitlement -> CustomerTicketResponse.of(entitlement, ticketName,
+                        entitlement.parentTicketId() == null ? null : ticketNoByParent.get(entitlement.parentTicketId())))
                 .toList();
     }
 
@@ -607,6 +686,55 @@ public class TicketingService {
     @Transactional
     public TicketCredentialResponse getCustomerTicketCredential(String ticketId, String customerId) {
         return credentialService.getCustomerTicketCredential(ticketId, customerId);
+    }
+
+    // ── AUD-077 门票转赠(客人端经 CustomerService 委派;鉴权=客人 token,已在 CustomerService 过账号闸) ──
+    public TicketTransferResponse initiateTicketTransfer(String customerId, String customerPhone,
+            com.complex.platform.customer.dto.CustomerTicketTransferRequest request) {
+        return transferService.initiate(customerId, customerPhone, request);
+    }
+
+    public TicketTransferResponse claimTicketTransfer(String customerId, String customerPhone, String transferId, String claimCode) {
+        return transferService.claim(customerId, customerPhone, transferId, claimCode);
+    }
+
+    public TicketTransferResponse revokeTicketTransfer(String customerId, String transferId) {
+        return transferService.revoke(customerId, transferId);
+    }
+
+    public TicketTransferPreviewResponse previewTicketTransfer(String claimCode) {
+        return transferService.preview(claimCode);
+    }
+
+    public List<TicketTransferResponse> listIncomingTicketTransfers(String customerPhone) {
+        return transferService.listIncoming(customerPhone);
+    }
+
+    public List<TicketTransferResponse> listOutgoingTicketTransfers(String customerId) {
+        return transferService.listOutgoing(customerId);
+    }
+
+    /** AUD-077 我的票(持有人视角):holder=me 的全部 slot(自购未转+受赠),含转赠中("transferring")标记。 */
+    public List<CustomerTicketResponse> listCustomerHeldTickets(String customerId) {
+        String me = operations.requireText(customerId, "customer_id");
+        List<CustomerTicketResponse> out = new java.util.ArrayList<>();
+        for (TicketSlotHolderRecord holder : repository.listSlotHoldersByHolder(me)) {
+            TicketInstanceRecord parent = repository.findTicketInstanceById(holder.parentTicketId()).orElse(null);
+            String ticketNo = parent == null ? null : parent.ticketNo();
+            String ticketName = parent == null ? null : repository.findTicketTypeById(parent.ticketTypeId())
+                    .map(TicketTypeRecord::ticketName).orElse(null);
+            String transferState = repository.existsPendingTransferForSlot(holder.parentTicketId(), holder.slotIndex())
+                    ? "transferring" : null;
+            for (IssuedEntitlementRecord e : repository.listIssuedEntitlementsByParentSlot(holder.parentTicketId(), holder.slotIndex())) {
+                out.add(CustomerTicketResponse.ofWithTransfer(e, ticketName, ticketNo, transferState));
+            }
+        }
+        return out;
+    }
+
+    /** AUD-077 后台客服只读转赠记录(纠纷排查,首期只读不撤回)。权限 ticket.transfer.read。 */
+    public PageResponse<TicketTransferResponse> listTicketTransfers() {
+        return operations.readPage(TicketingReadOperation.LIST_TICKET_TRANSFERS, transferService::listAllForAdmin);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.request")
@@ -633,6 +761,20 @@ public class TicketingService {
                 TicketRefundRecord.class,
                 TicketingWriteOperation.APPROVE_TICKET_REFUND,
                 () -> refundService.approveRefund(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.approve", admissionAction = "ticketing.refund_reject", objectType = "ticket_refund")
+    @Transactional
+    public TicketRefundRecord rejectTicketRefund(String refundId, StatusChangeRequest request) {
+        String id = operations.requireText(refundId, "refund_id");
+        return operations.executeWrite(
+                "rejectTicketRefund:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketRefundRecord.class,
+                TicketingWriteOperation.REJECT_TICKET_REFUND,
+                () -> refundService.rejectRefund(id, request)
         );
     }
 

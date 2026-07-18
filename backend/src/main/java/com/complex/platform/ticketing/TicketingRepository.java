@@ -54,6 +54,49 @@ public interface TicketingRepository {
 
     Optional<IssuedEntitlementRecord> findIssuedEntitlementByCode(String entitlementCode);
 
+    // AUD-066 父票实例：default 兼容既有假实现（不落父票，无父票的核销守卫自然跳过）；Jdbc+InMemory 双写覆盖。
+    default TicketInstanceRecord saveTicketInstance(TicketInstanceRecord instance) {
+        return instance;
+    }
+
+    default Optional<TicketInstanceRecord> findTicketInstanceById(String id) {
+        return Optional.empty();
+    }
+
+    default List<TicketInstanceRecord> listTicketInstances() {
+        return java.util.List.of();
+    }
+
+    default List<TicketInstanceRecord> listTicketInstancesByOrderId(String orderId) {
+        return java.util.List.of();
+    }
+
+    /** AUD-066 + AUD 复核 P2-6：原子抢占父票首场次键（写一次）。命中 0 行=已被别的场次抢占→调用方回滚消费。
+     *  default 视为放行（返回 1）：无库支撑的测试替身不做场次约束。 */
+    default int markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+        return 1;
+    }
+
+    /** 方案2 申请即冻结：父票 active→refund_pending（CAS，返回命中行数）。default 返回 0（无父票=不放行整票退）。 */
+    default int markTicketInstanceRefundPending(String id, java.time.Instant now) {
+        return 0;
+    }
+
+    /** 方案2 生效：父票 refund_pending→refunded（CAS）。default 返回 0。 */
+    default int markTicketInstanceRefunded(String id, java.time.Instant now) {
+        return 0;
+    }
+
+    /** 方案2 驳回：父票 refund_pending→active 解冻（CAS）。default 返回 0。 */
+    default int restoreTicketInstanceActive(String id, java.time.Instant now) {
+        return 0;
+    }
+
+    /** 方案2 复核驳回：退款单 requested→rejected（CAS，返回命中行数）。default 返回 0。 */
+    default int markTicketRefundRejected(String refundId, String rejectedBy, java.time.Instant rejectedAt) {
+        return 0;
+    }
+
     /**
      * 结算重构批3-1(PRD §6.1)：按 bar_products.id 取实物权益的酒吧内部结算价(V152 internal_settlement_price_cent)。
      * 无此商品或内部价为空 → 空(判定层回退 value_amount)。default 返回空兼容既有测试假实现。
@@ -220,6 +263,14 @@ public interface TicketingRepository {
         return 0;
     }
 
+    /**
+     * AUD-076 撤场提前到期：把归属该酒吧（bar_id）的在效权益 valid_to 提前到截止营业时刻（只提前不延长），
+     * 由 processExpiredPaidEntitlements 走方案2到期规则处置。返回受影响行数。default 返回 0 兼容既有测试双子。
+     */
+    default int expireBarEntitlements(String barId, java.time.Instant validTo, java.time.Instant now) {
+        return 0;
+    }
+
     List<IssuedEntitlementRecord> listIssuedEntitlements();
 
     List<IssuedEntitlementRecord> listIssuedEntitlementsByOrderId(String orderId);
@@ -259,4 +310,24 @@ public interface TicketingRepository {
 
     /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
     void setPriceRuleArchiveReason(String id, String reason);
+
+    // AUD-077 门票转赠 / slot 持有人 (default 空兼容测试双子; JdbcTicketingRepository 实现真 SQL)
+    default TicketSlotHolderRecord upsertSlotHolder(String parentTicketId, int slotIndex, String holderCustomerId, java.time.Instant now) {
+        return new TicketSlotHolderRecord(parentTicketId, slotIndex, holderCustomerId, now, now);
+    }
+    default Optional<TicketSlotHolderRecord> findSlotHolder(String parentTicketId, int slotIndex) { return Optional.empty(); }
+    default List<TicketSlotHolderRecord> listSlotHoldersByHolder(String holderCustomerId) { return List.of(); }
+    default int updateTicketInstanceHolder(String id, String holderCustomerId, java.time.Instant now) { return 0; }
+    default List<IssuedEntitlementRecord> listIssuedEntitlementsByParentSlot(String parentTicketId, int slotIndex) { return List.of(); }
+    default TicketTransferRecord saveTicketTransfer(TicketTransferRecord record) { return record; }
+    default Optional<TicketTransferRecord> findTicketTransferById(String id) { return Optional.empty(); }
+    default Optional<TicketTransferRecord> findTicketTransferByClaimCode(String claimCode) { return Optional.empty(); }
+    default int claimTicketTransfer(String id, String receiverCustomerId, java.time.Instant now) { return 0; }
+    default int revokeTicketTransfer(String id, String initiatorCustomerId, java.time.Instant now) { return 0; }
+    default int voidPendingTransfersForParent(String parentTicketId, String reason, java.time.Instant now) { return 0; }
+    default boolean existsPendingTransferForSlot(String parentTicketId, int slotIndex) { return false; }
+    default boolean existsPendingTransferForParent(String parentTicketId) { return false; }
+    default List<TicketTransferRecord> listPendingTransfersByReceiverPhoneHash(String receiverPhoneHash) { return List.of(); }
+    default List<TicketTransferRecord> listTicketTransfersByInitiator(String initiatorCustomerId) { return List.of(); }
+    default List<TicketTransferRecord> listTicketTransfers() { return List.of(); }
 }

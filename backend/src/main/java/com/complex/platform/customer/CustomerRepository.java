@@ -18,6 +18,9 @@ public interface CustomerRepository {
 
     Optional<CustomerSessionRecord> findSessionByToken(String token);
 
+    /** AUD-030：按 token 撤销会话（活动会话置 logged_out），登出后 token 立即失效。返回受影响行数（幂等：0=无匹配活动会话）。 */
+    int revokeSessionByToken(String token);
+
     CustomerConsentRecord saveConsent(CustomerConsentRecord consent);
 
     Optional<CustomerPointsAccountRecord> findPointsByCustomerId(String customerId);
@@ -194,6 +197,11 @@ public interface CustomerRepository {
         return merchantId == null ? findStoredValueAccountForUpdate(customerId, projectId) : Optional.empty();
     }
 
+    /** 客人端「我的全部卡」：列该客人所有储值账户（通用卡 + 各商户卡），供分卡余额展示。 */
+    default List<CustomerStoredValueAccountRecord> listStoredValueAccountsByCustomer(String customerId) {
+        return List.of();
+    }
+
     default CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         throw new UnsupportedOperationException("saveStoredValueAccount not supported by this repository");
     }
@@ -221,41 +229,17 @@ public interface CustomerRepository {
         return false;
     }
 
+    // AUD-058 充值支付意图 ↔ 卡范围绑定：topup 落绑定行，settleTopup 只认绑定的 (customer, project, merchant) 入账。
+    default int bindStoredValueTopupIntent(String paymentIntentId, String customerId, String projectId,
+                                           String merchantId, Instant createdAt) {
+        throw new UnsupportedOperationException("bindStoredValueTopupIntent not supported by this repository");
+    }
+
+    default Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String paymentIntentId) {
+        return Optional.empty();
+    }
+
     default List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accountId) {
-        return List.of();
-    }
-
-    // 付费会员档位 / 订阅
-    default CustomerMembershipPlanRecord saveMembershipPlan(CustomerMembershipPlanRecord plan) {
-        throw new UnsupportedOperationException("saveMembershipPlan not supported by this repository");
-    }
-
-    default Optional<CustomerMembershipPlanRecord> findMembershipPlanById(String planId) {
-        return Optional.empty();
-    }
-
-    default List<CustomerMembershipPlanRecord> listMembershipPlans(String projectId) {
-        return List.of();
-    }
-
-    default CustomerMembershipRecord saveMembership(CustomerMembershipRecord membership) {
-        throw new UnsupportedOperationException("saveMembership not supported by this repository");
-    }
-
-    default Optional<CustomerMembershipRecord> findMembershipByIdForUpdate(String membershipId) {
-        return Optional.empty();
-    }
-
-    default Optional<CustomerMembershipRecord> findMembershipByIdempotencyKey(String key) {
-        return Optional.empty();
-    }
-
-    default List<CustomerMembershipRecord> listMembershipsByCustomerId(String customerId) {
-        return List.of();
-    }
-
-    /** 列出已到期但仍 active 的订阅（到期作业用）。 */
-    default List<CustomerMembershipRecord> listActiveMembershipsExpiringBefore(Instant now) {
         return List.of();
     }
 

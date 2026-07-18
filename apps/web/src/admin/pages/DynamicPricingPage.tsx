@@ -306,7 +306,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
                 <tr key={rule.id} className="admin-row-clickable" tabIndex={0} data-testid={`dynamic-pricing-row-${rule.id}`}
                   onClick={() => openRuleDetail(rule)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRuleDetail(rule); } }}>
-                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`dynamic-pricing-select-${rule.id}`} checked={(selectedRule?.id ?? "") === rule.id} onChange={() => setSelectedRuleId(rule.id)} /></td>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此定价规则 ${rule.id}`} data-testid={`dynamic-pricing-select-${rule.id}`} checked={(selectedRule?.id ?? "") === rule.id} onChange={() => setSelectedRuleId(rule.id)} /></td>
                   <td>{rule.ruleName ?? rule.id}</td>
                   <td>{formatBusinessStatus(rule.salesChannel)}</td>
                   <td>{rule.priority ?? "-"}</td>

@@ -32,7 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
         "complex.auth.failed-login.max-attempts=3",
         "complex.auth.failed-login.lock-duration=PT15M",
         "ticket.credential.signing.secret=prod-test-ticket-signing-secret-32-bytes-minimum",
-        "bar.invitation.signing.secret=prod-test-bar-invitation-signing-secret-32-bytes-minimum"
+        "bar.invitation.signing.secret=prod-test-bar-invitation-signing-secret-32-bytes-minimum",
+        "compliance.wecom.webhook.signing.secret=prod-test-wecom-webhook-signing-secret-32-bytes-minimum"
 })
 @Transactional
 class ProductionAuthJdbcIntegrationTests {

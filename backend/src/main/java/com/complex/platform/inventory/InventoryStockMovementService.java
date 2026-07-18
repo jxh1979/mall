@@ -16,8 +16,6 @@ import java.util.function.Supplier;
 
 final class InventoryStockMovementService {
 
-    private static final int DEFAULT_PAGE = 1;
-    private static final int DEFAULT_PAGE_SIZE = 50;
 
     // P1-4: adjustmentType 白名单，防止任意字符串触发扣减
     private static final Set<String> ALLOWED_ADJUSTMENT_TYPES =
@@ -241,7 +239,7 @@ final class InventoryStockMovementService {
         );
     }
 
-    PageResponse<StockMovementRecord> listStockMovements() {
+    PageResponse<StockMovementRecord> listStockMovements(int page, int size) {
         return readPage(
                 "inventory.stock_movement.viewed",
                 "inventory.stock_movement.view_failed",
@@ -249,13 +247,12 @@ final class InventoryStockMovementService {
                 "inventory_stock_movement",
                 () -> {
                     // C2: merchant staff -> merchant; project staff (no merchant) -> project; platform admin -> all.
-                    java.util.Optional<String> scope = authorizationService.currentMerchantScope();
-                    if (scope.isPresent()) {
-                        return repository.listStockMovementsByMerchant(scope.get());
-                    }
-                    return authorizationService.currentProjectScopeQuietly()
-                            .map(repository::listStockMovementsByProject)
-                            .orElseGet(repository::listStockMovements);
+                    // AUD-013: 真分页在 SQL 层, 租户谓词经 nullable merchantId/projectId 下推。
+                    java.util.Optional<String> merchantScope = authorizationService.currentMerchantScope();
+                    String merchantId = merchantScope.orElse(null);
+                    String projectId = merchantId != null ? null
+                            : authorizationService.currentProjectScopeQuietly().orElse(null);
+                    return repository.listStockMovementsPaged(merchantId, projectId, page, size);
                 }
         );
     }
@@ -484,10 +481,10 @@ final class InventoryStockMovementService {
             String failureEvent,
             String permissionCode,
             String businessType,
-            Supplier<List<T>> supplier
+            Supplier<PageResponse<T>> supplier
     ) {
         try {
-            List<T> items = supplier.get();
+            PageResponse<T> page = supplier.get();
             auditEventService.recordSuccess(
                     successEvent,
                     permissionCode,
@@ -495,9 +492,9 @@ final class InventoryStockMovementService {
                     "all",
                     null,
                     null,
-                    Map.of("count", items.size())
+                    Map.of("count", page.total())
             );
-            return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
+            return page;
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     failureEvent,

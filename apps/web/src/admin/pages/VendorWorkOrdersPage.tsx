@@ -184,7 +184,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-work-order-row-${row.id}`}
               onClick={() => openWorkOrderDetail(row)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
-              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`vendor-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此工单 ${row.id}`} data-testid={`vendor-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
               <td>{row.code ?? row.id}</td>
               <td>{row.title ?? "-"}</td>
               <td>{formatBusinessStatus(row.workOrderType)}</td>

@@ -24,17 +24,24 @@ public class TicketOrderExpiryJob {
     private final TicketingService service;
     private final Clock clock;
     private final long timeoutMinutes;
+    private final boolean scheduledEnabled;
 
     @Autowired
     public TicketOrderExpiryJob(TicketingService service,
-                                @Value("${ticket.order.expiry.unpaid-timeout-minutes:30}") long timeoutMinutes) {
-        this(service, Clock.systemUTC(), timeoutMinutes);
+                                @Value("${ticket.order.expiry.unpaid-timeout-minutes:30}") long timeoutMinutes,
+                                @Value("${ticket.order.expiry.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(service, Clock.systemUTC(), timeoutMinutes, scheduledEnabled);
     }
 
     TicketOrderExpiryJob(TicketingService service, Clock clock, long timeoutMinutes) {
+        this(service, clock, timeoutMinutes, true);
+    }
+
+    TicketOrderExpiryJob(TicketingService service, Clock clock, long timeoutMinutes, boolean scheduledEnabled) {
         this.service = service;
         this.clock = clock;
         this.timeoutMinutes = timeoutMinutes;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     /**
@@ -45,6 +52,9 @@ public class TicketOrderExpiryJob {
     @ConditionalOnProperty(name = "ticket.order.expiry.scheduled.enabled", havingValue = "true")
     @Scheduled(fixedDelayString = "${ticket.order.expiry.scheduled.fixed-delay-ms:300000}")
     public void scheduledReleaseExpired() {
+        if (!scheduledEnabled) {
+            return;
+        }
         service.cancelExpiredUnpaidTicketOrders(Instant.now(clock).minus(Duration.ofMinutes(timeoutMinutes)));
         service.processExpiredPaidEntitlements(Instant.now(clock));
     }

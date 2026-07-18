@@ -4,6 +4,8 @@
 import { CustomerApi } from "./customerClient";
 import type {
   CustomerTicket,
+  TicketTransfer,
+  TicketTransferPreview,
   BarInvitation,
   BarInvitationMember,
   BarReservation,
@@ -11,12 +13,12 @@ import type {
   BarScanMenuItem,
   BarScanOrder,
   CheckInRecord,
-  Membership,
   PaymentIntent,
   PointsRedemption,
   PointsSummary,
   RedemptionItem,
   StoredValueAccount,
+  StoredValueTransaction,
   TicketCredential,
   TicketOrder,
   TicketProduct,
@@ -29,9 +31,10 @@ export class CustomerService {
     this.api = new CustomerApi(customerToken);
   }
 
-  // ① 票种浏览
-  listTicketProducts(): Promise<TicketProduct[]> {
-    return this.api.get<TicketProduct[]>("/api/v1/customer/ticket-products");
+  // ① 票种浏览（AUD-076：barId 传入=专属入口锁定该酒吧；不传=公共入口全量）。
+  listTicketProducts(barId?: string): Promise<TicketProduct[]> {
+    const query = barId ? `?bar_id=${encodeURIComponent(barId)}` : "";
+    return this.api.get<TicketProduct[]>(`/api/v1/customer/ticket-products${query}`);
   }
 
   // ② 官方购票下单
@@ -41,6 +44,8 @@ export class CustomerService {
     visitDate?: string;
     contactPhone?: string;
     buyerNote?: string;
+    // AUD-076 单店票挂酒吧：单店票必填该票所属酒吧 id（通票不传）；请求体自动 snake_case 为 bar_id。
+    barId?: string;
   }): Promise<TicketOrder> {
     return this.api.post<TicketOrder>("/api/v1/customer/ticket-orders", payload);
   }
@@ -119,8 +124,19 @@ export class CustomerService {
     return this.api.get<StoredValueAccount | null>("/api/v1/customer/stored-value/account");
   }
 
-  listMemberships(): Promise<Membership[]> {
-    return this.api.get<Membership[]>("/api/v1/customer/memberships");
+  // AUD-061 我的全部卡（通用卡 + 各商户卡分卡余额）
+  getStoredValueAccounts(): Promise<StoredValueAccount[]> {
+    return this.api.get<StoredValueAccount[]>("/api/v1/customer/stored-value/accounts");
+  }
+
+  // AUD-061 充值（绑支付意图，待柜台确认收款到账）
+  topupStoredValue(payload: { projectId?: string; merchantId?: string; amountCent: number; channel?: string }): Promise<PaymentIntent> {
+    return this.api.post<PaymentIntent>("/api/v1/customer/stored-value/topup", { channel: "aggregate_pay", ...payload });
+  }
+
+  // AUD-061 消费（即时扣本卡余额；platform_collect 卡消费逐笔挂应付商户）
+  consumeStoredValue(payload: { projectId?: string; merchantId?: string; amountCent: number; reason?: string }): Promise<StoredValueTransaction> {
+    return this.api.post<StoredValueTransaction>("/api/v1/customer/stored-value/consume", payload);
   }
 
   // ⑧ 扫码点单（绑桌台会话 + 继承入场闸）：扫桌台二维码得 sessionId -> 看菜单 / 自助下单（不重复核龄）
@@ -155,5 +171,47 @@ export class CustomerService {
 
   listRedemptions(): Promise<PointsRedemption[]> {
     return this.api.get<PointsRedemption[]>("/api/v1/customer/points/redemptions");
+  }
+
+  // AUD-077 门票转赠
+  listMyTickets(): Promise<CustomerTicket[]> {
+    return this.api.get<CustomerTicket[]>("/api/v1/customer/my-tickets");
+  }
+
+  initiateTicketTransfer(req: {
+    parentTicketId: string;
+    slotIndex?: number;
+    channel: "phone" | "link";
+    receiverPhone?: string;
+  }): Promise<TicketTransfer> {
+    return this.api.post<TicketTransfer>("/api/v1/customer/ticket-transfers", req);
+  }
+
+  claimTicketTransfer(transferId: string, claimCode?: string): Promise<TicketTransfer> {
+    return this.api.post<TicketTransfer>(
+      `/api/v1/customer/ticket-transfers/${encodeURIComponent(transferId)}/claim`,
+      { claimCode },
+    );
+  }
+
+  revokeTicketTransfer(transferId: string): Promise<TicketTransfer> {
+    return this.api.post<TicketTransfer>(
+      `/api/v1/customer/ticket-transfers/${encodeURIComponent(transferId)}/revoke`,
+      {},
+    );
+  }
+
+  previewTicketTransfer(claimCode: string): Promise<TicketTransferPreview> {
+    return this.api.get<TicketTransferPreview>(
+      `/api/v1/customer/ticket-transfers/preview?claim_code=${encodeURIComponent(claimCode)}`,
+    );
+  }
+
+  listIncomingTicketTransfers(): Promise<TicketTransfer[]> {
+    return this.api.get<TicketTransfer[]>("/api/v1/customer/ticket-transfers/incoming");
+  }
+
+  listOutgoingTicketTransfers(): Promise<TicketTransfer[]> {
+    return this.api.get<TicketTransfer[]>("/api/v1/customer/ticket-transfers/outgoing");
   }
 }

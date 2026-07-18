@@ -475,7 +475,7 @@ class JdbcAccessRepository implements AccessRepository {
             String staffLevelId
     ) {
         MapSqlParameterSource parameters = new MapSqlParameterSource()
-                .addValue("organization_id", organizationId)
+                .addValue("organization_id", organizationId, java.sql.Types.VARCHAR)
                 .addValue("position_code", positionCode)
                 .addValue("staff_level_id", staffLevelId);
         List<PositionRoleTemplate> result = jdbcTemplate.query("""

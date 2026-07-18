@@ -355,7 +355,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
         )}
 
         <div className="admin-list-toolbar" data-testid="merchant-work-orders-filter">
-          <input data-testid="merchant-work-orders-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题 / 类型 / 优先级 / 状态 / 负责人" />
+          <input data-testid="merchant-work-orders-search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索标题 / 类型 / 优先级 / 状态 / 负责人" placeholder="搜索标题 / 类型 / 优先级 / 状态 / 负责人" />
           <span className="admin-muted-action" data-testid="merchant-work-orders-filter-count">匹配 {filteredRows.length} / {baseRows.length} 条</span>
         </div>
         {filteredRows.length === 0 ? (
@@ -369,7 +369,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-work-order-row-${row.id}`}
                   onClick={() => openWorkOrderDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
-                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`merchant-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此工单 ${row.id}`} data-testid={`merchant-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.title ?? row.id}<br /><span onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></span></td>
                   <td>{formatBusinessStatus(row.workOrderType)}</td>
                   <td>{formatBusinessStatus(row.priority)}</td>

@@ -30,6 +30,7 @@ import { BuyTicketPage } from "./pages/BuyTicketPage";
 import { HomePage } from "./pages/HomePage";
 import { MyOrdersPage } from "./pages/MyOrdersPage";
 import { PointsPage } from "./pages/PointsPage";
+import { TicketTransferPage } from "./pages/TicketTransferPage";
 import { WalletPage } from "./pages/WalletPage";
 import type { CustomerSession } from "./types";
 
@@ -38,9 +39,9 @@ dayjs.locale("zh-cn");
 
 const { Header, Content, Sider } = Layout;
 
-type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet";
+type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet" | "transfer";
 
-const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet"];
+const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet", "transfer"];
 
 // 页面标题单一来源：侧栏菜单与每页 h1（语义地标）共用。
 const PAGE_TITLES: Record<PageKey, string> = {
@@ -52,6 +53,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   orders: "我的订单 / 票 / 二维码",
   points: "积分 / 签到",
   wallet: "储值 / 会员",
+  transfer: "门票转赠",
 };
 
 // 3.11 多页入口 + 深链修复：
@@ -86,6 +88,9 @@ export default function CustomerApp(): React.ReactElement {
     if (pageFromLocation() !== next) {
       window.history.pushState({ page: next }, "", withBase(next === "home" ? "/" : `/?page=${next}`));
     }
+    // SPA 切页后把焦点移到主内容（#main-content tabIndex=-1）；rAF 等重渲染后再聚焦。
+    // 仅菜单点击（goTo）触发；首屏/前进后退（走 setPage）不抢焦点。
+    requestAnimationFrame(() => document.getElementById("main-content")?.focus());
   };
 
   useEffect(() => {
@@ -186,6 +191,7 @@ export default function CustomerApp(): React.ReactElement {
               { key: "orders", icon: <UnorderedListOutlined />, label: PAGE_TITLES.orders },
               { key: "points", icon: <StarOutlined />, label: PAGE_TITLES.points },
               { key: "wallet", icon: <WalletOutlined />, label: PAGE_TITLES.wallet },
+              { key: "transfer", icon: <ShoppingOutlined />, label: PAGE_TITLES.transfer },
             ]}
             onClick={(info) => goTo(info.key as PageKey)}
           />
@@ -193,9 +199,9 @@ export default function CustomerApp(): React.ReactElement {
         <Layout>
           <Header style={{ background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span data-testid="customer-phone">已登录：{session.maskedPhone}</span>
-            <a className="customer-logout-link" onClick={onLogout} data-testid="customer-logout">
+            <button type="button" className="customer-logout-link" onClick={onLogout} data-testid="customer-logout">
               退出登录
-            </a>
+            </button>
           </Header>
           <Content id="main-content" tabIndex={-1} style={{ padding: 16 }}>
             {/* 每页 h1 语义地标（此前全站无 h1）；标题与侧栏菜单同源。 */}
@@ -208,6 +214,7 @@ export default function CustomerApp(): React.ReactElement {
             {page === "orders" ? <MyOrdersPage service={service} /> : null}
             {page === "points" ? <PointsPage service={service} /> : null}
             {page === "wallet" ? <WalletPage service={service} /> : null}
+            {page === "transfer" ? <TicketTransferPage service={service} /> : null}
           </Content>
         </Layout>
       </Layout>

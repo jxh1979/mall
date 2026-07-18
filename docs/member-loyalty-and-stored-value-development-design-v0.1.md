@@ -57,7 +57,9 @@
 - `freeze`/`unfreeze`：账户冻结/解冻（速查表"账户可冻结/解冻"）。
 - 客人端端点 `customer/stored-value/{topup,settle,consume,account}`（MemberWalletController）。
 
-## 7. 付费会员订阅
+## 7. 付费会员订阅（已废止 2026-07-18）
+
+> **[已废止 2026-07-18]** 付费会员（客人付费购买年卡/权益包）已按权威业务地图（三份业务 HTML 对「付费会员」零命中）彻底废除：客人端/后台端点、`customer_memberships` / `customer_membership_plans` 两表、`MembershipService`、OpenAPI 六条 operation 全部下线（迁移 V290 DROP 两表并退役 `customer.membership.*` 三条权限）。本节仅存历史记录，非现行能力；免费会员忠诚度（成长积分/等级自动升级）与储值预付卡不受影响。
 
 落 `customer_membership_plans` / `customer_memberships`（V090）。`MembershipService`：
 - `subscribe`：返回支付意图，绑支付（速查表"开通绑定支付"）。

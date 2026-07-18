@@ -188,6 +188,21 @@ class CustomerServiceTests {
     }
 
     @Test
+    void logoutRevokesServerSideSessionAndIsIdempotent() {
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp"));
+        assertThat(customerRepository.findSessionByToken(login.customerToken())).isPresent();
+
+        service.logout(login.customerToken());
+
+        // AUD-030：登出后服务端会话置 logged_out，凭该 token 的后续动作按失效拒绝（不再靠客户端丢弃本地凭证）。
+        assertThatThrownBy(() -> service.listOrders(login.customerToken()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_UNAUTHENTICATED"));
+        // 幂等：重复登出与空 token 不报错。
+        service.logout(login.customerToken());
+        service.logout(null);
+    }
+
+    @Test
     void suspensionAutoRestoresWhenExpiredOnNextLogin() {
         // V194：封禁到期(until 早于 fixed clock 2026-06-14) → 下次登录 lazy 自动恢复 active。
         CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900005678", "000000", "miniapp"));
@@ -233,6 +248,28 @@ class CustomerServiceTests {
     }
 
     @Test
+    void ticketProductsFilterByBarAndResolveName() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        TicketTypeRecord pass = new TicketTypeRecord(
+                "tt_pass", "综合体通票", "weekday_weekend_holiday", 9900L, 9900L, 9900L,
+                false, "published", null, null, now, now);
+        TicketTypeRecord barA = new TicketTypeRecord(
+                "tt_bar_a", "周末单人票", "weekday_weekend_holiday", 9900L, 9900L, 9900L,
+                false, "published", null, null, now, now, null, 0, null, false, "mch_bar_a");
+        when(ticketingService.listTicketTypes()).thenReturn(new PageResponse<>(List.of(pass, barA), 2, 50, 2));
+        when(ticketingService.resolveBarName("mch_bar_a")).thenReturn("话梅酒馆");
+
+        // 公共入口：全量（通票 + 单店票）。
+        assertThat(service.listTicketProducts(null).items()).hasSize(2);
+        // 专属入口：锁定 bar_a，只见该酒吧单店票，且带实时酒吧名。
+        PageResponse<CustomerTicketProductResponse> onlyA = service.listTicketProducts("mch_bar_a");
+        assertThat(onlyA.items()).singleElement().satisfies(pr -> {
+            assertThat(pr.barId()).isEqualTo("mch_bar_a");
+            assertThat(pr.barName()).isEqualTo("话梅酒馆");
+        });
+    }
+
+    @Test
     void ticketProductsArePublicListable() {
         when(ticketingService.listTicketTypes()).thenReturn(new PageResponse<>(List.of(new TicketTypeRecord(
                 "ticket_type_public",
@@ -249,7 +286,7 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z")
         )), 1, 50, 1));
 
-        PageResponse<CustomerTicketProductResponse> response = service.listTicketProducts();
+        PageResponse<CustomerTicketProductResponse> response = service.listTicketProducts(null);
 
         assertThat(response.items())
                 .extracting(CustomerTicketProductResponse::ticketTypeId, CustomerTicketProductResponse::currency)
@@ -822,6 +859,17 @@ class CustomerServiceTests {
         @Override
         public Optional<CustomerSessionRecord> findSessionByToken(String token) {
             return Optional.ofNullable(sessions.get(token));
+        }
+
+        @Override
+        public int revokeSessionByToken(String token) {
+            CustomerSessionRecord session = sessions.get(token);
+            if (session == null || !"active".equals(session.status())) {
+                return 0;
+            }
+            sessions.put(token, new CustomerSessionRecord(session.id(), session.customerId(), session.customerToken(),
+                    session.scene(), session.issuedAt(), session.expiresAt(), "logged_out"));
+            return 1;
         }
 
         @Override

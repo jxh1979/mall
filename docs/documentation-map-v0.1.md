@@ -22,7 +22,7 @@
 |---|---|---|
 | `product-requirements-v0.1.md` | 产品总纲与业务边界 | 现行 |
 | `ticketing-entitlement-checkin-product-prd-v0.1.md` | 票务-权益-核销 PRD | 现行 |
-| `member-loyalty-and-stored-value-product-prd-v0.1.md` | 会员忠诚度（两本账/签到/生日）与储值/付费会员 PRD（2026-06-26 审计回填需求源） | 现行 |
+| `member-loyalty-and-stored-value-product-prd-v0.1.md` | 会员忠诚度（两本账/签到/生日）与储值 PRD（付费会员部分已于 2026-07-18 废止，V290 下线；2026-06-26 审计回填需求源） | 现行 |
 | `customer-app-miniapp-product-prd-v0.1.md` | 客人端（App/小程序）PRD：两端一套口径/订台定金/订卡邀请函/隐私同意（2026-06-26 审计回填） | 现行 |
 | `business-dashboard-metrics-product-prd-v0.1.md` | 经营看板指标 PRD：8 类指标 + 下钻 + 角色可见范围（2026-06-26 审计回填，裁决#7） | 现行 |
 | `bar-business-operations-product-prd-v0.1.md` | 酒吧业务运营 PRD | 现行 |
@@ -30,7 +30,7 @@
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
 | `finance-settlement-product-prd-v0.1.md` | 财务结算 PRD | 现行 |
 | `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD（3.18，2026-07-02 拍板方案 A：后台内商户专区） | 现行 |
-| `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值/付费会员/连续签到/生日权益 PRD（审计V2缺口回填，按发货现状） | 现行 |
+| `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值/付费会员（已于 2026-07-18 废止，V290）/连续签到/生日权益 PRD（审计V2缺口回填，按发货现状） | 现行 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |
 | `platform-governance-prd-v0.1.md` / `platform-governance-product-spec-v0.2.md` | 平台治理 PRD / 产品规格 | 现行 |
 | `evidence-risk-control-product-prd-v0.1.md` | 证据留痕与风控 PRD | 现行 |
@@ -59,7 +59,7 @@
 | `frontend-admin-development-design.md` | 前端管理端开发设计 | 现行 |
 | `android-device-terminal-development-design.md` | Android 终端开发设计 | 现行 |
 | `customer-app-miniapp-development-design-v0.1.md` | 客户 App/小程序开发设计 | 现行 |
-| `member-loyalty-and-stored-value-development-design-v0.1.md` | 会员忠诚度/积分两本账/储值/付费会员订阅/签到/生日 开发设计（2026-06-24 据现有实现 V025/V060/V089/V090/V100 回填） | 现行 |
+| `member-loyalty-and-stored-value-development-design-v0.1.md` | 会员忠诚度/积分两本账/储值/付费会员订阅（付费会员已于 2026-07-18 废止，V290）/签到/生日 开发设计（2026-06-24 据现有实现 V025/V060/V089/V090/V100 回填） | 现行 |
 | `ticketing-pass-entitlement-development-design.md` | 票务-通票-权益开发设计 | 现行 |
 | `bar-operations-development-design.md` | 酒吧运营开发设计 | 现行 |
 | `amusement-operations-development-design.md` | 游乐运营开发设计 | 现行 |

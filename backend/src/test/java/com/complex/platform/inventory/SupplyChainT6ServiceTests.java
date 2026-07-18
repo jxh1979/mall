@@ -671,6 +671,7 @@ class SupplyChainT6ServiceTests {
         @Override public List<StockBalanceRecord> listStockBalancesByProject(String p) { throw nyi(); }
         @Override public List<StockMovementRecord> listStockMovementsByMerchant(String m) { throw nyi(); }
         @Override public List<StockMovementRecord> listStockMovementsByProject(String p) { throw nyi(); }
+        @Override public com.complex.platform.common.api.PageResponse<StockMovementRecord> listStockMovementsPaged(String m, String p, int page, int size) { throw nyi(); }
         @Override public List<InventoryStockBatchRecord> listStockBatchesByMerchant(String m) { throw nyi(); }
         @Override public List<InventoryStockBatchRecord> listStockBatchesByProject(String p) { throw nyi(); }
         @Override public List<InventoryRiskAlertRecord> listRiskAlertsByMerchant(String m) { throw nyi(); }

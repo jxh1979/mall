@@ -644,8 +644,8 @@ public class AmusementService implements AmusementVerificationPort {
         });
     }
 
-    public PageResponse<AmusementQueueEntryRecord> listQueueEntries() {
-        return bookingService.listQueueEntries();
+    public PageResponse<AmusementQueueEntryRecord> listQueueEntries(int page, int size) {
+        return bookingService.listQueueEntries(page, size);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "amusement.queue.manage")
@@ -660,8 +660,8 @@ public class AmusementService implements AmusementVerificationPort {
         return bookingService.changeQueueEntryStatus(queueEntryId, request);
     }
 
-    public PageResponse<AmusementReservationRecord> listReservations() {
-        return bookingService.listReservations();
+    public PageResponse<AmusementReservationRecord> listReservations(int page, int size) {
+        return bookingService.listReservations(page, size);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "amusement.reservation.manage")
@@ -676,8 +676,8 @@ public class AmusementService implements AmusementVerificationPort {
         return bookingService.changeReservationStatus(reservationId, request);
     }
 
-    public PageResponse<AmusementGroupBookingRecord> listGroupBookings() {
-        return bookingService.listGroupBookings();
+    public PageResponse<AmusementGroupBookingRecord> listGroupBookings(int page, int size) {
+        return bookingService.listGroupBookings(page, size);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "amusement.group_booking.manage")

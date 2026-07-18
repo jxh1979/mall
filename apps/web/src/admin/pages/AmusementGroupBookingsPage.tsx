@@ -82,7 +82,9 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      setBookings(await api.get<AmusementGroupBookingRow[]>("/api/v1/amusement/group-bookings"));
+      // AUD-013: 后端已改真分页(默认 50)。本页仍客户端分页 → 显式取一页上限(后端 size 封顶 200)。
+      // ponytail: 200 上限, 超量需改 useServerPagedRows+getPaged 服务端分页(并加汇总端点还原 KPI 全量口径)。
+      setBookings(await api.get<AmusementGroupBookingRow[]>("/api/v1/amusement/group-bookings?size=200"));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -157,7 +159,7 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
   }
 
   const bookingsSection = (
-    <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-group-bookings-table"><thead><tr><th>{TEXT.select}</th><th>类型</th><th>客户</th><th>人数</th><th>容量占用</th><th>项目</th><th>场次</th><th>状态</th><th>下单时间</th><th>确认时间</th></tr></thead><tbody>{pagedBookings.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-group-booking-row-${row.id}`} onClick={() => openBookingDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBookingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`amusement-group-booking-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td><td>{formatBusinessStatus(row.bookingType)}</td><td>{display(row.customerName)}</td><td>{display(row.partySize)}</td><td>{display(row.reservedCapacity)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{display(row.sessionId)}</td><td>{formatBusinessStatus(row.bookingStatus)}</td><td>{cnDate(row.createdAt)}</td><td data-testid={`amusement-group-booking-paid-at-${row.id}`}>{cnDate(row.paidAt)}</td></tr>)}</tbody></table><TablePager testid="amusement-group-bookings-pager" page={pagedBookings.page} pageCount={pagedBookings.pageCount} total={pagedBookings.total} onPrev={pagedBookings.prev} onNext={pagedBookings.next} /></div>
+    <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-group-bookings-table"><thead><tr><th>{TEXT.select}</th><th>类型</th><th>客户</th><th>人数</th><th>容量占用</th><th>项目</th><th>场次</th><th>状态</th><th>下单时间</th><th>确认时间</th></tr></thead><tbody>{pagedBookings.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-group-booking-row-${row.id}`} onClick={() => openBookingDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBookingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此团体预订 ${row.id}`} data-testid={`amusement-group-booking-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td><td>{formatBusinessStatus(row.bookingType)}</td><td>{display(row.customerName)}</td><td>{display(row.partySize)}</td><td>{display(row.reservedCapacity)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{display(row.sessionId)}</td><td>{formatBusinessStatus(row.bookingStatus)}</td><td>{cnDate(row.createdAt)}</td><td data-testid={`amusement-group-booking-paid-at-${row.id}`}>{cnDate(row.paidAt)}</td></tr>)}</tbody></table><TablePager testid="amusement-group-bookings-pager" page={pagedBookings.page} pageCount={pagedBookings.pageCount} total={pagedBookings.total} onPrev={pagedBookings.prev} onNext={pagedBookings.next} /></div>
   );
 
   return (

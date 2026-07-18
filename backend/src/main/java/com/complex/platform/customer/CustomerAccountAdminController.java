@@ -3,8 +3,6 @@ package com.complex.platform.customer;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import java.time.Instant;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,10 +28,15 @@ public class CustomerAccountAdminController {
     }
 
 
-    /** 按手机号精确查客人账号（盲索引查询，返回安全投影；查不到返回空列表）。 */
-    @GetMapping
-    public ApiResponse<java.util.List<CustomerAccountView>> lookup(@RequestParam("phone") String phone) {
+    /**
+     * 按手机号精确查客人账号（盲索引查询，返回安全投影；查不到返回空列表）。
+     * AUD-020：手机号属 PII，改用 POST body 传参，避免明文手机号进入 URL query string 落入 access log / 代理日志。
+     */
+    @PostMapping("/lookup")
+    public ApiResponse<java.util.List<CustomerAccountView>> lookup(
+            @RequestBody @jakarta.validation.Valid CustomerAccountLookupRequest request) {
         authorizationService.requirePermission(MANAGE);
+        String phone = request == null ? null : request.phone();
         return ApiResponse.ok(service.findAccountByPhone(phone).map(CustomerAccountView::of)
                 .map(java.util.List::of).orElse(java.util.List.of()));
     }

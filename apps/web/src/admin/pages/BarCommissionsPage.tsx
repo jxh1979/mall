@@ -210,7 +210,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
                   <tr key={order.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-commission-row-${order.id}`}
                     onClick={() => openCommissionDetail(order)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCommissionDetail(order); } }}>
-                    <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`bar-commission-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
+                    <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此提成单 ${order.id}`} data-testid={`bar-commission-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                     <td>{order.orderNo ?? order.id}</td>
                     <td>{order.tableId ?? "-"}</td>
                     <td>{rowBill?.id ?? order.billId ?? "-"}</td>

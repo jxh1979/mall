@@ -73,12 +73,17 @@ class SavedBottleNotificationIntegrationTest {
         insertCustomer(customerId, DEPOSIT_PHONE);
         insertInventoryItem(itemId, prefix + "_sku", "Deposit Merlot");
 
+        // 到期日取相对未来时刻（now+30天，截断到秒避免 DB 微秒精度回读漂移）：硬编码 2026-07-10 一旦成为过去，
+        // 后续 claimSavedBottle 因 expireAt 已过而抛 SAVED_BOTTLE_EXPIRED（InventoryService 552-553），本用例即 flaky。
+        Instant expireAt = Instant.now()
+                .plus(java.time.Duration.ofDays(30))
+                .truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         SavedBottleRecord bottle = inventoryService.createSavedBottle(savedBottleRequest(
                 prefix + "_create",
                 customerId,
                 itemId,
                 "Deposit Merlot",
-                Instant.parse("2026-07-10T00:00:00Z")
+                expireAt
         ));
 
         assertThat(logCount("deposit", DEPOSIT_PHONE)).isEqualTo(1);
@@ -87,7 +92,7 @@ class SavedBottleNotificationIntegrationTest {
         assertThat(logValue("deposit", DEPOSIT_PHONE, "status")).isEqualTo("sent");
         assertThat(logParam("deposit", DEPOSIT_PHONE, "bottle")).isEqualTo("Deposit Merlot");
         assertThat(logParam("deposit", DEPOSIT_PHONE, "item")).isEqualTo(itemId);
-        assertThat(logParam("deposit", DEPOSIT_PHONE, "expireAt")).isEqualTo("2026-07-10T00:00:00Z");
+        assertThat(logParam("deposit", DEPOSIT_PHONE, "expireAt")).isEqualTo(expireAt.toString());
 
         jdbcTemplate.update("UPDATE customers SET phone = ?, masked_phone = ?, updated_at = now() WHERE id = ?",
                 piiCipher.encrypt(CLAIM_PHONE), maskPhone(CLAIM_PHONE), customerId);

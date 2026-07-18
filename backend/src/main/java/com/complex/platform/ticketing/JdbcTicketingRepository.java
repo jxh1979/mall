@@ -30,14 +30,17 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                     holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                     stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
-                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                    refundable, bar_id
                 )
                 VALUES (
                     :id, :ticket_name, :base_calendar_price_mode, :weekday_price_cent, :weekend_price_cent,
                     :holiday_price_cent, :stock_required, :status, :validity_days, :refresh_interval_seconds,
                     :stock_quantity, :sold_quantity, :ticket_category, :created_at, :updated_at,
-                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
+                    :refundable, :bar_id
                 )
+                -- bar_id（酒吧归属）建票时定，不可变（AUD-076“挂错不许改”），故不在 ON CONFLICT SET。
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_name = EXCLUDED.ticket_name,
                     base_calendar_price_mode = EXCLUDED.base_calendar_price_mode,
@@ -56,6 +59,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     delete_requested_by = EXCLUDED.delete_requested_by,
                     delete_requested_at = EXCLUDED.delete_requested_at,
                     delete_reason = EXCLUDED.delete_reason,
+                    refundable = EXCLUDED.refundable,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.ticketTypeParameters(ticketType));
         return ticketType;
@@ -67,7 +71,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                       refundable, bar_id
                   FROM ticket_types
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -120,7 +125,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                       refundable, bar_id
                   FROM ticket_types
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();
@@ -282,14 +288,17 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                     entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                     value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                    allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
+                    allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
+                    parent_ticket_id, slot_index, bar_id
                 )
                 VALUES (
                     :id, :ticket_type_id, :order_id, :entitlement_template_id, :entitlement_code,
                     :entitlement_type, :merchant_id, :venue_id, :point_id, :total_times, :used_times,
                     :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people,
-                    :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window, :exclusive_merchant_id
+                    :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window, :exclusive_merchant_id,
+                    :parent_ticket_id, :slot_index, :bar_id
                 )
+                -- bar_id（酒吧归属快照）出票时定，不可变，故不在 ON CONFLICT SET。
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
                     order_id = EXCLUDED.order_id,
@@ -311,9 +320,120 @@ class JdbcTicketingRepository implements TicketingRepository {
                     entitlement_kind = EXCLUDED.entitlement_kind,
                     agreement_price_cent = EXCLUDED.agreement_price_cent,
                     consumption_window = EXCLUDED.consumption_window,
-                    exclusive_merchant_id = EXCLUDED.exclusive_merchant_id
+                    exclusive_merchant_id = EXCLUDED.exclusive_merchant_id,
+                    parent_ticket_id = EXCLUDED.parent_ticket_id,
+                    slot_index = EXCLUDED.slot_index
                 """, parameterSource.issuedEntitlementParameters(entitlement));
         return entitlement;
+    }
+
+    @Override
+    public TicketInstanceRecord saveTicketInstance(TicketInstanceRecord instance) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_instances (
+                    id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,
+                    buyer_customer_id, current_holder_customer_id, status, first_used_at, first_session_key,
+                    created_at, updated_at, bar_id
+                )
+                VALUES (
+                    :id, :ticket_no, :order_id, :ticket_type_id, :seq_in_order, :num_people, :total_times,
+                    :buyer_customer_id, :current_holder_customer_id, :status, :first_used_at, :first_session_key,
+                    :created_at, :updated_at, :bar_id
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, parameterSource.ticketInstanceParameters(instance));
+        return instance;
+    }
+
+    @Override
+    public Optional<TicketInstanceRecord> findTicketInstanceById(String id) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketInstanceSelect() + " WHERE id = :id",
+                Map.of("id", id), rowMapper::mapTicketInstance).stream().findFirst();
+    }
+
+    @Override
+    public List<TicketInstanceRecord> listTicketInstances() {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketInstanceSelect() + " ORDER BY created_at DESC, id",
+                rowMapper::mapTicketInstance);
+    }
+
+    @Override
+    public List<TicketInstanceRecord> listTicketInstancesByOrderId(String orderId) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketInstanceSelect()
+                + " WHERE order_id = :order_id ORDER BY seq_in_order, id",
+                Map.of("order_id", orderId), rowMapper::mapTicketInstance);
+    }
+
+    @Override
+    public int markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+        // AUD-066 + AUD 复核 P2-6：原子抢占首场次键。CAS 只在 first_session_key 为空或等于本次 key 时成功（1 行），
+        // 已被别的场次抢占 → 0 行，调用方据此回滚本次消费（并发首刷两 slot 不同场次只放行一个）。first_used_at 仍只写一次。
+        // AUD 复核回归修：num_people <= 1（单人票，含单人多次票）WHERE 恒真恒更新 1 行，场次互斥只对多人票生效，
+        // 单人多次票第二次跨场次/跨日核销不再被 CAS 误伤（first_session_key 顺带写入无害，enforceMultiPersonSameSession 对单人票不比对）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_instances
+                   SET first_used_at = COALESCE(first_used_at, :now),
+                       first_session_key = :session_key,
+                       updated_at = :now
+                 WHERE id = :id
+                   AND (num_people <= 1 OR first_session_key IS NULL OR first_session_key = :session_key)
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("session_key", sessionKey, java.sql.Types.VARCHAR)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int markTicketInstanceRefundPending(String id, java.time.Instant now) {
+        // 方案2 申请即冻结：父票 active→refund_pending（CAS）。并发只一路得 1，抢先者胜；
+        // 已 refund_pending/refunded/forfeited/transferring 命中 0 行，调用方据此拒（在途/已退/转赠中）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_instances
+                   SET status = 'refund_pending', updated_at = :now
+                 WHERE id = :id AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int markTicketInstanceRefunded(String id, java.time.Instant now) {
+        // 方案2 生效：父票 refund_pending→refunded（终态，CAS）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_instances
+                   SET status = 'refunded', updated_at = :now
+                 WHERE id = :id AND status = 'refund_pending'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int restoreTicketInstanceActive(String id, java.time.Instant now) {
+        // 方案2 驳回：父票 refund_pending→active（解冻恢复可用，CAS）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_instances
+                   SET status = 'active', updated_at = :now
+                 WHERE id = :id AND status = 'refund_pending'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int markTicketRefundRejected(String refundId, String rejectedBy, java.time.Instant rejectedAt) {
+        // 方案2 复核驳回：退款单 requested→rejected（CAS）。approved_by/at 复用为“复核决定人/决定时间”。
+        return jdbcTemplate.update("""
+                UPDATE ticket_refunds
+                   SET status = 'rejected',
+                       approved_by = :rejected_by,
+                       approved_at = :rejected_at,
+                       updated_at = :rejected_at
+                 WHERE id = :id AND status = 'requested'
+                """, new MapSqlParameterSource()
+                .addValue("id", refundId)
+                .addValue("rejected_by", rejectedBy)
+                .addValue("rejected_at", rejectedAt.atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override
@@ -322,7 +442,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
+                       parent_ticket_id, slot_index, bar_id
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
@@ -346,7 +467,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
+                       parent_ticket_id, slot_index, bar_id
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)
@@ -354,8 +476,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                  ORDER BY updated_at DESC, id
                  LIMIT :limit
                 """, new MapSqlParameterSource()
-                .addValue("merchant_id", merchantId)
-                .addValue("venue_id", venueId)
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("venue_id", venueId, java.sql.Types.VARCHAR)
                 .addValue("limit", limit), (resultSet, rowNumber) ->
                 TicketEntitlementMapper.toOfflineEntitlementResponse(rowMapper.mapIssuedEntitlement(resultSet, rowNumber)));
     }
@@ -690,15 +812,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
                     sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id, base_amount_cent,
                     dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at,
-                    merchant_id, paid_at
+                    merchant_id, paid_at, bar_id
                 )
                 VALUES (
                     :id, :order_no, :customer_id, :ticket_type_id, :price_rule_id, :quantity, :visit_date,
                     :sales_channel, :buyer_phone, :amount_cent, :dynamic_pricing_rule_id, :base_amount_cent,
                     :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at,
-                    :merchant_id, :paid_at
+                    :merchant_id, :paid_at, :bar_id
                 )
-                -- merchant_id（下单受理商户）下单时定，后续 update（出票/置 paid）不覆盖。
+                -- merchant_id（下单受理商户）与 bar_id（酒吧归属快照）下单时定，后续 update（出票/置 paid）不覆盖。
                 ON CONFLICT (id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -749,8 +871,11 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public List<TicketOrderRecord> listTicketOrdersByMerchant(String merchantId) {
+        // AUD 复核 P2-7：单店票销售归属既可能落 merchant_id（商户代售）也可能只落 bar_id（客人端自助购本店单店票，
+        // 无商户 scope → merchant_id=null）。酒吧即商户（bar_id 与 merchant 同命名空间），故本店后台可见口径=受理商户 OR 归属酒吧。
         return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + """
                  WHERE merchant_id = :merchant_id
+                    OR bar_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapTicketOrder);
     }
@@ -1118,6 +1243,9 @@ class JdbcTicketingRepository implements TicketingRepository {
     @Override
     public Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt) {
         // 2a-3 退款冻结：核销必须 status='active'（防退款冻结后经游乐 gateway 直连 atomicUseEntitlement 绕过 service 检查）。
+        // AUD 复核：service 路径靠 requireParentTicketActive 挡冻结中的父票，但游乐 gateway 直连本方法绕过该守卫——
+        //   退款「申请即冻结」只把父票 ticket_instances 置 refund_pending，子权益要到审批 freezeEntitlementForRefund 才置 refunded，
+        //   申请~审批空窗内子权益仍 active，故此处必须自查父票 active（与 requireParentTicketActive 同语义），否则游乐可绕过冻结核销。
         int rowCount = jdbcTemplate.update("""
                 UPDATE issued_entitlements
                    SET used_times = used_times + 1,
@@ -1125,6 +1253,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                  WHERE id = :id
                    AND used_times < total_times
                    AND status = 'active'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM ticket_transfers t
+                        WHERE t.parent_ticket_id = issued_entitlements.parent_ticket_id
+                          AND t.slot_index = issued_entitlements.slot_index
+                          AND t.status = 'pending')
+                   AND (parent_ticket_id IS NULL OR EXISTS (
+                       SELECT 1 FROM ticket_instances p
+                        WHERE p.id = issued_entitlements.parent_ticket_id
+                          AND p.status = 'active'))
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
@@ -1158,13 +1295,15 @@ class JdbcTicketingRepository implements TicketingRepository {
     @Override
     public int freezeEntitlementForRefund(String id, java.time.Instant updatedAt) {
         // 2a-3 退款冻结：退款审批通过 → 把未冻结的 active 权益置 refunded，使其不可再核销（含游乐 gateway 路径）。
-        // 仅冻结 active（幂等：已 refunded 返回 0）。
+        // 方案2（AUD-006）强 CAS：额外要求 used_times=0——封死“申请→审批空窗内票被核销”的竞态：
+        //   若空窗内被核销 used_times 变 1，本 UPDATE 命中 0 行，调用方据此整笔回滚拒退，杜绝“钱退了票也用了”。
         return jdbcTemplate.update("""
                 UPDATE issued_entitlements
                    SET status = 'refunded',
                        updated_at = :updated_at
                  WHERE id = :id
                    AND status = 'active'
+                   AND used_times = 0
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
@@ -1194,6 +1333,22 @@ class JdbcTicketingRepository implements TicketingRepository {
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int expireBarEntitlements(String barId, java.time.Instant validTo, java.time.Instant now) {
+        // AUD-076 撤场提前到期：把该酒吧单店票所有在效权益的 valid_to 提前到截止营业时刻（LEAST 只提前不延长），
+        // 由既有到期任务 processExpiredPaidEntitlements 按方案2规则处置（可退未用自动退/不可退作废）。
+        return jdbcTemplate.update("""
+                UPDATE issued_entitlements
+                   SET valid_to = LEAST(valid_to, :valid_to),
+                       updated_at = :now
+                 WHERE bar_id = :bar_id
+                   AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("bar_id", barId)
+                .addValue("valid_to", validTo.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override
@@ -1235,5 +1390,175 @@ class JdbcTicketingRepository implements TicketingRepository {
     public void setPriceRuleArchiveReason(String id, String reason) {
         jdbcTemplate.update("UPDATE ticket_price_rules SET archive_reason = :reason WHERE id = :id",
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
+
+    // AUD-077 门票转赠 / slot 持有人
+    @Override
+    public TicketSlotHolderRecord upsertSlotHolder(String parentTicketId, int slotIndex, String holderCustomerId, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_slot_holders (parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at)
+                VALUES (:p, :s, :holder, :now, :now)
+                ON CONFLICT (parent_ticket_id, slot_index) DO UPDATE SET
+                    holder_customer_id = EXCLUDED.holder_customer_id, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex)
+                .addValue("holder", holderCustomerId).addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+        return new TicketSlotHolderRecord(parentTicketId, slotIndex, holderCustomerId, now, now);
+    }
+
+    @Override
+    public Optional<TicketSlotHolderRecord> findSlotHolder(String parentTicketId, int slotIndex) {
+        return jdbcTemplate.query(
+                "SELECT parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at FROM ticket_slot_holders WHERE parent_ticket_id = :p AND slot_index = :s",
+                new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex), this::mapSlotHolder)
+                .stream().findFirst();
+    }
+
+    @Override
+    public List<TicketSlotHolderRecord> listSlotHoldersByHolder(String holderCustomerId) {
+        return jdbcTemplate.query(
+                "SELECT parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at FROM ticket_slot_holders WHERE holder_customer_id = :h ORDER BY parent_ticket_id, slot_index",
+                Map.of("h", holderCustomerId), this::mapSlotHolder);
+    }
+
+    @Override
+    public int updateTicketInstanceHolder(String id, String holderCustomerId, java.time.Instant now) {
+        return jdbcTemplate.update("UPDATE ticket_instances SET current_holder_customer_id = :holder, updated_at = :now WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", id).addValue("holder", holderCustomerId)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public List<IssuedEntitlementRecord> listIssuedEntitlementsByParentSlot(String parentTicketId, int slotIndex) {
+        return jdbcTemplate.query(JdbcTicketingSql.issuedEntitlementSelect()
+                + " WHERE parent_ticket_id = :p AND slot_index = :s ORDER BY created_at ASC, id",
+                new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex), rowMapper::mapIssuedEntitlement);
+    }
+
+    @Override
+    public TicketTransferRecord saveTicketTransfer(TicketTransferRecord r) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_transfers (
+                    id, parent_ticket_id, slot_index, initiator_customer_id, channel,
+                    receiver_phone, receiver_phone_hash, receiver_phone_masked, claim_code, receiver_customer_id,
+                    status, void_reason, created_at, claimed_at, revoked_at, voided_at, updated_at)
+                VALUES (
+                    :id, :parent_ticket_id, :slot_index, :initiator, :channel,
+                    :receiver_phone, :receiver_phone_hash, :receiver_phone_masked, :claim_code, :receiver_customer_id,
+                    :status, :void_reason, :created_at, :claimed_at, :revoked_at, :voided_at, :updated_at)
+                """, new MapSqlParameterSource()
+                .addValue("id", r.id()).addValue("parent_ticket_id", r.parentTicketId()).addValue("slot_index", r.slotIndex())
+                .addValue("initiator", r.initiatorCustomerId()).addValue("channel", r.channel())
+                .addValue("receiver_phone", r.receiverPhone(), java.sql.Types.VARCHAR)
+                .addValue("receiver_phone_hash", r.receiverPhoneHash(), java.sql.Types.VARCHAR)
+                .addValue("receiver_phone_masked", r.receiverPhoneMasked(), java.sql.Types.VARCHAR)
+                .addValue("claim_code", r.claimCode(), java.sql.Types.VARCHAR)
+                .addValue("receiver_customer_id", r.receiverCustomerId(), java.sql.Types.VARCHAR)
+                .addValue("status", r.status()).addValue("void_reason", r.voidReason(), java.sql.Types.VARCHAR)
+                .addValue("created_at", off(r.createdAt())).addValue("claimed_at", off(r.claimedAt()))
+                .addValue("revoked_at", off(r.revokedAt())).addValue("voided_at", off(r.voidedAt()))
+                .addValue("updated_at", off(r.updatedAt())));
+        return r;
+    }
+
+    @Override
+    public Optional<TicketTransferRecord> findTicketTransferById(String id) {
+        return jdbcTemplate.query(transferSelect() + " WHERE id = :id", Map.of("id", id), this::mapTransfer).stream().findFirst();
+    }
+
+    @Override
+    public Optional<TicketTransferRecord> findTicketTransferByClaimCode(String claimCode) {
+        return jdbcTemplate.query(transferSelect() + " WHERE claim_code = :c", Map.of("c", claimCode), this::mapTransfer).stream().findFirst();
+    }
+
+    @Override
+    public int claimTicketTransfer(String id, String receiverCustomerId, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE ticket_transfers SET status = 'claimed', receiver_customer_id = :recv, claimed_at = :now, updated_at = :now
+                 WHERE id = :id AND status = 'pending'
+                """, new MapSqlParameterSource().addValue("id", id).addValue("recv", receiverCustomerId)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int revokeTicketTransfer(String id, String initiatorCustomerId, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE ticket_transfers SET status = 'revoked', revoked_at = :now, updated_at = :now
+                 WHERE id = :id AND status = 'pending' AND initiator_customer_id = :me
+                """, new MapSqlParameterSource().addValue("id", id).addValue("me", initiatorCustomerId)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int voidPendingTransfersForParent(String parentTicketId, String reason, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE ticket_transfers SET status = 'voided', void_reason = :reason, voided_at = :now, updated_at = :now
+                 WHERE parent_ticket_id = :p AND status = 'pending'
+                """, new MapSqlParameterSource().addValue("p", parentTicketId).addValue("reason", reason, java.sql.Types.VARCHAR)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public boolean existsPendingTransferForSlot(String parentTicketId, int slotIndex) {
+        return !jdbcTemplate.query(
+                "SELECT 1 FROM ticket_transfers WHERE parent_ticket_id = :p AND slot_index = :s AND status = 'pending' LIMIT 1",
+                new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex), (rs, n) -> 1).isEmpty();
+    }
+
+    @Override
+    public boolean existsPendingTransferForParent(String parentTicketId) {
+        return !jdbcTemplate.query(
+                "SELECT 1 FROM ticket_transfers WHERE parent_ticket_id = :p AND status = 'pending' LIMIT 1",
+                Map.of("p", parentTicketId), (rs, n) -> 1).isEmpty();
+    }
+
+    @Override
+    public List<TicketTransferRecord> listPendingTransfersByReceiverPhoneHash(String receiverPhoneHash) {
+        return jdbcTemplate.query(transferSelect() + " WHERE receiver_phone_hash = :h AND status = 'pending' ORDER BY created_at DESC, id",
+                Map.of("h", receiverPhoneHash), this::mapTransfer);
+    }
+
+    @Override
+    public List<TicketTransferRecord> listTicketTransfersByInitiator(String initiatorCustomerId) {
+        return jdbcTemplate.query(transferSelect() + " WHERE initiator_customer_id = :me ORDER BY created_at DESC, id",
+                Map.of("me", initiatorCustomerId), this::mapTransfer);
+    }
+
+    @Override
+    public List<TicketTransferRecord> listTicketTransfers() {
+        return jdbcTemplate.query(transferSelect() + " ORDER BY created_at DESC, id", this::mapTransfer);
+    }
+
+    private static java.time.OffsetDateTime off(java.time.Instant instant) {
+        return instant == null ? null : instant.atOffset(java.time.ZoneOffset.UTC);
+    }
+
+    private static String transferSelect() {
+        return """
+                SELECT id, parent_ticket_id, slot_index, initiator_customer_id, channel,
+                       receiver_phone, receiver_phone_hash, receiver_phone_masked, claim_code, receiver_customer_id,
+                       status, void_reason, created_at, claimed_at, revoked_at, voided_at, updated_at
+                  FROM ticket_transfers
+                """;
+    }
+
+    private TicketSlotHolderRecord mapSlotHolder(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new TicketSlotHolderRecord(rs.getString("parent_ticket_id"), rs.getInt("slot_index"),
+                rs.getString("holder_customer_id"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "created_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "updated_at"));
+    }
+
+    private TicketTransferRecord mapTransfer(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new TicketTransferRecord(
+                rs.getString("id"), rs.getString("parent_ticket_id"), rs.getInt("slot_index"),
+                rs.getString("initiator_customer_id"), rs.getString("channel"),
+                rs.getString("receiver_phone"), rs.getString("receiver_phone_hash"), rs.getString("receiver_phone_masked"),
+                rs.getString("claim_code"), rs.getString("receiver_customer_id"),
+                rs.getString("status"), rs.getString("void_reason"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "created_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "claimed_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "revoked_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "voided_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "updated_at"));
     }
 }

@@ -8,6 +8,9 @@ export type TicketProduct = {
   holidayPriceCent: number | null;
   currency: string;
   status: string;
+  // AUD-076 单店票挂酒吧：所属酒吧 id 与实时名称（null=综合体通票，展示“综合体通用”）。
+  barId?: string | null;
+  barName?: string | null;
 };
 
 // 1.8 我的票：订单内票实例安全投影（后端 CustomerTicketResponse）。
@@ -22,6 +25,39 @@ export type CustomerTicket = {
   numPeople: number;
   validFrom: string | null;
   validTo: string | null;
+  // AUD-066 父票聚合：按父票聚合展示（票名+N人+剩余次数），每人一个 slot 各自出码。
+  parentTicketId?: string | null;
+  slotIndex?: number;
+  ticketNo?: string | null;
+  // AUD-077 转赠中标记（"transferring"=该票转赠冻结中不可用）。
+  transferState?: string | null;
+};
+
+// AUD-077 门票转赠记录（后端 TicketTransferResponse 安全投影）。
+export type TicketTransfer = {
+  id: string;
+  parentTicketId: string;
+  slotIndex: number;
+  channel: string;
+  status: string;
+  claimCode?: string | null;
+  receiverPhoneMasked?: string | null;
+  ticketName?: string | null;
+  voidReason?: string | null;
+  createdAt: string | null;
+  claimedAt?: string | null;
+};
+
+// AUD-077 领取预览（不算领取）。
+export type TicketTransferPreview = {
+  transferId: string;
+  parentTicketId: string;
+  slotIndex: number;
+  channel: string;
+  status: string;
+  ticketName: string | null;
+  numPeople: number;
+  totalTimes: number;
 };
 
 export type TicketOrder = {
@@ -41,6 +77,8 @@ export type TicketOrder = {
   status: string;
   createdAt: string;
   updatedAt: string;
+  // AUD-076 单店票挂酒吧：订单快照的酒吧 id（null=通票）。
+  barId?: string | null;
 };
 
 export type TicketCredential = {
@@ -129,23 +167,24 @@ export type CheckInRecord = {
 export type StoredValueAccount = {
   id: string;
   customerId: string;
-  projectId: string;
+  projectId: string | null;
+  merchantId: string | null;
+  cardScope: string;
+  fundOwnership: string | null;
   balanceCent: number;
   status: string;
   createdAt: string;
   updatedAt: string;
 };
 
-export type Membership = {
+export type StoredValueTransaction = {
   id: string;
+  accountId: string;
   customerId: string;
-  planId: string;
-  projectId: string;
-  startAt: string;
-  expireAt: string;
-  status: string;
-  autoRenew: boolean;
-  paymentIntentId: string | null;
+  txnType: string;
+  amountCent: number;
+  balanceAfterCent: number;
+  reason: string | null;
   createdAt: string;
 };
 

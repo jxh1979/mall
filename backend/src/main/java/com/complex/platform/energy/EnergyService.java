@@ -182,14 +182,14 @@ public class EnergyService {
         Map<String, BigDecimal> publicConsumptionByProject = new LinkedHashMap<>();
         List<EnergyFeeSettlementRecord> out = new ArrayList<>();
         for (EnergyContractSnapshot c : contracts) {
-            if (repository.energyFeeArExists(c.merchantId(), p)) {
+            if (repository.energyFeeArExists(c.merchantId(), c.contractId(), p)) {
                 continue;
             }
             long amountCent = amountCent(c, p, areaTotals, usageTotals, merchantUsage, publicConsumptionByProject);
             if (amountCent <= 0) {
                 continue;
             }
-            String sourceId = energyFeeSourceId(c.merchantId(), p);
+            String sourceId = energyFeeSourceId(c.merchantId(), c.contractId(), p);
             String token = stableToken(sourceId);
             Instant now = Instant.now();
             EnergyFeeSettlementRecord rec = repository.insertEnergyFeeAr(new EnergyFeeSettlementRecord(
@@ -346,8 +346,9 @@ public class EnergyService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    static String energyFeeSourceId(String merchantId, String period) {
-        return SOURCE_TYPE_ENERGY_FEE + "_" + stableToken(merchantId + "|" + period);
+    static String energyFeeSourceId(String merchantId, String contractId, String period) {
+        // AUD-005：去重键加合同维度,一商户多合同同期各自独立结算,避免按 merchant+period 去重时第二份合同静默漏计。
+        return SOURCE_TYPE_ENERGY_FEE + "_" + stableToken(merchantId + "|" + contractId + "|" + period);
     }
 
     private static String stableToken(String value) {

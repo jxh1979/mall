@@ -1,4 +1,5 @@
 package com.complex.platform.compliance;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -21,20 +22,31 @@ public class WecomRetentionJob {
 
     private final WecomConversationService service;
     private final Clock clock;
+    private final boolean scheduledEnabled;
 
     @Autowired
-    public WecomRetentionJob(WecomConversationService service) {
-        this(service, Clock.systemUTC());
+    public WecomRetentionJob(
+            WecomConversationService service,
+            @Value("${compliance.wecom-retention.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(service, Clock.systemUTC(), scheduledEnabled);
     }
 
     WecomRetentionJob(WecomConversationService service, Clock clock) {
+        this(service, clock, true);
+    }
+
+    WecomRetentionJob(WecomConversationService service, Clock clock, boolean scheduledEnabled) {
         this.service = service;
         this.clock = clock;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     @ConditionalOnProperty(name = "compliance.wecom-retention.scheduled.enabled", havingValue = "true")
     @Scheduled(fixedDelayString = "${compliance.wecom-retention.scheduled.fixed-delay-ms:86400000}")
     public void scheduledApply() {
+        if (!scheduledEnabled) {
+            return;
+        }
         service.applyRetention(LocalDate.ofInstant(Instant.now(clock), ZoneOffset.UTC));
     }
 }

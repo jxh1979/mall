@@ -263,6 +263,18 @@ public class TicketingController {
         return ApiResponse.ok(service.listIssuedEntitlements());
     }
 
+    @GetMapping("/ticketing/ticket-instances")
+    public ApiResponse<PageResponse<TicketInstanceRecord>> listTicketInstances() {
+        authorizationService.requirePermission("ticket.verify.view");
+        return ApiResponse.ok(service.listTicketInstances());
+    }
+
+    @GetMapping("/ticketing/ticket-transfers")
+    public ApiResponse<PageResponse<TicketTransferResponse>> listTicketTransfers() {
+        authorizationService.requirePermission("ticket.transfer.read");
+        return ApiResponse.ok(service.listTicketTransfers());
+    }
+
     @GetMapping("/ticketing/orders")
     public ApiResponse<PageResponse<TicketOrderRecord>> listTicketOrders() {
         authorizationService.requirePermission("ticket.order.read");
@@ -337,6 +349,16 @@ public class TicketingController {
         authorizationService.requirePermission("ticket.refund.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.approveTicketRefund(refundId, request));
+    }
+
+    @PostMapping("/ticketing/refunds/{refund_id}/reject")
+    public ApiResponse<TicketRefundRecord> rejectTicketRefund(
+            @PathVariable("refund_id") String refundId,
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("ticket.refund.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.rejectTicketRefund(refundId, request));
     }
 
     @GetMapping("/ticketing/refunds/{refund_id}/lines")

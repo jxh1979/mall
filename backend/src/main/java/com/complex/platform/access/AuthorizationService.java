@@ -19,11 +19,10 @@ import org.springframework.stereotype.Service;
 public class AuthorizationService implements CallerScopeResolver {
 
     // #14 钱包双路径：客人自助主体可自行执行的权限白名单（仅作用于本人账户，由控制器按客人 token 绑定）。
-    // 仅限客人端 App/小程序自助场景：储值充值/确认、储值消费、付费会员订阅。退款/冻结/会员管理等仍为员工专属。
+    // 仅限客人端 App/小程序自助场景：储值充值/确认、储值消费。退款/冻结等仍为员工专属。
     private static final java.util.Set<String> CUSTOMER_SELF_SERVICE_PERMISSIONS = java.util.Set.of(
             "customer.stored_value.topup",
-            "customer.stored_value.consume",
-            "customer.membership.subscribe");
+            "customer.stored_value.consume");
 
     private final AccessRepository accessRepository;
 

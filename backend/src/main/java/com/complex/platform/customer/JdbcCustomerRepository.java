@@ -104,6 +104,19 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public int revokeSessionByToken(String token) {
+        if (token == null || token.isBlank()) {
+            return 0;
+        }
+        return jdbcTemplate.update("""
+                UPDATE customer_sessions
+                   SET status = 'logged_out'
+                 WHERE customer_token_hash = :customer_token_hash
+                   AND status = 'active'
+                """, Map.of("customer_token_hash", sha256(token)));
+    }
+
+    @Override
     public CustomerConsentRecord saveConsent(CustomerConsentRecord consent) {
         jdbcTemplate.update("""
                 INSERT INTO customer_consents (
@@ -1073,22 +1086,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                 """, Map.of("project_id", projectId), this::mapBirthdayRule);
     }
 
-    public List<CustomerMembershipPlanRecord> listMembershipPlansByProject(String projectId) {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, plan_code, name, price_cent, duration_days,
-                       benefits::text AS benefits, status, created_at, updated_at
-                  FROM customer_membership_plans
-                 WHERE project_id = :project_id
-                 ORDER BY price_cent ASC, id ASC
-                """, Map.of("project_id", projectId), this::mapMembershipPlan);
-    }
-
-    public List<CustomerMembershipRecord> listMembershipsByProject(String projectId) {
-        return jdbcTemplate.query(MEMBERSHIP_SELECT
-                        + " WHERE project_id = :project_id ORDER BY created_at DESC, id DESC",
-                Map.of("project_id", projectId), this::mapMembership);
-    }
-
     public List<CustomerPointsRuleRecord> listPointsRulesByProject(String projectId) {
         return jdbcTemplate.query("""
                 SELECT * FROM customer_points_rules
@@ -1202,7 +1199,7 @@ class JdbcCustomerRepository implements CustomerRepository {
     // ---- V090 会员忠诚度 第2部分：储值 / 付费会员 / 积分转赠 ----
 
     private static final String STORED_VALUE_ACCOUNT_SELECT = """
-            SELECT id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at
+            SELECT id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at, fund_ownership
               FROM customer_stored_value_accounts
             """;
 
@@ -1247,9 +1244,9 @@ class JdbcCustomerRepository implements CustomerRepository {
     public CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         jdbcTemplate.update("""
                 INSERT INTO customer_stored_value_accounts (
-                    id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at
+                    id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at, fund_ownership
                 )
-                VALUES (:id, :customer_id, :project_id, :merchant_id, :balance_cent, :status, :created_at, :updated_at)
+                VALUES (:id, :customer_id, :project_id, :merchant_id, :balance_cent, :status, :created_at, :updated_at, :fund_ownership)
                 ON CONFLICT (id) DO UPDATE SET
                     balance_cent = EXCLUDED.balance_cent,
                     status = EXCLUDED.status,
@@ -1262,7 +1259,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("balance_cent", account.balanceCent())
                 .addValue("status", account.status())
                 .addValue("created_at", timestampWithTimeZone(account.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(account.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(account.updatedAt()))
+                .addValue("fund_ownership", account.fundOwnership()));
         return account;
     }
 
@@ -1317,6 +1315,45 @@ class JdbcCustomerRepository implements CustomerRepository {
         return count != null && count > 0;
     }
 
+    // AUD-058 充值支付意图 ↔ 卡范围绑定（V284 stored_value_topup_intents）。
+    @Override
+    public int bindStoredValueTopupIntent(String paymentIntentId, String customerId, String projectId,
+                                          String merchantId, Instant createdAt) {
+        // AUD 复核 P1-1②：冲突即校验一致，不再 DO UPDATE 静默改绑。ON CONFLICT 时仅当已绑卡范围与本次完全一致才更新（返回 1=幂等放过），
+        // 卡范围不同则 WHERE 不命中 → 更新 0 行，调用方据此抛 409。IS NOT DISTINCT FROM 兼容 project/merchant 为空。
+        return jdbcTemplate.update("""
+                INSERT INTO stored_value_topup_intents (payment_intent_id, customer_id, project_id, merchant_id, created_at)
+                VALUES (:payment_intent_id, :customer_id, :project_id, :merchant_id, :created_at)
+                ON CONFLICT (payment_intent_id) DO UPDATE SET
+                    customer_id = EXCLUDED.customer_id
+                 WHERE EXCLUDED.customer_id = stored_value_topup_intents.customer_id
+                   AND EXCLUDED.project_id IS NOT DISTINCT FROM stored_value_topup_intents.project_id
+                   AND EXCLUDED.merchant_id IS NOT DISTINCT FROM stored_value_topup_intents.merchant_id
+                """, new MapSqlParameterSource()
+                .addValue("payment_intent_id", paymentIntentId)
+                .addValue("customer_id", customerId)
+                .addValue("project_id", projectId)
+                .addValue("merchant_id", merchantId)
+                .addValue("created_at", timestampWithTimeZone(createdAt)));
+    }
+
+    @Override
+    public Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String paymentIntentId) {
+        if (paymentIntentId == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query("""
+                SELECT payment_intent_id, customer_id, project_id, merchant_id
+                  FROM stored_value_topup_intents
+                 WHERE payment_intent_id = :payment_intent_id
+                """, Map.of("payment_intent_id", paymentIntentId),
+                (rs, rowNumber) -> new StoredValueTopupIntentScope(
+                        rs.getString("payment_intent_id"),
+                        rs.getString("customer_id"),
+                        rs.getString("project_id"),
+                        rs.getString("merchant_id"))).stream().findFirst();
+    }
+
     @Override
     public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accountId) {
         return jdbcTemplate.query("""
@@ -1328,129 +1365,11 @@ class JdbcCustomerRepository implements CustomerRepository {
                 """, Map.of("account_id", accountId), this::mapStoredValueTransaction);
     }
 
-    @Override
-    public CustomerMembershipPlanRecord saveMembershipPlan(CustomerMembershipPlanRecord plan) {
-        jdbcTemplate.update("""
-                INSERT INTO customer_membership_plans (
-                    id, project_id, plan_code, name, price_cent, duration_days, benefits, status, created_at, updated_at
-                )
-                VALUES (
-                    :id, :project_id, :plan_code, :name, :price_cent, :duration_days,
-                    CAST(:benefits AS jsonb), :status, :created_at, :updated_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    name = EXCLUDED.name,
-                    price_cent = EXCLUDED.price_cent,
-                    duration_days = EXCLUDED.duration_days,
-                    benefits = EXCLUDED.benefits,
-                    status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
-                """, new MapSqlParameterSource()
-                .addValue("id", plan.id())
-                .addValue("project_id", plan.projectId())
-                .addValue("plan_code", plan.planCode())
-                .addValue("name", plan.name())
-                .addValue("price_cent", plan.priceCent())
-                .addValue("duration_days", plan.durationDays())
-                .addValue("benefits", writeJson(plan.benefits()))
-                .addValue("status", plan.status())
-                .addValue("created_at", timestampWithTimeZone(plan.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(plan.updatedAt())));
-        return plan;
-    }
-
-    @Override
-    public Optional<CustomerMembershipPlanRecord> findMembershipPlanById(String planId) {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, plan_code, name, price_cent, duration_days,
-                       benefits::text AS benefits, status, created_at, updated_at
-                  FROM customer_membership_plans WHERE id = :id
-                """, Map.of("id", planId), this::mapMembershipPlan).stream().findFirst();
-    }
-
-    @Override
-    public List<CustomerMembershipPlanRecord> listMembershipPlans(String projectId) {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, plan_code, name, price_cent, duration_days,
-                       benefits::text AS benefits, status, created_at, updated_at
-                  FROM customer_membership_plans
-                 WHERE status = 'active'
-                   AND (project_id IS NOT DISTINCT FROM :project_id OR project_id IS NULL)
-                 ORDER BY price_cent ASC, id ASC
-                """, new MapSqlParameterSource("project_id", projectId), this::mapMembershipPlan);
-    }
-
-    @Override
-    public CustomerMembershipRecord saveMembership(CustomerMembershipRecord membership) {
-        jdbcTemplate.update("""
-                INSERT INTO customer_memberships (
-                    id, customer_id, plan_id, project_id, start_at, expire_at, status,
-                    auto_renew, payment_intent_id, idempotency_key, created_at, updated_at
-                )
-                VALUES (
-                    :id, :customer_id, :plan_id, :project_id, :start_at, :expire_at, :status,
-                    :auto_renew, :payment_intent_id, :idempotency_key, :created_at, :updated_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    expire_at = EXCLUDED.expire_at,
-                    status = EXCLUDED.status,
-                    auto_renew = EXCLUDED.auto_renew,
-                    updated_at = EXCLUDED.updated_at
-                """, new MapSqlParameterSource()
-                .addValue("id", membership.id())
-                .addValue("customer_id", membership.customerId())
-                .addValue("plan_id", membership.planId())
-                .addValue("project_id", membership.projectId())
-                .addValue("start_at", timestampWithTimeZone(membership.startAt()))
-                .addValue("expire_at", timestampWithTimeZone(membership.expireAt()))
-                .addValue("status", membership.status())
-                .addValue("auto_renew", membership.autoRenew())
-                .addValue("payment_intent_id", membership.paymentIntentId())
-                .addValue("idempotency_key", membership.idempotencyKey())
-                .addValue("created_at", timestampWithTimeZone(membership.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(membership.updatedAt())));
-        return membership;
-    }
-
-    private static final String MEMBERSHIP_SELECT = """
-            SELECT id, customer_id, plan_id, project_id, start_at, expire_at, status,
-                   auto_renew, payment_intent_id, idempotency_key, created_at, updated_at
-              FROM customer_memberships
-            """;
-
-    @Override
-    public Optional<CustomerMembershipRecord> findMembershipByIdForUpdate(String membershipId) {
-        return jdbcTemplate.query(MEMBERSHIP_SELECT + " WHERE id = :id FOR UPDATE",
-                Map.of("id", membershipId), this::mapMembership).stream().findFirst();
-    }
-
-    @Override
-    public Optional<CustomerMembershipRecord> findMembershipByIdempotencyKey(String key) {
-        if (key == null) {
-            return Optional.empty();
-        }
-        return jdbcTemplate.query(MEMBERSHIP_SELECT + " WHERE idempotency_key = :key",
-                Map.of("key", key), this::mapMembership).stream().findFirst();
-    }
-
-    @Override
-    public List<CustomerMembershipRecord> listMembershipsByCustomerId(String customerId) {
-        return jdbcTemplate.query(MEMBERSHIP_SELECT + " WHERE customer_id = :cid ORDER BY created_at DESC, id DESC",
-                Map.of("cid", customerId), this::mapMembership);
-    }
-
-    @Override
-    public List<CustomerMembershipRecord> listActiveMembershipsExpiringBefore(Instant now) {
-        return jdbcTemplate.query(MEMBERSHIP_SELECT
-                        + " WHERE status = 'active' AND expire_at <= :now ORDER BY expire_at ASC",
-                Map.of("now", timestampWithTimeZone(now)), this::mapMembership);
-    }
-
     // B1d⑤ phase3 商户级卡退款规则
     @Override
     public Optional<StoredValueMerchantRefundRuleRecord> findStoredValueMerchantRefundRule(String merchantId) {
         return jdbcTemplate.query("""
-                SELECT merchant_id, refund_allowed, refund_ratio_bps, created_at, updated_at
+                SELECT merchant_id, refund_allowed, refund_ratio_bps, card_issuance_enabled, fund_ownership, created_at, updated_at
                   FROM stored_value_merchant_refund_rules WHERE merchant_id = :merchant_id
                 """, new MapSqlParameterSource().addValue("merchant_id", merchantId),
                 this::mapMerchantRefundRule).stream().findFirst();
@@ -1459,16 +1378,20 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public StoredValueMerchantRefundRuleRecord saveStoredValueMerchantRefundRule(StoredValueMerchantRefundRuleRecord rule) {
         jdbcTemplate.update("""
-                INSERT INTO stored_value_merchant_refund_rules (merchant_id, refund_allowed, refund_ratio_bps, created_at, updated_at)
-                VALUES (:merchant_id, :refund_allowed, :refund_ratio_bps, :created_at, :updated_at)
+                INSERT INTO stored_value_merchant_refund_rules (merchant_id, refund_allowed, refund_ratio_bps, card_issuance_enabled, fund_ownership, created_at, updated_at)
+                VALUES (:merchant_id, :refund_allowed, :refund_ratio_bps, :card_issuance_enabled, :fund_ownership, :created_at, :updated_at)
                 ON CONFLICT (merchant_id) DO UPDATE SET
                     refund_allowed = EXCLUDED.refund_allowed,
                     refund_ratio_bps = EXCLUDED.refund_ratio_bps,
+                    card_issuance_enabled = EXCLUDED.card_issuance_enabled,
+                    fund_ownership = EXCLUDED.fund_ownership,
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("merchant_id", rule.merchantId())
                 .addValue("refund_allowed", rule.refundAllowed())
                 .addValue("refund_ratio_bps", rule.refundRatioBps())
+                .addValue("card_issuance_enabled", rule.cardIssuanceEnabled())
+                .addValue("fund_ownership", rule.fundOwnership())
                 .addValue("created_at", timestampWithTimeZone(rule.createdAt() == null ? java.time.Instant.now() : rule.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(rule.updatedAt() == null ? java.time.Instant.now() : rule.updatedAt())));
         return rule;
@@ -1479,8 +1402,18 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("merchant_id"),
                 rs.getBoolean("refund_allowed"),
                 rs.getInt("refund_ratio_bps"),
+                rs.getBoolean("card_issuance_enabled"),
+                rs.getString("fund_ownership"),
                 nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "updated_at"));
+    }
+
+    @Override
+    public List<CustomerStoredValueAccountRecord> listStoredValueAccountsByCustomer(String customerId) {
+        return jdbcTemplate.query(STORED_VALUE_ACCOUNT_SELECT
+                        + " WHERE customer_id = :customer_id ORDER BY merchant_id NULLS FIRST, created_at",
+                new MapSqlParameterSource().addValue("customer_id", customerId),
+                this::mapStoredValueAccount);
     }
 
     private CustomerStoredValueAccountRecord mapStoredValueAccount(ResultSet rs, int rowNumber) throws SQLException {
@@ -1492,7 +1425,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getLong("balance_cent"),
                 rs.getString("status"),
                 nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "updated_at"),
+                rs.getString("fund_ownership"));
     }
 
     private CustomerStoredValueTransactionRecord mapStoredValueTransaction(ResultSet rs, int rowNumber) throws SQLException {
@@ -1508,36 +1442,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("idempotency_key"),
                 nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "paid_at"));
-    }
-
-    private CustomerMembershipPlanRecord mapMembershipPlan(ResultSet rs, int rowNumber) throws SQLException {
-        return new CustomerMembershipPlanRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("plan_code"),
-                rs.getString("name"),
-                rs.getLong("price_cent"),
-                rs.getInt("duration_days"),
-                readObjectMap(rs.getString("benefits")),
-                rs.getString("status"),
-                nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
-    }
-
-    private CustomerMembershipRecord mapMembership(ResultSet rs, int rowNumber) throws SQLException {
-        return new CustomerMembershipRecord(
-                rs.getString("id"),
-                rs.getString("customer_id"),
-                rs.getString("plan_id"),
-                rs.getString("project_id"),
-                nullableInstant(rs, "start_at"),
-                nullableInstant(rs, "expire_at"),
-                rs.getString("status"),
-                rs.getBoolean("auto_renew"),
-                rs.getString("payment_intent_id"),
-                rs.getString("idempotency_key"),
-                nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
     }
 
 }

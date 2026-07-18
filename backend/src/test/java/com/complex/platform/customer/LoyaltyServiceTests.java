@@ -495,6 +495,11 @@ class LoyaltyServiceTests {
         }
 
         @Override
+        public int revokeSessionByToken(String token) {
+            return 0;
+        }
+
+        @Override
         public CustomerConsentRecord saveConsent(CustomerConsentRecord consent) {
             return consent;
         }

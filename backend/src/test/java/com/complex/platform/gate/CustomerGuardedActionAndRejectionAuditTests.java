@@ -9,7 +9,6 @@ import static org.mockito.Mockito.when;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.customer.LoyaltyService;
-import com.complex.platform.customer.MembershipService;
 import com.complex.platform.customer.StoredValueService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
@@ -36,12 +35,6 @@ class CustomerGuardedActionAndRejectionAuditTests {
     /** 客户域资金/权益动作：Service 类 + 方法名 + 期望补全的 capability 码。 */
     static Stream<Arguments> customerFundAndEntitlementActions() {
         return Stream.of(
-                // 会员（资金：开通/续费；权益：激活/取消/计划）
-                Arguments.of(MembershipService.class, "subscribe", "customer.membership.subscribe"),
-                Arguments.of(MembershipService.class, "activate", "customer.membership.activate"),
-                Arguments.of(MembershipService.class, "renew", "customer.membership.renew"),
-                Arguments.of(MembershipService.class, "cancel", "customer.membership.cancel"),
-                Arguments.of(MembershipService.class, "savePlan", "customer.membership_plan.manage"),
                 // 储值（资金：充值/消费/退卡/冻结）
                 Arguments.of(StoredValueService.class, "topup", "customer.stored_value.topup"),
                 Arguments.of(StoredValueService.class, "settleTopup", "customer.stored_value.topup"),

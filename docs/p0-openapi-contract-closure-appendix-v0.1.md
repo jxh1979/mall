@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 614 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 312 | 人工权限矩阵正文未覆盖 209 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1228 | 人工事件矩阵正文未覆盖 1186 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 614 | 人工任务映射正文未逐项覆盖 608 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 368 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 620 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 309 | 人工权限矩阵正文未覆盖 206 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1240 | 人工事件矩阵正文未覆盖 1198 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 620 | 人工任务映射正文未逐项覆盖 614 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 372 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -147,15 +147,12 @@
 | `customer.account.manage` | staff-token | platform | 4 | lookupCustomerAccountByPhone, suspendCustomerAccount, blacklistCustomerAccount, reinstateCustomerAccount | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.evaluate` | staff-token | project | 1 | evaluateMemberLevel | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.view` | staff-token | project | 1 | listMemberLevels | OpenAPI 补充，以本附录为准 |
-| `customer.membership.manage` | staff-token | project | 1 | saveMembershipPlan | OpenAPI 补充，以本附录为准 |
-| `customer.membership.subscribe` | customer-token | customer | 1 | customerMembershipSubscribe | OpenAPI 补充，以本附录为准 |
-| `customer.membership.view` | customer-token, staff-token | customer, project | 3 | listCustomerMemberships, customerMembershipBenefits, listMembershipPlans | OpenAPI 补充，以本附录为准 |
 | `customer.points.freeze` | staff-token | project | 2 | freezePointsAccount, unfreezePointsAccount | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.consume` | customer-token | customer | 1 | customerStoredValueConsume | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.freeze` | staff-token | project | 2 | freezeStoredValueAccount, unfreezeStoredValueAccount | OpenAPI 补充，以本附录为准 |
-| `customer.stored_value.refund` | staff-token | merchant, project | 3 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule | OpenAPI 补充，以本附录为准 |
+| `customer.stored_value.refund` | staff-token | merchant, platform, project | 4 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule, configureStoredValueMerchantCard | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.topup` | customer-token | customer | 2 | customerStoredValueTopup, customerStoredValueSettle | OpenAPI 补充，以本附录为准 |
-| `customer.stored_value.view` | customer-token | customer | 1 | customerStoredValueAccount | OpenAPI 补充，以本附录为准 |
+| `customer.stored_value.view` | customer-token | customer | 2 | customerStoredValueAccount, customerStoredValueAccounts | OpenAPI 补充，以本附录为准 |
 | `energy.meter.manage` | staff-token | platform | 3 | listEnergyMeters, createEnergyMeter, updateEnergyMeter | OpenAPI 补充，以本附录为准 |
 | `energy.reading.manage` | staff-token | platform | 7 | listEnergyReadings, recordEnergyReading, reviewEnergyReading, getEnergyMeterDifference, settleEnergyFee, settleEnergyFeeShortcut, listAbnormalReadings | OpenAPI 补充，以本附录为准 |
 | `entity.binding.manage` | staff-token | project-merchant | 3 | createBusinessEntity, createBusinessEntityBinding, changeBusinessEntityBinding | 已在权限矩阵正文出现 |
@@ -179,8 +176,6 @@
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project-entity | 3 | createArApItem, generateContractRentBill, generateContractPeriodBills | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | platform, project-entity | 2 | listArApItems, listArOverdueDebtors | 已在权限矩阵正文出现 |
-| `finance.cam.allocate` | staff-token | platform | 1 | allocateCam | OpenAPI 补充，以本附录为准 |
-| `finance.cam.trueup` | staff-token | platform | 1 | trueUpCam | OpenAPI 补充，以本附录为准 |
 | `finance.daily_close.lock` | staff-token | project-entity | 1 | createDailyClose | 已在权限矩阵正文出现 |
 | `finance.daily_close.manage` | staff-token | project-entity | 1 | listDailyCloseSummaries | OpenAPI 补充，以本附录为准 |
 | `finance.deposit.manage` | staff-token | platform | 1 | recordDepositAction | OpenAPI 补充，以本附录为准 |
@@ -243,6 +238,7 @@
 | `inventory.trace_code.print` | staff-token | project | 1 | printInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.trace_code.register` | staff-token | project | 1 | registerInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.trace_code.view` | staff-token | project | 2 | listInventoryTraceCodes, getInventoryTraceCode | OpenAPI 补充，以本附录为准 |
+| `inventory.transfer_order.manage` | staff-token | project | 2 | returnTransferOrder, cancelTransferOrder | OpenAPI 补充，以本附录为准 |
 | `inventory.warehouse.manage` | staff-token | project-warehouse-bar, warehouse | 2 | listWarehouses, createWarehouse | OpenAPI 补充，以本附录为准 |
 | `leasing.brand.blacklist` | staff-token | platform | 1 | blacklistLeasingBrand | OpenAPI 补充，以本附录为准 |
 | `leasing.brand.manage` | staff-token | platform | 2 | listLeasingBrands, createLeasingBrand | OpenAPI 补充，以本附录为准 |
@@ -267,7 +263,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 27 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 34 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
@@ -277,7 +273,7 @@
 | `partner.subordinate.manage` | staff-token | self | 2 | createPartnerSubordinate, disablePartnerSubordinate | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.view` | staff-token | self | 2 | listPartnerSubordinates, listSubordinateCompletion | OpenAPI 补充，以本附录为准 |
 | `platform.notification_window.manage` | staff-token | platform | 1 | upsertNotificationWindow | OpenAPI 补充，以本附录为准 |
-| `public` | public | customer, none, project, public-project | 6 | login, customerPhoneLogin, customerLogout, listCustomerTicketProducts, getSystemHealth, listCustomerMembershipPlans | 已在权限矩阵正文出现 |
+| `public` | public | customer, none, public-project | 5 | login, customerPhoneLogin, customerLogout, listCustomerTicketProducts, getSystemHealth | 已在权限矩阵正文出现 |
 | `refund.authority.manage` | staff-token | project | 2 | upsertRefundAuthorityLimit, upsertRefundAutoRule | OpenAPI 补充，以本附录为准 |
 | `refund.authority.view` | staff-token | project | 2 | listRefundAuthorityLimits, listRefundAutoRules | OpenAPI 补充，以本附录为准 |
 | `risk_alert.claim` | staff-token | platform | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
@@ -325,12 +321,13 @@
 | `ticket.price_variant.view` | staff-token | project-channel | 1 | listTicketPriceRules | 已在权限矩阵正文出现 |
 | `ticket.product.manage` | staff-token | project | 3 | createTicketType, bindTicketTypeEntitlement, publishTicketType | 已在权限矩阵正文出现 |
 | `ticket.product.view` | staff-token | project | 1 | listTicketTypes | 已在权限矩阵正文出现 |
-| `ticket.refund.approve` | staff-token | project-order | 1 | approveTicketRefund | 已在权限矩阵正文出现 |
+| `ticket.refund.approve` | staff-token | project-order | 2 | approveTicketRefund, rejectTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.request` | staff-token | project-order | 1 | requestTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.view` | staff-token | - | 1 | listTicketRefundLines | OpenAPI 补充，以本附录为准 |
 | `ticket.ticket.issue` | staff-token | project-order | 1 | issueTicket | 已在权限矩阵正文出现 |
+| `ticket.transfer.read` | staff-token | project | 1 | listTicketTransfers | OpenAPI 补充，以本附录为准 |
 | `ticket.verify.reverse` | staff-token | project-point | 1 | reverseTicketVerification | OpenAPI 补充，以本附录为准 |
-| `ticket.verify.view` | staff-token | project | 1 | listIssuedEntitlements | 已在权限矩阵正文出现 |
+| `ticket.verify.view` | staff-token | project | 2 | listTicketInstances, listIssuedEntitlements | 已在权限矩阵正文出现 |
 | `verification.execute` | staff-token | project-point | 2 | createTicketVerification, previewTicketVerification | 已在权限矩阵正文出现 |
 | `verification.view` | staff-token | project-merchant | 1 | listTicketVerifications | 已在权限矩阵正文出现 |
 | `wecom.retention.manage` | staff-token | platform | 2 | listWecomRetentionPolicies, upsertWecomRetentionPolicy | OpenAPI 补充，以本附录为准 |
@@ -783,8 +780,8 @@
 | `customer.account.reinstated` | success | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `customer.account.suspend_failed` | failure | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `customer.account.suspended` | success | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
-| `customer.account.view_failed` | failure | `lookupCustomerAccountByPhone` | `GET` | `/api/v1/customer-accounts` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
-| `customer.account.viewed` | success | `lookupCustomerAccountByPhone` | `GET` | `/api/v1/customer-accounts` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.view_failed` | failure | `lookupCustomerAccountByPhone` | `POST` | `/api/v1/customer-accounts/lookup` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.viewed` | success | `lookupCustomerAccountByPhone` | `POST` | `/api/v1/customer-accounts/lookup` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `customer.auth.login` | success | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.auth.login_failed` | failure | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.bar_invitation.confirm_failed` | failure | `confirmCustomerBarInvitation` | `POST` | `/api/v1/customer/bar-invitations/confirm` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -810,16 +807,8 @@
 | `customer.logout_failed` | failure | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.member_levels_view_failed` | failure | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
 | `customer.member_levels_viewed` | success | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
-| `customer.membership_benefits_viewed` | success | `customerMembershipBenefits` | `GET` | `/api/v1/customer/membership-benefits` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
-| `customer.membership_benefits_viewed_failed` | failure | `customerMembershipBenefits` | `GET` | `/api/v1/customer/membership-benefits` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
-| `customer.membership_plans_admin_viewed` | success | `listMembershipPlans` | `GET` | `/api/v1/loyalty/membership-plans` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
-| `customer.membership_plans_admin_viewed_failed` | failure | `listMembershipPlans` | `GET` | `/api/v1/loyalty/membership-plans` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
-| `customer.membership_plans_viewed` | success | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
-| `customer.membership_plans_viewed_failed` | failure | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
-| `customer.membership.subscribe` | success | `customerMembershipSubscribe` | `POST` | `/api/v1/customer/memberships/subscribe` | CUS-客人端 | `customer.membership.subscribe` | 接口级事件，以本附录为准 |
-| `customer.membership.subscribe_failed` | failure | `customerMembershipSubscribe` | `POST` | `/api/v1/customer/memberships/subscribe` | CUS-客人端 | `customer.membership.subscribe` | 接口级事件，以本附录为准 |
-| `customer.memberships_viewed` | success | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
-| `customer.memberships_viewed_failed` | failure | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
+| `customer.my_tickets_view_failed` | failure | `listMyTickets` | `GET` | `/api/v1/customer/my-tickets` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.my_tickets_viewed` | success | `listMyTickets` | `GET` | `/api/v1/customer/my-tickets` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.order_tickets_view_failed` | failure | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.order_tickets_viewed` | success | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_view_failed` | failure | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -842,6 +831,8 @@
 | `customer.session_viewed` | success | `getCustomerSession` | `GET` | `/api/v1/customer/session` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.stored_value_account_viewed` | success | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `customer.stored_value_account_viewed_failed` | failure | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
+| `customer.stored_value_accounts_viewed` | success | `customerStoredValueAccounts` | `GET` | `/api/v1/customer/stored-value/accounts` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
+| `customer.stored_value_accounts_viewed_failed` | failure | `customerStoredValueAccounts` | `GET` | `/api/v1/customer/stored-value/accounts` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `customer.stored_value.consume` | success | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | CUS-客人端 | `customer.stored_value.consume` | 接口级事件，以本附录为准 |
 | `customer.stored_value.consume_failed` | failure | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | CUS-客人端 | `customer.stored_value.consume` | 接口级事件，以本附录为准 |
 | `customer.stored_value.settle` | success | `customerStoredValueSettle` | `POST` | `/api/v1/customer/stored-value/settle` | CUS-客人端 | `customer.stored_value.topup` | 接口级事件，以本附录为准 |
@@ -852,6 +843,12 @@
 | `customer.ticket_order.created` | success | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_view_failed` | failure | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_viewed` | success | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
+| `customer.ticket_transfer_incoming_view_failed` | failure | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_transfer_incoming_viewed` | success | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_transfer_outgoing_view_failed` | failure | `listOutgoingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_transfer_outgoing_viewed` | success | `listOutgoingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_transfer_preview_view_failed` | failure | `previewCustomerTicketTransfer` | `GET` | `/api/v1/customer/ticket-transfers/preview` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_transfer_preview_viewed` | success | `previewCustomerTicketTransfer` | `GET` | `/api/v1/customer/ticket-transfers/preview` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `device.policy_violation` | success | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
 | `device.policy_violation_failed` | failure | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
 | `energy.fee_settle_failed` | failure | `settleEnergyFee` | `POST` | `/api/v1/energy/settlements/energy-fee` | P0-待归类 | `energy.reading.manage` | 接口级事件，以本附录为准 |
@@ -1008,10 +1005,6 @@
 | `finance_reconciliation.view_failed` | failure | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `openplatform.reconcile.execute` | 接口级事件，以本附录为准 |
 | `finance_refund.create_failed` | failure | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
 | `finance_refund.created` | success | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
-| `finance.cam.allocate_failed` | failure | `allocateCam` | `POST` | `/api/v1/finance/cam/allocations` | FIN-财务台账 | `finance.cam.allocate` | 接口级事件，以本附录为准 |
-| `finance.cam.allocated` | success | `allocateCam` | `POST` | `/api/v1/finance/cam/allocations` | FIN-财务台账 | `finance.cam.allocate` | 接口级事件，以本附录为准 |
-| `finance.cam.trued_up` | success | `trueUpCam` | `POST` | `/api/v1/finance/cam/trueups` | FIN-财务台账 | `finance.cam.trueup` | 接口级事件，以本附录为准 |
-| `finance.cam.trueup_failed` | failure | `trueUpCam` | `POST` | `/api/v1/finance/cam/trueups` | FIN-财务台账 | `finance.cam.trueup` | 接口级事件，以本附录为准 |
 | `finance.daily_close_summary.view_failed` | failure | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
 | `finance.daily_close_summary.viewed` | success | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
 | `finance.deposit.action_failed` | failure | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | FIN-财务台账 | `finance.deposit.manage` | 接口级事件，以本附录为准 |
@@ -1198,6 +1191,10 @@
 | `inventory.trace_code.registered` | success | `registerInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes` | INV-库存存酒 | `inventory.trace_code.register` | 接口级事件，以本附录为准 |
 | `inventory.trace_code.view_failed` | failure | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | INV-库存存酒 | `inventory.trace_code.view` | 接口级事件，以本附录为准 |
 | `inventory.trace_code.viewed` | success | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | INV-库存存酒 | `inventory.trace_code.view` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_cancel_failed` | failure | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_cancelled` | success | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_return_failed` | failure | `returnTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/return` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_returned` | success | `returnTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/return` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.create_failed` | failure | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.created` | success | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.list` | success | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
@@ -1247,8 +1244,6 @@
 | `mdm.violation.view_failed` | failure | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.violation.view` | 接口级事件，以本附录为准 |
 | `mdm.violation.viewed` | success | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.violation.view` | 接口级事件，以本附录为准 |
 | `member.level_changed` | success | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
-| `membership.plan_saved` | success | `saveMembershipPlan` | `POST` | `/api/v1/loyalty/membership-plans` | CUS-客人端 | `customer.membership.manage` | 接口级事件，以本附录为准 |
-| `membership.plan_saved_failed` | failure | `saveMembershipPlan` | `POST` | `/api/v1/loyalty/membership-plans` | CUS-客人端 | `customer.membership.manage` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.view_failed` | failure | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.viewed` | success | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.view_failed` | failure | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
@@ -1451,6 +1446,8 @@
 | `staff.shift.viewed` | success | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `stored_value.frozen` | success | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
 | `stored_value.frozen_failed` | failure | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
+| `stored_value.merchant_card_config_failed` | failure | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `stored_value.merchant_card_configured` | success | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.merchant_refund_rule_configured` | success | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.merchant_refund_rule_failed` | failure | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.merchant_refund_rule_view_failed` | failure | `getStoredValueMerchantRefundRule` | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
@@ -1521,6 +1518,8 @@
 | `ticket_entitlement_template.unarchived` | success | `unarchiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/unarchive` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.viewed` | success | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | TIC-票务权益 | `ticket.entitlement.view` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.viewed_failed` | failure | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | TIC-票务权益 | `ticket.entitlement.view` | 接口级事件，以本附录为准 |
+| `ticket_instance.viewed` | success | `listTicketInstances` | `GET` | `/api/v1/ticketing/ticket-instances` | TIC-票务权益 | `ticket.verify.view` | 接口级事件，以本附录为准 |
+| `ticket_instance.viewed_failed` | failure | `listTicketInstances` | `GET` | `/api/v1/ticketing/ticket-instances` | TIC-票务权益 | `ticket.verify.view` | 接口级事件，以本附录为准 |
 | `ticket_issued_entitlement.viewed` | success | `listIssuedEntitlements` | `GET` | `/api/v1/ticketing/issued-entitlements` | TIC-票务权益 | `ticket.verify.view` | 接口级事件，以本附录为准 |
 | `ticket_issued_entitlement.viewed_failed` | failure | `listIssuedEntitlements` | `GET` | `/api/v1/ticketing/issued-entitlements` | TIC-票务权益 | `ticket.verify.view` | 接口级事件，以本附录为准 |
 | `ticket_order.cancel_failed` | failure | `cancelTicketOrder` | `POST` | `/api/v1/ticketing/orders/{order_id}/cancel` | TIC-票务权益 | `ticket.order.create` | 接口级事件，以本附录为准 |
@@ -1547,8 +1546,18 @@
 | `ticket_product.viewed` | success | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `ticket_refund.approve_failed` | failure | `approveTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | TIC-票务权益 | `ticket.refund.approve` | 接口级事件，以本附录为准 |
 | `ticket_refund.approved` | success | `approveTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | TIC-票务权益 | `ticket.refund.approve` | 接口级事件，以本附录为准 |
+| `ticket_refund.reject_failed` | failure | `rejectTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/reject` | TIC-票务权益 | `ticket.refund.approve` | 接口级事件，以本附录为准 |
+| `ticket_refund.rejected` | success | `rejectTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/reject` | TIC-票务权益 | `ticket.refund.approve` | 接口级事件，以本附录为准 |
 | `ticket_refund.request_failed` | failure | `requestTicketRefund` | `POST` | `/api/v1/ticketing/refunds` | TIC-票务权益 | `ticket.refund.request` | 接口级事件，以本附录为准 |
 | `ticket_refund.requested` | success | `requestTicketRefund` | `POST` | `/api/v1/ticketing/refunds` | TIC-票务权益 | `ticket.refund.request` | 接口级事件，以本附录为准 |
+| `ticket_transfer.claim_failed` | failure | `claimCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/claim` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `ticket_transfer.claimed` | success | `claimCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/claim` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `ticket_transfer.create_failed` | failure | `initiateCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `ticket_transfer.created` | success | `initiateCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `ticket_transfer.revoke_failed` | failure | `revokeCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/revoke` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `ticket_transfer.revoked` | success | `revokeCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/revoke` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `ticket_transfer.view_failed` | failure | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | TIC-票务权益 | `ticket.transfer.read` | 接口级事件，以本附录为准 |
+| `ticket_transfer.viewed` | success | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | TIC-票务权益 | `ticket.transfer.read` | 接口级事件，以本附录为准 |
 | `ticket.issue_failed` | failure | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
 | `ticket.issued` | success | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
 | `ticket.refund_line.list` | success | `listTicketRefundLines` | `GET` | `/api/v1/ticketing/refunds/{refund_id}/lines` | TIC-票务权益 | `ticket.refund.view` | 接口级事件，以本附录为准 |
@@ -1780,14 +1789,14 @@
 | BAR-酒吧经营 | `verifyBarReservationInvitationEntry` | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 订卡邀请函入场核验 | `bar.table.guest_checkin` | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | staff_work_phone | operation 级补充 |
 | BAR-酒吧经营 | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | 退菜退酒 | `bar.order_item.void` | `bar.order_item_voided` / `bar.order_item_void_failed` | tablet, web | operation 级补充 |
 | CUS-客人端 | `blacklistCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist` | 拉黑客人账号（永久禁止使用服务，无到期） | `customer.account.manage` | `customer.account.blacklisted` / `customer.account.blacklist_failed` | web | operation 级补充 |
+| CUS-客人端 | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收） | `customer.stored_value.refund` | `stored_value.merchant_card_configured` / `stored_value.merchant_card_config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
 | CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | 客人登出（清除免登录会话 cookie） | `public` | `customer.logged_out` / `customer.logout_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS-客人端 | `customerMembershipBenefits` | `GET` | `/api/v1/customer/membership-benefits` | 客人当前生效会员权益 | `customer.membership.view` | `customer.membership_benefits_viewed` / `customer.membership_benefits_viewed_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `customerMembershipSubscribe` | `POST` | `/api/v1/customer/memberships/subscribe` | 客人付费会员开通（绑支付意图） | `customer.membership.subscribe` | `customer.membership.subscribe` / `customer.membership.subscribe_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | 客人手机号登录 | `public` | `customer.auth.login` / `customer.auth.login_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | 客人储值账户查询 | `customer.stored_value.view` | `customer.stored_value_account_viewed` / `customer.stored_value_account_viewed_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerStoredValueAccounts` | `GET` | `/api/v1/customer/stored-value/accounts` | 客人储值卡列表（我的全部卡：通用卡 + 各商户卡分别余额） | `customer.stored_value.view` | `customer.stored_value_accounts_viewed` / `customer.stored_value_accounts_viewed_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | 客人储值消费（余额扣减） | `customer.stored_value.consume` | `customer.stored_value.consume` / `customer.stored_value.consume_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerStoredValueSettle` | `POST` | `/api/v1/customer/stored-value/settle` | 客人储值充值入账（支付成功后） | `customer.stored_value.topup` | `customer.stored_value.settle` / `customer.stored_value.settle_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerStoredValueTopup` | `POST` | `/api/v1/customer/stored-value/topup` | 客人储值充值（绑支付意图） | `customer.stored_value.topup` | `customer.stored_value.topup` / `customer.stored_value.topup_failed` | web, miniapp, app | operation 级补充 |
@@ -1800,18 +1809,14 @@
 | CUS-客人端 | `getCustomerSession` | `GET` | `/api/v1/customer/session` | 客人会话恢复（免登录） | `not_applicable` | `customer.session_viewed` / `customer.session_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `getStoredValueMerchantRefundRule` | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | 查询商户级储值卡退款规则 | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_viewed` / `stored_value.merchant_refund_rule_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | 付费会员档位列表（客人端公开展示） | `public` | `customer.membership_plans_viewed` / `customer.membership_plans_viewed_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | 客人付费会员列表 | `customer.membership.view` | `customer.memberships_viewed` / `customer.memberships_viewed_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | 我的订单 | `not_applicable` | `customer.orders_viewed` / `customer.orders_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | 查询积分兑换商品目录 | `not_applicable` | `customer.points.redemption_items_viewed` / `customer.points.redemption_items_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | 查询我的积分兑换记录 | `not_applicable` | `customer.points.redemptions_viewed` / `customer.points.redemptions_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | 会员等级配置列表 | `customer.loyalty.view` | `customer.member_levels_viewed` / `customer.member_levels_view_failed` | web | operation 级补充 |
-| CUS-客人端 | `listMembershipPlans` | `GET` | `/api/v1/loyalty/membership-plans` | 付费会员档位列表（后台） | `customer.membership.view` | `customer.membership_plans_admin_viewed` / `customer.membership_plans_admin_viewed_failed` | web | operation 级补充 |
-| CUS-客人端 | `lookupCustomerAccountByPhone` | `GET` | `/api/v1/customer-accounts` | 按手机号精确查客人账号（盲索引，返回安全投影，明文手机号不出网） | `customer.account.manage` | `customer.account.viewed` / `customer.account.view_failed` | web | operation 级补充 |
+| CUS-客人端 | `lookupCustomerAccountByPhone` | `POST` | `/api/v1/customer-accounts/lookup` | 按手机号精确查客人账号（盲索引，返回安全投影；手机号走请求体不入 URL） | `customer.account.manage` | `customer.account.viewed` / `customer.account.view_failed` | web | operation 级补充 |
 | CUS-客人端 | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | 提交积分兑换 | `not_applicable` | `customer.points.redeem` / `customer.points.redeem_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `refundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | 会员储值退卡/退余额（后台） | `customer.stored_value.refund` | `stored_value.refund` / `stored_value.refund_failed` | web | operation 级补充 |
 | CUS-客人端 | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | 恢复客人账号为正常（解封/解黑） | `customer.account.manage` | `customer.account.reinstated` / `customer.account.reinstate_failed` | web | operation 级补充 |
-| CUS-客人端 | `saveMembershipPlan` | `POST` | `/api/v1/loyalty/membership-plans` | 保存付费会员档位（后台） | `customer.membership.manage` | `membership.plan_saved` / `membership.plan_saved_failed` | web | operation 级补充 |
 | CUS-客人端 | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | 封禁客人账号（临时，到期客人再登录自动恢复正常；期内购买/使用被拒） | `customer.account.manage` | `customer.account.suspended` / `customer.account.suspend_failed` | web | operation 级补充 |
 | CUS-客人端 | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | 解冻会员积分账户 | `customer.points.freeze` | `customer.points.unfrozen` / `customer.points.unfreeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `unfreezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/unfreeze` | 解冻会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.unfrozen` / `stored_value.unfrozen_failed` | web | operation 级补充 |
@@ -1821,10 +1826,17 @@
 | CUS/BAR-客人订台 | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | 客人可订台资源 | `not_applicable` | `customer.bar_reservation_options_viewed` / `customer.bar_reservation_options_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS/BAR-客人订台 | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-sessions/{session_id}/menu` | 客人扫码点单查看菜单 | `not_applicable` | `customer.bar_scan_menu.viewed` / `customer.bar_scan_menu.view_failed` | web, miniapp, app | operation 级补充 |
 | CUS/BAR-客人订台 | `placeCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-sessions/{session_id}/scan-orders` | 客人自助扫码点单 | `not_applicable` | `customer.bar_scan_order.created` / `customer.bar_scan_order.create_failed` | web, miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `claimCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/claim` | 确认领取转赠(手机号只指定人可领;链接/二维码先确认者得) | `not_applicable` | `ticket_transfer.claimed` / `ticket_transfer.claim_failed` | web, miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | 客人自助购票下单 | `not_applicable` | `customer.ticket_order.created` / `customer.ticket_order.create_failed` | web, miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `getCustomerTicketQr` | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | 我的动态二维码 | `not_applicable` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `initiateCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers` | 发起门票转赠(手机号/微信链接/二维码) | `not_applicable` | `ticket_transfer.created` / `ticket_transfer.create_failed` | web, miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | 客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id） | `not_applicable` | `customer.order_tickets_viewed` / `customer.order_tickets_view_failed` | miniapp, web | operation 级补充 |
 | CUS/TIC-客人购票 | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | 客人可购票种和票价 | `public` | `customer.ticket_products_viewed` / `customer.ticket_products_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
+| CUS/TIC-客人购票 | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | 待我领取的转赠(手机号渠道) | `not_applicable` | `customer.ticket_transfer_incoming_viewed` / `customer.ticket_transfer_incoming_view_failed` | web, miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `listMyTickets` | `GET` | `/api/v1/customer/my-tickets` | 我的票(持有人视角:自购未转+受赠,含转赠中标记) | `not_applicable` | `customer.my_tickets_viewed` / `customer.my_tickets_view_failed` | web, miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `listOutgoingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | 我发起的转赠(撤回入口/状态查看) | `not_applicable` | `customer.ticket_transfer_outgoing_viewed` / `customer.ticket_transfer_outgoing_view_failed` | web, miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `previewCustomerTicketTransfer` | `GET` | `/api/v1/customer/ticket-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `customer.ticket_transfer_preview_viewed` / `customer.ticket_transfer_preview_view_failed` | web, miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `revokeCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/revoke` | 撤回转赠(领取前发起人可撤回) | `not_applicable` | `ticket_transfer.revoked` / `ticket_transfer.revoke_failed` | web, miniapp, app | operation 级补充 |
 | EVD-事件证据 | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | 关联证据附件到业务对象 | `evidence.attachment.create` | `evidence.attachment_bound` / `evidence.attachment_bind_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | EVD-事件证据 | `claimRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | 认领风险预警 | `risk_alert.claim` | `exception.claimed` / `exception.claim_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `completeEvidenceAttachmentUpload` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/complete` | 完成上传确认 | `evidence.attachment.create` | `evidence.attachment_completed` / `evidence.attachment_complete_failed` | web, staff_work_phone, tablet | operation 级补充 |
@@ -1841,7 +1853,6 @@
 | EVD-事件证据 | `resolveRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | 关闭风险预警（需结论） | `risk_alert.resolve` | `exception.resolved` / `exception.resolve_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | 查询风险预警列表 | `risk_alert.view` | `exception.alerts_viewed` / `exception.alerts_view_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | 转交风险预警 | `risk_alert.transfer` | `exception.transferred` / `exception.transfer_failed` | web, mobile_admin | operation 级补充 |
-| FIN-财务台账 | `allocateCam` | `POST` | `/api/v1/finance/cam/allocations` | （已废止）CAM 权重分摊 → 改用物业费固定计费；调用返回 409 CAM_ALLOCATION_ABOLISHED | `finance.cam.allocate` | `finance.cam.allocated` / `finance.cam.allocate_failed` | web | operation 级补充 |
 | FIN-财务台账 | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | 锁定后补录审批决定 | `finance.locked_backfill.approve` | `finance.locked_backfill_approved` / `finance.locked_backfill_decision_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `billPropertyFee` | `POST` | `/api/v1/finance/property-fee/bills` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `finance.property_fee.manage` | `finance_property_fee.billed` / `finance_property_fee.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | 营业额抽成计费生成应收 | `finance.turnover_rent.bill` | `finance.turnover_rent.billed` / `finance.turnover_rent.bill_failed` | web | operation 级补充 |
@@ -1865,7 +1876,6 @@
 | FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | 保证金台账动作（收取/退还/抵扣/没收） | `finance.deposit.manage` | `finance.deposit.action_recorded` / `finance.deposit.action_failed` | web | operation 级补充 |
 | FIN-财务台账 | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | 锁定后补录审批申请 | `finance.locked_backfill.request` | `finance.locked_backfill_requested` / `finance.locked_backfill_request_failed` | web, mobile_admin | operation 级补充 |
-| FIN-财务台账 | `trueUpCam` | `POST` | `/api/v1/finance/cam/trueups` | （已废止）CAM 年度 true-up → 物业费不退不补、无对账；调用返回 409 CAM_TRUEUP_ABOLISHED | `finance.cam.trueup` | `finance.cam.trued_up` / `finance.cam.trueup_failed` | web | operation 级补充 |
 | FIN-财务台账 | `upsertRefundAuthorityLimit` | `POST` | `/api/v1/finance/refund-authority/limits` | 新增或更新退款自助额度 | `refund.authority.manage` | `refund_authority.changed` / `refund_authority.change_failed` | web | operation 级补充 |
 | FIN-财务台账 | `upsertRefundAutoRule` | `POST` | `/api/v1/finance/refund-authority/rules` | 新增或更新退款自动放行规则 | `refund.authority.manage` | `refund_authority.changed` / `refund_authority.change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `approveSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | 主管审批或驳回复核记录 | `governance.supervisor_review.approve` | `governance.supervisor_review.decided` / `governance.supervisor_review.decide_failed` | web | operation 级补充 |
@@ -1924,6 +1934,7 @@
 | INV-库存存酒 | `approveSupplyContract` | `POST` | `/api/v1/inventory/supply-contracts/{id}/approve` | 审批供应合同(draft→approved/rejected) | `inventory.purchase.approve` | `supply_contract.approved` / `supply_contract.approve_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `arrivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/arrive` | 采购单到货(ordered/expected→arrived) | `inventory.purchase.approve` | `inventory.purchase_status_changed` / `inventory.purchase_status_change_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `cancelSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/cancel` | 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废) | `bar.saved_bottle.manage` | `bar.saved_bottle.cancelled` / `bar.saved_bottle.cancel_failed` | tablet, web, staff_work_phone | operation 级补充 |
+| INV-库存存酒 | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | 取消借调单 | `inventory.transfer_order.manage` | `inventory.transfer_order_cancelled` / `inventory.transfer_order_cancel_failed` | web | operation 级补充 |
 | INV-库存存酒 | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | 存酒领取 | `bar.saved_bottle.manage` | `bar.saved_bottle_picked_up` / `bar.saved_bottle.pickup_failed` | tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `createInventoryItem` | `POST` | `/api/v1/inventory/items` | 创建库存物品 | `inventory.stock.move` | `inventory.item.created` / `inventory.item.created_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createInventoryStockBatch` | `POST` | `/api/v1/inventory/stock-batches` | 创建库存批次 | `inventory.stock.batch.manage` | `inventory.stock_batch.create` / `inventory.stock_batch.create_failed` | web, mobile_admin | operation 级补充 |
@@ -1966,6 +1977,7 @@
 | INV-库存存酒 | `recordInventoryStocktakeVariance` | `POST` | `/api/v1/inventory/stocktakes/{id}/variances` | 录入库存盘点差异行 | `inventory.stocktake.variance_record` | `inventory.stocktake.variance_recorded` / `inventory.stocktake.variance_record_failed` | web | operation 级补充 |
 | INV-库存存酒 | `registerInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes` | 贴码登记溯源码（入库） | `inventory.trace_code.register` | `inventory.trace_code.registered` / `inventory.trace_code.register_failed` | web | operation 级补充 |
 | INV-库存存酒 | `reportRobotSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | 机器人配送段上报(被动留痕,受第三方开关门控) | `inventory.handover.scan` | `inventory.handover_robot_reported` / `inventory.handover_robot_report_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `returnTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/return` | 借调归还 | `inventory.transfer_order.manage` | `inventory.transfer_order_returned` / `inventory.transfer_order_return_failed` | web | operation 级补充 |
 | INV-库存存酒 | `reviewHighValue` | `POST` | `/api/v1/inventory/high-value-reviews/{id}/review` | 主管复核高价值动作(approve生效/reject回滚) | `inventory.high_value.review` | `inventory.high_value_review_decided` / `inventory.high_value_review_decide_failed` | web, tablet, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reviewInventoryStocktakeVariance` | `POST` | `/api/v1/inventory/stocktakes/{id}/variances/{vid}/review` | 复核库存盘点差异（approved/rejected） | `inventory.stocktake.variance_review` | `inventory.stocktake.variance_reviewed` / `inventory.stocktake.variance_review_failed` | web | operation 级补充 |
 | INV-库存存酒 | `reviewTraceHandoverException` | `POST` | `/api/v1/inventory/trace-handovers/exceptions/{id}/review` | 交接异常复核(缺口/重复/差异) | `inventory.handover.review` | `inventory.handover_exception_resolved` / `inventory.handover_exception_review_failed` | web, mobile_admin | operation 级补充 |
@@ -2181,14 +2193,17 @@
 | TIC-票务权益 | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | 查询权益模板 | `ticket.entitlement.view` | `ticket_entitlement_template.viewed` / `ticket_entitlement_template.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listIssuedEntitlements` | `GET` | `/api/v1/ticketing/issued-entitlements` | 查询已发放权益 | `ticket.verify.view` | `ticket_issued_entitlement.viewed` / `ticket_issued_entitlement.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketDynamicPricingRules` | `GET` | `/api/v1/ticketing/dynamic-pricing-rules` | List P2 ticket dynamic pricing rules | `ticket.dynamic_pricing.view` | `ticket_dynamic_pricing.viewed.success` / `ticket_dynamic_pricing.viewed.failure` | web | operation 级补充 |
+| TIC-票务权益 | `listTicketInstances` | `GET` | `/api/v1/ticketing/ticket-instances` | 查询父票实例 | `ticket.verify.view` | `ticket_instance.viewed` / `ticket_instance.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketOrders` | `GET` | `/api/v1/ticketing/orders` | 查询票务订单 | `ticket.order.read` | `ticket_order.viewed` / `ticket_order.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketPriceRules` | `GET` | `/api/v1/ticketing/price-rules` | 查询平日、周末、节假日及派生价规则 | `ticket.price_variant.view` | `ticket_price_variant.viewed` / `ticket_price_variant.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketRefundLines` | `GET` | `/api/v1/ticketing/refunds/{refund_id}/lines` | 查询退票明细行 | `ticket.refund.view` | `ticket.refund_line.list` / `ticket.refund_line.list_failed` | web | operation 级补充 |
+| TIC-票务权益 | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | 查询门票转赠记录(客服纠纷排查,只读) | `ticket.transfer.read` | `ticket_transfer.viewed` / `ticket_transfer.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | 票种查询 | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketVerifications` | `GET` | `/api/v1/ticketing/verifications` | 查询票核销记录 | `verification.view` | `verification.viewed` / `verification.view_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
 | TIC-票务权益 | `previewTicketVerification` | `POST` | `/api/v1/ticketing/verifications/preview` | 票务核销预览 | `verification.execute` | `verification.previewed` / `verification.failed` | staff_work_phone<br>device: verification-gate | operation 级补充 |
 | TIC-票务权益 | `publishTicketDynamicPricingRule` | `POST` | `/api/v1/ticketing/dynamic-pricing-rules/{id}/publish` | Publish P2 ticket dynamic pricing rule | `ticket.dynamic_pricing.publish` | `ticket_dynamic_pricing.published.success` / `ticket_dynamic_pricing.published.failure` | web | operation 级补充 |
 | TIC-票务权益 | `publishTicketType` | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | 发布票种 | `ticket.product.manage` | `ticket_price.published` / `ticket_price.publish_failed` | web | operation 级补充 |
+| TIC-票务权益 | `rejectTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/reject` | 退款驳回 | `ticket.refund.approve` | `ticket_refund.rejected` / `ticket_refund.reject_failed` | web | operation 级补充 |
 | TIC-票务权益 | `requestDeleteEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/delete-request` | 发起权益模板删除申请 | `ticket.entitlement.manage` | `ticket_entitlement_template.delete_requested` / `ticket_entitlement_template.delete_request_failed` | web | operation 级补充 |
 | TIC-票务权益 | `requestTicketRefund` | `POST` | `/api/v1/ticketing/refunds` | 退款或撤销申请 | `ticket.refund.request` | `ticket_refund.requested` / `ticket_refund.request_failed` | web, merchant_portal | operation 级补充 |
 | TIC-票务权益 | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | 核销冲正 | `ticket.verify.reverse` | `ticket.verification_reversed` / `ticket.verification_reverse_failed` | web, staff_work_phone, mobile_admin | operation 级补充 |

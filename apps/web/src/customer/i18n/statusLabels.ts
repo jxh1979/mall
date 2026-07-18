@@ -11,6 +11,11 @@ const STATUS_LABELS: Record<string, string> = {
   partial_paid: "部分支付",
   refunded: "已退款",
   refunding: "退款中",
+  // AUD-077 门票转赠
+  transferring: "转赠中",
+  claimed: "已领取",
+  revoked: "已撤回",
+  voided: "已失效",
   // 出票
   issued: "已出票",
   not_issued: "未出票",

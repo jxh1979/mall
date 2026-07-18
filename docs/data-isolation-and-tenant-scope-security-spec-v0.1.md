@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V283**，发现 **155** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V291**，发现 **150** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -102,12 +102,9 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_table_session_adjustments` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_table_sessions` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_tables` | `merchant_id` + `space_id` | direct | V047, V084 | `V047__bar_security_merchant_isolation.sql`<br>`V084__object_space_mapping.sql` |
-| `bars` | `merchant_id` + `project_id` + `space_id` | direct | V263 | `V263__bar_venue.sql` |
 | `business_entity_bindings` | `merchant_id` | direct | V010 | `V010__p0_foundation_residual_platform_terminal_evidence.sql` |
 | `business_process_instances` | `merchant_id` + `project_id` + `venue_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
 | `business_review_locks` | `project_id` | direct | V216 | `V216__business_review_locks.sql` |
-| `cam_allocations` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
-| `cam_trueup_lines` | `merchant_id` | direct | V121 | `V121__cam_trueup_and_refund_direction.sql` |
 | `complex_operating_params` | `project_id` | direct | V160 | `V160__complex_operating_params.sql` |
 | `compliance_expiry_items` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
 | `compliance_reminders` | `merchant_id` | direct | V051 | `V051__compliance_security_fixes.sql` |
@@ -122,10 +119,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `customer_birthday_rules` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
 | `customer_check_in_tiers` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
 | `customer_member_levels` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
-| `customer_membership_plans` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
-| `customer_memberships` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
 | `customer_points_rules` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
-| `customer_points_transfer_limits` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
 | `customer_redemption_catalog_items` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
 | `customer_stored_value_accounts` | `merchant_id` + `project_id` | direct | V090, V175 | `V090__member_stored_value_paid_membership_transfer.sql`<br>`V175__stored_value_merchant_scoped_cards.sql` |
 | `deposit_ledger` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
@@ -196,6 +190,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `staff_shift_schedules` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `stocktake` | `merchant_id` | direct | V108 | `V108__inventory_variance_to_ap.sql` |
 | `stored_value_merchant_refund_rules` | `merchant_id` | direct | V176 | `V176__stored_value_merchant_refund_rules.sql` |
+| `stored_value_topup_intents` | `merchant_id` + `project_id` | direct | V284 | `V284__stored_value_topup_intents.sql` |
 | `supplier_qualifications` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
 | `supplier_settlement_methods` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
 | `supply_contracts` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |

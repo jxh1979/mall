@@ -365,6 +365,11 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         if (type == null || id == null || intentId == null || amountCent <= 0) {
             return;
         }
+        // AUD-059：商户卡充值(stored_value_topup_merchant)不是平台经营收入——商户预收模式钱归商户、平台代收模式为平台预收负债，
+        // 二者都不得计入平台内部核算收入。此处跳过；平台代收的消费结算由 recordStoredValueMerchantPayable 逐笔挂应付商户。
+        if ("stored_value_topup_merchant".equals(type)) {
+            return;
+        }
         String key = slug(intentId);
         String itemId = "arap_internal_" + key;
         Instant now = Instant.now();
@@ -723,6 +728,72 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 "finance_refund",
                 () -> refund(request)
         );
+    }
+
+    /**
+     * AUD-060 储值退款打款台账：储值退款在渠道未真正兑付（RESERVED/NOT_CONFIGURED/PENDING）时登记一笔
+     * status=requested 的退款待办（内部/手工确认打款），复用 finance_refunds 状态机。target_id 承载储值账户 id
+     * （该列无外键）。不复用 {@link #createRefund}：其内部强制 target 为 ar_ap_payment 单据，储值退款无 ar_ap 单据。
+     * 仅供储值域服务内部调用（调用方已过 customer.stored_value.refund 权限闸并在同一事务/审计留痕），不暴露控制器入口。
+     * 幂等：id 由储值退款幂等键派生（sv_ 命名空间与财务退款隔离），saveRefund ON CONFLICT(id) 重试安全。
+     */
+    public String recordStoredValuePayoutRefund(String accountId, long payoutCent, String reason,
+                                                String channel, String idempotencyKey) {
+        FinanceRefundRecord saved = repository.saveRefund(new FinanceRefundRecord(
+                "refund_sv_" + slug(idempotencyKey),
+                requireText(accountId, "account_id"),
+                requirePositive(payoutCent, "payout_cent"),
+                trimToDefault(reason, "stored value refund payout"),
+                trimToDefault(channel, "manual"),
+                DEFAULT_REFUND_DIRECTION,
+                "requested",
+                Instant.now()));
+        return saved.id();
+    }
+
+    /**
+     * AUD-059 平台代收商户卡消费逐笔结算：platform_collect 模式商户卡消费时，生成一条「平台应付商户」台账（逐笔可追溯）。
+     * 复用 ar_ap_items（direction=payable、counterparty=merchantId、source_type=stored_value_consume、source_id=消费流水id）；
+     * 幂等靠 uq_ar_ap_items_direction_source（direction,source_type,source_id）+ id 派生自消费流水，重放零重复分录；
+     * merchant scope=该发卡商户；遵守日结锁（与 recordInternalAccountingRevenue 同口径，按该商户 scope 判锁）。
+     * 仅供储值域服务内部调用（调用方已过 customer.stored_value.consume / 结账权限闸并在同一事务/审计留痕），不暴露控制器入口。
+     */
+    public ArApItemRecord recordStoredValueMerchantPayable(String merchantId, String consumeTxnId,
+                                                           long amountCent, String idempotencyKey) {
+        String mid = trimToNull(merchantId);
+        String txnId = trimToNull(consumeTxnId);
+        if (mid == null || txnId == null || amountCent <= 0) {
+            return null;
+        }
+        String key = slug(txnId);
+        String itemId = "arap_svpay_" + key;
+        Instant now = Instant.now();
+        LocalDate businessDate = LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        // 遵守日结锁：已封账经营日禁止新增应付，走补录审批（按该商户 scope 判锁，与内部核算/createItem 同口径）。
+        if (repository.lockedDailyCloseExistsForDate(businessDate, mid)) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "business date " + businessDate + " is locked; use the backfill adjustment workflow");
+        }
+        ArApItemRecord saved = repository.saveArApItem(new ArApItemRecord(
+                itemId,
+                "SVPAY-" + key,
+                "payable",
+                mid,
+                "stored_value_consume",
+                txnId,
+                amountCent,
+                0L,
+                amountCent,
+                CURRENCY_CNY,
+                businessDate,
+                null,
+                "pending_payment",
+                now,
+                now,
+                mid));
+        repository.saveArApItemSource(new ArApItemSourceRecord(
+                "arap_src_svpay_" + key, itemId, "stored_value_consume", txnId, amountCent, now));
+        return saved;
     }
 
     public PageResponse<DailyCloseSummaryRecord> listDailyCloseSummaries(String dailyCloseId) {

@@ -189,10 +189,10 @@ class JdbcEnergyRepository implements EnergyRepository {
                   JOIN energy_meters m ON m.id = r.meter_id
                  WHERE m.gather_object = :gather_object
                    AND r.period = :period
-                   AND r.status IN ('recorded','reviewed')
+                   AND r.status = 'reviewed'
                    AND (:project_id IS NULL OR m.project_id = :project_id)
                 """, new MapSqlParameterSource().addValue("gather_object", gatherObject)
-                .addValue("period", period).addValue("project_id", projectId), BigDecimal.class);
+                .addValue("period", period).addValue("project_id", projectId, java.sql.Types.VARCHAR), BigDecimal.class);
         return sum == null ? BigDecimal.ZERO : sum;
     }
 
@@ -205,21 +205,21 @@ class JdbcEnergyRepository implements EnergyRepository {
                  WHERE m.gather_object = 'merchant'
                    AND m.merchant_id = :merchant_id
                    AND r.period = :period
-                   AND r.status IN ('recorded','reviewed')
+                   AND r.status = 'reviewed'
                    AND (:project_id IS NULL OR m.project_id = :project_id)
                 """, new MapSqlParameterSource().addValue("merchant_id", merchantId)
-                .addValue("period", period).addValue("project_id", projectId), BigDecimal.class);
+                .addValue("period", period).addValue("project_id", projectId, java.sql.Types.VARCHAR), BigDecimal.class);
         return sum == null ? BigDecimal.ZERO : sum;
     }
 
     @Override
-    public boolean energyFeeArExists(String merchantId, String period) {
+    public boolean energyFeeArExists(String merchantId, String contractId, String period) {
         Boolean exists = jdbcTemplate.queryForObject("""
                 SELECT EXISTS (
                     SELECT 1 FROM ar_ap_items
                      WHERE direction = 'receivable' AND source_type = 'energy_fee' AND source_id = :source_id
                 )
-                """, new MapSqlParameterSource("source_id", EnergyService.energyFeeSourceId(merchantId, period)),
+                """, new MapSqlParameterSource("source_id", EnergyService.energyFeeSourceId(merchantId, contractId, period)),
                 Boolean.class);
         return Boolean.TRUE.equals(exists);
     }

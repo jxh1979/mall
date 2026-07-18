@@ -172,7 +172,9 @@ public class CustomerService {
         }
     }
 
-    public PageResponse<CustomerTicketProductResponse> listTicketProducts() {
+    public PageResponse<CustomerTicketProductResponse> listTicketProducts(String barId) {
+        // AUD-076 专属入口锁定：带 bar_id 只返回该酒吧单店票；不传=公共入口全量（通票 + 各家单店票）。
+        String barFilter = barId == null || barId.isBlank() ? null : barId.trim();
         return readPage(
                 "customer.ticket_products_viewed",
                 "customer.ticket_products_view_failed",
@@ -180,6 +182,7 @@ public class CustomerService {
                 "ticket_product",
                 () -> ticketingService.listTicketTypes().items().stream()
                         .filter(ticketType -> "published".equals(ticketType.status()) || "active".equals(ticketType.status()))
+                        .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
                         .map(this::toTicketProduct)
                         .toList()
         );
@@ -213,7 +216,10 @@ public class CustomerService {
                         actual.visitDate(),
                         "miniapp",
                         actual.contactPhone(),
-                        customer.id()
+                        customer.id(),
+                        java.util.Map.of(),
+                        // AUD-076：把客人选中的酒吧透传给服务端校验+快照（单店票必填、通票必空）。
+                        actual.barId()
                 ))
         );
     }
@@ -880,6 +886,67 @@ public class CustomerService {
         return new CustomerSessionInfoResponse(customer.id(), customer.maskedPhone(), expiresAt);
     }
 
+    /**
+     * AUD-030 登出：撤销服务端会话（凭 token 命中活动会话即置 logged_out），令登出后 token 立即失效，
+     * 而非仅靠客户端丢弃本地凭证。端点幂等：token 缺失/已失效均静默返回。
+     */
+    @Transactional
+    public void logout(String customerToken) {
+        String token = trimToNull(customerToken);
+        if (token == null) {
+            return;
+        }
+        int revoked = repository.revokeSessionByToken(token);
+        if (revoked > 0) {
+            auditEventService.recordSuccess("customer.auth.logout", "public", "customer",
+                    null, null, null, Map.of());
+        }
+    }
+
+    // ── AUD-077 门票转赠(鉴权=客人 token + 账号状态闸;明细状态机/审计在 TicketTransferService) ──
+    public PageResponse<com.complex.platform.ticketing.CustomerTicketResponse> listMyTickets(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.my_tickets_viewed", "customer.my_tickets_view_failed", "not_applicable",
+                "issued_entitlement", () -> ticketingService.listCustomerHeldTickets(customer.id()));
+    }
+
+    public com.complex.platform.ticketing.TicketTransferResponse initiateTicketTransfer(
+            String customerToken, com.complex.platform.customer.dto.CustomerTicketTransferRequest request) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return ticketingService.initiateTicketTransfer(customer.id(), customer.phone(), request);
+    }
+
+    public com.complex.platform.ticketing.TicketTransferResponse claimTicketTransfer(
+            String customerToken, String transferId,
+            com.complex.platform.customer.dto.CustomerTicketTransferClaimRequest request) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return ticketingService.claimTicketTransfer(customer.id(), customer.phone(), transferId,
+                request == null ? null : request.claimCode());
+    }
+
+    public com.complex.platform.ticketing.TicketTransferResponse revokeTicketTransfer(String customerToken, String transferId) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return ticketingService.revokeTicketTransfer(customer.id(), transferId);
+    }
+
+    public com.complex.platform.ticketing.TicketTransferPreviewResponse previewTicketTransfer(
+            String customerToken, String claimCode) {
+        requireCustomer(customerToken);
+        return ticketingService.previewTicketTransfer(claimCode);
+    }
+
+    public PageResponse<com.complex.platform.ticketing.TicketTransferResponse> listIncomingTicketTransfers(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.ticket_transfer_incoming_viewed", "customer.ticket_transfer_incoming_view_failed",
+                "not_applicable", "ticket_transfer", () -> ticketingService.listIncomingTicketTransfers(customer.phone()));
+    }
+
+    public PageResponse<com.complex.platform.ticketing.TicketTransferResponse> listOutgoingTicketTransfers(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.ticket_transfer_outgoing_viewed", "customer.ticket_transfer_outgoing_view_failed",
+                "not_applicable", "ticket_transfer", () -> ticketingService.listOutgoingTicketTransfers(customer.id()));
+    }
+
     private CustomerRecord requireCustomer(String customerToken) {
         String token = trimToNull(customerToken);
         if (token == null) {
@@ -988,7 +1055,10 @@ public class CustomerService {
                 ticketType.weekendPriceCent(),
                 ticketType.holidayPriceCent(),
                 "CNY",
-                ticketType.status()
+                ticketType.status(),
+                // AUD-076 单店票挂酒吧：结构化 bar_id + 实时解析酒吧名（null=综合体通票）。
+                ticketType.barId(),
+                ticketingService.resolveBarName(ticketType.barId())
         );
     }
 

@@ -222,9 +222,11 @@ public class AmusementController {
     }
 
     @GetMapping("/queue-entries")
-    public ApiResponse<PageResponse<AmusementQueueEntryRecord>> listQueueEntries() {
+    public ApiResponse<PageResponse<AmusementQueueEntryRecord>> listQueueEntries(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size) {
         authorizationService.requirePermission("amusement.queue.view");
-        return ApiResponse.ok(service.listQueueEntries());
+        return ApiResponse.ok(service.listQueueEntries(page, size));
     }
 
     @PostMapping("/queue-entries")
@@ -247,9 +249,11 @@ public class AmusementController {
     }
 
     @GetMapping("/reservations")
-    public ApiResponse<PageResponse<AmusementReservationRecord>> listReservations() {
+    public ApiResponse<PageResponse<AmusementReservationRecord>> listReservations(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size) {
         authorizationService.requirePermission("amusement.reservation.view");
-        return ApiResponse.ok(service.listReservations());
+        return ApiResponse.ok(service.listReservations(page, size));
     }
 
     @PostMapping("/reservations")
@@ -272,9 +276,11 @@ public class AmusementController {
     }
 
     @GetMapping("/group-bookings")
-    public ApiResponse<PageResponse<AmusementGroupBookingRecord>> listGroupBookings() {
+    public ApiResponse<PageResponse<AmusementGroupBookingRecord>> listGroupBookings(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size) {
         authorizationService.requirePermission("amusement.group_booking.view");
-        return ApiResponse.ok(service.listGroupBookings());
+        return ApiResponse.ok(service.listGroupBookings(page, size));
     }
 
     @PostMapping("/group-bookings")

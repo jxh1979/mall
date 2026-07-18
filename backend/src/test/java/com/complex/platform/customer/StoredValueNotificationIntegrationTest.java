@@ -124,7 +124,20 @@ class StoredValueNotificationIntegrationTest {
     ) {
         String paymentIntentId = prefix + "_payment_intent";
         insertSucceededPaymentIntent(paymentIntentId, customerId, amountCent);
+        // AUD-058：settleTopup 只认充值时绑定的卡范围，夹具需同步落绑定行（等价 topup 落库动作）。
+        insertTopupIntentBinding(paymentIntentId, customerId);
         return storedValueService.settleTopup(customerId, PROJECT_ID, null, paymentIntentId);
+    }
+
+    private void insertTopupIntentBinding(String paymentIntentId, String customerId) {
+        jdbcTemplate.update("""
+                INSERT INTO stored_value_topup_intents (payment_intent_id, customer_id, project_id, merchant_id, created_at)
+                VALUES (?, ?, ?, NULL, now())
+                ON CONFLICT (payment_intent_id) DO UPDATE SET
+                    customer_id = EXCLUDED.customer_id,
+                    project_id = EXCLUDED.project_id,
+                    merchant_id = EXCLUDED.merchant_id
+                """, paymentIntentId, customerId, PROJECT_ID);
     }
 
     private void insertSucceededPaymentIntent(String id, String customerId, long amountCent) {
@@ -171,6 +184,13 @@ class StoredValueNotificationIntegrationTest {
     }
 
     private void cleanupNotificationData() {
+        // AUD-070：本用例产生的 customers / customer_stored_value_accounts /
+        // customer_stored_value_transactions / finance_payment_intents 无法物理清理：
+        // customer_stored_value_transactions 属 V140 append-only 不可变表（UPDATE/DELETE 触发器对 owner 也拦截，
+        // 抛 COMPLEX_APPEND_ONLY_VIOLATION），且 customer→accounts→transactions 皆 ON DELETE CASCADE，
+        // 删 customer/account 会级联触碰不可变账本致整事务回滚；finance_payment_intents 亦被 delete_only 触发器锁。
+        // 用例已用每次随机 UUID 客户号 + 手机号前缀（15588…）自隔离，残留行属 append-only 留痕（按设计永久），
+        // 故此处仅清理可删的 notification_send_log / idempotency_records。
         jdbcTemplate.update("""
                 DELETE FROM idempotency_records
                  WHERE idempotency_key LIKE 'sv_notif_%'
