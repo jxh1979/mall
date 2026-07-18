@@ -15210,6 +15210,185 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/finance/merchant-expenses:
+    get:
+      tags: &a1
+        - finance
+      operationId: listMerchantExpenses
+      summary: 商户费用归集台账分页查询（分红净利润费用侧）
+      x-auth-context: staff-token
+      x-permission: finance.merchant_expense.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: merchant_expense.listed
+      x-audit-event-failure: merchant_expense.list_failed
+      parameters:
+        - name: merchant_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 商户 ID 筛选；商户 scope 账号强制只看自己。
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 16
+          description: 费用归属月份（如 2026-07）。
+        - name: expense_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - rent_allocation
+              - energy
+              - property_fee
+              - labor
+              - amortization
+              - other
+          description: 费用类型筛选。
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - auto_energy
+              - auto_property
+              - manual
+          description: 来源筛选：自动挂接（能耗/物业费）或手工录入。
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 页码（1 起）。
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: 每页行数（上限 200）。
+      responses: &a2
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: *a1
+      operationId: createMerchantExpenseEntry
+      summary: 手工录入商户费用（人工/摊销/其他，理由必填）
+      x-auth-context: staff-token
+      x-permission: finance.merchant_expense.manage
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant_expense.manual_created
+      x-audit-event-failure: merchant_expense.manual_create_failed
+      requestBody:
+        $ref: "#/components/requestBodies/MerchantExpenseEntryRequest"
+      responses: &a3
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/finance/merchant-expenses/summary:
+    get:
+      tags: *a1
+      operationId: summarizeMerchantExpenses
+      summary: 商户费用期间汇总（按商户+月份分类型合计，分红引擎费用侧取数点）
+      x-auth-context: staff-token
+      x-permission: finance.merchant_expense.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: merchant_expense.summary_viewed
+      x-audit-event-failure: merchant_expense.summary_view_failed
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 16
+          description: 汇总月份（如 2026-07），必填。
+        - name: merchant_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 商户 ID；空=全部商户。商户 scope 账号强制只看自己。
+      responses: *a2
+  /api/v1/finance/merchant-expenses/{id}/reverse:
+    post:
+      tags: *a1
+      operationId: reverseMerchantExpenseEntry
+      summary: 红字冲销费用台账行（负金额新行，不改历史行，理由必填）
+      x-auth-context: staff-token
+      x-permission: finance.merchant_expense.manage
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant_expense.reversed
+      x-audit-event-failure: merchant_expense.reverse_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: Resource id path parameter.
+      requestBody:
+        $ref: "#/components/requestBodies/MerchantExpenseReversalRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/finance/merchant-expenses/sync-auto:
+    post:
+      tags: *a1
+      operationId: syncMerchantExpenseAuto
+      summary: 自动挂接能耗费/物业费账单到费用台账（按期幂等可重跑）
+      x-auth-context: staff-token
+      x-permission: finance.merchant_expense.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant_expense.auto_synced
+      x-audit-event-failure: merchant_expense.auto_sync_failed
+      requestBody:
+        $ref: "#/components/requestBodies/MerchantExpenseSyncRequest"
+      responses: *a3
   /api/v1/finance/refund-authority/limits:
     get:
       tags:
@@ -23285,6 +23464,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/PropertyFeeBillRequest"
+    MerchantExpenseEntryRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MerchantExpenseEntryRequest"
+    MerchantExpenseReversalRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MerchantExpenseReversalRequest"
+    MerchantExpenseSyncRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MerchantExpenseSyncRequest"
     RefundAuthorityLimitRequest:
       required: true
       content:
@@ -30343,6 +30540,81 @@ components:
           items:
             type: string
             maxLength: 64
+    MerchantExpenseEntryRequest:
+      type: object
+      description: 请求载荷 `MerchantExpenseEntryRequest`（商户费用手工录入）：人工/摊销/其他等无系统单据的费用进台账，note=录入理由必填（审计留痕）。金额单位分、不可为 0；更正走红字冲销，不改历史行。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - merchant_id
+        - period
+        - expense_type
+        - amount_cent
+        - note
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键重放返回同一台账行，不重复计入。
+          maxLength: 128
+        merchant_id:
+          type: string
+          description: 费用归属商户 ID。
+          maxLength: 64
+        period:
+          type: string
+          description: 费用归属月份（如 2026-07）。
+          maxLength: 16
+        expense_type:
+          type: string
+          description: 费用类型：rent_allocation 房租摊 / energy 能耗 / property_fee 物业费 / labor 人工 / amortization 摊销 / other 其他。
+          enum:
+            - rent_allocation
+            - energy
+            - property_fee
+            - labor
+            - amortization
+            - other
+        amount_cent:
+          type: integer
+          format: int64
+          description: 费用金额（分），不可为 0；负数仅用于红字冲销（走冲销端点）。
+        note:
+          type: string
+          description: 录入理由（必填，进入审计留痕）。
+          maxLength: 1000
+    MerchantExpenseReversalRequest:
+      type: object
+      description: 请求载荷 `MerchantExpenseReversalRequest`（红字冲销）：对原台账行生成金额取负的新行（source_ref=原行 id），不改历史行；每行仅允许一次全额冲销，冲销行不可再被冲销。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - note
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交返回同一冲销行。
+          maxLength: 128
+        note:
+          type: string
+          description: 冲销理由（必填，进入审计留痕）。
+          maxLength: 1000
+    MerchantExpenseSyncRequest:
+      type: object
+      description: 请求载荷 `MerchantExpenseSyncRequest`（自动挂接触发）：把 period 已出账的能耗费应收（ar_ap_items
+        source_type=energy_fee）与物业费账单（property_fee_bills）汇入费用台账；同商户同月同来源单据重跑不重复计入。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - period
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        period:
+          type: string
+          description: 挂接月份（如 2026-07）。
+          maxLength: 16
     RefundAuthorityLimitRequest:
       type: object
       description: 请求载荷 RefundAuthorityLimitRequest；员工退款自助额度配置（upsert，自然键 subject_type+subject_id+refund_domain 幂等）。

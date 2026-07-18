@@ -785,6 +785,26 @@ export type PropertyFeeBillRow = {
   createdAt?: string;
 };
 
+export type MerchantExpenseEntryRow = {
+  id: string;
+  merchantId?: string;
+  period?: string;
+  expenseType?: string;
+  amountCent?: number;
+  source?: string;
+  sourceRef?: string | null;
+  note?: string | null;
+  operatorUserId?: string | null;
+  createdAt?: string;
+};
+
+export type MerchantExpenseSummaryRow = {
+  merchantId?: string;
+  period?: string;
+  expenseType?: string;
+  totalCent?: number;
+};
+
 export type MerchantZoneSettlementRow = {
   id: string;
   contractId?: string;
