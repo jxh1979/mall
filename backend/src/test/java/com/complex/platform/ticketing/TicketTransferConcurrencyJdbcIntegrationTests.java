@@ -157,6 +157,11 @@ class TicketTransferConcurrencyJdbcIntegrationTests {
                 c.parent, "TNO_" + c.parent, "ord_" + c.parent, "tt_tr", 1, 1, 1,
                 c.initiator, c.initiator, "active", null, null, now, now));
         repository.upsertSlotHolder(c.parent, 1, c.initiator, now);
+        // V159 FK：issued_entitlements.order_id 必须指向真实订单行。
+        jdbcTemplate.update("INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent, "
+                + "pay_status, issue_status, status, created_at, updated_at) "
+                + "VALUES (?, ?, 'tt_tr', 1, 'web', 0, 'paid', 'issued', 'created', now(), now())",
+                "ord_" + c.parent, "ONO_" + c.parent.substring(4, 16));
         c.entitlementId = "ent_" + UUID.randomUUID().toString().replace("-", "");
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 c.entitlementId, "code_" + c.entitlementId, "tt_tr", "ord_" + c.parent, "et_tr", "ticket",
@@ -177,6 +182,7 @@ class TicketTransferConcurrencyJdbcIntegrationTests {
         jdbcTemplate.update("DELETE FROM issued_entitlements WHERE parent_ticket_id = ?", c.parent);
         jdbcTemplate.update("DELETE FROM ticket_slot_holders WHERE parent_ticket_id = ?", c.parent);
         jdbcTemplate.update("DELETE FROM ticket_instances WHERE id = ?", c.parent);
+        jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "ord_" + c.parent);
         jdbcTemplate.update("DELETE FROM customers WHERE id IN (?,?,?)", c.initiator, c.receiverA, c.receiverB);
     }
 
