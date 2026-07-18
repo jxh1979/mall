@@ -199,7 +199,8 @@ class MetricDetailConsistencyJdbcIntegrationTests {
         jdbcTemplate.update("""
                 INSERT INTO finance_reconciliation_differences (id, batch_id, difference_type, business_ref,
                         amount_cent, expected_amount_cent, actual_amount_cent, source, status, created_at)
-                VALUES (:id, :batch_id, 'amount_mismatch', :id, :amount, 0, :amount, 'system', :status, now())
+                -- difference_type 走 V105 收紧后的白名单(amount/count/status/missing);amount_mismatch 是 V069 遗留值已被清
+                VALUES (:id, :batch_id, 'amount', :id, :amount, 0, :amount, 'system', :status, now())
                 """, new MapSqlParameterSource().addValue("id", id).addValue("batch_id", batchId)
                 .addValue("amount", amountCent).addValue("status", status));
     }
