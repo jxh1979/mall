@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 621 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 622 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 309 | 人工权限矩阵正文未覆盖 206 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1242 | 人工事件矩阵正文未覆盖 1200 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 621 | 人工任务映射正文未逐项覆盖 615 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 373 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1244 | 人工事件矩阵正文未覆盖 1202 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 622 | 人工任务映射正文未逐项覆盖 616 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 374 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -268,7 +268,7 @@
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
-| `partner.org.manage` | staff-token | platform | 2 | createPartnerOrg, bindUserToPartnerOrg | OpenAPI 补充，以本附录为准 |
+| `partner.org.manage` | staff-token | platform | 3 | createPartnerOrg, bindUserToPartnerOrg, unbindUserFromPartnerOrg | OpenAPI 补充，以本附录为准 |
 | `partner.org.view` | staff-token | platform | 1 | listPartnerOrgs | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.manage` | staff-token | self | 2 | createPartnerSubordinate, disablePartnerSubordinate | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.view` | staff-token | self | 2 | listPartnerSubordinates, listSubordinateCompletion | OpenAPI 补充，以本附录为准 |
@@ -1295,6 +1295,8 @@
 | `partner_subordinate.viewed` | success | `listPartnerSubordinates` | `GET` | `/api/v1/partner/subordinates` | P0-待归类 | `partner.subordinate.view` | 接口级事件，以本附录为准 |
 | `partner.org.user_bind_failed` | failure | `bindUserToPartnerOrg` | `POST` | `/api/v1/partner/orgs/{org_id}/bind-user` | P0-待归类 | `partner.org.manage` | 接口级事件，以本附录为准 |
 | `partner.org.user_bound` | success | `bindUserToPartnerOrg` | `POST` | `/api/v1/partner/orgs/{org_id}/bind-user` | P0-待归类 | `partner.org.manage` | 接口级事件，以本附录为准 |
+| `partner.org.user_unbind_failed` | failure | `unbindUserFromPartnerOrg` | `POST` | `/api/v1/partner/orgs/{org_id}/unbind-user` | P0-待归类 | `partner.org.manage` | 接口级事件，以本附录为准 |
+| `partner.org.user_unbound` | success | `unbindUserFromPartnerOrg` | `POST` | `/api/v1/partner/orgs/{org_id}/unbind-user` | P0-待归类 | `partner.org.manage` | 接口级事件，以本附录为准 |
 | `payment.intent_created` | success | `createBarBillPayIntent` | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | BAR-酒吧经营 | `finance.payment_intent.create` | 接口级事件，以本附录为准 |
 | `payment.intent_created` | success | `createPaymentIntent` | `POST` | `/api/v1/finance/payment-intents` | FIN-财务台账 | `finance.payment_intent.create` | 接口级事件，以本附录为准 |
 | `payment.intent_created` | success | `createTicketOrderPayIntent` | `POST` | `/api/v1/ticketing/orders/{order_id}/pay-intents` | TIC-票务权益 | `finance.payment_intent.create` | 接口级事件，以本附录为准 |
@@ -2145,6 +2147,7 @@
 | P0-待归类 | `submitStaffLeave` | `POST` | `/api/v1/staff/leaves` | 提交请假(员工手机) | `staff.leave.submit` | `staff.leave.submitted` / `staff.leave.submit_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `suspendFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/suspend` | 挂起工单 | `facility.work_order.manage` | `facility.work_order_suspended` / `facility.work_order_suspend_failed` | web | operation 级补充 |
 | P0-待归类 | `syncWecomConversation` | `POST` | `/api/v1/compliance/wecom/conversations/sync` | 企微会话同步入站（PIPL 合规，开关门控） | `wecom.sync` | `wecom.conversation_synced` / `wecom.conversation_sync_failed` | <br>channel: provider-webhook | operation 级补充 |
+| P0-待归类 | `unbindUserFromPartnerOrg` | `POST` | `/api/v1/partner/orgs/{org_id}/unbind-user` | 账号解绑外部协作机构 | `partner.org.manage` | `partner.org.user_unbound` / `partner.org.user_unbind_failed` | web | operation 级补充 |
 | P0-待归类 | `updateEnergyMeter` | `POST` | `/api/v1/energy/meters/{meter_id}` | 更新能源表计 | `energy.meter.manage` | `energy.meter_saved` / `energy.meter_save_failed` | web | operation 级补充 |
 | P0-待归类 | `updateFacilityEquipment` | `POST` | `/api/v1/facility/equipment/{equipment_id}` | 更新设备台账 | `facility.equipment.manage` | `facility.equipment_updated` / `facility.equipment_update_failed` | web | operation 级补充 |
 | P0-待归类 | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | 招商线索状态流转(7 态) | `leasing.lead.manage` | `leasing.lead.status_changed` / `leasing.lead.status_change_failed` | web | operation 级补充 |

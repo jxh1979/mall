@@ -22,6 +22,9 @@ public interface PartnerRepository {
     /** AUD-033：把账号绑到机构（覆盖旧绑定）。返回受影响行数（0=账号不存在）。 */
     int updateUserPartnerOrg(String userId, String partnerOrgId);
 
+    /** 解绑 CAS：仅当账号当前绑的就是该机构才清空（复核建议：一行关掉 check-then-act 竞态窗口）。 */
+    int unbindUserPartnerOrg(String userId, String partnerOrgId);
+
     List<PartnerSubordinateRecord> listSubordinates(String partnerOrgId);
 
     Optional<PartnerSubordinateRecord> findSubordinate(String userId);

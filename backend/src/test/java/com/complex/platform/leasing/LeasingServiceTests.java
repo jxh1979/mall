@@ -89,6 +89,8 @@ class LeasingServiceTests {
                 "following_up", null, null, "prj_b", now, now));
         repo.saveBrand(new LeasingBrandRecord("brand_a", "品牌甲", "prospective", null, null, null, null, "prj_a", now, now));
         repo.saveBrand(new LeasingBrandRecord("brand_b", "品牌乙", "prospective", null, null, null, null, "prj_b", now, now));
+        repo.saveFollowUp(new LeasingFollowUpRecord("fu_a", "lead", "lead_a", "phone", "跟进甲", null, "u", "prj_a", now));
+        repo.saveFollowUp(new LeasingFollowUpRecord("fu_b", "lead", "lead_b", "phone", "跟进乙", null, "u", "prj_b", now));
 
         // 平台管理员：全量可见。
         assertThat(service.listLeads().items()).extracting(LeasingLeadRecord::id).contains("lead_a", "lead_b");
@@ -99,6 +101,10 @@ class LeasingServiceTests {
                 .contains("lead_a").doesNotContain("lead_b");
         assertThat(service.listBrands().items()).extracting(LeasingBrandRecord::id)
                 .contains("brand_a").doesNotContain("brand_b");
+        // 2026-07-18 收尾：跟进列表（全量+按对象）同样按项目 scope 过滤。
+        assertThat(service.listFollowUps(null, null).items()).extracting(LeasingFollowUpRecord::id)
+                .contains("fu_a").doesNotContain("fu_b");
+        assertThat(service.listFollowUps("lead", "lead_b").items()).isEmpty();
     }
 
     @Test

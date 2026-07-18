@@ -99,6 +99,15 @@ class JdbcPartnerRepository implements PartnerRepository {
     }
 
     @Override
+    public int unbindUserPartnerOrg(String userId, String partnerOrgId) {
+        return jdbcTemplate.update(
+                "UPDATE access_users SET partner_org_id = NULL WHERE id = :id AND partner_org_id = :org",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("id", userId)
+                        .addValue("org", partnerOrgId));
+    }
+
+    @Override
     public List<PartnerSubordinateRecord> listSubordinates(String partnerOrgId) {
         return jdbcTemplate.query("""
                 SELECT id, username, partner_org_id, account_type, status, created_at

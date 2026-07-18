@@ -92,7 +92,7 @@
 |---|---|---|
 | `foundation-database-design.md` | PostgreSQL/Flyway 数据库总设计 | 现行 |
 | `ticketing-database-implementation-notes.md` | 票务数据库实现笔记 | 现行 |
-| （权威）`../backend/src/main/resources/db/migration/` | 实际 Flyway 迁移；版本与数量以迁移目录为准，本轮核验最新 V182、179 个迁移 | 现行 |
+| （权威）`../backend/src/main/resources/db/migration/` | 实际 Flyway 迁移；版本与数量以迁移目录为准，实时基线见 `00-current-effective-document-entry-v0.1.md` 与 README 的事实基线表（`npm run docs:entry-baseline` 自动回填） | 现行 |
 
 ## 6. 页面权限矩阵 / 后台 SRS
 

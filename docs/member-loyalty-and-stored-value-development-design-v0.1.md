@@ -63,7 +63,7 @@
 
 落 `customer_membership_plans` / `customer_memberships`（V090）。`MembershipService`：
 - `subscribe`：返回支付意图，绑支付（速查表"开通绑定支付"）。
-- `activate`（支付成功后生效）/ `renew` / `autoRenewCharge`（自动续费）/ `cancel` / `expireMemberships`（到期）。
+- `activate`（支付成功后生效）/ `renew` / `autoRenewCharge`（自动续费，V290 已废止）/ `cancel` / `expireMemberships`（到期）。
 - `activeBenefits(customerId)`：当前生效会员权益。
 - `savePlan`：后台档位维护（权限 `customer.membership.manage`）。
 - 客人端 `customer/memberships{,/subscribe}`、`customer/membership-plans`、`customer/membership-benefits`。

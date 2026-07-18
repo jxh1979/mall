@@ -94,10 +94,10 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="vendor-subordinates-table">
-            <thead><tr><th>账号</th><th>登录名</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>账号</th><th>登录名</th><th>状态</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={4} className="admin-empty" data-testid="vendor-subordinates-empty">暂无下属账号</td></tr>
+                <tr><td colSpan={5} className="admin-empty" data-testid="vendor-subordinates-empty">暂无下属账号</td></tr>
               ) : rows.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-subordinate-${row.id}`}
                   onClick={() => openSubordinateDetail(row)}
@@ -107,6 +107,7 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
                     <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
                       data-testid={`vendor-subordinate-disable-${row.id}`} onClick={() => void disableSubordinate(row.id)}>停用</PermissionButton>
                   )}</td>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看下属账号详情" onClick={(event) => { event.stopPropagation(); openSubordinateDetail(row); }}>查看详情</button></td>
                 </tr>
               ))}
             </tbody>
@@ -120,10 +121,10 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
         <h3>下属工作完成情况</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="vendor-subordinate-completion-table">
-            <thead><tr><th>登录名</th><th>状态</th><th>工单(完成/总)</th><th>巡检(完成/总)</th></tr></thead>
+            <thead><tr><th>登录名</th><th>状态</th><th>工单(完成/总)</th><th>巡检(完成/总)</th><th>详情</th></tr></thead>
             <tbody>
               {completion.length === 0 ? (
-                <tr><td colSpan={4} className="admin-empty" data-testid="vendor-subordinate-completion-empty">暂无数据</td></tr>
+                <tr><td colSpan={5} className="admin-empty" data-testid="vendor-subordinate-completion-empty">暂无数据</td></tr>
               ) : completion.map((row) => (
                 <tr key={row.subordinateId} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-subordinate-completion-${row.subordinateId}`}
                   onClick={() => openCompletionDetail(row)}
@@ -131,6 +132,7 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
                   <td>{row.username}</td><td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.workOrderCompleted}/{row.workOrderTotal}</td>
                   <td>{row.inspectionCompleted}/{row.inspectionTotal}</td>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看下属工作完成情况详情" onClick={(event) => { event.stopPropagation(); openCompletionDetail(row); }}>查看详情</button></td>
                 </tr>
               ))}
             </tbody>

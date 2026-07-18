@@ -58,6 +58,10 @@ entryText = entryText.replace(/本轮（\d{4}-\d{2}-\d{2}）核验为 \d+ operat
 entryText = entryText.replace(
     /当前事实基线（后端 surefire 现有报告 (\d+) tests \/ OpenAPI \d+ operations \/ Flyway 最新 V\d+/g,
     (m, oldTests) => `当前事实基线（后端 surefire 现有报告 ${testCount ?? oldTests} tests / OpenAPI ${operationCount} operations / Flyway 最新 ${latestMigrationTag}`);
+// §2.1 句尾"YYYY-MM-DD 刷新"日期随脚本刷新（2026-07-18 收尾：此前写死 2026-07-02）。
+entryText = entryText.replace(
+    /(以 `npm run verify:\*` 输出为准，)\d{4}-\d{2}-\d{2}( 刷新）)/g,
+    `$1${today}$2`);
 entryText = entryText.replace(
     /本轮 \d{4}-\d{2}-\d{2} 取证 Flyway 最新 V\d+、OpenAPI \d+ operations、后端 surefire 现有报告 (\d+) tests/g,
     (m, oldTests) => `本轮 ${today} 取证 Flyway 最新 ${latestMigrationTag}、OpenAPI ${operationCount} operations、后端 surefire 现有报告 ${testCount ?? oldTests} tests`);

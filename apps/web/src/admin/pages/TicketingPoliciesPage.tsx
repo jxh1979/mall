@@ -592,6 +592,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <th>状态</th>
                 <th>存档状态</th>
                 <th>操作</th>
+                <th>详情</th>
               </tr>
             </thead>
             <tbody>
@@ -611,6 +612,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{archiveLabel(row)}</td>
                   <td onClick={(event) => event.stopPropagation()}>{catalogActions("ticket-types", row)}</td>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看票种详情" onClick={(event) => { event.stopPropagation(); openTicketTypeDetail(row); }}>查看详情</button></td>
                 </tr>
               ))}
             </tbody>
@@ -833,6 +835,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
               <th>模板名称</th>
               <th>权益类型</th>
               <th>状态</th>
+              <th>详情</th>
             </tr>
           </thead>
           <tbody>
@@ -843,6 +846,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <td>{row.name}</td>
                 <td>{formatBusinessStatus(row.entitlementType)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看权益模板详情" onClick={(event) => { event.stopPropagation(); openTemplateDetail(row); }}>查看详情</button></td>
               </tr>
             ))}
           </tbody>
@@ -940,6 +944,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
               <th>状态</th>
               <th>存档状态</th>
               <th>操作</th>
+              <th>详情</th>
             </tr>
           </thead>
           <tbody>
@@ -954,6 +959,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <td>{formatBusinessStatus(row.status)}</td>
                 <td>{archiveLabel(row)}</td>
                 <td onClick={(event) => event.stopPropagation()}>{catalogActions("price-rules", row)}</td>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看派生价规则详情" onClick={(event) => { event.stopPropagation(); openRuleDetail(row); }}>查看详情</button></td>
               </tr>
             ))}
           </tbody>
