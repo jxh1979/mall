@@ -216,6 +216,10 @@ public class StoredValueService {
         Instant now = now();
         CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
         if (existing != null) {
+            // AUD-057: 幂等键全局唯一,命中流水须属当前客人;否则=跨客人键碰撞,拒绝(不泄露他人流水/不抑制本人操作)。
+            if (!customerId.equals(existing.customerId())) {
+                throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "idempotency key already used by another operation");
+            }
             return existing;
         }
         // 「只扣指定的那一张」：按 (customer, project, merchant) 精确解析卡。商户卡=该商户的卡，
@@ -261,6 +265,10 @@ public class StoredValueService {
         Instant now = now();
         CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
         if (existing != null) {
+            // AUD-057: 幂等键全局唯一,命中流水须属当前客人;否则=跨客人键碰撞,拒绝(不泄露他人流水/不抑制本人操作)。
+            if (!customerId.equals(existing.customerId())) {
+                throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "idempotency key already used by another operation");
+            }
             return existing;
         }
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
