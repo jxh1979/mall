@@ -137,10 +137,21 @@ public class TicketVerificationService {
         IssuedEntitlementRecord entitlement = repository.findIssuedEntitlementById(requireText(ticketId, "ticket_id"))
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
         if (customerId != null) {
-            TicketOrderRecord order = repository.findTicketOrderById(entitlement.orderId())
-                    .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
-            if (!customerId.equals(order.customerId())) {
-                throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "ticket does not belong to customer");
+            // AUD-077 取码授权按"当前持有人"(slot holder),非订单归属:转出后原持票人取码 403、受赠人可取。
+            // 无 slot holder(存量/直发未分组)回退订单归属校验;新发放 holder 初始=购票人,故未转赠票行为不变。
+            String holder = entitlement.parentTicketId() == null ? null
+                    : repository.findSlotHolder(entitlement.parentTicketId(), entitlement.slotIndex())
+                            .map(TicketSlotHolderRecord::holderCustomerId).orElse(null);
+            if (holder != null) {
+                if (!customerId.equals(holder)) {
+                    throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "ticket does not belong to customer");
+                }
+            } else {
+                TicketOrderRecord order = repository.findTicketOrderById(entitlement.orderId())
+                        .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+                if (!customerId.equals(order.customerId())) {
+                    throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "ticket does not belong to customer");
+                }
             }
         } else {
             // P0 越权修复：员工侧（customerId==null）此前完全跳过归属校验，可对任意权益 id 签发动态核销凭证（跨租户 IDOR）。
@@ -419,6 +430,19 @@ public class TicketVerificationService {
         });
     }
 
+    /**
+     * 方案3 转赠冻结守卫:该权益所属 slot 有 pending 转赠 → 拒核销(响亮,非静默)。
+     * 无父票/未分组(parentTicketId 空)跳过。与 atomicUseEntitlement 的 NOT EXISTS 兜底双闸,覆盖游乐 gateway 等直连消费路径。
+     */
+    private void requireSlotNotTransferring(IssuedEntitlementRecord entitlement) {
+        if (entitlement.parentTicketId() == null) {
+            return;
+        }
+        if (repository.existsPendingTransferForSlot(entitlement.parentTicketId(), entitlement.slotIndex())) {
+            throw ApiException.conflict("TICKET_TRANSFER_PENDING", "该票转赠确认中，暂不可用");
+        }
+    }
+
     private VerificationResponse verifyEntitlement(VerificationRequest request, String sourceType, String clientTaskId) {
         // 健壮性修复：先校验核销设备已注册，未注册直接干净 400，杜绝 FK 违反中止事务后的脏 500。
         requireRegisteredDevice(request);
@@ -516,6 +540,8 @@ public class TicketVerificationService {
         // 方案2 申请即冻结：父票非 active（退款申请中 refund_pending / 已退 refunded / 转赠中 transferring）→ 拒核销。
         // 与方案3 转赠冻结共用同一守卫；单人票/无父票不约束（parent 为空跳过）。
         requireParentTicketActive(entitlement);
+        // 方案3 转赠冻结：该 slot 有 pending 转赠 → 拒核销(响亮非静默)。与 atomicUseEntitlement NOT EXISTS 双闸。
+        requireSlotNotTransferring(entitlement);
         if (entitlement.validFrom() != null && now.isBefore(entitlement.validFrom())) {
             throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID", "entitlement is not yet valid");
         }

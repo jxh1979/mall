@@ -308,6 +308,72 @@ public class CustomerController {
         ));
     }
 
+    @GetMapping("/my-tickets")
+    public ApiResponse<PageResponse<com.complex.platform.ticketing.CustomerTicketResponse>> listMyTickets(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ApiResponse.ok(service.listMyTickets(requireCustomerToken(customerToken, authorization)));
+    }
+
+    @PostMapping("/ticket-transfers")
+    public ApiResponse<com.complex.platform.ticketing.TicketTransferResponse> initiateTicketTransfer(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.customer.dto.CustomerTicketTransferRequest request
+    ) {
+        return ApiResponse.ok(service.initiateTicketTransfer(requireCustomerToken(customerToken, authorization), request));
+    }
+
+    @PostMapping("/ticket-transfers/{transfer_id}/claim")
+    public ApiResponse<com.complex.platform.ticketing.TicketTransferResponse> claimTicketTransfer(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @PathVariable("transfer_id") String transferId,
+            @RequestBody(required = false) @jakarta.validation.Valid com.complex.platform.customer.dto.CustomerTicketTransferClaimRequest request
+    ) {
+        return ApiResponse.ok(service.claimTicketTransfer(
+                requireCustomerToken(customerToken, authorization), transferId, request));
+    }
+
+    @PostMapping("/ticket-transfers/{transfer_id}/revoke")
+    public ApiResponse<com.complex.platform.ticketing.TicketTransferResponse> revokeTicketTransfer(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("transfer_id") String transferId
+    ) {
+        return ApiResponse.ok(service.revokeTicketTransfer(
+                requireCustomerToken(customerToken, authorization), transferId));
+    }
+
+    @GetMapping("/ticket-transfers/preview")
+    public ApiResponse<com.complex.platform.ticketing.TicketTransferPreviewResponse> previewTicketTransfer(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @org.springframework.web.bind.annotation.RequestParam("claim_code") String claimCode
+    ) {
+        return ApiResponse.ok(service.previewTicketTransfer(
+                requireCustomerToken(customerToken, authorization), claimCode));
+    }
+
+    @GetMapping("/ticket-transfers/incoming")
+    public ApiResponse<PageResponse<com.complex.platform.ticketing.TicketTransferResponse>> listIncomingTicketTransfers(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ApiResponse.ok(service.listIncomingTicketTransfers(requireCustomerToken(customerToken, authorization)));
+    }
+
+    @GetMapping("/ticket-transfers/outgoing")
+    public ApiResponse<PageResponse<com.complex.platform.ticketing.TicketTransferResponse>> listOutgoingTicketTransfers(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ApiResponse.ok(service.listOutgoingTicketTransfers(requireCustomerToken(customerToken, authorization)));
+    }
+
     private String requireCustomerToken(String customerToken, String authorization) {
         String resolved = resolveCustomerToken(customerToken, authorization);
         if (resolved == null) {

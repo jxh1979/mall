@@ -1240,6 +1240,11 @@ class JdbcTicketingRepository implements TicketingRepository {
                  WHERE id = :id
                    AND used_times < total_times
                    AND status = 'active'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM ticket_transfers t
+                        WHERE t.parent_ticket_id = issued_entitlements.parent_ticket_id
+                          AND t.slot_index = issued_entitlements.slot_index
+                          AND t.status = 'pending')
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
@@ -1352,5 +1357,175 @@ class JdbcTicketingRepository implements TicketingRepository {
     public void setPriceRuleArchiveReason(String id, String reason) {
         jdbcTemplate.update("UPDATE ticket_price_rules SET archive_reason = :reason WHERE id = :id",
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));
+    }
+
+    // AUD-077 门票转赠 / slot 持有人
+    @Override
+    public TicketSlotHolderRecord upsertSlotHolder(String parentTicketId, int slotIndex, String holderCustomerId, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_slot_holders (parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at)
+                VALUES (:p, :s, :holder, :now, :now)
+                ON CONFLICT (parent_ticket_id, slot_index) DO UPDATE SET
+                    holder_customer_id = EXCLUDED.holder_customer_id, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex)
+                .addValue("holder", holderCustomerId).addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+        return new TicketSlotHolderRecord(parentTicketId, slotIndex, holderCustomerId, now, now);
+    }
+
+    @Override
+    public Optional<TicketSlotHolderRecord> findSlotHolder(String parentTicketId, int slotIndex) {
+        return jdbcTemplate.query(
+                "SELECT parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at FROM ticket_slot_holders WHERE parent_ticket_id = :p AND slot_index = :s",
+                new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex), this::mapSlotHolder)
+                .stream().findFirst();
+    }
+
+    @Override
+    public List<TicketSlotHolderRecord> listSlotHoldersByHolder(String holderCustomerId) {
+        return jdbcTemplate.query(
+                "SELECT parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at FROM ticket_slot_holders WHERE holder_customer_id = :h ORDER BY parent_ticket_id, slot_index",
+                Map.of("h", holderCustomerId), this::mapSlotHolder);
+    }
+
+    @Override
+    public int updateTicketInstanceHolder(String id, String holderCustomerId, java.time.Instant now) {
+        return jdbcTemplate.update("UPDATE ticket_instances SET current_holder_customer_id = :holder, updated_at = :now WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", id).addValue("holder", holderCustomerId)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public List<IssuedEntitlementRecord> listIssuedEntitlementsByParentSlot(String parentTicketId, int slotIndex) {
+        return jdbcTemplate.query(JdbcTicketingSql.issuedEntitlementSelect()
+                + " WHERE parent_ticket_id = :p AND slot_index = :s ORDER BY created_at ASC, id",
+                new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex), rowMapper::mapIssuedEntitlement);
+    }
+
+    @Override
+    public TicketTransferRecord saveTicketTransfer(TicketTransferRecord r) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_transfers (
+                    id, parent_ticket_id, slot_index, initiator_customer_id, channel,
+                    receiver_phone, receiver_phone_hash, receiver_phone_masked, claim_code, receiver_customer_id,
+                    status, void_reason, created_at, claimed_at, revoked_at, voided_at, updated_at)
+                VALUES (
+                    :id, :parent_ticket_id, :slot_index, :initiator, :channel,
+                    :receiver_phone, :receiver_phone_hash, :receiver_phone_masked, :claim_code, :receiver_customer_id,
+                    :status, :void_reason, :created_at, :claimed_at, :revoked_at, :voided_at, :updated_at)
+                """, new MapSqlParameterSource()
+                .addValue("id", r.id()).addValue("parent_ticket_id", r.parentTicketId()).addValue("slot_index", r.slotIndex())
+                .addValue("initiator", r.initiatorCustomerId()).addValue("channel", r.channel())
+                .addValue("receiver_phone", r.receiverPhone(), java.sql.Types.VARCHAR)
+                .addValue("receiver_phone_hash", r.receiverPhoneHash(), java.sql.Types.VARCHAR)
+                .addValue("receiver_phone_masked", r.receiverPhoneMasked(), java.sql.Types.VARCHAR)
+                .addValue("claim_code", r.claimCode(), java.sql.Types.VARCHAR)
+                .addValue("receiver_customer_id", r.receiverCustomerId(), java.sql.Types.VARCHAR)
+                .addValue("status", r.status()).addValue("void_reason", r.voidReason(), java.sql.Types.VARCHAR)
+                .addValue("created_at", off(r.createdAt())).addValue("claimed_at", off(r.claimedAt()))
+                .addValue("revoked_at", off(r.revokedAt())).addValue("voided_at", off(r.voidedAt()))
+                .addValue("updated_at", off(r.updatedAt())));
+        return r;
+    }
+
+    @Override
+    public Optional<TicketTransferRecord> findTicketTransferById(String id) {
+        return jdbcTemplate.query(transferSelect() + " WHERE id = :id", Map.of("id", id), this::mapTransfer).stream().findFirst();
+    }
+
+    @Override
+    public Optional<TicketTransferRecord> findTicketTransferByClaimCode(String claimCode) {
+        return jdbcTemplate.query(transferSelect() + " WHERE claim_code = :c", Map.of("c", claimCode), this::mapTransfer).stream().findFirst();
+    }
+
+    @Override
+    public int claimTicketTransfer(String id, String receiverCustomerId, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE ticket_transfers SET status = 'claimed', receiver_customer_id = :recv, claimed_at = :now, updated_at = :now
+                 WHERE id = :id AND status = 'pending'
+                """, new MapSqlParameterSource().addValue("id", id).addValue("recv", receiverCustomerId)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int revokeTicketTransfer(String id, String initiatorCustomerId, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE ticket_transfers SET status = 'revoked', revoked_at = :now, updated_at = :now
+                 WHERE id = :id AND status = 'pending' AND initiator_customer_id = :me
+                """, new MapSqlParameterSource().addValue("id", id).addValue("me", initiatorCustomerId)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int voidPendingTransfersForParent(String parentTicketId, String reason, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE ticket_transfers SET status = 'voided', void_reason = :reason, voided_at = :now, updated_at = :now
+                 WHERE parent_ticket_id = :p AND status = 'pending'
+                """, new MapSqlParameterSource().addValue("p", parentTicketId).addValue("reason", reason, java.sql.Types.VARCHAR)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public boolean existsPendingTransferForSlot(String parentTicketId, int slotIndex) {
+        return !jdbcTemplate.query(
+                "SELECT 1 FROM ticket_transfers WHERE parent_ticket_id = :p AND slot_index = :s AND status = 'pending' LIMIT 1",
+                new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex), (rs, n) -> 1).isEmpty();
+    }
+
+    @Override
+    public boolean existsPendingTransferForParent(String parentTicketId) {
+        return !jdbcTemplate.query(
+                "SELECT 1 FROM ticket_transfers WHERE parent_ticket_id = :p AND status = 'pending' LIMIT 1",
+                Map.of("p", parentTicketId), (rs, n) -> 1).isEmpty();
+    }
+
+    @Override
+    public List<TicketTransferRecord> listPendingTransfersByReceiverPhoneHash(String receiverPhoneHash) {
+        return jdbcTemplate.query(transferSelect() + " WHERE receiver_phone_hash = :h AND status = 'pending' ORDER BY created_at DESC, id",
+                Map.of("h", receiverPhoneHash), this::mapTransfer);
+    }
+
+    @Override
+    public List<TicketTransferRecord> listTicketTransfersByInitiator(String initiatorCustomerId) {
+        return jdbcTemplate.query(transferSelect() + " WHERE initiator_customer_id = :me ORDER BY created_at DESC, id",
+                Map.of("me", initiatorCustomerId), this::mapTransfer);
+    }
+
+    @Override
+    public List<TicketTransferRecord> listTicketTransfers() {
+        return jdbcTemplate.query(transferSelect() + " ORDER BY created_at DESC, id", this::mapTransfer);
+    }
+
+    private static java.time.OffsetDateTime off(java.time.Instant instant) {
+        return instant == null ? null : instant.atOffset(java.time.ZoneOffset.UTC);
+    }
+
+    private static String transferSelect() {
+        return """
+                SELECT id, parent_ticket_id, slot_index, initiator_customer_id, channel,
+                       receiver_phone, receiver_phone_hash, receiver_phone_masked, claim_code, receiver_customer_id,
+                       status, void_reason, created_at, claimed_at, revoked_at, voided_at, updated_at
+                  FROM ticket_transfers
+                """;
+    }
+
+    private TicketSlotHolderRecord mapSlotHolder(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new TicketSlotHolderRecord(rs.getString("parent_ticket_id"), rs.getInt("slot_index"),
+                rs.getString("holder_customer_id"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "created_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "updated_at"));
+    }
+
+    private TicketTransferRecord mapTransfer(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new TicketTransferRecord(
+                rs.getString("id"), rs.getString("parent_ticket_id"), rs.getInt("slot_index"),
+                rs.getString("initiator_customer_id"), rs.getString("channel"),
+                rs.getString("receiver_phone"), rs.getString("receiver_phone_hash"), rs.getString("receiver_phone_masked"),
+                rs.getString("claim_code"), rs.getString("receiver_customer_id"),
+                rs.getString("status"), rs.getString("void_reason"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "created_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "claimed_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "revoked_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "voided_at"),
+                com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "updated_at"));
     }
 }

@@ -897,6 +897,50 @@ public class CustomerService {
         }
     }
 
+    // ── AUD-077 门票转赠(鉴权=客人 token + 账号状态闸;明细状态机/审计在 TicketTransferService) ──
+    public PageResponse<com.complex.platform.ticketing.CustomerTicketResponse> listMyTickets(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.my_tickets_viewed", "customer.my_tickets_view_failed", "not_applicable",
+                "issued_entitlement", () -> ticketingService.listCustomerHeldTickets(customer.id()));
+    }
+
+    public com.complex.platform.ticketing.TicketTransferResponse initiateTicketTransfer(
+            String customerToken, com.complex.platform.customer.dto.CustomerTicketTransferRequest request) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return ticketingService.initiateTicketTransfer(customer.id(), customer.phone(), request);
+    }
+
+    public com.complex.platform.ticketing.TicketTransferResponse claimTicketTransfer(
+            String customerToken, String transferId,
+            com.complex.platform.customer.dto.CustomerTicketTransferClaimRequest request) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return ticketingService.claimTicketTransfer(customer.id(), customer.phone(), transferId,
+                request == null ? null : request.claimCode());
+    }
+
+    public com.complex.platform.ticketing.TicketTransferResponse revokeTicketTransfer(String customerToken, String transferId) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return ticketingService.revokeTicketTransfer(customer.id(), transferId);
+    }
+
+    public com.complex.platform.ticketing.TicketTransferPreviewResponse previewTicketTransfer(
+            String customerToken, String claimCode) {
+        requireCustomer(customerToken);
+        return ticketingService.previewTicketTransfer(claimCode);
+    }
+
+    public PageResponse<com.complex.platform.ticketing.TicketTransferResponse> listIncomingTicketTransfers(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.ticket_transfer_incoming_viewed", "customer.ticket_transfer_incoming_view_failed",
+                "not_applicable", "ticket_transfer", () -> ticketingService.listIncomingTicketTransfers(customer.phone()));
+    }
+
+    public PageResponse<com.complex.platform.ticketing.TicketTransferResponse> listOutgoingTicketTransfers(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.ticket_transfer_outgoing_viewed", "customer.ticket_transfer_outgoing_view_failed",
+                "not_applicable", "ticket_transfer", () -> ticketingService.listOutgoingTicketTransfers(customer.id()));
+    }
+
     private CustomerRecord requireCustomer(String customerToken) {
         String token = trimToNull(customerToken);
         if (token == null) {

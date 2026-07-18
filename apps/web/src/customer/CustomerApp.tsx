@@ -30,6 +30,7 @@ import { BuyTicketPage } from "./pages/BuyTicketPage";
 import { HomePage } from "./pages/HomePage";
 import { MyOrdersPage } from "./pages/MyOrdersPage";
 import { PointsPage } from "./pages/PointsPage";
+import { TicketTransferPage } from "./pages/TicketTransferPage";
 import { WalletPage } from "./pages/WalletPage";
 import type { CustomerSession } from "./types";
 
@@ -38,9 +39,9 @@ dayjs.locale("zh-cn");
 
 const { Header, Content, Sider } = Layout;
 
-type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet";
+type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet" | "transfer";
 
-const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet"];
+const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet", "transfer"];
 
 // 页面标题单一来源：侧栏菜单与每页 h1（语义地标）共用。
 const PAGE_TITLES: Record<PageKey, string> = {
@@ -52,6 +53,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   orders: "我的订单 / 票 / 二维码",
   points: "积分 / 签到",
   wallet: "储值 / 会员",
+  transfer: "门票转赠",
 };
 
 // 3.11 多页入口 + 深链修复：
@@ -189,6 +191,7 @@ export default function CustomerApp(): React.ReactElement {
               { key: "orders", icon: <UnorderedListOutlined />, label: PAGE_TITLES.orders },
               { key: "points", icon: <StarOutlined />, label: PAGE_TITLES.points },
               { key: "wallet", icon: <WalletOutlined />, label: PAGE_TITLES.wallet },
+              { key: "transfer", icon: <ShoppingOutlined />, label: PAGE_TITLES.transfer },
             ]}
             onClick={(info) => goTo(info.key as PageKey)}
           />
@@ -211,6 +214,7 @@ export default function CustomerApp(): React.ReactElement {
             {page === "orders" ? <MyOrdersPage service={service} /> : null}
             {page === "points" ? <PointsPage service={service} /> : null}
             {page === "wallet" ? <WalletPage service={service} /> : null}
+            {page === "transfer" ? <TicketTransferPage service={service} /> : null}
           </Content>
         </Layout>
       </Layout>

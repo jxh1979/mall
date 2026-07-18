@@ -26,6 +26,35 @@ export type CustomerTicket = {
   parentTicketId?: string | null;
   slotIndex?: number;
   ticketNo?: string | null;
+  // AUD-077 转赠中标记（"transferring"=该票转赠冻结中不可用）。
+  transferState?: string | null;
+};
+
+// AUD-077 门票转赠记录（后端 TicketTransferResponse 安全投影）。
+export type TicketTransfer = {
+  id: string;
+  parentTicketId: string;
+  slotIndex: number;
+  channel: string;
+  status: string;
+  claimCode?: string | null;
+  receiverPhoneMasked?: string | null;
+  ticketName?: string | null;
+  voidReason?: string | null;
+  createdAt: string | null;
+  claimedAt?: string | null;
+};
+
+// AUD-077 领取预览（不算领取）。
+export type TicketTransferPreview = {
+  transferId: string;
+  parentTicketId: string;
+  slotIndex: number;
+  channel: string;
+  status: string;
+  ticketName: string | null;
+  numPeople: number;
+  totalTimes: number;
 };
 
 export type TicketOrder = {

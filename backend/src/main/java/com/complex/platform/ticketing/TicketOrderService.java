@@ -363,6 +363,12 @@ public class TicketOrderService {
             repository.saveTicketInstance(new TicketInstanceRecord(
                     parentTicketId, ticketNo, orderId, ticketTypeId, t, parentNumPeople, parentTotalTimes,
                     buyerCustomerId, buyerCustomerId, "active", null, null, now, now));
+            // AUD-077 人员权益组持有人:每个 slot 初始 holder=购票人(direct 无购票人则不建持有人,不可转赠)。
+            if (buyerCustomerId != null) {
+                for (int slot = 1; slot <= Math.max(1, parentNumPeople); slot++) {
+                    repository.upsertSlotHolder(parentTicketId, slot, buyerCustomerId, now);
+                }
+            }
             Long thisTicketAmount = perTicketAmount == null ? null : perTicketAmount[t - 1];
             long[] allocations = allocateRevenue(bindings, thisTicketAmount);
             int allocationIndex = 0;

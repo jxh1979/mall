@@ -300,4 +300,24 @@ public interface TicketingRepository {
 
     /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
     void setPriceRuleArchiveReason(String id, String reason);
+
+    // AUD-077 门票转赠 / slot 持有人 (default 空兼容测试双子; JdbcTicketingRepository 实现真 SQL)
+    default TicketSlotHolderRecord upsertSlotHolder(String parentTicketId, int slotIndex, String holderCustomerId, java.time.Instant now) {
+        return new TicketSlotHolderRecord(parentTicketId, slotIndex, holderCustomerId, now, now);
+    }
+    default Optional<TicketSlotHolderRecord> findSlotHolder(String parentTicketId, int slotIndex) { return Optional.empty(); }
+    default List<TicketSlotHolderRecord> listSlotHoldersByHolder(String holderCustomerId) { return List.of(); }
+    default int updateTicketInstanceHolder(String id, String holderCustomerId, java.time.Instant now) { return 0; }
+    default List<IssuedEntitlementRecord> listIssuedEntitlementsByParentSlot(String parentTicketId, int slotIndex) { return List.of(); }
+    default TicketTransferRecord saveTicketTransfer(TicketTransferRecord record) { return record; }
+    default Optional<TicketTransferRecord> findTicketTransferById(String id) { return Optional.empty(); }
+    default Optional<TicketTransferRecord> findTicketTransferByClaimCode(String claimCode) { return Optional.empty(); }
+    default int claimTicketTransfer(String id, String receiverCustomerId, java.time.Instant now) { return 0; }
+    default int revokeTicketTransfer(String id, String initiatorCustomerId, java.time.Instant now) { return 0; }
+    default int voidPendingTransfersForParent(String parentTicketId, String reason, java.time.Instant now) { return 0; }
+    default boolean existsPendingTransferForSlot(String parentTicketId, int slotIndex) { return false; }
+    default boolean existsPendingTransferForParent(String parentTicketId) { return false; }
+    default List<TicketTransferRecord> listPendingTransfersByReceiverPhoneHash(String receiverPhoneHash) { return List.of(); }
+    default List<TicketTransferRecord> listTicketTransfersByInitiator(String initiatorCustomerId) { return List.of(); }
+    default List<TicketTransferRecord> listTicketTransfers() { return List.of(); }
 }

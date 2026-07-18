@@ -4,6 +4,8 @@
 import { CustomerApi } from "./customerClient";
 import type {
   CustomerTicket,
+  TicketTransfer,
+  TicketTransferPreview,
   BarInvitation,
   BarInvitationMember,
   BarReservation,
@@ -155,5 +157,47 @@ export class CustomerService {
 
   listRedemptions(): Promise<PointsRedemption[]> {
     return this.api.get<PointsRedemption[]>("/api/v1/customer/points/redemptions");
+  }
+
+  // AUD-077 门票转赠
+  listMyTickets(): Promise<CustomerTicket[]> {
+    return this.api.get<CustomerTicket[]>("/api/v1/customer/my-tickets");
+  }
+
+  initiateTicketTransfer(req: {
+    parentTicketId: string;
+    slotIndex?: number;
+    channel: "phone" | "link";
+    receiverPhone?: string;
+  }): Promise<TicketTransfer> {
+    return this.api.post<TicketTransfer>("/api/v1/customer/ticket-transfers", req);
+  }
+
+  claimTicketTransfer(transferId: string, claimCode?: string): Promise<TicketTransfer> {
+    return this.api.post<TicketTransfer>(
+      `/api/v1/customer/ticket-transfers/${encodeURIComponent(transferId)}/claim`,
+      { claimCode },
+    );
+  }
+
+  revokeTicketTransfer(transferId: string): Promise<TicketTransfer> {
+    return this.api.post<TicketTransfer>(
+      `/api/v1/customer/ticket-transfers/${encodeURIComponent(transferId)}/revoke`,
+      {},
+    );
+  }
+
+  previewTicketTransfer(claimCode: string): Promise<TicketTransferPreview> {
+    return this.api.get<TicketTransferPreview>(
+      `/api/v1/customer/ticket-transfers/preview?claim_code=${encodeURIComponent(claimCode)}`,
+    );
+  }
+
+  listIncomingTicketTransfers(): Promise<TicketTransfer[]> {
+    return this.api.get<TicketTransfer[]>("/api/v1/customer/ticket-transfers/incoming");
+  }
+
+  listOutgoingTicketTransfers(): Promise<TicketTransfer[]> {
+    return this.api.get<TicketTransfer[]>("/api/v1/customer/ticket-transfers/outgoing");
   }
 }

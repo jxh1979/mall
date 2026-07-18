@@ -422,6 +422,9 @@ public class TicketRefundService {
         if (ti == null || !"active".equals(ti.status()) || ti.firstUsedAt() != null) {
             return false;
         }
+        if (repository.existsPendingTransferForParent(ti.id())) {
+            return false; // AUD-077 转赠在途 → 不整票自动退(到期路径先作废在途转赠再退)。
+        }
         if (entitlements == null || entitlements.isEmpty()) {
             return false;
         }
@@ -473,6 +476,10 @@ public class TicketRefundService {
 
     /** 整票连坐可退性校验（显式选票时）：任一不满足即整笔拒（不做部分放行）。 */
     private void requireInstanceRefundable(TicketInstanceRecord ti, List<IssuedEntitlementRecord> entitlements) {
+        if (repository.existsPendingTransferForParent(ti.id())) {
+            throw ApiException.conflict("TICKET_TRANSFER_PENDING_NO_REFUND",
+                    "该票有转赠在等待领取，请先撤回转赠再退款");
+        }
         if ("refund_pending".equals(ti.status()) || "transferring".equals(ti.status())) {
             throw ApiException.conflict("TICKET_INSTANCE_REFUND_IN_PROGRESS",
                     "ticket instance " + ti.id() + " is already frozen (refund in progress or transferring)");
