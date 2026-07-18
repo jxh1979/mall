@@ -4,6 +4,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import java.util.Map;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TicketCredentialService {
@@ -16,7 +17,9 @@ public class TicketCredentialService {
         this.auditEventService = auditEventService;
     }
 
-    TicketCredentialResponse getTicketCredential(String ticketId) {
+    // 复核修正(AUD-012):取码链必须在一个事务内(共享锁读 holder→插凭证同事务提交),@Transactional 须 public 才被代理。
+    @Transactional
+    public TicketCredentialResponse getTicketCredential(String ticketId) {
         try {
             TicketCredentialResponse response = verificationService.refreshCredential(ticketId, null);
             auditEventService.recordSuccess("ticket_credential.refreshed", "ticket.credential.view", "ticket_credential", response.id(), null, null, Map.of("ticket_id", response.ticketId()));
@@ -27,7 +30,8 @@ public class TicketCredentialService {
         }
     }
 
-    TicketCredentialResponse getCustomerTicketCredential(String ticketId, String customerId) {
+    @Transactional
+    public TicketCredentialResponse getCustomerTicketCredential(String ticketId, String customerId) {
         String resolvedCustomerId = requireText(customerId, "customer_id");
         try {
             TicketCredentialResponse response = verificationService.refreshCredential(ticketId, resolvedCustomerId);

@@ -139,8 +139,10 @@ public class TicketVerificationService {
         if (customerId != null) {
             // AUD-077 取码授权按"当前持有人"(slot holder),非订单归属:转出后原持票人取码 403、受赠人可取。
             // 无 slot holder(存量/直发未分组)回退订单归属校验;新发放 holder 初始=购票人,故未转赠票行为不变。
+            // 复核修正(AUD-012):共享锁读持有人,取码(读 holder→插新凭证)与 claim(改 holder+撤销凭证)串行化,
+            // 否则 claim 的撤销可能扫不到并发在飞的新凭证=转出后原持有人留下一个有效动态码。
             String holder = entitlement.parentTicketId() == null ? null
-                    : repository.findSlotHolder(entitlement.parentTicketId(), entitlement.slotIndex())
+                    : repository.findSlotHolderForShare(entitlement.parentTicketId(), entitlement.slotIndex())
                             .map(TicketSlotHolderRecord::holderCustomerId).orElse(null);
             if (holder != null) {
                 if (!customerId.equals(holder)) {

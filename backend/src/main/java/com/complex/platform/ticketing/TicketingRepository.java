@@ -313,6 +313,12 @@ public interface TicketingRepository {
         return new TicketSlotHolderRecord(parentTicketId, slotIndex, holderCustomerId, now, now);
     }
     default Optional<TicketSlotHolderRecord> findSlotHolder(String parentTicketId, int slotIndex) { return Optional.empty(); }
+
+    /** 复核修正(AUD-012 残留竞态):取码链共享锁读持有人——与 claim 对同行的 UPDATE 互斥,
+     * 封死「claim 撤销扫不到未提交新凭证」的毫秒级双花窗口。内存实现回退普通读(单线程测试无竞态)。 */
+    default Optional<TicketSlotHolderRecord> findSlotHolderForShare(String parentTicketId, int slotIndex) {
+        return findSlotHolder(parentTicketId, slotIndex);
+    }
     default List<TicketSlotHolderRecord> listSlotHoldersByHolder(String holderCustomerId) { return List.of(); }
     default int updateTicketInstanceHolder(String id, String holderCustomerId, java.time.Instant now) { return 0; }
     default List<IssuedEntitlementRecord> listIssuedEntitlementsByParentSlot(String parentTicketId, int slotIndex) { return List.of(); }

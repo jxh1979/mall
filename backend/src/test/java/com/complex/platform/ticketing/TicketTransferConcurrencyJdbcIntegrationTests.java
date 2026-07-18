@@ -82,7 +82,11 @@ class TicketTransferConcurrencyJdbcIntegrationTests {
                                     UUID.randomUUID().toString(), c.parent, null, "link", null));
                             return 1;
                         } catch (ApiException e) {
-                            return 0; // TICKET_TRANSFER_SLOT_USED:核销先提交,发起被拒
+                            // 复核建议:只放行预期的竞态拒绝码——夹具坏了导致 initiate 恒抛其他错时测试必须红,不许假绿。
+                            if (!"TICKET_TRANSFER_SLOT_USED".equals(e.code())) {
+                                throw e;
+                            }
+                            return 0; // 核销先提交,发起被拒
                         }
                     },
                     () -> tx.execute(status -> {

@@ -318,6 +318,20 @@ class TicketTransferJdbcIntegrationTests {
         assertThat(verificationService.refreshCredential(entId, f.receiver)).isNotNull();
     }
 
+    // ── 复核裁定钉死:重放已消费动态码=按已消费拒(CREDENTIAL_EXPIRED),非 404——
+    // 查码按 credential_hash(消费不清),明文 token 列清空只是隐私最小化,不影响定位。 ──
+    @Test
+    void consumedCredentialStillResolvesByHashSoReplayHitsExpiredNotNotFound() {
+        Fixture f = seedSinglePerson();
+        String entId = firstEntitlementId(f.parent, 1);
+        TicketCredentialResponse cred = verificationService.refreshCredential(entId, f.buyer);
+        assertThat(repository.markTicketCredentialConsumed(cred.id(), now)).isEqualTo(1);
+        var replayed = repository.findTicketCredentialByToken(cred.credentialToken());
+        assertThat(replayed).isPresent();
+        assertThat(replayed.get().status()).isEqualTo("consumed");
+        assertThat(repository.markTicketCredentialConsumed(cred.id(), now)).isZero();
+    }
+
     // ── AUD-018 领取前复验:pending 在途却已被消费(竞态/历史残留) → 拒领取,转赠留在 pending ──
     @Test
     void claimRejectsWhenSlotUsedBehindPendingTransfer() {

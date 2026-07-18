@@ -1403,6 +1403,16 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public Optional<TicketSlotHolderRecord> findSlotHolderForShare(String parentTicketId, int slotIndex) {
+        // FOR SHARE 与 claim 的 UPDATE ticket_slot_holders 同行互斥:取码先拿锁则 claim 的撤销等本事务提交后
+        // 能扫到新凭证;claim 先拿锁则取码复读到新持有人即 403。锁持续到取码事务提交。
+        return jdbcTemplate.query(
+                "SELECT parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at FROM ticket_slot_holders WHERE parent_ticket_id = :p AND slot_index = :s FOR SHARE",
+                new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex), this::mapSlotHolder)
+                .stream().findFirst();
+    }
+
+    @Override
     public List<TicketSlotHolderRecord> listSlotHoldersByHolder(String holderCustomerId) {
         return jdbcTemplate.query(
                 "SELECT parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at FROM ticket_slot_holders WHERE holder_customer_id = :h ORDER BY parent_ticket_id, slot_index",
@@ -1446,6 +1456,8 @@ class JdbcTicketingRepository implements TicketingRepository {
     @Override
     public int markTicketCredentialConsumed(String credentialId, java.time.Instant now) {
         // AUD-012 凭证消费 CAS:仅 active→consumed;已被并发撤销/已消费则 0 行,调用方据此拒绝并回滚。
+        // 重放契约不受清 token 影响:查码按 credential_hash(永不清),已消费码重放仍可定位→CREDENTIAL_EXPIRED;
+        // 明文 credential_token 清空=隐私最小化,与 upsert/revoke 两路一致(有 JDBC 契约测试钉死)。
         return jdbcTemplate.update(
                 "UPDATE ticket_credentials SET status = 'consumed', credential_token = NULL, updated_at = :now"
                         + " WHERE id = :id AND status = 'active'",
