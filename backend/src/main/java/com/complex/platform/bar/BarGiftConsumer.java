@@ -91,7 +91,8 @@ public class BarGiftConsumer {
                 ORDER_TYPE_GIFT
         ));
 
-        // 2) 出品 ticket。
+        // 2) 出品 ticket。赠饮票=核销留痕载体（同事务 created→delivered 一步到位，不进出品看板待办），
+        //    不受出品双驱动（吧台位/独立餐饮免票）约束——它承载 deliver 事件与库存流水回填，不是点单流转。
         String ticketId = "ticket_" + slug(seed);
         repository.saveProductionTicket(new BarProductionTicketRecord(
                 ticketId,

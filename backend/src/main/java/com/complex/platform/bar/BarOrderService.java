@@ -238,7 +238,7 @@ public class BarOrderService {
     /**
      * 出品票据双驱动判定：
      * ① 桌台类型 bar_counter（吧台位）=吧台直点，即点即取不建票；
-     * ② 商户业态 food（独立餐饮）=出品走第三方餐饮系统，平台只拿回流，不建票；
+     * ② 商户业态 catering（独立餐饮，与后台商户词表/集成域 CHECK 同源）=出品走第三方餐饮系统，平台只拿回流，不建票；
      * ③ 其余（卡座/VIP/扫码/后厨自营）=建票走完整流转。目录未注入或商户为空按③处理（从严留痕）。
      */
     private boolean requiresProductionTicket(String merchantId, BarTableRecord table) {
@@ -247,7 +247,7 @@ public class BarOrderService {
         }
         if (merchantId != null && merchantDirectory != null
                 && merchantDirectory.findMerchant(merchantId)
-                        .map(m -> "food".equals(m.merchantType())).orElse(false)) {
+                        .map(m -> "catering".equals(m.merchantType())).orElse(false)) {
             return false;
         }
         return true;

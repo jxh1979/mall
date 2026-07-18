@@ -3073,12 +3073,15 @@ class BarServiceTests {
     }
 
     @Test
-    void foodMerchantOrderSkipsProductionTicket() {
-        // 独立餐饮（merchant_type=food）：出品走第三方餐饮系统，平台只拿回流，不建出品票据。
-        com.complex.platform.governance.MerchantRecord foodMerchant =
-                mock(com.complex.platform.governance.MerchantRecord.class);
-        when(foodMerchant.merchantType()).thenReturn("food");
-        barOrderService.merchantDirectory = merchantId -> java.util.Optional.of(foodMerchant);
+    void cateringMerchantOrderSkipsProductionTicket() {
+        // 独立餐饮（merchant_type=catering，后台商户词表/集成域 CHECK 的规范值）：
+        // 出品走第三方餐饮系统，平台只拿回流，不建出品票据。用真 record 防「mock 词汇与实现互证」假绿。
+        java.time.Instant mNow = java.time.Instant.now();
+        com.complex.platform.governance.MerchantRecord cateringMerchant =
+                new com.complex.platform.governance.MerchantRecord(
+                        "merchant_food", "餐饮甲", "catering", null, null, null, null, null, null, null,
+                        null, null, null, null, null, null, "active", mNow, mNow);
+        barOrderService.merchantDirectory = merchantId -> java.util.Optional.of(cateringMerchant);
         try {
             TestSecurityActors.asMerchantUser("merchant_food");
             BarProductRecord product = service.createProduct(new BarProductRequest(

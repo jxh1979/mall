@@ -82,7 +82,7 @@ Response:
 
 ## 5. 验收标准
 
-1. 创建酒吧订单后自动生成 `created` 出品票据。
+1. 创建酒吧订单后按双驱动生成出品票据：卡座/VIP/扫码/后厨自营订单自动生成 `created` 票据；吧台位（table_type=`bar_counter`）直点与独立餐饮商户（merchant_type=`catering`）订单不生成（即点即取 / 第三方出品仅回流，业务HTML 983 行口径）。
 2. `created -> accepted -> preparing -> ready` 逐步流转成功，每步写入 `bar_production_ticket_events` 和审计日志。
 3. 非法跳转返回 `BAR_PRODUCTION_INVALID_TRANSITION`，原票据状态不变，不写事件。
 4. 送达订单成功后，对应出品票据同步为 `delivered` 并写 `deliver` 事件。
