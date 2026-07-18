@@ -24,6 +24,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-FIN-005", label: "通票结算审阅", route: "/admin/finance/settlement-review" },
   { pageId: "ADM-AMU-005", label: "游乐核销记录", route: "/admin/amusement/verification-records" },
   { pageId: "ADM-FIN-004", label: "物业费管理", route: "/admin/finance/property-fee" },
+  { pageId: "ADM-FIN-006", label: "商户费用台账", route: "/admin/finance/merchant-expenses" },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
   { pageId: "ADM-GOV-007", label: "空间类型字典", route: "/admin/governance/space-types" },
@@ -118,6 +119,9 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("bar-combos-page")).toBeVisible();
   } else if (spec.pageId === "ADM-INV-001") {
     await expect(page.getByTestId("inventory-ledger-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-FIN-006") {
+    await expect(page.getByTestId("finance-merchant-expense-page")).toBeVisible();
+    await expect(page.getByTestId("merchant-expense-table")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-002") {
     await expect(page.getByTestId("reconciliation-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-003") {

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 624 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 310 | 人工权限矩阵正文未覆盖 207 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1248 | 人工事件矩阵正文未覆盖 1206 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 624 | 人工任务映射正文未逐项覆盖 618 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 374 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 629 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 312 | 人工权限矩阵正文未覆盖 209 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1258 | 人工事件矩阵正文未覆盖 1216 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 629 | 人工任务映射正文未逐项覆盖 623 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 377 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -182,6 +182,8 @@
 | `finance.inventory_variance.post` | staff-token | platform | 1 | postInventoryVariance | OpenAPI 补充，以本附录为准 |
 | `finance.locked_backfill.approve` | staff-token | project-entity | 1 | approveArApAdjustment | OpenAPI 补充，以本附录为准 |
 | `finance.locked_backfill.request` | staff-token | project-entity | 1 | requestArApAdjustment | OpenAPI 补充，以本附录为准 |
+| `finance.merchant_expense.manage` | staff-token | merchant, platform | 3 | createMerchantExpenseEntry, reverseMerchantExpenseEntry, syncMerchantExpenseAuto | OpenAPI 补充，以本附录为准 |
+| `finance.merchant_expense.view` | staff-token | merchant | 2 | listMerchantExpenses, summarizeMerchantExpenses | OpenAPI 补充，以本附录为准 |
 | `finance.payment_intent.create` | staff-token | project-bar-table, project-order | 3 | createBarBillPayIntent, createPaymentIntent, createTicketOrderPayIntent | 已在权限矩阵正文出现 |
 | `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-order | 4 | settleBarBill, createArApPayment, confirmOfflinePayment, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
 | `finance.property_fee.manage` | staff-token | platform | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
@@ -1251,6 +1253,16 @@
 | `member.level_changed` | success | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.view_failed` | failure | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.viewed` | success | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
+| `merchant_expense.auto_sync_failed` | failure | `syncMerchantExpenseAuto` | `POST` | `/api/v1/finance/merchant-expenses/sync-auto` | FIN-财务台账 | `finance.merchant_expense.manage` | 接口级事件，以本附录为准 |
+| `merchant_expense.auto_synced` | success | `syncMerchantExpenseAuto` | `POST` | `/api/v1/finance/merchant-expenses/sync-auto` | FIN-财务台账 | `finance.merchant_expense.manage` | 接口级事件，以本附录为准 |
+| `merchant_expense.list_failed` | failure | `listMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses` | FIN-财务台账 | `finance.merchant_expense.view` | 接口级事件，以本附录为准 |
+| `merchant_expense.listed` | success | `listMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses` | FIN-财务台账 | `finance.merchant_expense.view` | 接口级事件，以本附录为准 |
+| `merchant_expense.manual_create_failed` | failure | `createMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses` | FIN-财务台账 | `finance.merchant_expense.manage` | 接口级事件，以本附录为准 |
+| `merchant_expense.manual_created` | success | `createMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses` | FIN-财务台账 | `finance.merchant_expense.manage` | 接口级事件，以本附录为准 |
+| `merchant_expense.reverse_failed` | failure | `reverseMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses/{id}/reverse` | FIN-财务台账 | `finance.merchant_expense.manage` | 接口级事件，以本附录为准 |
+| `merchant_expense.reversed` | success | `reverseMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses/{id}/reverse` | FIN-财务台账 | `finance.merchant_expense.manage` | 接口级事件，以本附录为准 |
+| `merchant_expense.summary_view_failed` | failure | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | FIN-财务台账 | `finance.merchant_expense.view` | 接口级事件，以本附录为准 |
+| `merchant_expense.summary_viewed` | success | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | FIN-财务台账 | `finance.merchant_expense.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.view_failed` | failure | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.viewed` | success | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.settlement.dispute_failed` | failure | `submitMerchantPortalSettlementDispute` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | P0-待归类 | `merchant.portal.settlement.dispute` | 接口级事件，以本附录为准 |
@@ -1873,11 +1885,13 @@
 | FIN-财务台账 | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | 日结锁定 | `finance.daily_close.lock` | `finance_daily_close.locked` / `finance_daily_close.lock_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | 创建对账差异 | `finance.reconciliation.difference.create` | `finance.reconciliation.difference_created` / `finance.reconciliation.difference_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | 创建财务退款记录 | `finance.refund.create` | `finance_refund.created` / `finance_refund.create_failed` | web | operation 级补充 |
+| FIN-财务台账 | `createMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses` | 手工录入商户费用（人工/摊销/其他，理由必填） | `finance.merchant_expense.manage` | `merchant_expense.manual_created` / `merchant_expense.manual_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createPaymentIntent` | `POST` | `/api/v1/finance/payment-intents` | 创建聚合支付意图 | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | web, tablet, kiosk, miniapp, app | operation 级补充 |
 | FIN-财务台账 | `createPropertyFeeRate` | `POST` | `/api/v1/finance/property-fee/rates` | 维护物业费费率（项目级、可按期） | `finance.property_fee.manage` | `finance_property_fee.rate_set` / `finance_property_fee.rate_set_failed` | web | operation 级补充 |
 | FIN-财务台账 | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | 导出应收应付台账快照 | `finance.ar_ap.export` | `finance_ar_ap.exported` / `finance_ar_ap.export_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | 查询应收应付台账 | `finance.ar_ap.view` | `finance_ar_ap.viewed` / `finance_ar_ap.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | 查询日结六源汇总 | `finance.daily_close.manage` | `finance.daily_close_summary.viewed` / `finance.daily_close_summary.view_failed` | web, mobile_admin | operation 级补充 |
+| FIN-财务台账 | `listMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses` | 商户费用归集台账分页查询（分红净利润费用侧） | `finance.merchant_expense.view` | `merchant_expense.listed` / `merchant_expense.list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listPropertyFeeRates` | `GET` | `/api/v1/finance/property-fee/rates` | 列出某项目的物业费费率 | `finance.property_fee.manage` | `finance_property_fee.rate_viewed` / `finance_property_fee.rate_view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | 查询对账批次 | `finance.reconciliation.view` | `finance.reconciliation_batch.viewed` / `finance.reconciliation_batch.viewed_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `openplatform.reconcile.execute` | `finance_reconciliation.difference_found` / `finance_reconciliation.view_failed` | web | operation 级补充 |
@@ -1886,6 +1900,9 @@
 | FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | 保证金台账动作（收取/退还/抵扣/没收） | `finance.deposit.manage` | `finance.deposit.action_recorded` / `finance.deposit.action_failed` | web | operation 级补充 |
 | FIN-财务台账 | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | 锁定后补录审批申请 | `finance.locked_backfill.request` | `finance.locked_backfill_requested` / `finance.locked_backfill_request_failed` | web, mobile_admin | operation 级补充 |
+| FIN-财务台账 | `reverseMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses/{id}/reverse` | 红字冲销费用台账行（负金额新行，不改历史行，理由必填） | `finance.merchant_expense.manage` | `merchant_expense.reversed` / `merchant_expense.reverse_failed` | web | operation 级补充 |
+| FIN-财务台账 | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | 商户费用期间汇总（按商户+月份分类型合计，分红引擎费用侧取数点） | `finance.merchant_expense.view` | `merchant_expense.summary_viewed` / `merchant_expense.summary_view_failed` | web | operation 级补充 |
+| FIN-财务台账 | `syncMerchantExpenseAuto` | `POST` | `/api/v1/finance/merchant-expenses/sync-auto` | 自动挂接能耗费/物业费账单到费用台账（按期幂等可重跑） | `finance.merchant_expense.manage` | `merchant_expense.auto_synced` / `merchant_expense.auto_sync_failed` | web | operation 级补充 |
 | FIN-财务台账 | `upsertRefundAuthorityLimit` | `POST` | `/api/v1/finance/refund-authority/limits` | 新增或更新退款自助额度 | `refund.authority.manage` | `refund_authority.changed` / `refund_authority.change_failed` | web | operation 级补充 |
 | FIN-财务台账 | `upsertRefundAutoRule` | `POST` | `/api/v1/finance/refund-authority/rules` | 新增或更新退款自动放行规则 | `refund.authority.manage` | `refund_authority.changed` / `refund_authority.change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `approveSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | 主管审批或驳回复核记录 | `governance.supervisor_review.approve` | `governance.supervisor_review.decided` / `governance.supervisor_review.decide_failed` | web | operation 级补充 |
