@@ -998,3 +998,30 @@ export type AuditOperationEventRow = {
   subjectType?: string;
   metadata?: Record<string, unknown>;
 };
+
+// KPI 统一明细（指标登记簿，2026-07-18 方案A）：GET /api/v1/analytics/metric-detail 响应。
+export type MetricDetailColumn = { key: string; label: string };
+
+export type MetricDetailPayload = {
+  metricKey: string;
+  name: string;
+  valueType: "additive" | "ratio" | "balance";
+  unit: string;
+  caliber: string;
+  source: string;
+  part: "numerator" | "denominator" | null;
+  from: string | null;
+  to: string | null;
+  dataAsOf: string;
+  summaryValue: number | string | null;
+  numeratorValue?: number | string | null;
+  denominatorValue?: number | string | null;
+  summaryNote?: string | null;
+  columns: MetricDetailColumn[];
+  rows: Array<Record<string, unknown>>;
+  page: number;
+  size: number;
+  totalRows: number;
+  traceLinkPageId?: string | null;
+  traceLinkColumnKey?: string | null;
+};

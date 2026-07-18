@@ -1926,4 +1926,186 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 resultSet.getString("idempotency_key")
         );
     }
+
+    // ==== KPI 统一明细（指标登记簿，2026-07-18 方案A）====
+    // 铁律：每个指标「当前页明细行」与「合计校验值」共用同一 WHERE 谓词 → 数字=明细合计按构造成立。
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows ticketRevenueDetail(Instant start, Instant end, int limit, int offset) {
+        MapSqlParameterSource params = pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, order_no, quantity, sales_channel, amount_cent, created_at, paid_at
+                  FROM ticket_orders
+                 WHERE pay_status = 'paid'
+                   AND created_at >= :start
+                   AND created_at < :end
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("orderNo", rs.getString("order_no"));
+            row.put("quantity", rs.getInt("quantity"));
+            row.put("salesChannel", rs.getString("sales_channel"));
+            row.put("amountCent", rs.getLong("amount_cent"));
+            row.put("createdAt", instant(rs, "created_at"));
+            row.put("paidAt", instant(rs, "paid_at"));
+            return row;
+        });
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(amount_cent), 0) AS summary
+                  FROM ticket_orders
+                 WHERE pay_status = 'paid'
+                   AND created_at >= :start
+                   AND created_at < :end
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows reconciliationDifferenceDetail(Instant start, Instant end, int limit, int offset) {
+        // start/end 可空=全历史（与对账差异页「对账差异」合计口径一致）。
+        String window = start == null ? "" : "WHERE created_at >= :start AND created_at < :end";
+        MapSqlParameterSource params = start == null
+                ? pagedParams(limit, offset)
+                : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, difference_type, amount_cent, source, status, created_at
+                  FROM finance_reconciliation_differences
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(window), params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("differenceType", rs.getString("difference_type"));
+            row.put("amountCent", rs.getLong("amount_cent"));
+            row.put("source", rs.getString("source"));
+            row.put("status", rs.getString("status"));
+            row.put("createdAt", instant(rs, "created_at"));
+            return row;
+        });
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM finance_reconciliation_differences
+                 %s
+                """.formatted(window), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows electricityReadingDetail(Instant start, Instant end, int limit, int offset) {
+        MapSqlParameterSource params = pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT r.id, m.name AS meter_name, r.period, r.consumption, r.abnormal_reason, r.read_at
+                  FROM energy_meter_readings r
+                  JOIN energy_meters m ON m.id = r.meter_id
+                 WHERE m.meter_type = 'electricity'
+                   AND r.read_at >= :start
+                   AND r.read_at < :end
+                 ORDER BY r.read_at DESC, r.id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("meterName", rs.getString("meter_name"));
+            row.put("period", rs.getString("period"));
+            row.put("consumption", rs.getBigDecimal("consumption"));
+            row.put("abnormalReason", rs.getString("abnormal_reason"));
+            row.put("readAt", instant(rs, "read_at"));
+            return row;
+        });
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(r.consumption), 0) AS summary
+                  FROM energy_meter_readings r
+                  JOIN energy_meters m ON m.id = r.meter_id
+                 WHERE m.meter_type = 'electricity'
+                   AND r.read_at >= :start
+                   AND r.read_at < :end
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows rentableSpaceDetail(int limit, int offset) {
+        // 分母与出租率同分母（occupancyAreas.rentable）：shop/booth 且非 unavailable。
+        MapSqlParameterSource params = pagedParams(limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, space_name, space_type, floor_no, area_square_meter
+                  FROM spaces
+                 WHERE space_type IN ('shop','booth')
+                   AND status <> 'unavailable'
+                 ORDER BY area_square_meter DESC NULLS LAST, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("spaceName", rs.getString("space_name"));
+            row.put("spaceType", rs.getString("space_type"));
+            row.put("floorNo", rs.getString("floor_no"));
+            row.put("areaSquareMeter", rs.getBigDecimal("area_square_meter"));
+            return row;
+        });
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(area_square_meter), 0) AS summary
+                  FROM spaces
+                 WHERE space_type IN ('shop','booth')
+                   AND status <> 'unavailable'
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset) {
+        // 与 ETL ar.balance（arOverdueAgingByMerchant）同谓词：应收、未关闭、未收>0、到期日早于截至日。
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, COALESCE(merchant_id, counterparty_id) AS merchant_key, source_type,
+                       due_date, unpaid_amount_cent, status
+                  FROM ar_ap_items
+                 WHERE direction = 'receivable'
+                   AND status <> 'closed'
+                   AND unpaid_amount_cent > 0
+                   AND due_date < :as_of
+                 ORDER BY due_date, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("merchantId", rs.getString("merchant_key"));
+            row.put("sourceType", rs.getString("source_type"));
+            row.put("dueDate", rs.getObject("due_date", LocalDate.class));
+            row.put("unpaidAmountCent", rs.getLong("unpaid_amount_cent"));
+            row.put("status", rs.getString("status"));
+            return row;
+        });
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(unpaid_amount_cent), 0) AS summary
+                  FROM ar_ap_items
+                 WHERE direction = 'receivable'
+                   AND status <> 'closed'
+                   AND unpaid_amount_cent > 0
+                   AND due_date < :as_of
+                """, params));
+    }
+
+    private static MapSqlParameterSource pagedParams(int limit, int offset) {
+        return new MapSqlParameterSource()
+                .addValue("limit", Math.min(Math.max(limit, 1), 200))
+                .addValue("offset", Math.max(offset, 0));
+    }
+
+    private MapSqlParameterSource pagedRangeParams(Instant start, Instant end, int limit, int offset) {
+        // 防御断言：当前登记项凡走带窗查询必有窗（服务层已推导缺省经营日）；防未来登记项误传 null 变成空谓词。
+        java.util.Objects.requireNonNull(start, "metric detail window start must not be null");
+        java.util.Objects.requireNonNull(end, "metric detail window end must not be null");
+        return pagedParams(limit, offset)
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end));
+    }
+
+    private static AnalyticsRecords.MetricDetailRows metricDetailRows(
+            java.util.List<java.util.Map<String, Object>> rows, java.util.Map<String, Object> aggregate) {
+        Object summary = aggregate.get("summary");
+        return new AnalyticsRecords.MetricDetailRows(
+                rows,
+                ((Number) aggregate.get("total_rows")).longValue(),
+                summary == null ? BigDecimal.ZERO : new BigDecimal(String.valueOf(summary)));
+    }
 }

@@ -71,6 +71,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-010", label: "AI/对标阈值", route: "/admin/analytics/ai-thresholds" },
   { pageId: "ADM-ANA-011", label: "提醒窗配置", route: "/admin/analytics/notification-windows" },
   { pageId: "ADM-ANA-009", label: "T3-A 只读经营分析", route: "/admin/analytics/t3a-readonly" },
+  { pageId: "ADM-ANA-012", label: "指标明细", route: "/admin/metric-detail" },
   { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
   { pageId: "ADM-STF-002", label: "薪酬与请假", route: "/admin/staff/payroll" },
   { pageId: "ADM-STF-003", label: "个税税表", route: "/admin/staff/tax-brackets" },
@@ -207,6 +208,9 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("ai-thresholds-page")).toBeVisible();
     await expect(page.getByTestId("ai-threshold-confidence")).toContainText("60%");
     await expect(page.getByTestId("ai-thresholds-form")).toBeVisible();
+  } else if (spec.pageId === "ADM-ANA-012") {
+    await expect(page.getByTestId("metric-detail-page")).toBeVisible();
+    await expect(page.getByTestId("metric-detail-metric-select")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-011") {
     await expect(page.getByTestId("notification-windows-page")).toBeVisible();
     await expect(page.getByTestId("notification-windows-table")).toContainText("续约");

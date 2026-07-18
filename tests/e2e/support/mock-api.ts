@@ -285,6 +285,13 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/ops/production-readiness/checks": [{ id: "check-1", status: "open", message: "NAS 恢复演练待回填" }],
     "/api/v1/analytics/robot": empty,
     "/api/v1/analytics/metric-definitions": state.metricDefinitions,
+    // KPI 统一明细(指标登记簿): 数字=明细合计同源(summary_value == Σ rows.amount_cent)。
+    "/api/v1/analytics/metric-detail": { metric_key: "revenue.ticket", name: "票务收入", value_type: "additive",
+      unit: "分", caliber: "已支付票务订单实付金额合计(分)。可加口径=区间求和。", source: "票务订单台账(实时查询)。",
+      part: null, from: "2026-06-15", to: "2026-06-15", data_as_of: now, summary_value: 12500, summary_note: null,
+      columns: [{ key: "orderNo", label: "订单号" }, { key: "amountCent", label: "实付金额（分）" }],
+      rows: [{ id: "to-1", orderNo: "TK-1", amountCent: 10000 }, { id: "to-2", orderNo: "TK-2", amountCent: 2500 }],
+      page: 1, size: 20, total_rows: 2, trace_link_page_id: "ADM-TKT-003", trace_link_column_key: "id" },
     "/api/v1/analytics/anomaly-config": { surge_pct: 0.5, high_pct: 0.8, enabled: true },
     "/api/v1/analytics/ai-thresholds": { local_llm_min_confidence: 0.6, benchmark_deviation: 0.2 },
     "/api/v1/analytics/notification-windows": [

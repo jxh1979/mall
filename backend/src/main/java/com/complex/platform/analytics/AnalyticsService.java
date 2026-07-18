@@ -1332,5 +1332,120 @@ public class AnalyticsService {
     private record NormalizedText(String value, boolean adjusted) {
     }
 
+    // ==== KPI 统一明细（指标登记簿，2026-07-18 方案A）====
+
+    /**
+     * KPI 统一明细：按登记项返回分页明细 + 合计校验值 + 口径说明 + 数据截至时间。
+     * 口径铁律：可加=区间求和；比率=分子/分母（part 两页签）；余额=区间末值（取 to，from 不参与）。
+     * 权限：控制器已做「契约宽权限 + 登记项权限」双重 fail-closed 校验；审计事件按登记项权限落账。
+     */
+    public AnalyticsRecords.MetricDetailResponse metricDetail(
+            String metricKey, String part, LocalDate from, LocalDate to, int page, int size) {
+        MetricRegistry.MetricDefinition definition = MetricRegistry.require(metricKey);
+        return readSingle(
+                "analytics.metric_detail.viewed",
+                "analytics.metric_detail.view_failed",
+                definition.permission(),
+                "analytics_metric_detail",
+                () -> buildMetricDetail(definition, part, from, to, page, size));
+    }
+
+    private AnalyticsRecords.MetricDetailResponse buildMetricDetail(
+            MetricRegistry.MetricDefinition definition, String part, LocalDate from, LocalDate to, int page, int size) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "起始日期不能晚于结束日期");
+        }
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 200);
+        int offset = (safePage - 1) * safeSize;
+        boolean isRatio = MetricRegistry.TYPE_RATIO.equals(definition.valueType());
+        String activePart = null;
+        if (isRatio) {
+            activePart = part == null || part.isBlank() ? "numerator" : part.trim();
+            if (!"numerator".equals(activePart) && !"denominator".equals(activePart)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "part 仅支持 numerator/denominator（比率类两页签）");
+            }
+        } else if (part != null && !part.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "part 仅比率类指标可用（分子/分母两页签）");
+        }
+
+        Instant now = Instant.now(clock);
+        LocalDate currentBusinessDay = businessDayResolver.businessDate(definition.windowDomain(), now);
+
+        if (MetricRegistry.TYPE_BALANCE.equals(definition.valueType())) {
+            // 余额类=区间末值：as-of=to（缺省=当前经营日），from 不参与。
+            LocalDate asOf = to != null ? to : currentBusinessDay;
+            AnalyticsRecords.MetricDetailRows detail = switch (definition.metricKey()) {
+                case "finance.ar_balance" -> repository.arOpenReceivableDetail(asOf, safeSize, offset);
+                default -> throw ApiException.badRequest("VALIDATION_FAILED",
+                        "指标已登记但明细查询未接线：" + definition.metricKey());
+            };
+            String note = from != null ? "余额类指标取区间末值，起始日期不参与计算" : null;
+            return assembleMetricDetail(definition, null, null, asOf, now, detail.summaryValue(), null, null, note,
+                    definition.columns(), detail, safePage, safeSize, true);
+        }
+
+        // 可加/比率分子的时间窗：经营日窗 [start(from), end(to))；缺省=当前经营日（登记 rangeFilterOptional=true 则缺省全历史）。
+        LocalDate effectiveFrom = from != null ? from : (to != null ? to : (definition.rangeFilterOptional() ? null : currentBusinessDay));
+        LocalDate effectiveTo = to != null ? to : (from != null ? from : (definition.rangeFilterOptional() ? null : currentBusinessDay));
+        Instant windowStart = effectiveFrom == null ? null : businessDayResolver.startInstant(definition.windowDomain(), effectiveFrom);
+        Instant windowEnd = effectiveTo == null ? null : businessDayResolver.endInstant(definition.windowDomain(), effectiveTo);
+
+        if (isRatio) {
+            // 首批唯一比率指标：energy.electricity_per_sqm。分子=区间用电量；分母=可租面积（区间末时点）。
+            boolean numeratorActive = "numerator".equals(activePart);
+            AnalyticsRecords.MetricDetailRows numerator =
+                    repository.electricityReadingDetail(windowStart, windowEnd, numeratorActive ? safeSize : 1, numeratorActive ? offset : 0);
+            AnalyticsRecords.MetricDetailRows denominator =
+                    repository.rentableSpaceDetail(numeratorActive ? 1 : safeSize, numeratorActive ? 0 : offset);
+            BigDecimal ratio = denominator.summaryValue().signum() > 0
+                    ? numerator.summaryValue().divide(denominator.summaryValue(), 4, java.math.RoundingMode.HALF_UP)
+                    : null;
+            String note = ratio == null ? "分母（可租面积）为 0，比率不产出（不伪造）" : null;
+            return assembleMetricDetail(definition, activePart, effectiveFrom, effectiveTo, now, ratio,
+                    numerator.summaryValue(), denominator.summaryValue(), note,
+                    numeratorActive ? definition.columns() : definition.denominatorColumns(),
+                    numeratorActive ? numerator : denominator, safePage, safeSize, numeratorActive);
+        }
+
+        AnalyticsRecords.MetricDetailRows detail = switch (definition.metricKey()) {
+            case "revenue.ticket" -> repository.ticketRevenueDetail(windowStart, windowEnd, safeSize, offset);
+            case "finance.recon_diff_count" -> repository.reconciliationDifferenceDetail(windowStart, windowEnd, safeSize, offset);
+            case "energy.total_electricity" -> repository.electricityReadingDetail(windowStart, windowEnd, safeSize, offset);
+            default -> throw ApiException.badRequest("VALIDATION_FAILED",
+                    "指标已登记但明细查询未接线：" + definition.metricKey());
+        };
+        return assembleMetricDetail(definition, null, effectiveFrom, effectiveTo, now, detail.summaryValue(),
+                null, null, null, definition.columns(), detail, safePage, safeSize, true);
+    }
+
+    private AnalyticsRecords.MetricDetailResponse assembleMetricDetail(
+            MetricRegistry.MetricDefinition definition, String part, LocalDate from, LocalDate to, Instant dataAsOf,
+            BigDecimal summaryValue, BigDecimal numeratorValue, BigDecimal denominatorValue, String summaryNote,
+            List<MetricRegistry.MetricColumn> columns, AnalyticsRecords.MetricDetailRows detail,
+            int page, int size, boolean rowTraceLinkable) {
+        return new AnalyticsRecords.MetricDetailResponse(
+                definition.metricKey(),
+                definition.name(),
+                definition.valueType(),
+                definition.unit(),
+                definition.caliber(),
+                definition.source(),
+                part,
+                from,
+                to,
+                dataAsOf,
+                summaryValue,
+                numeratorValue,
+                denominatorValue,
+                summaryNote,
+                columns,
+                detail.rows(),
+                page,
+                size,
+                detail.totalRows(),
+                rowTraceLinkable ? definition.traceLinkPageId() : null,
+                rowTraceLinkable ? definition.traceLinkColumnKey() : null);
+    }
 
 }

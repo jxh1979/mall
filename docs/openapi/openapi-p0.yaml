@@ -1571,6 +1571,78 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/analytics/metric-detail:
+    get:
+      tags:
+        - analytics
+      operationId: getMetricDetail
+      summary: KPI统一指标明细(指标登记簿)
+      description: "统一明细端点(2026-07-18 拍板方案A): 按代码内指标登记簿(MetricRegistry)返回分页明细行+合计校验值+口径说明+数据截至时间, 保证「页面数字=明细合计」同源。口径铁律: 可加=区间求和; 比率=分子/分母(part 两页签); 余额=区间末值(取 to, from 不参与)。除本操作 x-permission 外, 服务端按登记项权限码二次校验(首批: revenue.ticket=analytics.dashboard.view; finance.recon_diff_count=finance.reconciliation.view; energy.total_electricity 与 energy.electricity_per_sqm=energy.reading.manage; finance.ar_balance=finance.ar_ap.view)。project_id/merchant_id 为预留维度参数, 首批平台口径指标不支持, 传入即 VALIDATION_FAILED。未登记 metric 亦为 VALIDATION_FAILED(fail-closed)。"
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.metric_detail.viewed
+      x-audit-event-failure: analytics.metric_detail.view_failed
+      parameters:
+        - name: metric
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: part
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - numerator
+              - denominator
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: merchant_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/analytics/risk-alerts:
     get:
       tags:
@@ -3402,7 +3474,7 @@ paths:
         - finance
       operationId: listReconciliationDifferences
       summary: 对账差异
-      x-permission: openplatform.reconcile.execute
+      x-permission: finance.reconciliation.view
       x-data-scope: project-entity-channel
       x-terminal-allowed:
         - web

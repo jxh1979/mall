@@ -387,4 +387,31 @@ public interface AnalyticsRepository {
     default long countMerchantsWithEtlSnapshotByProject(LocalDate businessDate, String projectId) {
         return countMerchantsWithEtlSnapshot(businessDate);
     }
+
+    // ==== KPI 统一明细（指标登记簿，2026-07-18 方案A）：明细行与合计同一 SQL 谓词同源 ====
+
+    /** revenue.ticket 明细：已支付票务订单（经营日窗，按下单时间），合计=Σamount_cent（与 sumTicketRevenueCents 同谓词）。 */
+    default AnalyticsRecords.MetricDetailRows ticketRevenueDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** finance.recon_diff_count 明细：对账差异逐笔（start/end 可空=全历史），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows reconciliationDifferenceDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** energy.total_electricity（及每平米电耗分子）明细：电表读数（经营日窗），合计=Σconsumption（与 energyConsumptionByType 同谓词）。 */
+    default AnalyticsRecords.MetricDetailRows electricityReadingDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** energy.electricity_per_sqm 分母明细：可租空间（商铺/摊位、非停用），合计=Σ面积（与出租率 occupancyAreas.rentable 同谓词）。 */
+    default AnalyticsRecords.MetricDetailRows rentableSpaceDetail(int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** finance.ar_balance 明细：逾期未清应收（as-of=截至日），合计=Σunpaid_amount_cent（与 arOverdueAgingByMerchant 同谓词）。 */
+    default AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
 }

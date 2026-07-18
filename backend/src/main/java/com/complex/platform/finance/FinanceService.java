@@ -439,7 +439,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         return readPage(
                 "finance_reconciliation.difference_found",
                 "finance_reconciliation.view_failed",
-                "openplatform.reconcile.execute",
+                "finance.reconciliation.view",
                 "finance_reconciliation_difference",
                 () -> {
                     requirePlatformReconciliationAccess();

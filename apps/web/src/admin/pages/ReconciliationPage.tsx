@@ -7,6 +7,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, ReconciliationBatchRow, ReconciliationDifferenceRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -115,6 +116,11 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
 
   const unresolvedCount = differences.filter((item) => !["resolved", "ignored", "matched"].includes(item.status ?? "")).length;
   const totalDifference = differences.reduce((sum, item) => sum + amountValue(item.amount ?? item.differenceAmount ?? item.diffAmount), 0);
+
+  // 首批接线（指标登记簿方案A）：「对账差异」笔数改走统一明细端点（与明细页同源，全历史计数）；
+  // 端点失败（含无 analytics.dashboard.view 的财务账号）→ 回退本地列表计数并隐藏「完整明细」入口，体验不降级。
+  const diffCountKpi = useMetricKpiValue(api, "finance.recon_diff_count", {});
+  const diffCountDisplay = diffCountKpi.status === "ready" && diffCountKpi.value !== null ? diffCountKpi.value : differences.length;
 
   function validateReview() {
     if (!selected) {
@@ -243,8 +249,12 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
           <>
             {/* 聚焦视图：只渲染被点 KPI 对应那张承载表，其余表/KPI 卡全隐藏，感知上=新页面。 */}
             <div className="admin-state" data-testid="reconciliation-kpi-focus-banner">
-              正在查看：{kpiFocusTitle(kpiFocus)}（{kpiFocus.table === "batches" ? batches.length : differences.length}）
+              正在查看：{kpiFocusTitle(kpiFocus)}（{kpiFocus.table === "batches" ? batches.length : diffCountDisplay}）
               <button type="button" data-testid="reconciliation-kpi-focus-clear" onClick={exitKpiFocus}>{TEXT.focusClear}</button>
+              {/* 聚焦视图出口（设计稿二拍板）：本页聚焦交互不动，加「查看完整明细」进统一明细页（可核可分享）。 */}
+              {kpiFocus.table === "differences" && diffCountKpi.status === "ready"
+                ? <MetricDetailLink navigateTo={navigateTo} metric="finance.recon_diff_count" testid="reconciliation-metric-detail-differences" />
+                : null}
             </div>
             {kpiFocus.table === "batches" ? batchesSection : differencesSection}
           </>
@@ -258,7 +268,7 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
               </div>
               <div className="admin-kpi-card admin-kpi-card--clickable">
                 <span>{TEXT.differences}</span>
-                <button type="button" className="admin-kpi-value" data-testid="reconciliation-kpi-differences" onClick={() => enterKpiFocus("differences")}>{differences.length}</button>
+                <button type="button" className="admin-kpi-value" data-testid="reconciliation-kpi-differences" onClick={() => enterKpiFocus("differences")}>{diffCountDisplay}</button>
                 <small>{TEXT.unresolved}: {unresolvedCount}</small>
               </div>
               {/* 差异金额=聚合金额、正式关闭接口=状态、选中差异=选择态，均无独立承载表→不可点。 */}

@@ -347,8 +347,8 @@ class FinanceControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(0));
 
-        verify(authorizationService).requirePermission("finance.reconciliation.view");
-        verify(authorizationService).requirePermission("openplatform.reconcile.execute");
+        // 读路径统一 finance.reconciliation.view(batches+differences 各一次); execute 保留给执行/补偿动作。
+        verify(authorizationService, org.mockito.Mockito.times(2)).requirePermission("finance.reconciliation.view");
     }
 
     @Test

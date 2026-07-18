@@ -347,7 +347,7 @@
 | `POST` | `/api/v1/finance/ar-ap-items` | 手工新增台账项 | `finance.ar_ap.create` |
 | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | 收付款登记 | `finance.ar_ap.payment.create` |
 | `POST` | `/api/v1/finance/daily-closes` | 日结锁定 | `finance.daily_close.lock` |
-| `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `openplatform.reconcile.execute` |
+| `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `finance.reconciliation.view` |
 
 ### 8.11 留痕、证据、复核和风险
 
