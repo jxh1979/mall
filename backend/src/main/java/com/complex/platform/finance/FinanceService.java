@@ -35,7 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort {
+public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort, DividendPayoutPort {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -45,7 +45,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     private static final Set<String> SOURCE_TYPES = Set.of(
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
             "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
-            "property_fee", "pass_drink_settlement", "ticket_distribution");
+            "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -1493,6 +1493,19 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         return tiers.isEmpty()
                 ? clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent())
                 : TurnoverRentMath.tieredRent(turnover, tiers, rule.minAmountCent());
+    }
+
+    /**
+     * V299 持股分红发放端口：审批通过的分红计算单按主理人净发放额（代扣后）挂应付
+     * (payable, counterparty=主理人账户, source_type='dividend_payout', source_id=计算单 id——
+     * (direction,source_type,source_id) 部分唯一索引防一单重挂；幂等键取计算单 id 使派生 id 确定)。
+     */
+    @Override
+    public String createDividendPayoutPayable(
+            String principalUserId, String merchantId, long netAmountCent, String statementId) {
+        ArApItemRecord item = persistDerivedArApItem(
+                "payable", principalUserId, "dividend_payout", statementId, netAmountCent, statementId, merchantId);
+        return item.id();
     }
 
     /** 批3:内部价采购券核销回流 -> 按内部结算价给第三方挂应付(payable, counterparty=partnerId)。 */

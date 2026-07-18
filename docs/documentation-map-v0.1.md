@@ -29,6 +29,7 @@
 | `amusement-business-operations-product-prd-v0.1.md` | 游乐业务运营 PRD | 现行 |
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
 | `finance-settlement-product-prd-v0.1.md` | 财务结算 PRD | 现行 |
+| `dividend-engine-prd-v0.1.md` | 持股分红引擎 PRD（V299：净利润制/股息红利代扣/季度+月预览/全可配） | 现行 |
 | `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD（3.18，2026-07-02 拍板方案 A：后台内商户专区） | 现行 |
 | `stored-value-membership-checkin-birthday-prd-v0.1.md` | 储值/付费会员（已于 2026-07-18 废止，V290）/连续签到/生日权益 PRD（审计V2缺口回填，按发货现状） | 现行 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |

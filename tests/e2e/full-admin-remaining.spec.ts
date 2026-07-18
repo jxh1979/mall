@@ -25,6 +25,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-AMU-005", label: "游乐核销记录", route: "/admin/amusement/verification-records" },
   { pageId: "ADM-FIN-004", label: "物业费管理", route: "/admin/finance/property-fee" },
   { pageId: "ADM-FIN-006", label: "商户费用台账", route: "/admin/finance/merchant-expenses" },
+  { pageId: "ADM-FIN-007", label: "持股分红", route: "/admin/finance/dividends" },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
   { pageId: "ADM-GOV-007", label: "空间类型字典", route: "/admin/governance/space-types" },
@@ -51,6 +52,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-MER-005", label: "我的对账", route: "/admin/merchant-zone/settlements" },
   { pageId: "ADM-MER-006", label: "我的合同", route: "/admin/merchant-zone/contracts" },
   { pageId: "ADM-MER-007", label: "费用通知", route: "/admin/merchant-zone/fee-recipients" },
+  { pageId: "ADM-MER-008", label: "我的分红", route: "/admin/merchant-zone/dividends" },
   { pageId: "ADM-VND-001", label: "外包维保工单", route: "/admin/vendor/work-orders" },
   { pageId: "ADM-VND-002", label: "外包巡检任务", route: "/admin/vendor/inspections" },
   { pageId: "ADM-VND-003", label: "外包进场报备", route: "/admin/vendor/site-entries" },
@@ -123,6 +125,12 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-FIN-006") {
     await expect(page.getByTestId("finance-merchant-expense-page")).toBeVisible();
     await expect(page.getByTestId("merchant-expense-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-FIN-007") {
+    await expect(page.getByTestId("finance-dividends-page")).toBeVisible();
+    await expect(page.getByTestId("dividend-statement-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-MER-008") {
+    await expect(page.getByTestId("merchant-zone-dividends-page")).toBeVisible();
+    await expect(page.getByTestId("merchant-dividend-table")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-002") {
     await expect(page.getByTestId("reconciliation-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-003") {
@@ -269,7 +277,7 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
 
 // 账号形态裁决（fix/web-critical）：商户专区/外包工作台页面只对匹配形态渲染菜单；
 // 平台账号（admin）菜单不出现这些项，直链进入显示业务化提示（不放请求打 403/400）。
-const merchantOnlyPages = new Set(["ADM-MER-003", "ADM-MER-004", "ADM-MER-005", "ADM-MER-006", "ADM-MER-007"]);
+const merchantOnlyPages = new Set(["ADM-MER-003", "ADM-MER-004", "ADM-MER-005", "ADM-MER-006", "ADM-MER-007", "ADM-MER-008"]);
 const vendorOnlyPages = new Set(["ADM-VND-001", "ADM-VND-002", "ADM-VND-003", "ADM-VND-004"]);
 
 test.describe("full admin remaining pages acceptance", () => {
@@ -847,6 +855,12 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("merchant-zone-fee-recipients-summary")).toContainText("接收人配置");
     await expect(page.getByTestId("merchant-zone-fee-recipients-table")).toContainText("15577000001");
     await expect(page.getByTestId("merchant-zone-fee-recipient-form")).toBeVisible();
+
+    // 商户专区主理人分红只读视图（V299）：每期金额 + 状态可见，无审批入口。
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-008")!);
+    await expect(page.getByTestId("merchant-dividend-table")).toContainText("2026-Q2");
+    await expect(page.getByTestId("merchant-dividend-table")).toContainText("1,040.00");
+    await expect(page.getByTestId("merchant-dividend-table")).toContainText("已审批");
 
     // 商户形态看不到外包工作台菜单。
     await expect(page.getByTestId("admin-nav-ADM-VND-001")).toHaveCount(0);

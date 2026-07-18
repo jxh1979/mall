@@ -22267,6 +22267,418 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/finance/dividends/plans:
+    get:
+      tags:
+      - finance
+      operationId: listDividendPlans
+      summary: 分红方案列表（商户 scope 账号只见本商户）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: dividend.plans_listed
+      x-audit-event-failure: dividend.plans_list_failed
+      parameters:
+      - name: merchant_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        description: 商户 ID 筛选；商户 scope 账号强制只看自己。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    post:
+      tags:
+      - finance
+      operationId: createDividendPlan
+      summary: 新建分红方案（比例/税率/周期/基数构成全可配，80/20 仅默认值）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.plan_created
+      x-audit-event-failure: dividend.plan_create_failed
+      x-failure-codes:
+      - DIVIDEND_PLAN_EXISTS
+      requestBody:
+        $ref: '#/components/requestBodies/DividendPlanRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /api/v1/finance/dividends/plans/{id}:
+    put:
+      tags:
+      - finance
+      operationId: updateDividendPlan
+      summary: 修改分红方案（改动审计留痕；历史分红单按单内快照追溯，不受影响）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.plan_updated
+      x-audit-event-failure: dividend.plan_update_failed
+      x-failure-codes:
+      - DIVIDEND_PLAN_NOT_FOUND
+      requestBody:
+        $ref: '#/components/requestBodies/DividendPlanRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+        description: 分红方案 ID。
+  /api/v1/finance/dividends/statements/compute:
+    post:
+      tags:
+      - finance
+      operationId: computeDividendStatements
+      summary: 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.computed
+      x-audit-event-failure: dividend.compute_failed
+      x-failure-codes:
+      - DIVIDEND_PLAN_NOT_FOUND
+      requestBody:
+        $ref: '#/components/requestBodies/DividendComputeRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /api/v1/finance/dividends/statements:
+    get:
+      tags:
+      - finance
+      operationId: listDividendStatements
+      summary: 分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: dividend.statements_listed
+      x-audit-event-failure: dividend.statements_list_failed
+      parameters:
+      - name: merchant_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        description: 商户 ID 筛选；商户 scope 账号强制只看自己。
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - official
+          - preview
+        description: 类别筛选：official 正式单 / preview 月度预览。
+      - name: period_label
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 16
+        description: 期间标签筛选（季度 2026-Q3 / 月份 2026-07）。
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - preview
+          - draft
+          - pending_review
+          - approved
+          - paid
+          - rejected
+          - voided
+        description: 状态筛选。
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+        description: 页码（1 起）。
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        description: 每页行数（上限 200）。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /api/v1/finance/dividends/statements/{id}:
+    get:
+      tags:
+      - finance
+      operationId: getDividendStatement
+      summary: 分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: dividend.statement_viewed
+      x-audit-event-failure: dividend.statement_view_failed
+      x-failure-codes:
+      - DIVIDEND_STATEMENT_NOT_FOUND
+      - CROSS_MERCHANT_FORBIDDEN
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+        description: 分红计算单 ID。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/finance/dividends/statements/{id}/submit:
+    post:
+      tags:
+      - finance
+      operationId: submitDividendStatement
+      summary: 提交审阅：draft → pending_review（预览单不可提交）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.submitted
+      x-audit-event-failure: dividend.submit_failed
+      x-failure-codes:
+      - DIVIDEND_STATEMENT_NOT_FOUND
+      - DIVIDEND_STATE_INVALID
+      - DIVIDEND_PREVIEW_NOT_APPROVABLE
+      requestBody:
+        $ref: '#/components/requestBodies/DividendActionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+        description: 分红计算单 ID。
+  /api/v1/finance/dividends/statements/{id}/approve:
+    post:
+      tags:
+      - finance
+      operationId: approveDividendStatement
+      summary: 审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.approved
+      x-audit-event-failure: dividend.approve_failed
+      x-failure-codes:
+      - DIVIDEND_STATEMENT_NOT_FOUND
+      - DIVIDEND_STATE_INVALID
+      - DIVIDEND_PREVIEW_NOT_APPROVABLE
+      requestBody:
+        $ref: '#/components/requestBodies/DividendActionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+        description: 分红计算单 ID。
+  /api/v1/finance/dividends/statements/{id}/reject:
+    post:
+      tags:
+      - finance
+      operationId: rejectDividendStatement
+      summary: 驳回：pending_review → rejected（理由必填；驳回后可重算）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.rejected
+      x-audit-event-failure: dividend.reject_failed
+      x-failure-codes:
+      - DIVIDEND_STATEMENT_NOT_FOUND
+      - DIVIDEND_STATE_INVALID
+      - DIVIDEND_PREVIEW_NOT_APPROVABLE
+      requestBody:
+        $ref: '#/components/requestBodies/DividendActionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+        description: 分红计算单 ID。
+  /api/v1/finance/dividends/statements/{id}/mark-paid:
+    post:
+      tags:
+      - finance
+      operationId: markDividendStatementPaid
+      summary: 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程）
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.paid_marked
+      x-audit-event-failure: dividend.mark_paid_failed
+      x-failure-codes:
+      - DIVIDEND_STATEMENT_NOT_FOUND
+      - DIVIDEND_STATE_INVALID
+      - DIVIDEND_PREVIEW_NOT_APPROVABLE
+      requestBody:
+        $ref: '#/components/requestBodies/DividendActionRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+        description: 分红计算单 ID。
 components:
   securitySchemes:
     BearerAuth:
@@ -22478,6 +22890,24 @@ components:
         maxLength: 64
       description: ProjectId 路径参数；必须引用当前数据范围内存在且归属本商户的游乐项目。
   requestBodies:
+    DividendPlanRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DividendPlanRequest'
+    DividendComputeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DividendComputeRequest'
+    DividendActionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DividendActionRequest'
     StatusChange:
       required: true
       content:
@@ -23935,6 +24365,124 @@ components:
             meta:
               server_time: 2026-06-12T12:00:00Z
   schemas:
+    DividendPlanRequest:
+      type: object
+      description: 请求载荷 `DividendPlanRequest`（分红方案新建/修改共用）：凡涉数据皆可配——比例/税率/周期/基数构成开关全部可调，空缺按默认口径补齐（平台 80%、股息红利 20%、季度+月度预览、净利润全项）。修改时 merchant_id 不可变更；status=ended 停用方案。一个商户同一时期只允许一个生效中方案。
+      additionalProperties: false
+      required:
+      - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回同一结果。
+          maxLength: 128
+        merchant_id:
+          type: string
+          description: 经营商户 ID（新建必填；修改不可变更）。
+          maxLength: 64
+        principal_user_id:
+          type: string
+          description: 主理人账户 ID（工商登记持股的真实股东；发放走应付台账挂到该账户）。
+          maxLength: 80
+        principal_name:
+          type: string
+          description: 主理人姓名（展示用，选填）。
+          maxLength: 200
+        platform_share_bps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: 平台分成比例（万分比，默认 8000=80%；主理人=10000−平台）。
+        tax_rate_bps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: 主理人代扣税率（万分比，默认 2000=20% 股息红利；整除链截断）。
+        period_type:
+          type: string
+          enum:
+          - quarterly
+          - monthly
+          description: 分红周期：quarterly 季度正式+月度预览（默认）/ monthly 月度正式。
+        revenue_domains:
+          type: array
+          items:
+            type: string
+            enum:
+            - bar
+            - ticket
+          description: 计入收入域（默认 bar+ticket；复用 revenue.net 商户行级谓词区间版）。
+        include_inventory_cost:
+          type: boolean
+          description: 是否扣减销货成本（V296 移动加权出库成本，默认 true）。
+        expense_types:
+          type: array
+          items:
+            type: string
+            enum:
+            - rent_allocation
+            - energy
+            - property_fee
+            - labor
+            - amortization
+            - other
+          description: 计入费用类别（V297 费用归集台账，默认全部六类）。
+        effective_from:
+          type: string
+          format: date
+          description: 生效起始日（选填，ISO 日期）。
+        status:
+          type: string
+          enum:
+          - active
+          - ended
+          description: 方案状态（修改时可置 ended 停用，不再出单）。
+        note:
+          type: string
+          description: 备注（选填）。
+          maxLength: 1000
+    DividendComputeRequest:
+      type: object
+      description: 请求载荷 `DividendComputeRequest`（期间分红作业触发）：kind=official 正式单（period_label 须匹配方案周期类型）或 preview 月度预览（period_label=yyyy-MM，仅季度方案出预览）。merchant_id 为空=对全部生效中方案跑批。幂等可重跑：草稿/预览/驳回单作废重算，已进入审批流跳过。
+      additionalProperties: false
+      required:
+      - idempotency_key
+      - period_label
+      - kind
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回首次响应。
+          maxLength: 128
+        period_label:
+          type: string
+          description: 期间标签：季度 2026-Q3 / 月份 2026-07。
+          maxLength: 16
+        kind:
+          type: string
+          enum:
+          - official
+          - preview
+          description: 计算单类别：official 正式单（进入审批发放）/ preview 月度预览（只看不发）。
+        merchant_id:
+          type: string
+          description: 仅对该商户算单（选填；空=全部生效中方案）。
+          maxLength: 64
+    DividendActionRequest:
+      type: object
+      description: 请求载荷 `DividendActionRequest`（计算单状态机动作：提交审阅/审批/驳回/标记发放）。驳回时 note=驳回理由，必填；其余动作 note 选填。
+      additionalProperties: false
+      required:
+      - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回首次响应。
+          maxLength: 128
+        note:
+          type: string
+          description: 说明/理由（驳回必填，进入审计留痕）。
+          maxLength: 1000
     SuccessResponse:
       type: object
       required:
