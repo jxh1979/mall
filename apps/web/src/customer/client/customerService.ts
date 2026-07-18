@@ -13,7 +13,6 @@ import type {
   BarScanMenuItem,
   BarScanOrder,
   CheckInRecord,
-  Membership,
   PaymentIntent,
   PointsRedemption,
   PointsSummary,
@@ -138,10 +137,6 @@ export class CustomerService {
   // AUD-061 消费（即时扣本卡余额；platform_collect 卡消费逐笔挂应付商户）
   consumeStoredValue(payload: { projectId?: string; merchantId?: string; amountCent: number; reason?: string }): Promise<StoredValueTransaction> {
     return this.api.post<StoredValueTransaction>("/api/v1/customer/stored-value/consume", payload);
-  }
-
-  listMemberships(): Promise<Membership[]> {
-    return this.api.get<Membership[]>("/api/v1/customer/memberships");
   }
 
   // ⑧ 扫码点单（绑桌台会话 + 继承入场闸）：扫桌台二维码得 sessionId -> 看菜单 / 自助下单（不重复核龄）

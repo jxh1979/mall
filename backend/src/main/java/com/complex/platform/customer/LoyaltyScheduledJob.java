@@ -17,25 +17,22 @@ import org.springframework.stereotype.Component;
 public class LoyaltyScheduledJob {
 
     private final LoyaltyService service;
-    private final MembershipService membershipService;
     private final Clock clock;
     private final boolean scheduledEnabled;
 
     @Autowired
     public LoyaltyScheduledJob(
             LoyaltyService service,
-            MembershipService membershipService,
             @Value("${customer.loyalty.scheduled.enabled:false}") boolean scheduledEnabled) {
-        this(service, membershipService, Clock.systemUTC(), scheduledEnabled);
+        this(service, Clock.systemUTC(), scheduledEnabled);
     }
 
-    LoyaltyScheduledJob(LoyaltyService service, MembershipService membershipService, Clock clock) {
-        this(service, membershipService, clock, true);
+    LoyaltyScheduledJob(LoyaltyService service, Clock clock) {
+        this(service, clock, true);
     }
 
-    LoyaltyScheduledJob(LoyaltyService service, MembershipService membershipService, Clock clock, boolean scheduledEnabled) {
+    LoyaltyScheduledJob(LoyaltyService service, Clock clock, boolean scheduledEnabled) {
         this.service = service;
-        this.membershipService = membershipService;
         this.clock = clock;
         this.scheduledEnabled = scheduledEnabled;
     }
@@ -49,7 +46,5 @@ public class LoyaltyScheduledJob {
         Instant now = Instant.now(clock);
         service.expirePoints(now);
         service.evaluateLevels(now);
-        // 付费会员到期清理（V090 第2部分）：把已到期但仍 active 的订阅置 expired。
-        membershipService.expireMemberships(now);
     }
 }

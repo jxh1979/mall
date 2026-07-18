@@ -93,8 +93,6 @@ customer_check_in_tiers,direct,project_id,project_id column on customer_check_in
 customer_check_ins,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 customer_consents,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
 customer_member_levels,direct,project_id,project_id column on customer_member_levels,ready for project/merchant scoped query enforcement,covered
-customer_membership_plans,direct,project_id,project_id column on customer_membership_plans,ready for project/merchant scoped query enforcement,covered
-customer_memberships,direct,project_id,project_id column on customer_memberships,ready for project/merchant scoped query enforcement,covered
 customer_points_accounts,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
 customer_points_ledger,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
 customer_points_redemptions,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
@@ -249,6 +247,7 @@ staff_profiles,direct,project_id,project_id column on staff_profiles,ready for p
 staff_shift_schedules,direct,project_id,project_id column on staff_shift_schedules,ready for project/merchant scoped query enforcement,covered
 stocktake,direct,merchant_id,merchant_id column on stocktake,ready for project/merchant scoped query enforcement,covered
 stored_value_merchant_refund_rules,direct,merchant_id,merchant_id column on stored_value_merchant_refund_rules,ready for project/merchant scoped query enforcement,covered
+stored_value_topup_intents,direct,project_id,project_id column on stored_value_topup_intents,ready for project/merchant scoped query enforcement,covered
 supervisor_review_decisions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 supervisor_review_policies,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 supplier_qualifications,direct,merchant_id,merchant_id column on supplier_qualifications,ready for project/merchant scoped query enforcement,covered
@@ -270,11 +269,14 @@ ticket_distribution_merchant_rates,direct,project_id,project_id column on ticket
 ticket_distribution_rank_tiers,direct,project_id,project_id column on ticket_distribution_rank_tiers,ready for project/merchant scoped query enforcement,covered
 ticket_dynamic_pricing_rules,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 ticket_face_photos,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+ticket_instances,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 ticket_orders,direct,merchant_id,merchant_id column on ticket_orders,ready for project/merchant scoped query enforcement,covered
 ticket_payment_intents,inherited,order_id,order_id -> ticket_orders -> ticket_type/project scope,must join through scope path before multi-complex rollout,covered
 ticket_price_rules,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 ticket_refund_lines,inherited,refund_id,refund_id -> ticket_refunds -> order_id -> ticket_orders,must join through scope path before multi-complex rollout,covered
 ticket_refunds,direct,merchant_id,merchant_id column on ticket_refunds,ready for project/merchant scoped query enforcement,covered
+ticket_slot_holders,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+ticket_transfers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 ticket_type_entitlements,inherited,ticket_type_id,ticket_type_id -> ticket_types -> project scope,must join through scope path before multi-complex rollout,covered
 ticket_types,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 ticket_verifications,direct,merchant_id,merchant_id column on ticket_verifications,ready for project/merchant scoped query enforcement,covered

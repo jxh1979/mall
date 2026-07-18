@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * 会员忠诚度 第2部分（V090）单测：储值充值（绑支付意图：无支付不加余额）/消费不足拒/冻结阻断；
- * 付费会员开通→生效期、到期→expired、续费；积分转赠原子 + 日限额拒 + 不足拒。
+ * 发卡资格/资金模式/代收应付/预收退卡。
  */
 class MemberWalletServiceTests {
 
@@ -282,64 +282,7 @@ class MemberWalletServiceTests {
     }
 
     // ============================================================
-    // 付费会员：开通→生效期、到期→expired、续费
-    // ============================================================
-
-    @Test
-    void subscribeActivatesWithinValidityAndExpiresAfter() {
-        InMemoryRepo repo = seeded();
-        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
-                "plan1", null, "gold", "金卡", 9_900L, 30,
-                Map.of("discount_bp", 9000), "active", T0, T0));
-        FakeFinance finance = new FakeFinance();
-        MembershipService service = new MembershipService(repo, finance, audit(),
-                Clock.fixed(T0, ZoneOffset.UTC));
-
-        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-1");
-        assertThat(intent.amountCent()).isEqualTo(9_900L);
-        // 未支付不生效
-        assertThatThrownBy(() -> service.activate("c1", "plan1", null, intent.id(), false))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PAYMENT_NOT_SUCCEEDED"));
-
-        finance.markPaymentIntentSucceeded(intent.id());
-        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), false);
-        assertThat(m.status()).isEqualTo("active");
-        assertThat(m.expireAt()).isEqualTo(T0.plusSeconds(days(30)));
-
-        // 生效期内权益可用
-        assertThat(service.activeBenefits("c1")).containsEntry("discount_bp", 9000);
-
-        // 到期作业（在 T0+31d）→ expired
-        MembershipService later = new MembershipService(repo, finance, audit(),
-                Clock.fixed(T0.plusSeconds(days(31)), ZoneOffset.UTC));
-        int expired = later.expireMemberships(T0.plusSeconds(days(31)));
-        assertThat(expired).isEqualTo(1);
-        assertThat(repo.memberships.get(m.id()).status()).isEqualTo("expired");
-        // 过期后权益不可用
-        assertThat(later.activeBenefits("c1")).isEmpty();
-    }
-
-    @Test
-    void renewExtendsExpiry() {
-        InMemoryRepo repo = seeded();
-        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
-                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
-        FakeFinance finance = new FakeFinance();
-        MembershipService service = new MembershipService(repo, finance, audit(),
-                Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-2");
-        finance.markPaymentIntentSucceeded(intent.id());
-        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
-
-        PaymentIntentRecord renewIntent = finance.create("membership_subscribe", "c1", 9_900L, "renew-1");
-        finance.markPaymentIntentSucceeded(renewIntent.id());
-        CustomerMembershipRecord renewed = service.renew(m.id(), renewIntent.id());
-        // 生效期内续费：在原 expire 基础上 +30d
-        assertThat(renewed.expireAt()).isEqualTo(T0.plusSeconds(days(60)));
-    }
-
-    // ============================================================
-    // 支付渠道开关（V093）：会员自动续费扣款 / 储值退款打款
+    // 支付渠道开关（V093）：储值退款打款
     // ============================================================
 
     private com.complex.platform.finance.gateway.PaymentGatewayRouter gatewayRouter(boolean enabled) {
@@ -354,44 +297,6 @@ class MemberWalletServiceTests {
                         com.complex.platform.finance.gateway.PaymentGatewayRouter.CAPABILITY,
                         "global", "global", enabled, "test", T0, T0)));
         return new com.complex.platform.finance.gateway.PaymentGatewayRouter(terminalRepo);
-    }
-
-    @Test
-    void autoRenewChargeWithGatewayOffIsReservedDoesNotChargeOrExtend() {
-        InMemoryRepo repo = seeded();
-        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
-                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
-        FakeFinance finance = new FakeFinance();
-        MembershipService service = new MembershipService(repo, finance, audit(),
-                gatewayRouter(false), Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-ar1");
-        finance.markPaymentIntentSucceeded(intent.id());
-        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
-
-        MembershipService.AutoRenewOutcome outcome = service.autoRenewCharge(m.id());
-        assertThat(outcome.charged()).isFalse();
-        assertThat(outcome.gatewayStatus()).isEqualTo("RESERVED");
-        // 未实际扣款 → 未续期（expire 不变）。
-        assertThat(repo.memberships.get(m.id()).expireAt()).isEqualTo(T0.plusSeconds(days(30)));
-    }
-
-    @Test
-    void autoRenewChargeWithGatewayOnRoutesToPortNotConfiguredNoCrash() {
-        InMemoryRepo repo = seeded();
-        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
-                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
-        FakeFinance finance = new FakeFinance();
-        MembershipService service = new MembershipService(repo, finance, audit(),
-                gatewayRouter(true), Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-ar2");
-        finance.markPaymentIntentSucceeded(intent.id());
-        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
-
-        MembershipService.AutoRenewOutcome outcome = service.autoRenewCharge(m.id());
-        // 占位 NOT_CONFIGURED：不实际扣款、不续期、不崩。
-        assertThat(outcome.charged()).isFalse();
-        assertThat(outcome.gatewayStatus()).isEqualTo("NOT_CONFIGURED");
-        assertThat(repo.memberships.get(m.id()).expireAt()).isEqualTo(T0.plusSeconds(days(30)));
     }
 
     @Test
@@ -627,8 +532,6 @@ class MemberWalletServiceTests {
         final List<CustomerPointsLedgerRecord> pointsLedger = new ArrayList<>();
         final Map<String, CustomerStoredValueAccountRecord> storedValue = new java.util.LinkedHashMap<>();
         final List<CustomerStoredValueTransactionRecord> storedValueTxns = new ArrayList<>();
-        final Map<String, CustomerMembershipPlanRecord> plans = new java.util.LinkedHashMap<>();
-        final Map<String, CustomerMembershipRecord> memberships = new java.util.LinkedHashMap<>();
 
         @Override public Optional<CustomerRecord> findCustomerByPhone(String phone) {
             return customers.values().stream().filter(c -> phone.equals(c.phone())).findFirst();
@@ -710,33 +613,6 @@ class MemberWalletServiceTests {
         }
         @Override public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accId) {
             return storedValueTxns.stream().filter(t -> accId.equals(t.accountId())).toList();
-        }
-
-        // V090 membership
-        @Override public CustomerMembershipPlanRecord saveMembershipPlan(CustomerMembershipPlanRecord p) {
-            plans.put(p.id(), p); return p;
-        }
-        @Override public Optional<CustomerMembershipPlanRecord> findMembershipPlanById(String id) {
-            return Optional.ofNullable(plans.get(id));
-        }
-        @Override public List<CustomerMembershipPlanRecord> listMembershipPlans(String pid) {
-            return plans.values().stream().filter(p -> "active".equals(p.status())).toList();
-        }
-        @Override public CustomerMembershipRecord saveMembership(CustomerMembershipRecord m) {
-            memberships.put(m.id(), m); return m;
-        }
-        @Override public Optional<CustomerMembershipRecord> findMembershipByIdForUpdate(String id) {
-            return Optional.ofNullable(memberships.get(id));
-        }
-        @Override public Optional<CustomerMembershipRecord> findMembershipByIdempotencyKey(String k) {
-            return memberships.values().stream().filter(m -> k != null && k.equals(m.idempotencyKey())).findFirst();
-        }
-        @Override public List<CustomerMembershipRecord> listMembershipsByCustomerId(String cid) {
-            return memberships.values().stream().filter(m -> cid.equals(m.customerId())).toList();
-        }
-        @Override public List<CustomerMembershipRecord> listActiveMembershipsExpiringBefore(Instant now) {
-            return memberships.values().stream()
-                    .filter(m -> "active".equals(m.status()) && !m.expireAt().isAfter(now)).toList();
         }
 
     }

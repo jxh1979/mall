@@ -243,39 +243,5 @@ public interface CustomerRepository {
         return List.of();
     }
 
-    // 付费会员档位 / 订阅
-    default CustomerMembershipPlanRecord saveMembershipPlan(CustomerMembershipPlanRecord plan) {
-        throw new UnsupportedOperationException("saveMembershipPlan not supported by this repository");
-    }
-
-    default Optional<CustomerMembershipPlanRecord> findMembershipPlanById(String planId) {
-        return Optional.empty();
-    }
-
-    default List<CustomerMembershipPlanRecord> listMembershipPlans(String projectId) {
-        return List.of();
-    }
-
-    default CustomerMembershipRecord saveMembership(CustomerMembershipRecord membership) {
-        throw new UnsupportedOperationException("saveMembership not supported by this repository");
-    }
-
-    default Optional<CustomerMembershipRecord> findMembershipByIdForUpdate(String membershipId) {
-        return Optional.empty();
-    }
-
-    default Optional<CustomerMembershipRecord> findMembershipByIdempotencyKey(String key) {
-        return Optional.empty();
-    }
-
-    default List<CustomerMembershipRecord> listMembershipsByCustomerId(String customerId) {
-        return List.of();
-    }
-
-    /** 列出已到期但仍 active 的订阅（到期作业用）。 */
-    default List<CustomerMembershipRecord> listActiveMembershipsExpiringBefore(Instant now) {
-        return List.of();
-    }
-
     // 积分会员间转赠已下线（HTML：积分不支持会员间转赠；2026-06-24 裁决）。相关 repo 方法/记录类/表已随 V172 清理移除。
 }

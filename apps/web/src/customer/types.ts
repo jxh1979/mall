@@ -188,19 +188,6 @@ export type StoredValueTransaction = {
   createdAt: string;
 };
 
-export type Membership = {
-  id: string;
-  customerId: string;
-  planId: string;
-  projectId: string;
-  startAt: string;
-  expireAt: string;
-  status: string;
-  autoRenew: boolean;
-  paymentIntentId: string | null;
-  createdAt: string;
-};
-
 export type PaymentIntent = {
   id?: string;
   status?: string;

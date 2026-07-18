@@ -539,8 +539,8 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 
 **需求/决策来源**：多综合体隔离（§24 商户隔离 / §30 数据权限）。无新迁移，为仓储层按 project_id 维度查询通道。
 
-**数据表**：无新表。涉及既有多表的 `project_id` 列。grep 命中仓储方法（**实证 15 个 `listXxxByProject`**，分布 8 个 JdbcXxxRepository）：
-`listBirthdayRulesByProject`、`listCheckInTiersByProject`、`listDashboardSnapshotsByProject`、`listMemberLevelsByProject`、`listMembershipPlansByProject`、`listMembershipsByProject`、`listPointsRulesByProject`、`listPointsTransferLimitsByProject`、`listProcessInstancesByProject`、`listProfilesByProject`、`listRedemptionCatalogItemsByProject`、`listShiftsByProject`、`listStoredValueAccountsByProject`、`listSupplyContractsByProject`、`listWarehousesByProject`。
+**数据表**：无新表。涉及既有多表的 `project_id` 列。grep 命中仓储方法（**实证 15 个 `listXxxByProject`（其中付费会员 2 个已于 2026-07-18 废止删除，现存 13 个）**，分布 8 个 JdbcXxxRepository）：
+`listBirthdayRulesByProject`、`listCheckInTiersByProject`、`listDashboardSnapshotsByProject`、`listMemberLevelsByProject`、~~`listMembershipPlansByProject`~~、~~`listMembershipsByProject`~~（付费会员 2 方法已于 2026-07-18 随 V290 废止删除）、`listPointsRulesByProject`、`listPointsTransferLimitsByProject`、`listProcessInstancesByProject`、`listProfilesByProject`、`listRedemptionCatalogItemsByProject`、`listShiftsByProject`、`listStoredValueAccountsByProject`、`listSupplyContractsByProject`、`listWarehousesByProject`。
 > 实证修正：任务清单称“18 表 listXxxByProject”，**实际 grep 命中 15 个** `listXxxByProject` 方法（分布于 access/staff、analytics、bar(×2)、customer、evidence(接口+实现)、inventory 等仓储）。若期望 18，差额 3 项**待确认**（可能为命名不同的 project-scoped 查询，或尚未补齐）。
 
 **API/operationId**：随各域列表端点透传 project 维度参数（未单列独立 operationId 集合）。

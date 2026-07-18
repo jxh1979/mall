@@ -2,7 +2,7 @@ import { Alert, Button, Card, Empty, InputNumber, List, message, Select, Space, 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
-import type { Membership, StoredValueAccount } from "../types";
+import type { StoredValueAccount } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Paragraph, Text } = Typography;
@@ -25,7 +25,6 @@ function yuan(cent: number): string {
 // ⑦ 储值钱包（AUD-061）：多卡（通用卡 + 各商户卡）分卡余额展示 + 选卡充值/消费。3.17：error/loading/empty 分离可重试。
 export function WalletPage({ service }: { service: CustomerService }): React.ReactElement {
   const [accounts, setAccounts] = useState<StoredValueAccount[]>([]);
-  const [memberships, setMemberships] = useState<Membership[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
@@ -36,12 +35,12 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
     let active = true;
     setLoading(true);
     setError(null);
-    Promise.all([service.getStoredValueAccounts(), service.listMemberships()])
-      .then(([accs, plans]) => {
+    service
+      .getStoredValueAccounts()
+      .then((accs) => {
         if (!active) return;
         const cards = accs ?? [];
         setAccounts(cards);
-        setMemberships(plans ?? []);
         setSelectedId((prev) => prev ?? cards[0]?.id);
       })
       .catch((err) => {
@@ -175,34 +174,6 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
               充值需到柜台完成支付收款后到账；储值消费即时扣本卡余额。商户预收卡退卡请到店办理。
             </Paragraph>
           </Space>
-        )}
-      </Card>
-
-      <Card title="我的会员" style={{ marginTop: 16 }}>
-        {loading ? (
-          <Spin />
-        ) : error ? null : (
-          <List
-            dataSource={memberships}
-            locale={{ emptyText: "暂无会员订阅" }}
-            renderItem={(item) => (
-              <List.Item data-testid="membership-item">
-                <List.Item.Meta
-                  title={
-                    <span>
-                      会员 {item.planId}{" "}
-                      <Tag color={item.status === "active" ? "green" : "default"}>{formatBusinessStatus(item.status)}</Tag>
-                    </span>
-                  }
-                  description={
-                    <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                      有效期 {item.startAt} ~ {item.expireAt} · 自动续费 {item.autoRenew ? "是" : "否"}
-                    </Paragraph>
-                  }
-                />
-              </List.Item>
-            )}
-          />
         )}
       </Card>
     </div>

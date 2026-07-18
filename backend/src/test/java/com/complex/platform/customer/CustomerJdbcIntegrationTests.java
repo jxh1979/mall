@@ -409,7 +409,6 @@ class CustomerJdbcIntegrationTests {
             repository.listMemberLevels(null);
             repository.listCheckInTiers(null);
             repository.listActiveBirthdayRules(null);
-            repository.listMembershipPlans(null);
         }).doesNotThrowAnyException();
     }
 

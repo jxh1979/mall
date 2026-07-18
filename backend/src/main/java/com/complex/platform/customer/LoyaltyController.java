@@ -3,7 +3,6 @@ package com.complex.platform.customer;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.LoyaltyFreezeRequest;
-import com.complex.platform.customer.dto.MembershipPlanRequest;
 import com.complex.platform.customer.dto.StoredValueFreezeRequest;
 import com.complex.platform.customer.dto.StoredValueMerchantCardConfigRequest;
 import com.complex.platform.customer.dto.StoredValueMerchantRefundRuleRequest;
@@ -20,23 +19,21 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 会员忠诚度后台管理（staff-token + 权限闸）：等级配置查询、积分账户冻结/解冻、手动等级评估；
- * 第2部分（V090）：付费会员档位管理、储值账户冻结/解冻/退卡。
+ * 第2部分（V090）：储值账户冻结/解冻/退卡。
  */
 @RestController
 @RequestMapping("/api/v1/loyalty")
 public class LoyaltyController {
 
     private final LoyaltyService service;
-    private final MembershipService membershipService;
     private final StoredValueService storedValueService;
     private final CustomerRepository repository;
     private final CustomerService customerService;
 
-    public LoyaltyController(LoyaltyService service, MembershipService membershipService,
+    public LoyaltyController(LoyaltyService service,
                              StoredValueService storedValueService, CustomerRepository repository,
                              CustomerService customerService) {
         this.service = service;
-        this.membershipService = membershipService;
         this.storedValueService = storedValueService;
         this.repository = repository;
         this.customerService = customerService;
@@ -79,27 +76,6 @@ public class LoyaltyController {
             @PathVariable("customer_id") String customerId
     ) {
         return ApiResponse.ok(service.evaluateLevel(customerId, Instant.now()));
-    }
-
-    // ---- 第2部分（V090）：付费会员档位管理 ----
-
-    @PostMapping("/membership-plans")
-    public ApiResponse<CustomerMembershipPlanRecord> saveMembershipPlan(
-            @RequestBody @jakarta.validation.Valid MembershipPlanRequest request
-    ) {
-        return ApiResponse.ok(membershipService.savePlan(
-                null, request.projectId(), request.planCode(), request.name(),
-                request.priceCent() == null ? 0L : request.priceCent(),
-                request.durationDays() == null ? 0 : request.durationDays(),
-                request.benefits(), request.status()));
-    }
-
-    @GetMapping("/membership-plans")
-    public ApiResponse<PageResponse<CustomerMembershipPlanRecord>> listMembershipPlans(
-            @RequestParam(name = "project_id", required = false) String projectId
-    ) {
-        List<CustomerMembershipPlanRecord> list = repository.listMembershipPlans(projectId);
-        return ApiResponse.ok(new PageResponse<>(list, 1, list.size(), list.size()));
     }
 
     // ---- 第2部分（V090）：储值账户冻结/解冻/退卡 ----

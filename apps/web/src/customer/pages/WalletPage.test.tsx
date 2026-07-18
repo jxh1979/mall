@@ -36,7 +36,6 @@ describe("WalletPage", () => {
   it("renders per-card balances for the general card and each merchant card", async () => {
     const service = {
       getStoredValueAccounts: vi.fn().mockResolvedValue([projectCard, merchantCard]),
-      listMemberships: vi.fn().mockResolvedValue([]),
       topupStoredValue: vi.fn(),
       consumeStoredValue: vi.fn(),
     } as unknown as CustomerService;
@@ -58,7 +57,6 @@ describe("WalletPage", () => {
   it("shows empty state when the customer has no stored-value cards", async () => {
     const service = {
       getStoredValueAccounts: vi.fn().mockResolvedValue([]),
-      listMemberships: vi.fn().mockResolvedValue([]),
       topupStoredValue: vi.fn(),
       consumeStoredValue: vi.fn(),
     } as unknown as CustomerService;
