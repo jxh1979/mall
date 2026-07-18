@@ -220,6 +220,37 @@ class CustomerJdbcIntegrationTests {
     }
 
     @Test
+    void listStoredValueAccountsByCustomerReturnsAllCardsWithFundOwnership() {
+        // AUD-061 客人端多卡余额：列该客人全部卡（通用 + 各商户），并读回开卡定格的资金模式。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveCustomer(new CustomerRecord(
+                "cust_sv_list", "13900130002", "139****0002", "active", null, now, now, now));
+        repository.saveStoredValueAccount(new CustomerStoredValueAccountRecord(
+                "svl_prj", "cust_sv_list", "prj_1", null, 1000L, "active", now, now, null));
+        repository.saveStoredValueAccount(new CustomerStoredValueAccountRecord(
+                "svl_mc", "cust_sv_list", null, "merchant_pc", 2000L, "active", now, now, "platform_collect"));
+
+        assertThat(repository.listStoredValueAccountsByCustomer("cust_sv_list"))
+                .extracting(CustomerStoredValueAccountRecord::id, CustomerStoredValueAccountRecord::fundOwnership)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("svl_prj", null),
+                        org.assertj.core.groups.Tuple.tuple("svl_mc", "platform_collect"));
+    }
+
+    @Test
+    void merchantCardConfigPersistsIssuanceAndFundOwnership() {
+        // AUD-058/059 迁移 V289：商户卡发卡资格 + 资金模式列持久化（与退款规则同表并存）。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
+                "merchant_cfg", true, 8000, true, "platform_collect", now, now));
+        assertThat(repository.findStoredValueMerchantRefundRule("merchant_cfg")).get()
+                .extracting(StoredValueMerchantRefundRuleRecord::cardIssuanceEnabled,
+                        StoredValueMerchantRefundRuleRecord::fundOwnership,
+                        StoredValueMerchantRefundRuleRecord::refundRatioBps)
+                .containsExactly(true, "platform_collect", 8000);
+    }
+
+    @Test
     void customerPointsRulePersistsAndReadsBack() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.savePointsRule(new CustomerPointsRuleRecord(

@@ -19,6 +19,7 @@ import type {
   PointsSummary,
   RedemptionItem,
   StoredValueAccount,
+  StoredValueTransaction,
   TicketCredential,
   TicketOrder,
   TicketProduct,
@@ -122,6 +123,21 @@ export class CustomerService {
   // ⑦ 储值 / 会员（V090，可选展示）
   getStoredValueAccount(): Promise<StoredValueAccount | null> {
     return this.api.get<StoredValueAccount | null>("/api/v1/customer/stored-value/account");
+  }
+
+  // AUD-061 我的全部卡（通用卡 + 各商户卡分卡余额）
+  getStoredValueAccounts(): Promise<StoredValueAccount[]> {
+    return this.api.get<StoredValueAccount[]>("/api/v1/customer/stored-value/accounts");
+  }
+
+  // AUD-061 充值（绑支付意图，待柜台确认收款到账）
+  topupStoredValue(payload: { projectId?: string; merchantId?: string; amountCent: number; channel?: string }): Promise<PaymentIntent> {
+    return this.api.post<PaymentIntent>("/api/v1/customer/stored-value/topup", { channel: "aggregate_pay", ...payload });
+  }
+
+  // AUD-061 消费（即时扣本卡余额；platform_collect 卡消费逐笔挂应付商户）
+  consumeStoredValue(payload: { projectId?: string; merchantId?: string; amountCent: number; reason?: string }): Promise<StoredValueTransaction> {
+    return this.api.post<StoredValueTransaction>("/api/v1/customer/stored-value/consume", payload);
   }
 
   listMemberships(): Promise<Membership[]> {

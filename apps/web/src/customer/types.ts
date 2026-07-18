@@ -167,11 +167,25 @@ export type CheckInRecord = {
 export type StoredValueAccount = {
   id: string;
   customerId: string;
-  projectId: string;
+  projectId: string | null;
+  merchantId: string | null;
+  cardScope: string;
+  fundOwnership: string | null;
   balanceCent: number;
   status: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type StoredValueTransaction = {
+  id: string;
+  accountId: string;
+  customerId: string;
+  txnType: string;
+  amountCent: number;
+  balanceAfterCent: number;
+  reason: string | null;
+  createdAt: string;
 };
 
 export type Membership = {

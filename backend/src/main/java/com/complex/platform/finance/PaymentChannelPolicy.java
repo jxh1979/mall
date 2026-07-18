@@ -16,7 +16,7 @@ public final class PaymentChannelPolicy {
     private static final Set<String> PAYMENT_INTENT_CHANNELS = Set.of(
             "aggregate_pay", "wechat", "alipay", "unionpay", "bank_card", "mock");
     private static final Set<String> SETTLEMENT_CHANNELS = Set.of(
-            "aggregate_pay", "cash", "pos", "bank_transfer", "other");
+            "aggregate_pay", "cash", "pos", "bank_transfer", "other", "stored_value");
     private static final Map<String, String> CHANNEL_ALIASES = Map.ofEntries(
             Map.entry("聚合支付", "aggregate_pay"),
             Map.entry("线上支付", "aggregate_pay"),
@@ -31,7 +31,10 @@ public final class PaymentChannelPolicy {
             Map.entry("POS", "pos"),
             Map.entry("pos刷卡", "pos"),
             Map.entry("银行转账", "bank_transfer"),
-            Map.entry("线下其他", "other")
+            Map.entry("线下其他", "other"),
+            Map.entry("储值支付", "stored_value"),
+            Map.entry("储值", "stored_value"),
+            Map.entry("储值卡", "stored_value")
     );
 
     private PaymentChannelPolicy() {

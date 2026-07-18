@@ -1215,7 +1215,7 @@ class JdbcCustomerRepository implements CustomerRepository {
     // ---- V090 会员忠诚度 第2部分：储值 / 付费会员 / 积分转赠 ----
 
     private static final String STORED_VALUE_ACCOUNT_SELECT = """
-            SELECT id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at
+            SELECT id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at, fund_ownership
               FROM customer_stored_value_accounts
             """;
 
@@ -1260,9 +1260,9 @@ class JdbcCustomerRepository implements CustomerRepository {
     public CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         jdbcTemplate.update("""
                 INSERT INTO customer_stored_value_accounts (
-                    id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at
+                    id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at, fund_ownership
                 )
-                VALUES (:id, :customer_id, :project_id, :merchant_id, :balance_cent, :status, :created_at, :updated_at)
+                VALUES (:id, :customer_id, :project_id, :merchant_id, :balance_cent, :status, :created_at, :updated_at, :fund_ownership)
                 ON CONFLICT (id) DO UPDATE SET
                     balance_cent = EXCLUDED.balance_cent,
                     status = EXCLUDED.status,
@@ -1275,7 +1275,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("balance_cent", account.balanceCent())
                 .addValue("status", account.status())
                 .addValue("created_at", timestampWithTimeZone(account.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(account.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(account.updatedAt()))
+                .addValue("fund_ownership", account.fundOwnership()));
         return account;
     }
 
@@ -1499,7 +1500,7 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public Optional<StoredValueMerchantRefundRuleRecord> findStoredValueMerchantRefundRule(String merchantId) {
         return jdbcTemplate.query("""
-                SELECT merchant_id, refund_allowed, refund_ratio_bps, created_at, updated_at
+                SELECT merchant_id, refund_allowed, refund_ratio_bps, card_issuance_enabled, fund_ownership, created_at, updated_at
                   FROM stored_value_merchant_refund_rules WHERE merchant_id = :merchant_id
                 """, new MapSqlParameterSource().addValue("merchant_id", merchantId),
                 this::mapMerchantRefundRule).stream().findFirst();
@@ -1508,16 +1509,20 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public StoredValueMerchantRefundRuleRecord saveStoredValueMerchantRefundRule(StoredValueMerchantRefundRuleRecord rule) {
         jdbcTemplate.update("""
-                INSERT INTO stored_value_merchant_refund_rules (merchant_id, refund_allowed, refund_ratio_bps, created_at, updated_at)
-                VALUES (:merchant_id, :refund_allowed, :refund_ratio_bps, :created_at, :updated_at)
+                INSERT INTO stored_value_merchant_refund_rules (merchant_id, refund_allowed, refund_ratio_bps, card_issuance_enabled, fund_ownership, created_at, updated_at)
+                VALUES (:merchant_id, :refund_allowed, :refund_ratio_bps, :card_issuance_enabled, :fund_ownership, :created_at, :updated_at)
                 ON CONFLICT (merchant_id) DO UPDATE SET
                     refund_allowed = EXCLUDED.refund_allowed,
                     refund_ratio_bps = EXCLUDED.refund_ratio_bps,
+                    card_issuance_enabled = EXCLUDED.card_issuance_enabled,
+                    fund_ownership = EXCLUDED.fund_ownership,
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("merchant_id", rule.merchantId())
                 .addValue("refund_allowed", rule.refundAllowed())
                 .addValue("refund_ratio_bps", rule.refundRatioBps())
+                .addValue("card_issuance_enabled", rule.cardIssuanceEnabled())
+                .addValue("fund_ownership", rule.fundOwnership())
                 .addValue("created_at", timestampWithTimeZone(rule.createdAt() == null ? java.time.Instant.now() : rule.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(rule.updatedAt() == null ? java.time.Instant.now() : rule.updatedAt())));
         return rule;
@@ -1528,8 +1533,18 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("merchant_id"),
                 rs.getBoolean("refund_allowed"),
                 rs.getInt("refund_ratio_bps"),
+                rs.getBoolean("card_issuance_enabled"),
+                rs.getString("fund_ownership"),
                 nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "updated_at"));
+    }
+
+    @Override
+    public List<CustomerStoredValueAccountRecord> listStoredValueAccountsByCustomer(String customerId) {
+        return jdbcTemplate.query(STORED_VALUE_ACCOUNT_SELECT
+                        + " WHERE customer_id = :customer_id ORDER BY merchant_id NULLS FIRST, created_at",
+                new MapSqlParameterSource().addValue("customer_id", customerId),
+                this::mapStoredValueAccount);
     }
 
     private CustomerStoredValueAccountRecord mapStoredValueAccount(ResultSet rs, int rowNumber) throws SQLException {
@@ -1541,7 +1556,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getLong("balance_cent"),
                 rs.getString("status"),
                 nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "updated_at"),
+                rs.getString("fund_ownership"));
     }
 
     private CustomerStoredValueTransactionRecord mapStoredValueTransaction(ResultSet rs, int rowNumber) throws SQLException {

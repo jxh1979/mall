@@ -5,6 +5,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.LoyaltyFreezeRequest;
 import com.complex.platform.customer.dto.MembershipPlanRequest;
 import com.complex.platform.customer.dto.StoredValueFreezeRequest;
+import com.complex.platform.customer.dto.StoredValueMerchantCardConfigRequest;
 import com.complex.platform.customer.dto.StoredValueMerchantRefundRuleRequest;
 import com.complex.platform.customer.dto.StoredValueRefundRequest;
 import java.time.Instant;
@@ -152,6 +153,18 @@ public class LoyaltyController {
             @PathVariable("merchant_id") String merchantId
     ) {
         return ApiResponse.ok(storedValueService.getMerchantRefundRule(merchantId));
+    }
+
+    // ---- AUD-061：商户卡平台配置（仅平台可改）：发卡资格 + 资金模式（预收/代收）----
+
+    @PostMapping("/stored-value/merchant-card-config")
+    public ApiResponse<StoredValueMerchantRefundRuleRecord> configureMerchantCard(
+            @RequestBody @jakarta.validation.Valid StoredValueMerchantCardConfigRequest request
+    ) {
+        return ApiResponse.ok(storedValueService.configureMerchantCard(
+                request.merchantId(),
+                Boolean.TRUE.equals(request.cardIssuanceEnabled()),
+                request.fundOwnership()));
     }
 
     // 积分转赠风控配置已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。

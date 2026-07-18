@@ -88,6 +88,17 @@ public class MemberWalletController {
         return ApiResponse.ok(repository.findStoredValueAccount(customerId, projectId, merchantId).orElse(null));
     }
 
+    @GetMapping("/stored-value/accounts")
+    public ApiResponse<PageResponse<CustomerStoredValueAccountRecord>> listAccounts(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        // AUD-061 客人端「我的全部卡」：通用卡 + 各商户卡分别余额，供钱包分卡展示。
+        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        List<CustomerStoredValueAccountRecord> cards = repository.listStoredValueAccountsByCustomer(customerId);
+        return ApiResponse.ok(new PageResponse<>(cards, 1, cards.size(), cards.size()));
+    }
+
     // ---- 付费会员 ----
 
     @PostMapping("/memberships/subscribe")

@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 624 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 626 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -317,6 +317,7 @@
 | customer | `POST` | `/api/v1/customer/stored-value/settle` | `customerStoredValueSettle` | 客人储值充值入账（支付成功后） | `StoredValueSettleRequest` | `customer.stored_value.topup` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.stored_value.settle` | `customer.stored_value.settle_failed` |
 | customer | `POST` | `/api/v1/customer/stored-value/consume` | `customerStoredValueConsume` | 客人储值消费（余额扣减） | `StoredValueConsumeRequest` | `customer.stored_value.consume` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.stored_value.consume` | `customer.stored_value.consume_failed` |
 | customer | `GET` | `/api/v1/customer/stored-value/account` | `customerStoredValueAccount` | 客人储值账户查询 | `-` | `customer.stored_value.view` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.stored_value_account_viewed` | `customer.stored_value_account_viewed_failed` |
+| customer | `GET` | `/api/v1/customer/stored-value/accounts` | `customerStoredValueAccounts` | 客人储值卡列表（我的全部卡：通用卡 + 各商户卡分别余额） | `-` | `customer.stored_value.view` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.stored_value_accounts_viewed` | `customer.stored_value_accounts_viewed_failed` |
 | customer | `POST` | `/api/v1/customer/memberships/subscribe` | `customerMembershipSubscribe` | 客人付费会员开通（绑支付意图） | `MembershipSubscribeRequest` | `customer.membership.subscribe` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.membership.subscribe` | `customer.membership.subscribe_failed` |
 | customer | `GET` | `/api/v1/customer/memberships` | `listCustomerMemberships` | 客人付费会员列表 | `-` | `customer.membership.view` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.memberships_viewed` | `customer.memberships_viewed_failed` |
 | customer | `GET` | `/api/v1/customer/membership-plans` | `listCustomerMembershipPlans` | 付费会员档位列表（客人端公开展示） | `-` | `public` | `public` | `project` | web, miniapp, app | 否 | `customer.membership_plans_viewed` | `customer.membership_plans_viewed_failed` |
@@ -552,6 +553,7 @@
 | access | `GET` | `/api/v1/access/grant-requests/summary` | `getAccessGrantSummary` | 授权申请治理汇总 | `-` | `access.grant_request.view` | `staff-token` | `project` | web | 否 | `access.grant_request.summary_viewed` | `access.grant_request.summary_view_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | `configureStoredValueMerchantRefundRule` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `StoredValueMerchantRefundRuleRequest` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_refund_rule_configured` | `stored_value.merchant_refund_rule_failed` |
 | customer | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | `getStoredValueMerchantRefundRule` | 查询商户级储值卡退款规则 | `-` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_refund_rule_viewed` | `stored_value.merchant_refund_rule_view_failed` |
+| customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收） | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
 | audit | `GET` | `/api/v1/audit/operation-events` | `queryAuditOperationEvents` | 跨对象查询操作留痕 | `-` | `audit.operation_log.view` | `staff-token` | `platform` | web | 否 | `audit.operation_log.viewed` | `audit.operation_log.view_failed` |
 | audit | `GET` | `/api/v1/audit/operation-events/export` | `exportAuditOperationEvents` | 导出操作留痕（敏感） | `-` | `audit.operation_log.export` | `staff-token` | `platform` | web | 否 | `audit.operation_log.exported` | `audit.operation_log.export_failed` |
 | platform | `GET` | `/api/v1/platform/space-types` | `listSpaceTypes` | 空间类型字典列表 | `-` | `governance.space.view` | `staff-token` | `platform` | web | 否 | `space_type.viewed` | `space_type.view_failed` |
@@ -712,5 +714,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 624 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 626 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

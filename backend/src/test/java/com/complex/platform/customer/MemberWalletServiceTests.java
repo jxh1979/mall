@@ -186,6 +186,7 @@ class MemberWalletServiceTests {
         PaymentIntentRecord p = service.topup("c1", null, null, 8_000L, "wechat", "tp-prj");
         finance.markPaymentIntentSucceeded(p.id());
         service.settleTopup("c1", null, null, p.id());
+        service.configureMerchantCard("m1", true, "merchant_prepaid");
         PaymentIntentRecord m = service.topup("c1", null, "m1", 3_000L, "wechat", "tp-m1");
         finance.markPaymentIntentSucceeded(m.id());
         service.settleTopup("c1", null, "m1", m.id());
@@ -210,6 +211,7 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(),
                 Clock.fixed(T0, ZoneOffset.UTC));
+        service.configureMerchantCard("m1", true, "platform_collect");
         PaymentIntentRecord m = service.topup("c1", null, "m1", 5_000L, "wechat", "tp-m1r");
         finance.markPaymentIntentSucceeded(m.id());
         service.settleTopup("c1", null, "m1", m.id());
@@ -447,6 +449,101 @@ class MemberWalletServiceTests {
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(5_000L);
     }
 
+    // ============================================================
+    // AUD-058/059/060/061：发卡资格 / 资金模式定格 / 代收应付 / 预收退卡
+    // ============================================================
+
+    @Test
+    void merchantCardTopupRejectedWithoutIssuanceThenAllowedAfterPlatformEnables() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        assertThatThrownBy(() -> service.topup("c1", null, "mX", 5_000L, "wechat", "tp-noissue"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("STORED_VALUE_CARD_ISSUANCE_DISABLED"));
+        // 通用卡不受发卡资格约束。
+        service.topup("c1", null, null, 1_000L, "wechat", "tp-prjok");
+        // 平台开通发卡资格后 → 商户卡可充。
+        service.configureMerchantCard("mX", true, "merchant_prepaid");
+        PaymentIntentRecord m = service.topup("c1", null, "mX", 5_000L, "wechat", "tp-issued");
+        finance.markPaymentIntentSucceeded(m.id());
+        service.settleTopup("c1", null, "mX", m.id());
+        assertThat(repo.storedValue.get("c1|null|mX").balanceCent()).isEqualTo(5_000L);
+    }
+
+    @Test
+    void fundModeFrozenAtOpenAndPlatformOnly() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService platform = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        platform.configureMerchantCard("mX", true, "platform_collect");
+        PaymentIntentRecord m = platform.topup("c1", null, "mX", 5_000L, "wechat", "tp-frz");
+        finance.markPaymentIntentSucceeded(m.id());
+        platform.settleTopup("c1", null, "mX", m.id());
+        assertThat(repo.storedValue.get("c1|null|mX").fundOwnership()).isEqualTo("platform_collect");
+        // 后台改为商户预收 → 已发卡不变（仍 platform_collect）。
+        platform.configureMerchantCard("mX", true, "merchant_prepaid");
+        assertThat(repo.storedValue.get("c1|null|mX").fundOwnership()).isEqualTo("platform_collect");
+
+        // 仅平台可改：商户 scope 调用方改资金模式 → 拒（requirePlatformScope 抛 PLATFORM_SCOPE_REQUIRED）。
+        com.complex.platform.access.AuthorizationService merchantAuth =
+                org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
+        org.mockito.Mockito.doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "x"))
+                .when(merchantAuth).requirePlatformScope();
+        StoredValueService merchantSvc = new StoredValueService(repo, finance, audit(),
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), merchantAuth,
+                Clock.fixed(T0, ZoneOffset.UTC));
+        assertThatThrownBy(() -> merchantSvc.configureMerchantCard("mX", true, "platform_collect"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+    }
+
+    @Test
+    void platformCollectConsumeGeneratesMerchantPayableAndPrepaidDoesNot() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        service.configureMerchantCard("mPC", true, "platform_collect");
+        PaymentIntentRecord m = service.topup("c1", null, "mPC", 5_000L, "wechat", "tp-pc");
+        finance.markPaymentIntentSucceeded(m.id());
+        service.settleTopup("c1", null, "mPC", m.id());
+        CustomerStoredValueTransactionRecord consumed = service.consume("c1", null, "mPC", 2_000L, "buy", "cs-pc");
+        assertThat(finance.merchantPayables).containsExactly("mPC|" + consumed.id() + "|2000");
+
+        service.configureMerchantCard("mPP", true, "merchant_prepaid");
+        PaymentIntentRecord m2 = service.topup("c1", null, "mPP", 5_000L, "wechat", "tp-pp");
+        finance.markPaymentIntentSucceeded(m2.id());
+        service.settleTopup("c1", null, "mPP", m2.id());
+        service.consume("c1", null, "mPP", 1_000L, "buy", "cs-pp");
+        assertThat(finance.merchantPayables).hasSize(1);
+    }
+
+    @Test
+    void merchantPrepaidCardRefundRejectedOnlineWhilePlatformCollectAllowed() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        service.configureMerchantCard("mPP", true, "merchant_prepaid");
+        PaymentIntentRecord m = service.topup("c1", null, "mPP", 5_000L, "wechat", "tp-refuse");
+        finance.markPaymentIntentSucceeded(m.id());
+        service.settleTopup("c1", null, "mPP", m.id());
+        assertThatThrownBy(() -> service.refund("c1", null, "mPP", 1_000L, "r", false, "rf-prepaid"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("STORED_VALUE_MERCHANT_PREPAID_REFUND_IN_STORE"));
+        assertThat(repo.storedValue.get("c1|null|mPP").balanceCent()).isEqualTo(5_000L);
+
+        service.configureMerchantCard("mPC", true, "platform_collect");
+        PaymentIntentRecord m2 = service.topup("c1", null, "mPC", 5_000L, "wechat", "tp-pcref");
+        finance.markPaymentIntentSucceeded(m2.id());
+        service.settleTopup("c1", null, "mPC", m2.id());
+        service.refund("c1", null, "mPC", 5_000L, "refund", true, "rf-pc");
+        assertThat(repo.storedValue.get("c1|null|mPC").balanceCent()).isZero();
+    }
+
     // 积分转赠用例已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
     // InMemoryRepo 仍保留转赠 repo 桩方法以实现 CustomerRepository 接口（转赠 repo 方法留孤儿）。
 
@@ -510,6 +607,16 @@ class MemberWalletServiceTests {
             String id = "refund_sv_" + idempotencyKey;
             payoutRefunds.add(id + "|" + accountId + "|" + payoutCent + "|" + channel);
             return id;
+        }
+
+        // AUD-059 平台代收商户卡消费逐笔应付：记录调用供断言。
+        final List<String> merchantPayables = new ArrayList<>();
+
+        @Override
+        public com.complex.platform.finance.ArApItemRecord recordStoredValueMerchantPayable(
+                String merchantId, String consumeTxnId, long amountCent, String idempotencyKey) {
+            merchantPayables.add(merchantId + "|" + consumeTxnId + "|" + amountCent);
+            return null;
         }
     }
 

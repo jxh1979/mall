@@ -48,6 +48,7 @@ public class StoredValueService {
 
     /** 商户卡充值资金归属：merchant_prepaid=发卡商户预收（默认）；platform_collect=平台代收、消费时结算给商户。 */
     static final String FUND_MERCHANT_PREPAID = "merchant_prepaid";
+    static final String FUND_PLATFORM_COLLECT = "platform_collect";
 
     private final CustomerRepository repository;
     private final FinanceService financeService;
@@ -132,7 +133,9 @@ public class StoredValueService {
             throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be positive");
         }
         requireCustomer(customerId);
-        // 提前建账户（active），充值入账时复用。
+        // 发卡资格门控（AUD-061）：商户卡充值前须平台已给该商户开通「发卡资格」，默认关→拒。通用卡不受限。
+        requireCardIssuanceEnabled(merchantId);
+        // 提前建账户（active），充值入账时复用（开卡即从商户配置定格资金模式）。
         loadOrCreateAccountForUpdate(customerId, projectId, merchantId);
         String key = idempotencyKey == null || idempotencyKey.isBlank()
                 ? "sv_topup_" + UUID.randomUUID() : idempotencyKey;
@@ -200,9 +203,8 @@ public class StoredValueService {
         detail.put("card_scope", account.cardScope());
         if (account.merchantId() != null) {
             detail.put("merchant_id", account.merchantId());
-            // B1d⑤ 商户卡资金归属：默认 merchant_prepaid=记入发卡商户预收。留痕供财务结算。
-            // ponytail: 此处仅记账归属，深度 财务预收款台账/消费时结算分录 走 finance 模块跟进（独立结算工单），不在储值域内联。
-            detail.put("fund_ownership", fundOwnershipDefault);
+            // AUD-059 商户卡资金归属：用开卡时定格在卡上的 fund_ownership（非全局默认）；旧卡未定格按商户预收兜底显示。
+            detail.put("fund_ownership", effectiveFundOwnership(account));
         }
         auditEventService.recordSuccess(EVENT_TOPUP, "customer.stored_value.topup",
                 "customer_stored_value", account.id(), null, null, detail);
@@ -218,6 +220,17 @@ public class StoredValueService {
     @Transactional
     @GuardedAction(capability = "customer.stored_value.consume", permission = "customer.stored_value.consume")
     public CustomerStoredValueTransactionRecord consume(String customerId, String projectId, String merchantId,
+                                                        long amountCent, String reason, String idempotencyKey) {
+        return consumeInternal(customerId, projectId, merchantId, amountCent, reason, idempotencyKey);
+    }
+
+    /**
+     * 内部消费（酒吧结账-储值支付等已过各自权限闸的域调用）：不重复过 customer.stored_value.consume 权限闸，
+     * 但仍走卡范围/状态/余额守卫，并按开卡定格的资金模式对 platform_collect 商户卡逐笔挂应付商户。
+     * 仅供本域及已授权域内部调用，不暴露控制器入口。@Transactional(REQUIRED)：并入调用方事务，同成同败。
+     */
+    @Transactional
+    public CustomerStoredValueTransactionRecord consumeInternal(String customerId, String projectId, String merchantId,
                                                         long amountCent, String reason, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
@@ -254,6 +267,11 @@ public class StoredValueService {
         auditEventService.recordSuccess(EVENT_CONSUME, "customer.stored_value.consume",
                 "customer_stored_value", account.id(), null, null,
                 consumeRefundDetail(account, amountCent, balanceAfter));
+        // AUD-059 平台代收(platform_collect)：消费即时逐笔生成一条「平台应付商户」台账（逐笔可追溯，结算给发卡商户）。
+        // 仅对开卡定格为 platform_collect 的商户卡；商户预收/通用卡/旧卡(未定格)不挂账（钱已归商户或平台无代收关系）。
+        if (FUND_PLATFORM_COLLECT.equals(account.fundOwnership()) && account.merchantId() != null) {
+            financeService.recordStoredValueMerchantPayable(account.merchantId(), txn.id(), amountCent, idempotencyKey);
+        }
         notifyStoredValueAfterCommit(txn, account, NOTIFICATION_EVENT_CONSUME, STORED_VALUE_CONSUME_TEMPLATE,
                 "svconsume:" + txn.id(), amountCent, balanceAfter);
         return txn;
@@ -296,6 +314,12 @@ public class StoredValueService {
         //   综合体通用卡（merchantId 空）无规则=全额退（payout=amountCent），沿用既有行为。
         long payoutCent = amountCent;
         if (account.merchantId() != null) {
+            // AUD-060 预收模式退卡：商户预收(merchant_prepaid)卡不支持线上退，只能到店由发卡商户办理（钱在商户处）。
+            // 仅对开卡定格为 merchant_prepaid 的商户卡；平台代收(platform_collect)卡与旧卡(未定格,NULL)沿用退款规则线上退。
+            if (FUND_MERCHANT_PREPAID.equals(account.fundOwnership())) {
+                throw ApiException.conflict("STORED_VALUE_MERCHANT_PREPAID_REFUND_IN_STORE",
+                        "merchant prepaid card cannot be refunded online; please refund in store at the issuing merchant");
+            }
             StoredValueMerchantRefundRuleRecord rule = repository.findStoredValueMerchantRefundRule(account.merchantId())
                     .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(account.merchantId()));
             if (!rule.refundAllowed()) {
@@ -360,8 +384,13 @@ public class StoredValueService {
         // phase4 卡范围隔离：商户范围员工只能配置本商户的退款规则。
         requireMerchantScopeForMerchant(merchantId.trim());
         Instant now = now();
+        // 保留平台侧配置（发卡资格/资金模式）：商户改退款规则不得清掉平台开通的发卡资格与定格的资金模式。
+        StoredValueMerchantRefundRuleRecord existing = repository.findStoredValueMerchantRefundRule(merchantId.trim())
+                .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId.trim()));
         return repository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
-                merchantId.trim(), refundAllowed, refundRatioBps, now, now));
+                merchantId.trim(), refundAllowed, refundRatioBps,
+                existing.cardIssuanceEnabled(), existing.fundOwnership(),
+                existing.createdAt() == null ? now : existing.createdAt(), now));
     }
 
     @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
@@ -371,6 +400,67 @@ public class StoredValueService {
         requireMerchantScopeForMerchant(merchantId);
         return repository.findStoredValueMerchantRefundRule(merchantId)
                 .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId));
+    }
+
+    /**
+     * 商户卡平台配置（AUD-061）：开通/关闭发卡资格 + 设资金模式（预收/代收）。仅平台可改
+     * （requirePlatformScope 拒 merchant-scoped 调用方）；资金模式只影响之后新开的卡（开卡时定格），已发卡不变。
+     * 发卡资格/资金模式与商户自设的退款规则并存于同一行，读改存互不覆盖。
+     */
+    @Transactional
+    @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
+    public StoredValueMerchantRefundRuleRecord configureMerchantCard(String merchantId, boolean cardIssuanceEnabled,
+                                                                     String fundOwnership) {
+        if (merchantId == null || merchantId.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id is required");
+        }
+        String mode = fundOwnership == null || fundOwnership.isBlank() ? FUND_MERCHANT_PREPAID : fundOwnership.trim();
+        if (!FUND_MERCHANT_PREPAID.equals(mode) && !FUND_PLATFORM_COLLECT.equals(mode)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "fund_ownership must be merchant_prepaid or platform_collect");
+        }
+        // 仅平台可改：fail-closed 拒商户/外包 scope 调用方（authorizationService 为 null=旧构造/单测不强制）。
+        if (authorizationService != null) {
+            authorizationService.requirePlatformScope();
+        }
+        Instant now = now();
+        StoredValueMerchantRefundRuleRecord existing = repository.findStoredValueMerchantRefundRule(merchantId.trim())
+                .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId.trim()));
+        return repository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
+                merchantId.trim(), existing.refundAllowed(), existing.refundRatioBps(),
+                cardIssuanceEnabled, mode,
+                existing.createdAt() == null ? now : existing.createdAt(), now));
+    }
+
+    /** 发卡资格门控：商户卡（merchantId 非空）充值前须平台已开通发卡资格，默认关→拒。通用卡不受限。 */
+    private void requireCardIssuanceEnabled(String merchantId) {
+        if (merchantId == null) {
+            return;
+        }
+        StoredValueMerchantRefundRuleRecord rule = repository.findStoredValueMerchantRefundRule(merchantId)
+                .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId));
+        if (!rule.cardIssuanceEnabled()) {
+            throw ApiException.conflict("STORED_VALUE_CARD_ISSUANCE_DISABLED",
+                    "merchant card issuance is not enabled by the platform for this merchant");
+        }
+    }
+
+    /** 开卡定格资金模式：商户卡取商户当前配置（默认商户预收）；通用卡为 null。 */
+    private String resolveMerchantFundOwnership(String merchantId) {
+        if (merchantId == null) {
+            return null;
+        }
+        return repository.findStoredValueMerchantRefundRule(merchantId)
+                .map(StoredValueMerchantRefundRuleRecord::fundOwnership)
+                .orElse(FUND_MERCHANT_PREPAID);
+    }
+
+    /** 展示用有效资金模式：卡上定格值优先；旧卡(未定格,NULL)的商户卡按商户预收兜底；通用卡为 null。 */
+    private String effectiveFundOwnership(CustomerStoredValueAccountRecord account) {
+        if (account.merchantId() == null) {
+            return null;
+        }
+        return account.fundOwnership() == null ? FUND_MERCHANT_PREPAID : account.fundOwnership();
     }
 
     // ============================================================
@@ -572,16 +662,18 @@ public class StoredValueService {
         return repository.findStoredValueAccountForUpdate(customerId, projectId, merchantId)
                 .orElseGet(() -> {
                     Instant now = now();
+                    // AUD-059 开卡定格资金模式：商户卡取商户当前配置钉进卡（终身不变）；通用卡为 null。
+                    String fundOwnership = resolveMerchantFundOwnership(merchantId);
                     return repository.saveStoredValueAccount(new CustomerStoredValueAccountRecord(
                             "svacc_" + UUID.randomUUID().toString().replace("-", ""),
-                            customerId, projectId, merchantId, 0L, "active", now, now));
+                            customerId, projectId, merchantId, 0L, "active", now, now, fundOwnership));
                 });
     }
 
     private CustomerStoredValueAccountRecord withBalanceAndStatus(CustomerStoredValueAccountRecord account,
                                                                   long balanceCent, String status, Instant now) {
         return new CustomerStoredValueAccountRecord(account.id(), account.customerId(), account.projectId(),
-                account.merchantId(), balanceCent, status, account.createdAt(), now);
+                account.merchantId(), balanceCent, status, account.createdAt(), now, account.fundOwnership());
     }
 
     private CustomerRecord requireCustomer(String customerId) {

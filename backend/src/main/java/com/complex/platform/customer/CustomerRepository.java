@@ -197,6 +197,11 @@ public interface CustomerRepository {
         return merchantId == null ? findStoredValueAccountForUpdate(customerId, projectId) : Optional.empty();
     }
 
+    /** 客人端「我的全部卡」：列该客人所有储值账户（通用卡 + 各商户卡），供分卡余额展示。 */
+    default List<CustomerStoredValueAccountRecord> listStoredValueAccountsByCustomer(String customerId) {
+        return List.of();
+    }
+
     default CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         throw new UnsupportedOperationException("saveStoredValueAccount not supported by this repository");
     }
