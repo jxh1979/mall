@@ -97,11 +97,8 @@ public class ComplianceController {
         // AUD-001：先过 T2 开关 integration.wecom.sync（关→TERMINAL_DISABLED），再做 HMAC 签名 + 时间窗 + nonce 校验，
         // 令未签名/伪造/过期请求 fail-closed，不再仅凭任意已认证员工放行；签名是该端点真实鉴权闸。
         terminalSwitchGuard.check(WecomConversationService.SYNC_CAPABILITY);
-        wecomWebhookSignatureVerifier.verify(
-                signature, timestamp, nonce,
-                request == null ? null : request.idempotencyKey(),
-                request == null ? null : request.externalConversationId(),
-                request == null ? null : request.projectId());
+        // AUD 复核 P1-2：整个报文体（含 ownerStaffId/customerRef/messages）纳入验签 + nonce 持久化去重，见 verify。
+        wecomWebhookSignatureVerifier.verify(signature, timestamp, nonce, request);
         return ApiResponse.ok(wecomConversationService.syncConversation(request));
     }
 

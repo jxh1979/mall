@@ -365,13 +365,16 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
-    public void markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
-        jdbcTemplate.update("""
+    public int markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+        // AUD-066 + AUD 复核 P2-6：原子抢占首场次键。CAS 只在 first_session_key 为空或等于本次 key 时成功（1 行），
+        // 已被别的场次抢占 → 0 行，调用方据此回滚本次消费（并发首刷两 slot 不同场次只放行一个）。first_used_at 仍只写一次。
+        return jdbcTemplate.update("""
                 UPDATE ticket_instances
                    SET first_used_at = COALESCE(first_used_at, :now),
-                       first_session_key = COALESCE(first_session_key, :session_key),
+                       first_session_key = :session_key,
                        updated_at = :now
                  WHERE id = :id
+                   AND (first_session_key IS NULL OR first_session_key = :session_key)
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("session_key", sessionKey, java.sql.Types.VARCHAR)
@@ -866,8 +869,11 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public List<TicketOrderRecord> listTicketOrdersByMerchant(String merchantId) {
+        // AUD 复核 P2-7：单店票销售归属既可能落 merchant_id（商户代售）也可能只落 bar_id（客人端自助购本店单店票，
+        // 无商户 scope → merchant_id=null）。酒吧即商户（bar_id 与 merchant 同命名空间），故本店后台可见口径=受理商户 OR 归属酒吧。
         return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + """
                  WHERE merchant_id = :merchant_id
+                    OR bar_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapTicketOrder);
     }
@@ -1235,6 +1241,9 @@ class JdbcTicketingRepository implements TicketingRepository {
     @Override
     public Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt) {
         // 2a-3 退款冻结：核销必须 status='active'（防退款冻结后经游乐 gateway 直连 atomicUseEntitlement 绕过 service 检查）。
+        // AUD 复核：service 路径靠 requireParentTicketActive 挡冻结中的父票，但游乐 gateway 直连本方法绕过该守卫——
+        //   退款「申请即冻结」只把父票 ticket_instances 置 refund_pending，子权益要到审批 freezeEntitlementForRefund 才置 refunded，
+        //   申请~审批空窗内子权益仍 active，故此处必须自查父票 active（与 requireParentTicketActive 同语义），否则游乐可绕过冻结核销。
         int rowCount = jdbcTemplate.update("""
                 UPDATE issued_entitlements
                    SET used_times = used_times + 1,
@@ -1247,6 +1256,10 @@ class JdbcTicketingRepository implements TicketingRepository {
                         WHERE t.parent_ticket_id = issued_entitlements.parent_ticket_id
                           AND t.slot_index = issued_entitlements.slot_index
                           AND t.status = 'pending')
+                   AND (parent_ticket_id IS NULL OR EXISTS (
+                       SELECT 1 FROM ticket_instances p
+                        WHERE p.id = issued_entitlements.parent_ticket_id
+                          AND p.status = 'active'))
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));

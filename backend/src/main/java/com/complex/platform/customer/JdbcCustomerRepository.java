@@ -1317,15 +1317,18 @@ class JdbcCustomerRepository implements CustomerRepository {
 
     // AUD-058 充值支付意图 ↔ 卡范围绑定（V284 stored_value_topup_intents）。
     @Override
-    public void bindStoredValueTopupIntent(String paymentIntentId, String customerId, String projectId,
-                                           String merchantId, Instant createdAt) {
-        jdbcTemplate.update("""
+    public int bindStoredValueTopupIntent(String paymentIntentId, String customerId, String projectId,
+                                          String merchantId, Instant createdAt) {
+        // AUD 复核 P1-1②：冲突即校验一致，不再 DO UPDATE 静默改绑。ON CONFLICT 时仅当已绑卡范围与本次完全一致才更新（返回 1=幂等放过），
+        // 卡范围不同则 WHERE 不命中 → 更新 0 行，调用方据此抛 409。IS NOT DISTINCT FROM 兼容 project/merchant 为空。
+        return jdbcTemplate.update("""
                 INSERT INTO stored_value_topup_intents (payment_intent_id, customer_id, project_id, merchant_id, created_at)
                 VALUES (:payment_intent_id, :customer_id, :project_id, :merchant_id, :created_at)
                 ON CONFLICT (payment_intent_id) DO UPDATE SET
-                    customer_id = EXCLUDED.customer_id,
-                    project_id = EXCLUDED.project_id,
-                    merchant_id = EXCLUDED.merchant_id
+                    customer_id = EXCLUDED.customer_id
+                 WHERE EXCLUDED.customer_id = stored_value_topup_intents.customer_id
+                   AND EXCLUDED.project_id IS NOT DISTINCT FROM stored_value_topup_intents.project_id
+                   AND EXCLUDED.merchant_id IS NOT DISTINCT FROM stored_value_topup_intents.merchant_id
                 """, new MapSqlParameterSource()
                 .addValue("payment_intent_id", paymentIntentId)
                 .addValue("customer_id", customerId)

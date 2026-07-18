@@ -757,6 +757,30 @@ class TicketingJdbcIntegrationTests {
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
+    @Test
+    void merchantOrderListIncludesGuestBoughtSingleBarOrdersByBarId() {
+        // AUD 复核 P2-7：客人端自助购本店单店票的订单 merchant_id=null、bar_id=酒吧；本店后台按 bar_id 也须可见（读写归属一致）。
+        jdbcTemplate.update("INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, status, created_at, updated_at) "
+                + "VALUES ('tt_p27','单店票','fixed','active', now(), now()) ON CONFLICT (id) DO NOTHING");
+        String barId = "bar_p27_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        // bar_id 有外键 → merchants(id)，先落一条酒吧商户行。
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at) "
+                + "VALUES (?, '话梅酒馆', 'bar', 'active', now(), now()) ON CONFLICT (id) DO NOTHING", barId);
+        String guestOrderId = "ord_guest_" + barId;    // 客人自助：merchant_id=null，bar_id=barId
+        String merchantOrderId = "ord_mer_" + barId;    // 商户代售：merchant_id=barId
+        jdbcTemplate.update("INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent, "
+                + "pay_status, issue_status, status, merchant_id, bar_id, created_at, updated_at) "
+                + "VALUES (?, ?, 'tt_p27', 1, 'web', 100, 'paid', 'not_issued', 'created', NULL, ?, now(), now())",
+                guestOrderId, "ONO_" + guestOrderId, barId);
+        jdbcTemplate.update("INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent, "
+                + "pay_status, issue_status, status, merchant_id, bar_id, created_at, updated_at) "
+                + "VALUES (?, ?, 'tt_p27', 1, 'admin', 100, 'paid', 'not_issued', 'created', ?, ?, now(), now())",
+                merchantOrderId, "ONO_" + merchantOrderId, barId, barId);
+        List<String> ids = repository.listTicketOrdersByMerchant(barId).stream()
+                .map(TicketOrderRecord::id).toList();
+        assertThat(ids).contains(guestOrderId, merchantOrderId);
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

@@ -591,8 +591,11 @@ public class TicketOrderService {
         if (!typeBarId.equals(reqBarId)) {
             throw ApiException.badRequest("BAR_TICKET_MISMATCH", "所选酒吧与票种归属不一致");
         }
-        if (scope != null && kiosk && !scope.equals(typeBarId)) {
-            throw ApiException.forbidden("BAR_SCOPE_FORBIDDEN", "门店终端只能售卖本店单店票");
+        // AUD 复核 P1-4：跨酒吧越权闸不得只在 kiosk 触发——酒吧即商户（bar_id 与 merchant 同命名空间），
+        // 任何有商户 scope 的员工（web/admin/channel/kiosk 皆然）只能给本店单店票下单；平台级（scope==null，
+        // 含客人 miniapp/平台 admin）可售任意酒吧单店票。别用客户端可控 salesChannel 决定是否做越权校验。
+        if (scope != null && !scope.equals(typeBarId)) {
+            throw ApiException.forbidden("BAR_SCOPE_FORBIDDEN", "本商户只能售卖本店单店票");
         }
         requireBarSellable(typeBarId);
         return typeBarId;

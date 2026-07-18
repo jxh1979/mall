@@ -605,8 +605,16 @@ class MemberWalletServiceTests {
         }
         // AUD-058 充值支付意图 ↔ 卡范围绑定
         final Map<String, StoredValueTopupIntentScope> topupIntents = new java.util.LinkedHashMap<>();
-        @Override public void bindStoredValueTopupIntent(String pi, String cid, String pjid, String mid, Instant at) {
+        @Override public int bindStoredValueTopupIntent(String pi, String cid, String pjid, String mid, Instant at) {
+            StoredValueTopupIntentScope existing = topupIntents.get(pi);
+            if (existing != null
+                    && (!java.util.Objects.equals(existing.customerId(), cid)
+                        || !java.util.Objects.equals(existing.projectId(), pjid)
+                        || !java.util.Objects.equals(existing.merchantId(), mid))) {
+                return 0; // AUD 复核 P1-1②：同一支付意图已绑不同卡范围 → 冲突
+            }
             topupIntents.put(pi, new StoredValueTopupIntentScope(pi, cid, pjid, mid));
+            return 1;
         }
         @Override public Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String pi) {
             return Optional.ofNullable(topupIntents.get(pi));

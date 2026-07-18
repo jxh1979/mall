@@ -40,6 +40,20 @@ class CustomerJdbcIntegrationTests {
     private CustomerPointsRuleAdminService pointsRuleAdminService;
 
     @Test
+    void bindStoredValueTopupIntentRejectsRebindToDifferentScope() {
+        // AUD 复核 P1-1②：同一支付意图绑定后，同 customer 换商户再绑同一意图 → 返回 0（冲突），不静默改绑；完全一致才幂等放过。
+        String intentId = "pi_p11_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        Instant at = Instant.now();
+        assertThat(repository.bindStoredValueTopupIntent(intentId, "cust_A", "proj_1", "merchant_A", at)).isEqualTo(1);
+        // 同卡范围重复绑定 → 幂等放过（1 行）
+        assertThat(repository.bindStoredValueTopupIntent(intentId, "cust_A", "proj_1", "merchant_A", at)).isEqualTo(1);
+        // 同 customer/project 换商户 B → 冲突（0 行），不覆盖
+        assertThat(repository.bindStoredValueTopupIntent(intentId, "cust_A", "proj_1", "merchant_B", at)).isZero();
+        // 读回仍是原商户 A（未被改绑）
+        assertThat(repository.findStoredValueTopupIntent(intentId).orElseThrow().merchantId()).isEqualTo("merchant_A");
+    }
+
+    @Test
     void phoneLoginPersistsNonLeakingCustomerIdToRealPostgres() {
         // 真实后端活证据：新客人经真实 CustomerService.phoneLogin 落真实 Postgres，主键不得内嵌明文手机号。
         String phone = "13655667788";

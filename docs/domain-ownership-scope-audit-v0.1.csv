@@ -293,3 +293,4 @@ wecom_conversations,direct,project_id,project_id column on wecom_conversations,r
 wecom_messages,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 wecom_retention_policies,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 wecom_risk_hits,direct,project_id,project_id column on wecom_risk_hits,ready for project/merchant scoped query enforcement,covered
+wecom_webhook_nonces,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered

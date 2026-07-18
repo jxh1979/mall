@@ -7,8 +7,11 @@ import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.gate.GuardedAction;
 import com.complex.platform.notification.NotificationService;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -142,12 +145,20 @@ public class StoredValueService {
         // B1d⑤ 资金归属：商户卡走 stored_value_topup_merchant（finance 据此把预收记入发卡商户，按开关结算）；
         // 通用卡仍走 stored_value_topup（平台综合体级余额）。businessOrderId=customerId 保持既有归属链。
         String businessOrderType = merchantId == null ? "stored_value_topup" : "stored_value_topup_merchant";
+        // AUD 复核 P1-1①：finance 幂等作用域必须纳入卡范围（customer/project/merchant）。PaymentIntentRequest 不带 merchantId/projectId，
+        // 仅凭客户端 idempotencyKey 会使不同商户卡的同 key 请求哈希相同 → 复用同一支付意图，随后 bind 覆盖 scope 造成静默改绑。
+        // 故把卡范围折进 finance 幂等键并 SHA-256 压成定长（避免 slug 40 字截断致 ON CONFLICT 覆盖旧意图）；相同 (key, 卡范围) 仍得同一意图，正常重试幂等不受影响。
+        String scopedTopupKey = "svtop_" + sha256Hex(key + "|" + customerId + "|"
+                + (projectId == null ? "" : projectId) + "|" + (merchantId == null ? "" : merchantId));
         PaymentIntentRecord intent = financeService.createPaymentIntent(new PaymentIntentRequest(
-                key, null, null, businessOrderType, customerId, amountCent, "CNY",
+                scopedTopupKey, null, null, businessOrderType, customerId, amountCent, "CNY",
                 channel == null || channel.isBlank() ? "wechat" : channel));
-        // AUD-058：把本次充值的卡范围（customer/project/merchant）绑定到支付意图，settle 只认此绑定范围入账，
-        // 杜绝请求体在入账时指名入他卡/跨商户/跨项目。绑定与账户创建同一事务落库。
-        repository.bindStoredValueTopupIntent(intent.id(), customerId, projectId, merchantId, now());
+        // AUD-058 + AUD 复核 P1-1②：把本次充值的卡范围（customer/project/merchant）绑定到支付意图，settle 只认此绑定范围入账。
+        // bind「冲突即校验一致」：同一支付意图已绑定的卡范围与本次不同 → 抛 409（不再 DO UPDATE 静默改绑）；完全一致才幂等放过。
+        if (repository.bindStoredValueTopupIntent(intent.id(), customerId, projectId, merchantId, now()) == 0) {
+            throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT",
+                    "payment intent already bound to a different card scope");
+        }
         return intent;
     }
 
@@ -615,6 +626,16 @@ public class StoredValueService {
             return null;
         }
         return repository.findStoredValueTransactionByIdempotencyKey(idempotencyKey).orElse(null);
+    }
+
+    /** AUD 复核 P1-1：把充值幂等键与卡范围压成定长十六进制，供 finance 幂等键使用（避免 slug 截断碰撞）。 */
+    private static String sha256Hex(String value) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 
     private void requireActive(CustomerStoredValueAccountRecord account) {

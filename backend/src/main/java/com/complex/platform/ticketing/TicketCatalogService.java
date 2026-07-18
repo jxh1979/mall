@@ -372,6 +372,16 @@ public class TicketCatalogService {
             throw ApiException.conflict("ENTITLEMENT_TEMPLATE_NOT_BINDABLE",
                     "已存档或待删除的权益模板不可绑定到票种");
         }
+        // AUD 复核 P2-5：单店票（票种 bar_id 非空）只能绑归属本店的权益模板——出票时权益 merchant 优先取 template.merchantId，
+        // 若模板 merchant_id 属他商户 B 而票种 bar_id=A，则出票权益 merchant=B/父票 bar=A 归属分裂（撤场按 A、结算按 B）。
+        // 模板 merchant_id 为空时出票回退酒吧归属，天然一致，放行；现无联合票类型故不开例外。
+        String bindTypeBarId = trimToNull(ticketType.barId());
+        String bindTemplateMerchantId = trimToNull(template.merchantId());
+        if (bindTypeBarId != null && bindTemplateMerchantId != null
+                && !bindTypeBarId.equals(bindTemplateMerchantId)) {
+            throw ApiException.conflict("BAR_TICKET_TEMPLATE_MERCHANT_MISMATCH",
+                    "单店票只能绑定归属本店的权益模板");
+        }
         Instant now = Instant.now();
         return repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "ticket_link_" + slug(actual.idempotencyKey()),

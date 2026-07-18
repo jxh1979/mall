@@ -410,7 +410,13 @@ public class TicketVerificationService {
         if (parentId == null) {
             return;
         }
-        repository.markTicketInstanceFirstUse(parentId, sessionKeyFor(entitlement.venueId(), now), now);
+        // AUD 复核 P2-6：原子抢占父票首场次键——CAS 命中 0 行=同父票已被别的场次抢占（多人票各人份额并发首刷跨场次），
+        // 抛错回滚本次消费（本方法在 TicketingService.createVerification 的 @Transactional 事务内，回滚 atomicUseEntitlement）。
+        // 与 enforceMultiPersonSameSession 的读检查构成「读快拒 + 写原子闸」双闸，封死并发窗口。
+        if (repository.markTicketInstanceFirstUse(parentId, sessionKeyFor(entitlement.venueId(), now), now) == 0) {
+            throw ApiException.conflict("MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
+                    "多人票各人份额必须在同一场次内核销，不能跨场次/日期");
+        }
     }
 
     /**

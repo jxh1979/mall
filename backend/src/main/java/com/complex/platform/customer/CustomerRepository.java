@@ -230,8 +230,8 @@ public interface CustomerRepository {
     }
 
     // AUD-058 充值支付意图 ↔ 卡范围绑定：topup 落绑定行，settleTopup 只认绑定的 (customer, project, merchant) 入账。
-    default void bindStoredValueTopupIntent(String paymentIntentId, String customerId, String projectId,
-                                            String merchantId, Instant createdAt) {
+    default int bindStoredValueTopupIntent(String paymentIntentId, String customerId, String projectId,
+                                           String merchantId, Instant createdAt) {
         throw new UnsupportedOperationException("bindStoredValueTopupIntent not supported by this repository");
     }
 

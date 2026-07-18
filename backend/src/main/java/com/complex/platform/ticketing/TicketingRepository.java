@@ -71,8 +71,10 @@ public interface TicketingRepository {
         return java.util.List.of();
     }
 
-    /** AUD-066：首次成功核销定格父票 first_used_at 与首场次键（写一次，COALESCE）。default 空操作。 */
-    default void markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+    /** AUD-066 + AUD 复核 P2-6：原子抢占父票首场次键（写一次）。命中 0 行=已被别的场次抢占→调用方回滚消费。
+     *  default 视为放行（返回 1）：无库支撑的测试替身不做场次约束。 */
+    default int markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+        return 1;
     }
 
     /** 方案2 申请即冻结：父票 active→refund_pending（CAS，返回命中行数）。default 返回 0（无父票=不放行整票退）。 */

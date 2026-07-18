@@ -35,6 +35,7 @@ class TicketTransferJdbcIntegrationTests {
     @Autowired private BlindIndex blindIndex;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private TicketVerificationService verificationService;
+    @Autowired private TicketingAmusementEntitlementGateway amusementGateway;
 
     private final Instant now = Instant.now();
 
@@ -257,6 +258,32 @@ class TicketTransferJdbcIntegrationTests {
         assertThat(transferService.listOutgoing(f.buyer)).hasSize(1);
         assertThat(transferService.listIncoming(f.receiverPhone)).hasSize(1);
         assertThat(transferService.listIncoming(f.thirdPhone)).isEmpty();
+    }
+
+    // ── AUD 复核 P1-3：退款申请即冻结父票后，游乐 gateway 直连消费也须被父票状态闸拦截 ──────────────
+    @Test
+    void refundPendingParentBlocksAmusementGatewayConsumption() {
+        Fixture f = seedMultiPerson(2);
+        String frozenSlotEntId = firstEntitlementId(f.parent, 1);
+        // 基线：父票 active 时 slot2 可核销
+        assertThat(repository.atomicUseEntitlement(firstEntitlementId(f.parent, 2), now)).isPresent();
+        // 申请即冻结：父票 active→refund_pending（子权益仍 active，模拟申请~审批空窗）
+        assertThat(repository.markTicketInstanceRefundPending(f.parent, now)).isEqualTo(1);
+        // 游乐 gateway 直连 atomicUseEntitlement / consumeEntitlement 均须被父票状态闸拦截（0 行/false）
+        assertThat(repository.atomicUseEntitlement(frozenSlotEntId, now)).isEmpty();
+        assertThat(amusementGateway.consumeEntitlement(frozenSlotEntId)).isFalse();
+    }
+
+    // ── AUD 复核 P2-6：多人票各人份额首刷原子抢占场次，第二个跨场次被拒（CAS 命中 0 行）──────────────
+    @Test
+    void multiPersonSecondSessionClaimRejectedByCas() {
+        Fixture f = seedMultiPerson(2);
+        // slot1 首刷抢占 sessA（1 行）
+        assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessA", now)).isEqualTo(1);
+        // slot2 尝试不同场次 sessB → CAS WHERE 不命中 → 0 行（跨场次冲突，调用方据此回滚本次消费）
+        assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessB", now)).isEqualTo(0);
+        // 同场次 sessA 再抢占幂等成功（1 行）
+        assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessA", now)).isEqualTo(1);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

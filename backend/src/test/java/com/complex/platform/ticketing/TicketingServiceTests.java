@@ -2986,6 +2986,53 @@ class TicketingServiceTests {
     }
 
     @Test
+    void nonKioskMerchantScopeCannotSellAnotherBarSingleTicket() {
+        // AUD 复核 P1-4：越权闸不再只在 kiosk 触发——商户A员工经 web（非 kiosk）渠道给别家酒吧B单店票下单也须 403。
+        registerBar("mch_bar_a", "话梅酒馆");
+        registerBar("mch_bar_b", "夜航船");
+        TicketTypeRecord aTicket = createBarTicketType("p14-a", "mch_bar_a", false);
+        TicketTypeRecord bTicket = createBarTicketType("p14-b", "mch_bar_b", false);
+        TestSecurityActors.clear();
+        try {
+            TestSecurityActors.asMerchantUser("mch_bar_a");
+            // 本店单店票经 web 渠道 OK。
+            TicketOrderRecord ok = service.createTicketOrder(new TicketOrderRequest(
+                    "p14-ok", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                    "web", "13800138000", null, java.util.Map.of(), "mch_bar_a"));
+            assertThat(ok.barId()).isEqualTo("mch_bar_a");
+            // 别家单店票经 web（非 kiosk）→ 越权拒（此前 kiosk-only 判断会放行=漏洞）。
+            assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                    "p14-x", "c", List.of(), bTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                    "web", "13800138000", null, java.util.Map.of(), "mch_bar_b")))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_SCOPE_FORBIDDEN"));
+        } finally {
+            TestSecurityActors.clear();
+        }
+    }
+
+    @Test
+    void singleBarTicketRejectsBindingOtherMerchantTemplate() {
+        // AUD 复核 P2-5：单店票（bar_id=A）只能绑归属本店的权益模板；绑他商户 B 的模板 → 拒（出票权益 merchant/父票 bar 归属分裂）。
+        registerBar("mch_bar_a", "话梅酒馆");
+        TicketTypeRecord aTicket = createBarTicketType("p25-a", "mch_bar_a", false);
+        Instant now = Instant.now();
+        // 他商户 B 归属的模板 → 绑到 bar=A 单店票被拒。
+        EntitlementTemplateRecord otherMerchantTpl = ticketingRepository.saveEntitlementTemplate(
+                new EntitlementTemplateRecord("tpl_p25_b", "他店权益", "entry", 1, 100L, "active",
+                        "mch_bar_b", null, null, null, now, now, null, null));
+        assertThatThrownBy(() -> service.bindTicketTypeEntitlement(aTicket.id(), new TicketTypeEntitlementRequest(
+                "p25-badbind", "bind", List.of(), otherMerchantTpl.id(), 1, 1, 100L, "default", 1, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("BAR_TICKET_TEMPLATE_MERCHANT_MISMATCH"));
+        // 本店 A 归属的模板可绑（归属一致）。
+        EntitlementTemplateRecord ownTpl = ticketingRepository.saveEntitlementTemplate(
+                new EntitlementTemplateRecord("tpl_p25_a", "本店权益", "entry", 1, 100L, "active",
+                        "mch_bar_a", null, null, null, now, now, null, null));
+        assertThat(service.bindTicketTypeEntitlement(aTicket.id(), new TicketTypeEntitlementRequest(
+                "p25-okbind", "bind", List.of(), ownTpl.id(), 1, 1, 100L, "default", 1, null))).isNotNull();
+    }
+
+    @Test
     void barTeardownStopsSaleAndExpiresSoldTickets() {
         registerBar("mch_bar_c", "撤场酒馆");
         TicketTypeRecord tt = createBarTicketType("teardown", "mch_bar_c", false); // 不可退
@@ -3401,17 +3448,21 @@ class TicketingServiceTests {
         }
 
         @Override
-        public void markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+        public int markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
             TicketInstanceRecord ti = ticketInstances.get(id);
             if (ti == null) {
-                return;
+                return 1; // 无父票记录=无可抢占冲突，放行（生产父票必存在）
+            }
+            if (ti.firstSessionKey() != null && !ti.firstSessionKey().equals(sessionKey)) {
+                return 0; // AUD 复核 P2-6：已被别的场次抢占
             }
             ticketInstances.put(id, new TicketInstanceRecord(
                     ti.id(), ti.ticketNo(), ti.orderId(), ti.ticketTypeId(), ti.seqInOrder(), ti.numPeople(),
                     ti.totalTimes(), ti.buyerCustomerId(), ti.currentHolderCustomerId(), ti.status(),
                     ti.firstUsedAt() == null ? now : ti.firstUsedAt(),
-                    ti.firstSessionKey() == null ? sessionKey : ti.firstSessionKey(),
+                    sessionKey,
                     ti.createdAt(), now));
+            return 1;
         }
 
         @Override
