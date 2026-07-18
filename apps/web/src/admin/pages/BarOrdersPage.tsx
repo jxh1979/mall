@@ -11,6 +11,7 @@ import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 const TEXT = {
   ordered: "\u5df2\u70b9\u5355",
@@ -166,6 +167,15 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0);
   const salesCommissionOrders = orders.filter((order) => order.sellerRole === "sales" || order.commissionRate === "15%").length;
 
+  // 第二批接线（指标登记簿）：订单数/未完结/订单金额三个 KPI 数字改走统一明细端点（与明细页同源，全历史口径
+  // 与本页全量列表一致）；端点失败（含无权限）→ 回退本地列表计算并隐藏「完整明细」入口，体验不降级。
+  const orderCountKpi = useMetricKpiValue(api, "bar.order_count", {});
+  const openOrderKpi = useMetricKpiValue(api, "bar.open_order_count", {});
+  const orderAmountKpi = useMetricKpiValue(api, "bar.order_amount", {});
+  const orderCountDisplay = orderCountKpi.status === "ready" && orderCountKpi.value !== null ? orderCountKpi.value : orders.length;
+  const openOrdersDisplay = openOrderKpi.status === "ready" && openOrderKpi.value !== null ? openOrderKpi.value : openOrders;
+  const orderAmountDisplay = orderAmountKpi.status === "ready" && orderAmountKpi.value !== null ? orderAmountKpi.value : totalAmount;
+
   async function runOrderAction(action: string, request: () => Promise<unknown>) {
     if (!selectedOrder) {
       setFormError(TEXT.noOrder);
@@ -249,11 +259,11 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         ) : (
         <>
         <div className="admin-kpi-grid" data-testid="bar-orders-summary">
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orderCount}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orders.length}</button><small>{TEXT.currentRows}</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.openOrders}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-open" onClick={() => enterKpiFocus("open")}>{openOrders}</button><small>{TEXT.openOrdersHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orderCount}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orderCountDisplay}</button><small>{TEXT.currentRows}{orderCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.order_count" testid="bar-orders-metric-detail-orders" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.openOrders}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-open" onClick={() => enterKpiFocus("open")}>{openOrdersDisplay}</button><small>{TEXT.openOrdersHelp}{openOrderKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.open_order_count" testid="bar-orders-metric-detail-open" /></> : null}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.bill}</span><strong>{billCount}</strong><small>{TEXT.billHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.commission}</span><strong>{salesCommissionOrders}</strong><small>{TEXT.commissionHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong>{formatAmount(totalAmount)}</strong><small>{TEXT.amountHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong data-testid="bar-orders-kpi-amount">{formatAmount(orderAmountDisplay)}</strong><small>{TEXT.amountHelp}{orderAmountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.order_amount" testid="bar-orders-metric-detail-amount" /></> : null}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedOrder?.orderNo ?? "-"}>{selectedOrder?.orderNo ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
         </div>
 

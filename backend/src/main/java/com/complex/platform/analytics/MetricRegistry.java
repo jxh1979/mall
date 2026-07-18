@@ -15,7 +15,7 @@ import java.util.Map;
  * 「分页明细行 + 合计校验值 + 口径说明 + 数据截至时间」，保证「页面数字 = 明细合计」同源。
  *
  * 口径铁律：可加(additive)=区间求和；比率(ratio)=分子/分母（明细分两页签）；余额(balance)=区间末值。
- * 首批登记（覆盖三类口径）均为平台口径，暂不支持商户/项目维度过滤（登记 supportsMerchantDim=false）。
+ * 首批 + 第二批（酒吧域）登记均为平台口径，暂不支持商户/项目维度过滤（登记 supportsMerchantDim=false）。
  */
 public final class MetricRegistry {
 
@@ -166,7 +166,161 @@ public final class MetricRegistry {
                         new MetricColumn("unpaidAmountCent", "未收金额（分）"),
                         new MetricColumn("status", "状态")),
                 null));
+
+        // ==== 第二批（酒吧域，2026-07-18）：谓词逐字抄各页面现数字的既有取数（不自造口径）====
+        register(registry, new MetricDefinition(
+                "revenue.bar",
+                "酒吧收入",
+                TYPE_ADDITIVE,
+                "分",
+                "已结算账单实收合计（分）。可加口径=区间求和：按结算时间落酒吧经营日窗、剔除已冲正（reversed）流水；"
+                        + "与总控驾驶舱「酒吧收入」卡及看板 ETL（revenue.bar）同一谓词同源；仅现场消费实收，不含通票售票分摊。",
+                "酒吧账单结算流水台账（bar_bill_settlements，实时查询；看板快照为 ETL 跑批时点，可能存在时滞）。",
+                "analytics.dashboard.view",
+                "bar",
+                false,
+                false,
+                "ADM-OV-001",
+                "ADM-BAR-002",
+                "billId",
+                List.of(
+                        new MetricColumn("id", "结算流水号"),
+                        new MetricColumn("billId", "账单号"),
+                        new MetricColumn("merchantId", "商户"),
+                        new MetricColumn("settleChannel", "结算渠道"),
+                        new MetricColumn("settlementAmountCent", "实收金额（分）"),
+                        new MetricColumn("settledAt", "结算时间")),
+                null));
+        register(registry, new MetricDefinition(
+                "bar.order_count",
+                "酒吧订单数",
+                TYPE_ADDITIVE,
+                "笔",
+                "酒吧订单逐笔计数（含全部状态，与订单/出品/账单页「订单数」及销售提成页「订单数」一致）。"
+                        + "可加口径=区间求和：按下单时间落酒吧经营日窗计数；不传日期=全部历史（与页面全量列表一致）。",
+                "酒吧订单台账（bar_orders，实时查询）。",
+                "bar.order.view",
+                "bar",
+                true,
+                false,
+                "ADM-BAR-002",
+                "ADM-BAR-002",
+                "id",
+                barOrderColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "bar.order_amount",
+                "酒吧订单金额",
+                TYPE_ADDITIVE,
+                "分",
+                "酒吧订单金额合计（分，含全部状态订单，与订单/出品/账单页「订单金额」卡一致；下单口径非实收口径，"
+                        + "实收见「酒吧收入」）。可加口径=区间求和：按下单时间落酒吧经营日窗；不传日期=全部历史。",
+                "酒吧订单台账（bar_orders，实时查询）。",
+                "bar.order.view",
+                "bar",
+                true,
+                false,
+                "ADM-BAR-002",
+                "ADM-BAR-002",
+                "id",
+                barOrderColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "bar.open_order_count",
+                "未完结酒吧订单",
+                TYPE_BALANCE,
+                "笔",
+                "当前未完结订单数=状态非「已支付/已取消」的酒吧订单计数（与订单/出品/账单页「未完结」卡一致）。"
+                        + "余额口径=区间末值：取结束日期（缺省=当前酒吧经营日）为截至日，起始日期不参与；"
+                        + "仅限制下单时间早于截至日窗末。注意：状态按台账当前值计，历史截至日仅影响下单时间截止。",
+                "酒吧订单台账（bar_orders，实时查询）。",
+                "bar.order.view",
+                "bar",
+                false,
+                false,
+                "ADM-BAR-002",
+                "ADM-BAR-002",
+                "id",
+                barOrderColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "bar.saved_bottle_count",
+                "存酒登记总数",
+                TYPE_ADDITIVE,
+                "笔",
+                "存酒登记逐笔计数（含在存/已领取/已取消/已过期全部状态，与存酒页「存酒总数」一致）。"
+                        + "可加口径=区间求和：按存入时间落酒吧经营日窗计数；不传日期=全部历史。",
+                "存酒台账（saved_bottles，实时查询）。",
+                "bar.saved_bottle.manage",
+                "bar",
+                true,
+                false,
+                "ADM-BAR-003",
+                "ADM-BAR-003",
+                "id",
+                savedBottleColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "bar.saved_bottle_stored",
+                "在存存酒",
+                TYPE_BALANCE,
+                "瓶",
+                "当前在存（状态=在存）存酒笔数（与存酒页「在存」卡一致）。余额口径=区间末值："
+                        + "取结束日期（缺省=当前酒吧经营日）为截至日，起始日期不参与；仅限制存入时间早于截至日窗末。"
+                        + "注意：状态按台账当前值计，历史截至日仅影响存入时间截止。",
+                "存酒台账（saved_bottles，实时查询）。",
+                "bar.saved_bottle.manage",
+                "bar",
+                false,
+                false,
+                "ADM-BAR-003",
+                "ADM-BAR-003",
+                "id",
+                savedBottleColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "bar.saved_bottle_quantity",
+                "存酒剩余数量",
+                TYPE_BALANCE,
+                "数量",
+                "Σ剩余数量=全部存酒登记行的当前剩余数量直加（含已领完=0行，与存酒页「剩余数量」口径一致）。"
+                        + "余额口径=区间末值：取结束日期（缺省=当前酒吧经营日）为截至日，起始日期不参与；"
+                        + "仅限制存入时间早于截至日窗末，剩余数量按台账当前值计。"
+                        + "注意：各登记行计量单位可能不同（瓶/支等），合计为数量直加。",
+                "存酒台账（saved_bottles，实时查询）。",
+                "bar.saved_bottle.manage",
+                "bar",
+                false,
+                false,
+                "ADM-BAR-003",
+                "ADM-BAR-003",
+                "id",
+                savedBottleColumns(),
+                null));
         return registry;
+    }
+
+    private static List<MetricColumn> barOrderColumns() {
+        return List.of(
+                new MetricColumn("id", "订单号"),
+                new MetricColumn("tableId", "卡座"),
+                new MetricColumn("merchantId", "商户"),
+                new MetricColumn("status", "订单状态"),
+                new MetricColumn("totalAmountCent", "订单金额（分）"),
+                new MetricColumn("createdAt", "下单时间"),
+                new MetricColumn("paidAt", "支付时间"));
+    }
+
+    private static List<MetricColumn> savedBottleColumns() {
+        return List.of(
+                new MetricColumn("id", "存酒号"),
+                new MetricColumn("bottleName", "酒品"),
+                new MetricColumn("initialQuantity", "存入数量"),
+                new MetricColumn("remainingQuantity", "剩余数量"),
+                new MetricColumn("unit", "单位"),
+                new MetricColumn("status", "状态"),
+                new MetricColumn("createdAt", "存入时间"),
+                new MetricColumn("expireAt", "到期时间"));
     }
 
     private static List<MetricColumn> electricityColumns() {

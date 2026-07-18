@@ -346,6 +346,8 @@ export type StoredWineRow = {
   customerName?: string;
   itemId?: string;
   itemName?: string;
+  /** 列表接口实际返回字段（SavedBottleRecord.remainingQuantity）；quantity 为旧字段兼容保留。 */
+  remainingQuantity?: number;
   quantity?: number;
   status?: string;
   createdAt?: string;

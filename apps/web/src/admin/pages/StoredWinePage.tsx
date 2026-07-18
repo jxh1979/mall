@@ -11,6 +11,7 @@ import { rowMatchesKeyword } from "../components/rowSearch";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, StoredWineRow } from "../types";
 
 // 后端 /saved-bottles 还返回到期/更新/剩余数量等（StoredWineRow 未全量声明），
@@ -73,7 +74,7 @@ function numberValue(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function StoredWinePage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function StoredWinePage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<StoredWineRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [claimPhone, setClaimPhone] = React.useState("13800013800");
@@ -137,7 +138,17 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
 
 
   const storedCount = rows.filter((row) => (row.status ?? "") === "stored").length;
-  const totalQuantity = rows.reduce((sum, row) => sum + numberValue(row.quantity), 0);
+  // 列表接口返回 remainingQuantity（旧 quantity 字段兼容保留）：剩余数量=全部登记行当前剩余数量直加。
+  const totalQuantity = rows.reduce((sum, row) => sum + numberValue(row.remainingQuantity ?? row.quantity), 0);
+
+  // 第二批接线（指标登记簿）：存酒总数/在存/剩余数量三个 KPI 数字改走统一明细端点（与明细页同源，
+  // 全历史/台账当前值口径与本页全量列表一致）；失败（含无权限）回退本地计算并隐藏「完整明细」入口。
+  const bottleCountKpi = useMetricKpiValue(api, "bar.saved_bottle_count", {});
+  const storedKpi = useMetricKpiValue(api, "bar.saved_bottle_stored", {});
+  const quantityKpi = useMetricKpiValue(api, "bar.saved_bottle_quantity", {});
+  const bottleCountDisplay = bottleCountKpi.status === "ready" && bottleCountKpi.value !== null ? bottleCountKpi.value : rows.length;
+  const storedDisplay = storedKpi.status === "ready" && storedKpi.value !== null ? storedKpi.value : storedCount;
+  const quantityDisplay = quantityKpi.status === "ready" && quantityKpi.value !== null ? quantityKpi.value : totalQuantity;
 
   // 聚焦时先按子集过滤内存数组（stored=在线可领取），再叠加关键词与排序；不发起后端查询。
   const kpiRows = kpiFocus === "stored" ? rows.filter((row) => (row.status ?? "") === "stored") : rows;
@@ -146,7 +157,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     savedNo: (row) => row.savedNo ?? row.id,
     customer: (row) => row.customerName ?? row.customerId,
     item: (row) => row.itemName ?? row.itemId,
-    quantity: (row) => numberValue(row.quantity),
+    quantity: (row) => numberValue(row.remainingQuantity ?? row.quantity),
     status: (row) => row.status,
     createdAt: (row) => row.createdAt,
   });
@@ -222,9 +233,9 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
         ) : (
         <>
         <div className="admin-kpi-grid" data-testid="stored-wine-summary">
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.totalBottles}</span><button type="button" className="admin-kpi-value" data-testid="stored-wine-kpi-bottles" onClick={() => enterKpiFocus("bottles")}>{rows.length}</button><small>{TEXT.totalBottlesHelp}</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.storedBottles}</span><button type="button" className="admin-kpi-value" data-testid="stored-wine-kpi-stored" onClick={() => enterKpiFocus("stored")}>{storedCount}</button><small>{TEXT.storedHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.totalQuantity}</span><strong>{totalQuantity}</strong><small>{TEXT.totalQuantityHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.totalBottles}</span><button type="button" className="admin-kpi-value" data-testid="stored-wine-kpi-bottles" onClick={() => enterKpiFocus("bottles")}>{bottleCountDisplay}</button><small>{TEXT.totalBottlesHelp}{bottleCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.saved_bottle_count" testid="stored-wine-metric-detail-bottles" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.storedBottles}</span><button type="button" className="admin-kpi-value" data-testid="stored-wine-kpi-stored" onClick={() => enterKpiFocus("stored")}>{storedDisplay}</button><small>{TEXT.storedHelp}{storedKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.saved_bottle_stored" testid="stored-wine-metric-detail-stored" /></> : null}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.totalQuantity}</span><strong data-testid="stored-wine-kpi-quantity">{quantityDisplay}</strong><small>{TEXT.totalQuantityHelp}{quantityKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.saved_bottle_quantity" testid="stored-wine-metric-detail-quantity" /></> : null}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selectedBottle}</span><strong className="admin-kpi-value--text" title={selected?.savedNo ?? "-"}>{selected?.savedNo ?? "-"}</strong><small>{selected?.customerName ?? "-"}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.onlineCheck}</span><strong>必需</strong><small>{TEXT.onlineCheckHelp}</small></div>
         </div>
@@ -273,7 +284,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
                   <td>{row.savedNo ?? row.id}</td>
                   <td>{row.customerName ?? row.customerId ?? "-"}</td>
                   <td>{row.itemName ?? row.itemId ?? "-"}</td>
-                  <td>{row.quantity ?? "-"}</td>
+                  <td>{row.remainingQuantity ?? row.quantity ?? "-"}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{cnDate(row.createdAt)}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看存酒详情" onClick={(event) => { event.stopPropagation(); openBottleDetail(row); }}>查看详情</button></td></tr>

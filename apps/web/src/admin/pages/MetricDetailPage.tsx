@@ -9,13 +9,21 @@ import { metricDetailFocus, parseMetricDetailFocus } from "../components/MetricD
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { AdminPageProps, MetricDetailPayload } from "../types";
 
-// 首批登记指标目录（与后端 MetricRegistry 首批一致，中文名/口径以接口返回为权威；此处仅供直达选择与面包屑回源）。
+// 登记指标目录（与后端 MetricRegistry 一致，中文名/口径以接口返回为权威；此处仅供直达选择与面包屑回源）。
 const CATALOG: Array<{ key: string; name: string; sourcePageId: string; sourceLabel: string }> = [
   { key: "revenue.ticket", name: "票务收入", sourcePageId: "ADM-OV-001", sourceLabel: "总控驾驶舱" },
   { key: "finance.ar_balance", name: "应收欠费余额", sourcePageId: "ADM-OV-001", sourceLabel: "总控驾驶舱" },
   { key: "finance.recon_diff_count", name: "对账差异笔数", sourcePageId: "ADM-FIN-002", sourceLabel: "对账差异" },
   { key: "energy.total_electricity", name: "用电量", sourcePageId: "ADM-ANA-007", sourceLabel: "能耗分析" },
   { key: "energy.electricity_per_sqm", name: "每平米电耗", sourcePageId: "ADM-ANA-007", sourceLabel: "能耗分析" },
+  // 第二批（酒吧域）
+  { key: "revenue.bar", name: "酒吧收入", sourcePageId: "ADM-OV-001", sourceLabel: "总控驾驶舱" },
+  { key: "bar.order_count", name: "酒吧订单数", sourcePageId: "ADM-BAR-002", sourceLabel: "订单/出品/账单" },
+  { key: "bar.order_amount", name: "酒吧订单金额", sourcePageId: "ADM-BAR-002", sourceLabel: "订单/出品/账单" },
+  { key: "bar.open_order_count", name: "未完结酒吧订单", sourcePageId: "ADM-BAR-002", sourceLabel: "订单/出品/账单" },
+  { key: "bar.saved_bottle_count", name: "存酒登记总数", sourcePageId: "ADM-BAR-003", sourceLabel: "存酒" },
+  { key: "bar.saved_bottle_stored", name: "在存存酒", sourcePageId: "ADM-BAR-003", sourceLabel: "存酒" },
+  { key: "bar.saved_bottle_quantity", name: "存酒剩余数量", sourcePageId: "ADM-BAR-003", sourceLabel: "存酒" },
 ];
 
 const VALUE_TYPE_LABELS: Record<string, string> = { additive: "可加（区间求和）", ratio: "比率（分子/分母）", balance: "余额（区间末值）" };

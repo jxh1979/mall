@@ -1377,6 +1377,13 @@ public class AnalyticsService {
             LocalDate asOf = to != null ? to : currentBusinessDay;
             AnalyticsRecords.MetricDetailRows detail = switch (definition.metricKey()) {
                 case "finance.ar_balance" -> repository.arOpenReceivableDetail(asOf, safeSize, offset);
+                // 第二批（酒吧域）余额类：状态/剩余数量按台账当前值，截至日仅限制下单/存入时间早于该经营日窗末。
+                case "bar.open_order_count" -> repository.barOpenOrderDetail(
+                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                case "bar.saved_bottle_stored" -> repository.savedBottleStoredDetail(
+                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                case "bar.saved_bottle_quantity" -> repository.savedBottleQuantityDetail(
+                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
                 default -> throw ApiException.badRequest("VALIDATION_FAILED",
                         "指标已登记但明细查询未接线：" + definition.metricKey());
             };
@@ -1411,6 +1418,11 @@ public class AnalyticsService {
         AnalyticsRecords.MetricDetailRows detail = switch (definition.metricKey()) {
             case "revenue.ticket" -> repository.ticketRevenueDetail(windowStart, windowEnd, safeSize, offset);
             case "finance.recon_diff_count" -> repository.reconciliationDifferenceDetail(windowStart, windowEnd, safeSize, offset);
+            // 第二批（酒吧域）可加类：谓词逐字同各页面既有取数（见 MetricRegistry 口径说明）。
+            case "revenue.bar" -> repository.barSettlementRevenueDetail(windowStart, windowEnd, safeSize, offset);
+            case "bar.order_count" -> repository.barOrderDetail(windowStart, windowEnd, false, safeSize, offset);
+            case "bar.order_amount" -> repository.barOrderDetail(windowStart, windowEnd, true, safeSize, offset);
+            case "bar.saved_bottle_count" -> repository.savedBottleDetail(windowStart, windowEnd, safeSize, offset);
             case "energy.total_electricity" -> repository.electricityReadingDetail(windowStart, windowEnd, safeSize, offset);
             default -> throw ApiException.badRequest("VALIDATION_FAILED",
                     "指标已登记但明细查询未接线：" + definition.metricKey());

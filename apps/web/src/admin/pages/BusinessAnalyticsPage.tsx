@@ -7,6 +7,7 @@ import { Sparkline, MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, BusinessMetricSnapshotRow, BusinessReviewLockRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
 import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -84,7 +85,7 @@ function kpiFocusTitle(target: KpiTarget): string {
   return "指标快照";
 }
 
-export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, navigateTo }: AdminPageProps) {
   const [snapshots, setSnapshots] = React.useState<BusinessMetricSnapshotRow[]>([]);
   const [definitions, setDefinitions] = React.useState<MetricDefinitionRow[]>([]);
   const [anomalies, setAnomalies] = React.useState<MetricAnomalyRow[]>([]);
@@ -221,14 +222,21 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
   }, [filteredSnapshots]);
 
   // T4.2/T4.3 三图派生：取最新经营日的平台口径指标值（不受业务域筛选影响，恒为管理层视图）。
-  function latestPlatformMetric(metricKey: string): number | null {
+  function latestPlatformSnapshot(metricKey: string): BusinessMetricSnapshotRow | null {
     const rows = snapshots.filter((row) => row.metricKey === metricKey && (!row.segmentType || row.segmentType === "platform"));
     if (rows.length === 0) return null;
-    const latest = [...rows].sort((a, b) => String(b.businessDate ?? "").localeCompare(String(a.businessDate ?? "")))[0];
+    return [...rows].sort((a, b) => String(b.businessDate ?? "").localeCompare(String(a.businessDate ?? "")))[0] ?? null;
+  }
+  function latestPlatformMetric(metricKey: string): number | null {
+    const latest = latestPlatformSnapshot(metricKey);
     return latest?.actualValue == null ? null : numberValue(latest.actualValue);
   }
   const perSqmCent = latestPlatformMetric("revenue.per_sqm"); // 坪效（分/㎡）
-  const barRevenue = latestPlatformMetric("revenue.bar") ?? 0;
+  // 第二批接线（指标登记簿）：品类占比的酒吧实收改走统一明细端点（同快照经营日区间，与明细页同源）；
+  // 失败（含无权限）回退最新快照值并隐藏「完整明细」入口。
+  const barSnapshotDate = latestPlatformSnapshot("revenue.bar")?.businessDate ?? "";
+  const barKpi = useMetricKpiValue(api, "revenue.bar", { from: barSnapshotDate, to: barSnapshotDate, enabled: !!barSnapshotDate });
+  const barRevenue = barKpi.status === "ready" && barKpi.value !== null ? barKpi.value : (latestPlatformMetric("revenue.bar") ?? 0);
   const ticketRevenue = latestPlatformMetric("revenue.ticket") ?? 0;
   const categoryTotal = barRevenue + ticketRevenue;
   const barShare = categoryTotal > 0 ? (barRevenue / categoryTotal) * 100 : 0;
@@ -349,8 +357,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
               <div className="admin-chart-block" data-testid="business-analytics-category-share">
                 <span>品类占比（酒吧 vs 票务实收）</span>
                 <MiniBars values={[barRevenue, ticketRevenue]} width={90} height={36} testid="business-analytics-category-bars" ariaLabel="酒吧与票务收入占比" />
-                <small className="admin-muted-action">
+                <small className="admin-muted-action" data-testid="business-analytics-category-share-note">
                   {categoryTotal > 0 ? `酒吧 ${barShare.toFixed(1)}% · 票务 ${ticketShare.toFixed(1)}%` : "暂无收入数据"}
+                  {barKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="revenue.bar" from={barSnapshotDate} to={barSnapshotDate} testid="business-analytics-metric-detail-bar" /></> : null}
                 </small>
               </div>
               <div className="admin-chart-block" data-testid="business-analytics-hourly">
