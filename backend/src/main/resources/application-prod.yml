@@ -23,3 +23,15 @@ spring:
   flyway:
     user: ${COMPLEX_DATABASE_OWNER_USERNAME:${COMPLEX_DATABASE_USERNAME:complex}}
     password: ${COMPLEX_DATABASE_OWNER_PASSWORD:${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}}
+
+# AUD-033 配套(HTML冲突复核用户拍板): 承接业务全景图强制"系统自动"的定时作业, prod开启;
+# 企微会话留存(compliance.wecom-retention)按用户选择保持默认关。
+ticket.order.expiry.scheduled.enabled: true
+settlement.expiry.scheduled.enabled: true
+settlement.reconciliation.scheduled.enabled: true
+settlement.monthly.scheduled.enabled: true
+customer.loyalty.scheduled.enabled: true
+ticket.face-photo.purge.scheduled.enabled: true
+analytics.dashboard-etl.scheduled.enabled: true
+amusement.inspection-task.scheduled.enabled: true
+merchant.service.sla-escalation.scheduled.enabled: true
