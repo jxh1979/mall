@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 630 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 640 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -444,7 +444,7 @@
 | finance | `POST` | `/api/v1/finance/merchant-expenses` | `createMerchantExpenseEntry` | 手工录入商户费用（人工/摊销/其他，理由必填） | `MerchantExpenseEntryRequest` | `finance.merchant_expense.manage` | `staff-token` | `merchant` | web | 是 | `merchant_expense.manual_created` | `merchant_expense.manual_create_failed` |
 | finance | `GET` | `/api/v1/finance/merchant-expenses/summary` | `summarizeMerchantExpenses` | 商户费用期间汇总（按商户+月份分类型合计，分红引擎费用侧取数点） | `-` | `finance.merchant_expense.view` | `staff-token` | `merchant` | web | 否 | `merchant_expense.summary_viewed` | `merchant_expense.summary_view_failed` |
 | finance | `POST` | `/api/v1/finance/merchant-expenses/{id}/reverse` | `reverseMerchantExpenseEntry` | 红字冲销费用台账行（负金额新行，不改历史行，理由必填） | `MerchantExpenseReversalRequest` | `finance.merchant_expense.manage` | `staff-token` | `merchant` | web | 是 | `merchant_expense.reversed` | `merchant_expense.reverse_failed` |
-| finance | `POST` | `/api/v1/finance/merchant-expenses/sync-auto` | `syncMerchantExpenseAuto` | 自动挂接能耗费/物业费账单到费用台账（按期幂等可重跑） | `MerchantExpenseSyncRequest` | `finance.merchant_expense.manage` | `staff-token` | `platform` | web | 是 | `merchant_expense.auto_synced` | `merchant_expense.auto_sync_failed` |
+| finance | `POST` | `/api/v1/finance/merchant-expenses/sync-auto` | `syncMerchantExpenseAuto` | 自动挂接能耗费/物业费/租金账单到费用台账（按期幂等可重跑） | `MerchantExpenseSyncRequest` | `finance.merchant_expense.manage` | `staff-token` | `platform` | web | 是 | `merchant_expense.auto_synced` | `merchant_expense.auto_sync_failed` |
 | finance | `GET` | `/api/v1/finance/refund-authority/limits` | `listRefundAuthorityLimits` | 查询退款自助额度配置 | `-` | `refund.authority.view` | `staff-token` | `project` | web | 否 | `refund_authority_limit.viewed` | `refund_authority_limit.view_failed` |
 | finance | `POST` | `/api/v1/finance/refund-authority/limits` | `upsertRefundAuthorityLimit` | 新增或更新退款自助额度 | `RefundAuthorityLimitRequest` | `refund.authority.manage` | `staff-token` | `project` | web | 是 | `refund_authority.changed` | `refund_authority.change_failed` |
 | finance | `GET` | `/api/v1/finance/refund-authority/rules` | `listRefundAutoRules` | 查询退款自动放行规则配置 | `-` | `refund.authority.view` | `staff-token` | `project` | web | 否 | `refund_auto_rule.viewed` | `refund_auto_rule.view_failed` |
@@ -651,6 +651,16 @@
 | partner | `POST` | `/api/v1/partner/orgs/{org_id}/unbind-user` | `unbindUserFromPartnerOrg` | 账号解绑外部协作机构 | `PartnerOrgUserBindRequest` | `partner.org.manage` | `staff-token` | `platform` | web | 是 | `partner.org.user_unbound` | `partner.org.user_unbind_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-ledger` | `listInventoryCostLedger` | 查询库存成本流水（移动加权） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_ledger.viewed` | `inventory.cost_ledger.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-summary` | `getInventoryCostSummary` | 期间出库成本汇总（分红成本侧取数点） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_summary.viewed` | `inventory.cost_summary.view_failed` |
+| finance | `GET` | `/api/v1/finance/dividends/plans` | `listDividendPlans` | 分红方案列表（商户 scope 账号只见本商户） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `dividend.plans_listed` | `dividend.plans_list_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/plans` | `createDividendPlan` | 新建分红方案（比例/税率/周期/基数构成全可配，80/20 仅默认值） | `DividendPlanRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.plan_created` | `dividend.plan_create_failed` |
+| finance | `PUT` | `/api/v1/finance/dividends/plans/{id}` | `updateDividendPlan` | 修改分红方案（改动审计留痕；历史分红单按单内快照追溯，不受影响） | `DividendPlanRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.plan_updated` | `dividend.plan_update_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/statements/compute` | `computeDividendStatements` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `DividendComputeRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.computed` | `dividend.compute_failed` |
+| finance | `GET` | `/api/v1/finance/dividends/statements` | `listDividendStatements` | 分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `dividend.statements_listed` | `dividend.statements_list_failed` |
+| finance | `GET` | `/api/v1/finance/dividends/statements/{id}` | `getDividendStatement` | 分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `dividend.statement_viewed` | `dividend.statement_view_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/statements/{id}/submit` | `submitDividendStatement` | 提交审阅：draft → pending_review（预览单不可提交） | `DividendActionRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.submitted` | `dividend.submit_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/statements/{id}/approve` | `approveDividendStatement` | 审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）；提交人不得审批自己提交的单 | `DividendActionRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.approved` | `dividend.approve_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/statements/{id}/reject` | `rejectDividendStatement` | 驳回：pending_review → rejected（理由必填；驳回后可重算） | `DividendActionRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.rejected` | `dividend.reject_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | `markDividendStatementPaid` | 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程） | `DividendActionRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.paid_marked` | `dividend.mark_paid_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -718,5 +728,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 630 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 640 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

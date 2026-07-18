@@ -186,6 +186,36 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
     }
 
     /**
+     * 租金自动挂接（2026-07-18 拍板：租金计入费用台账、分红基数默认扣减）。
+     * 覆盖全部租金出账路径：contract_rent（合同租金，单期 billRentPeriod 与整租期批量预排两路都经
+     * ContractService.genFeeBill → insertRentBill，accounting_period=期间）+ turnover_rent（营业额抽成租金，
+     * FinanceService.billTurnoverRent，V299 起 accounting_period=期间起始月；历史行无期间标记不挂接）。
+     * expense_type 同归 rent_allocation；id 前缀 mex_arn_（8+64≤120）；(source,source_ref) 部分唯一索引幂等；
+     * 漂移报告 listAutoDrift 按 id 前缀走 ar_ap_items 分支，自动覆盖本源。
+     */
+    @Override
+    public int attachContractRent(String period, String operatorUserId, Instant now) {
+        return jdbcTemplate.update("""
+                INSERT INTO merchant_expense_entries (
+                    id, merchant_id, period, expense_type, amount_cent, source, source_ref,
+                    note, operator_user_id, created_at
+                )
+                SELECT 'mex_arn_' || i.id, i.merchant_id, :period, 'rent_allocation', i.amount_cent, 'auto_rent',
+                       i.id, '租金自动挂接（应收单 ' || i.item_no || '）', :operator, :created_at
+                  FROM ar_ap_items i
+                 WHERE i.direction = 'receivable'
+                   AND i.source_type IN ('contract_rent', 'turnover_rent')
+                   AND i.accounting_period = :period
+                   AND i.merchant_id IS NOT NULL
+                   AND i.amount_cent <> 0
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("period", period)
+                .addValue("operator", operatorUserId, Types.VARCHAR)
+                .addValue("created_at", timestampWithTimeZone(now)));
+    }
+
+    /**
      * 金额漂移报告：上游（ar_ap_items 锁定后补录审批可原地改 amount_cent）改账后，快照式挂接不自动追改。
      * 本查询对该期每个 auto 挂接行，算台账净额 = 原行 + 指向它的红字冲销行合计，与上游当前金额比对，
      * 不等则列入清单（处置 SOP：红字冲销旧行 + 手工录入修正额）。上游表按行 id 前缀区分

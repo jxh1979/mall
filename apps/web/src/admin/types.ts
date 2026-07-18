@@ -820,7 +820,87 @@ export type MerchantExpenseSyncResult = {
   energyInserted?: number;
   propertyInserted?: number;
   contractPropertyInserted?: number;
+  rentInserted?: number;
   drift?: MerchantExpenseDriftRow[];
+};
+
+// 持股分红（V299）：方案配置 / 期间计算单 / 算式明细行 / 期间作业结果。
+export type DividendPlanRow = {
+  id: string;
+  merchantId?: string;
+  principalUserId?: string;
+  principalName?: string | null;
+  platformShareBps?: number;
+  taxRateBps?: number;
+  periodType?: string;
+  revenueDomains?: string[];
+  includeInventoryCost?: boolean;
+  expenseTypes?: string[];
+  effectiveFrom?: string | null;
+  status?: string;
+  note?: string | null;
+  updatedBy?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type DividendStatementRow = {
+  id: string;
+  merchantId?: string;
+  planId?: string;
+  kind?: string;
+  periodLabel?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  principalUserId?: string;
+  platformShareBps?: number;
+  taxRateBps?: number;
+  revenueDomains?: string[];
+  includeInventoryCost?: boolean;
+  expenseTypes?: string[];
+  revenueCent?: number;
+  costCent?: number;
+  expenseCent?: number;
+  netProfitCent?: number;
+  distributableCent?: number;
+  platformShareCent?: number;
+  principalGrossCent?: number;
+  taxCent?: number;
+  principalNetCent?: number;
+  noCostBasisCount?: number;
+  status?: string;
+  rejectReason?: string | null;
+  arApItemId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type DividendStatementLineRow = {
+  id: string;
+  statementId?: string;
+  merchantId?: string;
+  seq?: number;
+  lineType?: string;
+  amountCent?: number;
+  detail?: string | null;
+  createdAt?: string;
+};
+
+export type DividendStatementDetail = {
+  statement?: DividendStatementRow;
+  lines?: DividendStatementLineRow[];
+};
+
+export type DividendComputeSkipRow = {
+  merchantId?: string;
+  reason?: string;
+};
+
+export type DividendComputeResult = {
+  periodLabel?: string;
+  kind?: string;
+  computed?: DividendStatementRow[];
+  skipped?: DividendComputeSkipRow[];
 };
 
 export type MerchantZoneSettlementRow = {

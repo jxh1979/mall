@@ -30,5 +30,8 @@ public interface MerchantExpenseRepository {
     int attachContractPropertyFees(String period, String operatorUserId, Instant now);
 
     /** 金额漂移报告：该期每个已挂接源的台账净额（原行+冲销行合计）对上游单据当前金额，不一致的清单。 */
+    /** 租金自动挂接：ar_ap_items receivable 且 source_type ∈ (contract_rent, turnover_rent)，按 accounting_period 归期。 */
+    int attachContractRent(String period, String operatorUserId, Instant now);
+
     List<MerchantExpenseDriftRecord> listAutoDrift(String period);
 }

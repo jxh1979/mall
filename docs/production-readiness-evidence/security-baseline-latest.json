@@ -6,8 +6,8 @@
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 630,
+  "openapi_operation_count": 640,
   "security_baseline_version": "V1",
   "plaintext_secret_present": false,
-  "notes": "Formal security baseline and findings register are generated and verified. Re-synced to 630 operations after feat/kpi-metric-registry rebased onto PR#130+#131 (getMetricDetail endpoint; net +1 on 629). Re-verified via npm run verify:security-baseline and verify:production-readiness-evidence. P0/P1 open findings remain production blockers until real external or IT evidence is supplied."
+  "notes": "Formal security baseline and findings register are generated and verified. Re-synced to 640 operations after feat/dividend-engine (V299 dividend engine: 10 finance.dividends operations on 630). Re-verified via npm run verify:security-baseline and verify:production-readiness-evidence. P0/P1 open findings remain production blockers until real external or IT evidence is supplied."
 }

@@ -35,7 +35,7 @@ public class MerchantExpenseService {
 
     private static final Set<String> EXPENSE_TYPES = Set.of(
             "rent_allocation", "energy", "property_fee", "labor", "amortization", "other");
-    private static final Set<String> SOURCES = Set.of("auto_energy", "auto_property", "manual");
+    private static final Set<String> SOURCES = Set.of("auto_energy", "auto_property", "auto_rent", "manual");
     private static final Pattern PERIOD_PATTERN = Pattern.compile("^\\d{4}-(0[1-9]|1[0-2])$");
 
     private final MerchantExpenseRepository repository;
@@ -177,7 +177,8 @@ public class MerchantExpenseService {
 
     /**
      * 自动挂接：把 period 已出账的能耗费应收（ar_ap_items source_type='energy_fee'）、物业费账单
-     * （property_fee_bills）与合同计费物业费（ar_ap_items source_type='contract_property_fee'）汇入台账。
+     * （property_fee_bills）、合同计费物业费（ar_ap_items source_type='contract_property_fee'）与租金
+     * （ar_ap_items source_type ∈ contract_rent/turnover_rent，2026-07-18 拍板计入分红基数）汇入台账。
      * 幂等可重跑：同商户同月同来源单据不重复计入（id 派生 + 部分唯一索引）。
      * 响应附金额漂移报告（上游改账后台账净额与上游不一致的清单；处置 SOP=红字冲销旧行+手工录入修正额）。
      * 上游出账本身是手动触发（能耗结算/物业费出账），故此处用手动触发端点而非 @Scheduled 空跑。
@@ -203,8 +204,9 @@ public class MerchantExpenseService {
                     int energyInserted = repository.attachEnergyFees(period, operator, now);
                     int propertyInserted = repository.attachPropertyFees(period, operator, now);
                     int contractPropertyInserted = repository.attachContractPropertyFees(period, operator, now);
+                    int rentInserted = repository.attachContractRent(period, operator, now);
                     return new MerchantExpenseSyncResultRecord(period, energyInserted, propertyInserted,
-                            contractPropertyInserted, repository.listAutoDrift(period));
+                            contractPropertyInserted, rentInserted, repository.listAutoDrift(period));
                 },
                 MerchantExpenseService::businessId,
                 java.util.Map.of());

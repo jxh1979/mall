@@ -81,6 +81,8 @@ const bespokePages = new Set([
   "ADM-FIN-004",
   "ADM-FIN-005",
   "ADM-FIN-006",
+  "ADM-FIN-007",
+  "ADM-MER-008",
   "ADM-AMU-005",
 ]);
 

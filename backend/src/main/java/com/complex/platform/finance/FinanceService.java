@@ -35,7 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort {
+public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort, DividendPayoutPort {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -45,7 +45,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     private static final Set<String> SOURCE_TYPES = Set.of(
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
             "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
-            "property_fee", "pass_drink_settlement", "ticket_distribution");
+            "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -1495,6 +1495,19 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 : TurnoverRentMath.tieredRent(turnover, tiers, rule.minAmountCent());
     }
 
+    /**
+     * V299 持股分红发放端口：审批通过的分红计算单按主理人净发放额（代扣后）挂应付
+     * (payable, counterparty=主理人账户, source_type='dividend_payout', source_id=计算单 id——
+     * (direction,source_type,source_id) 部分唯一索引防一单重挂；幂等键取计算单 id 使派生 id 确定)。
+     */
+    @Override
+    public String createDividendPayoutPayable(
+            String principalUserId, String merchantId, long netAmountCent, String statementId) {
+        ArApItemRecord item = persistDerivedArApItem(
+                "payable", principalUserId, "dividend_payout", statementId, netAmountCent, statementId, merchantId);
+        return item.id();
+    }
+
     /** 批3:内部价采购券核销回流 -> 按内部结算价给第三方挂应付(payable, counterparty=partnerId)。 */
     @Override
     public String createPartnerVoucherPayable(String partnerId, long internalPriceCent, String idempotencyKey) {
@@ -1534,7 +1547,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             throw ApiException.badRequest("TURNOVER_RENT_ZERO",
                     "computed turnover rent is zero (turnover=" + turnover + "); nothing to bill");
         }
-        // 营业额抽成应收：counterparty=商户。
+        // 营业额抽成应收：counterparty=商户。V299 起落 accounting_period=期间起始月——
+        // 租金自动挂接（费用台账→分红基数）按 accounting_period 归期；历史行无期间标记不挂接（如实边界）。
         return persistDerivedArApItem(
                 "receivable",
                 rule.merchantId(),
@@ -1542,7 +1556,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 rule.id(),
                 rent,
                 actual.idempotencyKey(),
-                rule.merchantId());
+                rule.merchantId(),
+                java.time.YearMonth.from(periodStart).toString());
     }
 
     /** rent = clamp(turnover × rateBps / 10000, min, max)。min/max 为 null 时不夹。 */
@@ -1631,6 +1646,19 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             long amountCent,
             String idempotencyKey,
             String merchantId) {
+        return persistDerivedArApItem(direction, counterpartyId, sourceType, sourceId, amountCent,
+                idempotencyKey, merchantId, null);
+    }
+
+    private ArApItemRecord persistDerivedArApItem(
+            String direction,
+            String counterpartyId,
+            String sourceType,
+            String sourceId,
+            long amountCent,
+            String idempotencyKey,
+            String merchantId,
+            String accountingPeriod) {
         LocalDate dueDate = LocalDate.now();
         // F-OPS-09：派生台账按本条目归属 merchantId 判锁（与下方 ArApItemRecord.merchantId 同口径）；
         // merchantId 为空（平台口径派生）则受任一封账约束。
@@ -1660,7 +1688,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 unpaidAmountCent,
                 CURRENCY_CNY,
                 dueDate,
-                null,
+                accountingPeriod,
                 status,
                 now,
                 now,

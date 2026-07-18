@@ -1,0 +1,650 @@
+package com.complex.platform.dividend;
+
+import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.BusinessDayResolver;
+import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
+import com.complex.platform.dividend.DividendRecords.DividendComputeSkipRecord;
+import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
+import com.complex.platform.dividend.DividendRecords.DividendStatementDetailRecord;
+import com.complex.platform.dividend.DividendRecords.DividendStatementLineRecord;
+import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
+import com.complex.platform.dividend.DividendRecords.ExpenseTypeSumRecord;
+import com.complex.platform.dividend.dto.DividendActionRequest;
+import com.complex.platform.dividend.dto.DividendComputeRequest;
+import com.complex.platform.dividend.dto.DividendPlanRequest;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
+import com.complex.platform.finance.DividendPayoutPort;
+import com.complex.platform.inventory.InventoryCostSummaryRecord;
+import com.complex.platform.inventory.InventoryRepository;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 持股分红引擎（2026-07-18 拍板：净利润制 / 真实股东股息红利 20% 代扣 / 季度正式+月度预览）。
+ *
+ * <p>算式（整数分，恒等式由 V299 DB CHECK 硬保证）：
+ * 期间收入（复用 revenue.net 商户行级谓词区间版：酒吧实收−酒吧退款 + 售票分量−售票退款，计入域可配）
+ * − 期间销货成本（V296 sumOutboundCost 同谓词，可配开关）
+ * − 期间费用（V297 费用归集台账净额，计入类别可配）
+ * = 净利润 → 按方案比例劈分（余数归主理人） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
+ * 整除链截断与薪资税表同口径） → 净发放额。
+ *
+ * <p>时窗：BusinessDayResolver 平台全局经营日切分（与 V296 成本汇总/营业额租金同口径）——三来源同窗才能恒等；
+ * 费用侧为 V297 的月份桶粒度（台账本身按月归集）。
+ *
+ * <p>状态机：preview（月预览，只可看不可审批）；official：draft → pending_review → approved（挂应付
+ * source_type='dividend_payout'）→ paid；pending_review 可驳回 rejected。重算=旧单 voided + 新单
+ * （红字更正范式），已进入审批流（pending_review/approved/paid）不重算。
+ *
+ * <p>写路径统一走 {@link AuditedOperationExecutor#executeWrite}（同键不同载荷抛 IDEMPOTENCY_CONFLICT）。
+ * 审批要求 finance.dividend.manage（V299 仅授 role_platform_admin=最高权限审批现状口径）。
+ */
+@Service
+public class DividendService {
+
+    static final String VIEW_PERM = "finance.dividend.view";
+    static final String MANAGE_PERM = "finance.dividend.manage";
+    private static final String PLAN_TYPE = "dividend_plan";
+    private static final String STMT_TYPE = "dividend_statement";
+
+    static final Set<String> REVENUE_DOMAINS = Set.of("bar", "ticket");
+    static final Set<String> EXPENSE_TYPES = Set.of(
+            "rent_allocation", "energy", "property_fee", "labor", "amortization", "other");
+    private static final Set<String> PERIOD_TYPES = Set.of("quarterly", "monthly");
+    private static final Set<String> PLAN_STATUSES = Set.of("active", "ended");
+    private static final Set<String> KINDS = Set.of("official", "preview");
+    private static final Set<String> STATEMENT_STATUSES = Set.of(
+            "preview", "draft", "pending_review", "approved", "paid", "rejected", "voided");
+    /** 可重算（作废+重出）的状态；已进入审批流的单不重算。 */
+    private static final Set<String> RECOMPUTABLE_STATUSES = Set.of("preview", "draft", "rejected");
+
+    // 默认口径（仅新建方案时的默认值，全部可配）。
+    private static final int DEFAULT_PLATFORM_SHARE_BPS = 8000;
+    private static final int DEFAULT_TAX_RATE_BPS = 2000;
+    private static final String DEFAULT_PERIOD_TYPE = "quarterly";
+    private static final List<String> DEFAULT_REVENUE_DOMAINS = List.of("bar", "ticket");
+    private static final List<String> DEFAULT_EXPENSE_TYPES = List.of(
+            "rent_allocation", "energy", "property_fee", "labor", "amortization", "other");
+
+    private final DividendRepository repository;
+    private final InventoryRepository inventoryRepository;
+    private final BusinessDayResolver businessDayResolver;
+    private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor operations;
+    private final DividendPayoutPort payoutPort;
+
+    public DividendService(
+            DividendRepository repository,
+            InventoryRepository inventoryRepository,
+            BusinessDayResolver businessDayResolver,
+            AuthorizationService authorizationService,
+            AuditedOperationExecutor operations,
+            DividendPayoutPort payoutPort) {
+        this.repository = repository;
+        this.inventoryRepository = inventoryRepository;
+        this.businessDayResolver = businessDayResolver;
+        this.authorizationService = authorizationService;
+        this.operations = operations;
+        this.payoutPort = payoutPort;
+    }
+
+    // ── 方案配置 ──────────────────────────────────────────────
+
+    /** 方案列表。商户 scope 账号强制只看自己（覆盖请求参数）。 */
+    public List<DividendPlanRecord> listPlans(String merchantId) {
+        authorizationService.requirePermission(VIEW_PERM);
+        return operations.readSingle(
+                AuditedOperation.of("dividend.plans_listed", "dividend.plans_list_failed", VIEW_PERM, PLAN_TYPE),
+                () -> repository.listPlans(blankToNull(scopeMerchant(merchantId))),
+                result -> "all");
+    }
+
+    /** 新建分红方案：一个商户同一时期只允许一个生效中方案；空缺字段按默认口径补齐。 */
+    @Transactional
+    public DividendPlanRecord createPlan(DividendPlanRequest request) {
+        authorizationService.requirePermission(MANAGE_PERM);
+        authorizationService.requirePlatformScope();
+        requireRequest(request);
+        return operations.executeWrite(
+                "createDividendPlan",
+                request.idempotencyKey(),
+                request,
+                DividendPlanRecord.class,
+                AuditedOperation.of("dividend.plan_created", "dividend.plan_create_failed", MANAGE_PERM, PLAN_TYPE),
+                () -> createPlanInternal(request),
+                DividendService::businessId,
+                java.util.Map.of());
+    }
+
+    private DividendPlanRecord createPlanInternal(DividendPlanRequest request) {
+        String merchantId = requireText(request.merchantId(), "merchant_id");
+        String principalUserId = requireText(request.principalUserId(), "principal_user_id");
+        Instant now = Instant.now();
+        DividendPlanRecord plan = new DividendPlanRecord(
+                "divp_" + stableToken(request.idempotencyKey()),
+                merchantId,
+                principalUserId,
+                blankToNull(request.principalName()),
+                requireBps(orDefault(request.platformShareBps(), DEFAULT_PLATFORM_SHARE_BPS), "platform_share_bps"),
+                requireBps(orDefault(request.taxRateBps(), DEFAULT_TAX_RATE_BPS), "tax_rate_bps"),
+                requireEnum(orDefault(request.periodType(), DEFAULT_PERIOD_TYPE), PERIOD_TYPES, "period_type"),
+                requireTokens(orDefault(request.revenueDomains(), DEFAULT_REVENUE_DOMAINS), REVENUE_DOMAINS,
+                        "revenue_domains"),
+                request.includeInventoryCost() == null || request.includeInventoryCost(),
+                requireTokens(orDefault(request.expenseTypes(), DEFAULT_EXPENSE_TYPES), EXPENSE_TYPES,
+                        "expense_types"),
+                parseDate(request.effectiveFrom(), "effective_from"),
+                "active",
+                blankToNull(request.note()),
+                currentOperator(),
+                now,
+                now);
+        if (!repository.insertPlan(plan)) {
+            throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
+                    "该商户已有生效中的分红方案；请修改现有方案或先停用（status=ended）再新建");
+        }
+        return repository.findPlanById(plan.id())
+                .orElseThrow(() -> ApiException.conflict("DIVIDEND_PLAN_EXISTS", "dividend plan insert lost race"));
+    }
+
+    /** 修改方案配置（比例/税率/周期/基数构成开关/停用）；改动经审计事件留痕，历史分红单按单内快照追溯。 */
+    @Transactional
+    public DividendPlanRecord updatePlan(String planId, DividendPlanRequest request) {
+        authorizationService.requirePermission(MANAGE_PERM);
+        authorizationService.requirePlatformScope();
+        requireRequest(request);
+        String id = requireText(planId, "plan_id");
+        return operations.executeWrite(
+                "updateDividendPlan:" + id,
+                request.idempotencyKey(),
+                request,
+                DividendPlanRecord.class,
+                AuditedOperation.of("dividend.plan_updated", "dividend.plan_update_failed", MANAGE_PERM, PLAN_TYPE),
+                () -> updatePlanInternal(id, request),
+                DividendService::businessId,
+                java.util.Map.of());
+    }
+
+    private DividendPlanRecord updatePlanInternal(String planId, DividendPlanRequest request) {
+        DividendPlanRecord existing = repository.findPlanById(planId)
+                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND",
+                        "dividend plan not found: " + planId));
+        if (request.merchantId() != null && !request.merchantId().isBlank()
+                && !existing.merchantId().equals(request.merchantId().trim())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id of a dividend plan cannot be changed");
+        }
+        DividendPlanRecord updated = new DividendPlanRecord(
+                existing.id(),
+                existing.merchantId(),
+                request.principalUserId() == null || request.principalUserId().isBlank()
+                        ? existing.principalUserId() : request.principalUserId().trim(),
+                request.principalName() == null ? existing.principalName() : blankToNull(request.principalName()),
+                requireBps(orDefault(request.platformShareBps(), existing.platformShareBps()), "platform_share_bps"),
+                requireBps(orDefault(request.taxRateBps(), existing.taxRateBps()), "tax_rate_bps"),
+                requireEnum(orDefault(request.periodType(), existing.periodType()), PERIOD_TYPES, "period_type"),
+                requireTokens(orDefault(request.revenueDomains(), existing.revenueDomains()), REVENUE_DOMAINS,
+                        "revenue_domains"),
+                request.includeInventoryCost() == null ? existing.includeInventoryCost()
+                        : request.includeInventoryCost(),
+                requireTokens(orDefault(request.expenseTypes(), existing.expenseTypes()), EXPENSE_TYPES,
+                        "expense_types"),
+                request.effectiveFrom() == null ? existing.effectiveFrom()
+                        : parseDate(request.effectiveFrom(), "effective_from"),
+                requireEnum(orDefault(request.status(), existing.status()), PLAN_STATUSES, "status"),
+                request.note() == null ? existing.note() : blankToNull(request.note()),
+                currentOperator(),
+                existing.createdAt(),
+                Instant.now());
+        if (!repository.updatePlan(updated)) {
+            // ended 改回 active 撞同商户唯一生效索引（uq_dividend_plans_active_merchant）→ 业务 409 非 500。
+            throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
+                    "该商户已有另一生效中的分红方案，无法再启用本方案；请先停用另一方案");
+        }
+        return repository.findPlanById(planId)
+                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "dividend plan lost race"));
+    }
+
+    // ── 期间作业 ──────────────────────────────────────────────
+
+    /** 期间分红作业（手动触发，幂等可重跑）：对每个生效中方案出计算单，算式逐项落明细行。 */
+    @Transactional
+    public DividendComputeResultRecord compute(DividendComputeRequest request) {
+        authorizationService.requirePermission(MANAGE_PERM);
+        authorizationService.requirePlatformScope();
+        requireRequest(request);
+        return operations.executeWrite(
+                "computeDividendStatements",
+                request.idempotencyKey(),
+                request,
+                DividendComputeResultRecord.class,
+                AuditedOperation.of("dividend.computed", "dividend.compute_failed", MANAGE_PERM, STMT_TYPE),
+                () -> computeInternal(request),
+                DividendService::businessId,
+                java.util.Map.of());
+    }
+
+    private DividendComputeResultRecord computeInternal(DividendComputeRequest request) {
+        String kind = requireEnum(requireText(request.kind(), "kind"), KINDS, "kind");
+        DividendPeriod period = DividendPeriod.parse(request.periodLabel());
+        if ("preview".equals(kind) && !DividendPeriod.isMonthLabel(period.label())) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "preview 只支持月度期间标签（如 2026-07）");
+        }
+        List<DividendPlanRecord> plans;
+        if (request.merchantId() != null && !request.merchantId().isBlank()) {
+            plans = List.of(repository.findActivePlanByMerchant(request.merchantId().trim())
+                    .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND",
+                            "该商户没有生效中的分红方案: " + request.merchantId())));
+        } else {
+            plans = repository.listActivePlans();
+        }
+        List<DividendStatementRecord> computed = new ArrayList<>();
+        List<DividendComputeSkipRecord> skipped = new ArrayList<>();
+        Instant now = Instant.now();
+        String operator = currentOperator();
+        for (DividendPlanRecord plan : plans) {
+            String mismatch = periodMismatchReason(kind, period, plan);
+            if (mismatch != null) {
+                skipped.add(new DividendComputeSkipRecord(plan.merchantId(), mismatch));
+                continue;
+            }
+            Optional<DividendStatementRecord> existing =
+                    repository.findActiveStatement(plan.merchantId(), kind, period.label());
+            if (existing.isPresent()) {
+                if (!RECOMPUTABLE_STATUSES.contains(existing.get().status())) {
+                    skipped.add(new DividendComputeSkipRecord(plan.merchantId(),
+                            "已有计算单进入审批流（" + existing.get().status() + "），不重算"));
+                    continue;
+                }
+                // C-1：作废 UPDATE 带期望前态守卫（preview/draft/rejected）；0 行=并发下已进入审批流，跳过不重算。
+                if (repository.markVoided(existing.get().id(), operator, now) == 0) {
+                    skipped.add(new DividendComputeSkipRecord(plan.merchantId(),
+                            "计算单状态在重算期间被并发变更（已进入审批流），本次跳过"));
+                    continue;
+                }
+            }
+            computed.add(computeStatement(plan, kind, period, operator, now));
+        }
+        return new DividendComputeResultRecord(period.label(), kind, computed, skipped);
+    }
+
+    /** kind=official 时期间标签必须匹配方案周期类型；kind=preview 仅对季度方案出预览。 */
+    private static String periodMismatchReason(String kind, DividendPeriod period, DividendPlanRecord plan) {
+        if ("preview".equals(kind)) {
+            return "quarterly".equals(plan.periodType()) ? null : "月度正式方案无需月度预览，跳过";
+        }
+        boolean quarterLabel = DividendPeriod.isQuarterLabel(period.label());
+        if ("quarterly".equals(plan.periodType()) && !quarterLabel) {
+            return "季度方案的正式单需按季度标签（如 2026-Q3）出单，跳过";
+        }
+        if ("monthly".equals(plan.periodType()) && quarterLabel) {
+            return "月度方案的正式单需按月份标签（如 2026-07）出单，跳过";
+        }
+        return null;
+    }
+
+    private DividendStatementRecord computeStatement(
+            DividendPlanRecord plan, String kind, DividendPeriod period, String operator, Instant now) {
+        String merchantId = plan.merchantId();
+        // 三来源同窗：平台全局经营日切分（V296 成本汇总同口径）。
+        Instant from = businessDayResolver.startInstant(period.start());
+        Instant to = businessDayResolver.startInstant(period.end().plusDays(1));
+        String window = "[" + period.start() + "," + period.end().plusDays(1) + ") 经营日窗";
+
+        String statementId = "divs_" + UUID.randomUUID().toString().replace("-", "");
+        List<DividendStatementLineRecord> lines = new ArrayList<>();
+        int[] seq = {0};
+        long revenue = 0L;
+
+        if (plan.revenueDomains().contains("bar")) {
+            long barGross = repository.sumBarRevenueCent(merchantId, from, to);
+            long barRefund = repository.sumBarRefundCent(merchantId, from, to);
+            revenue += barGross - barRefund;
+            addLine(lines, statementId, merchantId, seq, "revenue_bar", barGross,
+                    "酒吧结账实收（bar_bill_settlements，冲正不计）" + window, now);
+            addLine(lines, statementId, merchantId, seq, "revenue_bar_refund", -barRefund,
+                    "酒吧结账后退款（bar_bill_adjustments refund）" + window, now);
+        }
+        if (plan.revenueDomains().contains("ticket")) {
+            long ticketGross = repository.sumTicketAllocatedCent(merchantId, from, to);
+            long ticketRefund = repository.sumTicketRefundCent(merchantId, from, to);
+            revenue += ticketGross - ticketRefund;
+            addLine(lines, statementId, merchantId, seq, "revenue_ticket", ticketGross,
+                    "售票分量（issued_entitlements 权益分配收入）" + window, now);
+            addLine(lines, statementId, merchantId, seq, "revenue_ticket_refund", -ticketRefund,
+                    "售票退款（ticket_refunds 本商户受理）" + window, now);
+        }
+
+        long cost = 0L;
+        long noCostBasisCount = 0L;
+        if (plan.includeInventoryCost()) {
+            InventoryCostSummaryRecord costSummary = inventoryRepository.sumOutboundCost(
+                    merchantId, null, period.start().toString(), period.end().toString(), from, to);
+            cost = costSummary.outboundTotalCostCent();
+            noCostBasisCount = costSummary.noCostBasisCount();
+            addLine(lines, statementId, merchantId, seq, "cost_inventory", -cost,
+                    "销货成本（V296 移动加权出库成本汇总）" + window
+                            + (noCostBasisCount > 0
+                                    ? "；无成本基准出库 " + noCostBasisCount + " 笔，成本合计或有低估" : ""),
+                    now);
+        }
+
+        long expense = 0L;
+        for (ExpenseTypeSumRecord typeSum : repository.sumExpenseByType(
+                merchantId, period.months(), plan.expenseTypes())) {
+            expense += typeSum.totalCent();
+            addLine(lines, statementId, merchantId, seq, "expense_" + typeSum.expenseType(), -typeSum.totalCent(),
+                    "期间费用（V297 费用归集台账净额，月份桶 " + String.join("、", period.months()) + "）", now);
+        }
+
+        long netProfit = revenue - cost - expense;
+        DividendMath.Split split = DividendMath.split(netProfit, plan.platformShareBps(), plan.taxRateBps());
+        addLine(lines, statementId, merchantId, seq, "net_profit", netProfit,
+                "净利润 = 收入 − 销货成本 − 费用（亏损期可分配额为 0，不倒扣主理人）", now);
+        addLine(lines, statementId, merchantId, seq, "platform_share", split.platformShareCent(),
+                "平台分成（" + plan.platformShareBps() + " 万分比，整除链截断）", now);
+        addLine(lines, statementId, merchantId, seq, "principal_gross", split.principalGrossCent(),
+                "主理人应得（可分配额 − 平台分成，余数归主理人）", now);
+        addLine(lines, statementId, merchantId, seq, "tax_withheld", -split.taxCent(),
+                "代扣股息红利个税（真实股东口径，税率 " + plan.taxRateBps() + " 万分比，整除链截断）", now);
+        addLine(lines, statementId, merchantId, seq, "principal_net", split.principalNetCent(),
+                "净发放额 = 主理人应得 − 代扣税；审批通过后按此额挂应付发放", now);
+
+        DividendStatementRecord statement = new DividendStatementRecord(
+                statementId, merchantId, plan.id(), kind, period.label(), period.start(), period.end(),
+                plan.principalUserId(), plan.platformShareBps(), plan.taxRateBps(), plan.revenueDomains(),
+                plan.includeInventoryCost(), plan.expenseTypes(),
+                revenue, cost, expense, netProfit, split.distributableCent(), split.platformShareCent(),
+                split.principalGrossCent(), split.taxCent(), split.principalNetCent(), noCostBasisCount,
+                "preview".equals(kind) ? "preview" : "draft",
+                null, null, operator, null, null, null, null, null, null, now, now);
+        repository.insertStatement(statement);
+        for (DividendStatementLineRecord line : lines) {
+            repository.insertLine(line);
+        }
+        return statement;
+    }
+
+    private static void addLine(List<DividendStatementLineRecord> lines, String statementId, String merchantId,
+            int[] seq, String lineType, long amountCent, String detail, Instant now) {
+        seq[0]++;
+        lines.add(new DividendStatementLineRecord(
+                statementId + "_" + seq[0], statementId, merchantId, seq[0], lineType, amountCent, detail, now));
+    }
+
+    // ── 查询 ──────────────────────────────────────────────────
+
+    /** 计算单分页。商户 scope 账号强制只看自己（商户专区主理人视图同入口）。 */
+    public PageResponse<DividendStatementRecord> listStatements(
+            String merchantId, String kind, String periodLabel, String status, int page, int pageSize) {
+        authorizationService.requirePermission(VIEW_PERM);
+        return operations.readPageResult(
+                AuditedOperation.of("dividend.statements_listed", "dividend.statements_list_failed",
+                        VIEW_PERM, STMT_TYPE),
+                () -> {
+                    if (kind != null && !kind.isBlank() && !KINDS.contains(kind)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "unknown kind: " + kind);
+                    }
+                    if (status != null && !status.isBlank() && !STATEMENT_STATUSES.contains(status)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "unknown status: " + status);
+                    }
+                    int safePage = Math.max(page, 1);
+                    int safeSize = Math.min(Math.max(pageSize, 1), 200);
+                    PageResponse<DividendStatementRecord> pageResult = repository.pageStatements(
+                            blankToNull(scopeMerchant(merchantId)), blankToNull(kind),
+                            blankToNull(periodLabel), blankToNull(status), safePage, safeSize);
+                    // S-3：商户 scope（主理人视图）不外发内部操作员 id 与应付款项 id（平台侧全量）。
+                    if (authorizationService.currentMerchantScope().isEmpty()) {
+                        return pageResult;
+                    }
+                    return new PageResponse<>(
+                            pageResult.items().stream().map(DividendStatementRecord::forMerchantView).toList(),
+                            pageResult.page(), pageResult.pageSize(), pageResult.total());
+                });
+    }
+
+    /** 计算单详情（头 + 算式明细行）。商户 scope 账号只能看本商户的单。 */
+    public DividendStatementDetailRecord getStatement(String statementId) {
+        authorizationService.requirePermission(VIEW_PERM);
+        return operations.readSingle(
+                AuditedOperation.of("dividend.statement_viewed", "dividend.statement_view_failed",
+                        VIEW_PERM, STMT_TYPE),
+                () -> {
+                    DividendStatementRecord statement = requireStatement(statementId);
+                    checkMerchantOwnership(statement.merchantId());
+                    String scoped = authorizationService.currentMerchantScope().orElse(null);
+                    // S-3：商户 scope（主理人视图）不外发内部操作员 id 与应付款项 id（平台侧全量）。
+                    return new DividendStatementDetailRecord(
+                            scoped == null ? statement : statement.forMerchantView(),
+                            repository.listLines(statement.id(), scoped));
+                },
+                result -> statementId);
+    }
+
+    // ── 状态机 ────────────────────────────────────────────────
+
+    /** 提交审阅：draft → pending_review。 */
+    @Transactional
+    public DividendStatementRecord submit(String statementId, DividendActionRequest request) {
+        return transition(statementId, request, "submitDividendStatement",
+                AuditedOperation.of("dividend.submitted", "dividend.submit_failed", MANAGE_PERM, STMT_TYPE),
+                (statement, operator, now) -> {
+                    requireStatus(statement, "draft", "只有草稿单可以提交审阅");
+                    requireTransition(repository.markSubmitted(statement.id(), operator, now), "提交审阅");
+                });
+    }
+
+    /**
+     * 审批通过：pending_review → approved；净发放额 > 0 时给主理人挂应付
+     * （source_type='dividend_payout'，source_id=计算单 id，部分唯一索引防一单重挂）。
+     * C-1：先挂应付、后带守卫置 approved——守卫 0 行（并发被驳回等）抛冲突，事务整体回滚，应付不落地。
+     * I-1：职责分离——提交人不得审批自己提交的单（SELF_APPROVAL_FORBIDDEN，仓内补录审批同范式）。
+     */
+    @Transactional
+    public DividendStatementRecord approve(String statementId, DividendActionRequest request) {
+        return transition(statementId, request, "approveDividendStatement",
+                AuditedOperation.of("dividend.approved", "dividend.approve_failed", MANAGE_PERM, STMT_TYPE),
+                (statement, operator, now) -> {
+                    requireStatus(statement, "pending_review", "只有待审批单可以审批通过");
+                    if (operator != null && operator.equals(statement.submittedBy())) {
+                        throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
+                                "分红计算单的提交人不能审批自己提交的单；请由另一位审批人处理");
+                    }
+                    String arApItemId = null;
+                    if (statement.principalNetCent() > 0) {
+                        arApItemId = payoutPort.createDividendPayoutPayable(
+                                statement.principalUserId(), statement.merchantId(),
+                                statement.principalNetCent(), statement.id());
+                    }
+                    requireTransition(repository.markApproved(statement.id(), operator, arApItemId, now), "审批通过");
+                });
+    }
+
+    /** 驳回：pending_review → rejected，理由必填；驳回后可重算（旧单作废+新单）。 */
+    @Transactional
+    public DividendStatementRecord reject(String statementId, DividendActionRequest request) {
+        return transition(statementId, request, "rejectDividendStatement",
+                AuditedOperation.of("dividend.rejected", "dividend.reject_failed", MANAGE_PERM, STMT_TYPE),
+                (statement, operator, now) -> {
+                    String reason = requireText(request.note(), "note");
+                    requireStatus(statement, "pending_review", "只有待审批单可以驳回");
+                    requireTransition(repository.markRejected(statement.id(), operator, reason, now), "驳回");
+                });
+    }
+
+    /** 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程，本动作登记发放完成）。 */
+    @Transactional
+    public DividendStatementRecord markPaid(String statementId, DividendActionRequest request) {
+        return transition(statementId, request, "markDividendStatementPaid",
+                AuditedOperation.of("dividend.paid_marked", "dividend.mark_paid_failed", MANAGE_PERM, STMT_TYPE),
+                (statement, operator, now) -> {
+                    requireStatus(statement, "approved", "只有审批通过的单可以标记发放");
+                    requireTransition(repository.markPaid(statement.id(), operator, now), "标记发放");
+                });
+    }
+
+    /** C-1：状态 UPDATE 守卫 0 行=并发下状态已被变更，抛业务冲突（409），事务回滚（不产生半截副作用）。 */
+    private static void requireTransition(int updatedRows, String action) {
+        if (updatedRows == 0) {
+            throw ApiException.conflict("DIVIDEND_STATE_INVALID",
+                    action + "失败：计算单状态已被并发变更，请刷新后重试");
+        }
+    }
+
+    @FunctionalInterface
+    private interface Transition {
+        void apply(DividendStatementRecord statement, String operator, Instant now);
+    }
+
+    private DividendStatementRecord transition(
+            String statementId, DividendActionRequest request, String operationId,
+            AuditedOperation operation, Transition transition) {
+        authorizationService.requirePermission(MANAGE_PERM);
+        authorizationService.requirePlatformScope();
+        requireRequest(request);
+        String id = requireText(statementId, "statement_id");
+        return operations.executeWrite(
+                operationId + ":" + id,
+                request.idempotencyKey(),
+                request,
+                DividendStatementRecord.class,
+                operation,
+                () -> {
+                    DividendStatementRecord statement = requireStatement(id);
+                    if ("preview".equals(statement.kind())) {
+                        throw ApiException.conflict("DIVIDEND_PREVIEW_NOT_APPROVABLE",
+                                "月度预览单只可查看，不可提交/审批/发放");
+                    }
+                    transition.apply(statement, currentOperator(), Instant.now());
+                    return requireStatement(id);
+                },
+                DividendService::businessId,
+                java.util.Map.of());
+    }
+
+    private DividendStatementRecord requireStatement(String id) {
+        return repository.findStatementById(id)
+                .orElseThrow(() -> ApiException.notFound("DIVIDEND_STATEMENT_NOT_FOUND",
+                        "dividend statement not found: " + id));
+    }
+
+    private static void requireStatus(DividendStatementRecord statement, String expected, String message) {
+        if (!expected.equals(statement.status())) {
+            throw ApiException.conflict("DIVIDEND_STATE_INVALID",
+                    message + "（当前状态：" + statement.status() + "）");
+        }
+    }
+
+    // ── 辅助 ──────────────────────────────────────────────────
+
+    private String scopeMerchant(String requested) {
+        return authorizationService.currentMerchantScope().orElse(requested);
+    }
+
+    private void checkMerchantOwnership(String resourceMerchantId) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                    "access to another merchant's resource is not allowed");
+        }
+    }
+
+    private String currentOperator() {
+        return authorizationService.currentActor().id();
+    }
+
+    private static String businessId(Object saved) {
+        if (saved instanceof DividendPlanRecord plan) {
+            return plan.id();
+        }
+        if (saved instanceof DividendStatementRecord statement) {
+            return statement.id();
+        }
+        if (saved instanceof DividendComputeResultRecord result) {
+            return result.kind() + ":" + result.periodLabel();
+        }
+        return "all";
+    }
+
+    private static void requireRequest(Object request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
+        }
+        return value.trim();
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static <T> T orDefault(T value, T fallback) {
+        return value == null ? fallback : value;
+    }
+
+    private static String orDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private static int requireBps(int value, String field) {
+        if (value < 0 || value > DividendMath.BPS_DENOMINATOR) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be within [0,10000]");
+        }
+        return value;
+    }
+
+    private static String requireEnum(String value, Set<String> allowed, String field) {
+        String trimmed = requireText(value, field);
+        if (!allowed.contains(trimmed)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "unknown " + field + ": " + trimmed);
+        }
+        return trimmed;
+    }
+
+    private static List<String> requireTokens(List<String> values, Set<String> allowed, String field) {
+        if (values == null || values.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " must not be empty");
+        }
+        LinkedHashSet<String> distinct = new LinkedHashSet<>();
+        for (String value : values) {
+            String token = requireText(value, field);
+            if (!allowed.contains(token)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "unknown " + field + " token: " + token);
+            }
+            distinct.add(token);
+        }
+        return List.copyOf(distinct);
+    }
+
+    private static LocalDate parseDate(String value, String field) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be an ISO date (yyyy-MM-dd)");
+        }
+    }
+
+    private static String stableToken(String value) {
+        return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8)).toString().replace("-", "");
+    }
+}
