@@ -222,6 +222,14 @@ class DividendJdbcIntegrationTests {
                         default_value_cent, status, created_at, updated_at)
                 VALUES ('et_div_jdbc', '分红JDBC权益', 'admission', 1, 0, 'active', ?, ?)
                 """, ts, ts);
+        // fk_issued_entitlements_order（V159 NOT VALID 对新写强制）：权益前先落票订单父行
+        // （TicketTransferJdbcIntegrationTests 同款种子范式）。@Transactional 回滚自动清理，无 FK 序问题。
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
+                        pay_status, issue_status, status, created_at, updated_at)
+                VALUES ('order_div_jdbc', 'ONO_DIV_JDBC', 'tt_div_jdbc', 1, 'web', 250000,
+                        'paid', 'issued', 'created', ?, ?)
+                """, ts, ts);
         jdbcTemplate.update("""
                 INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id,
                         entitlement_code, entitlement_type, merchant_id, total_times, used_times,
