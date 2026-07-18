@@ -207,7 +207,7 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 - `claimRiskAlert` POST `…/{alert_id}/claim`（`risk_alert.claim`）
 - `transferRiskAlert` POST `…/{alert_id}/transfer`（`risk_alert.transfer`）
 - `escalateRiskAlert` POST `…/{alert_id}/escalate`（`risk_alert.escalate`）
-- `resolveRiskAlert` POST `…/{alert_id}/resolve`（`risk_alert.resolve`）
+- `resolveEvidenceRiskAlert` POST `…/{alert_id}/resolve`（`risk_alert.resolve`）
 - `dismissRiskAlert` POST `…/{alert_id}/dismiss`（`risk_alert.dismiss`）
 > 注意区分**孤岛 analytics 域**端点（旧）：`createRiskAlert` POST `/api/v1/analytics/risk-alerts`（perm `analytics.risk_alert.manage`）、`listRiskAlerts` GET（`analytics.risk_alert.view`）、`resolveRiskAlert` POST `/api/v1/analytics/risk-alerts/{id}/resolve`（`analytics.risk_alert.manage`）。统一层为 `/evidence/risk-alerts/*`，孤岛 `analytics_risk_alerts` 为既有桥接对象（V103 不强制改孤岛）。
 
@@ -222,7 +222,7 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 
 **G/W/T 验收**：
 - G: 任一域产生异常。W: reportRiskAlert（带 idempotency_key）。T: risk_alerts 建 open 行，risk_alert_actions 写 report 流水，落 `exception.reported`；重放同 idempotency_key 不重复建。
-- G: 一条 escalated 告警。W: resolveRiskAlert 不传 resolution_conclusion。T: 被拒（DB CHECK `chk_risk_alerts_resolved_conclusion`），无法置 resolved。
+- G: 一条 escalated 告警。W: resolveEvidenceRiskAlert 不传 resolution_conclusion。T: 被拒（DB CHECK `chk_risk_alerts_resolved_conclusion`），无法置 resolved。
 - G: open 告警。W: claim→transfer→escalate→resolve（带结论）。T: status 依次流转，risk_alert_actions 4 条 append-only 留痕，from/to_status 对应，落对应 `exception.*` 事件。
 
 ---
@@ -285,9 +285,9 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 - `analytics_risk_rules`（V106 seed 5 条 domain=compliance）：`STAFF_PRIVATE_DEAL`(high)、`STAFF_PRIVATE_PAYMENT`(critical)、`ABUSE`(high)、`ILLEGAL_PROMISE`(high)、`LURE_PRIVATE_WECHAT`(high)；keywords 落 `rule_config_json`（由硬编码 RISK_KEYWORDS 升级为可配置）。
 - `analytics_risk_alerts`（V106 补 `source_domain` 可空列）：企微命中标 `source_domain='wecom'`（统一表就位后按此口径迁移）。
 
-**API/operationId**（grep openapi，**两个 listWecomRiskHits** 并存）：
+**API/operationId**（grep openapi，两域命中查询并存；AUD-016 起 operationId 去重）：
 - `listWecomRiskHits` GET `/api/v1/compliance/wecom/risk-hits`（perm `wecom.risk_hit.view`）
-- `listWecomRiskHits` GET `/api/v1/integration/wecom/risk-hits`（perm `integration.provider_adapter.view`）— 集成域只读视图
+- `listIntegrationWecomRiskHits` GET `/api/v1/integration/wecom/risk-hits`（perm `integration.provider_adapter.view`）— 集成域只读视图
 - `reviewWecomRiskHit` POST `/api/v1/compliance/wecom/risk-hits/{id}/review`（perm `wecom.risk_hit.review`）
 - `syncWecomConversation` POST `/api/v1/compliance/wecom/conversations/sync`（perm `wecom.sync`）
 
@@ -569,7 +569,7 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 | `docs/bar-business-operations-product-prd-v0.1.md` / `bar-operations-development-design.md` | 功能 3/5/17（订台定金、pour cost、void 冲销）；本文补 V117/V124 CHECK 与冲销事件实证。 |
 | `docs/amusement-*` PRD/dev-design | 功能 7/16（超容、检修 FK）；本文补 V104/V116/V123 实证。 |
 | `docs/android-device-terminal-development-design.md` / `mdm-android-enterprise-implementation-plan-v0.1.md` | 功能 10/14（设备生命周期、capability）；本文补 V107/V111 命名映射（以代码为准）。 |
-| `docs/data-risk-ai-development-design.md` §11.4A | 功能 9（企微违规命中）；本文补 V106 规则码 seed 与两域 listWecomRiskHits 实证。 |
+| `docs/data-risk-ai-development-design.md` §11.4A | 功能 9（企微违规命中）；本文补 V106 规则码 seed 与两域命中查询（listWecomRiskHits/listIntegrationWecomRiskHits）实证。 |
 | `docs/integration-capability-switches-v0.1.md` | 功能 14（D5 10 端权威码）。 |
 | `docs/data-isolation-and-tenant-scope-security-spec-v0.1.md` | 功能 19（project scoped）+ R6-D12 verify:tenant-isolation。 |
 | `docs/openapi/openapi-p0.json`（386 op） | **契约权威源**。本文 operationId/path/`x-permission` 均引自此；契约变更以此为准。 |

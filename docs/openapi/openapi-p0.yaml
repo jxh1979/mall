@@ -4716,7 +4716,7 @@ paths:
     get:
       tags:
         - integration
-      operationId: listWecomRiskHits
+      operationId: listIntegrationWecomRiskHits
       summary: 查询企业微信风险命中
       description: 用于查询企业微信风险命中。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
@@ -10422,7 +10422,7 @@ paths:
     post:
       tags:
         - evidence
-      operationId: resolveRiskAlert
+      operationId: resolveEvidenceRiskAlert
       summary: 关闭风险预警（需结论）
       x-auth-context: staff-token
       x-permission: risk_alert.resolve
@@ -14844,7 +14844,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: "#/components/schemas/ApiResponse"
+                  - $ref: "#/components/schemas/SuccessResponse"
                   - type: object
                     properties:
                       data:
@@ -15443,11 +15443,11 @@ paths:
       x-audit-event-failure: staff.payroll.tax_bracket_view_failed
       responses:
         "200":
-          "": "#/components/responses/Page"
+          "$ref": "#/components/responses/Page"
         "403":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "500":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
       x-auth-context: staff-token
     post:
       tags:
@@ -15492,15 +15492,15 @@ paths:
                   type: string
       responses:
         "200":
-          "": "#/components/responses/Success"
+          "$ref": "#/components/responses/Success"
         "400":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "403":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "409":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "500":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
       x-auth-context: staff-token
   /api/v1/analytics/ai-thresholds:
     get:
@@ -15518,11 +15518,11 @@ paths:
       x-audit-event-failure: analytics.ai_thresholds.view_failed
       responses:
         "200":
-          "": "#/components/responses/Page"
+          "$ref": "#/components/responses/Page"
         "403":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "500":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
       x-auth-context: staff-token
     post:
       tags:
@@ -15551,15 +15551,15 @@ paths:
                   type: string
       responses:
         "200":
-          "": "#/components/responses/Success"
+          "$ref": "#/components/responses/Success"
         "400":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "403":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "409":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "500":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
       x-auth-context: staff-token
   /api/v1/analytics/notification-windows:
     get:
@@ -15577,11 +15577,11 @@ paths:
       x-audit-event-failure: analytics.notification_windows.view_failed
       responses:
         "200":
-          "": "#/components/responses/Page"
+          "$ref": "#/components/responses/Page"
         "403":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "500":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
       x-auth-context: staff-token
     post:
       tags:
@@ -15612,15 +15612,15 @@ paths:
                   type: string
       responses:
         "200":
-          "": "#/components/responses/Success"
+          "$ref": "#/components/responses/Success"
         "400":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "403":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "409":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "500":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
       x-auth-context: staff-token
   /api/v1/analytics/revenue-attribution-rules:
     get:
@@ -15638,11 +15638,11 @@ paths:
       x-audit-event-failure: analytics.revenue_attribution_rule.view_failed
       responses:
         "200":
-          "": "#/components/responses/Page"
+          "$ref": "#/components/responses/Page"
         "403":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "500":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
       x-auth-context: staff-token
     post:
       tags:
@@ -15685,15 +15685,15 @@ paths:
                   type: string
       responses:
         "200":
-          "": "#/components/responses/Success"
+          "$ref": "#/components/responses/Success"
         "400":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "403":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "409":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
         "500":
-          "": "#/components/responses/Error"
+          "$ref": "#/components/responses/Error"
       x-auth-context: staff-token
   /api/v1/leasing/leads:
     get:
@@ -19599,7 +19599,7 @@ paths:
                   maxLength: 2000
       responses:
         "200":
-          $ref: "#/components/responses/Item"
+          $ref: "#/components/responses/Success"
         "403":
           $ref: "#/components/responses/Error"
         "409":

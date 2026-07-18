@@ -93,7 +93,7 @@
 | 2 认领 | claim | `claimRiskAlert` | 复核员认领进 handling |
 | 3 转交 | transfer | `transferRiskAlert` | risk_level=high 需对应权限 |
 | 4 升级 | escalate | `escalateRiskAlert` | 升级到上级处置人 |
-| 5 关闭 | resolve | `resolveRiskAlert` | **必须携 `resolution_conclusion`**（DB CHECK `chk_risk_alerts_resolved_conclusion` 强制，无结论被拒）；resolve `requires_approval=TRUE` |
+| 5 关闭 | resolve | `resolveEvidenceRiskAlert` | **必须携 `resolution_conclusion`**（DB CHECK `chk_risk_alerts_resolved_conclusion` 强制，无结论被拒）；resolve `requires_approval=TRUE` |
 | 5' 误报 | dismiss | `dismissRiskAlert` | 误报驳回，`requires_approval=TRUE` |
 
 > 全程 append-only 留痕（`risk_alert_actions`），事件 `exception.*`（reported/claimed/transferred/escalated/resolved/dismissed）。运营铁律：**异常关闭必须有结论**，无结论无法置 resolved。
