@@ -56,43 +56,60 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
     if (ticketsError) return <Alert type="error" message="票据加载失败" description={ticketsError} />;
     const tickets = ticketsByOrder[orderId] ?? [];
     if (tickets.length === 0) return <Empty description="该订单暂无已出票据（未出票或已退）" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+    // AUD-066 按父票聚合：同一父票的各人份额（slot）归为一张卡片；无父票（存量）按票实例各自成组。
+    const groups = new Map<string, CustomerTicket[]>();
+    for (const t of tickets) {
+      const key = t.parentTicketId ?? t.id;
+      const arr = groups.get(key) ?? [];
+      arr.push(t);
+      groups.set(key, arr);
+    }
     return (
       <List
         size="small"
-        dataSource={tickets}
-        renderItem={(ticket) => (
-          <List.Item
-            data-testid="ticket-item"
-            actions={[
-              <Button
-                key="qr"
-                type="primary"
-                size="small"
-                disabled={ticket.status !== "active"}
-                onClick={() => setQrTicketId(ticket.id)}
-                data-testid="ticket-qr-open"
-              >
-                出示二维码
-              </Button>,
-            ]}
-          >
-            <List.Item.Meta
-              title={
-                <Space>
-                  <span>{ticket.ticketName ?? "票"}</span>
-                  <Tag color={ticket.status === "active" ? "green" : "default"}>{formatBusinessStatus(ticket.status)}</Tag>
-                  {ticket.numPeople > 1 ? <Tag color="blue">{ticket.numPeople} 人票</Tag> : null}
-                </Space>
-              }
-              description={
-                <Text type="secondary">
-                  剩余 {ticket.remainingTimes}/{ticket.totalTimes} 次
-                  {ticket.validTo ? ` · 有效期至 ${new Date(ticket.validTo).toLocaleDateString()}` : ""}
-                </Text>
-              }
-            />
-          </List.Item>
-        )}
+        dataSource={Array.from(groups.values())}
+        renderItem={(members) => {
+          const head = members[0];
+          if (!head) return null;
+          const remaining = members.reduce((sum, m) => sum + m.remainingTimes, 0);
+          const total = members.reduce((sum, m) => sum + m.totalTimes, 0);
+          return (
+            <List.Item data-testid="ticket-item" style={{ display: "block" }}>
+              <List.Item.Meta
+                title={
+                  <Space wrap>
+                    <span>{head.ticketName ?? "票"}</span>
+                    <Tag color={head.status === "active" ? "green" : "default"}>{formatBusinessStatus(head.status)}</Tag>
+                    {head.numPeople > 1 ? <Tag color="blue">{head.numPeople} 人票</Tag> : null}
+                    {head.ticketNo ? <Text type="secondary">票号 {head.ticketNo}</Text> : null}
+                  </Space>
+                }
+                description={
+                  <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                    <Text type="secondary">
+                      剩余 {remaining}/{total} 次
+                      {head.validTo ? ` · 有效期至 ${new Date(head.validTo).toLocaleDateString()}` : ""}
+                    </Text>
+                    <Space wrap>
+                      {members.map((m, idx) => (
+                        <Button
+                          key={m.id}
+                          type="primary"
+                          size="small"
+                          disabled={m.status !== "active"}
+                          onClick={() => setQrTicketId(m.id)}
+                          data-testid="ticket-qr-open"
+                        >
+                          {members.length > 1 ? `第${m.slotIndex ?? idx + 1}人 出示二维码` : "出示二维码"}
+                        </Button>
+                      ))}
+                    </Space>
+                  </Space>
+                }
+              />
+            </List.Item>
+          );
+        }}
       />
     );
   }

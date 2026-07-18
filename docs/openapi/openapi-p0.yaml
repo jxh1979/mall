@@ -6776,6 +6776,28 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/ticketing/ticket-instances:
+    get:
+      tags:
+        - ticketing
+      operationId: listTicketInstances
+      summary: 查询父票实例
+      description: 用于查询父票实例（订单每买 1 张票 = 1 条父票实例，多人票内每人一个权益组 slot；方案2 整票退款/方案3 转赠锚点）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: ticket.verify.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: ticket_instance.viewed
+      x-audit-event-failure: ticket_instance.viewed_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/ticketing/issued-entitlements:
     get:
       tags:

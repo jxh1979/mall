@@ -9,6 +9,7 @@ enum TicketingReadOperation implements AuditedOperation {
     LIST_ENTITLEMENT_TEMPLATES("ticket_entitlement_template.viewed", "ticket_entitlement_template.viewed_failed", "ticket.entitlement.view", "entitlement_template"),
     LIST_TICKET_ORDERS("ticket_order.viewed", "ticket_order.view_failed", "ticket.order.read", "ticket_order"),
     LIST_ISSUED_ENTITLEMENTS("ticket_issued_entitlement.viewed", "ticket_issued_entitlement.viewed_failed", "ticket.verify.view", "issued_entitlement"),
+    LIST_TICKET_INSTANCES("ticket_instance.viewed", "ticket_instance.viewed_failed", "ticket.verify.view", "ticket_instance"),
     LIST_TICKET_REFUND_LINES("ticket_refund_line.viewed", "ticket_refund_line.view_failed", "ticket.refund.view", "ticket_refund_line"),
     LIST_VERIFICATIONS("verification.viewed", "verification.view_failed", "verification.view", "ticket_verification");
 

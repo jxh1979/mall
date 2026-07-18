@@ -39,8 +39,18 @@ final class JdbcTicketingSql {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
+                       parent_ticket_id, slot_index
                   FROM issued_entitlements
+                """;
+    }
+
+    static String ticketInstanceSelect() {
+        return """
+                SELECT id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,
+                       buyer_customer_id, current_holder_customer_id, status, first_used_at, first_session_key,
+                       created_at, updated_at
+                  FROM ticket_instances
                 """;
     }
 }

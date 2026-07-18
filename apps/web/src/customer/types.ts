@@ -22,6 +22,10 @@ export type CustomerTicket = {
   numPeople: number;
   validFrom: string | null;
   validTo: string | null;
+  // AUD-066 父票聚合：按父票聚合展示（票名+N人+剩余次数），每人一个 slot 各自出码。
+  parentTicketId?: string | null;
+  slotIndex?: number;
+  ticketNo?: string | null;
 };
 
 export type TicketOrder = {

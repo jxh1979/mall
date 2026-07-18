@@ -338,14 +338,35 @@ public class TicketOrderService {
                 : now.plusSeconds(86_400);
         // 出票方商户，仅作为模板未配置归属时的回退（保证既有单模板票仍可用）。
         String issuerMerchantId = resolveMerchantId();
-        // 待确认项#1：拆分基数=订单实付（无订单则不拆分，allocated=null）。direct 出票（issueTicketTypeDirectly）
-        // 用合成 order_id 多无真实订单，此时跳过拆分，向后兼容既有单模板票。
-        Long orderAmount = repository.findTicketOrderById(orderId).map(TicketOrderRecord::amountCent).orElse(null);
-        long[] allocations = allocateRevenue(bindings, orderAmount);
+        // AUD-066 按张出票（用户口径）：一单买 N 张同种票=生成 N 个父票实例各一套权益
+        //（修此前"收 N 张钱只发 1 套权益"的 bug）。direct 出票无真实订单 → 恒 1 张，allocated=null 不拆分。
+        TicketOrderRecord order = repository.findTicketOrderById(orderId).orElse(null);
+        int quantity = order == null ? 1 : Math.max(1, order.quantity());
+        Long orderAmount = order == null ? null : order.amountCent();
+        String buyerCustomerId = order == null ? null : order.customerId();
+        // 订单实付先在 quantity 张父票间整数平分（同价均分即正确，分到分不丢分），每张内再按分项单价拆到各权益。
+        long[] perTicketAmount = orderAmount == null ? null : allocateEvenly(orderAmount, quantity);
+        // 父票人数/次数（展示语义）=该票种全部 binding 的 max；实况以子权益 used/total 计。
+        int parentNumPeople = 1;
+        int parentTotalTimes = 1;
+        for (TicketTypeEntitlementRecord binding : bindings) {
+            parentNumPeople = Math.max(parentNumPeople, Math.max(1, binding.numPeople()));
+            parentTotalTimes = Math.max(parentTotalTimes, binding.totalTimes());
+        }
 
         List<IssuedEntitlementResponse> responses = new ArrayList<>();
-        int allocationIndex = 0;
-        for (TicketTypeEntitlementRecord binding : bindings) {
+        for (int t = 1; t <= quantity; t++) {
+            // 每买 1 张 = 1 父票实例（seq_in_order=t）；买家/持有人=订单 customer（方案3 转赠起点）。
+            String parentTicketId = "tkt_" + UUID.randomUUID().toString().replace("-", "");
+            String ticketNo = "T" + now.toEpochMilli() + "-" + t + "-"
+                    + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+            repository.saveTicketInstance(new TicketInstanceRecord(
+                    parentTicketId, ticketNo, orderId, ticketTypeId, t, parentNumPeople, parentTotalTimes,
+                    buyerCustomerId, buyerCustomerId, "active", null, null, now, now));
+            Long thisTicketAmount = perTicketAmount == null ? null : perTicketAmount[t - 1];
+            long[] allocations = allocateRevenue(bindings, thisTicketAmount);
+            int allocationIndex = 0;
+            for (TicketTypeEntitlementRecord binding : bindings) {
             EntitlementTemplateRecord template = repository.findEntitlementTemplateById(binding.entitlementTemplateId())
                     .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
             // R5 审计点②：权益按各自模板归属（联合通票各模板可分属不同商户/场地/点位）。
@@ -391,7 +412,10 @@ public class TicketOrderService {
                             // 结算重构批3-2(PRD §6.2)：发放时把模板消耗单位复制到已发权益，供核销场次判定。
                             template.consumptionWindow(),
                             // 结算重构批3-4(PRD §6.4)：发放时把模板专属商户复制到已发权益，供核销双写定格专属归属。
-                            template.exclusiveMerchantId()
+                            template.exclusiveMerchantId(),
+                            // AUD-066：归父归组——parent_ticket_id + slot_index（用户口径无 slot 0，第 p 人=slot p+1）。
+                            parentTicketId,
+                            p + 1
                     );
                     // 批3-6：require_face_photo=TRUE 的权益必须带一张人脸照(base64)，逐张按发放顺序取用；
                     //   缺照 → 拒 FACE_PHOTO_REQUIRED(在建权益行之前拒，不产生无照的孤儿权益)。=FALSE 的票零影响。
@@ -411,6 +435,7 @@ public class TicketOrderService {
                     }
                     responses.add(new IssuedEntitlementResponse(entitlementCode));
                 }
+            }
             }
         }
         return new IssuedTicketResponse(responses);

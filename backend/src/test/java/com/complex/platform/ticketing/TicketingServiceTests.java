@@ -308,6 +308,85 @@ class TicketingServiceTests {
                 .isEqualTo(1);
     }
 
+    // AUD-066 按张出票（用户口径）：一单买 N 张同种票 = N 个父票实例各一套权益；多人票按人分 slot 1..N（无 slot 0）。
+    @Test
+    void perOrderQuantityFansOutIntoParentTicketsEachWithPersonSlots() {
+        TicketTypeRecord ticketType = createTicketType("qty-fanout");
+        EntitlementTemplateRecord template = createTemplate("qty-fanout", 1, 9900L);
+        // 四人票：binding num_people=4。
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "qty-fanout-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 4, null));
+        // 一单买 2 张。
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "qty-fanout-order", "create", List.of(), ticketType.id(), null, 2,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "cust_qty_fanout"));
+        IssuedTicketResponse issued = service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "qty-fanout-issue", "issue", "issue", List.of()));
+
+        // 2 张 × 4 人 = 8 权益（修此前"收 2 张钱只发 1 套 4 权益"的 bug）。
+        assertThat(issued.issuedEntitlements()).hasSize(8);
+        List<IssuedEntitlementRecord> ents = ticketingRepository.listIssuedEntitlementsByOrderId(order.id());
+        assertThat(ents).hasSize(8);
+        // 2 个父票实例，各 num_people=4。
+        assertThat(ticketingRepository.ticketInstances.values())
+                .filteredOn(ti -> order.id().equals(ti.orderId()))
+                .hasSize(2)
+                .allSatisfy(ti -> assertThat(ti.numPeople()).isEqualTo(4));
+        // 每个父票下 4 条权益，slot_index 恰为 1..4（无 slot 0），每条 num_people=1（一行=一人）。
+        Map<String, List<IssuedEntitlementRecord>> byParent = new LinkedHashMap<>();
+        for (IssuedEntitlementRecord e : ents) {
+            assertThat(e.parentTicketId()).isNotNull();
+            assertThat(e.numPeople()).isEqualTo(1);
+            byParent.computeIfAbsent(e.parentTicketId(), k -> new ArrayList<>()).add(e);
+        }
+        assertThat(byParent).hasSize(2);
+        byParent.values().forEach(group -> assertThat(group)
+                .hasSize(4)
+                .extracting(IssuedEntitlementRecord::slotIndex)
+                .containsExactlyInAnyOrder(1, 2, 3, 4));
+    }
+
+    // AUD-066 多人票同场次核销守卫：同场次内不同人可不同时间分别入场（都放行，不要求同一时刻）。
+    @Test
+    void multiPersonSiblingsAllowSameSessionDifferentTimes() {
+        List<String> codes = issueTwoPersonTicketCodes("mp-same");
+        ticketingRepository.openSessionId = "S1";
+        VerificationResponse first = service.createVerification(new VerificationRequest(
+                "mp-same-1", "qr", codes.get(0), "dev_1", "gate_1", Map.of()));
+        assertThat(first.status()).isEqualTo("success");
+        // 同一场次 S1，第二人稍后入场：放行成功。
+        VerificationResponse second = service.createVerification(new VerificationRequest(
+                "mp-same-2", "qr", codes.get(1), "dev_1", "gate_1", Map.of()));
+        assertThat(second.status()).isEqualTo("success");
+    }
+
+    // AUD-066 多人票同场次核销守卫：跨场次核销拒（一人在 S1 入场后，另一人不能在 S2 入场）。
+    @Test
+    void multiPersonSiblingsRejectCrossSessionVerification() {
+        List<String> codes = issueTwoPersonTicketCodes("mp-cross");
+        ticketingRepository.openSessionId = "S1";
+        service.createVerification(new VerificationRequest(
+                "mp-cross-1", "qr", codes.get(0), "dev_1", "gate_1", Map.of()));
+        // 切到别的场次 S2：另一人份额被拒（不能跨场次/日期）。
+        ticketingRepository.openSessionId = "S2";
+        assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
+                "mp-cross-2", "qr", codes.get(1), "dev_1", "gate_1", Map.of())))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("MULTI_PERSON_CROSS_SESSION_FORBIDDEN"));
+    }
+
+    /** AUD-066 测试辅助：直发一张 2 人票（1 父票 + slot 1/2 两条权益），返回两人的权益码（顺序即 slot 1、slot 2）。 */
+    private List<String> issueTwoPersonTicketCodes(String key) {
+        TicketTypeRecord ticketType = createTicketType(key);
+        EntitlementTemplateRecord template = createTemplate(key, 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                key + "-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 2, null));
+        IssuedTicketResponse issued = service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
+                key + "-issue", "issue", List.of(), "order_" + key, "manual", List.of("qr")));
+        assertThat(issued.issuedEntitlements()).hasSize(2);
+        return issued.issuedEntitlements().stream().map(IssuedEntitlementResponse::entitlementCode).toList();
+    }
+
     // ===== V253 数据存档与审批后删除范式（试点）=====
 
     @Test
@@ -1802,7 +1881,7 @@ class TicketingServiceTests {
                 "bind",
                 List.of(),
                 template.id(),
-                2,
+                1,
                 1,
                 9900L,
                 "default",
@@ -2862,6 +2941,9 @@ class TicketingServiceTests {
         private final Map<String, EntitlementTemplateRecord> entitlementTemplates = new LinkedHashMap<>();
         private final Map<String, TicketTypeEntitlementRecord> ticketTypeEntitlements = new LinkedHashMap<>();
         private final Map<String, IssuedEntitlementRecord> issuedEntitlements = new LinkedHashMap<>();
+        private final Map<String, TicketInstanceRecord> ticketInstances = new LinkedHashMap<>();
+        // AUD-066 可控场次（测试用）：非 null 时 resolveOpenSessionForVenue 返回它（模拟当前 open 场次），否则回退自然日。
+        String openSessionId = null;
         private final Map<String, VerificationRecord> verifications = new LinkedHashMap<>();
         private final Map<String, TerminalSyncTaskRecord> terminalSyncTasks = new LinkedHashMap<>();
         private final Map<String, TicketPriceRuleRecord> priceRules = new LinkedHashMap<>();
@@ -2982,6 +3064,52 @@ class TicketingServiceTests {
         public IssuedEntitlementRecord saveIssuedEntitlement(IssuedEntitlementRecord entitlement) {
             issuedEntitlements.put(entitlement.id(), entitlement);
             return entitlement;
+        }
+
+        @Override
+        public TicketInstanceRecord saveTicketInstance(TicketInstanceRecord instance) {
+            ticketInstances.put(instance.id(), instance);
+            return instance;
+        }
+
+        @Override
+        public Optional<TicketInstanceRecord> findTicketInstanceById(String id) {
+            return Optional.ofNullable(ticketInstances.get(id));
+        }
+
+        @Override
+        public List<TicketInstanceRecord> listTicketInstances() {
+            return new ArrayList<>(ticketInstances.values());
+        }
+
+        @Override
+        public List<TicketInstanceRecord> listTicketInstancesByOrderId(String orderId) {
+            List<TicketInstanceRecord> out = new ArrayList<>();
+            for (TicketInstanceRecord ti : ticketInstances.values()) {
+                if (orderId != null && orderId.equals(ti.orderId())) {
+                    out.add(ti);
+                }
+            }
+            return out;
+        }
+
+        @Override
+        public void markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+            TicketInstanceRecord ti = ticketInstances.get(id);
+            if (ti == null) {
+                return;
+            }
+            ticketInstances.put(id, new TicketInstanceRecord(
+                    ti.id(), ti.ticketNo(), ti.orderId(), ti.ticketTypeId(), ti.seqInOrder(), ti.numPeople(),
+                    ti.totalTimes(), ti.buyerCustomerId(), ti.currentHolderCustomerId(), ti.status(),
+                    ti.firstUsedAt() == null ? now : ti.firstUsedAt(),
+                    ti.firstSessionKey() == null ? sessionKey : ti.firstSessionKey(),
+                    ti.createdAt(), now));
+        }
+
+        @Override
+        public Optional<String> resolveOpenSessionForVenue(String venueId, java.time.Instant now) {
+            return Optional.ofNullable(openSessionId);
         }
 
         @Override

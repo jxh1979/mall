@@ -363,6 +363,45 @@ public class TicketVerificationService {
         return new long[]{used, total};
     }
 
+    /**
+     * AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
+     * 同场次内不同人可不同时间分别入场（不要求同一时刻），但不能跨场次/日期。
+     * 无父票（存量/直发手造）或单人票（父票 num_people&lt;=1）不约束。
+     * 场次键：优先取 venue 当前 open 场次；无场次配置的票回退自然日（"不能跨日期"的机械保证）。
+     * ponytail：读父票首场次键→比对（读在消费前，写用 COALESCE 写一次）；并发极端下可能双放行两场次，
+     *   频度极低、可接受上限；若需强一致改为父票行加锁。
+     */
+    private void enforceMultiPersonSameSession(IssuedEntitlementRecord entitlement, Instant now) {
+        String parentId = entitlement.parentTicketId();
+        if (parentId == null) {
+            return;
+        }
+        TicketInstanceRecord parent = repository.findTicketInstanceById(parentId).orElse(null);
+        if (parent == null || parent.numPeople() <= 1) {
+            return;
+        }
+        String firstKey = parent.firstSessionKey();
+        if (firstKey != null && !firstKey.equals(sessionKeyFor(entitlement.venueId(), now))) {
+            throw ApiException.conflict("MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
+                    "多人票各人份额必须在同一场次内核销，不能跨场次/日期");
+        }
+    }
+
+    /** AUD-066 场次键：venue 当前 open 场次 id；无场次配置回退自然日（系统默认时区）。 */
+    private String sessionKeyFor(String venueId, Instant now) {
+        return repository.resolveOpenSessionForVenue(venueId, now)
+                .orElse(now.atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString());
+    }
+
+    /** AUD-066：首次成功核销定格父票 first_used_at 与首场次键（写一次，COALESCE）。无父票跳过。 */
+    private void markTicketInstanceFirstUse(IssuedEntitlementRecord entitlement, Instant now) {
+        String parentId = entitlement.parentTicketId();
+        if (parentId == null) {
+            return;
+        }
+        repository.markTicketInstanceFirstUse(parentId, sessionKeyFor(entitlement.venueId(), now), now);
+    }
+
     private VerificationResponse verifyEntitlement(VerificationRequest request, String sourceType, String clientTaskId) {
         // 健壮性修复：先校验核销设备已注册，未注册直接干净 400，杜绝 FK 违反中止事务后的脏 500。
         requireRegisteredDevice(request);
@@ -463,6 +502,9 @@ public class TicketVerificationService {
         if (entitlement.validTo() != null && now.isAfter(entitlement.validTo())) {
             throw ApiException.conflict("ENTITLEMENT_EXPIRED", "entitlement has expired");
         }
+        // AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
+        // 同场次内不同人可不同时间分别入场，但不能跨场次/日期。单人票/无父票不约束。
+        enforceMultiPersonSameSession(entitlement, now);
         // 阶段1（2026-07-05 用户拍板）游乐核销走正路：检出游乐类权益（entitlement_type 以 "amusement" 开头，参考
         // 赠饮 gift_drink 的分流范式）→ 分流进游乐正路（定位项目/当前场次 + 三维容量原子扣减 + 写 amusement_verifications，
         // 并在同事务内消费本权益）。成功即在本方法内落一条带交叉引用的 ticket_verifications success 记录并短路返回，
@@ -501,6 +543,8 @@ public class TicketVerificationService {
         // 故本次核销人数恒 = 该权益 num_people(=1)，落 verified_people 记录。
         // （批4：原「verifiedPeople > num_people」是 fan-out 前的恒假死检查，已移除，核销语义不变。）
         int verifiedPeople = updated.numPeople();
+        // AUD-066：首次成功核销定格父票 first_used_at + 首场次键（方案2 整票退款闸门、方案3 绑定人锚点）。
+        markTicketInstanceFirstUse(updated, now);
         // 结算重构批3-1(PRD §6.1)：核销成功 → 判定本次结算价并写入核销记录 settlement_price_cent（供对账/by_entitlement_price 分账）。
         Long settlementPriceCent = resolveSettlementPrice(updated);
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(
@@ -646,6 +690,7 @@ public class TicketVerificationService {
         // 游乐侧已消费权益（used_times+1）；重读拿最新 used_times 用于积分/结算事件。
         IssuedEntitlementRecord consumed = repository.findIssuedEntitlementById(entitlement.id()).orElse(entitlement);
         int verifiedPeople = consumed.numPeople();
+        markTicketInstanceFirstUse(consumed, now);
         // D6：结算价沿用通票权益 value_amount_cent（游乐核销不另判物理/虚拟结算价）。
         Long settlementPriceCent = consumed.valueAmountCent();
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(

@@ -122,7 +122,28 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("entitlement_kind"),
                 nullableLong(resultSet, "agreement_price_cent"),
                 resultSet.getString("consumption_window"),
-                resultSet.getString("exclusive_merchant_id")
+                resultSet.getString("exclusive_merchant_id"),
+                resultSet.getString("parent_ticket_id"),
+                resultSet.getInt("slot_index")
+        );
+    }
+
+    TicketInstanceRecord mapTicketInstance(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new TicketInstanceRecord(
+                resultSet.getString("id"),
+                resultSet.getString("ticket_no"),
+                resultSet.getString("order_id"),
+                resultSet.getString("ticket_type_id"),
+                resultSet.getInt("seq_in_order"),
+                resultSet.getInt("num_people"),
+                resultSet.getInt("total_times"),
+                resultSet.getString("buyer_customer_id"),
+                resultSet.getString("current_holder_customer_id"),
+                resultSet.getString("status"),
+                nullableInstant(resultSet, "first_used_at"),
+                resultSet.getString("first_session_key"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at")
         );
     }
 

@@ -282,13 +282,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                     entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                     value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                    allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
+                    allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
+                    parent_ticket_id, slot_index
                 )
                 VALUES (
                     :id, :ticket_type_id, :order_id, :entitlement_template_id, :entitlement_code,
                     :entitlement_type, :merchant_id, :venue_id, :point_id, :total_times, :used_times,
                     :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people,
-                    :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window, :exclusive_merchant_id
+                    :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window, :exclusive_merchant_id,
+                    :parent_ticket_id, :slot_index
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -311,9 +313,62 @@ class JdbcTicketingRepository implements TicketingRepository {
                     entitlement_kind = EXCLUDED.entitlement_kind,
                     agreement_price_cent = EXCLUDED.agreement_price_cent,
                     consumption_window = EXCLUDED.consumption_window,
-                    exclusive_merchant_id = EXCLUDED.exclusive_merchant_id
+                    exclusive_merchant_id = EXCLUDED.exclusive_merchant_id,
+                    parent_ticket_id = EXCLUDED.parent_ticket_id,
+                    slot_index = EXCLUDED.slot_index
                 """, parameterSource.issuedEntitlementParameters(entitlement));
         return entitlement;
+    }
+
+    @Override
+    public TicketInstanceRecord saveTicketInstance(TicketInstanceRecord instance) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_instances (
+                    id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,
+                    buyer_customer_id, current_holder_customer_id, status, first_used_at, first_session_key,
+                    created_at, updated_at
+                )
+                VALUES (
+                    :id, :ticket_no, :order_id, :ticket_type_id, :seq_in_order, :num_people, :total_times,
+                    :buyer_customer_id, :current_holder_customer_id, :status, :first_used_at, :first_session_key,
+                    :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, parameterSource.ticketInstanceParameters(instance));
+        return instance;
+    }
+
+    @Override
+    public Optional<TicketInstanceRecord> findTicketInstanceById(String id) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketInstanceSelect() + " WHERE id = :id",
+                Map.of("id", id), rowMapper::mapTicketInstance).stream().findFirst();
+    }
+
+    @Override
+    public List<TicketInstanceRecord> listTicketInstances() {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketInstanceSelect() + " ORDER BY created_at DESC, id",
+                rowMapper::mapTicketInstance);
+    }
+
+    @Override
+    public List<TicketInstanceRecord> listTicketInstancesByOrderId(String orderId) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketInstanceSelect()
+                + " WHERE order_id = :order_id ORDER BY seq_in_order, id",
+                Map.of("order_id", orderId), rowMapper::mapTicketInstance);
+    }
+
+    @Override
+    public void markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+        jdbcTemplate.update("""
+                UPDATE ticket_instances
+                   SET first_used_at = COALESCE(first_used_at, :now),
+                       first_session_key = COALESCE(first_session_key, :session_key),
+                       updated_at = :now
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("session_key", sessionKey, java.sql.Types.VARCHAR)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override
@@ -322,7 +377,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
+                       parent_ticket_id, slot_index
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
@@ -346,7 +402,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id
+                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
+                       parent_ticket_id, slot_index
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)

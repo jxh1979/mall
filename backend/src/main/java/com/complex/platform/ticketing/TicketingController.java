@@ -263,6 +263,12 @@ public class TicketingController {
         return ApiResponse.ok(service.listIssuedEntitlements());
     }
 
+    @GetMapping("/ticketing/ticket-instances")
+    public ApiResponse<PageResponse<TicketInstanceRecord>> listTicketInstances() {
+        authorizationService.requirePermission("ticket.verify.view");
+        return ApiResponse.ok(service.listTicketInstances());
+    }
+
     @GetMapping("/ticketing/orders")
     public ApiResponse<PageResponse<TicketOrderRecord>> listTicketOrders() {
         authorizationService.requirePermission("ticket.order.read");

@@ -571,6 +571,14 @@ public class TicketingService {
         );
     }
 
+    // AUD-066 父票实例查询（后台核销台账/退款审阅锚点）：沿 ticket.verify.view 权限、project scope。
+    public PageResponse<TicketInstanceRecord> listTicketInstances() {
+        return operations.readPage(
+                TicketingReadOperation.LIST_TICKET_INSTANCES,
+                repository::listTicketInstances
+        );
+    }
+
     public PageResponse<TicketOrderRecord> listTicketOrders() {
         // 行级隔离（V135）：按调用方 scope 过滤——平台看全部、商户仅见自身受理订单（堵 ticket.order.read 下放后的跨租户泄露）。
         return operations.readPage(
@@ -594,8 +602,12 @@ public class TicketingService {
         }
         String ticketName = repository.findTicketTypeById(order.ticketTypeId())
                 .map(TicketTypeRecord::ticketName).orElse(null);
+        // AUD-066：父票号供"我的票"按父票聚合展示（parent_ticket_id -> ticket_no）。
+        java.util.Map<String, String> ticketNoByParent = repository.listTicketInstancesByOrderId(resolvedOrderId).stream()
+                .collect(java.util.stream.Collectors.toMap(TicketInstanceRecord::id, TicketInstanceRecord::ticketNo, (a, b) -> a));
         return repository.listIssuedEntitlementsByOrderId(resolvedOrderId).stream()
-                .map(entitlement -> CustomerTicketResponse.of(entitlement, ticketName))
+                .map(entitlement -> CustomerTicketResponse.of(entitlement, ticketName,
+                        entitlement.parentTicketId() == null ? null : ticketNoByParent.get(entitlement.parentTicketId())))
                 .toList();
     }
 

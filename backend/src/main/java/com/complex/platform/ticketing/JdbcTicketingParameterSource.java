@@ -111,7 +111,27 @@ final class JdbcTicketingParameterSource {
                 .addValue("entitlement_kind", entitlement.entitlementKind())
                 .addValue("agreement_price_cent", entitlement.agreementPriceCent())
                 .addValue("consumption_window", entitlement.consumptionWindow())
-                .addValue("exclusive_merchant_id", entitlement.exclusiveMerchantId());
+                .addValue("exclusive_merchant_id", entitlement.exclusiveMerchantId())
+                .addValue("parent_ticket_id", entitlement.parentTicketId())
+                .addValue("slot_index", entitlement.slotIndex());
+    }
+
+    MapSqlParameterSource ticketInstanceParameters(TicketInstanceRecord instance) {
+        return new MapSqlParameterSource()
+                .addValue("id", instance.id())
+                .addValue("ticket_no", instance.ticketNo())
+                .addValue("order_id", instance.orderId())
+                .addValue("ticket_type_id", instance.ticketTypeId())
+                .addValue("seq_in_order", instance.seqInOrder())
+                .addValue("num_people", instance.numPeople())
+                .addValue("total_times", instance.totalTimes())
+                .addValue("buyer_customer_id", instance.buyerCustomerId())
+                .addValue("current_holder_customer_id", instance.currentHolderCustomerId())
+                .addValue("status", instance.status())
+                .addValue("first_used_at", timestampWithTimeZone(instance.firstUsedAt()))
+                .addValue("first_session_key", instance.firstSessionKey())
+                .addValue("created_at", timestampWithTimeZone(instance.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(instance.updatedAt()));
     }
 
     MapSqlParameterSource verificationParameters(VerificationRecord verification) {

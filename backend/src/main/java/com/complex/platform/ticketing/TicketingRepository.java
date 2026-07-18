@@ -54,6 +54,27 @@ public interface TicketingRepository {
 
     Optional<IssuedEntitlementRecord> findIssuedEntitlementByCode(String entitlementCode);
 
+    // AUD-066 父票实例：default 兼容既有假实现（不落父票，无父票的核销守卫自然跳过）；Jdbc+InMemory 双写覆盖。
+    default TicketInstanceRecord saveTicketInstance(TicketInstanceRecord instance) {
+        return instance;
+    }
+
+    default Optional<TicketInstanceRecord> findTicketInstanceById(String id) {
+        return Optional.empty();
+    }
+
+    default List<TicketInstanceRecord> listTicketInstances() {
+        return java.util.List.of();
+    }
+
+    default List<TicketInstanceRecord> listTicketInstancesByOrderId(String orderId) {
+        return java.util.List.of();
+    }
+
+    /** AUD-066：首次成功核销定格父票 first_used_at 与首场次键（写一次，COALESCE）。default 空操作。 */
+    default void markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
+    }
+
     /**
      * 结算重构批3-1(PRD §6.1)：按 bar_products.id 取实物权益的酒吧内部结算价(V152 internal_settlement_price_cent)。
      * 无此商品或内部价为空 → 空(判定层回退 value_amount)。default 返回空兼容既有测试假实现。
