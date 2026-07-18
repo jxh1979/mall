@@ -36791,6 +36791,21 @@
             "type": "string",
             "description": "`inspected_at` 时间字段；使用 ISO 8601 格式。",
             "format": "date-time"
+          },
+          "device_id": {
+            "type": "string",
+            "description": "设备业务码（可空=项目级巡检）；每台设备按各自安全检查周期巡检，与核销 deviceId 同口径。",
+            "maxLength": 128
+          },
+          "inspector_id": {
+            "type": "string",
+            "description": "巡检人 ID（可空）；结构化落库，供看板/审计读取。",
+            "maxLength": 64
+          },
+          "abnormal_note": {
+            "type": "string",
+            "description": "异常说明（可空）；overall_result 非 pass 时填报，进入审计留痕。",
+            "maxLength": 1000
           }
         }
       },

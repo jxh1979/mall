@@ -9391,6 +9391,29 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+  /api/v1/customer/stored-value/accounts:
+    get:
+      tags:
+        - customer
+      operationId: customerStoredValueAccounts
+      summary: 客人储值卡列表（我的全部卡：通用卡 + 各商户卡分别余额）
+      x-permission: customer.stored_value.view
+      x-data-scope: customer
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
+      x-idempotency-required: false
+      x-audit-event-success: customer.stored_value_accounts_viewed
+      x-audit-event-failure: customer.stored_value_accounts_viewed_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: customer-token
   /api/v1/loyalty/stored-value/{customer_id}/freeze:
     post:
       tags:
@@ -18609,6 +18632,37 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/loyalty/stored-value/merchant-card-config:
+    post:
+      tags:
+        - customer
+      operationId: configureStoredValueMerchantCard
+      summary: 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）
+      x-permission: customer.stored_value.refund
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: stored_value.merchant_card_configured
+      x-audit-event-failure: stored_value.merchant_card_config_failed
+      requestBody:
+        $ref: "#/components/requestBodies/StoredValueMerchantCardConfigRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/audit/operation-events:
     get:
       tags:
@@ -23392,6 +23446,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StoredValueMerchantRefundRuleRequest"
+    StoredValueMerchantCardConfigRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StoredValueMerchantCardConfigRequest"
     SpaceTypeRequest:
       required: true
       content:
@@ -25210,8 +25270,7 @@ components:
           maxLength: 2048
         ticket_instance_ids:
           type: array
-          description: 方案2 整票退款：要退该订单下哪几张父票实例（ticket_instances ID）；不传/空=退该订单全部“完全未核销”的票实例。
-            金额按各实例出票定格的实付分摊额算定；父票任一权益已核销则整张不可退（TICKET_INSTANCE_VERIFIED_NO_REFUND）。
+          description: "方案2 整票退款：要退该订单下哪几张父票实例（ticket_instances ID）；不传/空=退该订单全部“完全未核销”的票实例。金额按各实例出票定格的实付分摊额算定；父票任一权益已核销则整张不可退（TICKET_INSTANCE_VERIFIED_NO_REFUND）。"
           items:
             type: string
             maxLength: 64
@@ -31677,6 +31736,26 @@ components:
           type: integer
           format: int32
           description: 退款比例（基点 0..10000，可退回客户的份额，余下商户留存）；空=默认 10000（全额）。
+    StoredValueMerchantCardConfigRequest:
+      type: object
+      description: 请求载荷 `StoredValueMerchantCardConfigRequest`；AUD-061 商户储值卡平台配置（仅平台）：发卡资格 + 资金模式（预收/代收），只影响之后新开的卡。
+      additionalProperties: false
+      required:
+        - merchant_id
+      properties:
+        merchant_id:
+          type: string
+          description: 商户ID。
+          maxLength: 64
+        card_issuance_enabled:
+          type: boolean
+          description: 发卡资格：开通后客人才能给该商户卡充值；空＝关。
+        fund_ownership:
+          type: string
+          description: 资金模式：merchant_prepaid=商户预收；platform_collect=平台代收；空＝商户预收。
+          enum:
+            - merchant_prepaid
+            - platform_collect
     SpaceTypeRequest:
       type: object
       description: 空间类型字典录入/修改请求；type_code 为唯一键，存在则更新名称/排序/状态。

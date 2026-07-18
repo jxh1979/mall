@@ -218,10 +218,61 @@ function checkOperation(apiPath, method, operation) {
   }
 }
 
+// json↔yaml 深等价：两份契约的 paths+components 必须逐值一致（键序不计），防止只改一边的漂移再次发生。
+function checkJsonYamlEquivalence(jsonDoc, yamlDoc) {
+  const diffs = [];
+  const typeOf = (v) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
+  function walk(a, b, location) {
+    const ta = typeOf(a);
+    const tb = typeOf(b);
+    if (ta !== tb) {
+      diffs.push(`${location}: type ${ta} (json) vs ${tb} (yaml)`);
+      return;
+    }
+    if (ta === "array") {
+      if (a.length !== b.length) {
+        diffs.push(`${location}: array length ${a.length} (json) vs ${b.length} (yaml)`);
+        return;
+      }
+      a.forEach((item, i) => walk(item, b[i], `${location}[${i}]`));
+      return;
+    }
+    if (ta === "object") {
+      for (const key of Object.keys(a)) {
+        if (key in b) {
+          walk(a[key], b[key], `${location}.${key}`);
+        } else {
+          diffs.push(`${location}.${key}: missing in yaml`);
+        }
+      }
+      for (const key of Object.keys(b)) {
+        if (!(key in a)) {
+          diffs.push(`${location}.${key}: missing in json (extra in yaml)`);
+        }
+      }
+      return;
+    }
+    if (a !== b) {
+      diffs.push(`${location}: ${JSON.stringify(a)} (json) vs ${JSON.stringify(b)} (yaml)`);
+    }
+  }
+  walk(jsonDoc.paths ?? {}, yamlDoc.paths ?? {}, "paths");
+  walk(jsonDoc.components ?? {}, yamlDoc.components ?? {}, "components");
+  if (diffs.length > 0) {
+    fail(`openapi-p0.json vs openapi-p0.yaml: ${diffs.length} deep-equality diff(s) in paths/components; first ${Math.min(diffs.length, 10)}:`);
+    for (const diff of diffs.slice(0, 10)) {
+      fail(`  ${diff}`);
+    }
+  }
+}
+
+let openapiJsonDoc = null;
+
 if (!fs.existsSync(openapiPath)) {
   fail(`OpenAPI file not found: ${openapiPath}`);
 } else {
   const openapi = JSON.parse(fs.readFileSync(openapiPath, "utf8"));
+  openapiJsonDoc = openapi;
   checkNoQuestionPlaceholder(openapi, "openapi");
   checkDocumentIntegrity(openapi, "openapi-p0.json");
 
@@ -257,7 +308,11 @@ if (!fs.existsSync(openapiYamlPath)) {
 } else {
   try {
     const openapiYaml = YAML.parse(fs.readFileSync(openapiYamlPath, "utf8"), { maxAliasCount: -1 });
+    checkNoQuestionPlaceholder(openapiYaml, "openapi-p0.yaml");
     checkDocumentIntegrity(openapiYaml, "openapi-p0.yaml");
+    if (openapiJsonDoc) {
+      checkJsonYamlEquivalence(openapiJsonDoc, openapiYaml);
+    }
   } catch (error) {
     fail(`openapi-p0.yaml: failed to parse (${error.message})`);
   }
