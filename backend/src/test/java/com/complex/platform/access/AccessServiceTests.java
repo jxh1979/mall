@@ -936,6 +936,32 @@ class AccessServiceTests {
         );
     }
 
+    @Test
+    void listGrantRequestsFiltersRowsStampedWithOtherProjects() {
+        // 2026-07-18 收尾（多综合体前置）：授权申请行带 project_id 时，项目员工只见本项目行（currentProjectScopeQuietly
+        // 谓词范式）；行无 project_id 时沿用目标账号同组织判定；平台管理员全量。
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        accessRepository.users.put("usr_scope_target", new AccessUser(
+                "usr_scope_target", "scope-target", "staff", "org_a", null, "active", now));
+        accessRepository.saveGrantRequest(grantRequestRow("agr_scope_a", "usr_scope_target", "org_a", now));
+        accessRepository.saveGrantRequest(grantRequestRow("agr_scope_b", "usr_scope_target", "org_b", now));
+        accessRepository.saveGrantRequest(grantRequestRow("agr_scope_none", "usr_scope_target", null, now));
+
+        authenticateAsOrgUser("usr_scope_viewer", "scope-viewer", "org_a");
+        assertThat(service.listGrantRequests(null).items()).extracting(AccessGrantRequestRecord::id)
+                .contains("agr_scope_a", "agr_scope_none").doesNotContain("agr_scope_b");
+
+        authenticateAsPlatformAdmin("seed-org");
+        assertThat(service.listGrantRequests(null).items()).extracting(AccessGrantRequestRecord::id)
+                .contains("agr_scope_a", "agr_scope_b", "agr_scope_none");
+    }
+
+    private AccessGrantRequestRecord grantRequestRow(String id, String targetUserId, String projectId, Instant now) {
+        return new AccessGrantRequestRecord(id, "temporary_permission", targetUserId, null, null, null, null,
+                null, null, null, List.of("ops.production_readiness.view"), null, now.plusSeconds(3600), false,
+                "pending", null, "scope test", "usr_requester", null, null, projectId, null, now, now);
+    }
+
     private void authenticateAsPlatformAdmin(String organizationId) {
         AuthService.UserRecord user = new AuthService.UserRecord(
                 "usr_admin", "seed-admin", "hash", "platform_admin", organizationId, null, "active",

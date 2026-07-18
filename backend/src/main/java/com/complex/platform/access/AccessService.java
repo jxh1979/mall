@@ -800,6 +800,12 @@ public class AccessService {
         if (!isBlank(actor.merchantId())) {
             return actor.merchantId().equals(request.merchantId());
         }
+        // 2026-07-18 收尾（多综合体前置）：项目员工按本项目 scope 强制过滤——申请行带 project_id 时必须与
+        // actor 项目一致（沿用 currentProjectScopeQuietly 谓词范式）；行无 project_id 时仍走目标账号同组织判定。
+        String projectScope = authorizationService.currentProjectScopeQuietly().orElse(null);
+        if (projectScope != null && !isBlank(request.projectId()) && !projectScope.equals(request.projectId())) {
+            return false;
+        }
         if (isBlank(actor.organizationId()) || isBlank(request.targetUserId())) {
             return false;
         }
