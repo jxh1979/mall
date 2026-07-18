@@ -36264,10 +36264,12 @@
           "refresh_interval_seconds": {
             "type": "integer",
             "enum": [
+              10,
+              15,
               30,
               60
             ],
-            "description": "动态码刷新秒数（可空=默认60）；仅允许 30/60。"
+            "description": "动态码刷新秒数（可空=默认15）；仅允许 10/15/30/60。"
           },
           "bar_id": {
             "type": "string",

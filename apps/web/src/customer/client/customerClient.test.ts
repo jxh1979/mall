@@ -40,20 +40,23 @@ describe("customerClient unwrap/normalize", () => {
 });
 
 describe("deriveRefreshIntervalSeconds", () => {
-  it("returns 60 by default when timestamps missing", () => {
-    expect(deriveRefreshIntervalSeconds(null, null)).toBe(60);
+  it("缺时间戳时回退默认 15 秒(2026-07-18 拍板)", () => {
+    expect(deriveRefreshIntervalSeconds(null, null)).toBe(15);
   });
 
-  it("derives 30 for a short window", () => {
+  it("按窗口精确推导四档 10/15/30/60", () => {
+    expect(deriveRefreshIntervalSeconds("2026-06-18T00:00:00Z", "2026-06-18T00:00:10Z")).toBe(10);
+    expect(deriveRefreshIntervalSeconds("2026-06-18T00:00:00Z", "2026-06-18T00:00:15Z")).toBe(15);
     expect(deriveRefreshIntervalSeconds("2026-06-18T00:00:00Z", "2026-06-18T00:00:30Z")).toBe(30);
-  });
-
-  it("derives 60 for a 60s window", () => {
     expect(deriveRefreshIntervalSeconds("2026-06-18T00:00:00Z", "2026-06-18T00:01:00Z")).toBe(60);
   });
 
-  it("falls back to 60 for non-positive window", () => {
-    expect(deriveRefreshIntervalSeconds("2026-06-18T00:01:00Z", "2026-06-18T00:00:00Z")).toBe(60);
+  it("非法窗口取最接近合法档(20 秒→15)", () => {
+    expect(deriveRefreshIntervalSeconds("2026-06-18T00:00:00Z", "2026-06-18T00:00:20Z")).toBe(15);
+  });
+
+  it("非正窗口回退默认 15 秒", () => {
+    expect(deriveRefreshIntervalSeconds("2026-06-18T00:01:00Z", "2026-06-18T00:00:00Z")).toBe(15);
   });
 });
 

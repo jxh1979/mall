@@ -77,12 +77,23 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     const createBody = (createCall?.[1] ?? {}) as Record<string, unknown>;
     expect(createBody.status).toBeUndefined();
     expect(createBody.validity_days).toBe(1);
-    expect(createBody.refresh_interval_seconds).toBe(60);
+    expect(createBody.refresh_interval_seconds).toBe(15);
     expect(createBody.refundable).toBe(false);
     // 发布载荷带必填理由。
     const publishCall = postSpy.mock.calls.find((c) => String(c[0]).includes("/publish"));
     expect(((publishCall?.[1] ?? {}) as Record<string, unknown>).reason).toBe("暑期档新票上架");
     // 发布成功后弹窗关闭。
     await waitFor(() => expect(screen.queryByTestId("ticket-name")).toBeNull());
+  });
+
+  // 2026-07-18 拍板:验证二维码默认 15 秒动态刷新,后台 10/15/30/60 四档可调。
+  it("动态码刷新下拉:默认15秒,提供10/15/30/60四档", async () => {
+    const postSpy = vi.fn(async () => ({} as unknown));
+    renderPage(postSpy);
+    await waitFor(() => expect(screen.getByTestId("ticket-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("ticket-create-open"));
+    const select = screen.getByTestId("ticket-refresh-seconds") as HTMLSelectElement;
+    expect(select.value).toBe("15");
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(["10", "15", "30", "60"]);
   });
 });

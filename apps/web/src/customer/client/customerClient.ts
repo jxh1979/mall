@@ -171,15 +171,16 @@ export async function customerLogout(): Promise<void> {
 }
 
 // 二维码刷新窗口：后端 TicketCredentialResponse 仅返回 issuedAt/expiresAt（不含 refresh_interval_seconds），
-// 客人端按 (expiresAt - issuedAt) 推导刷新间隔，落在票种级 {30,60} 秒口径，缺省 60 秒。
+// 客人端按 (expiresAt - issuedAt) 推导刷新间隔，落在票种级 {10,15,30,60} 秒口径，缺省 15 秒（2026-07-18 拍板默认）。
 export function deriveRefreshIntervalSeconds(issuedAt?: string | null, expiresAt?: string | null): number {
-  const fallback = 60;
+  const fallback = 15;
   if (!issuedAt || !expiresAt) return fallback;
   const issued = Date.parse(issuedAt);
   const expires = Date.parse(expiresAt);
   if (Number.isNaN(issued) || Number.isNaN(expires)) return fallback;
   const seconds = Math.round((expires - issued) / 1000);
   if (seconds <= 0) return fallback;
-  // 防伪口径：30 或 60 秒在线刷新；其它取最接近的合法窗口。
-  return seconds <= 45 ? 30 : 60;
+  // 防伪口径：10/15/30/60 秒在线刷新；其它取最接近的合法窗口。
+  const allowed = [10, 15, 30, 60];
+  return allowed.reduce((best, option) => (Math.abs(option - seconds) < Math.abs(best - seconds) ? option : best));
 }
