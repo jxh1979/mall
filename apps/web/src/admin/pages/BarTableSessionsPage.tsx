@@ -48,7 +48,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [tableCreateOpen, setTableCreateOpen] = React.useState(false);
   const [tableCreateError, setTableCreateError] = React.useState("");
   // 从零起单三表单：新建卡座 / 新建订台（代客）/ 开台。全站零英文，受权限按钮约束。
-  const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
+  const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", tableType: "card_seat", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
   const [newReservation, setNewReservation] = React.useState({ barId: "", tableId: "", guestCount: "2", salespersonUserId: "" });
   const [newSession, setNewSession] = React.useState({ barId: "", tableId: "", businessDate: todayBusinessDate(), guestCount: "2", salesStaffId: "", serviceStaffId: "" });
   // 行明细抽屉：三张业务表整行可点 → 完整字段（状态中文·开台/关台/预定时间中文）。
@@ -230,6 +230,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       const result = await api.post("/api/v1/bar/tables", {
         barId: newTable.barId.trim(),
         tableName: newTable.tableName.trim(),
+        tableType: newTable.tableType,
         capacity: Number(newTable.capacity),
         allowedFreeEntryCount: Number(newTable.allowedFreeEntryCount),
         minimumSpendCent: Math.round(Number(newTable.minimumSpendYuan) * 100),
@@ -407,6 +408,13 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
               <>
                 <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-table-bar" value={newTable.barId} onChange={(v) => setNewTable((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
                 <label>卡座名称<input data-testid="bar-new-table-name" value={newTable.tableName} onChange={(event) => setNewTable((p) => ({ ...p, tableName: event.target.value }))} placeholder="如 VIP-01" /></label>
+                <label>桌台类型
+                  <select data-testid="bar-new-table-type" aria-label="桌台类型" value={newTable.tableType} onChange={(event) => setNewTable((p) => ({ ...p, tableType: event.target.value }))}>
+                    <option value="card_seat">卡座（出品走接单→制作→备好→送达流转）</option>
+                    <option value="vip">VIP 包坐（同卡座流转）</option>
+                    <option value="bar_counter">吧台位（直点即点即取，不走出品流转）</option>
+                  </select>
+                </label>
               </>
             ),
           },
@@ -426,6 +434,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         summary={[
           { label: "所属酒吧", value: newTable.barId.trim() || "未填写" },
           { label: "卡座名称", value: newTable.tableName.trim() || "未填写" },
+          { label: "桌台类型", value: newTable.tableType === "bar_counter" ? "吧台位（不走出品流转）" : newTable.tableType === "vip" ? "VIP 包坐" : "卡座" },
           { label: "可进人数", value: newTable.capacity.trim() || "未填写" },
           { label: "免通票入场人数", value: newTable.allowedFreeEntryCount.trim() || "0" },
           { label: "低消（元）", value: newTable.minimumSpendYuan.trim() || "0" },
