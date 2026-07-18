@@ -69,6 +69,14 @@ function parseSchema() {
         }
       }
     }
+
+    // DROP TABLE — 已删除的表移出隔离基线（按版本序处理：本文件的 DROP 在其 CREATE/ALTER 之后应用；
+    // 跨文件“建→删→重建”场景由后续迁移的 CREATE TABLE 自然重新加入，故不会误删重建表）。
+    const dropRe = /DROP TABLE\s+(?:IF EXISTS\s+)?"?([a-zA-Z_][\w]*)"?/gi;
+    let dropMatch;
+    while ((dropMatch = dropRe.exec(sql)) !== null) {
+      tables.delete(dropMatch[1].toLowerCase());
+    }
   }
   return { tables, files };
 }
