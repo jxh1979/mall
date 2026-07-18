@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
         "spring.datasource.username=complex",
-        "spring.datasource.password=complex_dev_pwd",
+        "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}",
         "complex.smoke.admin.username=p0_jdbc_test_admin",
         "complex.smoke.admin.password=p0_jdbc_test_password"
 })
