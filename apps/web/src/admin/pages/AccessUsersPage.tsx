@@ -210,7 +210,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           <p className="admin-preview">外包/审计等机构的顶层账号须绑定所属机构后,外包工作台才能按机构过滤其工单/巡检数据;换机构=重新绑定覆盖。</p>
           <select aria-label="选择账号" data-testid="partner-bind-user" value={bindUserId} onChange={(event) => setBindUserId(event.target.value)}>
             <option value="">选择账号</option>
-            {rows.map((u) => (<option key={u.id} value={u.id}>{u.username}（{shortId(u.id)}）</option>))}
+            {rows.filter((u) => u.accountType === "outsourced_vendor").map((u) => (<option key={u.id} value={u.id}>{u.username}（{shortId(u.id)}）</option>))}
           </select>
           <select aria-label="选择外部协作机构" data-testid="partner-bind-org" value={bindOrgId} onChange={(event) => setBindOrgId(event.target.value)}>
             <option value="">选择机构</option>

@@ -73,8 +73,13 @@ public class PartnerService {
             if (!"active".equals(org.status())) {
                 throw ApiException.conflict("PARTNER_ORG_NOT_ACTIVE", "partner org is not active");
             }
-            if (!repository.accessUserExists(userId.trim())) {
-                throw ApiException.notFound("ACCESS_USER_NOT_FOUND", "access user not found");
+            String accountType = repository.findAccessUserAccountType(userId.trim())
+                    .orElseThrow(() -> ApiException.notFound("ACCESS_USER_NOT_FOUND", "access user not found"));
+            // 复核 Important:只允许外包类账号入机构——机构管理员可停用其"下属"、机构到期批量禁用挂靠账号,
+            // 平台/员工/商户账号被误绑=外部方可停用平台账号(权限倒挂)+配额被吃+名单外泄。
+            if (!"outsourced_vendor".equals(accountType)) {
+                throw ApiException.badRequest("ACCESS_USER_NOT_OUTSOURCED",
+                        "only outsourced vendor accounts can be bound to a partner org");
             }
             repository.updateUserPartnerOrg(userId.trim(), orgId);
             auditEventService.recordSuccess("partner.org.user_bound", "partner.org.manage",

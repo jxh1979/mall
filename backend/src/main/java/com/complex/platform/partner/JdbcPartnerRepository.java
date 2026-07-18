@@ -82,12 +82,11 @@ class JdbcPartnerRepository implements PartnerRepository {
     }
 
     @Override
-    public boolean accessUserExists(String userId) {
-        Integer hit = jdbcTemplate.query(
-                "SELECT 1 FROM access_users WHERE id = :id",
+    public java.util.Optional<String> findAccessUserAccountType(String userId) {
+        return java.util.Optional.ofNullable(jdbcTemplate.query(
+                "SELECT account_type FROM access_users WHERE id = :id",
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", userId),
-                rs -> rs.next() ? 1 : null);
-        return hit != null;
+                rs -> rs.next() ? rs.getString(1) : null));
     }
 
     @Override

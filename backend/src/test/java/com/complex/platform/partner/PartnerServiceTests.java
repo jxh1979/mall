@@ -53,11 +53,22 @@ class PartnerServiceTests {
     }
 
     @Test
-    void bindUserToOrgValidatesOrgActiveAndUserExistsThenUpdates() {
+    void bindUserToOrgValidatesOrgActiveAndOutsourcedUserThenUpdates() {
         when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "active", null)));
-        when(repository.accessUserExists("u1")).thenReturn(true);
+        when(repository.findAccessUserAccountType("u1")).thenReturn(Optional.of("outsourced_vendor"));
         service.bindUserToOrg(ORG, " u1 ");
         verify(repository).updateUserPartnerOrg("u1", ORG);
+    }
+
+    @Test
+    void bindUserToOrgRejectsNonOutsourcedAccountTypes() {
+        // 复核实害链:误绑平台账号→外部机构管理员可停用之/到期任务静默禁用——非外包类账号一律拒。
+        when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "active", null)));
+        when(repository.findAccessUserAccountType("admin1")).thenReturn(Optional.of("platform_admin"));
+        assertThatThrownBy(() -> service.bindUserToOrg(ORG, "admin1"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("ACCESS_USER_NOT_OUTSOURCED"));
+        verify(repository, org.mockito.Mockito.never()).updateUserPartnerOrg(any(), any());
     }
 
     @Test
@@ -69,7 +80,7 @@ class PartnerServiceTests {
         assertThatThrownBy(() -> service.bindUserToOrg(ORG, "u1"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PARTNER_ORG_NOT_ACTIVE"));
         when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "active", null)));
-        when(repository.accessUserExists("ghost_user")).thenReturn(false);
+        when(repository.findAccessUserAccountType("ghost_user")).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.bindUserToOrg(ORG, "ghost_user"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("ACCESS_USER_NOT_FOUND"));
         verify(repository, org.mockito.Mockito.never()).updateUserPartnerOrg(any(), any());

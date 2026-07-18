@@ -8,6 +8,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 // AUD-033：账号绑定外部协作机构——选账号+选机构→POST /partner/orgs/{id}/bind-user。
 const USERS = [
   { id: "u-1", username: "外包甲管理员", account_type: "outsourced_vendor", status: "active", organization_id: "org-1" },
+  { id: "u-2", username: "平台管理员乙", account_type: "platform_admin", status: "active", organization_id: "org-1" },
 ];
 const ORGS = [
   { id: "epo-1", org_name: "维保甲公司", status: "active" },
@@ -54,6 +55,10 @@ describe("AccessUsersPage 账号绑定外部协作机构", () => {
     render(<AccessUsersPage {...props} />);
 
     await waitFor(() => expect(screen.getByTestId("partner-bind-user")).toBeTruthy());
+    // 复核 Important:非外包类账号不得出现在绑定下拉(误绑平台账号=外部方可停用之)。
+    const userSelect = screen.getByTestId("partner-bind-user") as HTMLSelectElement;
+    await waitFor(() => expect(userSelect.options.length).toBe(2)); // 空选项 + 外包账号
+    expect(Array.from(userSelect.options).map((o) => o.textContent ?? "").join("|")).not.toContain("平台管理员乙");
     const orgSelect = screen.getByTestId("partner-bind-org") as HTMLSelectElement;
     await waitFor(() => expect(orgSelect.options.length).toBe(2)); // 空选项 + active 机构;停用机构被过滤
     expect(Array.from(orgSelect.options).map((o) => o.textContent)).not.toContain("已停用机构");
