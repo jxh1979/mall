@@ -68,7 +68,12 @@ public class TicketTransferService {
     }
 
     // ── 发起 ────────────────────────────────────────────────────────────────
-    /** 发起转赠。initiatorPhone=发起人登录手机号明文(用于"不能转给自己"盲索引比对)。 */
+    /**
+     * 发起转赠。initiatorPhone=发起人登录手机号明文(用于"不能转给自己"盲索引比对)。
+     * AUD-018 事务+行锁:锁定 slot 全部权益行后再检未核销,与核销 atomicUseEntitlement 竞争同一行锁——
+     * 核销先提交则此处读到已用即拒;本事务先占锁则核销消费在提交后由核销侧新快照复检 pending 回滚。
+     */
+    @Transactional
     public TicketTransferResponse initiate(String initiatorCustomerId, String initiatorPhone,
             CustomerTicketTransferRequest request) {
         String initiator = requireText(initiatorCustomerId, "customer_id");
@@ -93,9 +98,9 @@ public class TicketTransferService {
             throw ApiException.forbidden("TICKET_TRANSFER_NOT_HOLDER", "只有当前持票人可以转赠");
         }
 
-        // slot 全部权益未核销且 active(多次票首核后/任何已核销/已冻结 → 拒)。
+        // slot 全部权益未核销且 active(多次票首核后/任何已核销/已冻结 → 拒)。锁定读(FOR UPDATE)排除并发核销。
         List<IssuedEntitlementRecord> slotEntitlements =
-                repository.listIssuedEntitlementsByParentSlot(parentTicketId, slotIndex);
+                repository.listIssuedEntitlementsByParentSlotForUpdate(parentTicketId, slotIndex);
         if (slotEntitlements.isEmpty()) {
             throw ApiException.conflict("TICKET_TRANSFER_SLOT_EMPTY", "该票没有可转赠的权益");
         }
@@ -153,8 +158,7 @@ public class TicketTransferService {
             }
         }
 
-        auditEventService.recordSuccess("ticket_transfer.created", "not_applicable", "ticket_transfer", id,
-                null, null, Map.of("channel", channel, "parent_ticket_id", parentTicketId, "slot_index", slotIndex));
+        // 成功/失败审计统一由 TicketingService 包装层(executeWrite)按契约事件 ticket_transfer.created/create_failed 记录。
         return TicketTransferResponse.of(record, resolveTicketName(parentTicketId), true);
     }
 
@@ -187,6 +191,13 @@ public class TicketTransferService {
             }
         }
 
+        // AUD-018 领取前复验:该 slot 权益必须仍全部未核销且 active(封堵竞态/历史残留的"已用票在途转赠"被领取)。
+        for (IssuedEntitlementRecord e : repository.listIssuedEntitlementsByParentSlot(
+                transfer.parentTicketId(), transfer.slotIndex())) {
+            if (e.usedTimes() > 0 || !"active".equals(e.status())) {
+                throw ApiException.conflict("TICKET_TRANSFER_SLOT_USED", "该票已核销过,不能领取");
+            }
+        }
         Instant now = clock.instant();
         int rows = repository.claimTicketTransfer(id, claimer, now);
         if (rows == 0) {
@@ -199,14 +210,15 @@ public class TicketTransferService {
         }
         // 赢家:同事务原子改 slot 持有人=受赠人;单人票同步父票 current_holder 保持一致。
         repository.upsertSlotHolder(transfer.parentTicketId(), transfer.slotIndex(), claimer, now);
+        // AUD-012 持有人变更即撤销该 slot 现存 active 动态凭证:原持有人此前取的动态码立即失效
+        // (核销端读到非 active 即拒;在途核销由消费 CAS markTicketCredentialConsumed 兜底回滚)。
+        repository.revokeActiveCredentialsForSlot(transfer.parentTicketId(), transfer.slotIndex(), now);
         repository.findTicketInstanceById(transfer.parentTicketId()).ifPresent(parent -> {
             if (parent.numPeople() <= 1) {
                 repository.updateTicketInstanceHolder(parent.id(), claimer, now);
             }
         });
-        auditEventService.recordSuccess("ticket_transfer.claimed", "not_applicable", "ticket_transfer", id,
-                null, null, Map.of("receiver_customer_id", claimer, "parent_ticket_id", transfer.parentTicketId(),
-                        "slot_index", transfer.slotIndex()));
+        // 成功/失败审计统一由 TicketingService 包装层(executeWrite)按契约事件 ticket_transfer.claimed/claim_failed 记录。
         TicketTransferRecord claimed = repository.findTicketTransferById(id).orElse(transfer);
         return TicketTransferResponse.of(claimed, resolveTicketName(transfer.parentTicketId()), false);
     }
