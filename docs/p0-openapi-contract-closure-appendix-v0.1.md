@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 629 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 312 | 人工权限矩阵正文未覆盖 209 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1258 | 人工事件矩阵正文未覆盖 1216 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 629 | 人工任务映射正文未逐项覆盖 623 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI operation 数 | 630 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 311 | 人工权限矩阵正文未覆盖 209 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1260 | 人工事件矩阵正文未覆盖 1218 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 630 | 人工任务映射正文未逐项覆盖 624 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 377 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -83,7 +83,7 @@
 | `amusement.verification.override` | staff-token | project-amusement, project-amusement-point | 2 | listAmusementManualOverrides, createAmusementManualOverride | 已在权限矩阵正文出现 |
 | `amusement.verification.view` | staff-token | project-amusement | 1 | listAmusementVerifications | 已在权限矩阵正文出现 |
 | `amusement.waiver.acknowledge` | staff-token | project-amusement | 1 | acknowledgeAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
-| `analytics.dashboard.view` | staff-token | platform, project | 17 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, getAiThresholds, listNotificationWindows, listRevenueAttributionRules ... | 已在权限矩阵正文出现 |
+| `analytics.dashboard.view` | staff-token | platform, project | 18 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getMetricDetail, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, getAiThresholds, listNotificationWindows ... | 已在权限矩阵正文出现 |
 | `analytics.group.view` | staff-token | group | 1 | getGroupOverview | OpenAPI 补充，以本附录为准 |
 | `analytics.operating_params.manage` | staff-token | platform, project | 7 | upsertOperatingParams, updateAiThresholds, upsertRevenueAttributionRule, upsertBusinessDayCutoff, updateAnomalyConfig, upsertHolidayPeriod, fetchHolidayCalendar | OpenAPI 补充，以本附录为准 |
 | `analytics.report.export` | staff-token | platform | 1 | exportMonthlyReport | OpenAPI 补充，以本附录为准 |
@@ -189,7 +189,7 @@
 | `finance.property_fee.manage` | staff-token | platform | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.difference.create` | staff-token | platform | 1 | createFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.resolve` | staff-token | project-entity-channel | 1 | closeFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
-| `finance.reconciliation.view` | staff-token | project | 1 | listReconciliationBatches | 已在权限矩阵正文出现 |
+| `finance.reconciliation.view` | staff-token | project, project-entity-channel | 2 | listReconciliationBatches, listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `finance.refund.create` | staff-token | project-order | 1 | createFinanceRefund | 已在权限矩阵正文出现 |
 | `finance.turnover_rent.bill` | staff-token | platform | 1 | billTurnoverRent | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.manage` | staff-token | project-space | 2 | createFloorPlanImport, publishFloorPlanImport | OpenAPI 补充，以本附录为准 |
@@ -267,7 +267,6 @@
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
 | `not_applicable` | customer-token, device-credential, open-app-credential, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 34 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr ... | 已在权限矩阵正文出现 |
-| `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
@@ -545,6 +544,8 @@
 | `analytics.metric_anomaly.viewed_failed` | failure | `listMetricAnomalies` | `GET` | `/api/v1/analytics/metric-anomalies` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.metric_definition.viewed` | success | `listMetricDefinitions` | `GET` | `/api/v1/analytics/metric-definitions` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.metric_definition.viewed_failed` | failure | `listMetricDefinitions` | `GET` | `/api/v1/analytics/metric-definitions` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.metric_detail.view_failed` | failure | `getMetricDetail` | `GET` | `/api/v1/analytics/metric-detail` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.metric_detail.viewed` | success | `getMetricDetail` | `GET` | `/api/v1/analytics/metric-detail` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.monthly_comparison.view_failed` | failure | `getMonthlyComparison` | `GET` | `/api/v1/analytics/monthly-comparison` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.monthly_comparison.viewed` | success | `getMonthlyComparison` | `GET` | `/api/v1/analytics/monthly-comparison` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.monthly_report.export_failed` | failure | `exportMonthlyReport` | `GET` | `/api/v1/analytics/reports/monthly-export` | ANA-风控分析 | `analytics.report.export` | 接口级事件，以本附录为准 |
@@ -1004,8 +1005,8 @@
 | `finance_property_fee.rate_set_failed` | failure | `createPropertyFeeRate` | `POST` | `/api/v1/finance/property-fee/rates` | FIN-财务台账 | `finance.property_fee.manage` | 接口级事件，以本附录为准 |
 | `finance_property_fee.rate_view_failed` | failure | `listPropertyFeeRates` | `GET` | `/api/v1/finance/property-fee/rates` | FIN-财务台账 | `finance.property_fee.manage` | 接口级事件，以本附录为准 |
 | `finance_property_fee.rate_viewed` | success | `listPropertyFeeRates` | `GET` | `/api/v1/finance/property-fee/rates` | FIN-财务台账 | `finance.property_fee.manage` | 接口级事件，以本附录为准 |
-| `finance_reconciliation.difference_found` | success | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `openplatform.reconcile.execute` | 接口级事件，以本附录为准 |
-| `finance_reconciliation.view_failed` | failure | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `openplatform.reconcile.execute` | 接口级事件，以本附录为准 |
+| `finance_reconciliation.difference_found` | success | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `finance.reconciliation.view` | 接口级事件，以本附录为准 |
+| `finance_reconciliation.view_failed` | failure | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `finance.reconciliation.view` | 接口级事件，以本附录为准 |
 | `finance_refund.create_failed` | failure | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
 | `finance_refund.created` | success | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
 | `finance.daily_close_summary.view_failed` | failure | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
@@ -1679,6 +1680,7 @@
 | ANA-风控分析 | `getAnomalyConfig` | `GET` | `/api/v1/analytics/anomaly-config` | 读指标异常检测阈值 | `analytics.dashboard.view` | `analytics.anomaly_config.viewed` / `analytics.anomaly_config.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getGroupOverview` | `GET` | `/api/v1/analytics/group-overview` | 集团总览视图 | `analytics.group.view` | `analytics.group_overview.viewed` / `analytics.group_overview.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getHolidayComparison` | `GET` | `/api/v1/analytics/holiday-comparison` | 节假日对比(今年 vs 去年同名) | `analytics.dashboard.view` | `analytics.holiday_comparison.viewed` / `analytics.holiday_comparison.view_failed` | web | operation 级补充 |
+| ANA-风控分析 | `getMetricDetail` | `GET` | `/api/v1/analytics/metric-detail` | KPI统一指标明细(指标登记簿) | `analytics.dashboard.view` | `analytics.metric_detail.viewed` / `analytics.metric_detail.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getMonthlyComparison` | `GET` | `/api/v1/analytics/monthly-comparison` | 月度对比(环比/同比) | `analytics.dashboard.view` | `analytics.monthly_comparison.viewed` / `analytics.monthly_comparison.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | P0 经营总览 | `analytics.dashboard.view` | `analytics.dashboard_viewed` / `analytics.dashboard_view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getRobotAnalytics` | `GET` | `/api/v1/analytics/robot` | 获取机器人经营分析 | `analytics.dashboard.view` | `analytics.robot.viewed` / `analytics.robot.viewed_failed` | web | operation 级补充 |
@@ -1894,7 +1896,7 @@
 | FIN-财务台账 | `listMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses` | 商户费用归集台账分页查询（分红净利润费用侧） | `finance.merchant_expense.view` | `merchant_expense.listed` / `merchant_expense.list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listPropertyFeeRates` | `GET` | `/api/v1/finance/property-fee/rates` | 列出某项目的物业费费率 | `finance.property_fee.manage` | `finance_property_fee.rate_viewed` / `finance_property_fee.rate_view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | 查询对账批次 | `finance.reconciliation.view` | `finance.reconciliation_batch.viewed` / `finance.reconciliation_batch.viewed_failed` | web | operation 级补充 |
-| FIN-财务台账 | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `openplatform.reconcile.execute` | `finance_reconciliation.difference_found` / `finance_reconciliation.view_failed` | web | operation 级补充 |
+| FIN-财务台账 | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `finance.reconciliation.view` | `finance_reconciliation.difference_found` / `finance_reconciliation.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listRefundAuthorityLimits` | `GET` | `/api/v1/finance/refund-authority/limits` | 查询退款自助额度配置 | `refund.authority.view` | `refund_authority_limit.viewed` / `refund_authority_limit.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listRefundAutoRules` | `GET` | `/api/v1/finance/refund-authority/rules` | 查询退款自动放行规则配置 | `refund.authority.view` | `refund_auto_rule.viewed` / `refund_auto_rule.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
