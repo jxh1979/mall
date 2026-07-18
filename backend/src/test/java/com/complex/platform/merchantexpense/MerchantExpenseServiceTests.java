@@ -252,12 +252,27 @@ class MerchantExpenseServiceTests {
     }
 
     @Test
-    void merchantScopedActorManualEntryIsForcedToOwnMerchant() {
-        // I-2（写路径①）：商户 scope 账号手工录入他商户费用 → 强制收敛为自己商户（与读路径同口径）。
+    void merchantScopedActorManualEntryForOtherMerchantIsRejected() {
+        // I-2（写路径①，MerchantBillingService.createBillOnce 同款口径）：商户 scope 账号
+        // 手工录入他商户费用 → 拒绝（CROSS_MERCHANT_FORBIDDEN），不静默改写归属。
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant-scope"));
+        assertThatThrownBy(() -> service.createManual(
+                new MerchantExpenseEntryRequest("scope-key", "merchant-other", "2026-07", "labor", 100_00L, "越权录入")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(repository.rows).isEmpty();
+        // 记自己商户照常可录。
+        MerchantExpenseEntryRecord own = service.createManual(
+                new MerchantExpenseEntryRequest("scope-key-own", "merchant-scope", "2026-07", "labor", 100_00L, "自家人工"));
+        assertThat(own.merchantId()).isEqualTo("merchant-scope");
+    }
+
+    @Test
+    void platformActorCanCreateManualEntryForAnyMerchant() {
+        // I-2 正例：平台账号（无商户 scope）可代任意商户录入。
         MerchantExpenseEntryRecord saved = service.createManual(
-                new MerchantExpenseEntryRequest("scope-key", "merchant-other", "2026-07", "labor", 100_00L, "自家人工"));
-        assertThat(saved.merchantId()).isEqualTo("merchant-scope");
+                new MerchantExpenseEntryRequest("platform-key", "merchant-any", "2026-07", "labor", 100_00L, "代录人工"));
+        assertThat(saved.merchantId()).isEqualTo("merchant-any");
     }
 
     @Test

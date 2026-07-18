@@ -87,7 +87,7 @@ public class MerchantExpenseService {
 
     /**
      * 手工录入（人工/摊销/其他等）：理由必填；幂等键带请求指纹（同 key 同载荷重放返回同一行，
-     * 同 key 不同载荷抛 IDEMPOTENCY_CONFLICT）。商户 scope 账号强制只记自己商户（scope 覆盖请求参数）。
+     * 同 key 不同载荷抛 IDEMPOTENCY_CONFLICT）。商户 scope 账号只能记自己商户，传他商户 id 拒绝。
      */
     @Transactional
     public MerchantExpenseEntryRecord createManual(MerchantExpenseEntryRequest request) {
@@ -108,8 +108,10 @@ public class MerchantExpenseService {
     }
 
     private MerchantExpenseEntryRecord createManualInternal(MerchantExpenseEntryRequest request) {
-        // I-2 商户 scope 收敛：带商户绑定的账号只能记自己商户的费用（scope 覆盖请求 merchant_id）。
-        String merchantId = requireText(scopeMerchant(request.merchantId()), "merchant_id");
+        // I-2 商户 scope 守卫（MerchantBillingService.createBillOnce 同款）：请求体显式携带 merchant_id 的写路径，
+        // 商户账号传他商户 id 一律拒绝（不静默改写）；平台账号（scope 为空）可代任意商户录入。
+        String merchantId = requireText(request.merchantId(), "merchant_id");
+        checkMerchantOwnership(merchantId);
         String period = requirePeriod(request.period());
         String expenseType = requireText(request.expenseType(), "expense_type");
         if (!EXPENSE_TYPES.contains(expenseType)) {
