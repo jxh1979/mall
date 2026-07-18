@@ -151,6 +151,16 @@ public class BarPosCatalogService {
             merchantId = existing.merchantId();
             createdAt = existing.createdAt();
         }
+        // AUD-043 写侧门控：无内部价权限者不得录入/改动成本价（读侧脱敏已做，gov:197 仅授权角色可查看和录入）。
+        // 脱敏后的编辑者看不到真值会提交 null，此时保留原值不清空；提交异于原值的非空成本价则拒绝。
+        Long existingInternalPrice = existing == null ? null : existing.internalSettlementPriceCent();
+        if (!authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
+            if (internalPrice != null && !java.util.Objects.equals(internalPrice, existingInternalPrice)) {
+                throw ApiException.forbidden("BAR_INTERNAL_PRICE_FORBIDDEN",
+                        "recording bar internal settlement price requires bar.internal_settlement_price.view");
+            }
+            internalPrice = existingInternalPrice;
+        }
         List<BarComboRequest.Item> reqItems = r.items() == null ? List.of() : r.items();
         if (reqItems.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "combo must contain at least one product");

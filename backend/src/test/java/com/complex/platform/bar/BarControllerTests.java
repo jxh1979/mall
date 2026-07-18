@@ -215,6 +215,31 @@ class BarControllerTests {
         verify(redemptionService).redeemDrink(any(BarEntitlementDrinkRedemptionRequest.class));
     }
 
+    @Test
+    void createProductRejectsInternalPriceWithoutInternalPricePermission() throws Exception {
+        // AUD-043 写侧门控：持 bar.product.manage 但无 bar.internal_settlement_price.view 者，录入内部结算价被拒。
+        when(authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")).thenReturn(false);
+        mockMvc.perform(post("/api/v1/bar/products")
+                        .with(user("bar").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"bar-ip-deny\",\"bar_id\":\"bar_1\",\"product_name\":\"Whisky\",\"category\":\"spirit\",\"price_cent\":128800,\"internal_settlement_price_cent\":5000,\"status\":\"active\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("BAR_INTERNAL_PRICE_FORBIDDEN"));
+        verify(service, org.mockito.Mockito.never()).createProduct(any(BarProductRequest.class));
+    }
+
+    @Test
+    void createProductAllowsInternalPriceWithInternalPricePermission() throws Exception {
+        // 持内部价专用权限者可正常录入成本价。
+        when(authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")).thenReturn(true);
+        mockMvc.perform(post("/api/v1/bar/products")
+                        .with(user("bar").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"bar-ip-ok\",\"bar_id\":\"bar_1\",\"product_name\":\"Whisky\",\"category\":\"spirit\",\"price_cent\":128800,\"internal_settlement_price_cent\":5000,\"status\":\"active\"}"))
+                .andExpect(status().isOk());
+        verify(service).createProduct(any(BarProductRequest.class));
+    }
+
     private String bodyFor(String path, boolean withIdempotencyKey) {
         String idempotency = withIdempotencyKey ? "\"idempotency_key\":\"bar-once\"," : "";
         if (path.contains("entitlement-redemptions")) {

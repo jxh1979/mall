@@ -7264,6 +7264,158 @@
         }
       }
     },
+    "/api/v1/inventory/transfer-orders/{order_id}/return": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "returnTransferOrder",
+        "summary": "借调归还",
+        "description": "借用型（lending/borrow）借调收货后归还，溯源码归属翻回出让方并置 returned。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
+        "x-permission": "inventory.transfer_order.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.transfer_order_returned",
+        "x-audit-event-failure": "inventory.transfer_order_return_failed",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "借调流转单 ID 路径参数。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "幂等键（X-Idempotency-Key 请求体镜像）。"
+                  },
+                  "scanned_trace_codes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "随货溯源码清单（高价值必扫核对，防调包）。"
+                  },
+                  "operator_note": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "操作备注。"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/transfer-orders/{order_id}/cancel": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "cancelTransferOrder",
+        "summary": "取消借调单",
+        "description": "取消借调流转单：created 直接取消；shipped 需冲销发货时挂的应付（未收款才可冲）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
+        "x-permission": "inventory.transfer_order.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.transfer_order_cancelled",
+        "x-audit-event-failure": "inventory.transfer_order_cancel_failed",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "借调流转单 ID 路径参数。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "幂等键（X-Idempotency-Key 请求体镜像）。"
+                  },
+                  "scanned_trace_codes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "随货溯源码清单（高价值必扫核对，防调包）。"
+                  },
+                  "operator_note": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "操作备注。"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/inventory/stock-movements/{movement_type}": {
       "post": {
         "tags": [
