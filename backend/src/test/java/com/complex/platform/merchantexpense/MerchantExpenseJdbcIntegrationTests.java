@@ -10,7 +10,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * V297 商户费用归集台账 JDBC 集成测试（本迁移交付时按约定未在交付会话运行，待 DB 窗口跑）：
@@ -29,6 +32,9 @@ class MerchantExpenseJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private static MerchantExpenseEntryRecord manualEntry(String id, String merchantId, long amountCent) {
         return new MerchantExpenseEntryRecord(id, merchantId, "2026-07", "labor", amountCent,
@@ -161,16 +167,22 @@ class MerchantExpenseJdbcIntegrationTests {
     void autoSourceRefUniqueIndexGuardsIndependentlyOfPrimaryKey() {
         // (source, source_ref) 部分唯一索引须独立于 id 主键生效：不同 id、同 (source, source_ref) 的
         // 自动挂接行必须被拒（防绕过 id 派生规则手插重复挂接行、双计费用）。
+        // 冲突 INSERT 包进 NESTED（savepoint）子事务：唯一索引冲突后中止被限制在 savepoint 内，
+        // 外层事务/连接照常可用（同类前车之鉴见上方 append-only 拆分注释；不用 REQUIRES_NEW——
+        // 独立连接会等外层未提交的同键插入，同线程自锁挂死）。
         repository.insertEntry(new MerchantExpenseEntryRecord(
                 "mex_ae_dup_src_a", "merchant_jdbc", "2026-07", "energy", 100_00L,
                 "auto_energy", "arap_dup_src", "JDBC 集成测试挂接行 A", "usr_test",
                 Instant.parse("2026-07-18T00:00:00Z")));
-        assertThatThrownBy(() -> repository.insertEntry(new MerchantExpenseEntryRecord(
+        TransactionTemplate nested = new TransactionTemplate(transactionManager);
+        nested.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
+        assertThatThrownBy(() -> nested.execute(status -> repository.insertEntry(new MerchantExpenseEntryRecord(
                 "mex_ae_dup_src_b", "merchant_jdbc", "2026-07", "energy", 100_00L,
                 "auto_energy", "arap_dup_src", "JDBC 集成测试挂接行 B（应被唯一索引拒绝）", "usr_test",
-                Instant.parse("2026-07-18T00:00:00Z"))))
+                Instant.parse("2026-07-18T00:00:00Z")))))
                 .hasMessageContaining("uq_mex_auto_source_ref");
-        // manual 冲销行不受该索引约束（部分索引 WHERE source <> 'manual'）：同一原行的冲销行照常可插。
+        // savepoint 回滚后外层连接干净：B 未落库，A 仍在。
         assertThat(repository.findById("mex_ae_dup_src_b")).isEmpty();
+        assertThat(repository.findById("mex_ae_dup_src_a")).isPresent();
     }
 }
