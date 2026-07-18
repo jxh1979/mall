@@ -192,7 +192,7 @@ class JdbcEnergyRepository implements EnergyRepository {
                    AND r.status IN ('recorded','reviewed')
                    AND (:project_id IS NULL OR m.project_id = :project_id)
                 """, new MapSqlParameterSource().addValue("gather_object", gatherObject)
-                .addValue("period", period).addValue("project_id", projectId), BigDecimal.class);
+                .addValue("period", period).addValue("project_id", projectId, java.sql.Types.VARCHAR), BigDecimal.class);
         return sum == null ? BigDecimal.ZERO : sum;
     }
 
@@ -208,7 +208,7 @@ class JdbcEnergyRepository implements EnergyRepository {
                    AND r.status IN ('recorded','reviewed')
                    AND (:project_id IS NULL OR m.project_id = :project_id)
                 """, new MapSqlParameterSource().addValue("merchant_id", merchantId)
-                .addValue("period", period).addValue("project_id", projectId), BigDecimal.class);
+                .addValue("period", period).addValue("project_id", projectId, java.sql.Types.VARCHAR), BigDecimal.class);
         return sum == null ? BigDecimal.ZERO : sum;
     }
 

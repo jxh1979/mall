@@ -225,7 +225,7 @@ public class JdbcSettlementTransactionRepository {
                        verified_count, num_people, verified_amount_cent,
                        settlement_status, created_at
                   FROM settlement_transactions
-                 WHERE transaction_type = verification_settled
+                 WHERE transaction_type = 'verification_settled'
                    AND (:project_id::text  IS NULL OR project_id  = :project_id)
                    AND (:merchant_id::text IS NULL OR merchant_id = :merchant_id)
                  ORDER BY created_at DESC, id
@@ -253,7 +253,7 @@ public class JdbcSettlementTransactionRepository {
                 .addValue("merchant_id", merchantId);
         Long n = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM settlement_transactions
-                 WHERE transaction_type = verification_settled
+                 WHERE transaction_type = 'verification_settled'
                    AND (:project_id::text  IS NULL OR project_id  = :project_id)
                    AND (:merchant_id::text IS NULL OR merchant_id = :merchant_id)
                 """, params, Long.class);

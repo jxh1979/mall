@@ -354,8 +354,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                  ORDER BY updated_at DESC, id
                  LIMIT :limit
                 """, new MapSqlParameterSource()
-                .addValue("merchant_id", merchantId)
-                .addValue("venue_id", venueId)
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("venue_id", venueId, java.sql.Types.VARCHAR)
                 .addValue("limit", limit), (resultSet, rowNumber) ->
                 TicketEntitlementMapper.toOfflineEntitlementResponse(rowMapper.mapIssuedEntitlement(resultSet, rowNumber)));
     }
