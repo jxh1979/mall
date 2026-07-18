@@ -114,3 +114,41 @@ describe("VendorWorkOrdersPage 行明细抽屉", () => {
     expect(drawer.textContent).not.toContain("normal");
   });
 });
+
+
+describe("VendorWorkOrdersPage 副资源降级（AUD-032）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/vendor/work-orders");
+  });
+
+  function forbidden(): Response {
+    return new Response(
+      JSON.stringify({ success: false, code: "FORBIDDEN", message: "forbidden", request_id: "req-403" }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    );
+  }
+
+  it("设备接口 403 → 工单主表照常渲染，设备区块显示无权限降级提示，整页不报错", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/equipment")) return Promise.resolve(forbidden());
+      if (url.includes("/work-orders")) return Promise.resolve(envelope(WORK_ORDERS));
+      return Promise.resolve(envelope([]));
+    }));
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "vendor", accountType: "outsourced_vendor" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<VendorWorkOrdersPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("vendor-work-order-row-wo-1")).toBeTruthy());
+    expect(screen.getByTestId("vendor-work-orders-table")).toBeTruthy();
+    expect(screen.getByTestId("vendor-work-order-equipment-degraded").textContent).toContain("无权");
+    expect(screen.queryByTestId("vendor-work-order-equipment-table")).toBeNull();
+    expect(screen.queryByTestId("admin-error")).toBeNull();
+    expect(props.setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+});

@@ -1,5 +1,5 @@
 import React from "react";
-import { formatApiErrorDetail } from "../../shared/apiError";
+import { ApiError, formatApiErrorDetail } from "../../shared/apiError";
 
 /** message=业务话术（原 err.message），detail=技术详情（path/status/request_id/原文），供折叠报障。 */
 export interface AdminResourceError {
@@ -63,4 +63,24 @@ export function useAdminResource(
   }, [reload]);
 
   return { loading, error, reload };
+}
+
+/**
+ * 副资源容错加载（AUD-032）：页面主资源之外的辅助数据（如外包工单页的设备台账、
+ * 外包巡检页的模板）改经此包装后再进 Promise.all——副资源 403/失败不再整体 reject
+ * 拖垮整页，而是降级为 fallback + 区块级提示文案；主资源仍走 useAdminResource 原有错误路径。
+ */
+export interface SecondaryResource<T> {
+  data: T;
+  /** 非 null 表示该区块已降级，UI 用它替换区块内容展示。 */
+  notice: string | null;
+}
+
+export async function loadSecondary<T>(load: () => Promise<T>, fallback: T): Promise<SecondaryResource<T>> {
+  try {
+    return { data: (await load()) ?? fallback, notice: null };
+  } catch (error) {
+    const denied = error instanceof ApiError && error.detail.status === 403;
+    return { data: fallback, notice: denied ? "当前账号无权查看该数据" : "该数据加载失败，可稍后重试，不影响本页其他内容" };
+  }
 }
