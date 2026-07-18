@@ -126,7 +126,7 @@ npm run verify:production-evidence-crosslinks` |
 
 ### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
 
-本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线（后端 surefire 现有报告 2039 tests / OpenAPI 622 operations / Flyway 最新 V295 / P0 契约与安全基线以 `npm run verify:*` 输出为准，2026-07-02 刷新）以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。<!-- 文档goal(2026-06-30)：事实基线刷新为现有 surefire 报告 1606 tests、OpenAPI 516 ops、Flyway V182（179 个迁移）；不声明刚完成全量验证 -->
+本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线（后端 surefire 现有报告 2039 tests / OpenAPI 622 operations / Flyway 最新 V295 / P0 契约与安全基线以 `npm run verify:*` 输出为准，2026-07-18 刷新）以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。<!-- 文档goal(2026-06-30)：事实基线刷新为现有 surefire 报告 1606 tests、OpenAPI 516 ops、Flyway V182（179 个迁移）；不声明刚完成全量验证 -->
 
 | 交付物 | 入口 |
 |---|---|
