@@ -93,6 +93,14 @@ bar:
       # 生产必须由 env COMPLEX_BAR_INVITATION_SIGNING_SECRET 注入强随机密钥；下方 dev 默认仅供本地/测试，切勿用于生产。
       secret: ${COMPLEX_BAR_INVITATION_SIGNING_SECRET:complex-dev-bar-invitation-secret-change-me}
 
+compliance:
+  wecom:
+    webhook:
+      signing:
+        # 企微 webhook 回调 HMAC 验签密钥（AUD 复核 P1-2 新增）。生产必须由 env COMPLEX_WECOM_WEBHOOK_SIGNING_SECRET
+        # 注入强随机密钥；下方 dev 默认仅供本地/测试，切勿用于生产（SigningSecretGuard 在 prod 对弱/默认值 fail-closed）。
+        secret: ${COMPLEX_WECOM_WEBHOOK_SIGNING_SECRET:complex-dev-wecom-webhook-secret-change-me}
+
 keyvault:
   keys:
     # PII 字段加密密钥（AES-256-GCM，经 SHA-256 派生 32 字节）。安装期由 U 盘 provision 写入本地/环境，
