@@ -4555,7 +4555,7 @@
         ],
         "operationId": "listReconciliationDifferences",
         "summary": "对账差异",
-        "x-permission": "openplatform.reconcile.execute",
+        "x-permission": "finance.reconciliation.view",
         "x-data-scope": "project-entity-channel",
         "x-terminal-allowed": [
           "web"

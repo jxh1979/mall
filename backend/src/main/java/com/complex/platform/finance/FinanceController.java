@@ -142,7 +142,9 @@ public class FinanceController {
 
     @GetMapping("/reconciliation/differences")
     public ApiResponse<PageResponse<ReconciliationDifferenceRecord>> listReconciliationDifferences() {
-        authorizationService.requirePermission("openplatform.reconcile.execute");
+        // 权限口径对齐(2026-07-18 复核裁决): 对账差异读路径=finance.reconciliation.view(与 batches/审计口径一致);
+        // openplatform.reconcile.execute 保留给对账执行/补偿等写动作。
+        authorizationService.requirePermission("finance.reconciliation.view");
         return ApiResponse.ok(service.listReconciliationDifferences());
     }
 

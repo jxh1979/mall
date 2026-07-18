@@ -2092,6 +2092,9 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     private MapSqlParameterSource pagedRangeParams(Instant start, Instant end, int limit, int offset) {
+        // 防御断言：当前登记项凡走带窗查询必有窗（服务层已推导缺省经营日）；防未来登记项误传 null 变成空谓词。
+        java.util.Objects.requireNonNull(start, "metric detail window start must not be null");
+        java.util.Objects.requireNonNull(end, "metric detail window end must not be null");
         return pagedParams(limit, offset)
                 .addValue("start", timestampWithTimeZone(start))
                 .addValue("end", timestampWithTimeZone(end));

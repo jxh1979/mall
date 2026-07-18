@@ -163,7 +163,7 @@ export function MetricDetailPage({ api, setGlobalError, navigateTo, focusObjectI
                   <div className="admin-kpi-card">
                     <span>分子 / 分母</span>
                     <strong data-testid="metric-detail-ratio-parts">{formatNumber(data.numeratorValue)} / {formatNumber(data.denominatorValue)}</strong>
-                    <small>分子=区间合计；分母=区间末时点值</small>
+                    <small>分子=区间合计；分母=当前时点值（历史区间查询时为当前值）</small>
                   </div>
                 ) : null}
               </div>
