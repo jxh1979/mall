@@ -112,3 +112,41 @@ describe("VendorInspectionsPage 行明细抽屉", () => {
     expect(drawer.textContent).not.toContain("to_work_order");
   });
 });
+
+
+describe("VendorInspectionsPage 副资源降级（AUD-032）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/vendor/inspections");
+  });
+
+  function forbidden(): Response {
+    return new Response(
+      JSON.stringify({ success: false, code: "FORBIDDEN", message: "forbidden", request_id: "req-403" }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    );
+  }
+
+  it("模板接口 403 → 巡检任务主表照常渲染，模板区块显示无权限降级提示，整页不报错", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/templates")) return Promise.resolve(forbidden());
+      if (url.includes("/tasks")) return Promise.resolve(envelope(TASKS));
+      return Promise.resolve(envelope([]));
+    }));
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "vendor", accountType: "outsourced_vendor" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<VendorInspectionsPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("vendor-inspection-row-it-1")).toBeTruthy());
+    expect(screen.getByTestId("vendor-inspections-table")).toBeTruthy();
+    expect(screen.getByTestId("vendor-inspection-templates-degraded").textContent).toContain("无权");
+    expect(screen.queryByTestId("vendor-inspection-templates-table")).toBeNull();
+    expect(screen.queryByTestId("admin-error")).toBeNull();
+    expect(props.setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+});

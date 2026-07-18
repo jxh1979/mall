@@ -4,7 +4,7 @@ import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminAction } from "../hooks/useAdminAction";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -66,6 +66,7 @@ function readKpiFocusFromUrl(): KpiFocus | null {
 export function VendorInspectionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorInspectionTaskRow[]>([]);
   const [templates, setTemplates] = React.useState<VendorInspectionTemplateRow[]>([]);
+  const [templatesNotice, setTemplatesNotice] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState("");
   const [result, setResult] = React.useState("normal");
   const [note, setNote] = React.useState("现场巡检记录正常");
@@ -107,12 +108,14 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // AUD-032：巡检模板是副资源，外包账号可能无权（403）——降级为区块提示，不拖垮任务主内容。
       const [tasks, templateRows] = await Promise.all([
         api.get<VendorInspectionTaskRow[]>("/api/v1/facility/inspections/tasks"),
-        api.get<VendorInspectionTemplateRow[]>("/api/v1/facility/inspections/templates"),
+        loadSecondary(() => api.get<VendorInspectionTemplateRow[]>("/api/v1/facility/inspections/templates"), [] as VendorInspectionTemplateRow[]),
       ]);
       setRows(tasks ?? []);
-      setTemplates(templateRows ?? []);
+      setTemplates(templateRows.data);
+      setTemplatesNotice(templateRows.notice);
     },
     { onError: setGlobalError, fallbackMessage: "外包巡检任务读取失败", onStart: () => setGlobalError(null) },
   );
@@ -277,6 +280,9 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
             {formError ? <div data-testid="vendor-inspection-error" className="admin-inline-error">{formError}</div> : null}
 
             <h3>巡检模板/要求（只读）</h3>
+            {templatesNotice ? (
+              <div className="admin-state" data-testid="vendor-inspection-templates-degraded">{templatesNotice}</div>
+            ) : (
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="vendor-inspection-templates-table">
                 <thead><tr><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>检查要求</th><th>状态</th></tr></thead>
@@ -297,6 +303,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
                 </tbody>
               </table>
             </div>
+            )}
 
             {tasksTable}
           </>

@@ -5,7 +5,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminAction } from "../hooks/useAdminAction";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -63,6 +63,7 @@ function readKpiFocusFromUrl(): KpiFocus | null {
 export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorWorkOrderRow[]>([]);
   const [equipmentRows, setEquipmentRows] = React.useState<VendorEquipmentRow[]>([]);
+  const [equipmentNotice, setEquipmentNotice] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState("");
   const [note, setNote] = React.useState("外包维保现场处理");
   const [resolution, setResolution] = React.useState("已完成维保并上传现场记录");
@@ -104,12 +105,14 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // AUD-032：设备台账是副资源，外包账号可能无权（403）——降级为区块提示，不拖垮工单主内容。
       const [workOrders, equipment] = await Promise.all([
         api.get<VendorWorkOrderRow[]>("/api/v1/facility/work-orders"),
-        api.get<VendorEquipmentRow[]>("/api/v1/facility/equipment"),
+        loadSecondary(() => api.get<VendorEquipmentRow[]>("/api/v1/facility/equipment"), [] as VendorEquipmentRow[]),
       ]);
       setRows(workOrders ?? []);
-      setEquipmentRows(equipment ?? []);
+      setEquipmentRows(equipment.data);
+      setEquipmentNotice(equipment.notice);
     },
     { onError: setGlobalError, fallbackMessage: "外包维保工单读取失败", onStart: () => setGlobalError(null) },
   );
@@ -233,6 +236,9 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
             {formError ? <div data-testid="vendor-work-order-error" className="admin-inline-error">{formError}</div> : null}
 
             <h3>关联设备信息（只读）</h3>
+            {equipmentNotice ? (
+              <div className="admin-state" data-testid="vendor-work-order-equipment-degraded">{equipmentNotice}</div>
+            ) : (
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="vendor-work-order-equipment-table">
                 <thead><tr><th>设备</th><th>类型</th><th>状态</th><th>项目/空间</th><th>品牌/责任人</th><th>下次维保</th></tr></thead>
@@ -253,6 +259,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
                 </tbody>
               </table>
             </div>
+            )}
 
             {workOrdersTable}
           </>
