@@ -1,4 +1,5 @@
 package com.complex.platform.amusement;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -21,21 +22,32 @@ public class AmusementInspectionTaskJob {
 
     private final AmusementService service;
     private final Clock clock;
+    private final boolean scheduledEnabled;
 
     @Autowired
-    public AmusementInspectionTaskJob(AmusementService service) {
-        this(service, Clock.systemUTC());
+    public AmusementInspectionTaskJob(
+            AmusementService service,
+            @Value("${amusement.inspection-task.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(service, Clock.systemUTC(), scheduledEnabled);
     }
 
     AmusementInspectionTaskJob(AmusementService service, Clock clock) {
+        this(service, clock, true);
+    }
+
+    AmusementInspectionTaskJob(AmusementService service, Clock clock, boolean scheduledEnabled) {
         this.service = service;
         this.clock = clock;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     /** @Scheduled 薄包装：默认关闭，仅在 amusement.inspection-task.scheduled.enabled=true 时注册。 */
     @ConditionalOnProperty(name = "amusement.inspection-task.scheduled.enabled", havingValue = "true")
     @Scheduled(fixedDelayString = "${amusement.inspection-task.scheduled.fixed-delay-ms:300000}")
     public void scheduledGenerateDueTasks() {
+        if (!scheduledEnabled) {
+            return;
+        }
         service.generateDueInspectionTasks(Instant.now(clock));
     }
 }

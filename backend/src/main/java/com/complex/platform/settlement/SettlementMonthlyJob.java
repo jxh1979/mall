@@ -1,4 +1,5 @@
 package com.complex.platform.settlement;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Clock;
 import java.time.YearMonth;
@@ -20,21 +21,32 @@ public class SettlementMonthlyJob {
 
     private final TicketDistributionSettlementService service;
     private final Clock clock;
+    private final boolean scheduledEnabled;
 
     @Autowired
-    public SettlementMonthlyJob(TicketDistributionSettlementService service) {
-        this(service, Clock.systemUTC());
+    public SettlementMonthlyJob(
+            TicketDistributionSettlementService service,
+            @Value("${settlement.monthly.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(service, Clock.systemUTC(), scheduledEnabled);
     }
 
     SettlementMonthlyJob(TicketDistributionSettlementService service, Clock clock) {
+        this(service, clock, true);
+    }
+
+    SettlementMonthlyJob(TicketDistributionSettlementService service, Clock clock, boolean scheduledEnabled) {
         this.service = service;
         this.clock = clock;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     /** @Scheduled 薄包装:默认关闭,每月 1 日 03:00 结上月(平台口径)。 */
     @ConditionalOnProperty(name = "settlement.monthly.scheduled.enabled", havingValue = "true")
     @Scheduled(cron = "${settlement.monthly.scheduled.cron:0 0 3 1 * *}")
     public void scheduledSettle() {
+        if (!scheduledEnabled) {
+            return;
+        }
         YearMonth lastMonth = YearMonth.now(clock.withZone(ZoneOffset.UTC)).minusMonths(1);
         service.settleMonth(null, lastMonth);
     }

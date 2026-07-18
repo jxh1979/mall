@@ -1,4 +1,5 @@
 package com.complex.platform.ticketing;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -19,21 +20,32 @@ public class TicketFacePhotoPurgeJob {
 
     private final TicketFacePhotoRepository repository;
     private final Clock clock;
+    private final boolean scheduledEnabled;
 
     @Autowired
-    public TicketFacePhotoPurgeJob(TicketFacePhotoRepository repository) {
-        this(repository, Clock.systemUTC());
+    public TicketFacePhotoPurgeJob(
+            TicketFacePhotoRepository repository,
+            @Value("${ticket.face-photo.purge.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(repository, Clock.systemUTC(), scheduledEnabled);
     }
 
     TicketFacePhotoPurgeJob(TicketFacePhotoRepository repository, Clock clock) {
+        this(repository, clock, true);
+    }
+
+    TicketFacePhotoPurgeJob(TicketFacePhotoRepository repository, Clock clock, boolean scheduledEnabled) {
         this.repository = repository;
         this.clock = clock;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     /** @Scheduled 薄包装：默认关闭，每日营业后(默认 03:00)清过期脸照。 */
     @ConditionalOnProperty(name = "ticket.face-photo.purge.scheduled.enabled", havingValue = "true")
     @Scheduled(cron = "${ticket.face-photo.purge.scheduled.cron:0 0 3 * * *}")
     public void scheduledPurge() {
+        if (!scheduledEnabled) {
+            return;
+        }
         purgeExpired(LocalDate.now(clock));
     }
 

@@ -1,4 +1,5 @@
 package com.complex.platform.settlement;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -30,21 +31,32 @@ public class SettlementReconciliationJob {
 
     private final JdbcSettlementTransactionRepository repository;
     private final Clock clock;
+    private final boolean scheduledEnabled;
 
     @Autowired
-    public SettlementReconciliationJob(JdbcSettlementTransactionRepository repository) {
-        this(repository, Clock.systemUTC());
+    public SettlementReconciliationJob(
+            JdbcSettlementTransactionRepository repository,
+            @Value("${settlement.reconciliation.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(repository, Clock.systemUTC(), scheduledEnabled);
     }
 
     SettlementReconciliationJob(JdbcSettlementTransactionRepository repository, Clock clock) {
+        this(repository, clock, true);
+    }
+
+    SettlementReconciliationJob(JdbcSettlementTransactionRepository repository, Clock clock, boolean scheduledEnabled) {
         this.repository = repository;
         this.clock = clock;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     /** @Scheduled 薄包装:默认关闭,每日算前一日。 */
     @ConditionalOnProperty(name = "settlement.reconciliation.scheduled.enabled", havingValue = "true")
     @Scheduled(cron = "${settlement.reconciliation.scheduled.cron:0 30 3 * * *}")
     public void scheduledReconcile() {
+        if (!scheduledEnabled) {
+            return;
+        }
         reconcile(LocalDate.now(clock).minusDays(1));
     }
 

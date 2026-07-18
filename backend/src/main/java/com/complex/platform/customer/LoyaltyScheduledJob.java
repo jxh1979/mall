@@ -1,4 +1,5 @@
 package com.complex.platform.customer;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -18,21 +19,33 @@ public class LoyaltyScheduledJob {
     private final LoyaltyService service;
     private final MembershipService membershipService;
     private final Clock clock;
+    private final boolean scheduledEnabled;
 
     @Autowired
-    public LoyaltyScheduledJob(LoyaltyService service, MembershipService membershipService) {
-        this(service, membershipService, Clock.systemUTC());
+    public LoyaltyScheduledJob(
+            LoyaltyService service,
+            MembershipService membershipService,
+            @Value("${customer.loyalty.scheduled.enabled:false}") boolean scheduledEnabled) {
+        this(service, membershipService, Clock.systemUTC(), scheduledEnabled);
     }
 
     LoyaltyScheduledJob(LoyaltyService service, MembershipService membershipService, Clock clock) {
+        this(service, membershipService, clock, true);
+    }
+
+    LoyaltyScheduledJob(LoyaltyService service, MembershipService membershipService, Clock clock, boolean scheduledEnabled) {
         this.service = service;
         this.membershipService = membershipService;
         this.clock = clock;
+        this.scheduledEnabled = scheduledEnabled;
     }
 
     @ConditionalOnProperty(name = "customer.loyalty.scheduled.enabled", havingValue = "true")
     @Scheduled(fixedDelayString = "${customer.loyalty.scheduled.fixed-delay-ms:86400000}")
     public void scheduledEvaluate() {
+        if (!scheduledEnabled) {
+            return;
+        }
         Instant now = Instant.now(clock);
         service.expirePoints(now);
         service.evaluateLevels(now);
