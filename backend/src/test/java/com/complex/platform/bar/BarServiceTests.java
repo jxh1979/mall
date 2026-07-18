@@ -3049,6 +3049,54 @@ class BarServiceTests {
                 .containsExactly("bar_shift_a");
     }
 
+    // ── 出品票据双驱动（业务HTML 983 行口径）──
+
+    @Test
+    void barCounterTableOrderSkipsProductionTicketWhileCardSeatKeepsIt() {
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-dualdrive", "create product", List.of(), "bar_1", "Whisky dualdrive", "spirit",
+                12800L, null, null, "active", null, null, false));
+        // 吧台位（bar_counter）=吧台直点：即点即取，不建出品票据；送达/退菜路径对无票已容错。
+        BarTableRecord counter = service.createTable(new BarTableRequest(
+                "table-dualdrive-counter", "create table", List.of(), "bar_1", "吧台1号位", "bar_counter",
+                0L, 2, "active"));
+        BarOrderRecord counterOrder = service.createOrder(new BarOrderRequest(
+                "order-dualdrive-counter", "create order", List.of(), "bar_1", counter.id(), null,
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        assertThat(barRepository.findProductionTicketByOrderId(counterOrder.id())).isEmpty();
+        // 卡座=完整流转：照旧建票（既有行为不回退）。
+        BarTableRecord seat = createTable("dualdrive-seat", "bar_1", "active", 0L);
+        BarOrderRecord seatOrder = service.createOrder(new BarOrderRequest(
+                "order-dualdrive-seat", "create order", List.of(), "bar_1", seat.id(), null,
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        assertThat(barRepository.findProductionTicketByOrderId(seatOrder.id())).isPresent();
+    }
+
+    @Test
+    void foodMerchantOrderSkipsProductionTicket() {
+        // 独立餐饮（merchant_type=food）：出品走第三方餐饮系统，平台只拿回流，不建出品票据。
+        com.complex.platform.governance.MerchantRecord foodMerchant =
+                mock(com.complex.platform.governance.MerchantRecord.class);
+        when(foodMerchant.merchantType()).thenReturn("food");
+        barOrderService.merchantDirectory = merchantId -> java.util.Optional.of(foodMerchant);
+        try {
+            TestSecurityActors.asMerchantUser("merchant_food");
+            BarProductRecord product = service.createProduct(new BarProductRequest(
+                    "product-fooddrive", "create product", List.of(), "bar_1", "小吃 fooddrive", "food",
+                    3800L, null, null, "active", null, null, false));
+            BarTableRecord table = service.createTable(new BarTableRequest(
+                    "table-fooddrive", "create table", List.of(), "bar_1", "餐位1", "card_seat",
+                    0L, 2, "active"));
+            BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                    "order-fooddrive", "create order", List.of(), "bar_1", table.id(), null,
+                    List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+            assertThat(barRepository.findProductionTicketByOrderId(order.id())).isEmpty();
+        } finally {
+            barOrderService.merchantDirectory = null;
+            TestSecurityActors.asPlatformAdmin();
+        }
+    }
+
     private BarBillRecord billForOrder(String key, String salesStaffId) {
         BarReservationRecord reservation = createReservation("reservation-" + key, "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(

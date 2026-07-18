@@ -47,6 +47,11 @@ public class BarOrderService {
     @Autowired
     JdbcBarPosCatalogRepository catalogRepository;
 
+    // 出品票据双驱动（业务HTML 983 行口径）：商户业态目录，用于判定独立餐饮（food）不建出品票据。
+    // 字段注入同上，免改构造点；单测未注入=null 视为酒吧自营（走流转，与既有行为一致）。
+    @Autowired(required = false)
+    com.complex.platform.ticketing.BarMerchantDirectory merchantDirectory;
+
     @Autowired
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
             AuditEventService auditEventService, TraceabilityService traceabilityService,
@@ -213,16 +218,39 @@ public class BarOrderService {
                 now
         ));
         orderItems.forEach(repository::saveOrderItem);
-        repository.saveProductionTicket(new BarProductionTicketRecord(
-                "ticket_" + slug(actual.idempotencyKey()),
-                order.id(),
-                order.barId(),
-                merchantId,
-                "created",
-                now,
-                now
-        ));
+        // 出品票据双驱动（业务HTML 983 行口径）：吧台直点即点即取不走流转；独立餐饮出品在第三方系统、
+        // 平台只拿回流不建票；卡座点酒/扫码点单/后厨自营小吃走「接单→制作→备好→送达」完整留痕。
+        // 无票订单的送达/退菜路径均已容错（markProductionTicketDelivered 按存在处理）。
+        if (requiresProductionTicket(merchantId, table)) {
+            repository.saveProductionTicket(new BarProductionTicketRecord(
+                    "ticket_" + slug(actual.idempotencyKey()),
+                    order.id(),
+                    order.barId(),
+                    merchantId,
+                    "created",
+                    now,
+                    now
+            ));
+        }
         return order;
+    }
+
+    /**
+     * 出品票据双驱动判定：
+     * ① 桌台类型 bar_counter（吧台位）=吧台直点，即点即取不建票；
+     * ② 商户业态 food（独立餐饮）=出品走第三方餐饮系统，平台只拿回流，不建票；
+     * ③ 其余（卡座/VIP/扫码/后厨自营）=建票走完整流转。目录未注入或商户为空按③处理（从严留痕）。
+     */
+    private boolean requiresProductionTicket(String merchantId, BarTableRecord table) {
+        if ("bar_counter".equals(table.tableType())) {
+            return false;
+        }
+        if (merchantId != null && merchantDirectory != null
+                && merchantDirectory.findMerchant(merchantId)
+                        .map(m -> "food".equals(m.merchantType())).orElse(false)) {
+            return false;
+        }
+        return true;
     }
 
 
