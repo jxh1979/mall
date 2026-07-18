@@ -90,16 +90,20 @@ final class JdbcBarInventoryPaymentRepository {
         // project_id 取对应库位余额行。调用方（BarOrderService/BarGiftConsumer）无事务（自动提交），
         // 此处 REQUIRED 事务包住 锁状态行→计成本→插流水→滚状态 保证原子；已有事务则直接加入。
         return transactionTemplate.execute(status -> {
-            String merchantId = jdbcTemplate.query(
+            // merchant_id/project_id 列可为 NULL（平台自营物料/未标项目库位），
+            // findFirst() 遇 null 元素抛 NPE，须列表判空取值而非流。
+            java.util.List<String> merchantRows = jdbcTemplate.query(
                     "SELECT merchant_id FROM inventory_items WHERE id = :item_id",
                     new MapSqlParameterSource("item_id", movement.itemId()),
-                    (rs, i) -> rs.getString(1)).stream().findFirst().orElse(null);
+                    (rs, i) -> rs.getString(1));
+            String merchantId = merchantRows.isEmpty() ? null : merchantRows.get(0);
             String locationId = movement.sourceLocationId() != null
                     ? movement.sourceLocationId() : movement.targetLocationId();
-            String projectId = locationId == null ? null : jdbcTemplate.query(
+            java.util.List<String> projectRows = locationId == null ? java.util.List.of() : jdbcTemplate.query(
                     "SELECT project_id FROM inventory_stock_balances WHERE item_id = :item_id AND location_id = :location_id",
                     new MapSqlParameterSource("item_id", movement.itemId()).addValue("location_id", locationId),
-                    (rs, i) -> rs.getString(1)).stream().findFirst().orElse(null);
+                    (rs, i) -> rs.getString(1));
+            String projectId = projectRows.isEmpty() ? null : projectRows.get(0);
             inventoryRepository.saveStockMovement(new StockMovementRecord(
                     movement.id(),
                     movement.movementType(),
