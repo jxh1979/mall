@@ -1,9 +1,0 @@
-
-/* 行「查看详情」按钮列(AUD-023):给读屏用户可操作语义;整行可点/键盘 Enter 保留不回退。 */
-.admin-row-detail-cell { white-space: nowrap; }
-.admin-row-detail-btn {
-  padding: 3px 12px; border: 1px solid var(--adm-border-strong); border-radius: 999px;
-  background: #fff; color: var(--adm-text, #23262b); cursor: pointer; font-size: 12.5px;
-}
-.admin-row-detail-btn:hover { border-color: var(--adm-accent); color: var(--adm-accent); }
-.admin-row-detail-btn:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 2px; }
