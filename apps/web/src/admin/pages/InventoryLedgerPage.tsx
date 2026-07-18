@@ -255,8 +255,8 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <h3>{TEXT.items}</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-items-table">
-          <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th></tr></thead>
-          <tbody>{items.map((item) => <tr key={item.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-item-row-${item.id}`} onClick={() => openItemDetail(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openItemDetail(item); } }}><td onClick={(event) => event.stopPropagation()}>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td></tr>)}</tbody>
+          <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th><th>详情</th></tr></thead>
+          <tbody>{items.map((item) => <tr key={item.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-item-row-${item.id}`} onClick={() => openItemDetail(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openItemDetail(item); } }}><td onClick={(event) => event.stopPropagation()}>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看物料详情" onClick={(event) => { event.stopPropagation(); openItemDetail(item); }}>查看详情</button></td></tr>)}</tbody>
         </table>
       </div>
     </>
@@ -267,8 +267,8 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <h3>{TEXT.balances}</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-balances-table">
-          <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.location}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th></tr></thead>
-          <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-balance-row-${row.id}`} onClick={() => openBalanceDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBalanceDetail(row); } }}><td>{row.itemId ?? "-"}</td><td title={row.locationType ?? row.locationId ?? ""}>{formatLocation(row.locationType ?? row.locationId)}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td></tr>)}</tbody>
+          <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.location}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>详情</th></tr></thead>
+          <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-balance-row-${row.id}`} onClick={() => openBalanceDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBalanceDetail(row); } }}><td>{row.itemId ?? "-"}</td><td title={row.locationType ?? row.locationId ?? ""}>{formatLocation(row.locationType ?? row.locationId)}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status ?? "normal")}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看库存余额详情" onClick={(event) => { event.stopPropagation(); openBalanceDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
         <TablePager testid="inventory-balances-pager" page={pagedBalances.page} pageCount={pagedBalances.pageCount} total={pagedBalances.total} onPrev={pagedBalances.prev} onNext={pagedBalances.next} />
       </div>
@@ -280,8 +280,8 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <h3>{TEXT.movements}</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-movements-table">
-          <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>{TEXT.time}</th></tr></thead>
-          <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-movement-row-${row.id ?? index}`} onClick={() => openMovementDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMovementDetail(row); } }}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td><td>{cnDate(row.createdAt)}</td></tr>)}</tbody>
+          <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>{TEXT.time}</th><th>详情</th></tr></thead>
+          <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-movement-row-${row.id ?? index}`} onClick={() => openMovementDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMovementDetail(row); } }}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td><td>{cnDate(row.createdAt)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看库存流水详情" onClick={(event) => { event.stopPropagation(); openMovementDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
         <TablePager testid="inventory-movements-pager" page={pagedMovements.page} pageCount={pagedMovements.pageCount} total={pagedMovements.total} onPrev={pagedMovements.prev} onNext={pagedMovements.next} />
       </div>

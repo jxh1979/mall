@@ -215,9 +215,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-section-title">商户档案</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="admission-audits-merchants-table">
-          <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th></tr></thead>
+          <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>详情</th></tr></thead>
           <tbody>{merchants.map((row) => (
-            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-merchant-row-${row.id}`} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.merchantName)}</TraceLink></td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td></tr>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-merchant-row-${row.id}`} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.id}>{display(row.merchantName)}</TraceLink></td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>
           ))}</tbody>
         </table>
       </div>
@@ -229,9 +229,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-section-title">主体绑定</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="admission-audits-bindings-table">
-          <thead><tr><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>结算主体</th><th>状态</th><th>留痕证据</th></tr></thead>
+          <thead><tr><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>结算主体</th><th>状态</th><th>留痕证据</th><th>详情</th></tr></thead>
           <tbody>{bindings.map((row) => (
-            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-binding-row-${row.id}`} onClick={() => openBindingDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBindingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink></td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-binding-row-${row.id}`} onClick={() => openBindingDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBindingDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.businessObjectId}>{display(row.businessObjectId)}</TraceLink></td><td>{display(row.operatorSubject)}</td><td>{display(row.contractSubject)}</td><td>{display(row.settlementSubject)}</td><td>{formatBusinessStatus(row.status)}</td><td>{display(row.auditEvidenceRef)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看主体绑定详情" onClick={(event) => { event.stopPropagation(); openBindingDetail(row); }}>查看详情</button></td></tr>
           ))}</tbody>
         </table>
       </div>
@@ -243,9 +243,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-section-title">合同草稿/审批</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="admission-audits-contracts-table">
-          <thead><tr><th>商户</th><th>合同主体</th><th>运营主体</th><th>结算主体</th><th>生效日</th><th>到期日</th><th>附件</th><th>状态</th><th>留痕证据</th></tr></thead>
+          <thead><tr><th>商户</th><th>合同主体</th><th>运营主体</th><th>结算主体</th><th>生效日</th><th>到期日</th><th>附件</th><th>状态</th><th>留痕证据</th><th>详情</th></tr></thead>
           <tbody>{contracts.map((row) => (
-            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-contract-row-${row.id}`} onClick={() => openContractDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openContractDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{cnDate(row.effectiveDate)}</td><td>{cnDate(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{formatBusinessStatus(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-contract-row-${row.id}`} onClick={() => openContractDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openContractDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{cnDate(row.effectiveDate)}</td><td>{cnDate(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{formatBusinessStatus(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看合同草稿/审批详情" onClick={(event) => { event.stopPropagation(); openContractDetail(row); }}>查看详情</button></td></tr>
           ))}</tbody>
         </table>
       </div>

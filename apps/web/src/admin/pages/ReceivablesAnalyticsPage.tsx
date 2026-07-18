@@ -131,7 +131,7 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="receivables-debtors-table">
             <thead>
-              <tr><th>商户</th><th>未清金额</th><th>最早应收日</th><th>逾期天数</th><th>账龄段</th></tr>
+              <tr><th>商户</th><th>未清金额</th><th>最早应收日</th><th>逾期天数</th><th>账龄段</th><th>详情</th></tr>
             </thead>
             <tbody>
               {paged.pageRows.map((row, index) => (
@@ -145,7 +145,7 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
                   <td>{cnDate(row.oldestDueDate)}</td>
                   <td>{row.overdueDays ?? "—"}</td>
                   <td>{BUCKET_LABELS[row.bucket ?? ""] ?? row.bucket ?? "—"}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看欠费商户详情" onClick={(event) => { event.stopPropagation(); openDebtorDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

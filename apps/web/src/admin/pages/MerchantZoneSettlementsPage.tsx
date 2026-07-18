@@ -156,7 +156,7 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="merchant-zone-settlements-table">
         <thead>
-          <tr><th>选择</th><th>结算单</th><th>合同</th><th>触发</th><th>状态</th><th>异议理由</th><th>开账时间</th></tr>
+          <tr><th>选择</th><th>结算单</th><th>合同</th><th>触发</th><th>状态</th><th>异议理由</th><th>开账时间</th><th>详情</th></tr>
         </thead>
         <tbody>
           {paged.pageRows.map((row) => (
@@ -170,7 +170,7 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
               <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
               <td>{row.disputeReason ?? "-"}</td>
               <td>{cnDate(row.createdAt)}</td>
-            </tr>
+            <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看结算单详情" onClick={(event) => { event.stopPropagation(); openSettlementDetail(row); }}>查看详情</button></td></tr>
           ))}
         </tbody>
       </table>

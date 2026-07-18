@@ -363,7 +363,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="merchant-work-orders-table">
-            <thead><tr><th>{TEXT.select}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-title" onClick={() => sort.toggle("title")} {...sort.thProps("title")}>{TEXT.workOrderTitle}{sort.indicator("title")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-type" onClick={() => sort.toggle("type")} {...sort.thProps("type")}>{TEXT.type}{sort.indicator("type")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-priority" onClick={() => sort.toggle("priority")} {...sort.thProps("priority")}>{TEXT.priority}{sort.indicator("priority")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>{TEXT.status}{sort.indicator("status")}</th><th>{TEXT.ownerDepartment}</th><th>{TEXT.ownerUser}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-dueAt" onClick={() => sort.toggle("dueAt")} {...sort.thProps("dueAt")}>{TEXT.dueAt}{sort.indicator("dueAt")}</th><th>{TEXT.evidenceLabel}</th></tr></thead>
+            <thead><tr><th>{TEXT.select}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-title" onClick={() => sort.toggle("title")} {...sort.thProps("title")}>{TEXT.workOrderTitle}{sort.indicator("title")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-type" onClick={() => sort.toggle("type")} {...sort.thProps("type")}>{TEXT.type}{sort.indicator("type")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-priority" onClick={() => sort.toggle("priority")} {...sort.thProps("priority")}>{TEXT.priority}{sort.indicator("priority")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>{TEXT.status}{sort.indicator("status")}</th><th>{TEXT.ownerDepartment}</th><th>{TEXT.ownerUser}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-dueAt" onClick={() => sort.toggle("dueAt")} {...sort.thProps("dueAt")}>{TEXT.dueAt}{sort.indicator("dueAt")}</th><th>{TEXT.evidenceLabel}</th><th>详情</th></tr></thead>
             <tbody>
               {paged.pageRows.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-work-order-row-${row.id}`}
@@ -378,7 +378,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                   <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink></td>
                   <td>{cnDate(row.dueAt)}</td>
                   <td>{evidenceList(row)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

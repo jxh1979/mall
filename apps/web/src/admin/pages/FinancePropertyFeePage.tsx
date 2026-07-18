@@ -229,10 +229,10 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="property-fee-rates-table">
-            <thead><tr><th>生效期</th><th>每平米单价（元）</th><th>状态</th><th>创建时间</th></tr></thead>
+            <thead><tr><th>生效期</th><th>每平米单价（元）</th><th>状态</th><th>创建时间</th><th>详情</th></tr></thead>
             <tbody>
               {rates.length === 0 ? (
-                <tr data-testid="property-fee-rates-empty"><td colSpan={4} className="admin-muted-action">该项目暂无物业费费率，请先在上方设置。</td></tr>
+                <tr data-testid="property-fee-rates-empty"><td colSpan={5} className="admin-muted-action">该项目暂无物业费费率，请先在上方设置。</td></tr>
               ) : rates.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`property-fee-rate-row-${row.id}`}
                   onClick={() => openRateDetail(row)}
@@ -241,7 +241,7 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.ratePerSquareMeterCent)}</td>
                   <td>{row.status === "active" ? "生效" : (row.status ?? "—")}</td>
                   <td>{cnDate(row.createdAt)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看物业费费率详情" onClick={(event) => { event.stopPropagation(); openRateDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -286,7 +286,7 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
           <h4 data-testid="property-fee-bills-heading">本次生成账单（{bills.length} 户）</h4>
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="property-fee-bills-table">
-              <thead><tr><th>计费期</th><th>商户</th><th>面积（㎡）</th><th>应收金额（元）</th><th>台账单据</th></tr></thead>
+              <thead><tr><th>计费期</th><th>商户</th><th>面积（㎡）</th><th>应收金额（元）</th><th>台账单据</th><th>详情</th></tr></thead>
               <tbody>
                 {bills.map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`property-fee-bill-row-${row.id}`}
@@ -297,7 +297,7 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
                     <td className="admin-num" style={{ textAlign: "right" }}>{row.areaSquareMeter ?? "—"}</td>
                     <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.amountCent)}</td>
                     <td>{row.arApItemId ?? "—"}</td>
-                  </tr>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看物业费账单详情" onClick={(event) => { event.stopPropagation(); openBillDetail(row); }}>查看详情</button></td></tr>
                 ))}
               </tbody>
             </table>

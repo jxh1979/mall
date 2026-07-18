@@ -120,7 +120,7 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="merchant-zone-contracts-table">
         <thead>
-          <tr><th>合同</th><th>租期</th><th>空间</th><th>状态</th><th>保证金</th><th>续签自</th></tr>
+          <tr><th>合同</th><th>租期</th><th>空间</th><th>状态</th><th>保证金</th><th>续签自</th><th>详情</th></tr>
         </thead>
         <tbody>
           {paged.pageRows.map((row) => (
@@ -141,7 +141,7 @@ export function MerchantZoneContractsPage({ api, setGlobalError, navigateTo }: A
                   ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.renewedFromContractId}>{shortId(row.renewedFromContractId)}</TraceLink>
                   : shortId(row.renewedFromContractId)}
               </td>
-            </tr>
+            <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看合同详情" onClick={(event) => { event.stopPropagation(); openContractDetail(row); }}>查看详情</button></td></tr>
           ))}
         </tbody>
       </table>

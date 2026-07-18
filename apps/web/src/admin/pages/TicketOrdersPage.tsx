@@ -279,7 +279,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="ticket-orders-table">
             <thead>
-              <tr><th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.ticketType}</th><th>{TEXT.quantity}</th><th>{TEXT.visitDate}</th><th>{TEXT.channel}</th><th>{TEXT.amount}</th><th>{TEXT.payStatus}</th><th>{TEXT.issueStatus}</th><th>{TEXT.status}</th><th>{TEXT.createdAt}</th><th>{TEXT.paidAt}</th></tr>
+              <tr><th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.ticketType}</th><th>{TEXT.quantity}</th><th>{TEXT.visitDate}</th><th>{TEXT.channel}</th><th>{TEXT.amount}</th><th>{TEXT.payStatus}</th><th>{TEXT.issueStatus}</th><th>{TEXT.status}</th><th>{TEXT.createdAt}</th><th>{TEXT.paidAt}</th><th>详情</th></tr>
             </thead>
             <tbody>
               {paged.pageRows.map((order) => (
@@ -299,7 +299,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                   <td>{formatBusinessStatus(order.status)}</td>
                   <td>{cnDate(order.createdAt)}</td>
                   <td data-testid={`ticket-order-paid-at-${order.id}`}>{cnDate(order.paidAt)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看订单详情" onClick={(event) => { event.stopPropagation(); openOrderDetail(order); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

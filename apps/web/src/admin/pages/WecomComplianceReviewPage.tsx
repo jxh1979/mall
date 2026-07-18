@@ -155,7 +155,7 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="wecom-risk-hits-table">
-            <thead><tr><th>选择</th><th>规则码</th><th>风险等级</th><th>命中片段（脱敏）</th><th>状态</th><th>复核人</th></tr></thead>
+            <thead><tr><th>选择</th><th>规则码</th><th>风险等级</th><th>命中片段（脱敏）</th><th>状态</th><th>复核人</th><th>详情</th></tr></thead>
             <tbody>
               {riskHits.slice(0, 100).map((row) => (
                 <tr key={row.hitId} className="admin-row-clickable" tabIndex={0} data-testid={`wecom-risk-hit-row-${row.hitId}`}
@@ -164,7 +164,7 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
                   <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此风险命中 ${row.hitId}`} data-testid={`wecom-risk-hit-select-${row.hitId}`} checked={selectedHitId === row.hitId} onChange={() => setSelectedHitId(row.hitId)} /></td>
                   <td>{row.ruleCode ?? "-"}</td><td>{wLabel(RISK_LEVEL_LABELS, row.riskLevel)}</td><td>{row.matchedSnippet ?? "-"}</td>
                   <td>{formatBusinessStatus(row.status)}</td><td>{row.reviewerId ?? "-"}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看违规命中详情" onClick={(event) => { event.stopPropagation(); openHitDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -177,7 +177,7 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="wecom-retention-policies-table">
-            <thead><tr><th>适用范围</th><th>范围 ID</th><th>保留天数</th><th>到期动作</th><th>启用</th></tr></thead>
+            <thead><tr><th>适用范围</th><th>范围 ID</th><th>保留天数</th><th>到期动作</th><th>启用</th><th>详情</th></tr></thead>
             <tbody>
               {policies.slice(0, 100).map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`wecom-retention-policy-row-${row.id}`}
@@ -185,7 +185,7 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPolicyDetail(row); } }}>
                   <td>{wLabel(SCOPE_LABELS, row.scopeType)}</td><td>{row.scopeId ?? "-"}</td><td>{row.retentionDays ?? "-"}</td>
                   <td>{wLabel(EXPIRY_ACTION_LABELS, row.expiryAction)}</td><td>{yn(row.enabled)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看留存策略详情" onClick={(event) => { event.stopPropagation(); openPolicyDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

@@ -179,9 +179,9 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         {formError ? <div data-testid="access-users-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-users-table">
-            <thead><tr><th>员工账号</th><th>手机号</th><th>账号类型</th><th>组织</th><th>商户</th><th>状态</th></tr></thead>
+            <thead><tr><th>员工账号</th><th>手机号</th><th>账号类型</th><th>组织</th><th>商户</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>{rows.length === 0 ? (
-              <tr><td colSpan={6} className="admin-muted-action">暂无员工账号，可通过上方表单手动录入并套用权限模板。</td></tr>
+              <tr><td colSpan={7} className="admin-muted-action">暂无员工账号，可通过上方表单手动录入并套用权限模板。</td></tr>
             ) : rows.map((row) => (
               <tr key={row.id} data-testid={`access-user-row-${row.id}`}
                 className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`}
@@ -194,7 +194,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
                 <td>{row.organizationId ? (orgNames[row.organizationId] ?? <span className="admin-id-cell" title={row.organizationId}>{shortId(row.organizationId)}</span>) : "-"}</td>
                 <td>{row.merchantId ? (merchantNames[row.merchantId] ?? <span className="admin-id-cell" title={row.merchantId}>{shortId(row.merchantId)}</span>) : "-"}</td>
                 <td>{formatBusinessStatus(row.status ?? "active")}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看员工账号详情" onClick={(event) => { event.stopPropagation(); openUserDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>

@@ -374,7 +374,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <h3>合同</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contracts-table">
-            <thead><tr><th>合同号</th><th>商户</th><th>状态</th><th>租期</th><th>抽成</th><th className="admin-op-col">操作</th></tr></thead>
+            <thead><tr><th>合同号</th><th>商户</th><th>状态</th><th>租期</th><th>抽成</th><th className="admin-op-col">操作</th><th>详情</th></tr></thead>
             <tbody>
               {contracts.map((row) => (
                 <tr key={row.id} data-testid={`contract-${row.id}`}
@@ -405,7 +405,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                       return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`contract-actions-${row.id}`} />;
                     })()}
                   </td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看合同详情" onClick={(event) => { event.stopPropagation(); openContractDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -601,7 +601,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <h3>合同变更（6 类，走同一审批链）{selectedId ? <span className="admin-id-cell" title={selectedId}> · {shortId(selectedId)}</span> : "（点合同『明细』选）"}</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contract-changes-table">
-            <thead><tr><th>变更号</th><th>类型</th><th>审批</th><th className="admin-op-col">操作</th></tr></thead>
+            <thead><tr><th>变更号</th><th>类型</th><th>审批</th><th className="admin-op-col">操作</th><th>详情</th></tr></thead>
             <tbody>
               {changes.map((ch) => (
                 <tr key={ch.id} data-testid={`contract-change-${ch.id}`} className="admin-row-clickable" tabIndex={0}
@@ -613,7 +613,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                     if (ch.approvalStatus === "pending") APPROVE_ROLES.forEach((r) => acts.push({ key: `approve-${r.code}`, label: r.label, permissions: [r.code], onClick: () => void approveChange(ch.id, r.code), testId: `change-approve-${r.code}-${ch.id}` }));
                     return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`change-actions-${ch.id}`} />;
                   })()}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看合同变更详情" onClick={(event) => { event.stopPropagation(); openChangeDetail(ch); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -633,7 +633,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contract-settlements-table">
-            <thead><tr><th>结算单号</th><th>触发</th><th>状态</th><th className="admin-op-col">操作</th></tr></thead>
+            <thead><tr><th>结算单号</th><th>触发</th><th>状态</th><th className="admin-op-col">操作</th><th>详情</th></tr></thead>
             <tbody>
               {settlements.map((st) => (
                 <tr key={st.id} data-testid={`contract-settlement-${st.id}`} className="admin-row-clickable" tabIndex={0}
@@ -651,7 +651,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                       return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`settlement-actions-${st.id}`} />;
                     })()}
                   </td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看退租结算详情" onClick={(event) => { event.stopPropagation(); openSettlementDetail(st); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

@@ -69,7 +69,7 @@ export function AmusementInspectionTasksPage({ api, setGlobalError, navigateTo }
                 <th>设备</th>
                 <th>到期时间</th>
                 <th>状态</th>
-              </tr>
+              <th>详情</th></tr>
             </thead>
             <tbody>
               {rows.map((row) => (
@@ -86,7 +86,7 @@ export function AmusementInspectionTasksPage({ api, setGlobalError, navigateTo }
                       statusLabel(row.status)
                     )}
                   </td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看巡检到期任务详情" onClick={(event) => { event.stopPropagation(); openTaskDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

@@ -86,7 +86,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
         {formError ? <div data-testid="ops-readiness-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="ops-readiness-table">
-            <thead><tr><th>选择</th><th>阻断项</th><th>责任人</th><th>状态</th></tr></thead>
+            <thead><tr><th>选择</th><th>阻断项</th><th>责任人</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>{rows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`ops-readiness-row-${row.id}`}
                 onClick={() => openBlockerDetail(row)}
@@ -95,7 +95,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
                 <td>{row.blockerCode ?? row.title}</td>
                 <td>{row.owner}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看生产阻断项详情" onClick={(event) => { event.stopPropagation(); openBlockerDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>

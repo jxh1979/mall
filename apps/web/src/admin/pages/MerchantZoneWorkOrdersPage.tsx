@@ -202,7 +202,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="merchant-zone-work-orders-table">
             <thead>
-              <tr><th>标题</th><th>类型</th><th>优先级</th><th>状态</th><th>截止时间</th><th>处理结论</th><th>提交时间</th></tr>
+              <tr><th>标题</th><th>类型</th><th>优先级</th><th>状态</th><th>截止时间</th><th>处理结论</th><th>提交时间</th><th>详情</th></tr>
             </thead>
             <tbody>
               {paged.pageRows.map((row) => (
@@ -216,7 +216,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
                   <td>{cnDate(row.dueAt)}</td>
                   <td>{row.resolution ?? "-"}</td>
                   <td>{cnDate(row.createdAt)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

@@ -187,7 +187,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="finance-ledger-table">
-            <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sort.indicator("dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th></tr></thead>
+            <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sort.indicator("dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th><th>详情</th></tr></thead>
             <tbody>{sort.sorted.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`finance-ledger-row-${row.id}`}
                 onClick={() => openLedgerDetail(row)}
@@ -198,7 +198,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
                 <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.unpaidAmountCent)} / {centToYuan(row.amountCent)}</td>
                 <td>{row.dueDate ?? "—"}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看台账单据详情" onClick={(event) => { event.stopPropagation(); openLedgerDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
           <TablePager testid="finance-ledger-pager" page={ledger.page} pageCount={ledger.pageCount} total={ledger.total} onPrev={ledger.prev} onNext={ledger.next} />

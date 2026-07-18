@@ -211,7 +211,7 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
         <h3>到期提醒</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="compliance-reminders-table">
-            <thead><tr><th>提醒类型</th><th>到期日</th><th>提醒日</th><th>严重度</th><th>建议阻断</th><th>状态</th></tr></thead>
+            <thead><tr><th>提醒类型</th><th>到期日</th><th>提醒日</th><th>严重度</th><th>建议阻断</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>
               {reminders.slice(0, 100).map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`compliance-reminder-row-${row.id}`}
@@ -219,7 +219,7 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openReminderDetail(row); } }}>
                   <td>{cLabel(DATE_TYPE_LABELS, row.reminderType)}</td><td>{cnDate(row.dueDate)}</td><td>{cnDate(row.reminderAt)}</td>
                   <td>{cLabel(SEVERITY_LABELS, row.severity)}</td><td>{yn(row.blockingSuggested)}</td><td>{formatBusinessStatus(row.status)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看到期提醒详情" onClick={(event) => { event.stopPropagation(); openReminderDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -268,7 +268,7 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
         />
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="compliance-key-dates-table">
-            <thead><tr><th>标题</th><th>日期类型</th><th>关联合同</th><th>到期日</th><th>来源</th><th>状态</th></tr></thead>
+            <thead><tr><th>标题</th><th>日期类型</th><th>关联合同</th><th>到期日</th><th>来源</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>
               {keyDates.slice(0, 100).map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`compliance-key-date-row-${row.id}`}
@@ -276,7 +276,7 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openKeyDateDetail(row); } }}>
                   <td>{row.title ?? "-"}</td><td>{cLabel(DATE_TYPE_LABELS, row.dateType)}</td><td>{row.contractId ?? "-"}</td>
                   <td>{cnDate(row.dueDate)}</td><td>{cLabel(SOURCE_LABELS, row.sourceType)}</td><td>{formatBusinessStatus(row.status)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看合同关键日期详情" onClick={(event) => { event.stopPropagation(); openKeyDateDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -298,7 +298,7 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="compliance-expiry-items-table">
-            <thead><tr><th>证照名称</th><th>类型</th><th>编号</th><th>有效期止</th><th>到期动作</th><th>状态</th></tr></thead>
+            <thead><tr><th>证照名称</th><th>类型</th><th>编号</th><th>有效期止</th><th>到期动作</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>
               {expiryItems.slice(0, 100).map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`compliance-expiry-row-${row.id}`}
@@ -306,7 +306,7 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openExpiryDetail(row); } }}>
                   <td>{row.itemName ?? "-"}</td><td>{cLabel(ITEM_TYPE_LABELS, row.itemType)}</td><td>{row.documentNo ?? "-"}</td>
                   <td>{cnDate(row.validTo)}</td><td>{formatBusinessStatus(row.expiryAction)}</td><td>{formatBusinessStatus(row.status)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看证照到期详情" onClick={(event) => { event.stopPropagation(); openExpiryDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

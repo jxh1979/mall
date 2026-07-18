@@ -133,7 +133,7 @@ export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: Admin
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="merchant-zone-bills-table">
         <thead>
-          <tr><th>账单号</th><th>账期</th><th>到期日</th><th>金额</th><th>状态</th><th>账龄(天)</th><th>费用构成</th><th>来源合同</th></tr>
+          <tr><th>账单号</th><th>账期</th><th>到期日</th><th>金额</th><th>状态</th><th>账龄(天)</th><th>费用构成</th><th>来源合同</th><th>详情</th></tr>
         </thead>
         <tbody>
           {paged.pageRows.map((row) => (
@@ -150,7 +150,7 @@ export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: Admin
               <td className="admin-id-cell" onClick={(event) => event.stopPropagation()}>{row.sourceType === "contract" && row.sourceId
                 ? <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.sourceId}>{row.sourceId}</TraceLink>
                 : "-"}</td>
-            </tr>
+            <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看账单详情" onClick={(event) => { event.stopPropagation(); openBillDetail(row); }}>查看详情</button></td></tr>
           ))}
         </tbody>
       </table>

@@ -299,7 +299,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="dynamic-pricing-table">
             <thead>
-              <tr><th>{TEXT.select}</th><th>{TEXT.ruleName}</th><th>{TEXT.channel}</th><th>{TEXT.priority}</th><th>{TEXT.adjustment}</th><th>{TEXT.status}</th><th>{TEXT.effective}</th></tr>
+              <tr><th>{TEXT.select}</th><th>{TEXT.ruleName}</th><th>{TEXT.channel}</th><th>{TEXT.priority}</th><th>{TEXT.adjustment}</th><th>{TEXT.status}</th><th>{TEXT.effective}</th><th>详情</th></tr>
             </thead>
             <tbody>
               {visibleRules.map((rule) => (
@@ -313,7 +313,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
                   <td>{adjustmentTypeLabel(rule.adjustmentType)} {rule.adjustmentRate ?? ""}</td>
                   <td>{formatBusinessStatus(rule.status)}</td>
                   <td>{cnDate(rule.effectiveFrom)} ~ {cnDate(rule.effectiveTo)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看动态定价规则详情" onClick={(event) => { event.stopPropagation(); openRuleDetail(rule); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

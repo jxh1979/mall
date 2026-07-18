@@ -328,7 +328,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   const inspectionsTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="amusement-safety-table">
-        <thead><tr><th>{TEXT.select}</th><th>{TEXT.inspectionNo}</th><th>{TEXT.project}</th><th>{TEXT.overall}</th><th>{TEXT.inspectionStatus}</th><th>{TEXT.rectificationStatus}</th><th>{TEXT.reopenStatus}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.time}</th></tr></thead>
+        <thead><tr><th>{TEXT.select}</th><th>{TEXT.inspectionNo}</th><th>{TEXT.project}</th><th>{TEXT.overall}</th><th>{TEXT.inspectionStatus}</th><th>{TEXT.rectificationStatus}</th><th>{TEXT.reopenStatus}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.time}</th><th>详情</th></tr></thead>
         <tbody>
           {pagedRows.pageRows.map((row) => (
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-safety-row-${row.id}`}
@@ -343,7 +343,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
               <td>{row.reopenStatus ? formatBusinessStatus(row.reopenStatus) : "-"}</td>
               <td>{evidenceList(row)}</td>
               <td>{cnDate(row.inspectedAt ?? row.createdAt)}</td>
-            </tr>
+            <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看安全巡检详情" onClick={(event) => { event.stopPropagation(); openInspectionDetail(row); }}>查看详情</button></td></tr>
           ))}
         </tbody>
       </table>

@@ -462,7 +462,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <h3>设备台账</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-equipment-table">
-            <thead><tr><th>id</th><th>名称</th><th>分类</th><th>状态</th><th>品牌/责任人</th><th>维保到期</th><th>告警</th><th>操作</th></tr></thead>
+            <thead><tr><th>id</th><th>名称</th><th>分类</th><th>状态</th><th>品牌/责任人</th><th>维保到期</th><th>告警</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{equipment.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-equipment-${row.id}`}
                 onClick={() => openEquipmentDetail(row)}
@@ -474,7 +474,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
                   <button type="button" data-testid={`facility-equipment-select-${row.id}`} onClick={() => setStatusForm({ ...statusForm, equipmentId: row.id })}>选中</button>
                   <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-maintenance-done-${row.id}`} onClick={() => void maintenanceDone(row.id)}>维保完成</PermissionButton>
                 </td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看设备详情" onClick={(event) => { event.stopPropagation(); openEquipmentDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -535,8 +535,8 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <h3>设备维保到期清单</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-maintenance-due-table">
-            <thead><tr><th>设备</th><th>分类</th><th>责任人</th><th>到期日</th></tr></thead>
-            <tbody>{maintenanceDue.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-maintenance-due-${row.id}`} onClick={() => openMaintenanceDueDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMaintenanceDueDetail(row); } }}><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{row.responsibleUserId ?? "-"}</td><td>{cnDate(row.nextMaintenanceDue)}</td></tr>)}</tbody>
+            <thead><tr><th>设备</th><th>分类</th><th>责任人</th><th>到期日</th><th>详情</th></tr></thead>
+            <tbody>{maintenanceDue.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-maintenance-due-${row.id}`} onClick={() => openMaintenanceDueDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMaintenanceDueDetail(row); } }}><td>{row.name}</td><td>{zh(row.equipmentType)}</td><td>{row.responsibleUserId ?? "-"}</td><td>{cnDate(row.nextMaintenanceDue)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看维保到期详情" onClick={(event) => { event.stopPropagation(); openMaintenanceDueDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
 
@@ -559,7 +559,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-orders-table">
-            <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th><th>满意度</th><th>操作</th></tr></thead>
+            <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th><th>满意度</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{workOrders.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-${row.id}`}
                 onClick={() => openWorkOrderDetail(row)}
@@ -578,7 +578,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
                     return <RowActions actions={wo} permissionsState={effectivePermissions} testId={`facility-work-order-actions-${row.id}`} />;
                   })()}
                 </td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -588,15 +588,15 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-orders-overdue-table">
-            <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th></tr></thead>
-            <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-overdue-${row.id}`} onClick={() => openOverdueWorkOrderDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOverdueWorkOrderDetail(row); } }}><td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)} · 已逾期</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td></tr>)}</tbody>
+            <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th><th>详情</th></tr></thead>
+            <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-overdue-${row.id}`} onClick={() => openOverdueWorkOrderDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOverdueWorkOrderDetail(row); } }}><td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)} · 已逾期</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看逾期工单详情" onClick={(event) => { event.stopPropagation(); openOverdueWorkOrderDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
         <h3>SLA 策略表</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-order-policies-table">
-            <thead><tr><th>类型</th><th>优先级</th><th>响应/处理分钟</th><th>验收</th><th>状态</th></tr></thead>
-            <tbody>{policyRows.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-policy-${row.workOrderType}-${row.priority}`} onClick={() => openPolicyDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPolicyDetail(row); } }}><td>{zh(row.workOrderType)}</td><td>{zh(row.priority)}</td><td>{row.responseMinutes} / {row.handleMinutes}</td><td>{row.requiresAcceptance ? zh(row.acceptanceBy) : "无需"}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
+            <thead><tr><th>类型</th><th>优先级</th><th>响应/处理分钟</th><th>验收</th><th>状态</th><th>详情</th></tr></thead>
+            <tbody>{policyRows.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-policy-${row.workOrderType}-${row.priority}`} onClick={() => openPolicyDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPolicyDetail(row); } }}><td>{zh(row.workOrderType)}</td><td>{zh(row.priority)}</td><td>{row.responseMinutes} / {row.handleMinutes}</td><td>{row.requiresAcceptance ? zh(row.acceptanceBy) : "无需"}</td><td>{row.active ? "启用" : "停用"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看SLA 策略详情" onClick={(event) => { event.stopPropagation(); openPolicyDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-work-order-policy-form">
@@ -614,8 +614,8 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <h3>楼宇巡检</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-templates-table">
-            <thead><tr><th>id</th><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>状态</th></tr></thead>
-            <tbody>{inspectionTemplates.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-template-${row.id}`} onClick={() => openInspectionTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionTemplateDetail(row); } }}><td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.inspectionType)}</td><td>{row.cycleDays ?? "-"}</td><td>{zh(row.abnormalMode)}</td><td>{row.active ? "启用" : "停用"}</td></tr>)}</tbody>
+            <thead><tr><th>id</th><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>状态</th><th>详情</th></tr></thead>
+            <tbody>{inspectionTemplates.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-template-${row.id}`} onClick={() => openInspectionTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionTemplateDetail(row); } }}><td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.inspectionType)}</td><td>{row.cycleDays ?? "-"}</td><td>{zh(row.abnormalMode)}</td><td>{row.active ? "启用" : "停用"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看巡检模板详情" onClick={(event) => { event.stopPropagation(); openInspectionTemplateDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-inspection-template-form">
@@ -638,7 +638,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-tasks-table">
-            <thead><tr><th>id</th><th>标题</th><th>类型/排程</th><th>状态</th><th>人员/日期</th><th>工单</th><th>操作</th></tr></thead>
+            <thead><tr><th>id</th><th>标题</th><th>类型/排程</th><th>状态</th><th>人员/日期</th><th>工单</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{inspectionTasks.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-task-${row.id}`}
                 onClick={() => openInspectionTaskDetail(row)}
@@ -650,7 +650,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
                   {row.status === "rectifying" ? <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid={`facility-inspection-recheck-${row.id}`} onClick={() => void inspectionAction(row.id, "recheck")}>复检</PermissionButton> : null}
                   {row.status === "rechecked" ? <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid={`facility-inspection-confirm-${row.id}`} onClick={() => void inspectionAction(row.id, "supervisor-confirm")}>主管确认</PermissionButton> : null}
                 </td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看巡检任务详情" onClick={(event) => { event.stopPropagation(); openInspectionTaskDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -664,8 +664,8 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-records-table">
-            <thead><tr><th>记录</th><th>任务</th><th>结果</th><th>巡检人</th><th>异常</th><th>时间</th></tr></thead>
-            <tbody>{inspectionRecords.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-record-${row.id}`} onClick={() => openInspectionRecordDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionRecordDetail(row); } }}><td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{cnDate(row.recordedAt)}</td></tr>)}</tbody>
+            <thead><tr><th>记录</th><th>任务</th><th>结果</th><th>巡检人</th><th>异常</th><th>时间</th><th>详情</th></tr></thead>
+            <tbody>{inspectionRecords.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-record-${row.id}`} onClick={() => openInspectionRecordDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionRecordDetail(row); } }}><td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{cnDate(row.recordedAt)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看巡检记录详情" onClick={(event) => { event.stopPropagation(); openInspectionRecordDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
           </>) },

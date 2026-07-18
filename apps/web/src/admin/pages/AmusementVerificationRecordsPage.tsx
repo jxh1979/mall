@@ -241,11 +241,11 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="amu-verif-records-table">
         <thead>
-          <tr><th>方向</th><th>核销时间</th><th>项目</th><th>场次</th><th>结果</th><th>人数</th><th>关联通票号</th></tr>
+          <tr><th>方向</th><th>核销时间</th><th>项目</th><th>场次</th><th>结果</th><th>人数</th><th>关联通票号</th><th>详情</th></tr>
         </thead>
         <tbody>
           {paged.pageRows.length === 0 ? (
-            <tr data-testid="amu-verif-records-empty"><td colSpan={7}>暂无核销记录</td></tr>
+            <tr data-testid="amu-verif-records-empty"><td colSpan={8}>暂无核销记录</td></tr>
           ) : (
             paged.pageRows.map((row) => (
               <tr
@@ -263,7 +263,7 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
                 <td>{formatBusinessStatus(row.verificationResult)}</td>
                 <td>{display(row.verifiedPeople)}</td>
                 <td>{row.linkedTicketNo ?? "—"}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看核销详情" onClick={(event) => { event.stopPropagation(); openRecordDetail(row); }}>查看详情</button></td></tr>
             ))
           )}
         </tbody>
@@ -276,11 +276,11 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="amu-verif-capacity-table">
         <thead>
-          <tr><th>维度</th><th>项目</th><th>场次</th><th>点位/设备</th><th>在场/已用</th><th>上限</th><th>占用率</th></tr>
+          <tr><th>维度</th><th>项目</th><th>场次</th><th>点位/设备</th><th>在场/已用</th><th>上限</th><th>占用率</th><th>详情</th></tr>
         </thead>
         <tbody>
           {snapshots.length === 0 ? (
-            <tr data-testid="amu-verif-capacity-empty"><td colSpan={7}>暂无在场容量快照</td></tr>
+            <tr data-testid="amu-verif-capacity-empty"><td colSpan={8}>暂无在场容量快照</td></tr>
           ) : (
             snapshots.map((row) => {
               const over = num(row.occupiedCount) > num(row.capacityLimit);
@@ -301,7 +301,7 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
                   <td>{display(row.occupiedCount)}</td>
                   <td>{display(row.capacityLimit)}</td>
                   <td style={over ? { color: "var(--adm-danger, #c0392b)", fontWeight: 600 } : undefined}>{rate}%{over ? " · 超容" : ""}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看容量详情" onClick={(event) => { event.stopPropagation(); openSnapshotDetail(row); }}>查看详情</button></td></tr>
               );
             })
           )}

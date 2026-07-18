@@ -134,7 +134,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="shift-table">
-            <thead><tr><th>员工</th><th>开始</th><th>结束</th><th>点位</th><th>备注</th></tr></thead>
+            <thead><tr><th>员工</th><th>开始</th><th>结束</th><th>点位</th><th>备注</th><th>详情</th></tr></thead>
             <tbody>
               {shifts.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`shift-row-${row.id}`}
@@ -145,7 +145,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
                   <td>{localTime(row.endAt)}</td>
                   <td>{row.pointSpaceIds?.length ? row.pointSpaceIds.join("、") : "未指定"}</td>
                   <td>{row.note ?? "—"}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看排班详情" onClick={(event) => { event.stopPropagation(); openShiftDetail(row); }}>查看详情</button></td></tr>
               ))}
               {shifts.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">本日暂无排班，点「＋ 新增排班」开始</td></tr> : null}
             </tbody>
@@ -154,7 +154,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
         <h3>当日考勤记录(严格无宽限判定)</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="attendance-table">
-            <thead><tr><th>员工</th><th>类型</th><th>打卡时间(服务器)</th><th>方式</th><th>判定</th><th>点位</th></tr></thead>
+            <thead><tr><th>员工</th><th>类型</th><th>打卡时间(服务器)</th><th>方式</th><th>判定</th><th>点位</th><th>详情</th></tr></thead>
             <tbody>
               {attendance.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`attendance-row-${row.id}`}
@@ -166,7 +166,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
                   <td>{METHOD_LABELS[row.method ?? ""] ?? row.method ?? "—"}</td>
                   <td>{JUDGE_LABELS[row.judgement ?? ""] ?? row.judgement ?? "—"}</td>
                   <td>{row.spaceId ?? "—"}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看考勤详情" onClick={(event) => { event.stopPropagation(); openAttendanceDetail(row); }}>查看详情</button></td></tr>
               ))}
               {attendance.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">本日暂无考勤记录</td></tr> : null}
             </tbody>

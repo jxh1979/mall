@@ -262,7 +262,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="stored-wine-table">
             <thead>
-              <tr><th>{TEXT.select}</th><th className="admin-sort-th" data-testid="stored-wine-sort-savedNo" onClick={() => sort.toggle("savedNo")} {...sort.thProps("savedNo")}>{TEXT.savedNo}{sort.indicator("savedNo")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-customer" onClick={() => sort.toggle("customer")} {...sort.thProps("customer")}>{TEXT.customer}{sort.indicator("customer")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-item" onClick={() => sort.toggle("item")} {...sort.thProps("item")}>{TEXT.item}{sort.indicator("item")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-quantity" onClick={() => sort.toggle("quantity")} {...sort.thProps("quantity")}>{TEXT.quantity}{sort.indicator("quantity")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>{TEXT.status}{sort.indicator("status")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-createdAt" onClick={() => sort.toggle("createdAt")} {...sort.thProps("createdAt")}>{TEXT.createdAt}{sort.indicator("createdAt")}</th></tr>
+              <tr><th>{TEXT.select}</th><th className="admin-sort-th" data-testid="stored-wine-sort-savedNo" onClick={() => sort.toggle("savedNo")} {...sort.thProps("savedNo")}>{TEXT.savedNo}{sort.indicator("savedNo")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-customer" onClick={() => sort.toggle("customer")} {...sort.thProps("customer")}>{TEXT.customer}{sort.indicator("customer")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-item" onClick={() => sort.toggle("item")} {...sort.thProps("item")}>{TEXT.item}{sort.indicator("item")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-quantity" onClick={() => sort.toggle("quantity")} {...sort.thProps("quantity")}>{TEXT.quantity}{sort.indicator("quantity")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>{TEXT.status}{sort.indicator("status")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-createdAt" onClick={() => sort.toggle("createdAt")} {...sort.thProps("createdAt")}>{TEXT.createdAt}{sort.indicator("createdAt")}</th><th>详情</th></tr>
             </thead>
             <tbody>
               {paged.pageRows.map((row) => (
@@ -276,7 +276,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
                   <td>{row.quantity ?? "-"}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{cnDate(row.createdAt)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看存酒详情" onClick={(event) => { event.stopPropagation(); openBottleDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

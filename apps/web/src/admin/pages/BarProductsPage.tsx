@@ -443,7 +443,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
                 <th>状态</th>
                 <th>存档状态</th>
                 <th>操作</th>
-              </tr>
+              <th>详情</th></tr>
             </thead>
             <tbody>
               {rows.map((row) => (
@@ -483,7 +483,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
                   <td>{row.soldOut ? "沽清" : formatBusinessStatus(row.status)}</td>
                   <td data-testid={`bar-product-archive-label-${row.id}`}>{archiveLabel(row)}</td>
                   <td onClick={(e) => e.stopPropagation()}>{catalogActions("products", row)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商品详情" onClick={(event) => { event.stopPropagation(); openProductDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

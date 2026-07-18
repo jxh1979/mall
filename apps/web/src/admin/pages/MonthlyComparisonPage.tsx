@@ -223,7 +223,7 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="monthly-comparison-table">
-            <thead><tr><th>指标</th><th>口径</th><th>本月</th><th>上月</th><th>环比</th><th>去年同月</th><th>同比</th></tr></thead>
+            <thead><tr><th>指标</th><th>口径</th><th>本月</th><th>上月</th><th>环比</th><th>去年同月</th><th>同比</th><th>详情</th></tr></thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`monthly-comparison-row-${row.metricKey}`}
@@ -236,7 +236,7 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
                   <td>{pct(row.momPct)}</td>
                   <td>{fmt(row.yoySameMonth, row.unit)}</td>
                   <td>{pct(row.yoyPct)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看月度对比详情" onClick={(event) => { event.stopPropagation(); openComparisonDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -267,7 +267,7 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
       {holidayData ? (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="holiday-comparison-table">
-            <thead><tr><th>指标</th><th>口径</th><th>今年合计</th><th>今年日均</th><th>去年合计</th><th>去年日均</th><th>同比</th></tr></thead>
+            <thead><tr><th>指标</th><th>口径</th><th>今年合计</th><th>今年日均</th><th>去年合计</th><th>去年日均</th><th>同比</th><th>详情</th></tr></thead>
             <tbody>
               {(holidayData.rows ?? []).map((row) => (
                 <tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`holiday-comparison-row-${row.metricKey}`}
@@ -280,7 +280,7 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
                   <td>{fmt(row.previousTotal, row.unit)}</td>
                   <td>{row.aggregation === "monthly_sum" ? fmt(row.previousDailyAvg, row.unit) : "—"}</td>
                   <td>{pct(row.yoyPct)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看节假日对比详情" onClick={(event) => { event.stopPropagation(); openHolidayDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

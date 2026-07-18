@@ -133,7 +133,7 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="integration-adapters-table">
-            <thead><tr><th>供应商</th><th>适配器类型</th><th>生产就绪</th></tr></thead>
+            <thead><tr><th>供应商</th><th>适配器类型</th><th>生产就绪</th><th>详情</th></tr></thead>
             <tbody>{rows.map((row) => (
               <tr key={row.id} className={`admin-row-clickable${focusObjectId === row.providerCode ? " admin-row-focus" : ""}`} tabIndex={0} data-testid={`integration-adapter-row-${row.id}`}
                 onClick={() => openAdapterDetail(row)}
@@ -141,7 +141,7 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
                 <td>{row.providerCode}</td>
                 <td title={row.adapterType ?? ""}>{adapterTypeLabel(row.adapterType)}</td>
                 <td>{readyLabel(row.productionReady)}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看适配器详情" onClick={(event) => { event.stopPropagation(); openAdapterDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>

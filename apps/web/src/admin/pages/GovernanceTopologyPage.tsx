@@ -143,7 +143,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
       <div className="admin-section-title">主体 - 商户 - 项目关系</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="governance-topology-table">
-          <thead><tr><th>经营主体</th><th>统一社会信用代码</th><th>商户</th><th>项目</th><th>项目编码</th><th>业态</th><th>状态</th></tr></thead>
+          <thead><tr><th>经营主体</th><th>统一社会信用代码</th><th>商户</th><th>项目</th><th>项目编码</th><th>业态</th><th>状态</th><th>详情</th></tr></thead>
           <tbody>{merchants.map((merchant) => {
             const entity = entities.find((item) => item.id === merchant.businessEntityId);
             const merchantProjects = projects.filter((project) => project.merchantId === merchant.id);
@@ -163,7 +163,7 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
                 <td>{display(project?.code)}</td>
                 <td>{display(project?.venueType)}</td>
                 <td>{formatBusinessStatus(project?.status ?? merchant.status)}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看拓扑关系详情" onClick={(event) => { event.stopPropagation(); openTopologyDetail(entity, merchant, project); }}>查看详情</button></td></tr>
             ));
           })}</tbody>
         </table>
@@ -176,11 +176,11 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
       <div className="admin-section-title">空间点位</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="governance-topology-spaces-table">
-          <thead><tr><th>空间</th><th>所属项目</th><th>楼层</th><th>面积(㎡)</th><th>空间类型</th><th>状态</th></tr></thead>
+          <thead><tr><th>空间</th><th>所属项目</th><th>楼层</th><th>面积(㎡)</th><th>空间类型</th><th>状态</th><th>详情</th></tr></thead>
           <tbody>{spaces.map((space) => {
             const project = projects.find((item) => item.id === space.projectId);
             const spaceFocused = !!focusObjectId && (focusObjectId === space.id || focusObjectId === space.projectId);
-            return <tr key={space.id} data-testid={`governance-space-row-${space.id}`} className={`admin-row-clickable${spaceFocused ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openSpaceDetail(space, project)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSpaceDetail(space, project); } }}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatBusinessStatus(space.spaceType)}</td><td>{formatBusinessStatus(space.status)}</td></tr>;
+            return <tr key={space.id} data-testid={`governance-space-row-${space.id}`} className={`admin-row-clickable${spaceFocused ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openSpaceDetail(space, project)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSpaceDetail(space, project); } }}><td>{display(space.spaceName)}</td><td>{display(project?.name ?? space.projectId)}</td><td>{display(space.floorNo)}</td><td>{display(space.areaSquareMeter)}</td><td>{formatBusinessStatus(space.spaceType)}</td><td>{formatBusinessStatus(space.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看空间点位详情" onClick={(event) => { event.stopPropagation(); openSpaceDetail(space, project); }}>查看详情</button></td></tr>;
           })}</tbody>
         </table>
       </div>

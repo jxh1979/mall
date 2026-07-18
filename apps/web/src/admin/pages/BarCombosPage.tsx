@@ -321,7 +321,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
                 <th>状态</th>
                 <th>存档状态</th>
                 <th>操作</th>
-              </tr>
+              <th>详情</th></tr>
             </thead>
             <tbody>
               {rows.map((row) => (
@@ -339,7 +339,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td data-testid={`bar-combo-archive-label-${row.id}`}>{archiveLabel(row)}</td>
                   <td onClick={(e) => e.stopPropagation()}>{comboActions(row)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看套餐详情" onClick={(event) => { event.stopPropagation(); openDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

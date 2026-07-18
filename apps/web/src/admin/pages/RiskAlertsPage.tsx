@@ -218,7 +218,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
   const alertsTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="risk-alerts-table">
-        <thead><tr><th>{TEXT.select}</th><th>{TEXT.alertType}</th><th>{TEXT.riskLevel}</th><th>{TEXT.objectType}</th><th>{TEXT.objectId}</th><th>{TEXT.summary}</th><th>{TEXT.owner}</th><th>{TEXT.status}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.createdAt}</th></tr></thead>
+        <thead><tr><th>{TEXT.select}</th><th>{TEXT.alertType}</th><th>{TEXT.riskLevel}</th><th>{TEXT.objectType}</th><th>{TEXT.objectId}</th><th>{TEXT.summary}</th><th>{TEXT.owner}</th><th>{TEXT.status}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.createdAt}</th><th>详情</th></tr></thead>
         <tbody>{paged.pageRows.map((row) => (
           <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`risk-alert-row-${row.id}`}
             onClick={() => openAlertDetail(row)}
@@ -233,7 +233,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
             <td>{formatBusinessStatus(row.status)}</td>
             <td>{evidenceList(row)}</td>
             <td>{cnDate(row.createdAt)}</td>
-          </tr>
+          <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看风控预警详情" onClick={(event) => { event.stopPropagation(); openAlertDetail(row); }}>查看详情</button></td></tr>
         ))}</tbody>
       </table>
       <TablePager testid="risk-alerts-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />

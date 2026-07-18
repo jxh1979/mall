@@ -139,7 +139,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
       <h3>空置铺位明细(实时,与出租率同口径)</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="occupancy-vacant-table">
-          <thead><tr><th>铺位</th><th>类型</th><th>楼层</th><th>面积</th><th>状态</th></tr></thead>
+          <thead><tr><th>铺位</th><th>类型</th><th>楼层</th><th>面积</th><th>状态</th><th>详情</th></tr></thead>
           <tbody>
             {pagedVacant.pageRows.map((row) => (
               <tr key={row.spaceId} className="admin-row-clickable" tabIndex={0} data-testid={`occupancy-vacant-row-${row.spaceId}`}
@@ -150,7 +150,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
                 <td>{row.floorNo ?? "—"}</td>
                 <td>{sqm(row.areaSqm === undefined ? null : Number(row.areaSqm))}</td>
                 <td>{RENTAL_LABELS[row.rentalStatus ?? ""] ?? row.rentalStatus ?? "—"}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看空置铺位详情" onClick={(event) => { event.stopPropagation(); openVacantDetail(row); }}>查看详情</button></td></tr>
             ))}
           </tbody>
         </table>
@@ -164,7 +164,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
       <h3>到期预警(90 天内,按到期日升序)</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="occupancy-expiring-table">
-          <thead><tr><th>合同</th><th>商户</th><th>到期日</th><th>剩余天数</th><th>绑定面积</th></tr></thead>
+          <thead><tr><th>合同</th><th>商户</th><th>到期日</th><th>剩余天数</th><th>绑定面积</th><th>详情</th></tr></thead>
           <tbody>
             {pagedExpiring.pageRows.map((row) => (
               <tr key={row.contractId} className="admin-row-clickable" tabIndex={0} data-testid={`occupancy-expiring-row-${row.contractId}`}
@@ -175,7 +175,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
                 <td>{cnDate(row.expiryDate)}</td>
                 <td>{row.daysLeft ?? "—"}</td>
                 <td>{sqm(row.boundArea === undefined ? null : Number(row.boundArea))}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看到期预警详情" onClick={(event) => { event.stopPropagation(); openExpiringDetail(row); }}>查看详情</button></td></tr>
             ))}
           </tbody>
         </table>
