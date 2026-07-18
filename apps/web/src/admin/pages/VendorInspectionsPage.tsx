@@ -225,7 +225,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-inspection-row-${row.id}`}
               onClick={() => openTaskDetail(row)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTaskDetail(row); } }}>
-              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`vendor-inspection-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此巡检 ${row.id}`} data-testid={`vendor-inspection-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
               <td>{row.title ?? row.id}</td>
               <td>{formatBusinessStatus(row.inspectionType)}</td>
               <td>{formatBusinessStatus(row.status)}</td>

@@ -336,7 +336,11 @@ public class StoredValueService {
                 merchantId.trim(), refundAllowed, refundRatioBps, now, now));
     }
 
+    @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
     public StoredValueMerchantRefundRuleRecord getMerchantRefundRule(String merchantId) {
+        // AUD-062：查询商户退款规则须过权限闸 + 商户 scope（与 configureMerchantRefundRule 一致），
+        // 否则任意店员/跨商户可读任意商户的退款规则配置。
+        requireMerchantScopeForMerchant(merchantId);
         return repository.findStoredValueMerchantRefundRule(merchantId)
                 .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId));
     }

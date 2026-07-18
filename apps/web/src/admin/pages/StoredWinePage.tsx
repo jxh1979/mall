@@ -253,7 +253,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
         )}
 
         <div className="admin-list-toolbar" data-testid="stored-wine-filter">
-          <input data-testid="stored-wine-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索存酒号 / 客户 / 酒水 / 状态" />
+          <input data-testid="stored-wine-search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索存酒号 / 客户 / 酒水 / 状态" placeholder="搜索存酒号 / 客户 / 酒水 / 状态" />
           <span className="admin-muted-action" data-testid="stored-wine-filter-count">匹配 {filteredRows.length} / {rows.length} 条</span>
         </div>
         {filteredRows.length === 0 ? (
@@ -269,7 +269,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`stored-wine-row-${row.id}`}
                   onClick={() => openBottleDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBottleDetail(row); } }}>
-                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`stored-wine-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此存酒 ${row.id}`} data-testid={`stored-wine-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.savedNo ?? row.id}</td>
                   <td>{row.customerName ?? row.customerId ?? "-"}</td>
                   <td>{row.itemName ?? row.itemId ?? "-"}</td>

@@ -484,7 +484,10 @@ export default function AdminApp() {
     setNavOpen(false);
     // 固定高度布局下内容滚动发生在 .admin-content 内；切换页面后复位到顶部，
     // 避免从长列表页跳到短页面时停留在空白滚动位置。
-    document.querySelector(".admin-content")?.scrollTo({ top: 0 });
+    const content = document.querySelector<HTMLElement>(".admin-content");
+    content?.scrollTo({ top: 0 });
+    // SPA 换页后把焦点移到主内容区（tabIndex=-1），读屏/键盘用户不再滞留在旧菜单项。
+    content?.focus();
     if (stripBase(window.location.pathname) !== nextRoute.route) {
       window.history.pushState({ pageId: nextRoute.pageId }, "", withBase(nextRoute.route));
     }
@@ -504,7 +507,9 @@ export default function AdminApp() {
     setActionResult(null);
     setGlobalError(null);
     setNavOpen(false);
-    document.querySelector(".admin-content")?.scrollTo({ top: 0 });
+    const content = document.querySelector<HTMLElement>(".admin-content");
+    content?.scrollTo({ top: 0 });
+    content?.focus();
     const url = objectId ? `${target.route}?focus=${encodeURIComponent(objectId)}` : target.route;
     window.history.pushState({ pageId: target.pageId }, "", withBase(url));
   }
@@ -549,7 +554,7 @@ export default function AdminApp() {
       </aside>
       <div className="admin-auth-form-wrap">
         <form className="admin-auth-panel" data-testid="login-view" onSubmit={(event) => void login(event)}>
-          <strong>综合体完整后台</strong>
+          <strong role="heading" aria-level={1}>综合体完整后台</strong>
           <p className="admin-auth-desc">登录以进入对应权限与数据范围</p>
           {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
           <label><span>账号</span><input data-testid="login-username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
@@ -606,6 +611,7 @@ export default function AdminApp() {
                           key={item.pageId}
                           data-testid={`admin-nav-${item.pageId}`}
                           className={item.pageId === route.pageId ? "active" : ""}
+                          aria-current={item.pageId === route.pageId ? "page" : undefined}
                           onClick={() => navigate(item)}
                           disabled={!allowed}
                           aria-disabled={!allowed}
@@ -661,7 +667,7 @@ export default function AdminApp() {
             <button type="button" data-testid="admin-logout" onClick={logout}>退出</button>
           </div>
         </header>
-        <div className="admin-content" id="main-content" tabIndex={-1}>
+        <main className="admin-content" id="main-content" tabIndex={-1}>
           {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
           {!routeAllowsAccountForm(route, accountForm) ? (
             // 形态不匹配（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
@@ -677,7 +683,7 @@ export default function AdminApp() {
           </PermissionGate>
           )}
           {actionResult ? <pre className="admin-result" role="status" aria-live="polite" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
-        </div>
+        </main>
       </section>
     </div>
   );

@@ -270,7 +270,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
         )}
 
         <div className="admin-form-row" data-testid="ticket-orders-filter">
-          <input data-testid="ticket-orders-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索订单号 / 票种 / 渠道 / 支付/出票状态" />
+          <input data-testid="ticket-orders-search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索订单号 / 票种 / 渠道 / 支付/出票状态" placeholder="搜索订单号 / 票种 / 渠道 / 支付/出票状态" />
           <span className="admin-muted-action" data-testid="ticket-orders-filter-count">匹配 {filteredOrders.length} / {orders.length} 条</span>
         </div>
         {filteredOrders.length === 0 ? (
@@ -287,7 +287,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                   className={`admin-row-clickable${focusMatches(order) ? " admin-row-focus" : ""}`} tabIndex={0}
                   onClick={() => openOrderDetail(order)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOrderDetail(order); } }}>
-                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`ticket-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此订单 ${order.id}`} data-testid={`ticket-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                   <td>{order.orderNo ?? order.id}</td>
                   <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={order.ticketTypeId}>{order.ticketTypeId ?? "-"}</TraceLink></td>
                   <td>{order.quantity ?? "-"}</td>

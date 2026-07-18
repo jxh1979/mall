@@ -178,6 +178,12 @@ body {
   align-items: center;
   min-height: 44px;
   padding: 0 10px;
+  /* 由 <a> 改为 <button>（键盘可达）后重置按钮默认外观，保持原视觉。 */
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
 }
 
 .page-header {

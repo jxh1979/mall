@@ -26,6 +26,15 @@ public class OperatingParamsService {
     private final AuditEventService auditEventService;
     private final Clock clock;
 
+    // AUD-016 SSRF 防护：节假日抓取仅放行配置/默认白名单内的可信主机，防止高权限用户借抓取访问内网/云元数据地址。
+    // 经配置项 analytics.holiday.fetch.allowed-hosts（env COMPLEX_ANALYTICS_HOLIDAY_FETCH_ALLOWED_HOSTS，逗号分隔）覆盖，
+    // 未配置时回退 holiday-cn 官方源与常用镜像。用字段注入以避免改动两处单测复用的构造器签名（AnalyticsServiceTests）。
+    private static final java.util.Set<String> DEFAULT_HOLIDAY_FETCH_HOSTS =
+            java.util.Set.of("raw.githubusercontent.com", "cdn.jsdelivr.net", "gitee.com");
+
+    @org.springframework.beans.factory.annotation.Value("${analytics.holiday.fetch.allowed-hosts:}")
+    private String allowedHolidayFetchHostsCsv;
+
     @Autowired
     public OperatingParamsService(AnalyticsRepository repository, AuditEventService auditEventService) {
         this(repository, auditEventService, Clock.systemUTC());
@@ -247,6 +256,7 @@ public class OperatingParamsService {
         if (!url.startsWith("https://") && !url.startsWith("http://")) {
             throw ApiException.badRequest("VALIDATION_FAILED", "url must be http(s)");
         }
+        requireTrustedHolidayHost(url);
         String body;
         try {
             java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
@@ -308,6 +318,35 @@ public class OperatingParamsService {
                 "holiday_calendar", url, null, actual.idempotencyKey(),
                 java.util.Map.of("url", url, "imported", imported));
         return java.util.Map.of("imported", imported, "holidays", byName.keySet());
+    }
+
+    /** AUD-016 SSRF 防护：仅放行配置/默认白名单内的抓取主机（精确 host 匹配，拒绝内网/元数据地址/域名混淆如 a.com@evil.com）。 */
+    private void requireTrustedHolidayHost(String url) {
+        String host;
+        try {
+            host = java.net.URI.create(url).getHost();
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "url is malformed");
+        }
+        if (host == null || !allowedHolidayFetchHosts().contains(host.toLowerCase(java.util.Locale.ROOT))) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "holiday source host is not in the trusted allow-list");
+        }
+    }
+
+    private java.util.Set<String> allowedHolidayFetchHosts() {
+        String csv = allowedHolidayFetchHostsCsv;
+        if (csv == null || csv.isBlank()) {
+            return DEFAULT_HOLIDAY_FETCH_HOSTS;
+        }
+        java.util.Set<String> hosts = new java.util.LinkedHashSet<>();
+        for (String part : csv.split(",")) {
+            String trimmed = part.trim().toLowerCase(java.util.Locale.ROOT);
+            if (!trimmed.isEmpty()) {
+                hosts.add(trimmed);
+            }
+        }
+        return hosts.isEmpty() ? DEFAULT_HOLIDAY_FETCH_HOSTS : hosts;
     }
 
     private <T> T requireRequest(T request) {

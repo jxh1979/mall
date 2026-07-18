@@ -161,7 +161,7 @@ export function WecomComplianceReviewPage({ api, setActionResult, setGlobalError
                 <tr key={row.hitId} className="admin-row-clickable" tabIndex={0} data-testid={`wecom-risk-hit-row-${row.hitId}`}
                   onClick={() => openHitDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openHitDetail(row); } }}>
-                  <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`wecom-risk-hit-select-${row.hitId}`} checked={selectedHitId === row.hitId} onChange={() => setSelectedHitId(row.hitId)} /></td>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此风险命中 ${row.hitId}`} data-testid={`wecom-risk-hit-select-${row.hitId}`} checked={selectedHitId === row.hitId} onChange={() => setSelectedHitId(row.hitId)} /></td>
                   <td>{row.ruleCode ?? "-"}</td><td>{wLabel(RISK_LEVEL_LABELS, row.riskLevel)}</td><td>{row.matchedSnippet ?? "-"}</td>
                   <td>{formatBusinessStatus(row.status)}</td><td>{row.reviewerId ?? "-"}</td>
                 </tr>

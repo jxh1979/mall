@@ -334,7 +334,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-safety-row-${row.id}`}
               onClick={() => openInspectionDetail(row)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionDetail(row); } }}>
-              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`amusement-safety-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此安全巡检 ${row.id}`} data-testid={`amusement-safety-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
               <td>{displayNo(row)}</td>
               <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectName ?? row.projectId ?? "-"}</TraceLink></td>
               <td>{overallLabel(row)}</td>

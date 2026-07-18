@@ -215,7 +215,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-site-entry-row-${row.id}`}
               onClick={() => openEntryDetail(row)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEntryDetail(row); } }}>
-              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`vendor-site-entry-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此进场报备 ${row.id}`} data-testid={`vendor-site-entry-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
               <td>{row.workScope ?? row.id}</td>
               <td>{row.projectId ?? "-"} / {row.spaceId ?? "-"}</td>
               <td>{cnDate(row.plannedStartDate)} ~ {cnDate(row.plannedEndDate)}</td>

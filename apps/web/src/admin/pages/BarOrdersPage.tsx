@@ -305,7 +305,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                   <tr key={order.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-order-row-${order.id}`}
                     onClick={() => openOrderDetail(order)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOrderDetail(order); } }}>
-                    <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`bar-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
+                    <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此订单 ${order.id}`} data-testid={`bar-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                     <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={order.id}>{order.orderNo ?? order.id}</TraceLink></td>
                     <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-BAR-001" objectId={order.tableId}>{order.tableId ?? "-"}</TraceLink></td>
                     <td>{displayStatus(order.status)}</td>

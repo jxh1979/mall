@@ -394,7 +394,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const leadsTable = (
     <>
       <div className="admin-list-toolbar" data-testid="leasing-leads-filter">
-        <input data-testid="leasing-leads-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索联系人 / 来源 / 状态 / 负责人" />
+        <input data-testid="leasing-leads-search" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索联系人 / 来源 / 状态 / 负责人" placeholder="搜索联系人 / 来源 / 状态 / 负责人" />
         <span className="admin-muted-action" data-testid="leasing-leads-filter-count">匹配 {filteredLeads.length} / {focusLeads.length} 条</span>
       </div>
       {filteredLeads.length === 0 ? (
@@ -408,7 +408,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leasing-lead-row-${row.id}`}
                 onClick={() => openLeadDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openLeadDetail(row); } }}>
-                <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`leasing-lead-select-${row.id}`} checked={(lead.selectedId ?? "") === row.id} onChange={() => lead.setSelectedId(row.id)} /></td>
+                <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此招商线索 ${row.id}`} data-testid={`leasing-lead-select-${row.id}`} checked={(lead.selectedId ?? "") === row.id} onChange={() => lead.setSelectedId(row.id)} /></td>
                 <td>{row.contactName ?? row.id}</td>
                 <td>{row.contactPhone ?? "-"}</td>
                 <td>{label(SOURCE_LABELS, row.source)}</td>
@@ -434,7 +434,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leasing-intent-row-${row.id}`}
               onClick={() => openIntentDetail(row)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openIntentDetail(row); } }}>
-              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`leasing-intent-select-${row.id}`} checked={(intent.selectedId ?? "") === row.id} onChange={() => intent.setSelectedId(row.id)} /></td>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此招商意向 ${row.id}`} data-testid={`leasing-intent-select-${row.id}`} checked={(intent.selectedId ?? "") === row.id} onChange={() => intent.setSelectedId(row.id)} /></td>
               <td>{row.id}</td>
               <td>{row.leadId ?? "-"}</td>
               <td>{label(STAGE_LABELS, row.stage)}</td>
@@ -455,7 +455,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leasing-brand-row-${row.id}`}
               onClick={() => openBrandDetail(row)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBrandDetail(row); } }}>
-              <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`leasing-brand-select-${row.id}`} checked={(brand.selectedId ?? "") === row.id} onChange={() => brand.setSelectedId(row.id)} /></td>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此品牌 ${row.id}`} data-testid={`leasing-brand-select-${row.id}`} checked={(brand.selectedId ?? "") === row.id} onChange={() => brand.setSelectedId(row.id)} /></td>
               <td>{row.brandName ?? row.id}</td>
               <td>{label(BRAND_TYPE_LABELS, row.brandType)}</td>
               <td>{label(BUSINESS_TYPE_LABELS, row.businessType)}</td>

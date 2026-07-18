@@ -198,7 +198,7 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`subject-bindings-row-${row.id}`}
                     onClick={() => openBindingDetail(row)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBindingDetail(row); } }}>
-                    <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`subject-bindings-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                    <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此主体绑定 ${row.id}`} data-testid={`subject-bindings-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                     <td>{display(row.businessObjectId)}</td>
                     <td>{display(row.operatorSubject)}</td>
                     <td>{display(row.contractSubject)}</td>

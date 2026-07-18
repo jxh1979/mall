@@ -86,6 +86,9 @@ export default function CustomerApp(): React.ReactElement {
     if (pageFromLocation() !== next) {
       window.history.pushState({ page: next }, "", withBase(next === "home" ? "/" : `/?page=${next}`));
     }
+    // SPA 切页后把焦点移到主内容（#main-content tabIndex=-1）；rAF 等重渲染后再聚焦。
+    // 仅菜单点击（goTo）触发；首屏/前进后退（走 setPage）不抢焦点。
+    requestAnimationFrame(() => document.getElementById("main-content")?.focus());
   };
 
   useEffect(() => {
@@ -193,9 +196,9 @@ export default function CustomerApp(): React.ReactElement {
         <Layout>
           <Header style={{ background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span data-testid="customer-phone">已登录：{session.maskedPhone}</span>
-            <a className="customer-logout-link" onClick={onLogout} data-testid="customer-logout">
+            <button type="button" className="customer-logout-link" onClick={onLogout} data-testid="customer-logout">
               退出登录
-            </a>
+            </button>
           </Header>
           <Content id="main-content" tabIndex={-1} style={{ padding: 16 }}>
             {/* 每页 h1 语义地标（此前全站无 h1）；标题与侧栏菜单同源。 */}

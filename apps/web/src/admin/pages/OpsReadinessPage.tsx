@@ -91,7 +91,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError, effecti
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`ops-readiness-row-${row.id}`}
                 onClick={() => openBlockerDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBlockerDetail(row); } }}>
-                <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`ops-readiness-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此阻断项 ${row.id}`} data-testid={`ops-readiness-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                 <td>{row.blockerCode ?? row.title}</td>
                 <td>{row.owner}</td>
                 <td>{formatBusinessStatus(row.status)}</td>

@@ -301,7 +301,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
             {formError ? <div data-testid="risk-alert-error" className="admin-inline-error">{formError}</div> : null}
 
             <div className="admin-form-row" data-testid="risk-alerts-filter">
-              <input data-testid="risk-alerts-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索预警类型 / 对象 / 摘要 / 状态" />
+              <input data-testid="risk-alerts-search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索预警类型 / 对象 / 摘要 / 状态" placeholder="搜索预警类型 / 对象 / 摘要 / 状态" />
               <span className="admin-muted-action" data-testid="risk-alerts-filter-count">匹配 {filteredRows.length} / {rows.length} 条</span>
             </div>
             {filteredRows.length === 0 ? (

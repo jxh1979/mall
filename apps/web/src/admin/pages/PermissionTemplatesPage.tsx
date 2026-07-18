@@ -452,7 +452,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
               <tr><td colSpan={6} className="admin-muted-action">暂无权限模板，可先新建基础模板或临时模板。</td></tr>
             ) : rows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`permission-template-row-${row.id}`} onClick={() => openTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
-                <td onClick={(event) => event.stopPropagation()}><input type="radio" data-testid={`permission-template-select-${row.id}`} checked={mode === "existing" && selectedId === row.id} onChange={() => { setMode("existing"); setSelectedId(row.id); }} /></td>
+                <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此权限模板 ${row.id}`} data-testid={`permission-template-select-${row.id}`} checked={mode === "existing" && selectedId === row.id} onChange={() => { setMode("existing"); setSelectedId(row.id); }} /></td>
                 <td>{displayTemplateName(row)}</td>
                 <td>{templateTypeLabel(row.templateType)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
