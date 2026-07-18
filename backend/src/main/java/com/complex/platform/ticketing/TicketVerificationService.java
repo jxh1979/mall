@@ -139,8 +139,10 @@ public class TicketVerificationService {
         if (customerId != null) {
             // AUD-077 取码授权按"当前持有人"(slot holder),非订单归属:转出后原持票人取码 403、受赠人可取。
             // 无 slot holder(存量/直发未分组)回退订单归属校验;新发放 holder 初始=购票人,故未转赠票行为不变。
+            // 复核修正(AUD-012):共享锁读持有人,取码(读 holder→插新凭证)与 claim(改 holder+撤销凭证)串行化,
+            // 否则 claim 的撤销可能扫不到并发在飞的新凭证=转出后原持有人留下一个有效动态码。
             String holder = entitlement.parentTicketId() == null ? null
-                    : repository.findSlotHolder(entitlement.parentTicketId(), entitlement.slotIndex())
+                    : repository.findSlotHolderForShare(entitlement.parentTicketId(), entitlement.slotIndex())
                             .map(TicketSlotHolderRecord::holderCustomerId).orElse(null);
             if (holder != null) {
                 if (!customerId.equals(holder)) {
@@ -591,6 +593,9 @@ public class TicketVerificationService {
         }
         IssuedEntitlementRecord updated = repository.atomicUseEntitlement(entitlement.id(), now)
                 .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "entitlement has no remaining times"));
+        // AUD-018 消费后复检(新语句=新快照):发起转赠持 FOR UPDATE 锁时,本 UPDATE 解锁续跑的
+        // NOT EXISTS 可能仍用旧快照看不见刚提交的 pending → 此处复检,发现在途转赠即抛错回滚本次消费。
+        requireSlotNotTransferring(updated);
         // 发放已 fan-out 成单人权益（TicketOrderService：每张 num_people=1），每次核销一人；
         // 故本次核销人数恒 = 该权益 num_people(=1)，落 verified_people 记录。
         // （批4：原「verifiedPeople > num_people」是 fan-out 前的恒假死检查，已移除，核销语义不变。）
@@ -651,25 +656,11 @@ public class TicketVerificationService {
                 settlementPriceCent
         ));
         if (credential != null) {
-            repository.saveTicketCredential(new TicketCredentialRecord(
-                    credential.id(),
-                    credential.entitlementId(),
-                    credential.orderId(),
-                    credential.credentialToken(),
-                    credential.nonce(),
-                    credential.credentialHash(),
-                    credential.credentialType(),
-                    credential.issuedAt(),
-                    credential.expiresAt(),
-                    "consumed",
-                    credential.refreshedCount(),
-                    credential.createdAt(),
-                    now,
-                    credential.refreshIntervalSeconds(),
-                    credential.windowStartedAt(),
-                    credential.signatureValue(),
-                    credential.signatureVersion()
-            ));
+            // AUD-012 凭证消费 CAS(仅 active→consumed):0 行=该凭证已被并发撤销(转赠领取撤销原持有人旧码)
+            // 或已消费 → 响亮拒绝并回滚本次核销(本方法在 @Transactional 事务内,success 记录/扣减一并回滚)。
+            if (repository.markTicketCredentialConsumed(credential.id(), now) == 0) {
+                throw ApiException.conflict("CREDENTIAL_EXPIRED", "credential is expired");
+            }
         }
         // R5 T15：赠饮权益核销成功 → 发同步事件 ticket.gift_verified，bar 域据此生成 0 元单并扣库存。
         // 同步发布以便测试与同事务；不与本核销主链耦合（主链已照常完成，下游异常不回滚核销由消费者自行兜底）。
@@ -741,6 +732,8 @@ public class TicketVerificationService {
         String amusementVerificationId = amusementResult.get();
         // 游乐侧已消费权益（used_times+1）；重读拿最新 used_times 用于积分/结算事件。
         IssuedEntitlementRecord consumed = repository.findIssuedEntitlementById(entitlement.id()).orElse(entitlement);
+        // AUD-018 消费后复检(与通用路径同):发现在途转赠即抛错回滚本次游乐消费(同事务)。
+        requireSlotNotTransferring(consumed);
         int verifiedPeople = consumed.numPeople();
         markTicketInstanceFirstUse(consumed, now);
         // D6：结算价沿用通票权益 value_amount_cent（游乐核销不另判物理/虚拟结算价）。

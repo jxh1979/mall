@@ -49,6 +49,7 @@ public class TicketingOperationExecutor {
         if (value instanceof EntitlementTemplateRecord record) return record.id();
         if (value instanceof TicketTypeEntitlementRecord record) return record.id();
         if (value instanceof VerificationResponse response) return response.id();
+        if (value instanceof TicketTransferResponse response) return response.id();
         if (value instanceof IssuedTicketResponse response && !response.issuedEntitlements().isEmpty()) {
             return response.issuedEntitlements().getFirst().entitlementCode();
         }

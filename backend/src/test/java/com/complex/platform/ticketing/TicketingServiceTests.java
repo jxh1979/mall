@@ -3863,6 +3863,26 @@ class TicketingServiceTests {
         }
 
         @Override
+        public int markTicketCredentialConsumed(String credentialId, java.time.Instant now) {
+            // AUD-012 与 Jdbc 同语义的 CAS:仅 active→consumed,否则 0 行。
+            for (Map.Entry<String, TicketCredentialRecord> entry : credentials.entrySet()) {
+                TicketCredentialRecord c = entry.getValue();
+                if (c.id().equals(credentialId)) {
+                    if (!"active".equals(c.status())) {
+                        return 0;
+                    }
+                    entry.setValue(new TicketCredentialRecord(
+                            c.id(), c.entitlementId(), c.orderId(), c.credentialToken(), c.nonce(),
+                            c.credentialHash(), c.credentialType(), c.issuedAt(), c.expiresAt(),
+                            "consumed", c.refreshedCount(), c.createdAt(), now, c.refreshIntervalSeconds(),
+                            c.windowStartedAt(), c.signatureValue(), c.signatureVersion()));
+                    return 1;
+                }
+            }
+            return 0;
+        }
+
+        @Override
         public TicketRefundRecord saveTicketRefund(TicketRefundRecord refund) {
             refunds.put(refund.id(), refund);
             return refund;

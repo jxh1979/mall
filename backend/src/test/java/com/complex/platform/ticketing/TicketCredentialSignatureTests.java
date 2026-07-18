@@ -142,6 +142,8 @@ class TicketCredentialSignatureTests {
         when(repository.atomicUseEntitlement(eq(ENTITLEMENT_ID), any()))
                 .thenReturn(Optional.of(entitlement.useOnce(now)));
         when(repository.saveVerification(any())).thenAnswer(inv -> inv.getArgument(0));
+        // AUD-012 凭证消费改为 CAS(mock 默认 0 会被视作并发撤销拒绝),此处按消费成功打桩。
+        when(repository.markTicketCredentialConsumed(any(), any())).thenReturn(1);
 
         TicketVerificationService service = new TicketVerificationService(
                 repository, mock(ApplicationEventPublisher.class), null, null, signer);

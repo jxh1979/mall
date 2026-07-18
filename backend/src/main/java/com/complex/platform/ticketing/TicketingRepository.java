@@ -313,9 +313,23 @@ public interface TicketingRepository {
         return new TicketSlotHolderRecord(parentTicketId, slotIndex, holderCustomerId, now, now);
     }
     default Optional<TicketSlotHolderRecord> findSlotHolder(String parentTicketId, int slotIndex) { return Optional.empty(); }
+
+    /** 复核修正(AUD-012 残留竞态):取码链共享锁读持有人——与 claim 对同行的 UPDATE 互斥,
+     * 封死「claim 撤销扫不到未提交新凭证」的毫秒级双花窗口。内存实现回退普通读(单线程测试无竞态)。 */
+    default Optional<TicketSlotHolderRecord> findSlotHolderForShare(String parentTicketId, int slotIndex) {
+        return findSlotHolder(parentTicketId, slotIndex);
+    }
     default List<TicketSlotHolderRecord> listSlotHoldersByHolder(String holderCustomerId) { return List.of(); }
     default int updateTicketInstanceHolder(String id, String holderCustomerId, java.time.Instant now) { return 0; }
     default List<IssuedEntitlementRecord> listIssuedEntitlementsByParentSlot(String parentTicketId, int slotIndex) { return List.of(); }
+    /** AUD-018 发起转赠锁定读:锁住 slot 权益行与核销互斥。default 退化普通读(测试双子);Jdbc 覆写 FOR UPDATE。 */
+    default List<IssuedEntitlementRecord> listIssuedEntitlementsByParentSlotForUpdate(String parentTicketId, int slotIndex) {
+        return listIssuedEntitlementsByParentSlot(parentTicketId, slotIndex);
+    }
+    /** AUD-012 领取转赠即撤销该 slot 现存 active 动态凭证(active→revoked,返回行数)。default 0(无凭证存储的测试双子)。 */
+    default int revokeActiveCredentialsForSlot(String parentTicketId, int slotIndex, java.time.Instant now) { return 0; }
+    /** AUD-012 凭证消费 CAS(仅 active→consumed,返回命中行数)。default 1=视为消费成功(无并发撤销语义的测试双子)。 */
+    default int markTicketCredentialConsumed(String credentialId, java.time.Instant now) { return 1; }
     default TicketTransferRecord saveTicketTransfer(TicketTransferRecord record) { return record; }
     default Optional<TicketTransferRecord> findTicketTransferById(String id) { return Optional.empty(); }
     default Optional<TicketTransferRecord> findTicketTransferByClaimCode(String claimCode) { return Optional.empty(); }

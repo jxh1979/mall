@@ -921,8 +921,8 @@ public class CustomerService {
             String customerToken, String transferId,
             com.complex.platform.customer.dto.CustomerTicketTransferClaimRequest request) {
         CustomerRecord customer = requireCustomer(customerToken);
-        return ticketingService.claimTicketTransfer(customer.id(), customer.phone(), transferId,
-                request == null ? null : request.claimCode());
+        // AUD-006 幂等键随请求体透传至 TicketingService 包装层(executeWrite)。
+        return ticketingService.claimTicketTransfer(customer.id(), customer.phone(), transferId, request);
     }
 
     public com.complex.platform.ticketing.TicketTransferResponse revokeTicketTransfer(String customerToken, String transferId) {

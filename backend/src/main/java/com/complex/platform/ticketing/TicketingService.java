@@ -687,13 +687,29 @@ public class TicketingService {
     }
 
     // ── AUD-077 门票转赠(客人端经 CustomerService 委派;鉴权=客人 token,已在 CustomerService 过账号闸) ──
+    /** AUD-006 幂等:必填键+请求指纹+响应精确重放(丢响应重试可拿回同一 claim_code);operationId 绑定客人,键不跨客人复用。 */
     public TicketTransferResponse initiateTicketTransfer(String customerId, String customerPhone,
             com.complex.platform.customer.dto.CustomerTicketTransferRequest request) {
-        return transferService.initiate(customerId, customerPhone, request);
+        return operations.executeWrite(
+                "initiateTicketTransfer:" + customerId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTransferResponse.class,
+                TicketingWriteOperation.INITIATE_TICKET_TRANSFER,
+                () -> transferService.initiate(customerId, customerPhone, request));
     }
 
-    public TicketTransferResponse claimTicketTransfer(String customerId, String customerPhone, String transferId, String claimCode) {
-        return transferService.claim(customerId, customerPhone, transferId, claimCode);
+    /** AUD-006 幂等:operationId 绑定客人+转赠单;请求指纹=领取请求体。 */
+    public TicketTransferResponse claimTicketTransfer(String customerId, String customerPhone, String transferId,
+            com.complex.platform.customer.dto.CustomerTicketTransferClaimRequest request) {
+        return operations.executeWrite(
+                "claimTicketTransfer:" + customerId + ":" + transferId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTransferResponse.class,
+                TicketingWriteOperation.CLAIM_TICKET_TRANSFER,
+                () -> transferService.claim(customerId, customerPhone, transferId,
+                        request == null ? null : request.claimCode()));
     }
 
     public TicketTransferResponse revokeTicketTransfer(String customerId, String transferId) {

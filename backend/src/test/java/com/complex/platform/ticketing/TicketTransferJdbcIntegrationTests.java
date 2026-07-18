@@ -36,6 +36,8 @@ class TicketTransferJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private TicketVerificationService verificationService;
     @Autowired private TicketingAmusementEntitlementGateway amusementGateway;
+    // AUD-006 幂等经由 TicketingService 包装层(executeWrite)生效,直调 transferService 不带幂等。
+    @Autowired private TicketingService ticketingService;
 
     private final Instant now = Instant.now();
 
@@ -296,6 +298,106 @@ class TicketTransferJdbcIntegrationTests {
         assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessB", now)).isEqualTo(1);
         // 再换一个场次 sessC 亦放行（单人多次票可多次核销于任意场次）
         assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessC", now)).isEqualTo(1);
+    }
+
+    // ── AUD-012:领取转赠即撤销原持有人已取的动态凭证,旧码不可再被消费 ────────────────
+    @Test
+    void claimRevokesActiveCredentialsOfTransferredSlot() {
+        Fixture f = seedSinglePerson();
+        String entId = firstEntitlementId(f.parent, 1);
+        // 原持有人转赠前取动态码(active)。
+        TicketCredentialResponse cred = verificationService.refreshCredential(entId, f.buyer);
+        TicketTransferResponse r = transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, null));
+        transferService.claim(f.receiver, f.receiverPhone, r.id(), r.claimCode());
+        // 旧凭证已撤销:状态 revoked、明文 token 清空;消费 CAS 0 行(核销主链据此 CREDENTIAL_EXPIRED 拒绝并回滚)。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM ticket_credentials WHERE id = ?", String.class, cred.id()))
+                .isEqualTo("revoked");
+        assertThat(repository.markTicketCredentialConsumed(cred.id(), now)).isZero();
+        // 受赠人可取新码(新码 active 不受撤销影响)。
+        assertThat(verificationService.refreshCredential(entId, f.receiver)).isNotNull();
+    }
+
+    // ── 复核裁定钉死:重放已消费动态码=按已消费拒(CREDENTIAL_EXPIRED),非 404——
+    // 查码按 credential_hash(消费不清),明文 token 列清空只是隐私最小化,不影响定位。 ──
+    @Test
+    void consumedCredentialStillResolvesByHashSoReplayHitsExpiredNotNotFound() {
+        Fixture f = seedSinglePerson();
+        String entId = firstEntitlementId(f.parent, 1);
+        TicketCredentialResponse cred = verificationService.refreshCredential(entId, f.buyer);
+        assertThat(repository.markTicketCredentialConsumed(cred.id(), now)).isEqualTo(1);
+        var replayed = repository.findTicketCredentialByToken(cred.credentialToken());
+        assertThat(replayed).isPresent();
+        assertThat(replayed.get().status()).isEqualTo("consumed");
+        assertThat(repository.markTicketCredentialConsumed(cred.id(), now)).isZero();
+    }
+
+    // ── AUD-018 领取前复验:pending 在途却已被消费(竞态/历史残留) → 拒领取,转赠留在 pending ──
+    @Test
+    void claimRejectsWhenSlotUsedBehindPendingTransfer() {
+        Fixture f = seedSinglePerson();
+        TicketTransferResponse r = transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, null));
+        // 直改库模拟绕过冻结的已消费状态(NOT EXISTS 竞态窗口/历史数据)。
+        jdbcTemplate.update("UPDATE issued_entitlements SET used_times = 1 WHERE parent_ticket_id = ?", f.parent);
+        assertApiCode(() -> transferService.claim(f.receiver, f.receiverPhone, r.id(), r.claimCode()),
+                "TICKET_TRANSFER_SLOT_USED");
+        assertThat(repository.findTicketTransferById(r.id()).orElseThrow().status()).isEqualTo("pending");
+        assertThat(holderOf(f.parent, 1)).isEqualTo(f.buyer);
+    }
+
+    // ── AUD-006:发起幂等重放(丢响应重试拿回同一 claim_code,不撞唯一约束不重复建单) ──────
+    @Test
+    void initiateIdempotentReplayReturnsSameTransferAndClaimCode() {
+        Fixture f = seedSinglePerson();
+        CustomerTicketTransferRequest req = new CustomerTicketTransferRequest(
+                UUID.randomUUID().toString(), f.parent, null, "link", null);
+        TicketTransferResponse first = ticketingService.initiateTicketTransfer(f.buyer, f.buyerPhone, req);
+        TicketTransferResponse replay = ticketingService.initiateTicketTransfer(f.buyer, f.buyerPhone, req);
+        assertThat(replay.id()).isEqualTo(first.id());
+        assertThat(replay.claimCode()).isEqualTo(first.claimCode());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM ticket_transfers WHERE parent_ticket_id = ?", Integer.class, f.parent))
+                .isEqualTo(1);
+    }
+
+    // ── AUD-006:同键不同请求=指纹冲突 409(键被占用,不静默错放) ─────────────────────
+    @Test
+    void initiateSameKeyDifferentRequestConflicts() {
+        Fixture f = seedSinglePerson();
+        String key = UUID.randomUUID().toString();
+        ticketingService.initiateTicketTransfer(f.buyer, f.buyerPhone,
+                new CustomerTicketTransferRequest(key, f.parent, null, "link", null));
+        assertApiCode(() -> ticketingService.initiateTicketTransfer(f.buyer, f.buyerPhone,
+                new CustomerTicketTransferRequest(key, f.parent, null, "phone", f.receiverPhone)),
+                "IDEMPOTENCY_CONFLICT");
+    }
+
+    // ── AUD-006:幂等键必填(统一键来源=请求体 idempotency_key,客户端恒自动补) ─────────
+    @Test
+    void initiateAndClaimRequireIdempotencyKey() {
+        Fixture f = seedSinglePerson();
+        assertApiCode(() -> ticketingService.initiateTicketTransfer(f.buyer, f.buyerPhone,
+                new CustomerTicketTransferRequest(null, f.parent, null, "link", null)),
+                "VALIDATION_FAILED");
+        TicketTransferResponse r = transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, null));
+        assertApiCode(() -> ticketingService.claimTicketTransfer(f.receiver, f.receiverPhone, r.id(),
+                new com.complex.platform.customer.dto.CustomerTicketTransferClaimRequest(null, r.claimCode())),
+                "VALIDATION_FAILED");
+    }
+
+    // ── AUD-006:领取幂等重放(同键同请求返回同一结果) ─────────────────────────────
+    @Test
+    void claimIdempotentReplayByKey() {
+        Fixture f = seedSinglePerson();
+        TicketTransferResponse r = transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, null));
+        var claimReq = new com.complex.platform.customer.dto.CustomerTicketTransferClaimRequest(
+                UUID.randomUUID().toString(), r.claimCode());
+        TicketTransferResponse first = ticketingService.claimTicketTransfer(f.receiver, f.receiverPhone, r.id(), claimReq);
+        TicketTransferResponse replay = ticketingService.claimTicketTransfer(f.receiver, f.receiverPhone, r.id(), claimReq);
+        assertThat(first.status()).isEqualTo("claimed");
+        assertThat(replay.id()).isEqualTo(first.id());
+        assertThat(replay.status()).isEqualTo("claimed");
+        assertThat(holderOf(f.parent, 1)).isEqualTo(f.receiver);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
