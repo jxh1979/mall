@@ -22346,6 +22346,7 @@ paths:
       x-audit-event-failure: dividend.plan_update_failed
       x-failure-codes:
       - DIVIDEND_PLAN_NOT_FOUND
+      - DIVIDEND_PLAN_EXISTS
       requestBody:
         $ref: '#/components/requestBodies/DividendPlanRequest'
       responses:

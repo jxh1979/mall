@@ -1403,6 +1403,20 @@ class FinanceServiceTests {
     }
 
     @Test
+    void turnoverRentStampsAccountingPeriodWithPeriodStartMonth() {
+        // V299：营业额抽成应收落 accounting_period=期间起始月（YearMonth 打戳）——
+        // 租金自动挂接（费用台账→分红基数）按 accounting_period 归期，缺戳=漏挂=分红基数虚高。
+        financeRepository.seedTurnoverRule("rule_period", "merchant_1", 500, 10000L, 80000L);
+        financeRepository.reflowTurnoverByMerchant.put("merchant_1", 1000000L);
+
+        ArApItemRecord item = service.billTurnoverRent(new com.complex.platform.finance.dto.TurnoverRentBillRequest(
+                "bill-period", "note", List.of(), "rule_period",
+                LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-30"), LocalDate.parse("2026-07-10")));
+
+        assertThat(item.accountingPeriod()).isEqualTo("2026-06");
+    }
+
+    @Test
     void turnoverRentAppliesFloorWhenComputedBelowMinimum() {
         financeRepository.seedTurnoverRule("rule_floor", "merchant_1", 500, 10000L, 80000L);
         // 营业额 100,000 → 5% = 5000 < 保底 10000 → clamp 到 10000。

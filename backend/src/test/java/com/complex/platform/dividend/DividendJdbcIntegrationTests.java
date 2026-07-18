@@ -333,12 +333,22 @@ class DividendJdbcIntegrationTests {
         assertThat(((Number) payable.get("amount_cent")).longValue()).isEqualTo(11_200L);
         assertThat(payable.get("status")).isEqualTo("pending_payment");
 
-        // C-1 状态守卫：已 approved 的单重复审批 → 0 行守卫 →业务 409（非 500）。
+        // 已 approved 的单重复审批 → 服务层前置检查 requireStatus 拒（业务 409 非 500）。
+        // 注意：这条命中的是服务层预检，不是 SQL 守卫——SQL WHERE 期望前态的负路径由下面的直调仓储用例覆盖。
         assertThatThrownBy(() -> approverService.approve(statement.id(),
                 new DividendActionRequest("div-jdbc-approve-2", null)))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                 .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
                         .isEqualTo("DIVIDEND_STATE_INVALID"));
+
+        // C-1 SQL 守卫负路径真覆盖：绕过服务层直调仓储，对已 approved 单再 markApproved →
+        // UPDATE ... AND status='pending_review' 必须 0 行且状态/审批留痕不被盲改（并发双付窗口的 DB 层兜底）。
+        assertThat(repository.markApproved(statement.id(), "usr_div_jdbc_other", "arap_fake", Instant.now()))
+                .isZero();
+        DividendStatementRecord untouched = repository.findStatementById(statement.id()).orElseThrow();
+        assertThat(untouched.status()).isEqualTo("approved");
+        assertThat(untouched.arApItemId()).isEqualTo(approved.arApItemId());
+        assertThat(untouched.approvedBy()).isEqualTo("usr_div_jdbc_approver");
 
         // 标记发放收口。
         DividendStatementRecord paid = approverService.markPaid(statement.id(),
