@@ -248,6 +248,28 @@ class CustomerServiceTests {
     }
 
     @Test
+    void ticketProductsFilterByBarAndResolveName() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        TicketTypeRecord pass = new TicketTypeRecord(
+                "tt_pass", "综合体通票", "weekday_weekend_holiday", 9900L, 9900L, 9900L,
+                false, "published", null, null, now, now);
+        TicketTypeRecord barA = new TicketTypeRecord(
+                "tt_bar_a", "周末单人票", "weekday_weekend_holiday", 9900L, 9900L, 9900L,
+                false, "published", null, null, now, now, null, 0, null, false, "mch_bar_a");
+        when(ticketingService.listTicketTypes()).thenReturn(new PageResponse<>(List.of(pass, barA), 2, 50, 2));
+        when(ticketingService.resolveBarName("mch_bar_a")).thenReturn("话梅酒馆");
+
+        // 公共入口：全量（通票 + 单店票）。
+        assertThat(service.listTicketProducts(null).items()).hasSize(2);
+        // 专属入口：锁定 bar_a，只见该酒吧单店票，且带实时酒吧名。
+        PageResponse<CustomerTicketProductResponse> onlyA = service.listTicketProducts("mch_bar_a");
+        assertThat(onlyA.items()).singleElement().satisfies(pr -> {
+            assertThat(pr.barId()).isEqualTo("mch_bar_a");
+            assertThat(pr.barName()).isEqualTo("话梅酒馆");
+        });
+    }
+
+    @Test
     void ticketProductsArePublicListable() {
         when(ticketingService.listTicketTypes()).thenReturn(new PageResponse<>(List.of(new TicketTypeRecord(
                 "ticket_type_public",
@@ -264,7 +286,7 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z")
         )), 1, 50, 1));
 
-        PageResponse<CustomerTicketProductResponse> response = service.listTicketProducts();
+        PageResponse<CustomerTicketProductResponse> response = service.listTicketProducts(null);
 
         assertThat(response.items())
                 .extracting(CustomerTicketProductResponse::ticketTypeId, CustomerTicketProductResponse::currency)

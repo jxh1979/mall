@@ -20,6 +20,16 @@ public record TicketInstanceRecord(
         Instant firstUsedAt,
         String firstSessionKey,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        // AUD-076 单店票挂酒吧：出票时从订单快照的酒吧商户 id；null=通票/平台票。
+        String barId
 ) {
+    // ponytail: AUD-076 前的 14 参构造点（既有测试/直发）不带 barId，默认 null（通票）。
+    public TicketInstanceRecord(
+            String id, String ticketNo, String orderId, String ticketTypeId, int seqInOrder, int numPeople,
+            int totalTimes, String buyerCustomerId, String currentHolderCustomerId, String status,
+            Instant firstUsedAt, String firstSessionKey, Instant createdAt, Instant updatedAt) {
+        this(id, ticketNo, orderId, ticketTypeId, seqInOrder, numPeople, totalTimes, buyerCustomerId,
+                currentHolderCustomerId, status, firstUsedAt, firstSessionKey, createdAt, updatedAt, null);
+    }
 }

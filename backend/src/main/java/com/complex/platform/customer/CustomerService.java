@@ -172,7 +172,9 @@ public class CustomerService {
         }
     }
 
-    public PageResponse<CustomerTicketProductResponse> listTicketProducts() {
+    public PageResponse<CustomerTicketProductResponse> listTicketProducts(String barId) {
+        // AUD-076 专属入口锁定：带 bar_id 只返回该酒吧单店票；不传=公共入口全量（通票 + 各家单店票）。
+        String barFilter = barId == null || barId.isBlank() ? null : barId.trim();
         return readPage(
                 "customer.ticket_products_viewed",
                 "customer.ticket_products_view_failed",
@@ -180,6 +182,7 @@ public class CustomerService {
                 "ticket_product",
                 () -> ticketingService.listTicketTypes().items().stream()
                         .filter(ticketType -> "published".equals(ticketType.status()) || "active".equals(ticketType.status()))
+                        .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
                         .map(this::toTicketProduct)
                         .toList()
         );
@@ -213,7 +216,10 @@ public class CustomerService {
                         actual.visitDate(),
                         "miniapp",
                         actual.contactPhone(),
-                        customer.id()
+                        customer.id(),
+                        java.util.Map.of(),
+                        // AUD-076：把客人选中的酒吧透传给服务端校验+快照（单店票必填、通票必空）。
+                        actual.barId()
                 ))
         );
     }
@@ -1049,7 +1055,10 @@ public class CustomerService {
                 ticketType.weekendPriceCent(),
                 ticketType.holidayPriceCent(),
                 "CNY",
-                ticketType.status()
+                ticketType.status(),
+                // AUD-076 单店票挂酒吧：结构化 bar_id + 实时解析酒吧名（null=综合体通票）。
+                ticketType.barId(),
+                ticketingService.resolveBarName(ticketType.barId())
         );
     }
 

@@ -31,9 +31,10 @@ export class CustomerService {
     this.api = new CustomerApi(customerToken);
   }
 
-  // ① 票种浏览
-  listTicketProducts(): Promise<TicketProduct[]> {
-    return this.api.get<TicketProduct[]>("/api/v1/customer/ticket-products");
+  // ① 票种浏览（AUD-076：barId 传入=专属入口锁定该酒吧；不传=公共入口全量）。
+  listTicketProducts(barId?: string): Promise<TicketProduct[]> {
+    const query = barId ? `?bar_id=${encodeURIComponent(barId)}` : "";
+    return this.api.get<TicketProduct[]>(`/api/v1/customer/ticket-products${query}`);
   }
 
   // ② 官方购票下单
@@ -43,6 +44,8 @@ export class CustomerService {
     visitDate?: string;
     contactPhone?: string;
     buyerNote?: string;
+    // AUD-076 单店票挂酒吧：单店票必填该票所属酒吧 id（通票不传）；请求体自动 snake_case 为 bar_id。
+    barId?: string;
   }): Promise<TicketOrder> {
     return this.api.post<TicketOrder>("/api/v1/customer/ticket-orders", payload);
   }

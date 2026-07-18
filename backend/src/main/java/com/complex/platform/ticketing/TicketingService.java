@@ -613,6 +613,24 @@ public class TicketingService {
         );
     }
 
+    /** AUD-076 展示层实时解析酒吧名（供客人端商品/订单/我的票展示；ID 快照、名字实时 join）。 */
+    public String resolveBarName(String barId) {
+        return catalogService.resolveBarName(barId);
+    }
+
+    /**
+     * AUD-076 酒吧撤场提前到期：把该酒吧单店票已售权益 valid_to 提前到截止营业时刻（effectiveAt），
+     * 由 processExpiredPaidEntitlements 走方案2到期规则处置（可退未用自动退/不可退作废）。返回受影响权益数。
+     * 由 PlatformService.archiveMerchant（撤场=商户存档）在被存档商户为酒吧时调用。
+     */
+    @Transactional
+    public int expireBarSingleStoreTickets(String barId, java.time.Instant effectiveAt) {
+        if (barId == null || barId.isBlank()) {
+            return 0;
+        }
+        return repository.expireBarEntitlements(barId, effectiveAt, java.time.Instant.now());
+    }
+
     public PageResponse<IssuedEntitlementRecord> listIssuedEntitlements() {
         return operations.readPage(
                 TicketingReadOperation.LIST_ISSUED_ENTITLEMENTS,

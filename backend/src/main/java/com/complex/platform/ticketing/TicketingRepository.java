@@ -261,6 +261,14 @@ public interface TicketingRepository {
         return 0;
     }
 
+    /**
+     * AUD-076 撤场提前到期：把归属该酒吧（bar_id）的在效权益 valid_to 提前到截止营业时刻（只提前不延长），
+     * 由 processExpiredPaidEntitlements 走方案2到期规则处置。返回受影响行数。default 返回 0 兼容既有测试双子。
+     */
+    default int expireBarEntitlements(String barId, java.time.Instant validTo, java.time.Instant now) {
+        return 0;
+    }
+
     List<IssuedEntitlementRecord> listIssuedEntitlements();
 
     List<IssuedEntitlementRecord> listIssuedEntitlementsByOrderId(String orderId);

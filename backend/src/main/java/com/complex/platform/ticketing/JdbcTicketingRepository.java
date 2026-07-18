@@ -31,15 +31,16 @@ class JdbcTicketingRepository implements TicketingRepository {
                     holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                     stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
                     archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                    refundable
+                    refundable, bar_id
                 )
                 VALUES (
                     :id, :ticket_name, :base_calendar_price_mode, :weekday_price_cent, :weekend_price_cent,
                     :holiday_price_cent, :stock_required, :status, :validity_days, :refresh_interval_seconds,
                     :stock_quantity, :sold_quantity, :ticket_category, :created_at, :updated_at,
                     :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
-                    :refundable
+                    :refundable, :bar_id
                 )
+                -- bar_id（酒吧归属）建票时定，不可变（AUD-076“挂错不许改”），故不在 ON CONFLICT SET。
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_name = EXCLUDED.ticket_name,
                     base_calendar_price_mode = EXCLUDED.base_calendar_price_mode,
@@ -71,7 +72,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       refundable
+                       refundable, bar_id
                   FROM ticket_types
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -125,7 +126,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       refundable
+                       refundable, bar_id
                   FROM ticket_types
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();
@@ -288,15 +289,16 @@ class JdbcTicketingRepository implements TicketingRepository {
                     entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                     value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
                     allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                    parent_ticket_id, slot_index
+                    parent_ticket_id, slot_index, bar_id
                 )
                 VALUES (
                     :id, :ticket_type_id, :order_id, :entitlement_template_id, :entitlement_code,
                     :entitlement_type, :merchant_id, :venue_id, :point_id, :total_times, :used_times,
                     :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people,
                     :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window, :exclusive_merchant_id,
-                    :parent_ticket_id, :slot_index
+                    :parent_ticket_id, :slot_index, :bar_id
                 )
+                -- bar_id（酒吧归属快照）出票时定，不可变，故不在 ON CONFLICT SET。
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
                     order_id = EXCLUDED.order_id,
@@ -331,12 +333,12 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO ticket_instances (
                     id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,
                     buyer_customer_id, current_holder_customer_id, status, first_used_at, first_session_key,
-                    created_at, updated_at
+                    created_at, updated_at, bar_id
                 )
                 VALUES (
                     :id, :ticket_no, :order_id, :ticket_type_id, :seq_in_order, :num_people, :total_times,
                     :buyer_customer_id, :current_holder_customer_id, :status, :first_used_at, :first_session_key,
-                    :created_at, :updated_at
+                    :created_at, :updated_at, :bar_id
                 )
                 ON CONFLICT (id) DO NOTHING
                 """, parameterSource.ticketInstanceParameters(instance));
@@ -436,7 +438,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
                        allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                       parent_ticket_id, slot_index
+                       parent_ticket_id, slot_index, bar_id
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
@@ -461,7 +463,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
                        allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                       parent_ticket_id, slot_index
+                       parent_ticket_id, slot_index, bar_id
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)
@@ -805,15 +807,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
                     sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id, base_amount_cent,
                     dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at,
-                    merchant_id, paid_at
+                    merchant_id, paid_at, bar_id
                 )
                 VALUES (
                     :id, :order_no, :customer_id, :ticket_type_id, :price_rule_id, :quantity, :visit_date,
                     :sales_channel, :buyer_phone, :amount_cent, :dynamic_pricing_rule_id, :base_amount_cent,
                     :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at,
-                    :merchant_id, :paid_at
+                    :merchant_id, :paid_at, :bar_id
                 )
-                -- merchant_id（下单受理商户）下单时定，后续 update（出票/置 paid）不覆盖。
+                -- merchant_id（下单受理商户）与 bar_id（酒吧归属快照）下单时定，后续 update（出票/置 paid）不覆盖。
                 ON CONFLICT (id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -1316,6 +1318,22 @@ class JdbcTicketingRepository implements TicketingRepository {
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int expireBarEntitlements(String barId, java.time.Instant validTo, java.time.Instant now) {
+        // AUD-076 撤场提前到期：把该酒吧单店票所有在效权益的 valid_to 提前到截止营业时刻（LEAST 只提前不延长），
+        // 由既有到期任务 processExpiredPaidEntitlements 按方案2规则处置（可退未用自动退/不可退作废）。
+        return jdbcTemplate.update("""
+                UPDATE issued_entitlements
+                   SET valid_to = LEAST(valid_to, :valid_to),
+                       updated_at = :now
+                 WHERE bar_id = :bar_id
+                   AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("bar_id", barId)
+                .addValue("valid_to", validTo.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override

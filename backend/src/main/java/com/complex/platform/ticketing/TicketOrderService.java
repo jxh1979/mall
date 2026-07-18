@@ -2,6 +2,7 @@ package com.complex.platform.ticketing;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
@@ -34,20 +35,32 @@ public class TicketOrderService {
     private final ApplicationEventPublisher eventPublisher;
     // 批3-6：人脸照存档服务。可为 null=旧构造/兼容测试(不拍照存档)；生产由 Spring 主构造注入。
     private final TicketFacePhotoService facePhotoService;
+    // AUD-076：按 id 取酒吧商户（下单校验归属酒吧是否在售）。可为 null=兼容既有单测（跳过在线校验）。
+    private final BarMerchantDirectory barDirectory;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
                               AuthorizationService authorizationService,
                               ApplicationEventPublisher eventPublisher,
-                              TicketFacePhotoService facePhotoService) {
+                              TicketFacePhotoService facePhotoService,
+                              BarMerchantDirectory barDirectory) {
         this.repository = repository;
         this.pricingService = pricingService;
         this.authorizationService = authorizationService;
         this.eventPublisher = eventPublisher;
         this.facePhotoService = facePhotoService;
+        this.barDirectory = barDirectory;
     }
 
-    // ponytail: 向后兼容构造——既有单测(InMemory 仓库、无 PiiCipher/DB)不注入 facePhotoService，拍照存档跳过。
+    // ponytail: 向后兼容构造——注入 facePhotoService 但无 barDirectory。
+    public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
+                              AuthorizationService authorizationService,
+                              ApplicationEventPublisher eventPublisher,
+                              TicketFacePhotoService facePhotoService) {
+        this(repository, pricingService, authorizationService, eventPublisher, facePhotoService, null);
+    }
+
+    // ponytail: 向后兼容构造——既有单测(InMemory 仓库、无 PiiCipher/DB)不注入 facePhotoService/barDirectory。
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
                               AuthorizationService authorizationService,
                               ApplicationEventPublisher eventPublisher) {
@@ -62,6 +75,8 @@ public class TicketOrderService {
         if (ticketType.archivedAt() != null || !"none".equals(ticketType.deleteStatus())) {
             throw ApiException.conflict("TICKET_TYPE_NOT_SELLABLE", "该票种已下线（存档/待删除），不可下单");
         }
+        // AUD-076 单店票挂酒吧：校验酒吧归属并算出快照 bar_id（服务端真源），置于库存扣减前——拒单零副作用。
+        String orderBarId = resolveOrderBarId(ticketType, actual.barId(), actual.salesChannel());
         int quantity = requirePositive(actual.quantity(), "quantity");
         // P0 修复（V133）：限量票种原子扣减库存，防止超卖（stock_quantity 为 null=不限量，仅计数）。
         // createTicketOrder 已由 executeWrite 幂等包裹，重放不会重复进入此处、不会双扣。
@@ -115,7 +130,11 @@ public class TicketOrderService {
                 now,
                 now,
                 // 行级隔离（V135）：记录下单受理/销售商户（平台下单为 null），供订单列表按 scope 过滤。
-                resolveMerchantId()
+                resolveMerchantId(),
+                // V231：下单未支付，paid_at=null。
+                null,
+                // AUD-076：快照酒吧归属（取自票种，服务端真值；通票为 null）。
+                orderBarId
         ));
     }
 
@@ -203,7 +222,8 @@ public class TicketOrderService {
                 order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
                 order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
                 order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
-                "paid", order.issueStatus(), order.status(), order.createdAt(), now, order.merchantId(), now));
+                "paid", order.issueStatus(), order.status(), order.createdAt(), now, order.merchantId(), now,
+                order.barId()));
     }
 
     /**
@@ -299,7 +319,9 @@ public class TicketOrderService {
                 issuedAt,
                 order.merchantId(),
                 // V231：已通过支付确认置 paid 的订单保留原 paid_at；admin 渠道免确认直接出票（转 paid）则以出票时刻为支付时刻。
-                order.paidAt() != null ? order.paidAt() : issuedAt
+                order.paidAt() != null ? order.paidAt() : issuedAt,
+                // AUD-076：保留酒吧归属快照。
+                order.barId()
         ));
         // P0 清单#2：支付成功（订单转 paid）→ 发积分入账事件，customer 域写 pending（幂等 source_doc=ticket_order/orderId）。
         // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额折算（每元 1 分）。
@@ -344,6 +366,8 @@ public class TicketOrderService {
         int quantity = order == null ? 1 : Math.max(1, order.quantity());
         Long orderAmount = order == null ? null : order.amountCent();
         String buyerCustomerId = order == null ? null : order.customerId();
+        // AUD-076：出票时把订单酒吧归属快照进父票/权益（direct 出票无订单则 null）。
+        String orderBarId = order == null ? null : order.barId();
         // 订单实付先在 quantity 张父票间整数平分（同价均分即正确，分到分不丢分），每张内再按分项单价拆到各权益。
         long[] perTicketAmount = orderAmount == null ? null : allocateEvenly(orderAmount, quantity);
         // 父票人数/次数（展示语义）=该票种全部 binding 的 max；实况以子权益 used/total 计。
@@ -362,7 +386,7 @@ public class TicketOrderService {
                     + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
             repository.saveTicketInstance(new TicketInstanceRecord(
                     parentTicketId, ticketNo, orderId, ticketTypeId, t, parentNumPeople, parentTotalTimes,
-                    buyerCustomerId, buyerCustomerId, "active", null, null, now, now));
+                    buyerCustomerId, buyerCustomerId, "active", null, null, now, now, orderBarId));
             // AUD-077 人员权益组持有人:每个 slot 初始 holder=购票人(direct 无购票人则不建持有人,不可转赠)。
             if (buyerCustomerId != null) {
                 for (int slot = 1; slot <= Math.max(1, parentNumPeople); slot++) {
@@ -377,7 +401,9 @@ public class TicketOrderService {
                     .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
             // R5 审计点②：权益按各自模板归属（联合通票各模板可分属不同商户/场地/点位）。
             // 模板 merchant_id 为空时回退出票方，venue/point 直接取模板（可空）。
-            String merchantId = template.merchantId() != null ? template.merchantId() : issuerMerchantId;
+            // AUD-076 单店票回退：template.merchantId → 订单酒吧归属 → 出票方（单店票未配模板归属时核销归回酒吧）。
+            String merchantId = template.merchantId() != null ? template.merchantId()
+                    : (orderBarId != null ? orderBarId : issuerMerchantId);
             String venueId = template.venueId();
             String pointId = template.pointId();
             // 2a-4（用户裁定）：购买 N 人票即生成 N 张独立门票——numPeople=N 的 binding 展开为 N 张独立权益
@@ -421,7 +447,9 @@ public class TicketOrderService {
                             template.exclusiveMerchantId(),
                             // AUD-066：归父归组——parent_ticket_id + slot_index（用户口径无 slot 0，第 p 人=slot p+1）。
                             parentTicketId,
-                            p + 1
+                            p + 1,
+                            // AUD-076：快照酒吧归属（取自订单；通票为 null）。
+                            orderBarId
                     );
                     // 批3-6：require_face_photo=TRUE 的权益必须带一张人脸照(base64)，逐张按发放顺序取用；
                     //   缺照 → 拒 FACE_PHOTO_REQUIRED(在建权益行之前拒，不产生无照的孤儿权益)。=FALSE 的票零影响。
@@ -532,6 +560,54 @@ public class TicketOrderService {
             allocations[i] = base + (i < remainder ? 1 : 0);
         }
         return allocations;
+    }
+
+    /**
+     * AUD-076 单店票挂酒吧下单校验（服务端真源，客户端 barId 仅作核对）：
+     * a. 单店票（ticketType.barId≠null）：request.barId 必填且必须相等，归属酒吧须在售；
+     * b. 通票（ticketType.barId=null）：request.barId 必须为空；
+     * c. 门口一体机（salesChannel=kiosk）售票才受 HTML:897/930 约束——只卖本店单店票、不得卖通票。
+     *    其它渠道（后台/商户员工代客/客人端 miniapp/app/web）不受此限，避免误伤既有商户代售流程。
+     * @return 快照进订单的 bar_id（取自票种，恒为服务端真值）。
+     */
+    private String resolveOrderBarId(TicketTypeRecord ticketType, String requestBarId, String salesChannel) {
+        String typeBarId = trimToNull(ticketType.barId());
+        String reqBarId = trimToNull(requestBarId);
+        String scope = resolveMerchantId();
+        boolean kiosk = "kiosk".equals(salesChannel);
+        if (typeBarId == null) {
+            if (reqBarId != null) {
+                throw ApiException.badRequest("BAR_ID_NOT_ALLOWED", "通票不接受酒吧参数");
+            }
+            if (scope != null && kiosk) {
+                // 门口一体机不得售卖综合体通票（HTML:897/930）。
+                throw ApiException.forbidden("BAR_SCOPE_FORBIDDEN", "门店终端只能售卖本店单店票，不得售卖综合体通票");
+            }
+            return null;
+        }
+        if (reqBarId == null) {
+            throw ApiException.badRequest("BAR_ID_REQUIRED", "单店票必须指定所属酒吧");
+        }
+        if (!typeBarId.equals(reqBarId)) {
+            throw ApiException.badRequest("BAR_TICKET_MISMATCH", "所选酒吧与票种归属不一致");
+        }
+        if (scope != null && kiosk && !scope.equals(typeBarId)) {
+            throw ApiException.forbidden("BAR_SCOPE_FORBIDDEN", "门店终端只能售卖本店单店票");
+        }
+        requireBarSellable(typeBarId);
+        return typeBarId;
+    }
+
+    /** AUD-076 停售闸：归属酒吧不存在/非 bar/已存档/停业(status≠active) → 停售 TICKET_BAR_OFFLINE（已售票不受影响）。 */
+    private void requireBarSellable(String barId) {
+        if (barDirectory == null) {
+            return; // 兼容既有测试（无商户目录）：跳过在线校验。
+        }
+        MerchantRecord bar = barDirectory.findMerchant(barId).orElse(null);
+        if (bar == null || !"bar".equals(bar.merchantType()) || bar.archivedAt() != null
+                || !"active".equals(bar.status())) {
+            throw ApiException.conflict("TICKET_BAR_OFFLINE", "该票所属酒吧已撤场或停业，暂停售票");
+        }
     }
 
     private String resolveMerchantId() {

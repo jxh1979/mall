@@ -8,6 +8,9 @@ export type TicketProduct = {
   holidayPriceCent: number | null;
   currency: string;
   status: string;
+  // AUD-076 单店票挂酒吧：所属酒吧 id 与实时名称（null=综合体通票，展示“综合体通用”）。
+  barId?: string | null;
+  barName?: string | null;
 };
 
 // 1.8 我的票：订单内票实例安全投影（后端 CustomerTicketResponse）。
@@ -74,6 +77,8 @@ export type TicketOrder = {
   status: string;
   createdAt: string;
   updatedAt: string;
+  // AUD-076 单店票挂酒吧：订单快照的酒吧 id（null=通票）。
+  barId?: string | null;
 };
 
 export type TicketCredential = {

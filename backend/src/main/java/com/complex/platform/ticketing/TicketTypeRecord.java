@@ -35,7 +35,9 @@ public record TicketTypeRecord(
         String deleteReason,
         // 方案2/规则2（V286）：票种是否可退票。默认 false=不可退（客人不能申请退、到期直接作废不退）；
         // true=可退（未核销可退、到期未使用系统自动退）。一个总开关管申请退与到期退两条路径。放末位便于既有构造点追加。
-        boolean refundable
+        boolean refundable,
+        // AUD-076 单店票挂酒吧：绑定的酒吧商户 id（业态 bar）；null=综合体通票/平台票。建票时挂定、不可变（纠错=下架重建）。
+        String barId
 ) {
     /** 向后兼容构造：V286 前 21 参全签名（无 refundable）→ 默认 false（不可退，与建表默认一致）。 */
     public TicketTypeRecord(
@@ -48,7 +50,7 @@ public record TicketTypeRecord(
         this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
                 stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
                 stockQuantity, soldQuantity, ticketCategory, archivedAt, archivedBy, deleteStatus,
-                deleteRequestedBy, deleteRequestedAt, deleteReason, false);
+                deleteRequestedBy, deleteRequestedAt, deleteReason, false, null);
     }
 
     /** 向后兼容构造：V260 前 15 参全签名 → 存档/删除字段取默认（未存档、none）、不可退。 */
@@ -59,10 +61,10 @@ public record TicketTypeRecord(
             Integer stockQuantity, int soldQuantity, String ticketCategory) {
         this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
                 stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
-                stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, false);
+                stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, false, null);
     }
 
-    /** 16 参构造（15 参 + refundable）：建/发布票种入口透传可退配置，其余存档/删除默认。 */
+    /** 16 参构造（15 参 + refundable）：建/发布票种入口透传可退配置，其余存档/删除默认（bar 默认 null=通票）。 */
     public TicketTypeRecord(
             String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent,
             Long weekendPriceCent, Long holidayPriceCent, boolean stockRequired, String status,
@@ -70,14 +72,25 @@ public record TicketTypeRecord(
             Integer stockQuantity, int soldQuantity, String ticketCategory, boolean refundable) {
         this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
                 stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
-                stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, refundable);
+                stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, refundable, null);
+    }
+
+    /** AUD-076 17 参构造（16 参 + barId）：建/发布单店票入口透传酒吧归属，其余存档/删除默认。 */
+    public TicketTypeRecord(
+            String id, String ticketName, String baseCalendarPriceMode, Long weekdayPriceCent,
+            Long weekendPriceCent, Long holidayPriceCent, boolean stockRequired, String status,
+            Integer validityDays, Integer refreshIntervalSeconds, Instant createdAt, Instant updatedAt,
+            Integer stockQuantity, int soldQuantity, String ticketCategory, boolean refundable, String barId) {
+        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
+                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
+                stockQuantity, soldQuantity, ticketCategory, null, null, "none", null, null, null, refundable, barId);
     }
 
     public TicketTypeRecord withArchive(Instant archivedAt, String archivedBy, Instant updatedAt) {
         return new TicketTypeRecord(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent,
                 holidayPriceCent, stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
                 stockQuantity, soldQuantity, ticketCategory,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, refundable);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId);
     }
 
     public TicketTypeRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -85,7 +98,7 @@ public record TicketTypeRecord(
         return new TicketTypeRecord(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent,
                 holidayPriceCent, stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt,
                 stockQuantity, soldQuantity, ticketCategory,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, refundable);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, refundable, barId);
     }
     /**
      * 向后兼容构造：旧 12 参签名（无库存/分类字段）→ 库存不限量、soldQuantity=0、分类 null（标准）。

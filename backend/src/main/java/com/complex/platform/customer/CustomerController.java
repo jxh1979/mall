@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -108,8 +109,10 @@ public class CustomerController {
     }
 
     @GetMapping("/ticket-products")
-    public ApiResponse<PageResponse<CustomerTicketProductResponse>> listTicketProducts() {
-        return ApiResponse.ok(service.listTicketProducts());
+    public ApiResponse<PageResponse<CustomerTicketProductResponse>> listTicketProducts(
+            @RequestParam(name = "bar_id", required = false) String barId) {
+        // AUD-076 专属入口：酒吧二维码/分享链接带 bar_id 锁定该酒吧单店票；不传=公共入口全量。
+        return ApiResponse.ok(service.listTicketProducts(barId));
     }
 
     @PostMapping("/ticket-orders")

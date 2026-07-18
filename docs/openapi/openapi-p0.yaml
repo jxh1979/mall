@@ -2740,6 +2740,14 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: customer.ticket_products_viewed
       x-audit-event-failure: customer.ticket_products_view_failed
+      parameters:
+        - name: bar_id
+          in: query
+          required: false
+          description: 酒吧唯一标识；专属入口锁定该酒吧单店票，不传=公共入口全量。
+          schema:
+            type: string
+            maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -25398,6 +25406,10 @@ components:
           type: string
           description: 说明文本；用于人工复核、异常处理或审计，不得写入敏感明文。
           maxLength: 1000
+        bar_id:
+          type: string
+          description: 酒吧唯一标识；单店票必填、通票必空；服务端据票种校验并快照。
+          maxLength: 64
     CustomerBarReservationRequest:
       type: object
       description: 请求载荷 `CustomerBarReservationRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。

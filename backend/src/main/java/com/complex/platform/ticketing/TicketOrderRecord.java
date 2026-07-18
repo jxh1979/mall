@@ -26,7 +26,9 @@ public record TicketOrderRecord(
         // 行级隔离（V135）：下单受理/销售商户；平台下单为 null（平台官方票务口径）。列表读取按此 scope 过滤。
         String merchantId,
         // V231 强制口径：支付成功时刻（pay_status→paid 时写入）；未支付为 null。与 createdAt（下单时间）严格区分。
-        Instant paidAt
+        Instant paidAt,
+        // AUD-076 单店票挂酒吧：下单时从票种快照的酒吧商户 id；null=通票/平台票。与 merchantId（受理商户）语义正交。
+        String barId
 ) {
     // V231 兼容构造器（20 参，含 merchantId 无 paidAt）：paidAt 默认 null（既有非支付确认调用点零改动）。
     public TicketOrderRecord(
@@ -53,7 +55,7 @@ public record TicketOrderRecord(
     ) {
         this(id, orderNo, customerId, ticketTypeId, priceRuleId, quantity, visitDate, salesChannel,
                 buyerPhone, amountCent, dynamicPricingRuleId, baseAmountCent, dynamicAdjustmentCent,
-                currency, payStatus, issueStatus, status, createdAt, updatedAt, merchantId, null);
+                currency, payStatus, issueStatus, status, createdAt, updatedAt, merchantId, null, null);
     }
 
     // 兼容构造器（16 参，无 dynamicPricing/merchantId）：merchantId 默认 null。

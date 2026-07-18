@@ -52,6 +52,8 @@ class TicketingServiceTests {
     private InMemoryTicketingRepository ticketingRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private TicketingService service;
+    // AUD-076 酒吧目录（业态 bar 商户）测试双子：注入 catalog/order 服务供单店票校验/解析。
+    private java.util.Map<String, com.complex.platform.governance.MerchantRecord> bars;
     // P1 清单#19：捕获 ticketing 域发布的领域事件（如退款/结算冲正联动 VerificationReversedEvent），供断言。
     private final List<Object> publishedEvents = new ArrayList<>();
 
@@ -66,11 +68,13 @@ class TicketingServiceTests {
         TicketPricingService pricingService = new TicketPricingService(ticketingRepository);
         TicketVerificationService verificationService = new TicketVerificationService(ticketingRepository, publishedEvents::add);
         AuthorizationService authorizationService = new AuthorizationService(null);
+        bars = new java.util.HashMap<>();
+        BarMerchantDirectory barDirectory = id -> java.util.Optional.ofNullable(bars.get(id));
         service = new TicketingService(
                 ticketingRepository,
-                new TicketCatalogService(ticketingRepository),
+                new TicketCatalogService(ticketingRepository, barDirectory),
                 pricingService,
-                new TicketOrderService(ticketingRepository, pricingService, authorizationService, event -> { }),
+                new TicketOrderService(ticketingRepository, pricingService, authorizationService, event -> { }, null, barDirectory),
                 new TicketRefundService(ticketingRepository, event -> { }),
                 verificationService,
                 new TicketCredentialService(verificationService, auditEventService),
@@ -2886,6 +2890,145 @@ class TicketingServiceTests {
         assertThat(ChronoUnit.SECONDS.between(entNull.validFrom(), entNull.validTo())).isEqualTo(86_400);
     }
 
+    // ===================== AUD-076 单店票挂酒吧 =====================
+    @Test
+    void singleStoreTicketSnapshotsBarAndRejectsMismatch() {
+        registerBar("mch_bar_a", "话梅酒馆");
+        TicketTypeRecord aTicket = createBarTicketType("aud076-a", "mch_bar_a", false);
+        // 匹配 barId 下单+出票：订单/父票/权益都快照同一 bar_id。
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "aud076-a-order", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                "admin", "13800138000", "cust_a", java.util.Map.of(), "mch_bar_a"));
+        assertThat(order.barId()).isEqualTo("mch_bar_a");
+        service.issueTicketOrder(order.id(), new StatusChangeRequest("aud076-a-issue", "i", "paid offline", List.of()));
+        assertThat(ticketingRepository.ticketInstances.values()).isNotEmpty().allMatch(i -> "mch_bar_a".equals(i.barId()));
+        assertThat(ticketingRepository.issuedEntitlements.values()).isNotEmpty().allMatch(e -> "mch_bar_a".equals(e.barId()));
+
+        // 篡改：barId 与票种归属不符 → 拒。
+        assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                "aud076-a-x", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                "admin", "13800138000", "cust_x", java.util.Map.of(), "mch_bar_wrong")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_TICKET_MISMATCH"));
+        // 单店票缺 barId → 拒。
+        assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                "aud076-a-miss", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                "admin", "13800138000", "cust_m", java.util.Map.of(), null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_ID_REQUIRED"));
+        // 通票带 barId → 拒。
+        TicketTypeRecord pass = createTicketType("aud076-pass");
+        service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
+                "aud076-pass-bind", "b", List.of(), createTemplate("aud076-pass-tpl", 1, 9900L).id(),
+                1, 1, 9900L, "default", 1, null));
+        assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                "aud076-pass-x", "c", List.of(), pass.id(), null, 1, LocalDate.parse("2026-06-20"),
+                "admin", "13800138000", "cust_p", java.util.Map.of(), "mch_bar_a")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_ID_NOT_ALLOWED"));
+    }
+
+    @Test
+    void twoBarsSameNameTicketsOrderSeparately() {
+        registerBar("mch_bar_a", "话梅酒馆");
+        registerBar("mch_bar_b", "夜航船");
+        // 两家酒吧各发同名同价票——只靠 bar_id 区分。
+        TicketTypeRecord aTicket = createBarTicketType("same-a", "mch_bar_a", false);
+        TicketTypeRecord bTicket = createBarTicketType("same-b", "mch_bar_b", false);
+        assertThat(aTicket.ticketName()).isEqualTo(bTicket.ticketName());
+        TicketOrderRecord aOrder = service.createTicketOrder(new TicketOrderRequest(
+                "same-a-order", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                "admin", "13800138000", "cust_a", java.util.Map.of(), "mch_bar_a"));
+        TicketOrderRecord bOrder = service.createTicketOrder(new TicketOrderRequest(
+                "same-b-order", "c", List.of(), bTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                "admin", "13800138000", "cust_b", java.util.Map.of(), "mch_bar_b"));
+        assertThat(aOrder.barId()).isEqualTo("mch_bar_a");
+        assertThat(bOrder.barId()).isEqualTo("mch_bar_b");
+    }
+
+    @Test
+    void buildingSingleStoreTicketRejectsNonBarMerchant() {
+        bars.put("mch_shop", new com.complex.platform.governance.MerchantRecord(
+                "mch_shop", "百货商户", "retail", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, "active", Instant.now(), Instant.now()));
+        assertThatThrownBy(() -> createBarTicketType("bad", "mch_shop", false))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_MERCHANT_INVALID"));
+    }
+
+    @Test
+    void merchantScopeSellsOnlyOwnBarTicketsNotOthersOrPass() {
+        registerBar("mch_bar_a", "话梅酒馆");
+        registerBar("mch_bar_b", "夜航船");
+        TicketTypeRecord aTicket = createBarTicketType("scope-a", "mch_bar_a", false);
+        TicketTypeRecord bTicket = createBarTicketType("scope-b", "mch_bar_b", false);
+        TicketTypeRecord pass = createTicketType("scope-pass");
+        service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
+                "scope-pass-bind", "b", List.of(), createTemplate("scope-pass-tpl", 1, 9900L).id(),
+                1, 1, 9900L, "default", 1, null));
+        TestSecurityActors.clear();
+        try {
+            TestSecurityActors.asMerchantUser("mch_bar_a");
+            // 卖本店单店票 OK。
+            TicketOrderRecord ok = service.createTicketOrder(new TicketOrderRequest(
+                    "scope-ok", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                    "kiosk", "13800138000", null, java.util.Map.of(), "mch_bar_a"));
+            assertThat(ok.barId()).isEqualTo("mch_bar_a");
+            // 卖别家单店票 → 拒。
+            assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                    "scope-x", "c", List.of(), bTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                    "kiosk", "13800138000", null, java.util.Map.of(), "mch_bar_b")))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_SCOPE_FORBIDDEN"));
+            // 门口一体机卖综合体通票 → 拒（HTML:897/930）。
+            assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                    "scope-p", "c", List.of(), pass.id(), null, 1, LocalDate.parse("2026-06-20"),
+                    "kiosk", "13800138000", null, java.util.Map.of(), null)))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_SCOPE_FORBIDDEN"));
+        } finally {
+            TestSecurityActors.clear();
+        }
+    }
+
+    @Test
+    void barTeardownStopsSaleAndExpiresSoldTickets() {
+        registerBar("mch_bar_c", "撤场酒馆");
+        TicketTypeRecord tt = createBarTicketType("teardown", "mch_bar_c", false); // 不可退
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "teardown-order", "c", List.of(), tt.id(), null, 1, LocalDate.parse("2026-06-20"),
+                "admin", "13800138000", "cust_teardown", java.util.Map.of(), "mch_bar_c"));
+        service.issueTicketOrder(order.id(), new StatusChangeRequest("teardown-issue", "i", "paid offline", List.of()));
+        assertThat(ticketingRepository.issuedEntitlements.values()).isNotEmpty().allMatch(e -> "active".equals(e.status()));
+
+        // 撤场=商户存档：停售新票。
+        bars.put("mch_bar_c", bars.get("mch_bar_c").withArchive(Instant.now(), "admin", Instant.now()));
+        assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                "teardown-order2", "c", List.of(), tt.id(), null, 1, LocalDate.parse("2026-06-20"),
+                "admin", "13800138000", "cust2", java.util.Map.of(), "mch_bar_c")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TICKET_BAR_OFFLINE"));
+
+        // 已售提前到期 → 方案2 到期规则：不可退直接作废。
+        Instant cut = Instant.now();
+        int moved = service.expireBarSingleStoreTickets("mch_bar_c", cut);
+        assertThat(moved).isGreaterThanOrEqualTo(1);
+        service.processExpiredPaidEntitlements(cut.plusSeconds(60));
+        assertThat(ticketingRepository.issuedEntitlements.values()).isNotEmpty().allMatch(e -> "forfeited".equals(e.status()));
+    }
+
+    private com.complex.platform.governance.MerchantRecord registerBar(String id, String name) {
+        com.complex.platform.governance.MerchantRecord bar = new com.complex.platform.governance.MerchantRecord(
+                id, name, "bar", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, "active", Instant.now(), Instant.now());
+        bars.put(id, bar);
+        return bar;
+    }
+
+    private TicketTypeRecord createBarTicketType(String key, String barId, boolean refundable) {
+        TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
+                key, "create", List.of(), "周末单人票",
+                "weekday_weekend_holiday", 9900L, 9900L, 9900L,
+                List.of(), false, "active", null, null, refundable, barId));
+        EntitlementTemplateRecord tpl = createTemplate(key + "-tpl", 1, 9900L);
+        service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                key + "-bind", "bind", List.of(), tpl.id(), 1, 1, 9900L, "default", 1, null));
+        return tt;
+    }
+
     private TicketTypeRecord createTicketType(String key) {
         // 方案2：测试票种默认设 refundable=true，退款链测试才能走通（生产默认 false，另有 refundable=false 专项用例）。
         return service.createTicketType(new TicketTypeRequest(
@@ -3443,7 +3586,8 @@ class TicketingServiceTests {
                     order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
                     order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
                     order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
-                    order.payStatus(), order.issueStatus(), "cancelled", order.createdAt(), now, order.merchantId()));
+                    order.payStatus(), order.issueStatus(), "cancelled", order.createdAt(), now, order.merchantId(),
+                    order.paidAt(), order.barId()));
             return 1;
         }
 
@@ -3661,6 +3805,19 @@ class TicketingServiceTests {
         }
 
         @Override
+        public int expireBarEntitlements(String barId, java.time.Instant validTo, java.time.Instant now) {
+            int n = 0;
+            for (IssuedEntitlementRecord e : new ArrayList<>(issuedEntitlements.values())) {
+                if (barId != null && barId.equals(e.barId()) && "active".equals(e.status())) {
+                    java.time.Instant target = e.validTo() != null && e.validTo().isBefore(validTo) ? e.validTo() : validTo;
+                    issuedEntitlements.put(e.id(), e.withValidTo(target, now));
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        @Override
         public boolean tryLockOrderForIssuance(String orderId) {
             TicketOrderRecord order = ticketOrders.get(orderId);
             if (order == null || !"not_issued".equals(order.issueStatus())) {
@@ -3671,7 +3828,8 @@ class TicketingServiceTests {
                     order.priceRuleId(), order.quantity(), order.visitDate(), order.salesChannel(),
                     order.buyerPhone(), order.amountCent(), order.dynamicPricingRuleId(),
                     order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
-                    order.payStatus(), "issuing", order.status(), order.createdAt(), order.updatedAt()
+                    order.payStatus(), "issuing", order.status(), order.createdAt(), order.updatedAt(),
+                    order.merchantId(), order.paidAt(), order.barId()
             ));
             return true;
         }

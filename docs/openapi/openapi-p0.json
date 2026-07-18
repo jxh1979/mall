@@ -3854,7 +3854,19 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "public"
+        "x-auth-context": "public",
+        "parameters": [
+          {
+            "name": "bar_id",
+            "in": "query",
+            "required": false,
+            "description": "酒吧唯一标识；专属入口锁定该酒吧单店票，不传=公共入口全量。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ]
       }
     },
     "/api/v1/customer/tickets/{ticket_id}/qr": {
@@ -35513,6 +35525,11 @@
             "type": "string",
             "description": "说明文本；用于人工复核、异常处理或审计，不得写入敏感明文。",
             "maxLength": 1000
+          },
+          "bar_id": {
+            "type": "string",
+            "description": "酒吧唯一标识；单店票必填、通票必空；服务端据票种校验并快照。",
+            "maxLength": 64
           }
         }
       },

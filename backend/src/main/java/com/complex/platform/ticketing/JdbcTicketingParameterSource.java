@@ -43,7 +43,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("delete_requested_at", timestampWithTimeZone(ticketType.deleteRequestedAt()))
                 .addValue("delete_reason", ticketType.deleteReason())
                 .addValue("created_at", timestampWithTimeZone(ticketType.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()))
+                .addValue("bar_id", ticketType.barId());
     }
 
     MapSqlParameterSource entitlementTemplateParameters(EntitlementTemplateRecord template) {
@@ -114,7 +115,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("consumption_window", entitlement.consumptionWindow())
                 .addValue("exclusive_merchant_id", entitlement.exclusiveMerchantId())
                 .addValue("parent_ticket_id", entitlement.parentTicketId())
-                .addValue("slot_index", entitlement.slotIndex());
+                .addValue("slot_index", entitlement.slotIndex())
+                .addValue("bar_id", entitlement.barId());
     }
 
     MapSqlParameterSource ticketInstanceParameters(TicketInstanceRecord instance) {
@@ -132,7 +134,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("first_used_at", timestampWithTimeZone(instance.firstUsedAt()))
                 .addValue("first_session_key", instance.firstSessionKey())
                 .addValue("created_at", timestampWithTimeZone(instance.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(instance.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(instance.updatedAt()))
+                .addValue("bar_id", instance.barId());
     }
 
     MapSqlParameterSource verificationParameters(VerificationRecord verification) {
@@ -248,7 +251,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("created_at", timestampWithTimeZone(order.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(order.updatedAt()))
                 .addValue("merchant_id", order.merchantId())
-                .addValue("paid_at", timestampWithTimeZone(order.paidAt()));
+                .addValue("paid_at", timestampWithTimeZone(order.paidAt()))
+                .addValue("bar_id", order.barId());
     }
 
     MapSqlParameterSource ticketPaymentIntentParameters(TicketPaymentIntentRecord intent) {

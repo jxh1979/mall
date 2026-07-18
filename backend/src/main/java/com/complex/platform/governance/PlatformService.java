@@ -38,17 +38,32 @@ public class PlatformService {
     // F-AUTHZ-02 治理写仅平台：治理写方法（建商户/法律实体绑定/合同/项目空间等）首行经
     // requirePlatformScope() fail-closed 拒 merchant-scoped 主体，防权限被下放给商户角色后越权治理。
     private final AuthorizationService authorizationService;
+    // AUD-076 撤场提前到期：商户存档=撤场；被存档商户为酒吧时其单店票已售权益提前到期（走方案2）。可为 null=兼容既有测试。
+    private final com.complex.platform.ticketing.TicketingService ticketingService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    public PlatformService(
+            PlatformRepository repository,
+            AuditedOperationExecutor operations,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            com.complex.platform.ticketing.TicketingService ticketingService
+    ) {
+        this.repository = repository;
+        this.operations = operations;
+        this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
+        this.ticketingService = ticketingService;
+    }
+
+    // ponytail: 向后兼容构造——既有单测不接 ticketingService（不触发撤场提前到期）。
     public PlatformService(
             PlatformRepository repository,
             AuditedOperationExecutor operations,
             AuditEventService auditEventService,
             AuthorizationService authorizationService
     ) {
-        this.repository = repository;
-        this.operations = operations;
-        this.auditEventService = auditEventService;
-        this.authorizationService = authorizationService;
+        this(repository, operations, auditEventService, authorizationService, null);
     }
 
     public PageResponse<BusinessEntityRecord> listBusinessEntities() {
@@ -160,6 +175,11 @@ public class PlatformService {
                     Instant now = Instant.now();
                     MerchantRecord saved = repository.saveMerchant(merchant.withArchive(now, actorId(), now));
                     repository.setMerchantArchiveReason(id, r);
+                    // AUD-076 撤场：被存档商户为酒吧时，其单店票停售（下单侧 TICKET_BAR_OFFLINE）+
+                    // 已售权益提前到该酒吧截止营业时刻到期（走方案2：可退未用自动退/不可退作废）。
+                    if (ticketingService != null && "bar".equals(merchant.merchantType())) {
+                        ticketingService.expireBarSingleStoreTickets(id, now);
+                    }
                     return saved;
                 }
         );

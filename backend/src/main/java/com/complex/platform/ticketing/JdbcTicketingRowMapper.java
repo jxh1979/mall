@@ -51,7 +51,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
                 resultSet.getString("delete_reason"),
-                resultSet.getBoolean("refundable")
+                resultSet.getBoolean("refundable"),
+                resultSet.getString("bar_id")
         );
     }
 
@@ -125,7 +126,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("consumption_window"),
                 resultSet.getString("exclusive_merchant_id"),
                 resultSet.getString("parent_ticket_id"),
-                resultSet.getInt("slot_index")
+                resultSet.getInt("slot_index"),
+                resultSet.getString("bar_id")
         );
     }
 
@@ -144,7 +146,8 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "first_used_at"),
                 resultSet.getString("first_session_key"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("bar_id")
         );
     }
 
@@ -264,7 +267,8 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
                 resultSet.getString("merchant_id"),
-                nullableInstant(resultSet, "paid_at")
+                nullableInstant(resultSet, "paid_at"),
+                resultSet.getString("bar_id")
         );
     }
 
