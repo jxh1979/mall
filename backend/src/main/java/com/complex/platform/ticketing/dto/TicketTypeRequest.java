@@ -11,7 +11,6 @@ public record TicketTypeRequest(
         Long weekdayPriceCent,
         Long weekendPriceCent,
         Long holidayPriceCent,
-        List<String> entitlementTemplateIds,
         Boolean stockRequired,
         String status,
         // P0 修复（V133）：按票种总量限量。可空=不限量；非空=库存上限，下单原子扣减、超额拒绝。
@@ -28,6 +27,33 @@ public record TicketTypeRequest(
         // AUD-004 动态码刷新秒数（可空=默认60）：仅允许 30/60。
         Integer refreshIntervalSeconds
 ) {
+    // 2026-07-18 拍板：entitlementTemplateIds 死字段删除（权益统一走独立绑定端点 bindTicketTypeEntitlement）。
+    // 以下兼容构造器保留旧签名（含 List<String> 参数，忽略其值），使既有调用点零改动编译。
+
+    /** 2026-07-18 前的 17 参全签名（含 entitlementTemplateIds）→ 忽略该参数。 */
+    public TicketTypeRequest(
+            String idempotencyKey,
+            String operatorNote,
+            List<String> evidenceAttachmentIds,
+            String ticketName,
+            String baseCalendarPriceMode,
+            Long weekdayPriceCent,
+            Long weekendPriceCent,
+            Long holidayPriceCent,
+            List<String> entitlementTemplateIds,
+            Boolean stockRequired,
+            String status,
+            Integer stockQuantity,
+            String ticketCategory,
+            Boolean refundable,
+            String barId,
+            Integer validityDays,
+            Integer refreshIntervalSeconds) {
+        this(idempotencyKey, operatorNote, evidenceAttachmentIds, ticketName, baseCalendarPriceMode,
+                weekdayPriceCent, weekendPriceCent, holidayPriceCent, stockRequired,
+                status, stockQuantity, ticketCategory, refundable, barId, validityDays, refreshIntervalSeconds);
+    }
+
     /** AUD-004 前的 15 参全签名（无 validityDays/refreshIntervalSeconds）→ 均 null（默认1天/60秒）。 */
     public TicketTypeRequest(
             String idempotencyKey,
@@ -46,7 +72,7 @@ public record TicketTypeRequest(
             Boolean refundable,
             String barId) {
         this(idempotencyKey, operatorNote, evidenceAttachmentIds, ticketName, baseCalendarPriceMode,
-                weekdayPriceCent, weekendPriceCent, holidayPriceCent, entitlementTemplateIds, stockRequired,
+                weekdayPriceCent, weekendPriceCent, holidayPriceCent, stockRequired,
                 status, stockQuantity, ticketCategory, refundable, barId, null, null);
     }
 
@@ -64,8 +90,8 @@ public record TicketTypeRequest(
             Boolean stockRequired,
             String status) {
         this(idempotencyKey, operatorNote, evidenceAttachmentIds, ticketName, baseCalendarPriceMode,
-                weekdayPriceCent, weekendPriceCent, holidayPriceCent, entitlementTemplateIds, stockRequired,
-                status, null, null, null, null);
+                weekdayPriceCent, weekendPriceCent, holidayPriceCent, stockRequired,
+                status, null, null, null, null, null, null);
     }
 
     /** 向后兼容构造：12 参签名（含 stockQuantity、无分类）→ 分类 null（标准）。 */
@@ -83,8 +109,8 @@ public record TicketTypeRequest(
             String status,
             Integer stockQuantity) {
         this(idempotencyKey, operatorNote, evidenceAttachmentIds, ticketName, baseCalendarPriceMode,
-                weekdayPriceCent, weekendPriceCent, holidayPriceCent, entitlementTemplateIds, stockRequired,
-                status, stockQuantity, null, null, null);
+                weekdayPriceCent, weekendPriceCent, holidayPriceCent, stockRequired,
+                status, stockQuantity, null, null, null, null, null);
     }
 
     /** AUD-076 前的 14 参全签名（含 refundable、无 barId）→ barId=null。 */
@@ -104,7 +130,7 @@ public record TicketTypeRequest(
             String ticketCategory,
             Boolean refundable) {
         this(idempotencyKey, operatorNote, evidenceAttachmentIds, ticketName, baseCalendarPriceMode,
-                weekdayPriceCent, weekendPriceCent, holidayPriceCent, entitlementTemplateIds, stockRequired,
-                status, stockQuantity, ticketCategory, refundable, null);
+                weekdayPriceCent, weekendPriceCent, holidayPriceCent, stockRequired,
+                status, stockQuantity, ticketCategory, refundable, null, null, null);
     }
 }

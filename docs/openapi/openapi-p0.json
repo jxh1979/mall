@@ -35023,15 +35023,6 @@
             "minimum": 0,
             "maximum": 999999999999
           },
-          "entitlement_template_ids": {
-            "type": "array",
-            "description": "`entitlement_template_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 200
-          },
           "stock_required": {
             "type": "boolean",
             "description": "是否强制库存扣减；为 true 时售票必须锁定并扣减库存。"
