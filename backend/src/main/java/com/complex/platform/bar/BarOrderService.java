@@ -23,6 +23,12 @@ public class BarOrderService {
 
     private static final String CURRENCY_CNY = "CNY";
 
+    // I-2: 商品粗类别词表（与前端 BarProductsPage CATEGORY_LABELS / ContractScopeGuard 品类级同表）。
+    // 只校验新写入；生产存量词表外值（洋酒/鸡尾酒 中文字面）不迁移，见合同范围拦截交付报告。
+    // ponytail: 词表三处字面量并存，单一真源(S-4)留档下轮。
+    private static final Set<String> PRODUCT_CATEGORY_VOCAB = Set.of(
+            "spirit", "wine", "beer", "cocktail", "soft_drink", "mixer", "tea", "snack");
+
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
@@ -52,6 +58,11 @@ public class BarOrderService {
     @Autowired(required = false)
     com.complex.platform.ticketing.BarMerchantDirectory merchantDirectory;
 
+    // 合同经营范围越界拦截（2026-07-18）：下单前读订单商户生效合同 allowedCategories 比对商品粗类别。
+    // 字段注入同上，免改构造点；单测未注入=null 视为不拦截（拦截逻辑单测见 ContractScopeGuardTests）。
+    @Autowired(required = false)
+    com.complex.platform.contract.ContractScopeGuard contractScopeGuard;
+
     @Autowired
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
             AuditEventService auditEventService, TraceabilityService traceabilityService,
@@ -75,6 +86,12 @@ public class BarOrderService {
 
     BarProductRecord createProduct(BarProductRequest request) {
         BarProductRequest actual = requireRequest(request);
+        // I-2: 品类是合同经营范围拦截的比对基准——新建商品强制 8 值词表（否则商户可自报任意品类绕过拦截）。
+        String category = requireText(actual.category(), "category");
+        if (!PRODUCT_CATEGORY_VOCAB.contains(category)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "category 须为既有商品粗类别码值（spirit/wine/beer/cocktail/soft_drink/mixer/tea/snack）");
+        }
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         boolean stockManaged = Boolean.TRUE.equals(actual.stockDeductionRequired());
@@ -98,7 +115,7 @@ public class BarOrderService {
                 requireText(actual.barId(), "bar_id"),
                 merchantId,
                 requireText(actual.productName(), "product_name"),
-                requireText(actual.category(), "category"),
+                category,
                 nonNegative(actual.priceCent(), "price_cent"),
                 CURRENCY_CNY,
                 trimToNull(actual.inventoryItemId()),
@@ -154,6 +171,8 @@ public class BarOrderService {
         long total = 0L;
         Instant now = Instant.now();
         List<BarOrderItemRecord> orderItems = new ArrayList<>();
+        // 合同经营范围拦截：收集本单全部商品粗类别（含套餐展开 SKU），保存前一次性比对，越界整单拒。
+        Set<String> scopeCategories = new LinkedHashSet<>();
         int lineSeq = 0;
         for (Map<String, Object> item : requireItems(actual.items(), "items")) {
             String comboId = optionalItemText(item, "combo_id", "comboId");
@@ -163,7 +182,8 @@ public class BarOrderService {
                 // 平台↔酒吧结算与提成扣减照既有按 SKU 内部结算价的逻辑自然生效（见 BarBillingService）。
                 // ponytail: 套餐层 internal_settlement_price_cent 目前无独立读取口径（结算按 SKU 内部价逐项派生），
                 // 故不额外记套餐级结算行；若日后要按套餐口径对账，再加 combo_id 列与读取路径。
-                for (BarOrderItemRecord expanded : expandCombo(comboId, item, merchantId, barId, orderId, lineSeq, now)) {
+                for (BarOrderItemRecord expanded : expandCombo(comboId, item, merchantId, barId, orderId, lineSeq, now,
+                        scopeCategories)) {
                     total += expanded.amountCent();
                     orderItems.add(expanded);
                 }
@@ -175,6 +195,7 @@ public class BarOrderService {
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
             requireResourceInOrderMerchant(merchantId, product.merchantId(), "bar product");
             requireProductSellable(product);
+            scopeCategories.add(product.productType());
             int quantity = requirePositiveItemQuantity(item, "quantity");
             // F-TXN-05 赠菜：赠送项对客金额计 0（不计消费额/账单 subtotal），单价保留售价；
             // 成本按商品内部结算价于结账计提时从提成基数扣除（见 BarBillingService.calculateCommission）。
@@ -196,6 +217,11 @@ public class BarOrderService {
                     0L,
                     gift
             ));
+        }
+        // 合同经营范围拦截（保存前零副作用点）：订单商户缺失（平台直营下单）时按桌台归属商户查合同。
+        if (contractScopeGuard != null) {
+            contractScopeGuard.requireBarSaleAllowed(
+                    merchantId != null ? merchantId : table.merchantId(), scopeCategories);
         }
         String customerId = customerIdOverride != null
                 ? customerIdOverride
@@ -261,7 +287,7 @@ public class BarOrderService {
      * 套餐本身即定价组合，赠送走单品赠菜。SKU 归属商户/售卖状态/跨商户防护与单品下单一致。
      */
     private List<BarOrderItemRecord> expandCombo(String comboId, Map<String, Object> item, String merchantId,
-            String barId, String orderId, int lineSeq, Instant now) {
+            String barId, String orderId, int lineSeq, Instant now, Set<String> scopeCategoriesOut) {
         int comboQty = requirePositiveItemQuantity(item, "quantity");
         BarComboRecord combo = catalogRepository.findCombo(comboId)
                 .orElseThrow(() -> ApiException.notFound("BAR_COMBO_NOT_FOUND", "bar combo not found"));
@@ -288,6 +314,7 @@ public class BarOrderService {
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "combo product not found"));
             requireResourceInOrderMerchant(merchantId, product.merchantId(), "bar product");
             requireProductSellable(product);
+            scopeCategoriesOut.add(product.productType());
             int qty = ci.quantity() * comboQty;
             long w = product.priceCent() * ci.quantity();
             products.add(product);
@@ -432,6 +459,19 @@ public class BarOrderService {
         BarOrderRecord order = repository.findOrderById(orderId)
                 .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
         checkMerchantOwnership(order.merchantId());
+        // 合同经营范围拦截（加菜同口径）：明细保存在循环内，先预查全部品类过合同范围，越界整批拒、零落库。
+        // ponytail: 商品查两次（预查+落库），加菜明细通常个位数，可接受；要省这一次就得重排保存结构。
+        if (contractScopeGuard != null) {
+            Set<String> scopeCategories = new LinkedHashSet<>();
+            for (Map<String, Object> item : requireItems(actual.items(), "items")) {
+                repository.findProductById(requireItemText(item, "product_id", "sku_id", "skuId"))
+                        .ifPresent(product -> scopeCategories.add(product.productType()));
+            }
+            // S-2: 与 createOrder 同口径——订单商户缺失（平台直营下单）时回退桌台归属商户查合同。
+            String scopeMerchantId = order.merchantId() != null ? order.merchantId()
+                    : repository.findTableById(order.tableId()).map(BarTableRecord::merchantId).orElse(null);
+            contractScopeGuard.requireBarSaleAllowed(scopeMerchantId, scopeCategories);
+        }
         BarOrderItemRecord last = null;
         long total = order.totalAmountCent();
         Instant now = Instant.now();

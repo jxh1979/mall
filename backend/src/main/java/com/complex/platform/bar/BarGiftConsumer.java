@@ -72,6 +72,8 @@ public class BarGiftConsumer {
         String merchantId = trimToNull(event.merchantId());
 
         // 1) 0 元赠饮单（order_type='gift'，amount=0；进账单/留痕，不计商户收入）。
+        // S-3: 有意不接合同经营范围 guard——赠饮兑付非销售（0 元不计应收/商户收入），属通票权益的
+        // 平台↔酒吧结算履约，不构成商户超范围经营；接了反而会让范围收紧的商户无法履约既售通票。
         repository.saveOrder(new BarOrderRecord(
                 orderId,
                 barId,

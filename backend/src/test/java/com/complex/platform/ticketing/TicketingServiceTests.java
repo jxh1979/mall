@@ -2937,6 +2937,41 @@ class TicketingServiceTests {
     }
 
     @Test
+    void singleStoreTicketOrderBlockedWhenContractScopeExcludesTicketing() {
+        // 合同经营范围拦截接线（票务域级）：单店票归属酒吧商户，其生效合同范围不含 ticketing → 出票拒；补上则放行。
+        registerBar("mch_bar_a", "话梅酒馆");
+        TicketTypeRecord aTicket = createBarTicketType("scope-enf", "mch_bar_a", false);
+        com.complex.platform.contract.ContractRepository contractRepository =
+                org.mockito.Mockito.mock(com.complex.platform.contract.ContractRepository.class);
+        Instant now = Instant.now();
+        org.mockito.Mockito.when(contractRepository.listContractsByMerchant("mch_bar_a")).thenReturn(List.of(
+                new com.complex.platform.contract.ContractRecord("ctr_scope", "mch_bar_a", "subj", null, "subj",
+                        LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                        Map.of("allowedCategories", List.of("bar")), null, "none", null, Map.of(),
+                        List.of(), null, null, List.of(), "effective", null, null, null, null, now, now)));
+        orderService.contractScopeGuard = new com.complex.platform.contract.ContractScopeGuard(contractRepository);
+        try {
+            assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
+                    "scope-enf-x", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                    "admin", "13800138000", "cust_a", java.util.Map.of(), "mch_bar_a")))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+            org.mockito.Mockito.when(contractRepository.listContractsByMerchant("mch_bar_a")).thenReturn(List.of(
+                    new com.complex.platform.contract.ContractRecord("ctr_scope2", "mch_bar_a", "subj", null, "subj",
+                            LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                            Map.of("allowedCategories", List.of("bar", "ticketing")), null, "none", null,
+                            Map.of(), List.of(), null, null, List.of(), "effective", null, null, null, null,
+                            now, now)));
+            TicketOrderRecord ok = service.createTicketOrder(new TicketOrderRequest(
+                    "scope-enf-ok", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
+                    "admin", "13800138000", "cust_a", java.util.Map.of(), "mch_bar_a"));
+            assertThat(ok.barId()).isEqualTo("mch_bar_a");
+        } finally {
+            orderService.contractScopeGuard = null;
+        }
+    }
+
+    @Test
     void twoBarsSameNameTicketsOrderSeparately() {
         registerBar("mch_bar_a", "话梅酒馆");
         registerBar("mch_bar_b", "夜航船");

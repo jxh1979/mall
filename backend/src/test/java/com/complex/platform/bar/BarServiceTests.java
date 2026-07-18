@@ -408,6 +408,92 @@ class BarServiceTests {
                 .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
+    @Test
+    void createOrderBlocksCategoryOutsideContractScope() {
+        // 合同经营范围拦截接线：merchant_a 生效合同只许 beer → 卖 spirit 整单拒；范围内品类照常下单。
+        com.complex.platform.contract.ContractRepository contractRepository =
+                mock(com.complex.platform.contract.ContractRepository.class);
+        Instant now = Instant.now();
+        when(contractRepository.listContractsByMerchant("merchant_a")).thenReturn(List.of(
+                new com.complex.platform.contract.ContractRecord("ctr_scope", "merchant_a", "subj", null, "subj",
+                        LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                        Map.of("allowedCategories", List.of("beer")), null, "none", null, Map.of(), List.of(),
+                        null, null, List.of(), "effective", null, null, null, null, now, now)));
+        barOrderService.contractScopeGuard = new com.complex.platform.contract.ContractScopeGuard(contractRepository);
+        try {
+            TestSecurityActors.asMerchantUser("merchant_a");
+            BarTableRecord table = service.createTable(new BarTableRequest(
+                    "table-scope", "create", List.of(), "bar_1", "范围桌", "card_seat", 50000L, 2, "active"));
+            BarProductRecord spirit = service.createProduct(new BarProductRequest(
+                    "product-scope-spirit", "create", List.of(), "bar_1", "金酒", "spirit", 8800L,
+                    null, null, "active", null, null, false));
+            assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
+                    "order-scope-x", "create", List.of(), "bar_1", table.id(), null,
+                    List.of(Map.of("product_id", spirit.id(), "quantity", 1)), null, List.of(), "offline")))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+            BarProductRecord beer = service.createProduct(new BarProductRequest(
+                    "product-scope-beer", "create", List.of(), "bar_1", "精酿", "beer", 3800L,
+                    null, null, "active", null, null, false));
+            BarOrderRecord ok = service.createOrder(new BarOrderRequest(
+                    "order-scope-ok", "create", List.of(), "bar_1", table.id(), null,
+                    List.of(Map.of("product_id", beer.id(), "quantity", 1)), null, List.of(), "offline"));
+            assertThat(ok.totalAmountCent()).isEqualTo(3800L);
+        } finally {
+            barOrderService.contractScopeGuard = null;
+        }
+    }
+
+    @Test
+    void createProductRejectsCategoryOutsideVocabulary() {
+        // I-2: 品类是合同范围拦截比对基准——新建商品词表外品类（自报绕过）→ 拒。
+        assertThatThrownBy(() -> service.createProduct(new BarProductRequest(
+                "product-bad-cat", "create", List.of(), "bar_1", "私酿", "洋酒", 8800L,
+                null, null, "active", null, null, false)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void addOrderItemFallsBackToTableMerchantWhenOrderMerchantMissing() {
+        // S-2: 平台直营下单（订单商户为空）→ 加菜与创建同口径回退桌台归属商户查合同，越界仍拦。
+        com.complex.platform.contract.ContractRepository contractRepository =
+                mock(com.complex.platform.contract.ContractRepository.class);
+        Instant now = Instant.now();
+        when(contractRepository.listContractsByMerchant("merchant_a")).thenReturn(List.of(
+                new com.complex.platform.contract.ContractRecord("ctr_scope_fb", "merchant_a", "subj", null, "subj",
+                        LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                        Map.of("allowedCategories", List.of("beer")), null, "none", null, Map.of(), List.of(),
+                        null, null, List.of(), "effective", null, null, null, null, now, now)));
+        try {
+            TestSecurityActors.asMerchantUser("merchant_a");
+            BarTableRecord table = service.createTable(new BarTableRequest(
+                    "table-scope-fb", "create", List.of(), "bar_1", "回退桌", "card_seat", 50000L, 2, "active"));
+            BarProductRecord beer = service.createProduct(new BarProductRequest(
+                    "product-scope-fb-beer", "create", List.of(), "bar_1", "精酿", "beer", 3800L,
+                    null, null, "active", null, null, false));
+            BarProductRecord spirit = service.createProduct(new BarProductRequest(
+                    "product-scope-fb-spirit", "create", List.of(), "bar_1", "金酒", "spirit", 8800L,
+                    null, null, "active", null, null, false));
+            barOrderService.contractScopeGuard =
+                    new com.complex.platform.contract.ContractScopeGuard(contractRepository);
+            // 平台账号下单：订单商户为空，创建时按桌台归属商户比对（beer 在范围内 → 成单）。
+            TestSecurityActors.asPlatformAdmin();
+            BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                    "order-scope-fb", "create", List.of(), "bar_1", table.id(), null,
+                    List.of(Map.of("product_id", beer.id(), "quantity", 1)), null, List.of(), "offline"));
+            assertThat(order.merchantId()).isNull();
+            // 加菜越界品类：修复前 order.merchantId()=null 会跳过拦截 → 现回退桌台商户仍拦。
+            assertThatThrownBy(() -> service.addOrderItem(order.id(), new BarOrderRequest(
+                    "order-scope-fb-add", "create", List.of(), "bar_1", table.id(), null,
+                    List.of(Map.of("product_id", spirit.id(), "quantity", 1)), null, List.of(), "offline")))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+        } finally {
+            barOrderService.contractScopeGuard = null;
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // P1-3: audit attribution comes from auth token, not request body
     // ─────────────────────────────────────────────────────────────────────────
@@ -3085,7 +3171,8 @@ class BarServiceTests {
         try {
             TestSecurityActors.asMerchantUser("merchant_food");
             BarProductRecord product = service.createProduct(new BarProductRequest(
-                    "product-fooddrive", "create product", List.of(), "bar_1", "小吃 fooddrive", "food",
+                    // I-2 词表校验后品类须用规范值：独立餐饮判定看商户业态(merchantDirectory)非商品品类，snack 等价。
+                    "product-fooddrive", "create product", List.of(), "bar_1", "小吃 fooddrive", "snack",
                     3800L, null, null, "active", null, null, false));
             BarTableRecord table = service.createTable(new BarTableRequest(
                     "table-fooddrive", "create table", List.of(), "bar_1", "餐位1", "card_seat",

@@ -2014,6 +2014,8 @@ paths:
       tags:
         - bar
       operationId: createBarOrder
+      x-failure-codes:
+        - CONTRACT_SCOPE_VIOLATION
       summary: 点单
       x-permission: bar.order.create
       x-data-scope: project-bar-table
@@ -2124,6 +2126,8 @@ paths:
       tags:
         - bar
       operationId: addBarOrderItem
+      x-failure-codes:
+        - CONTRACT_SCOPE_VIOLATION
       summary: 新增酒吧订单物品
       description: 用于新增酒吧订单物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.order.create
@@ -2780,6 +2784,8 @@ paths:
       tags:
         - customer
       operationId: createCustomerTicketOrder
+      x-failure-codes:
+        - CONTRACT_SCOPE_VIOLATION
       summary: 客人自助购票下单
       x-permission: not_applicable
       x-data-scope: customer
@@ -7262,6 +7268,8 @@ paths:
       tags:
         - ticketing
       operationId: createTicketOrder
+      x-failure-codes:
+        - CONTRACT_SCOPE_VIOLATION
       summary: 创建票务订单（含一体机辅助售票）
       x-permission: ticket.order.create
       x-data-scope: project-channel
@@ -15570,6 +15578,8 @@ paths:
       tags:
         - bar
       operationId: placeBarScanOrder
+      x-failure-codes:
+        - CONTRACT_SCOPE_VIOLATION
       summary: 扫码点单（绑桌台会话）
       x-permission: bar.order.create
       x-data-scope: project-bar-table
@@ -15639,6 +15649,8 @@ paths:
         - customer
         - bar
       operationId: placeCustomerBarScanOrder
+      x-failure-codes:
+        - CONTRACT_SCOPE_VIOLATION
       summary: 客人自助扫码点单
       x-permission: not_applicable
       x-data-scope: customer-project-bar
@@ -24631,6 +24643,28 @@ components:
           type: string
           description: 经营范围(存 rent_terms；越界 enforcement 属下游)。
           maxLength: 500
+        allowed_categories:
+          type: array
+          description: 经营范围(结构化,可空)：取值=既有业务类目规范值(域级 bar/ticketing/amusement + 商户业态 catering/retail/service/entertainment + 酒吧商品粗类别 8 类)，存 rent_terms.allowedCategories；配置后下单侧(酒吧/票务)拦超范围经营(CONTRACT_SCOPE_VIOLATION)，空/缺省=不拦截(存量合同兼容)。
+          items:
+            type: string
+            enum:
+              - bar
+              - ticketing
+              - amusement
+              - catering
+              - retail
+              - service
+              - entertainment
+              - spirit
+              - wine
+              - beer
+              - cocktail
+              - soft_drink
+              - mixer
+              - tea
+              - snack
+          maxItems: 32
         space_ids:
           type: array
           items:

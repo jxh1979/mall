@@ -23,6 +23,7 @@ function shortId(id: string | null | undefined): string {
 type ContractRow = {
   id: string; merchantId: string; lifecycleStatus: string;
   effectiveDate?: string; expiryDate?: string; commissionMode?: string | null; projectId?: string | null;
+  rentTerms?: { businessScope?: string; allowedCategories?: string[] } | null;
 };
 type FlowStep = { stageSeq: number; stageName: string; approverPermissionCode: string };
 type ColorRule = { id: string; categoryName: string; color: string; thresholdDays: number };
@@ -42,6 +43,17 @@ const CHANGE_TYPES = [
   { v: "renewal", l: "续租" }, { v: "move_out", l: "退租" }, { v: "area_change", l: "面积变更" },
   { v: "rent_change", l: "租金变更" }, { v: "business_scope_change", l: "经营范围变更" }, { v: "early_termination", l: "提前终止" },
 ];
+// 经营范围词表（2026-07-18 拍板：复用既有业务类目，禁止发明新枚举）——
+// 域级 bar/ticketing/amusement=V103 风险告警 source_domain CHECK 消费域；catering/retail/service/entertainment=
+// merchant_type 既有词表（OrganizationMerchantPage MERCHANT_TYPES）；其余 8 项=酒吧商品粗类别（BarProductsPage CATEGORY_LABELS）。
+// 勾选后存 rent_terms.allowedCategories，下单侧（酒吧/票务）拦超范围经营；不勾=不拦截（存量口径）。
+const SCOPE_CATEGORIES: { v: string; l: string }[] = [
+  { v: "bar", l: "酒吧" }, { v: "ticketing", l: "门票销售" }, { v: "amusement", l: "游乐" },
+  { v: "catering", l: "餐饮" }, { v: "retail", l: "零售" }, { v: "service", l: "服务" }, { v: "entertainment", l: "娱乐" },
+  { v: "spirit", l: "烈酒" }, { v: "wine", l: "葡萄酒" }, { v: "beer", l: "啤酒" }, { v: "cocktail", l: "鸡尾酒" },
+  { v: "soft_drink", l: "软饮" }, { v: "mixer", l: "调饮" }, { v: "tea", l: "茶饮" }, { v: "snack", l: "小吃" },
+];
+const scopeLabel = (v: string) => SCOPE_CATEGORIES.find((c) => c.v === v)?.l ?? v;
 const RENTAL_LABEL: Record<string, string> = {
   vacant: "空置", negotiating: "洽谈中", let: "已租", expiring: "即将到期", moved_out: "已退租", unavailable: "不可租",
 };
@@ -77,6 +89,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     merchantId: "", contractSubjectId: "", settlementSubjectId: "", effectiveDate: "", expiryDate: "",
     baseRentYuan: "", perSqmYuan: "", rentMode: "monthly_fixed", rentBillingMode: "fixed_only",
     commissionMode: "fixed_ratio", energyFeeBasis: "by_area",
+    businessScope: "", allowedCategories: [] as string[],
   });
   const [spaceId, setSpaceId] = React.useState("");
   const [billPeriod, setBillPeriod] = React.useState("");
@@ -114,7 +127,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [changes, setChanges] = React.useState<ChangeRow[]>([]);
   const [settlements, setSettlements] = React.useState<SettlementRow[]>([]);
   const [spaceRental, setSpaceRental] = React.useState<SpaceRental[]>([]);
-  const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "" });
+  const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "", allowedCategories: [] as string[], clearScope: false });
   const [disputeReason, setDisputeReason] = React.useState("");
   // 商户显名字典（页面级拉取，失败降级回 ID）。
   const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
@@ -188,9 +201,11 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         rentTerms,
         commissionMode: draft.commissionMode,
         energyFeeBasis: draft.energyFeeBasis,
+        businessScope: draft.businessScope.trim() || undefined,
+        allowedCategories: draft.allowedCategories.length ? draft.allowedCategories : undefined,
       });
       setActionResult({ action: "contract_drafted", merchantId: draft.merchantId.trim() });
-      setDraft({ ...draft, merchantId: "", baseRentYuan: "", perSqmYuan: "" });
+      setDraft({ ...draft, merchantId: "", baseRentYuan: "", perSqmYuan: "", businessScope: "", allowedCategories: [] });
       setCreateOpen(false);
       reload();
     } catch (createError) {
@@ -257,8 +272,16 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
       setGlobalError("先点合同行『明细』选一份合同");
       return;
     }
+    const payload: Record<string, unknown> = {};
+    if (changeForm.note.trim()) payload.note = changeForm.note.trim();
+    if (changeForm.changeType === "business_scope_change") {
+      // S-5: 显式清空 → 发空数组（审批通过后 rent_terms.allowedCategories=[]，下单不再拦截）；
+      // 未勾任何类目且未勾清空 → 不发键，审批通过后既有范围原样不动。
+      if (changeForm.clearScope) payload.allowedCategories = [];
+      else if (changeForm.allowedCategories.length) payload.allowedCategories = changeForm.allowedCategories;
+    }
     await api.post(`/api/v1/contracts/${selectedId}/changes`, {
-      changeType: changeForm.changeType, payload: changeForm.note.trim() ? { note: changeForm.note.trim() } : {},
+      changeType: changeForm.changeType, payload,
     });
     setActionResult({ action: "contract_change_raised", contractId: selectedId, type: changeForm.changeType });
     void selectContract(selectedId);
@@ -319,6 +342,13 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         { label: "生效日期", value: cnDate(row.effectiveDate) },
         { label: "到期日期", value: cnDate(row.expiryDate) },
         { label: "抽成模式", value: formatBusinessStatus(row.commissionMode) },
+        {
+          label: "经营范围",
+          value: (row.rentTerms?.allowedCategories?.length ?? 0) > 0
+            ? (row.rentTerms?.allowedCategories ?? []).map(scopeLabel).join("、")
+            : "未配置（下单不拦截）",
+        },
+        { label: "经营范围描述", value: row.rentTerms?.businessScope ?? "—" },
         { label: "所属综合体", value: row.projectId ?? "—" },
         auditTraceField(navigateTo, "contract", row.id),
       ],
@@ -506,6 +536,33 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                 </>
               ),
             },
+            {
+              title: "经营范围",
+              description: "勾选合同允许经营的业务类目（可多选，可空）。勾选后商户在酒吧/票务下单超出范围会被拦截；不勾选则不启用拦截（存量口径）。",
+              content: (
+                <>
+                  <div role="group" aria-label="经营范围类目" data-testid="contract-scope-categories"
+                    style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
+                    {SCOPE_CATEGORIES.map((c) => (
+                      <label key={c.v} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <input type="checkbox" aria-label={`经营范围-${c.l}`}
+                          checked={draft.allowedCategories.includes(c.v)}
+                          onChange={(e) => setDraft({
+                            ...draft,
+                            allowedCategories: e.target.checked
+                              ? [...draft.allowedCategories, c.v]
+                              : draft.allowedCategories.filter((x) => x !== c.v),
+                          })} />
+                        {c.l}
+                      </label>
+                    ))}
+                  </div>
+                  <label>经营范围文字描述（可空，随勾选并存）<input aria-label="经营范围描述"
+                    placeholder="如：酒吧经营，含啤酒与小吃" value={draft.businessScope}
+                    onChange={(e) => setDraft({ ...draft, businessScope: e.target.value })} /></label>
+                </>
+              ),
+            },
           ]}
           summary={[
             { label: "商户 id", value: draft.merchantId.trim() || "未填写" },
@@ -515,6 +572,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             { label: "到期日期", value: draft.expiryDate || "未选择" },
             { label: "月租金（元）", value: draft.baseRentYuan.trim() || "未填写" },
             { label: "抽成模式", value: formatBusinessStatus(draft.commissionMode) },
+            { label: "经营范围", value: draft.allowedCategories.length ? draft.allowedCategories.map(scopeLabel).join("、") : "未勾选（不拦截）" },
           ]}
         />
         <div className="admin-inline-form" data-testid="contract-activate-form">
@@ -623,6 +681,32 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             {CHANGE_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
           </select>
           <input aria-label="变更说明" placeholder="变更说明 / payload" value={changeForm.note} onChange={(e) => setChangeForm({ ...changeForm, note: e.target.value })} />
+          {changeForm.changeType === "business_scope_change" ? (
+            <div role="group" aria-label="变更后经营范围类目" data-testid="contract-change-scope-categories"
+              style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", width: "100%" }}>
+              {SCOPE_CATEGORIES.map((c) => (
+                <label key={c.v} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <input type="checkbox" aria-label={`变更经营范围-${c.l}`} disabled={changeForm.clearScope}
+                    checked={changeForm.allowedCategories.includes(c.v)}
+                    onChange={(e) => setChangeForm({
+                      ...changeForm,
+                      allowedCategories: e.target.checked
+                        ? [...changeForm.allowedCategories, c.v]
+                        : changeForm.allowedCategories.filter((x) => x !== c.v),
+                    })} />
+                  {c.l}
+                </label>
+              ))}
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 600 }}>
+                <input type="checkbox" aria-label="清空经营范围" checked={changeForm.clearScope}
+                  onChange={(e) => setChangeForm({
+                    ...changeForm, clearScope: e.target.checked,
+                    allowedCategories: e.target.checked ? [] : changeForm.allowedCategories,
+                  })} />
+                清空经营范围（审批通过后下单不再拦截）
+              </label>
+            </div>
+          ) : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={CHANGE_MANAGE}
             data-testid="contract-change-raise" onClick={() => void raiseChange()}>发起变更</PermissionButton>
         </div>

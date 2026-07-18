@@ -36,12 +36,12 @@
 
 | 文件 | 当前行数 |
 |---|---:|
-| `apps/web/src/main.tsx` | 55 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 502 |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 649 |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1108 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 600 |
-| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 453 |
+| `apps/web/src/main.tsx` | 43 |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 879 |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 764 |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1332 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 674 |
+| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 465 |
 
 ## 4. 安全与生产证据闸口
 
@@ -105,7 +105,7 @@
 | credential_item_id | owner | status | blocking_scope | next_action |
 | --- | --- | --- | --- | --- |
 | PRD-CRED-OPS-001 | IT/运维/安全 | pending_info | 阻塞长期预生产和生产 | 建立账号负责人、授权范围、到期日和停用步骤 |
-| PRD-CRED-DB-001 | IT/运维/安全 | pending_info | 阻塞生产数据库接入 | 生成强密码、写入安全保管位置、补到期日和维护窗口 |
+| PRD-CRED-DB-001 | IT/运维/安全 | pending_info | 阻塞生产数据库接入 | 既成事实（2026-07-06 prod 切换后）：运行时 app 角色 complex_app 已轮换 55 位强密码且被 REVOKE 最小权限；owner/Flyway 超级角色 complex 密码仍为 dev 默认 complex_dev_pwd，运行时以 COMPLEX_DATABASE_CREDENTIAL_SEPARATION_ENFORCED=false 关闭凭证守卫掩盖此状态。待 IT 为 owner ALTER ROLE 生成强密码、同步 owner env 并重启，随后移除 enforced=false 让守卫 fail-closed 生效；补到期日和维护窗口 |
 | PRD-CRED-JWT-001 | IT/安全/技术负责人 | pending_info | 阻塞生产登录和开放接口签发 | 设计签名版本、双验窗口、旧 token 失效计划 |
 | PRD-CRED-NAS-001 | IT/运维/安全 | pending_info | 阻塞生产可恢复结论 | IT 将真实密码写入安全保管位置或 160 受控凭证文件，不得写入文档、聊天或仓库 |
 

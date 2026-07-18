@@ -391,7 +391,9 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
                 <>
                   <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-product-bar-id" value={form.barId} onChange={(v) => setField("barId", v)} setGlobalError={setGlobalError} /></label>
                   <label><span>商品名</span><input data-testid="bar-product-name" value={form.productName} onChange={(e) => setField("productName", e.target.value)} /></label>
-                  <label><span>类别</span><input data-testid="bar-product-category" value={form.category} onChange={(e) => setField("category", e.target.value)} /></label>
+                  <label><span>类别</span><select data-testid="bar-product-category" value={form.category} onChange={(e) => setField("category", e.target.value)}>
+                    {Object.entries(CATEGORY_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                  </select></label>
                 </>
               ),
             },
@@ -417,7 +419,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
           summary={[
             { label: "酒吧 ID", value: form.barId.trim() || "未填写" },
             { label: "商品名", value: form.productName.trim() || "未填写" },
-            { label: "类别", value: form.category.trim() || "未填写" },
+            { label: "类别", value: categoryLabel(form.category) },
             { label: "售价（元）", value: form.priceYuan.trim() || "未填写" },
             { label: "内部结算价（元）", value: form.internalPriceYuan.trim() || "不录入" },
           ]}

@@ -14,15 +14,22 @@ function envelope(data: unknown): Response {
   );
 }
 
-function makeApi(): AdminApi {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+type CapturedPost = { url: string; body: Record<string, unknown> };
+
+function makeApi(posts?: CapturedPost[], contracts?: unknown[]): AdminApi {
+  vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (init?.method === "POST" && posts) {
+      posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) as Record<string, unknown> });
+      return Promise.resolve(envelope({}));
+    }
     if (url.includes("/contracts/approval-flow")) return Promise.resolve(envelope([]));
     if (url.includes("/contracts/expiry-color-rules")) return Promise.resolve(envelope([]));
     if (url.includes("/contracts/space-rental-status")) return Promise.resolve(envelope([]));
     if (url.includes("/platform/business-entities")) return Promise.resolve(envelope([{ id: "subject-1", entityName: "测试主体1" }]));
     if (url.includes("/platform/merchants")) return Promise.resolve(envelope([{ id: "merchant-1", displayName: "测试商户1" }]));
-    if (url.endsWith("/api/v1/contracts")) return Promise.resolve(envelope([]));
+    if (url.includes("/changes") || url.includes("/settlements")) return Promise.resolve(envelope([]));
+    if (url.endsWith("/api/v1/contracts")) return Promise.resolve(envelope(contracts ?? []));
     return Promise.resolve(envelope([]));
   }));
   return new AdminApi("test-token");
@@ -65,5 +72,81 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     // 为聚焦「引导+提交」主路径，改由页面 state 已有 effectiveDate/expiryDate 为空 → 下一步应被拦。
     fireEvent.click(screen.getByTestId("contract-draft-next"));
     expect(screen.getByTestId("contract-draft-error").textContent).toContain("生效日期");
+  });
+
+  it("起草弹窗含「经营范围」类目勾选组（既有词表），可勾选/取消", async () => {
+    render(<ContractWorkbenchPage {...baseProps()} />);
+    await waitFor(() => expect(screen.getByTestId("contract-draft-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-draft-open"));
+    // 勾选组渲染全部既有类目（域级 + 商户业态 + 酒吧品类），全中文。
+    const group = screen.getByTestId("contract-scope-categories");
+    expect(group.textContent).toContain("酒吧");
+    expect(group.textContent).toContain("门票销售");
+    expect(group.textContent).toContain("烈酒");
+    expect(group.textContent).toContain("小吃");
+    const spirit = screen.getByLabelText("经营范围-烈酒") as HTMLInputElement;
+    expect(spirit.checked).toBe(false);
+    fireEvent.click(spirit);
+    expect(spirit.checked).toBe(true);
+    fireEvent.click(spirit);
+    expect(spirit.checked).toBe(false);
+    // 文字描述与勾选并存。
+    fireEvent.change(screen.getByLabelText("经营范围描述"), { target: { value: "酒吧经营" } });
+    expect((screen.getByLabelText("经营范围描述") as HTMLInputElement).value).toBe("酒吧经营");
+  });
+
+  it("经营范围变更：选 business_scope_change 出勾选组 → 发起变更载荷带 allowed_categories", async () => {
+    const posts: CapturedPost[] = [];
+    const props = baseProps();
+    props.api = makeApi(posts, [{ id: "ctr-1", merchant_id: "merchant-1", lifecycle_status: "terminated" }]);
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-detail-ctr-1")).toBeTruthy());
+    // 点「明细」选中合同（③ 变更与结算 tab forceRender 已在 DOM）。
+    fireEvent.click(screen.getByTestId("contract-detail-ctr-1"));
+    // 非 business_scope_change 类型不出勾选组。
+    expect(screen.queryByTestId("contract-change-scope-categories")).toBeNull();
+    fireEvent.change(screen.getByLabelText("变更类型"), { target: { value: "business_scope_change" } });
+    await waitFor(() => expect(screen.getByTestId("contract-change-scope-categories")).toBeTruthy());
+    fireEvent.click(screen.getByLabelText("变更经营范围-烈酒"));
+    fireEvent.click(screen.getByLabelText("变更经营范围-啤酒"));
+    fireEvent.click(screen.getByTestId("contract-change-raise"));
+    await waitFor(() => expect(posts.some((p) => p.url.includes("/api/v1/contracts/ctr-1/changes"))).toBe(true));
+    const change = posts.find((p) => p.url.includes("/api/v1/contracts/ctr-1/changes"))!;
+    expect(change.body.change_type).toBe("business_scope_change");
+    // 客户端蛇形化：payload.allowedCategories → allowed_categories（后端归一化回 rent_terms camel 键）。
+    expect((change.body.payload as Record<string, unknown>).allowed_categories).toEqual(["spirit", "beer"]);
+  });
+
+  it("经营范围变更：勾「清空经营范围」→ 发起变更载荷 allowed_categories 为空数组", async () => {
+    const posts: CapturedPost[] = [];
+    const props = baseProps();
+    props.api = makeApi(posts, [{ id: "ctr-3", merchant_id: "merchant-1", lifecycle_status: "terminated" }]);
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-detail-ctr-3")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-detail-ctr-3"));
+    fireEvent.change(screen.getByLabelText("变更类型"), { target: { value: "business_scope_change" } });
+    await waitFor(() => expect(screen.getByTestId("contract-change-scope-categories")).toBeTruthy());
+    // 先勾一个类目再勾清空：类目被清并禁用，载荷发空数组（显式清空≠未动）。
+    fireEvent.click(screen.getByLabelText("变更经营范围-啤酒"));
+    fireEvent.click(screen.getByLabelText("清空经营范围"));
+    expect((screen.getByLabelText("变更经营范围-啤酒") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("变更经营范围-啤酒") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId("contract-change-raise"));
+    await waitFor(() => expect(posts.some((p) => p.url.includes("/api/v1/contracts/ctr-3/changes"))).toBe(true));
+    const change = posts.find((p) => p.url.includes("/api/v1/contracts/ctr-3/changes"))!;
+    expect((change.body.payload as Record<string, unknown>).allowed_categories).toEqual([]);
+  });
+
+  it("合同详情抽屉展示经营范围（中文显名）与文字描述", async () => {
+    const props = baseProps();
+    props.api = makeApi(undefined, [{
+      id: "ctr-2", merchant_id: "merchant-1", lifecycle_status: "terminated",
+      rent_terms: { allowedCategories: ["beer", "ticketing"], businessScope: "酒吧经营含啤酒" },
+    }]);
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-ctr-2")).toBeTruthy());
+    fireEvent.click(screen.getByLabelText("查看合同详情"));
+    await waitFor(() => expect(screen.getByText("啤酒、门票销售")).toBeTruthy());
+    expect(screen.getByText("酒吧经营含啤酒")).toBeTruthy();
   });
 });
