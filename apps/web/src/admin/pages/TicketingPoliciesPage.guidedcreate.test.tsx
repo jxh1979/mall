@@ -35,7 +35,7 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
   afterEach(() => vi.clearAllMocks());
 
   it("基本信息校验→绑权益填理由→确认发布,后端收到 create/bind/publish 三段", async () => {
-    const postSpy = vi.fn(async (path: string) => {
+    const postSpy = vi.fn(async (path: string, _body?: unknown) => {
       if (path.endsWith("/ticketing/ticket-types")) return { id: "tt-new" } as unknown;
       return {} as unknown;
     });
@@ -74,14 +74,14 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     });
     // 建票载荷:不再传 status(服务端固定 draft),带有效期/刷新/可退/单店字段。
     const createCall = postSpy.mock.calls.find((c) => String(c[0]).endsWith("/ticketing/ticket-types"));
-    const createBody = createCall?.[1] as Record<string, unknown>;
+    const createBody = (createCall?.[1] ?? {}) as Record<string, unknown>;
     expect(createBody.status).toBeUndefined();
     expect(createBody.validity_days).toBe(1);
     expect(createBody.refresh_interval_seconds).toBe(60);
     expect(createBody.refundable).toBe(false);
     // 发布载荷带必填理由。
     const publishCall = postSpy.mock.calls.find((c) => String(c[0]).includes("/publish"));
-    expect((publishCall?.[1] as Record<string, unknown>).reason).toBe("暑期档新票上架");
+    expect(((publishCall?.[1] ?? {}) as Record<string, unknown>).reason).toBe("暑期档新票上架");
     // 发布成功后弹窗关闭。
     await waitFor(() => expect(screen.queryByTestId("ticket-name")).toBeNull());
   });
