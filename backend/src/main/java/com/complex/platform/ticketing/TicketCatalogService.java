@@ -54,13 +54,13 @@ public class TicketCatalogService {
                 actual.weekendPriceCent(),
                 actual.holidayPriceCent(),
                 actual.stockRequired() != null && actual.stockRequired(),
-                trimToDefault(actual.status(), "active"),
-                // R5 审计点②：validity_days 暂无创建入口（DTO 未扩展），保持 null=回退默认 1 天。
-                // 后续若需按票种配置有效期，再扩展 TicketTypeRequest + 此处赋值。
-                null,
-                // P1 清单#19：refresh_interval_seconds 暂无创建入口（DTO 未扩展），保持 null=回退默认 60 秒。
-                // 后续若需按票种配置刷新窗口，再扩展 TicketTypeRequest + 此处赋值（取值 {30,60}）。
-                null,
+                // AUD-015 建票固定 draft：必须先绑权益、再走发布闸（校验≥1个绑定+理由）才可售。
+                // 此前允许直接建 active → 客户端公开列表可见「可售但无权益」的票，付款后出票必失败。
+                "draft",
+                // AUD-004：有效期天数进入建票链路（可空=默认1天；正数校验）。
+                requireValidityDays(actual.validityDays()),
+                // AUD-004：动态码刷新秒数（可空=默认60；仅允许 30/60）。
+                requireRefreshIntervalSeconds(actual.refreshIntervalSeconds()),
                 now,
                 now,
                 // P0 修复（V133）：库存上限取自请求（可空=不限量）；已售从 0 起。
@@ -405,6 +405,11 @@ public class TicketCatalogService {
         requireText(actual.reason(), "reason");
         TicketTypeRecord current = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        // AUD-015 发布闸：至少绑定一个权益模板才可发布——公开可售的票必须能出票，否则形成收钱不出票。
+        if (repository.listTicketTypeEntitlements(current.id()).isEmpty()) {
+            throw ApiException.conflict("TICKET_TYPE_ENTITLEMENT_REQUIRED",
+                    "ticket type must have at least one entitlement binding before publish");
+        }
         requireComponentPricesForMultiBusinessPass(current.id());
         Instant now = Instant.now();
         return repository.saveTicketType(new TicketTypeRecord(
@@ -528,6 +533,28 @@ public class TicketCatalogService {
             throw ApiException.badRequest("VALIDATION_FAILED", "ticket_category is invalid");
         }
         return trimmed;
+    }
+
+    /** AUD-004：有效期天数可空（=默认1天）；非空必须为正（日=1/周=7/月=30/年=365 等业务值均为正整数）。 */
+    private Integer requireValidityDays(Integer value) {
+        if (value == null) {
+            return null;
+        }
+        if (value <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "validity_days must be positive");
+        }
+        return value;
+    }
+
+    /** AUD-004：动态码刷新秒数可空（=默认60）；非空仅允许 30/60。 */
+    private Integer requireRefreshIntervalSeconds(Integer value) {
+        if (value == null) {
+            return null;
+        }
+        if (value != 30 && value != 60) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "refresh_interval_seconds must be 30 or 60");
+        }
+        return value;
     }
 
     private int positiveOrDefault(Integer value, int defaultValue, String fieldName) {

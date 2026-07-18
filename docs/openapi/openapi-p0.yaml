@@ -7402,37 +7402,6 @@ paths:
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
       requestBody:
         $ref: "#/components/requestBodies/TicketTypeEntitlementRequest"
-  /api/v1/ticketing/ticket-types/{id}/issue:
-    post:
-      tags:
-        - ticketing
-      operationId: issueTicketTypeDirectly
-      summary: 发放票类型directly
-      description: 用于发放票类型directly。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-      x-permission: ticket.order.create
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: ticket_order.issued
-      x-audit-event-failure: ticket_order.issued_failed
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-      parameters:
-        - $ref: "#/components/parameters/Id"
-          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
-      requestBody:
-        $ref: "#/components/requestBodies/TicketIssueRequest"
   /api/v1/ticketing/ticket-types/{id}/publish:
     post:
       tags:
@@ -24936,7 +24905,7 @@ components:
           description: 是否强制库存扣减；为 true 时售票必须锁定并扣减库存。
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: AUD-015 起服务端不再采信该字段：建票固定 draft，须绑权益后经发布闸（理由必填）上架。保留仅为兼容旧客户端载荷。
           enum:
             - draft
             - active
@@ -24946,6 +24915,31 @@ components:
         refundable:
           type: boolean
           description: 方案2/规则2：该票种是否可退票（可空=不可退，默认最安全）。true 才允许客人申请整票退款、到期未用自动退。
+        validity_days:
+          type: integer
+          minimum: 1
+          description: 有效期天数（可空=默认1天）；日=1/周=7/月=30/年=365 等，出票按此计算 valid_to。
+        refresh_interval_seconds:
+          type: integer
+          enum:
+            - 30
+            - 60
+          description: 动态码刷新秒数（可空=默认60）；仅允许 30/60。
+        bar_id:
+          type: string
+          maxLength: 64
+          description: AUD-076 单店票挂酒吧：绑定的酒吧商户 id（可空=通票）。建票校验业态 bar 且未存档；建后不可变。
+        stock_quantity:
+          type: integer
+          minimum: 0
+          description: 按票种总量限量（可空=不限量）；下单原子扣减、超额拒绝。
+        ticket_category:
+          type: string
+          enum:
+            - standard
+            - new_person
+            - student
+          description: 资格/定价档分类标签（可空=标准）。仅分类/报表用，不碰定价。
     TicketPriceRuleRequest:
       type: object
       description: 请求载荷 `TicketPriceRuleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。

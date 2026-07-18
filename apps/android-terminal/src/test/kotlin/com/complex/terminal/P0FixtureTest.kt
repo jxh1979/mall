@@ -79,7 +79,9 @@ class P0FixtureTest {
         exchange.requestURI.path == "/api/v1/ticketing/ticket-types" -> """{"id":"ticket_type_1"}"""
         exchange.requestURI.path == "/api/v1/ticketing/entitlement-templates" -> """{"id":"template_1"}"""
         exchange.requestURI.path == "/api/v1/ticketing/ticket-types/ticket_type_1/entitlements" -> """{}"""
-        exchange.requestURI.path == "/api/v1/ticketing/ticket-types/ticket_type_1/issue" ->
+        exchange.requestURI.path == "/api/v1/ticketing/ticket-types/ticket_type_1/publish" -> """{}"""
+        exchange.requestURI.path == "/api/v1/ticketing/orders" -> """{"id":"order_1"}"""
+        exchange.requestURI.path == "/api/v1/ticketing/orders/order_1/issue" ->
           """{"issued_entitlements":[{"entitlement_code":"ENT-1"}]}"""
         else -> """{"error":"unexpected path","path":"${exchange.requestURI.path}"}"""
       }
@@ -91,7 +93,7 @@ class P0FixtureTest {
       val api = TerminalApiClient("http://127.0.0.1:${server.address.port}")
       P0Fixture(api, stamp).create()
 
-      assertEquals(10, mutationBodies.size)
+      assertEquals(12, mutationBodies.size)
       for ((path, body) in mutationBodies) {
         val request = Json.parseToJsonElement(body).jsonObject
         assertTrue("idempotency_key" in request, "$path fixture request must include idempotency_key")
@@ -149,9 +151,14 @@ class P0FixtureTest {
       assertFalse("entitlementTemplateId" in ticketTypeEntitlementRequest)
       assertFalse("valueAmount" in ticketTypeEntitlementRequest)
 
+      // AUD-019：direct 出票已退役——夹具走真实订单链（发布→下单→按单出票）。
+      val orderRequest =
+        assertNotNull(requestsByPath["/api/v1/ticketing/orders"]?.single())
+      assertTrue("ticket_type_id" in orderRequest)
+      assertTrue("sales_channel" in orderRequest)
       val issueRequest =
-        assertNotNull(requestsByPath["/api/v1/ticketing/ticket-types/ticket_type_1/issue"]?.single())
-      assertTrue("order_id" in issueRequest)
+        assertNotNull(requestsByPath["/api/v1/ticketing/orders/order_1/issue"]?.single())
+      assertTrue("reason" in issueRequest)
       assertFalse("purchaserName" in issueRequest)
     } finally {
       server.stop(0)

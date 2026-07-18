@@ -127,7 +127,7 @@ class P0Fixture(
         "weekend_price_cent" to 11900,
         "holiday_price_cent" to 12900,
         "stock_required" to false,
-        "status" to "active",
+        // AUD-015：建票固定 draft，绑权益后经发布闸上架（status 字段服务端不再采信）。
         *fixtureMutationMetadata("ticket_type"),
       ),
     )
@@ -158,11 +158,27 @@ class P0Fixture(
         *fixtureMutationMetadata("ticket_type_entitlement"),
       ),
     )
-    val issued = api.postJson<IssuedTicketResponse>(
-      "/api/v1/ticketing/ticket-types/${product.id}/issue",
+    // AUD-019：direct 出票端点已退役（对假订单必 FK 回滚、对真订单可错票占坑）——统一走「发布→真实订单→按单出票」。
+    api.postJson<JsonObject>(
+      "/api/v1/ticketing/ticket-types/${product.id}/publish",
       obj(
-        "order_id" to "android_p0_order_$stamp",
-        "issue_mode" to "manual",
+        "reason" to "P0 fixture publish",
+        *fixtureMutationMetadata("ticket_type_publish"),
+      ),
+    )
+    val order = api.postJson<IdResponse>(
+      "/api/v1/ticketing/orders",
+      obj(
+        "ticket_type_id" to product.id,
+        "quantity" to 1,
+        "sales_channel" to "admin",
+        *fixtureMutationMetadata("ticket_order"),
+      ),
+    )
+    val issued = api.postJson<IssuedTicketResponse>(
+      "/api/v1/ticketing/orders/${order.id}/issue",
+      obj(
+        "reason" to "P0 fixture issue",
         *fixtureMutationMetadata("ticket_issue"),
       ),
     )

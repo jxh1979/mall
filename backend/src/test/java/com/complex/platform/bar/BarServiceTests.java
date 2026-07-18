@@ -1601,7 +1601,51 @@ class BarServiceTests {
     }
 
     @Test
-    void partialSettlementKeepsOriginalPayableAndMarksPartialStatuses() {
+    void zeroRemainingBillSettlesAsCloseWithoutNewSettlementRow() {
+        // 复核修正(P2):全额减免后应收=0 的账单必须能关——结账=关单,不产生收款流水。
+        BarBillRecord bill = billForOrder("waived-close", "staff_sales");
+        service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
+                "bill-waived-close", "full waiver", List.of(), "waiver", 128800L, "全额减免", null));
+        BarBillRecord closed = service.settleBill(bill.id(), new BarBillSettleRequest(
+                "wc-settle", null, List.of(), "pay_wc", null, "aggregate_pay"));
+        assertThat(closed.settlementStatus()).isEqualTo("settled");
+        assertThat(closed.paymentStatus()).isEqualTo("paid");
+        assertThat(closed.paidAmountCent()).isEqualTo(0L);
+    }
+
+    @Test
+    void continuationSettlementAccumulatesPaidAmountAndSettlesAtTotal() {
+        // AUD-009:续付按剩余校验并累计,不再覆盖首付;累计到总额即 settled。
+        BarBillRecord bill = billForOrder("cont-settle", "staff_sales");
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "cont-1", null, List.of(), "pay_c1", 40000L, "aggregate_pay"));
+        BarBillRecord second = service.settleBill(bill.id(), new BarBillSettleRequest(
+                "cont-2", null, List.of(), "pay_c2", 88800L, "aggregate_pay"));
+        assertThat(second.paidAmountCent()).isEqualTo(128800L);
+        assertThat(second.paymentStatus()).isEqualTo("paid");
+        assertThat(second.settlementStatus()).isEqualTo("settled");
+    }
+
+    @Test
+    void continuationSettlementRejectsOverRemainingAndZeroAmounts() {
+        BarBillRecord bill = billForOrder("cont-guard", "staff_sales");
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "cg-1", null, List.of(), "pay_g1", 40000L, "aggregate_pay"));
+        // 二次付全额=超剩余(此前会超收 4 万并把账单标 settled)。
+        assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
+                "cg-2", null, List.of(), "pay_g2", 128800L, "aggregate_pay")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessage()).contains("remaining"));
+        // 0 元结算拒绝(此前会被接受并写 partial_paid/paid_at)。
+        assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
+                "cg-3", null, List.of(), "pay_g3", 0L, "aggregate_pay")))
+                .isInstanceOf(ApiException.class);
+        assertThat(barRepository.findBillById(bill.id())).get()
+                .extracting(BarBillRecord::paidAmountCent).isEqualTo(40000L);
+    }
+
+    @Test
+        void partialSettlementKeepsOriginalPayableAndMarksPartialStatuses() {
         BarBillRecord bill = billForOrder("partial-settle", "staff_sales");
 
         BarBillRecord settled = service.settleBill(

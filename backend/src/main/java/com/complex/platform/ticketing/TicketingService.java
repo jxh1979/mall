@@ -442,20 +442,6 @@ public class TicketingService {
 
     @com.complex.platform.gate.GuardedAction(capability = "ticket.order.create")
     @Transactional
-    public IssuedTicketResponse issueTicketTypeDirectly(String ticketTypeId, TicketIssueRequest request) {
-        String id = operations.requireText(ticketTypeId, "ticket_type_id");
-        return operations.executeWrite(
-                "issueTicketTypeDirectly:" + id,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                IssuedTicketResponse.class,
-                TicketingWriteOperation.ISSUE_TICKET_TYPE_DIRECTLY,
-                () -> orderService.issueEntitlements(id, request)
-        );
-    }
-
-    @com.complex.platform.gate.GuardedAction(capability = "ticket.order.create")
-    @Transactional
     public TicketOrderRecord createTicketOrder(TicketOrderRequest request) {
         return operations.executeWrite(
                 "createTicketOrder",
@@ -551,11 +537,23 @@ public class TicketingService {
         for (var entry : byOrder.entrySet()) {
             String orderId = entry.getKey();
             java.util.List<IssuedEntitlementRecord> expiredUnused = entry.getValue();
-            // 已有退款在途/完成则交由退款链、跳过。
+            // AUD-011：不再因「订单已有退款」整单跳过——同单人工退过 1 张后，其余到期票此前永远既不退也不作废。
+            // 幂等粒度=父票实例（refunded 实例的权益已冻结不在待处理集合，实例级 CAS 防并发双退）。
+            // 复核修正（P1-B）：人工退款「申请即冻结」只冻父实例（refund_pending），子权益要到审批才冻结——
+            // 这里作废它会让审批冻结命中 0 行、退款单永远批不了（驳回后实例回 active 但权益已作废=死票）。
+            // 该类权益留给退款链处置（批准→随整票冻结；驳回→回 active 后由下轮到期作业正常处置）。
             TicketOrderRecord order = repository.findTicketOrderById(orderId).orElse(null);
-            if (order != null && (repository.sumApprovedRefundAmountByOrderId(orderId) > 0
-                    || repository.sumPendingRefundAmountByOrderId(orderId) > 0)) {
-                continue;
+            java.util.Set<String> refundPendingParents = repository.listTicketInstancesByOrderId(orderId).stream()
+                    .filter(ti -> "refund_pending".equals(ti.status()))
+                    .map(TicketInstanceRecord::id)
+                    .collect(java.util.stream.Collectors.toSet());
+            if (!refundPendingParents.isEmpty()) {
+                expiredUnused = expiredUnused.stream()
+                        .filter(e -> e.parentTicketId() == null || !refundPendingParents.contains(e.parentTicketId()))
+                        .toList();
+                if (expiredUnused.isEmpty()) {
+                    continue;
+                }
             }
             // 规则2 可退配置：票种默认不可退 → 到期直接作废不退（客人到期无退款）。
             TicketTypeRecord ticketType = order == null

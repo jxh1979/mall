@@ -31,6 +31,10 @@ type TicketTypeRow = {
   // V260 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。
   archivedAt?: string | null;
   deleteStatus?: string;
+  // AUD-004/022：有效期/可退/单店酒吧在列表与详情贯通展示。
+  validityDays?: number | null;
+  refundable?: boolean;
+  barId?: string | null;
 };
 type EntitlementTemplateRow = {
   id: string;
@@ -101,6 +105,15 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [weekend, setWeekend] = React.useState("");
   const [holiday, setHoliday] = React.useState("");
   const [stock, setStock] = React.useState("");
+  // AUD-004/022：有效期天数/动态码刷新/可退票/单店酒吧 建票直配。
+  const [validityDays, setValidityDays] = React.useState("1");
+  const [refreshSeconds, setRefreshSeconds] = React.useState("60");
+  const [refundable, setRefundable] = React.useState(false);
+  const [barId, setBarId] = React.useState("");
+  // AUD-015：建票=草稿→绑权益→带理由发布，一个向导内完成；createKey 固定一次，失败重试幂等复用同一草稿。
+  const [createTemplateId, setCreateTemplateId] = React.useState("");
+  const [publishReason, setPublishReason] = React.useState("");
+  const [createKey, setCreateKey] = React.useState("");
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   // 引导式流程 phase-2：新建票种收起为主按钮，点击弹出分步引导（GuidedFlowModal）。
@@ -311,20 +324,43 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       setError("票种名称必填。");
       return;
     }
+    if (!createTemplateId) {
+      setError("必须绑定一个权益模板——公开可售的票必须能出票。");
+      return;
+    }
+    if (!publishReason.trim()) {
+      setError("发布理由必填。");
+      return;
+    }
     setError("");
     setBusy(true);
     try {
+      // AUD-015：草稿建票 → 绑权益 → 带理由发布（服务端发布闸校验≥1个绑定）。createKey 全程复用，失败重试不产生重复草稿。
       const ticket = await api.post<{ id: string }>("/api/v1/ticketing/ticket-types", {
-        idempotency_key: crypto.randomUUID(),
+        idempotency_key: createKey,
         ticket_name: ticketName.trim(),
         base_calendar_price_mode: "calendar",
         weekday_price_cent: Math.round(prices.平日价 * 100),
         weekend_price_cent: Math.round(prices.周末价 * 100),
         holiday_price_cent: Math.round(prices.节假日价 * 100),
         stock_quantity: stock.trim() ? Number(stock) : null,
-        status: "active",
+        validity_days: Number(validityDays) || 1,
+        refresh_interval_seconds: Number(refreshSeconds) || 60,
+        refundable,
+        bar_id: barId || null,
       });
-      const published = await api.post(`/api/v1/ticketing/ticket-types/${ticket.id ?? "ticket-1"}/publish`, {});
+      const ticketId = ticket.id ?? "ticket-1";
+      await api.post(`/api/v1/ticketing/ticket-types/${ticketId}/entitlements`, {
+        idempotency_key: `${createKey}-bind-${createTemplateId}`,
+        entitlement_template_id: createTemplateId,
+        quantity: 1,
+        total_times: 1,
+        num_people: 1,
+      });
+      const published = await api.post(`/api/v1/ticketing/ticket-types/${ticketId}/publish`, {
+        idempotency_key: `${createKey}-publish`,
+        reason: publishReason.trim(),
+      });
       setActionResult({ action: "ticket_policy_publish", status: "published", published });
       setCreateOpen(false);
       reload();
@@ -550,6 +586,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <th>周末（元）</th>
                 <th>节假日（元）</th>
                 <th>限量</th>
+                <th>有效期</th>
+                <th>可退</th>
+                <th>单店酒吧</th>
                 <th>状态</th>
                 <th>存档状态</th>
                 <th>操作</th>
@@ -566,6 +605,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                   <td>{yuan(row.weekendPriceCent)}</td>
                   <td>{yuan(row.holidayPriceCent)}</td>
                   <td>{row.stockQuantity ?? "不限"}</td>
+                  <td>{row.validityDays ?? 1} 天</td>
+                  <td>{row.refundable ? "可退" : "不可退"}</td>
+                  <td>{row.barId ? (merchants.find((m) => m.id === row.barId)?.merchantName ?? row.barId) : "通票"}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{archiveLabel(row)}</td>
                   <td onClick={(event) => event.stopPropagation()}>{catalogActions("ticket-types", row)}</td>
@@ -577,7 +619,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       </AdminDataState>
       {/* 引导式流程 phase-2：新建票种入口按钮（权限门在入口），点击弹出分步引导。 */}
       <div className="admin-form-row">
-        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-create-open" onClick={() => { setError(""); setCreateOpen(true); }}>
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-create-open" onClick={() => { setError(""); setCreateKey(crypto.randomUUID()); setCreateOpen(true); }}>
           ＋ 新建票种
         </PermissionButton>
       </div>
@@ -609,9 +651,57 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <label>周末价（元）<input data-testid="ticket-weekend-price" type="number" min={0} step="0.01" value={weekend} onChange={(event) => setWeekend(event.target.value)} placeholder="周末价" /></label>
                 <label>节假日价（元）<input data-testid="ticket-holiday-price" type="number" min={0} step="0.01" value={holiday} onChange={(event) => setHoliday(event.target.value)} placeholder="节假日价" /></label>
                 <label>限量<input data-testid="ticket-stock" type="number" min={0} value={stock} onChange={(event) => setStock(event.target.value)} placeholder="限量（可空=不限）" aria-label="限量" /></label>
+                <label>有效期（天）
+                  <select data-testid="ticket-validity-days" aria-label="有效期（天）" value={validityDays} onChange={(event) => setValidityDays(event.target.value)}>
+                    <option value="1">当日（1天）</option>
+                    <option value="7">周票（7天）</option>
+                    <option value="30">月票（30天）</option>
+                    <option value="365">年票（365天）</option>
+                  </select>
+                </label>
+                <label>动态码刷新（秒）
+                  <select data-testid="ticket-refresh-seconds" aria-label="动态码刷新（秒）" value={refreshSeconds} onChange={(event) => setRefreshSeconds(event.target.value)}>
+                    <option value="60">60 秒</option>
+                    <option value="30">30 秒</option>
+                  </select>
+                </label>
+                <label>
+                  <input data-testid="ticket-refundable" type="checkbox" checked={refundable} onChange={(event) => setRefundable(event.target.checked)} aria-label="可退票" />
+                  可退票（客人可申请整票退款、到期未用自动退；不勾=不可退）
+                </label>
+                <label>单店票绑定酒吧（可空=通票）
+                  <select data-testid="ticket-bar-select" aria-label="单店票绑定酒吧" value={barId} onChange={(event) => setBarId(event.target.value)}>
+                    <option value="">不绑定（通票）</option>
+                    {merchants.filter((m) => m.merchantType === "bar").map((m) => (
+                      <option key={m.id} value={m.id}>{m.merchantName}</option>
+                    ))}
+                  </select>
+                </label>
                 <div data-testid="ticket-derived-preview" className="admin-preview">
                   新人票、学生票、多人票、渠道价、会员价在下方「派生价规则」区配置：按基础价折扣派生或固定价。
                 </div>
+              </>
+            ),
+          },
+          {
+            title: "绑定权益并发布",
+            description: "公开可售的票必须能出票：至少绑定一个权益模板，填写发布理由后上架。更多分项权益可发布后在「组合式套票配置」补充。",
+            validate: () => {
+              if (!createTemplateId) return "必须选择一个权益模板。";
+              if (!publishReason.trim()) return "发布理由必填。";
+              return null;
+            },
+            content: (
+              <>
+                <label>权益模板（必选）
+                  <select data-testid="ticket-create-template" aria-label="权益模板" value={createTemplateId} onChange={(event) => setCreateTemplateId(event.target.value)}>
+                    <option value="">选择权益模板</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>发布理由（必填）<input data-testid="ticket-publish-reason" value={publishReason} onChange={(event) => setPublishReason(event.target.value)} placeholder="如：暑期档新票上架" aria-label="发布理由" /></label>
               </>
             ),
           },
@@ -622,6 +712,12 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           { label: "周末价（元）", value: weekend || "未填写" },
           { label: "节假日价（元）", value: holiday || "未填写" },
           { label: "限量", value: stock.trim() || "不限" },
+          { label: "有效期（天）", value: validityDays },
+          { label: "动态码刷新（秒）", value: refreshSeconds },
+          { label: "可退票", value: refundable ? "可退" : "不可退" },
+          { label: "单店酒吧", value: barId ? (merchants.find((m) => m.id === barId)?.merchantName ?? barId) : "通票" },
+          { label: "权益模板", value: createTemplateId ? (templates.find((t) => t.id === createTemplateId)?.name ?? createTemplateId) : "未选择" },
+          { label: "发布理由", value: publishReason.trim() || "未填写" },
         ]}
       />
 

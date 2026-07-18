@@ -291,9 +291,6 @@ public interface TicketingRepository {
 
     long sumPendingRefundAmountByOrderId(String orderId);
 
-    /** 已审批（approved）退款金额合计——用于判定整单是否累计全额退款（决定库存名额是否回补）。 */
-    long sumApprovedRefundAmountByOrderId(String orderId);
-
     Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt);
 
     Optional<IssuedEntitlementRecord> atomicReverseEntitlement(String id, java.time.Instant updatedAt);

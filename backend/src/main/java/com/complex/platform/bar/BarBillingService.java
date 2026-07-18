@@ -163,11 +163,47 @@ public class BarBillingService {
         requireText(actual.paymentId(), "payment_id");
         // V091：结算应收含小费（payable + tip）。小费为代收（归属服务员/交班结算），不计入低消/提成基数。
         long settleTotal = bill.payableAmountCent() + bill.tipAmountCent();
+        // AUD-009 续付累计：本次金额按「剩余未付」校验并累计入 paidAmount，不再按原始总额校验/覆盖——
+        // 否则部分付款后二次付全额会超收（流水累计>应收但账单标 settled），或续付覆盖掉首付金额致账实不符。
+        long existingPaid = bill.paidAmountCent();
+        long remaining = settleTotal - existingPaid;
+        // 复核修正（P2）：全免单/押金全抵/减免后剩余应收≤0 的账单必须能关——此路径「结账=关单」，
+        // 不产生收款流水（0 元无收款），否则免单账单永远停在未结。
+        if (remaining <= 0) {
+            if (actual.settlementAmountCent() != null && actual.settlementAmountCent() != 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "settlement amount cannot exceed remaining unpaid amount");
+            }
+            Instant closeNow = Instant.now();
+            BarBillRecord closedBill = repository.saveBill(billWithAmounts(
+                    bill,
+                    bill.subtotalAmountCent(),
+                    bill.discountAmountCent(),
+                    bill.depositDeductAmountCent(),
+                    bill.payableAmountCent(),
+                    existingPaid,
+                    "paid",
+                    "settled",
+                    closeNow
+            ));
+            if (bill.orderId() != null) {
+                repository.findOrderById(bill.orderId())
+                        .filter(o -> o.paidAt() == null)
+                        .ifPresent(o -> repository.saveOrder(new BarOrderRecord(
+                                o.id(), o.barId(), o.merchantId(), o.tableId(), o.reservationId(), o.customerId(),
+                                o.orderSource(), o.status(), o.totalAmountCent(), o.currency(), o.createdTerminal(),
+                                o.deviceId(), o.salesStaffId(), o.createdAt(), o.updatedAt(), o.orderType(), closeNow)));
+            }
+            return closedBill;
+        }
         long settlementAmount = actual.settlementAmountCent() == null
-                ? settleTotal
+                ? remaining
                 : nonNegative(actual.settlementAmountCent(), "settlement_amount_cent");
-        if (settlementAmount > settleTotal) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "settlement amount cannot exceed payable amount plus tip");
+        if (settlementAmount <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "settlement amount must be positive");
+        }
+        if (settlementAmount > remaining) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "settlement amount cannot exceed remaining unpaid amount");
         }
         Instant now = Instant.now();
         // A2/A3：结算渠道（统一词表，与 finance 对账归并）+ 现金/POS 收款留痕 + D4 权威事件。
@@ -207,15 +243,17 @@ public class BarBillingService {
                     Map.of("amount_cent", settlementAmount, "pos_transaction_no",
                             String.valueOf(actual.posTransactionNo())));
         }
+        // AUD-009：paidAmount=历史已付+本次；状态按累计后金额判定。
+        long newPaid = existingPaid + settlementAmount;
         BarBillRecord settledBill = repository.saveBill(billWithAmounts(
                 bill,
                 bill.subtotalAmountCent(),
                 bill.discountAmountCent(),
                 bill.depositDeductAmountCent(),
                 bill.payableAmountCent(),
-                settlementAmount,
-                settlementAmount >= settleTotal ? "paid" : "partial_paid",
-                settlementAmount >= settleTotal ? "settled" : "partial_settled",
+                newPaid,
+                newPaid >= settleTotal ? "paid" : "partial_paid",
+                newPaid >= settleTotal ? "settled" : "partial_settled",
                 now
         ));
         // V231：酒吧订单本身无支付生命周期，支付走账单结算；结账成功即回填链上订单 paid_at（首次为空才写，与账单同事务）。

@@ -75,6 +75,10 @@ public class TicketOrderService {
         if (ticketType.archivedAt() != null || !"none".equals(ticketType.deleteStatus())) {
             throw ApiException.conflict("TICKET_TYPE_NOT_SELLABLE", "该票种已下线（存档/待删除），不可下单");
         }
+        // AUD-015：只有已发布（=过了权益绑定发布闸）的票种可下单——draft/未发布票直传 id 也拒，杜绝收钱不出票。
+        if (!"published".equals(ticketType.status())) {
+            throw ApiException.conflict("TICKET_TYPE_NOT_SELLABLE", "该票种未发布，不可下单");
+        }
         // AUD-076 单店票挂酒吧：校验酒吧归属并算出快照 bar_id（服务端真源），置于库存扣减前——拒单零副作用。
         String orderBarId = resolveOrderBarId(ticketType, actual.barId(), actual.salesChannel());
         int quantity = requirePositive(actual.quantity(), "quantity");
