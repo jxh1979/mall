@@ -417,6 +417,11 @@ class FinanceControllerTests {
         }
 
         @Bean
+        com.complex.platform.customer.StoredValueService storedValueService() {
+            return Mockito.mock(com.complex.platform.customer.StoredValueService.class);
+        }
+
+        @Bean
         AuthService authService() {
             return new AuthService("", "");
         }

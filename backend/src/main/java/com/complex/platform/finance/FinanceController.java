@@ -36,10 +36,14 @@ public class FinanceController {
 
     private final FinanceService service;
     private final AuthorizationService authorizationService;
+    // AUD-014 柜台确认储值充值即入账：确认+意图 CAS+入账同事务，见 confirmOfflinePayment 路由。
+    private final com.complex.platform.customer.StoredValueService storedValueService;
 
-    public FinanceController(FinanceService service, AuthorizationService authorizationService) {
+    public FinanceController(FinanceService service, AuthorizationService authorizationService,
+                             com.complex.platform.customer.StoredValueService storedValueService) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.storedValueService = storedValueService;
     }
 
     @GetMapping("/ar-ap-items")
@@ -119,6 +123,14 @@ public class FinanceController {
     ) {
         authorizationService.requirePermission("finance.payment.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        // AUD-014：储值充值意图走「确认+意图 CAS+入账」同事务链（柜台确认成功=余额到账）；其余保持原确认路径。
+        boolean storedValueTopup = service.findPaymentIntent(paymentId)
+                .map(intent -> intent.businessOrderType() != null
+                        && intent.businessOrderType().startsWith("stored_value_topup"))
+                .orElse(false);
+        if (storedValueTopup) {
+            return ApiResponse.ok(storedValueService.confirmOfflineTopupAndSettle(paymentId, request));
+        }
         return ApiResponse.ok(service.confirmOfflinePayment(paymentId, request));
     }
 

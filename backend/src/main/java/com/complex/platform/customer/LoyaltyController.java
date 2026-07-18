@@ -3,6 +3,7 @@ package com.complex.platform.customer;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.LoyaltyFreezeRequest;
+import com.complex.platform.customer.dto.StoredValueCounterRefundRequest;
 import com.complex.platform.customer.dto.StoredValueFreezeRequest;
 import com.complex.platform.customer.dto.StoredValueMerchantCardConfigRequest;
 import com.complex.platform.customer.dto.StoredValueMerchantRefundRuleRequest;
@@ -110,6 +111,20 @@ public class LoyaltyController {
         return ApiResponse.ok(storedValueService.refund(customerId, request.projectId(), request.merchantId(),
                 request.amountCent() == null ? 0L : request.amountCent(), request.reason(),
                 Boolean.TRUE.equals(request.closeAccount()), request.idempotencyKey()));
+    }
+
+    /**
+     * AUD-003 本店柜台/到店退款：商户预收(merchant_prepaid)卡的唯一可达退款路径。
+     * staff-token + 发卡商户 scope + 退款规则 + 必填兑付凭证号，款项柜台现场兑付，审计留痕。
+     */
+    @PostMapping("/stored-value/{customer_id}/counter-refund")
+    public ApiResponse<CustomerStoredValueTransactionRecord> counterRefundStoredValue(
+            @PathVariable("customer_id") String customerId,
+            @RequestBody @jakarta.validation.Valid StoredValueCounterRefundRequest request
+    ) {
+        return ApiResponse.ok(storedValueService.counterRefund(customerId, request.projectId(), request.merchantId(),
+                request.amountCent() == null ? 0L : request.amountCent(), request.reason(),
+                Boolean.TRUE.equals(request.closeAccount()), request.redemptionVoucherNo(), request.idempotencyKey()));
     }
 
     // ---- B1d⑤ phase3：商户级卡退款规则配置（发卡商户自设可否退/比例）----

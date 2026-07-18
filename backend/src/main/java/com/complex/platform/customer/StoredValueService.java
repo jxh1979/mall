@@ -3,7 +3,9 @@ package com.complex.platform.customer;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.FinanceService;
+import com.complex.platform.finance.OfflinePaymentConfirmationRecord;
 import com.complex.platform.finance.PaymentIntentRecord;
+import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.gate.GuardedAction;
 import com.complex.platform.notification.NotificationService;
@@ -52,6 +54,13 @@ public class StoredValueService {
     /** 商户卡充值资金归属：merchant_prepaid=发卡商户预收（默认）；platform_collect=平台代收、消费时结算给商户。 */
     static final String FUND_MERCHANT_PREPAID = "merchant_prepaid";
     static final String FUND_PLATFORM_COLLECT = "platform_collect";
+
+    // AUD-002 操作命名空间隔离：内部派生幂等键的保留前缀。客户端/后台传入的幂等键不得占用，
+    // 否则可预占 sv_settle_<intentId> 使正常充值入账永久冲突，或伪造 barsv_ 命中错误重放。
+    // svcr_ = 柜台退款命名空间（复核发现：与线上退款共享命名空间时，跨路径同键重放会把线上退款流水
+    // 错当柜台退款成功返回——不落柜台审计/凭证还可能引发双重兑付）。
+    private static final String[] RESERVED_IDEMPOTENCY_PREFIXES = {
+            "sv_settle_", "sv_topup_", "svtop_", "barsv_", "svtxn_", "svacc_", "svcr_"};
 
     private final CustomerRepository repository;
     private final FinanceService financeService;
@@ -135,6 +144,7 @@ public class StoredValueService {
         if (amountCent <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be positive");
         }
+        requireClientIdempotencyKey(idempotencyKey);
         requireCustomer(customerId);
         // 发卡资格门控（AUD-061）：商户卡充值前须平台已给该商户开通「发卡资格」，默认关→拒。通用卡不受限。
         requireCardIssuanceEnabled(merchantId);
@@ -150,9 +160,12 @@ public class StoredValueService {
         // 故把卡范围折进 finance 幂等键并 SHA-256 压成定长（避免 slug 40 字截断致 ON CONFLICT 覆盖旧意图）；相同 (key, 卡范围) 仍得同一意图，正常重试幂等不受影响。
         String scopedTopupKey = "svtop_" + sha256Hex(key + "|" + customerId + "|"
                 + (projectId == null ? "" : projectId) + "|" + (merchantId == null ? "" : merchantId));
+        // AUD-013 资金归属契约：支付意图/网关请求显式携带收款商户与定格资金模式（merchant_prepaid=直达商户，
+        // platform_collect=平台代收），真实支付适配器据此路由收款主体，杜绝「支付进平台、账务认商户预收」错配。
         PaymentIntentRecord intent = financeService.createPaymentIntent(new PaymentIntentRequest(
                 scopedTopupKey, null, null, businessOrderType, customerId, amountCent, "CNY",
-                channel == null || channel.isBlank() ? "wechat" : channel));
+                channel == null || channel.isBlank() ? "wechat" : channel, null,
+                merchantId, resolveMerchantFundOwnership(merchantId)));
         // AUD-058 + AUD 复核 P1-1②：把本次充值的卡范围（customer/project/merchant）绑定到支付意图，settle 只认此绑定范围入账。
         // bind「冲突即校验一致」：同一支付意图已绑定的卡范围与本次不同 → 抛 409（不再 DO UPDATE 静默改绑）；完全一致才幂等放过。
         if (repository.bindStoredValueTopupIntent(intent.id(), customerId, projectId, merchantId, now()) == 0) {
@@ -170,6 +183,28 @@ public class StoredValueService {
     @GuardedAction(capability = "customer.stored_value.topup", permission = "customer.stored_value.topup")
     public CustomerStoredValueTransactionRecord settleTopup(String customerId, String projectId, String merchantId,
                                                             String paymentIntentId) {
+        return settleTopupInternal(customerId, projectId, merchantId, paymentIntentId);
+    }
+
+    /**
+     * AUD-014 柜台确认收款即入账：财务柜台确认线下收款（同事务内 CAS 支付意图 created→succeeded）
+     * 后立即结转本笔充值入账，同成同败——柜台确认成功=余额到账，不再停留 created/409。
+     * 权限走 finance 确认闸（finance.payment.register），入账复用绑定卡范围，不重复过客户充值闸。
+     */
+    @Transactional
+    public OfflinePaymentConfirmationRecord confirmOfflineTopupAndSettle(String paymentId,
+                                                                         OfflinePaymentConfirmRequest request) {
+        OfflinePaymentConfirmationRecord confirmation = financeService.confirmOfflinePayment(paymentId, request);
+        StoredValueTopupIntentScope bound = repository.findStoredValueTopupIntent(paymentId)
+                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
+                        "payment intent does not belong to a stored-value top-up"));
+        settleTopupInternal(bound.customerId(), bound.projectId(), bound.merchantId(), paymentId);
+        return confirmation;
+    }
+
+    /** 入账内核（不带客户充值权限闸）：仅供 {@link #settleTopup} 与柜台确认链两个带闸入口复用，不对外开放。 */
+    private CustomerStoredValueTransactionRecord settleTopupInternal(String customerId, String projectId,
+                                                                     String merchantId, String paymentIntentId) {
         Instant now = now();
         requireCustomer(customerId);
         PaymentIntentRecord intent = financeService.findPaymentIntent(paymentIntentId)
@@ -232,6 +267,7 @@ public class StoredValueService {
     @GuardedAction(capability = "customer.stored_value.consume", permission = "customer.stored_value.consume")
     public CustomerStoredValueTransactionRecord consume(String customerId, String projectId, String merchantId,
                                                         long amountCent, String reason, String idempotencyKey) {
+        requireClientIdempotencyKey(idempotencyKey);
         return consumeInternal(customerId, projectId, merchantId, amountCent, reason, idempotencyKey);
     }
 
@@ -252,11 +288,10 @@ public class StoredValueService {
         Instant now = now();
         CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
         if (existing != null) {
-            // AUD-057: 幂等键全局唯一,命中流水须属当前客人;否则=跨客人键碰撞,拒绝(不泄露他人流水/不抑制本人操作)。
-            if (!customerId.equals(existing.customerId())) {
-                throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "idempotency key already used by another operation");
-            }
-            return existing;
+            // AUD-002: 幂等命中不能只看 customerId——须核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，
+            // 否则同客户可用旧 consume 键让酒吧结账「命中旧流水不扣本次应付」仍标已支付，或跨卡/跨金额错误重放。
+            return verifyIdempotentReplay(existing, customerId, projectId, merchantId,
+                    "consume", -amountCent, reason);
         }
         // 「只扣指定的那一张」：按 (customer, project, merchant) 精确解析卡。商户卡=该商户的卡，
         // 故商户卡消费天然限定在该发卡商户（用 merchant Y 的范围取不到 merchant X 的卡）。
@@ -297,6 +332,44 @@ public class StoredValueService {
     public CustomerStoredValueTransactionRecord refund(String customerId, String projectId, String merchantId,
                                                        long amountCent, String reason, boolean closeAccount,
                                                        String idempotencyKey) {
+        requireClientIdempotencyKey(idempotencyKey);
+        return doRefund(customerId, projectId, merchantId, amountCent, reason, closeAccount,
+                idempotencyKey, false, null);
+    }
+
+    /**
+     * AUD-003 本店柜台/到店退款：商户预收(merchant_prepaid)卡的唯一可达退款路径（线上退对其无条件拒）。
+     * 仅限商户卡；staff-token 走权限闸 + {@link #requireMerchantScopeForCard} 发卡商户 scope；
+     * 仍过发卡商户退款规则(可否退/比例)；必填兑付凭证号(现场现金/原路退付的凭据)入审计留痕。
+     * 款项由柜台现场兑付，不走线上打款网关/退款台账。
+     */
+    @Transactional
+    @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
+    public CustomerStoredValueTransactionRecord counterRefund(String customerId, String projectId, String merchantId,
+                                                              long amountCent, String reason, boolean closeAccount,
+                                                              String redemptionVoucherNo, String idempotencyKey) {
+        if (merchantId == null || merchantId.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "counter refund is only for merchant cards");
+        }
+        String voucher = trimToNull(redemptionVoucherNo);
+        if (voucher == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "redemption_voucher_no is required");
+        }
+        requireClientIdempotencyKey(idempotencyKey);
+        if (idempotencyKey != null && idempotencyKey.length() > 120) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is too long");
+        }
+        // 柜台退款独立幂等命名空间：同一客户端键在线上/柜台两条路径各自幂等，互不重放（复核 Important 项）。
+        String namespacedKey = idempotencyKey == null || idempotencyKey.isBlank()
+                ? idempotencyKey : "svcr_" + idempotencyKey;
+        return doRefund(customerId, projectId, merchantId, amountCent, reason, closeAccount,
+                namespacedKey, true, voucher);
+    }
+
+    private CustomerStoredValueTransactionRecord doRefund(String customerId, String projectId, String merchantId,
+                                                          long amountCent, String reason, boolean closeAccount,
+                                                          String idempotencyKey, boolean counterMode,
+                                                          String redemptionVoucherNo) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
         }
@@ -306,11 +379,10 @@ public class StoredValueService {
         Instant now = now();
         CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
         if (existing != null) {
-            // AUD-057: 幂等键全局唯一,命中流水须属当前客人;否则=跨客人键碰撞,拒绝(不泄露他人流水/不抑制本人操作)。
-            if (!customerId.equals(existing.customerId())) {
-                throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "idempotency key already used by another operation");
-            }
-            return existing;
+            // AUD-002: 幂等命中核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，不再只看 customerId。
+            // 路径隔离由键命名空间保证（柜台=svcr_ 前缀），线上/柜台不会互相命中。
+            return verifyIdempotentReplay(existing, customerId, projectId, merchantId,
+                    "refund", -amountCent, reason);
         }
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         requireMerchantScopeForCard(account);
@@ -326,8 +398,8 @@ public class StoredValueService {
         long payoutCent = amountCent;
         if (account.merchantId() != null) {
             // AUD-060 预收模式退卡：商户预收(merchant_prepaid)卡不支持线上退，只能到店由发卡商户办理（钱在商户处）。
-            // 仅对开卡定格为 merchant_prepaid 的商户卡；平台代收(platform_collect)卡与旧卡(未定格,NULL)沿用退款规则线上退。
-            if (FUND_MERCHANT_PREPAID.equals(account.fundOwnership())) {
+            // AUD-003 柜台路径(counterMode)即「到店办理」本身——放行 merchant_prepaid，其余守卫全保留。
+            if (!counterMode && FUND_MERCHANT_PREPAID.equals(account.fundOwnership())) {
                 throw ApiException.conflict("STORED_VALUE_MERCHANT_PREPAID_REFUND_IN_STORE",
                         "merchant prepaid card cannot be refunded online; please refund in store at the issuing merchant");
             }
@@ -347,6 +419,18 @@ public class StoredValueService {
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
                         account.id(), customerId, "refund", -amountCent, balanceAfter,
                         null, reason, idempotencyKey, now));
+        if (counterMode) {
+            // AUD-003 柜台兑付：款项由发卡商户柜台现场支付给客户（现金/原路人工），不走线上打款网关；
+            // 兑付凭证号入审计事件供对账/稽核。
+            Map<String, Object> counterDetail = consumeRefundDetail(account, amountCent, balanceAfter);
+            counterDetail.put("closed", newStatus.equals("closed"));
+            counterDetail.put("payout_cent", payoutCent);
+            counterDetail.put("payout_status", "counter_settled");
+            counterDetail.put("redemption_voucher_no", redemptionVoucherNo);
+            auditEventService.recordSuccess("stored_value.counter_refund", "customer.stored_value.refund",
+                    "customer_stored_value", account.id(), null, idempotencyKey, counterDetail);
+            return txn;
+        }
         // 退款打款：系统内余额已退回（上方）。实际打款金额=payoutCent（商户卡按比例）。打款路径由支付渠道开关决定——
         //   关（默认）→ 不调外部渠道，标 reserved（人工/内部确认打款，不阻塞）。
         //   开 → 路由到 PaymentGatewayPort.refund（无真实厂商=占位 NOT_CONFIGURED，留接缝，不崩）。
@@ -626,6 +710,44 @@ public class StoredValueService {
             return null;
         }
         return repository.findStoredValueTransactionByIdempotencyKey(idempotencyKey).orElse(null);
+    }
+
+    /**
+     * AUD-002 幂等重放校验：命中已有流水时核对完整不可变指纹——客人、操作类型、签名金额、
+     * 业务事由、卡范围(按请求范围解析的账户须与流水账户同一张)。任一不符=键被其他操作占用，409 拒绝；
+     * 全部一致=同请求安全重放，返回原流水。
+     */
+    private CustomerStoredValueTransactionRecord verifyIdempotentReplay(CustomerStoredValueTransactionRecord existing,
+                                                                        String customerId, String projectId,
+                                                                        String merchantId, String txnType,
+                                                                        long signedAmountCent, String reason) {
+        boolean fingerprintMatches = customerId.equals(existing.customerId())
+                && txnType.equals(existing.txnType())
+                && existing.amountCent() == signedAmountCent
+                && java.util.Objects.equals(trimToNull(reason), trimToNull(existing.reason()));
+        if (fingerprintMatches) {
+            CustomerStoredValueAccountRecord account =
+                    repository.findStoredValueAccount(customerId, projectId, merchantId).orElse(null);
+            fingerprintMatches = account != null && account.id().equals(existing.accountId());
+        }
+        if (!fingerprintMatches) {
+            throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT",
+                    "idempotency key already used by another operation");
+        }
+        return existing;
+    }
+
+    /** AUD-002 命名空间隔离：客户端/后台传入的幂等键不得使用内部派生键的保留前缀。 */
+    private void requireClientIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return;
+        }
+        for (String prefix : RESERVED_IDEMPOTENCY_PREFIXES) {
+            if (idempotencyKey.startsWith(prefix)) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "idempotency_key uses a reserved internal prefix");
+            }
+        }
     }
 
     /** AUD 复核 P1-1：把充值幂等键与卡范围压成定长十六进制，供 finance 幂等键使用（避免 slug 截断碰撞）。 */

@@ -3,12 +3,12 @@
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 620
-- OpenAPI SHA-256: `de0fc319ee28b048542e863bcc58e191f24e47b8eb2008c3135ab43a42f186fa`
+- OpenAPI operation count: 621
+- OpenAPI SHA-256: `bad490d6a2b58bab10c4e89980cd6cfac5f78eefbad857af9bd05c5a9eb02961`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`
-- Maven dependency count: 15
+- Maven dependency count: 17
 - Verification command: `npm run verify:security-baseline`
 
 ## scope-and-inputs
@@ -38,11 +38,11 @@
 
 | auth_context | operation_count |
 |---|---:|
-| `customer-token` | 27 |
+| `customer-token` | 32 |
 | `device-credential` | 3 |
 | `open-app-credential` | 1 |
-| `public` | 6 |
-| `staff-token` | 573 |
+| `public` | 5 |
+| `staff-token` | 576 |
 | `webhook-signature` | 4 |
 
 | 检查项 | 结论 |
@@ -57,25 +57,25 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 全部 operation | 614 |
-| 写 operation | 368 |
-| public operation | 6 |
+| 全部 operation | 621 |
+| 写 operation | 373 |
+| public operation | 5 |
 | open-app/webhook operation | 5 |
 
 | terminal_or_channel | operation_count |
 |---|---:|
-| `app` | 39 |
+| `app` | 43 |
 | `kiosk` | 43 |
 | `merchant_app` | 1 |
 | `merchant_portal` | 16 |
-| `miniapp` | 39 |
+| `miniapp` | 43 |
 | `mobile_admin` | 62 |
 | `provider-webhook` | 3 |
 | `server-to-server` | 2 |
 | `staff_private_phone` | 29 |
 | `staff_work_phone` | 67 |
 | `tablet` | 95 |
-| `web` | 581 |
+| `web` | 588 |
 
 当前 SecurityConfig 允许 `/docs/**`、`/swagger-ui/**`、`/v3/api-docs/**` 公开访问。该配置可用于内网开发和联调，但公网公开生产必须关闭或加认证保护。
 
@@ -130,7 +130,7 @@
 
 | 依赖面 | 当前状态 | 后续动作 |
 |---|---|---|
-| Maven | `backend/pom.xml` 声明 15 个 dependency；Spring Boot `4.1.0` | 生成 CycloneDX 或等效 SBOM，并做漏洞处置/豁免 |
+| Maven | `backend/pom.xml` 声明 17 个 dependency；Spring Boot `4.1.0` | 生成 CycloneDX 或等效 SBOM，并做漏洞处置/豁免 |
 | npm/Web 工具链 | 根目录使用 lock 文件和 workspaces | 发布前执行 npm audit 或等效扫描 |
 | Android/Gradle | 完整 P0 验证脚本覆盖 Android env/build/smoke/APK | 发布前补 Android 依赖 SBOM |
 
