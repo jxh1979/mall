@@ -38,6 +38,11 @@ public class TicketOrderService {
     // AUD-076：按 id 取酒吧商户（下单校验归属酒吧是否在售）。可为 null=兼容既有单测（跳过在线校验）。
     private final BarMerchantDirectory barDirectory;
 
+    // 合同经营范围越界拦截（2026-07-18）：单店票（票种挂酒吧商户）出票前域级比对该商户生效合同
+    // allowedCategories 是否含 ticketing。字段注入免改构造点；单测未注入=null 视为不拦截。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.contract.ContractScopeGuard contractScopeGuard;
+
     @org.springframework.beans.factory.annotation.Autowired
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
                               AuthorizationService authorizationService,
@@ -81,6 +86,11 @@ public class TicketOrderService {
         }
         // AUD-076 单店票挂酒吧：校验酒吧归属并算出快照 bar_id（服务端真源），置于库存扣减前——拒单零副作用。
         String orderBarId = resolveOrderBarId(ticketType, actual.barId(), actual.salesChannel());
+        // 合同经营范围拦截（域级）：单店票归属酒吧商户（bar_id 与 merchant 同命名空间）时，
+        // 该商户生效合同若配了经营范围且不含 ticketing → 拒单。置于库存扣减前，拒单零副作用。通票（平台售）不拦。
+        if (contractScopeGuard != null && orderBarId != null) {
+            contractScopeGuard.requireTicketSaleAllowed(orderBarId);
+        }
         int quantity = requirePositive(actual.quantity(), "quantity");
         // P0 修复（V133）：限量票种原子扣减库存，防止超卖（stock_quantity 为 null=不限量，仅计数）。
         // createTicketOrder 已由 executeWrite 幂等包裹，重放不会重复进入此处、不会双扣。

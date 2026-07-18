@@ -42,6 +42,19 @@ describe("apiError translate — 字段级报错", () => {
     expect(m).toContain("重复提交");
   });
 
+  it("CONTRACT_SCOPE_VIOLATION（合同经营范围越界）透传中文业务话术", () => {
+    // 酒吧 POS/后台下单越界：后端 409 + 中文消息 → err.message 直接是业务语言（62 页 err.message 渲染点自动受益）。
+    const err = apiErrorFromResponse("/api/v1/bar/orders", 409, JSON.stringify({
+      code: "STATE_CONFLICT",
+      detail_code: "CONTRACT_SCOPE_VIOLATION",
+      message: "超出合同经营范围：品类「烈酒」不在本商户合同约定的经营范围内，禁止销售",
+    }), "POST");
+    expect(err.detailCode).toBe("CONTRACT_SCOPE_VIOLATION");
+    expect(err.message).toContain("超出合同经营范围");
+    expect(err.message).toContain("烈酒");
+    expect(err.message).not.toMatch(/[A-Za-z_]{4,}/);
+  });
+
   it("409 STATE_CONFLICT → 操作冲突（区别于读取失败）", () => {
     const m = msgFor(409, { code: "STATE_CONFLICT", message: "已被占用" });
     expect(m).toContain("操作冲突");

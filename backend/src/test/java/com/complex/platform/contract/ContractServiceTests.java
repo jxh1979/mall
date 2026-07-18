@@ -1,6 +1,7 @@
 package com.complex.platform.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -318,6 +319,61 @@ class ContractServiceTests {
     }
 
     /** 内存仓储：种平台默认链（阶段①业务/财务/法务并行 → 阶段②总经理）。 */
+    // ============ 合同经营范围（rent_terms.allowedCategories，2026-07-18） ============
+    @Test
+    void draftValidatesAndStoresAllowedCategories() {
+        ContractRecord c = service.createDraft(new ContractDraftRequest("k_scope1", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.now().minusDays(1), LocalDate.now().plusYears(1), Map.of(),
+                null, null, null, null, null, List.of(), null, "酒吧经营", null, List.of("beer", "snack")));
+        assertThat(c.rentTerms()).containsEntry("allowedCategories", List.of("beer", "snack"));
+        // 词表外取值（发明新枚举）→ 拒。
+        assertThatThrownBy(() -> service.createDraft(new ContractDraftRequest("k_scope2", "mch_1", "subj_1", null,
+                "subj_1", LocalDate.now().minusDays(1), LocalDate.now().plusYears(1), Map.of(),
+                null, null, null, null, null, List.of(), null, null, null, List.of("metaverse"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void businessScopeChangeUpdatesAllowedCategoriesAndGuardEnforcesAfterApproval() {
+        // 变更后生效：走既有 business_scope_change 变更链，终审通过 payload 并入 rent_terms，拦截即读新范围。
+        ContractRecord c = service.createDraft(new ContractDraftRequest("k_scope3", "mch_scope", "subj_1", null,
+                "subj_1", LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                Map.of("baseRentCent", 100000), "fixed_ratio", "by_area", null, null, null, List.of(), null,
+                "酒吧经营", null, List.of("beer")));
+        service.submit(c.id(), "k_scope3_submit");
+        approve(c, "contract.approve.business");
+        approve(c, "contract.approve.finance");
+        approve(c, "contract.approve.legal");
+        approve(c, "contract.approve.gm");
+        service.activate(c.id(), new ContractActivateRequest("k_scope3_act", List.of("sp_scope")));
+
+        ContractScopeGuard guard = new ContractScopeGuard(repo);
+        // 变更前：只许 beer，卖 spirit 拦。
+        assertThatThrownBy(() -> guard.requireBarSaleAllowed("mch_scope", List.of("spirit")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+        // 发起经营范围变更（web 客户端把嵌套键蛇形化为 allowed_categories → 后端归一化）：改为 spirit+beer。
+        ContractChangeRecord change = service.raiseChange(c.id(), new ContractChangeRequest(
+                "k_scope3_ch", "business_scope_change", Map.of("allowed_categories", List.of("spirit", "beer"))));
+        // 审批未全过 → 旧范围仍生效。
+        approveChange(change.id(), "contract.approve.business");
+        assertThatThrownBy(() -> guard.requireBarSaleAllowed("mch_scope", List.of("spirit")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+        approveChange(change.id(), "contract.approve.finance");
+        approveChange(change.id(), "contract.approve.legal");
+        approveChange(change.id(), "contract.approve.gm");
+        // 终审通过 → 新范围立即生效。
+        assertThatCode(() -> guard.requireBarSaleAllowed("mch_scope", List.of("spirit")))
+                .doesNotThrowAnyException();
+        // 变更链里发明新枚举同样拒。
+        assertThatThrownBy(() -> service.raiseChange(c.id(), new ContractChangeRequest(
+                "k_scope3_bad", "business_scope_change", Map.of("allowed_categories", List.of("metaverse")))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
     private static final class InMemoryContractRepository implements ContractRepository {
         // 3.13 测试基建：草稿预绑定存储 + 可控"空间已被生效合同占用"集合。
         final java.util.Map<String, java.util.Set<String>> boundSpaces = new java.util.HashMap<>();

@@ -89,12 +89,12 @@
     }
   },
   "architecture_line_counts": {
-    "apps/web/src/main.tsx": 55,
-    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 502,
-    "backend/src/main/java/com/complex/platform/bar/BarService.java": 649,
-    "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 1108,
-    "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 600,
-    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 453
+    "apps/web/src/main.tsx": 43,
+    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 879,
+    "backend/src/main/java/com/complex/platform/bar/BarService.java": 764,
+    "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 1332,
+    "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 674,
+    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 465
   },
   "gates": {
     "semgrep": {
@@ -300,7 +300,7 @@
         "owner": "IT/运维/安全",
         "status": "pending_info",
         "blocking_scope": "阻塞生产数据库接入",
-        "next_action": "生成强密码、写入安全保管位置、补到期日和维护窗口"
+        "next_action": "既成事实（2026-07-06 prod 切换后）：运行时 app 角色 complex_app 已轮换 55 位强密码且被 REVOKE 最小权限；owner/Flyway 超级角色 complex 密码仍为 dev 默认 complex_dev_pwd，运行时以 COMPLEX_DATABASE_CREDENTIAL_SEPARATION_ENFORCED=false 关闭凭证守卫掩盖此状态。待 IT 为 owner ALTER ROLE 生成强密码、同步 owner env 并重启，随后移除 enforced=false 让守卫 fail-closed 生效；补到期日和维护窗口"
       },
       {
         "id": "PRD-CRED-JWT-001",

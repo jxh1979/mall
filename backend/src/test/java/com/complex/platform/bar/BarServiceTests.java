@@ -408,6 +408,42 @@ class BarServiceTests {
                 .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
+    @Test
+    void createOrderBlocksCategoryOutsideContractScope() {
+        // 合同经营范围拦截接线：merchant_a 生效合同只许 beer → 卖 spirit 整单拒；范围内品类照常下单。
+        com.complex.platform.contract.ContractRepository contractRepository =
+                mock(com.complex.platform.contract.ContractRepository.class);
+        Instant now = Instant.now();
+        when(contractRepository.listContractsByMerchant("merchant_a")).thenReturn(List.of(
+                new com.complex.platform.contract.ContractRecord("ctr_scope", "merchant_a", "subj", null, "subj",
+                        LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                        Map.of("allowedCategories", List.of("beer")), null, "none", null, Map.of(), List.of(),
+                        null, null, List.of(), "effective", null, null, null, null, now, now)));
+        barOrderService.contractScopeGuard = new com.complex.platform.contract.ContractScopeGuard(contractRepository);
+        try {
+            TestSecurityActors.asMerchantUser("merchant_a");
+            BarTableRecord table = service.createTable(new BarTableRequest(
+                    "table-scope", "create", List.of(), "bar_1", "范围桌", "card_seat", 50000L, 2, "active"));
+            BarProductRecord spirit = service.createProduct(new BarProductRequest(
+                    "product-scope-spirit", "create", List.of(), "bar_1", "金酒", "spirit", 8800L,
+                    null, null, "active", null, null, false));
+            assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
+                    "order-scope-x", "create", List.of(), "bar_1", table.id(), null,
+                    List.of(Map.of("product_id", spirit.id(), "quantity", 1)), null, List.of(), "offline")))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+            BarProductRecord beer = service.createProduct(new BarProductRequest(
+                    "product-scope-beer", "create", List.of(), "bar_1", "精酿", "beer", 3800L,
+                    null, null, "active", null, null, false));
+            BarOrderRecord ok = service.createOrder(new BarOrderRequest(
+                    "order-scope-ok", "create", List.of(), "bar_1", table.id(), null,
+                    List.of(Map.of("product_id", beer.id(), "quantity", 1)), null, List.of(), "offline"));
+            assertThat(ok.totalAmountCent()).isEqualTo(3800L);
+        } finally {
+            barOrderService.contractScopeGuard = null;
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // P1-3: audit attribution comes from auth token, not request body
     // ─────────────────────────────────────────────────────────────────────────

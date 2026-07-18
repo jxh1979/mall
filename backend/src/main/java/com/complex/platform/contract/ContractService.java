@@ -135,7 +135,13 @@ public class ContractService {
         Instant now = Instant.now();
         Map<String, Object> rentTerms = new HashMap<>(actual.rentTerms() == null ? Map.of() : actual.rentTerms());
         if (trimToNull(actual.businessScope()) != null) {
-            rentTerms.put("businessScope", actual.businessScope().trim());   // 经营范围存 rent_terms；越界 enforcement 属下游(bar/票务查合同范围)
+            rentTerms.put("businessScope", actual.businessScope().trim());   // 经营范围文字描述存 rent_terms
+        }
+        // 经营范围结构化（2026-07-18 拍板）：取值校验限既有业务类目；存 rent_terms.allowedCategories，
+        // 下单侧（bar/票务）读此键拦超范围经营；空/缺省=不拦截（存量合同兼容）。
+        List<String> allowedCategories = ContractScopeGuard.validateAllowedCategories(actual.allowedCategories());
+        if (allowedCategories != null && !allowedCategories.isEmpty()) {
+            rentTerms.put(ContractScopeGuard.RENT_TERMS_KEY, allowedCategories);
         }
         ContractRecord saved = repository.saveContract(new ContractRecord(
                 contractId,
@@ -346,9 +352,20 @@ public class ContractService {
             throw ApiException.conflict("CONTRACT_NO_APPROVAL_FLOW", "no active approval flow configured");
         }
         Instant now = Instant.now();
+        // 经营范围变更载荷规范化：web 客户端会把嵌套键蛇形化（allowed_categories），统一归一到
+        // rent_terms 既有的 camel 键 allowedCategories 并做词表校验，approveChange→applyChange putAll 后即生效。
+        Map<String, Object> payload = new HashMap<>(actual.payload() == null ? Map.of() : actual.payload());
+        Object rawCategories = payload.remove("allowed_categories");
+        if (rawCategories == null) {
+            rawCategories = payload.get(ContractScopeGuard.RENT_TERMS_KEY);
+        }
+        List<String> changedCategories = ContractScopeGuard.validateAllowedCategories(rawCategories);
+        if (changedCategories != null) {
+            payload.put(ContractScopeGuard.RENT_TERMS_KEY, changedCategories);
+        }
         ContractChangeRecord saved = repository.saveChange(new ContractChangeRecord(
                 "cch_" + UUID.randomUUID(), contractId, type,
-                actual.payload() == null ? Map.of() : Map.copyOf(actual.payload()), "pending", null,
+                Map.copyOf(payload), "pending", null,
                 contract.projectId(), now, now));
         // 变更走同一可配并行链：物化第一阶段并行审批槽（changeId 维度）。
         int firstStage = steps.stream().mapToInt(ContractApprovalFlowStepRecord::stageSeq).min().orElseThrow();
