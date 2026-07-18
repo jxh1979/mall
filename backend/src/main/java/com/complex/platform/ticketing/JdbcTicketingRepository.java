@@ -30,13 +30,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                     holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                     stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
-                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                    refundable
                 )
                 VALUES (
                     :id, :ticket_name, :base_calendar_price_mode, :weekday_price_cent, :weekend_price_cent,
                     :holiday_price_cent, :stock_required, :status, :validity_days, :refresh_interval_seconds,
                     :stock_quantity, :sold_quantity, :ticket_category, :created_at, :updated_at,
-                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
+                    :refundable
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_name = EXCLUDED.ticket_name,
@@ -56,6 +58,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     delete_requested_by = EXCLUDED.delete_requested_by,
                     delete_requested_at = EXCLUDED.delete_requested_at,
                     delete_reason = EXCLUDED.delete_reason,
+                    refundable = EXCLUDED.refundable,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.ticketTypeParameters(ticketType));
         return ticketType;
@@ -67,7 +70,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                       refundable
                   FROM ticket_types
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -120,7 +124,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                       refundable
                   FROM ticket_types
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();
@@ -369,6 +374,59 @@ class JdbcTicketingRepository implements TicketingRepository {
                 .addValue("id", id)
                 .addValue("session_key", sessionKey, java.sql.Types.VARCHAR)
                 .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int markTicketInstanceRefundPending(String id, java.time.Instant now) {
+        // 方案2 申请即冻结：父票 active→refund_pending（CAS）。并发只一路得 1，抢先者胜；
+        // 已 refund_pending/refunded/forfeited/transferring 命中 0 行，调用方据此拒（在途/已退/转赠中）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_instances
+                   SET status = 'refund_pending', updated_at = :now
+                 WHERE id = :id AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int markTicketInstanceRefunded(String id, java.time.Instant now) {
+        // 方案2 生效：父票 refund_pending→refunded（终态，CAS）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_instances
+                   SET status = 'refunded', updated_at = :now
+                 WHERE id = :id AND status = 'refund_pending'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int restoreTicketInstanceActive(String id, java.time.Instant now) {
+        // 方案2 驳回：父票 refund_pending→active（解冻恢复可用，CAS）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_instances
+                   SET status = 'active', updated_at = :now
+                 WHERE id = :id AND status = 'refund_pending'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int markTicketRefundRejected(String refundId, String rejectedBy, java.time.Instant rejectedAt) {
+        // 方案2 复核驳回：退款单 requested→rejected（CAS）。approved_by/at 复用为“复核决定人/决定时间”。
+        return jdbcTemplate.update("""
+                UPDATE ticket_refunds
+                   SET status = 'rejected',
+                       approved_by = :rejected_by,
+                       approved_at = :rejected_at,
+                       updated_at = :rejected_at
+                 WHERE id = :id AND status = 'requested'
+                """, new MapSqlParameterSource()
+                .addValue("id", refundId)
+                .addValue("rejected_by", rejectedBy)
+                .addValue("rejected_at", rejectedAt.atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override
@@ -1215,13 +1273,15 @@ class JdbcTicketingRepository implements TicketingRepository {
     @Override
     public int freezeEntitlementForRefund(String id, java.time.Instant updatedAt) {
         // 2a-3 退款冻结：退款审批通过 → 把未冻结的 active 权益置 refunded，使其不可再核销（含游乐 gateway 路径）。
-        // 仅冻结 active（幂等：已 refunded 返回 0）。
+        // 方案2（AUD-006）强 CAS：额外要求 used_times=0——封死“申请→审批空窗内票被核销”的竞态：
+        //   若空窗内被核销 used_times 变 1，本 UPDATE 命中 0 行，调用方据此整笔回滚拒退，杜绝“钱退了票也用了”。
         return jdbcTemplate.update("""
                 UPDATE issued_entitlements
                    SET status = 'refunded',
                        updated_at = :updated_at
                  WHERE id = :id
                    AND status = 'active'
+                   AND used_times = 0
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));

@@ -30269,6 +30269,47 @@
           }
         }
       }
+    },
+    "/api/v1/ticketing/refunds/{refund_id}/reject": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "rejectTicketRefund",
+        "summary": "退款驳回",
+        "x-permission": "ticket.refund.approve",
+        "x-data-scope": "project-order",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_refund.rejected",
+        "x-audit-event-failure": "ticket_refund.reject_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RefundId",
+            "description": "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StatusChange"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -34706,6 +34747,10 @@
               "archived"
             ],
             "maxLength": 64
+          },
+          "refundable": {
+            "type": "boolean",
+            "description": "方案2/规则2：该票种是否可退票（可空=不可退，默认最安全）。true 才允许客人申请整票退款、到期未用自动退。"
           }
         }
       },
@@ -34940,7 +34985,6 @@
         "additionalProperties": false,
         "required": [
           "target_id",
-          "refund_amount_cent",
           "reason"
         ],
         "properties": {
@@ -34970,7 +35014,7 @@
           },
           "refund_amount_cent": {
             "type": "integer",
-            "description": "`refund_amount_cent` 金额字段，单位分；不得使用浮点数。",
+            "description": "方案2 整票退款：金额由服务端按整票额算定，本字段可选；传入必须等于服务端算出的整票可退额合计，否则 400 REFUND_AMOUNT_MISMATCH；不传=服务端定额。单位分，不得使用浮点数。",
             "minimum": 1,
             "maximum": 999999999999
           },
@@ -34986,7 +35030,17 @@
           },
           "entitlement_ids": {
             "type": "array",
-            "description": "票实例（issued_entitlements）ID 列表；按票实例选择要退该订单下的哪几张未核销票，可只退一张或退多张，不传则退该订单全部可退票；已核销的票实例不可退，传入将按票实例拒退 TICKET_ENTITLEMENT_VERIFIED_NO_REFUND。",
+            "description": "已退役（方案2 AUD-006）：退款单位改为父票实例（见 ticket_instance_ids）。传入非空即 400 REFUND_UNIT_IS_TICKET（退款单位为整张票，请按票选择）。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 200,
+            "deprecated": true
+          },
+          "ticket_instance_ids": {
+            "type": "array",
+            "description": "方案2 整票退款：要退该订单下哪几张父票实例（ticket_instances ID）；不传/空=退该订单全部“完全未核销”的票实例。金额按各实例出票定格的实付分摊额算定；父票任一权益已核销则整张不可退（TICKET_INSTANCE_VERIFIED_NO_REFUND）。",
             "items": {
               "type": "string",
               "maxLength": 64

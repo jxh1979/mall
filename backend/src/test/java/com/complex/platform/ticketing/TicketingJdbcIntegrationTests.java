@@ -511,13 +511,13 @@ class TicketingJdbcIntegrationTests {
     }
 
     @Test
-    void requestRefundRejectsOverRefundOfSingleTicketAndPersistsNothing() {
-        // 1.1 真实后端活证据：单张未核销票（份额 9900）不能退整单额（19800）；被拒时 DB 无退款行（钱没动），
-        // 份额内（9900）可退并落库。走真实 JdbcTicketingRepository + Postgres + Flyway。
+    void requestRefundWholeTicketRejectsAmountMismatchAndPersistsNothing() {
+        // 方案2 真实后端活证据（走 JdbcTicketingRepository + Postgres + Flyway V285/V286）：整票退款——
+        // 传部分/自由金额（≠整票额）被拒且 DB 无退款行（钱没动）；不带金额=服务端算定整票额可退并落库。
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveTicketType(new TicketTypeRecord(
                 "tt_share_live", "Share Pass", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, "published", null, null, now, now));
+                9900L, 11900L, 12900L, false, "published", null, null, now, now, null, 0, null, true));
         repository.saveTicketOrder(new TicketOrderRecord(
                 "o_share_live", "TO-SHARE-LIVE", "customer_share_live", "tt_share_live", null,
                 2, java.time.LocalDate.parse("2026-06-20"), "miniapp", "13800138000",
@@ -525,32 +525,40 @@ class TicketingJdbcIntegrationTests {
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_share_live", "Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now,
                 null, null));
+        // 两张父票实例，各一条挂父票的权益。
+        repository.saveTicketInstance(new TicketInstanceRecord(
+                "inst_share_a", "TN-A", "o_share_live", "tt_share_live", 1, 1, 1,
+                "customer_share_live", "customer_share_live", "active", null, null, now, now));
+        repository.saveTicketInstance(new TicketInstanceRecord(
+                "inst_share_b", "TN-B", "o_share_live", "tt_share_live", 2, 1, 1,
+                "customer_share_live", "customer_share_live", "active", null, null, now, now));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_share_a", "SHARE-A", "tt_share_live", "o_share_live", "tpl_share_live", "entry",
-                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, null,
-                null, null));
+                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, 9900L,
+                null, null, null, null, "inst_share_a", 1));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_share_b", "SHARE-B", "tt_share_live", "o_share_live", "tpl_share_live", "entry",
-                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, null,
-                null, null));
+                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, 9900L,
+                null, null, null, null, "inst_share_b", 2));
 
         TicketRefundService refundService = new TicketRefundService(repository, event -> { });
 
-        // 超退整单额（选一张票退 19800）→ 拒。
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> refundService.requestRefund(new TicketRefundRequest(
+        // 传金额≠整票额（选一张票传 19800）→ REFUND_AMOUNT_MISMATCH。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> refundService.requestRefund(
+                TicketRefundRequest.ofTicketInstances(
                         "share-live-over", "refund", List.of(), "o_share_live", 19800L, "customer request", "original",
-                        List.of("ent_share_a"))))
+                        List.of("inst_share_a"))))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
-                        assertThat(ex.getMessage()).contains("refund amount exceeds refundable ticket value"));
+                        assertThat(ex.code()).isEqualTo("REFUND_AMOUNT_MISMATCH"));
         // 活证据：被拒后 DB 无该单退款行（钱没动）。
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM ticket_refunds WHERE target_id = ?", Long.class, "o_share_live"))
                 .isEqualTo(0L);
 
-        // 份额内（9900）可退并落库。
-        TicketRefundRecord ok = refundService.requestRefund(new TicketRefundRequest(
-                "share-live-ok", "refund", List.of(), "o_share_live", 9900L, "customer request", "original",
-                List.of("ent_share_a")));
+        // 不带金额=服务端算定整票额（9900）可退并落库。
+        TicketRefundRecord ok = refundService.requestRefund(TicketRefundRequest.ofTicketInstances(
+                "share-live-ok", "refund", List.of(), "o_share_live", null, "customer request", "original",
+                List.of("inst_share_a")));
         assertThat(ok.refundAmountCent()).isEqualTo(9900L);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM ticket_refunds WHERE target_id = ?", Long.class, "o_share_live"))

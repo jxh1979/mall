@@ -35,6 +35,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("stock_quantity", ticketType.stockQuantity())
                 .addValue("sold_quantity", ticketType.soldQuantity())
                 .addValue("ticket_category", ticketType.ticketCategory())
+                .addValue("refundable", ticketType.refundable())
                 .addValue("archived_at", timestampWithTimeZone(ticketType.archivedAt()))
                 .addValue("archived_by", ticketType.archivedBy())
                 .addValue("delete_status", ticketType.deleteStatus() == null ? "none" : ticketType.deleteStatus())

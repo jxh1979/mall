@@ -57,7 +57,9 @@ public class TicketCatalogService {
                 actual.stockQuantity(),
                 0,
                 // 结算重构批4（V230）：资格/定价档分类标签（可空=标准；非空校验取值，DB 另有 CHECK 兜底）。
-                normalizeTicketCategory(actual.ticketCategory())
+                normalizeTicketCategory(actual.ticketCategory()),
+                // 方案2/规则2（V286）：是否可退票（可空=不可退，默认最安全）。
+                actual.refundable() != null && actual.refundable()
         ));
     }
 
@@ -400,7 +402,9 @@ public class TicketCatalogService {
                 current.stockQuantity(),
                 current.soldQuantity(),
                 // 结算重构批4（V230）：发布时保留既有分类标签，避免被置空。
-                current.ticketCategory()
+                current.ticketCategory(),
+                // 方案2/规则2（V286）：发布时保留既有可退配置。
+                current.refundable()
         ));
     }
 

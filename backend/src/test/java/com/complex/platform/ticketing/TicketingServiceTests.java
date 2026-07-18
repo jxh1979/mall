@@ -1432,127 +1432,218 @@ class TicketingServiceTests {
     void expiredFullyUnusedPaidOrderIsAutoRefunded() {
         java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
-        // 已付订单（9900 分，1 张）+ 1 个到期、active、全未核销的权益。
+        // 可退票种 + 已付订单（9900 分，1 张）+ 1 张全未核销的父票实例（到期）。
+        seedRefundableType("tt_auto");
         ticketingRepository.ticketOrders.put("o_auto", new TicketOrderRecord(
                 "o_auto", "ON-AUTO", "c1", "tt_auto", null, 1, LocalDate.parse("2026-06-20"),
                 "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", past, past));
+        seedInstance("inst_auto", "o_auto", "tt_auto", 1, 1, 1, "active", null);
         ticketingRepository.issuedEntitlements.put("e_auto",
-                seedEntitlement("e_auto", "o_auto", "tt_auto", 1, 0, "active", past));
+                seedEntitlement("e_auto", "o_auto", "tt_auto", 1, 0, "active", past, "inst_auto", 1));
 
         int processed = service.processExpiredPaidEntitlements(now);
 
         assertThat(processed).isEqualTo(1);
-        // 全未核销已付到期单 → 整单原渠道自动退款（approved/全额）、权益冻结 refunded、库存回补。
+        // 全未核销可退到期票 → 整票原渠道自动退款（approved/全额）、权益冻结 refunded、父票 refunded、名额回补。
         assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
                 "o_auto".equals(r.targetId()) && "approved".equals(r.status())
                         && r.refundAmountCent() == 9900L && "original".equals(r.refundChannel()));
         assertThat(ticketingRepository.issuedEntitlements.get("e_auto").status()).isEqualTo("refunded");
+        assertThat(ticketingRepository.findTicketInstanceById("inst_auto")).get()
+                .extracting(TicketInstanceRecord::status).isEqualTo("refunded");
         assertThat(ticketingRepository.releasedStock).contains("tt_auto:1");
     }
 
     @Test
-    void expiredUnusedTicketAutoRefundedPerTicketEvenWhenSiblingVerified() {
-        // F-TXN-03 按票实例（2026-06-29 裁决）：同单一张已核销、一张到期未核销 → 未核销那张逐张原渠道自动退款，
-        // 不再因同单有核销而连坐作废；已核销票不受影响。
+    void expiredNonRefundableTicketIsForfeitedNotRefunded() {
+        // 规则2：不可退票（refundable=false 默认）到期未使用 → 直接作废不退，不产生退款单。
         java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
-        ticketingRepository.ticketOrders.put("o_fft", new TicketOrderRecord(
-                "o_fft", "ON-FFT", "c1", "tt_fft", null, 2, LocalDate.parse("2026-06-20"),
-                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", past, past));
-        ticketingRepository.issuedEntitlements.put("e_used",
-                seedEntitlement("e_used", "o_fft", "tt_fft", 1, 1, "active", past));
-        ticketingRepository.issuedEntitlements.put("e_unused",
-                seedEntitlement("e_unused", "o_fft", "tt_fft", 1, 0, "active", past));
+        seedTicketType("tt_nr", false, null);
+        ticketingRepository.ticketOrders.put("o_nr", new TicketOrderRecord(
+                "o_nr", "ON-NR", "c1", "tt_nr", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", past, past));
+        seedInstance("inst_nr", "o_nr", "tt_nr", 1, 1, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_nr",
+                seedEntitlement("e_nr", "o_nr", "tt_nr", 1, 0, "active", past, "inst_nr", 1));
 
         int processed = service.processExpiredPaidEntitlements(now);
 
         assertThat(processed).isEqualTo(1);
-        // 未核销那张 → 按票实例自动退款（份额 9900）、冻结 refunded；已核销那张 active 不动。
-        assertThat(ticketingRepository.issuedEntitlements.get("e_unused").status()).isEqualTo("refunded");
-        assertThat(ticketingRepository.issuedEntitlements.get("e_used").status()).isEqualTo("active");
-        assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
-                "o_fft".equals(r.targetId()) && "approved".equals(r.status()) && r.refundAmountCent() == 9900L);
+        assertThat(ticketingRepository.refunds.values()).noneMatch(r -> "o_nr".equals(r.targetId()));
+        assertThat(ticketingRepository.issuedEntitlements.get("e_nr").status()).isEqualTo("forfeited");
+        assertThat(ticketingRepository.releasedStock).isEmpty();
     }
 
     @Test
-    void perTicketRefundSkipsVerifiedSiblingWhenNoEntitlementIds() {
-        // 手动退款不传 entitlement_ids → 只退未核销票，已核销票不连坐、不报错。
+    void expiredPartiallyUsedMultiPersonTicketIsForfeitedNotRefunded() {
+        // 到期整票口径：多人票任一权益已核销（整票已首用）→ 整张作废不退；同单完全未核销的票整张退。
+        java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
-        ticketingRepository.ticketOrders.put("o_pt", new TicketOrderRecord(
-                "o_pt", "ON-PT", "c1", "tt_pt", null, 2, LocalDate.parse("2026-06-20"),
-                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", now, now));
-        ticketingRepository.issuedEntitlements.put("e_pt_used",
-                seedEntitlement("e_pt_used", "o_pt", "tt_pt", 1, 1, "active", now));
-        ticketingRepository.issuedEntitlements.put("e_pt_free",
-                seedEntitlement("e_pt_free", "o_pt", "tt_pt", 1, 0, "active", now));
+        seedRefundableType("tt_mp");
+        // 两张票（各 9900）：inst_part=四人票已核销 1 人（首用），inst_free=完全未核销。
+        ticketingRepository.ticketOrders.put("o_mp", new TicketOrderRecord(
+                "o_mp", "ON-MP", "c1", "tt_mp", null, 2, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", past, past));
+        seedInstance("inst_part", "o_mp", "tt_mp", 1, 2, 1, "active", past); // firstUsedAt 非空=已首用
+        ticketingRepository.issuedEntitlements.put("e_part_used",
+                seedEntitlement("e_part_used", "o_mp", "tt_mp", 1, 1, "active", past, "inst_part", 1));
+        ticketingRepository.issuedEntitlements.put("e_part_free",
+                seedEntitlement("e_part_free", "o_mp", "tt_mp", 1, 0, "active", past, "inst_part", 2));
+        seedInstance("inst_free", "o_mp", "tt_mp", 2, 1, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_free",
+                seedEntitlement("e_free", "o_mp", "tt_mp", 1, 0, "active", past, "inst_free", 1));
 
-        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
-                "pt-refund", "refund", List.of(), "o_pt", 9900L, "customer request", "original"));
+        service.processExpiredPaidEntitlements(now);
+
+        // 完全未核销票 inst_free → 整张退款、权益冻结 refunded。
+        assertThat(ticketingRepository.issuedEntitlements.get("e_free").status()).isEqualTo("refunded");
+        assertThat(ticketingRepository.findTicketInstanceById("inst_free")).get()
+                .extracting(TicketInstanceRecord::status).isEqualTo("refunded");
+        // 部分使用票 inst_part 的到期未核销权益 → 作废不退；已核销权益不动。
+        assertThat(ticketingRepository.issuedEntitlements.get("e_part_free").status()).isEqualTo("forfeited");
+        assertThat(ticketingRepository.issuedEntitlements.get("e_part_used").status()).isEqualTo("active");
+        // 退款金额只含未核销票 9900（不含部分使用票）。
+        assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
+                "o_mp".equals(r.targetId()) && r.refundAmountCent() == 9900L);
+    }
+
+    @Test
+    void wholeTicketRefundOnlyRefundsSelectedInstanceOthersStayUsable() {
+        // 同单两张票：只退其一（整张），另一张仍 active 可用；退成功放回 1 个名额。
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        seedRefundableType("tt_sel");
+        ticketingRepository.ticketOrders.put("o_sel", new TicketOrderRecord(
+                "o_sel", "ON-SEL", "c1", "tt_sel", null, 2, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", now, now));
+        seedInstance("inst_x", "o_sel", "tt_sel", 1, 1, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_x",
+                seedEntitlement("e_x", "o_sel", "tt_sel", 1, 0, "active", now, "inst_x", 1));
+        seedInstance("inst_y", "o_sel", "tt_sel", 2, 1, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_y",
+                seedEntitlement("e_y", "o_sel", "tt_sel", 1, 0, "active", now, "inst_y", 1));
+
+        TicketRefundRecord refund = service.requestTicketRefund(TicketRefundRequest.ofTicketInstances(
+                "sel-refund", "refund", List.of(), "o_sel", null, "customer request", "original", List.of("inst_x")));
+        service.approveTicketRefund(refund.id(), new StatusChangeRequest("sel-approve", "approve", "approved", List.of()));
 
         assertThat(refund.refundAmountCent()).isEqualTo(9900L);
-        assertThat(ticketingRepository.listTicketRefundLines(refund.id()))
-                .extracting(TicketRefundLineRecord::entitlementId).containsExactly("e_pt_free");
+        // 只退的那张：权益冻结、父票 refunded；另一张 active、权益 active 可继续核销。
+        assertThat(ticketingRepository.issuedEntitlements.get("e_x").status()).isEqualTo("refunded");
+        assertThat(ticketingRepository.findTicketInstanceById("inst_x")).get()
+                .extracting(TicketInstanceRecord::status).isEqualTo("refunded");
+        assertThat(ticketingRepository.issuedEntitlements.get("e_y").status()).isEqualTo("active");
+        assertThat(ticketingRepository.findTicketInstanceById("inst_y")).get()
+                .extracting(TicketInstanceRecord::status).isEqualTo("active");
+        // 退一张放一个名额。
+        assertThat(ticketingRepository.releasedStock).containsExactly("tt_sel:1");
     }
 
     @Test
-    void perTicketRefundRejectsSelectedVerifiedEntitlement() {
-        // 显式 entitlement_ids 选中已核销票 → 按票实例拒退 TICKET_ENTITLEMENT_VERIFIED_NO_REFUND。
+    void wholeTicketRefundRejectsVerifiedInstance() {
+        // 整票连坐：父票任一权益已核销 → 整张不可退（选中它 → TICKET_INSTANCE_VERIFIED_NO_REFUND）。
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
-        ticketingRepository.ticketOrders.put("o_pt2", new TicketOrderRecord(
-                "o_pt2", "ON-PT2", "c1", "tt_pt2", null, 1, LocalDate.parse("2026-06-20"),
+        seedRefundableType("tt_v");
+        ticketingRepository.ticketOrders.put("o_v", new TicketOrderRecord(
+                "o_v", "ON-V", "c1", "tt_v", null, 1, LocalDate.parse("2026-06-20"),
                 "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", now, now));
-        ticketingRepository.issuedEntitlements.put("e_pt2_used",
-                seedEntitlement("e_pt2_used", "o_pt2", "tt_pt2", 1, 1, "active", now));
+        seedInstance("inst_v", "o_v", "tt_v", 1, 2, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_v_used",
+                seedEntitlement("e_v_used", "o_v", "tt_v", 1, 1, "active", now, "inst_v", 1)); // 一个人头已核销
+        ticketingRepository.issuedEntitlements.put("e_v_free",
+                seedEntitlement("e_v_free", "o_v", "tt_v", 1, 0, "active", now, "inst_v", 2));
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
-                        "pt2-refund", "refund", List.of(), "o_pt2", 9900L, "customer request", "original",
-                        List.of("e_pt2_used"))))
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(
+                TicketRefundRequest.ofTicketInstances(
+                        "v-refund", "refund", List.of(), "o_v", null, "customer request", "original", List.of("inst_v"))))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
-                        assertThat(ex.code()).isEqualTo("TICKET_ENTITLEMENT_VERIFIED_NO_REFUND"));
+                        assertThat(ex.code()).isEqualTo("TICKET_INSTANCE_VERIFIED_NO_REFUND"));
     }
 
     @Test
-    void perTicketRefundCannotExceedSelectedTicketShare() {
-        // 1.1 份额封顶：单张未核销票（份额 9900）不能退整单额（19800）。
+    void wholeTicketRefundRejectsPartialAmountAndEntitlementIds() {
+        // 金额服务端算定：传 refund_amount_cent≠整票额 → REFUND_AMOUNT_MISMATCH；传 entitlement_ids → REFUND_UNIT_IS_TICKET。
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
-        ticketingRepository.ticketOrders.put("o_share", new TicketOrderRecord(
-                "o_share", "ON-SHARE", "c1", "tt_share", null, 2, LocalDate.parse("2026-06-20"),
-                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", now, now));
-        ticketingRepository.issuedEntitlements.put("e_share_a",
-                seedEntitlement("e_share_a", "o_share", "tt_share", 1, 0, "active", now));
-        ticketingRepository.issuedEntitlements.put("e_share_b",
-                seedEntitlement("e_share_b", "o_share", "tt_share", 1, 0, "active", now));
+        seedRefundableType("tt_m");
+        ticketingRepository.ticketOrders.put("o_m", new TicketOrderRecord(
+                "o_m", "ON-M", "c1", "tt_m", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", now, now));
+        seedInstance("inst_m", "o_m", "tt_m", 1, 1, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_m",
+                seedEntitlement("e_m", "o_m", "tt_m", 1, 0, "active", now, "inst_m", 1));
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
-                        "share-refund", "refund", List.of(), "o_share", 19800L, "customer request", "original",
-                        List.of("e_share_a"))))
+        // 自由/部分金额（5000≠9900）→ 拒。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(
+                TicketRefundRequest.ofTicketInstances(
+                        "m-refund", "refund", List.of(), "o_m", 5000L, "partial", "original", List.of("inst_m"))))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
-                        assertThat(ex.getMessage()).contains("refund amount exceeds refundable ticket value"));
-
-        // 份额内（9900）仍可退。
-        TicketRefundRecord ok = service.requestTicketRefund(new TicketRefundRequest(
-                "share-refund-ok", "refund", List.of(), "o_share", 9900L, "customer request", "original",
-                List.of("e_share_a")));
-        assertThat(ok.refundAmountCent()).isEqualTo(9900L);
+                        assertThat(ex.code()).isEqualTo("REFUND_AMOUNT_MISMATCH"));
+        // 旧入参 entitlement_ids → 拒。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
+                        "m-refund2", "refund", List.of(), "o_m", null, "old", "original", List.of("e_m"))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("REFUND_UNIT_IS_TICKET"));
     }
 
     @Test
-    void perTicketRefundRejectsDuplicateEntitlementId() {
-        // 1.1 重复 entitlement_id 拒：同 id 传两次会翻倍上限，必须拒绝。
+    void wholeTicketRefundRejectsDuplicateInstanceId() {
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
-        ticketingRepository.ticketOrders.put("o_dup", new TicketOrderRecord(
-                "o_dup", "ON-DUP", "c1", "tt_dup", null, 2, LocalDate.parse("2026-06-20"),
-                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", now, now));
-        ticketingRepository.issuedEntitlements.put("e_dup_a",
-                seedEntitlement("e_dup_a", "o_dup", "tt_dup", 1, 0, "active", now));
-        ticketingRepository.issuedEntitlements.put("e_dup_b",
-                seedEntitlement("e_dup_b", "o_dup", "tt_dup", 1, 0, "active", now));
+        seedRefundableType("tt_d");
+        ticketingRepository.ticketOrders.put("o_d", new TicketOrderRecord(
+                "o_d", "ON-D", "c1", "tt_d", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", now, now));
+        seedInstance("inst_d", "o_d", "tt_d", 1, 1, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_d",
+                seedEntitlement("e_d", "o_d", "tt_d", 1, 0, "active", now, "inst_d", 1));
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
-                        "dup-refund", "refund", List.of(), "o_dup", 19800L, "customer request", "original",
-                        List.of("e_dup_a", "e_dup_a"))))
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(
+                TicketRefundRequest.ofTicketInstances(
+                        "d-refund", "refund", List.of(), "o_d", null, "dup", "original", List.of("inst_d", "inst_d"))))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
                         assertThat(ex.getMessage().toLowerCase()).contains("duplicate"));
+    }
+
+    @Test
+    void refundRequestRejectedForNonRefundableTicketType() {
+        // 规则2：不可退票种（refundable=false）→ 客人不能申请退款。
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        seedTicketType("tt_nrq", false, null);
+        ticketingRepository.ticketOrders.put("o_nrq", new TicketOrderRecord(
+                "o_nrq", "ON-NRQ", "c1", "tt_nrq", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", now, now));
+        seedInstance("inst_nrq", "o_nrq", "tt_nrq", 1, 1, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_nrq",
+                seedEntitlement("e_nrq", "o_nrq", "tt_nrq", 1, 0, "active", now, "inst_nrq", 1));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(
+                TicketRefundRequest.ofTicketInstances(
+                        "nrq-refund", "refund", List.of(), "o_nrq", null, "customer request", "original", List.of("inst_nrq"))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("TICKET_TYPE_NOT_REFUNDABLE"));
+    }
+
+    @Test
+    void approvalRolledBackWhenTicketVerifiedInRequestApproveWindow() {
+        // 方案2 强 CAS 竞态闸：申请→审批空窗内票被核销（used_times 0→1）→ 审批时冻结命中 0 行 → 整笔拒（回滚），杜绝钱退票也用。
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        seedRefundableType("tt_race");
+        ticketingRepository.ticketOrders.put("o_race", new TicketOrderRecord(
+                "o_race", "ON-RACE", "c1", "tt_race", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", now, now));
+        seedInstance("inst_race", "o_race", "tt_race", 1, 1, 1, "active", null);
+        ticketingRepository.issuedEntitlements.put("e_race",
+                seedEntitlement("e_race", "o_race", "tt_race", 1, 0, "active", now, "inst_race", 1));
+
+        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
+                "race-refund", "refund", List.of(), "o_race", null, "customer request", "original"));
+        // 空窗内票被核销（模拟游乐 gateway 直连绕过父票守卫）。
+        ticketingRepository.issuedEntitlements.put("e_race",
+                ticketingRepository.issuedEntitlements.get("e_race").useOnce(now));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.approveTicketRefund(refund.id(),
+                        new StatusChangeRequest("race-approve", "approve", "approved", List.of())))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("TICKET_INSTANCE_VERIFIED_NO_REFUND"));
     }
 
     @Test
@@ -1582,22 +1673,23 @@ class TicketingServiceTests {
                 .extracting(AuditEvent::eventName)
                 .contains("ticket_refund.requested", "ticket_refund.approved");
 
+        // 唯一的票已退（父票 refunded）→ 再申请退款无可退票，整笔拒。
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
-                        "refund-too-much",
+                        "refund-again",
                         "refund",
                         List.of(),
                         order.id(),
-                        order.amountCent() + 1,
-                        "too much",
+                        null,
+                        "again",
                         "original"
                 )))
-                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("refund amount exceeds order amount");
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("TICKET_INSTANCE_VERIFIED_NO_REFUND"));
     }
 
     @Test
     void refundRejectedAfterAnyEntitlementVerified() {
-        // F-TXN-03 退款联动：核销一张则整票不可退、核销后不可退（仅全未核销可退）。
+        // 方案2：核销一张则整票不可退（仅全未核销可退）。
         IssuedEntitlementRecord entitlement = issueOrderEntitlement("refund-verified");
         TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();
         // 标记该订单的权益已核销一张（usedTimes 0→1）。
@@ -1608,13 +1700,13 @@ class TicketingServiceTests {
                         "refund",
                         List.of(),
                         order.id(),
-                        order.amountCent(),
+                        null,
                         "customer request",
                         "original"
                 )))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, exception ->
-                        // F-TXN-03 按票实例（2026-06-29 裁决）：该单仅一张票且已核销 → 无可退，按票实例拒退。
-                        assertThat(exception.code()).isEqualTo("TICKET_ENTITLEMENT_VERIFIED_NO_REFUND"));
+                        // 该单仅一张票且已核销 → 无可退，整票拒退。
+                        assertThat(exception.code()).isEqualTo("TICKET_INSTANCE_VERIFIED_NO_REFUND"));
     }
 
     @Test
@@ -1691,8 +1783,8 @@ class TicketingServiceTests {
     }
 
     @Test
-    void partialRefundApprovalDoesNotReleaseTicketStock() {
-        // 部分退款不回补库存（金额维度无法精确映射名额数，保守不超额释放）。
+    void partialAmountRefundIsRejected() {
+        // 方案2：金额服务端算定，客户端传部分金额（≠整票额）→ REFUND_AMOUNT_MISMATCH，不产生退款、不回补库存。
         TicketTypeRecord ticketType = createTicketType("refund-partial-ticket");
         EntitlementTemplateRecord template = createTemplate("refund-partial-template", 1, 9900L);
         service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
@@ -1702,12 +1794,11 @@ class TicketingServiceTests {
                 LocalDate.parse("2026-06-15"), "admin", "13800138000", "customer_refund_partial"));
         service.issueTicketOrder(order.id(), new StatusChangeRequest(
                 "refund-partial-issue", "issue", "issue", List.of()));
-        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
-                "refund-partial-request", "refund", List.of(), order.id(), order.amountCent() / 2, "partial", "original"));
 
-        service.approveTicketRefund(refund.id(), new StatusChangeRequest(
-                "refund-partial-approve", "approve", "approved", List.of()));
-
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
+                        "refund-partial-request", "refund", List.of(), order.id(), order.amountCent() / 2, "partial", "original")))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("REFUND_AMOUNT_MISMATCH"));
         assertThat(ticketingRepository.releasedStock).isEmpty();
     }
 
@@ -1824,30 +1915,65 @@ class TicketingServiceTests {
     }
 
     @Test
-    void cumulativePartialRefundsReachingFullReleaseStockExactlyOnce() {
-        // 回归：分两次各退 50%（累计 100%）→ 第二次审批"恰好跨过全额阈值"时回补一次库存，且只一次。
-        TicketTypeRecord ticketType = createTicketType("refund-cumul-ticket");
-        EntitlementTemplateRecord template = createTemplate("refund-cumul-template", 1, 9900L);
+    void limitedStockRefundReleasesOneSlotPerTicket() {
+        // 方案2 限量票名额回补：一单 2 张，分别退 → 每退一张放回一个名额（退一张放一个）。
+        TicketTypeRecord ticketType = createTicketType("refund-stock2-ticket");
+        EntitlementTemplateRecord template = createTemplate("refund-stock2-template", 1, 9900L);
         service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
-                "refund-cumul-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 1, null));
+                "refund-stock2-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 1, null));
         TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
-                "refund-cumul-order", "create", List.of(), ticketType.id(), null, 1,
-                LocalDate.parse("2026-06-15"), "admin", "13800138000", "customer_refund_cumul"));
+                "refund-stock2-order", "create", List.of(), ticketType.id(), null, 2,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "customer_refund_stock2"));
         service.issueTicketOrder(order.id(), new StatusChangeRequest(
-                "refund-cumul-issue", "issue", "issue", List.of()));
-        long half = order.amountCent() / 2;
+                "refund-stock2-issue", "issue", "issue", List.of()));
+        List<TicketInstanceRecord> instances = ticketingRepository.listTicketInstancesByOrderId(order.id());
+        assertThat(instances).hasSize(2);
 
-        TicketRefundRecord r1 = service.requestTicketRefund(new TicketRefundRequest(
-                "refund-cumul-1", "refund", List.of(), order.id(), half, "partial1", "original"));
-        service.approveTicketRefund(r1.id(), new StatusChangeRequest("refund-cumul-app1", "approve", "approved", List.of()));
-        // 第一次（50%）不回补。
-        assertThat(ticketingRepository.releasedStock).isEmpty();
+        TicketRefundRecord r1 = service.requestTicketRefund(TicketRefundRequest.ofTicketInstances(
+                "refund-stock2-1", "refund", List.of(), order.id(), null, "one", "original", List.of(instances.get(0).id())));
+        service.approveTicketRefund(r1.id(), new StatusChangeRequest("refund-stock2-app1", "approve", "approved", List.of()));
+        assertThat(ticketingRepository.releasedStock).containsExactly(ticketType.id() + ":1");
 
-        TicketRefundRecord r2 = service.requestTicketRefund(new TicketRefundRequest(
-                "refund-cumul-2", "refund", List.of(), order.id(), order.amountCent() - half, "partial2", "original"));
-        service.approveTicketRefund(r2.id(), new StatusChangeRequest("refund-cumul-app2", "approve", "approved", List.of()));
-        // 第二次累计达全额 → 恰回补一次。
-        assertThat(ticketingRepository.releasedStock).containsExactly(ticketType.id() + ":" + order.quantity());
+        TicketRefundRecord r2 = service.requestTicketRefund(TicketRefundRequest.ofTicketInstances(
+                "refund-stock2-2", "refund", List.of(), order.id(), null, "two", "original", List.of(instances.get(1).id())));
+        service.approveTicketRefund(r2.id(), new StatusChangeRequest("refund-stock2-app2", "approve", "approved", List.of()));
+        // 再退一张再放一个（共两次各放一个）。
+        assertThat(ticketingRepository.releasedStock).containsExactly(ticketType.id() + ":1", ticketType.id() + ":1");
+    }
+
+    @Test
+    void refundRequestFreezesTicketAndRejectRestoresIt() {
+        // 方案2：申请即冻结（父票 refund_pending、核销被拒）；复核驳回 → 父票恢复 active、可再核销/再申请退。
+        TicketTypeRecord ticketType = createTicketType("refund-reject-ticket");
+        EntitlementTemplateRecord template = createTemplate("refund-reject-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "refund-reject-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 1, null));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "refund-reject-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "customer_refund_reject"));
+        service.issueTicketOrder(order.id(), new StatusChangeRequest("refund-reject-issue", "issue", "issue", List.of()));
+        IssuedEntitlementRecord ent = ticketingRepository.listIssuedEntitlementsByOrderId(order.id()).get(0);
+        String instanceId = ent.parentTicketId();
+
+        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
+                "refund-reject-request", "refund", List.of(), order.id(), null, "customer request", "original"));
+        // 申请即冻结：父票 refund_pending，核销被拒（父票守卫）。
+        assertThat(ticketingRepository.findTicketInstanceById(instanceId)).get()
+                .extracting(TicketInstanceRecord::status).isEqualTo("refund_pending");
+        TicketCredentialResponse frozenCred = service.getTicketCredential(ent.id());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
+                        "verify-frozen", "dynamic_qr", frozenCred.credentialToken(), "dev_1", "gate_1", Map.of())))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("TICKET_INSTANCE_REFUND_IN_PROGRESS"));
+
+        // 复核驳回 → 父票恢复 active、退款单 rejected、权益仍 active。
+        TicketRefundRecord rejected = service.rejectTicketRefund(refund.id(), new StatusChangeRequest(
+                "refund-reject-decide", "reject", "rejected", List.of()));
+        assertThat(rejected.status()).isEqualTo("rejected");
+        assertThat(ticketingRepository.findTicketInstanceById(instanceId)).get()
+                .extracting(TicketInstanceRecord::status).isEqualTo("active");
+        assertThat(ticketingRepository.findIssuedEntitlementById(ent.id())).get()
+                .extracting(IssuedEntitlementRecord::status).isEqualTo("active");
     }
 
     @Test
@@ -2445,21 +2571,22 @@ class TicketingServiceTests {
     }
 
     @Test
-    void duplicateRefundRequestsCannotExceedOrderTotal() {
+    void duplicateRefundOnSameTicketIsRejectedWhileInProgress() {
+        // 方案2：同一张票在途退款（refund_pending）不能再被申请退款 → TICKET_INSTANCE_REFUND_IN_PROGRESS。
         IssuedEntitlementRecord entitlement = issueOrderEntitlement("dup-refund");
         TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();
+        String instanceId = entitlement.parentTicketId();
 
-        // First refund for full amount succeeds
-        service.requestTicketRefund(new TicketRefundRequest(
-                "dup-refund-1", "refund", List.of(), order.id(), order.amountCent(), "first", "original"
-        ));
+        // 第一笔申请（不自助，留 refund_pending）。
+        service.requestTicketRefund(TicketRefundRequest.ofTicketInstances(
+                "dup-refund-1", "refund", List.of(), order.id(), null, "first", "original", List.of(instanceId)));
 
-        // Second refund of any positive amount should fail (already reached order total)
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
-                        "dup-refund-2", "refund", List.of(), order.id(), 1L, "second", "original"
-                )))
-                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("refund amount exceeds order amount");
+        // 同票再申请 → 拒（在途冻结中）。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(
+                TicketRefundRequest.ofTicketInstances(
+                        "dup-refund-2", "refund", List.of(), order.id(), null, "second", "original", List.of(instanceId))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("TICKET_INSTANCE_REFUND_IN_PROGRESS"));
     }
 
     @Test
@@ -2760,6 +2887,7 @@ class TicketingServiceTests {
     }
 
     private TicketTypeRecord createTicketType(String key) {
+        // 方案2：测试票种默认设 refundable=true，退款链测试才能走通（生产默认 false，另有 refundable=false 专项用例）。
         return service.createTicketType(new TicketTypeRequest(
                 key,
                 "create",
@@ -2771,7 +2899,10 @@ class TicketingServiceTests {
                 12900L,
                 List.of(),
                 false,
-                "active"
+                "active",
+                null,
+                null,
+                true
         ));
     }
 
@@ -2895,6 +3026,39 @@ class TicketingServiceTests {
                 id, "CODE_" + id, ticketTypeId, orderId, "tmpl_" + id, "general", "mch", "venue", "point",
                 totalTimes, usedTimes, 9900L, status, t0, validTo, t0, t0, 1, 9900L,
                 null, null);
+    }
+
+    // ── 方案2 整票退款测试脚手架 ──
+    /** 播种一个 refundable=true 的票种（直接入库，供直接 seed 的退款/到期用例）。 */
+    private void seedRefundableType(String id) {
+        seedTicketType(id, true, null);
+    }
+
+    private void seedTicketType(String id, boolean refundable, Integer stockQuantity) {
+        java.time.Instant t0 = java.time.Instant.parse("2026-06-19T00:00:00Z");
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                id, "T " + id, "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "active",
+                null, null, t0, t0, stockQuantity, stockQuantity == null ? 0 : stockQuantity, null, refundable));
+    }
+
+    /** 播种一张父票实例。 */
+    private void seedInstance(String id, String orderId, String ticketTypeId, int seq, int numPeople,
+            int totalTimes, String status, java.time.Instant firstUsedAt) {
+        java.time.Instant t0 = java.time.Instant.parse("2026-06-19T00:00:00Z");
+        ticketingRepository.saveTicketInstance(new TicketInstanceRecord(
+                id, "TN_" + id, orderId, ticketTypeId, seq, numPeople, totalTimes,
+                "c1", "c1", status, firstUsedAt, null, t0, t0));
+    }
+
+    /** 播种一条挂父票的权益（parentTicketId+slotIndex）。 */
+    private static IssuedEntitlementRecord seedEntitlement(String id, String orderId, String ticketTypeId,
+            int totalTimes, int usedTimes, String status, java.time.Instant validTo,
+            String parentTicketId, int slotIndex) {
+        java.time.Instant t0 = validTo.minusSeconds(86400);
+        return new IssuedEntitlementRecord(
+                id, "CODE_" + id, ticketTypeId, orderId, "tmpl_" + id, "general", "mch", "venue", "point",
+                totalTimes, usedTimes, 9900L, status, t0, validTo, t0, t0, 1, 9900L,
+                null, null, null, null, parentTicketId, slotIndex);
     }
 
     private IssuedEntitlementRecord issueOrderEntitlement(String key) {
@@ -3417,7 +3581,8 @@ class TicketingServiceTests {
         @Override
         public int freezeEntitlementForRefund(String id, java.time.Instant updatedAt) {
             IssuedEntitlementRecord entitlement = issuedEntitlements.get(id);
-            if (entitlement == null || !"active".equals(entitlement.status())) {
+            // 方案2 强 CAS：仅冻结 active 且 used_times=0（申请→审批空窗被核销则命中 0 行，调用方回滚拒退）。
+            if (entitlement == null || !"active".equals(entitlement.status()) || entitlement.usedTimes() != 0) {
                 return 0;
             }
             issuedEntitlements.put(id, new IssuedEntitlementRecord(
@@ -3427,7 +3592,48 @@ class TicketingServiceTests {
                     entitlement.usedTimes(), entitlement.valueAmountCent(),
                     "refunded", entitlement.validFrom(), entitlement.validTo(), entitlement.createdAt(), updatedAt,
                     entitlement.numPeople(), entitlement.allocatedRevenueCent(),
-                    entitlement.entitlementKind(), entitlement.agreementPriceCent()));
+                    entitlement.entitlementKind(), entitlement.agreementPriceCent(),
+                    entitlement.consumptionWindow(), entitlement.exclusiveMerchantId(),
+                    entitlement.parentTicketId(), entitlement.slotIndex()));
+            return 1;
+        }
+
+        @Override
+        public int markTicketInstanceRefundPending(String id, java.time.Instant now) {
+            return casTicketInstanceStatus(id, "active", "refund_pending", now);
+        }
+
+        @Override
+        public int markTicketInstanceRefunded(String id, java.time.Instant now) {
+            return casTicketInstanceStatus(id, "refund_pending", "refunded", now);
+        }
+
+        @Override
+        public int restoreTicketInstanceActive(String id, java.time.Instant now) {
+            return casTicketInstanceStatus(id, "refund_pending", "active", now);
+        }
+
+        private int casTicketInstanceStatus(String id, String from, String to, java.time.Instant now) {
+            TicketInstanceRecord ti = ticketInstances.get(id);
+            if (ti == null || !from.equals(ti.status())) {
+                return 0;
+            }
+            ticketInstances.put(id, new TicketInstanceRecord(
+                    ti.id(), ti.ticketNo(), ti.orderId(), ti.ticketTypeId(), ti.seqInOrder(), ti.numPeople(),
+                    ti.totalTimes(), ti.buyerCustomerId(), ti.currentHolderCustomerId(), to,
+                    ti.firstUsedAt(), ti.firstSessionKey(), ti.createdAt(), now));
+            return 1;
+        }
+
+        @Override
+        public int markTicketRefundRejected(String refundId, String rejectedBy, java.time.Instant rejectedAt) {
+            TicketRefundRecord r = refunds.get(refundId);
+            if (r == null || !"requested".equals(r.status())) {
+                return 0;
+            }
+            refunds.put(refundId, new TicketRefundRecord(
+                    r.id(), r.targetId(), r.refundAmountCent(), r.reason(), r.refundChannel(), "rejected",
+                    r.requestedBy(), rejectedBy, rejectedAt, r.createdAt(), rejectedAt, r.merchantId()));
             return 1;
         }
 

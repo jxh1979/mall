@@ -402,6 +402,23 @@ public class TicketVerificationService {
         repository.markTicketInstanceFirstUse(parentId, sessionKeyFor(entitlement.venueId(), now), now);
     }
 
+    /**
+     * 方案2 申请即冻结守卫：父票非 active（退款申请中/已退/转赠中）→ 拒核销，防冻结中的票照常入场。
+     * 无父票（存量/直发权益 parent 为空）跳过。
+     */
+    private void requireParentTicketActive(IssuedEntitlementRecord entitlement) {
+        String parentId = entitlement.parentTicketId();
+        if (parentId == null) {
+            return;
+        }
+        repository.findTicketInstanceById(parentId).ifPresent(parent -> {
+            if (!"active".equals(parent.status())) {
+                throw ApiException.conflict("TICKET_INSTANCE_REFUND_IN_PROGRESS",
+                        "ticket instance is frozen (refund in progress, refunded, or transferring) and cannot be verified");
+            }
+        });
+    }
+
     private VerificationResponse verifyEntitlement(VerificationRequest request, String sourceType, String clientTaskId) {
         // 健壮性修复：先校验核销设备已注册，未注册直接干净 400，杜绝 FK 违反中止事务后的脏 500。
         requireRegisteredDevice(request);
@@ -496,6 +513,9 @@ public class TicketVerificationService {
         if (!"active".equals(entitlement.status())) {
             throw ApiException.conflict("ENTITLEMENT_NOT_ACTIVE", "entitlement is not active");
         }
+        // 方案2 申请即冻结：父票非 active（退款申请中 refund_pending / 已退 refunded / 转赠中 transferring）→ 拒核销。
+        // 与方案3 转赠冻结共用同一守卫；单人票/无父票不约束（parent 为空跳过）。
+        requireParentTicketActive(entitlement);
         if (entitlement.validFrom() != null && now.isBefore(entitlement.validFrom())) {
             throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID", "entitlement is not yet valid");
         }

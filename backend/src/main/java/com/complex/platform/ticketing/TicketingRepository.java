@@ -75,6 +75,26 @@ public interface TicketingRepository {
     default void markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
     }
 
+    /** 方案2 申请即冻结：父票 active→refund_pending（CAS，返回命中行数）。default 返回 0（无父票=不放行整票退）。 */
+    default int markTicketInstanceRefundPending(String id, java.time.Instant now) {
+        return 0;
+    }
+
+    /** 方案2 生效：父票 refund_pending→refunded（CAS）。default 返回 0。 */
+    default int markTicketInstanceRefunded(String id, java.time.Instant now) {
+        return 0;
+    }
+
+    /** 方案2 驳回：父票 refund_pending→active 解冻（CAS）。default 返回 0。 */
+    default int restoreTicketInstanceActive(String id, java.time.Instant now) {
+        return 0;
+    }
+
+    /** 方案2 复核驳回：退款单 requested→rejected（CAS，返回命中行数）。default 返回 0。 */
+    default int markTicketRefundRejected(String refundId, String rejectedBy, java.time.Instant rejectedAt) {
+        return 0;
+    }
+
     /**
      * 结算重构批3-1(PRD §6.1)：按 bar_products.id 取实物权益的酒吧内部结算价(V152 internal_settlement_price_cent)。
      * 无此商品或内部价为空 → 空(判定层回退 value_amount)。default 返回空兼容既有测试假实现。

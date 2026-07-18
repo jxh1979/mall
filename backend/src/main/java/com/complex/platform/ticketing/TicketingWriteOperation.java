@@ -31,6 +31,7 @@ enum TicketingWriteOperation implements AuditedOperation {
     PUBLISH_TICKET_TYPE("ticket_price.published", "ticket_price.publish_failed", "ticket.product.manage", "ticket_type"),
     REQUEST_TICKET_REFUND("ticket_refund.requested", "ticket_refund.request_failed", "ticket.refund.request", "ticket_refund"),
     APPROVE_TICKET_REFUND("ticket_refund.approved", "ticket_refund.approve_failed", "ticket.refund.approve", "ticket_refund"),
+    REJECT_TICKET_REFUND("ticket_refund.rejected", "ticket_refund.reject_failed", "ticket.refund.approve", "ticket_refund"),
     PREVIEW_VERIFICATION("verification.previewed", "verification.failed", "verification.execute", "ticket_verification"),
     CREATE_VERIFICATION("verification.succeeded", "verification.failed", "verification.execute", "ticket_verification"),
     REVERSE_VERIFICATION("ticket.verification_reversed", "ticket.verification_reverse_failed", "ticket.verify.reverse", "ticket_verification"),

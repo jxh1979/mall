@@ -6,13 +6,31 @@ import com.complex.platform.finance.RefundAuthorizationService;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 方案2 整票退款（AUD-006）+ 规则2 可退配置。退款单位 = 父票实例（ticket_instances），不再受理单条权益/自由金额：
+ * <ul>
+ *   <li>金额由服务端按每票出票时定格的实付分摊额算定（复现方案1 出票均分），客户端不定价；</li>
+ *   <li>票种 refundable=false → 拒申请退（默认不可退）；</li>
+ *   <li>整票连坐：父票任一权益已核销/已冻结 → 整张不可退；</li>
+ *   <li>申请即冻结：父票 active→refund_pending，复核驳回恢复 active；</li>
+ *   <li>限量票名额回补：退成功的父票实例数即释放同数可售名额（退一张放一个）。</li>
+ * </ul>
+ */
 @Service
 public class TicketRefundService {
 
@@ -96,35 +114,57 @@ public class TicketRefundService {
         if (!"paid".equals(order.payStatus())) {
             throw ApiException.conflict("TICKET_ORDER_NOT_REFUNDABLE", "only paid ticket orders can be refunded");
         }
-        // F-TXN-03 按票实例判退（2026-06-29 裁决）：解析本次要退的票实例——
-        //   传 entitlement_ids → 仅退所选票（已核销票按票实例拒退 TICKET_ENTITLEMENT_VERIFIED_NO_REFUND）；
-        //   不传 → 退该订单全部未核销票（已核销票不连坐、自动跳过）；订单全核销则无可退（同码拒退）。
-        List<IssuedEntitlementRecord> allEntitlements = repository.listIssuedEntitlementsByOrderId(targetId);
-        List<IssuedEntitlementRecord> refundTargets =
-                resolveRefundTargets(allEntitlements, actual.entitlementIds());
-        long amountCent = requirePositiveLong(actual.refundAmountCent(), "refund_amount_cent");
+        // AUD-006 退款单位=整张票（无兼容期）：旧入参 entitlement_ids 传入非空即拒。
+        if (actual.entitlementIds() != null && !actual.entitlementIds().isEmpty()) {
+            throw ApiException.badRequest("REFUND_UNIT_IS_TICKET",
+                    "refund unit is a whole ticket; select tickets by ticket_instance_ids, not entitlement_ids");
+        }
+        // 规则2 可退配置：票种默认不可退；不可退则拒申请退（客人不能申请退）。
+        TicketTypeRecord ticketType = repository.findTicketTypeById(order.ticketTypeId()).orElse(null);
+        if (ticketType == null || !ticketType.refundable()) {
+            throw ApiException.conflict("TICKET_TYPE_NOT_REFUNDABLE",
+                    "this ticket type is not refundable");
+        }
+        List<TicketInstanceRecord> allInstances = repository.listTicketInstancesByOrderId(targetId);
+        if (allInstances.isEmpty()) {
+            throw ApiException.conflict("TICKET_ORDER_NOT_REFUNDABLE",
+                    "ticket order has no ticket instances to refund");
+        }
+        Map<String, Long> shareByInstance = perInstanceShares(order, allInstances);
+        Map<String, List<IssuedEntitlementRecord>> entByInstance =
+                groupByParent(repository.listIssuedEntitlementsByOrderId(targetId));
+        // 解析要退的父票实例：不传/空=该单全部"完全未核销"的实例；传=校验属本单、去重、整票连坐可退。
+        List<TicketInstanceRecord> targets =
+                resolveRefundInstances(allInstances, entByInstance, actual.ticketInstanceIds());
+        if (targets.isEmpty()) {
+            throw ApiException.conflict("TICKET_INSTANCE_VERIFIED_NO_REFUND",
+                    "no fully-unused ticket instance in this order is refundable");
+        }
+        // 金额=服务端算定的所选实例分摊额合计；客户端不定价，若带 refund_amount_cent 必须相等。
+        long amountCent = targets.stream().mapToLong(ti -> shareByInstance.getOrDefault(ti.id(), 0L)).sum();
+        if (amountCent <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "selected ticket instances have zero refundable amount; void the ticket instead of refunding");
+        }
+        if (actual.refundAmountCent() != null && actual.refundAmountCent() != amountCent) {
+            throw ApiException.badRequest("REFUND_AMOUNT_MISMATCH",
+                    "refund_amount_cent must equal the server-computed whole-ticket amount");
+        }
         long alreadyRequested = repository.sumPendingRefundAmountByOrderId(targetId);
         if (alreadyRequested + amountCent > order.amountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "refund amount exceeds order amount");
         }
-        // 1.1 份额封顶（F-TXN-03）：只退部分未核销票时，退款额不得超过所选票的可退价值之和，
-        // 单张票不能退整单额（镜像 autoRefundExpiredUnusedTickets 的 perTicketShare 口径）；
-        // 恰退订单全部票 → 沿用上方整单封顶（规避按张均摊整除舍入）。
-        if (!refundTargets.isEmpty() && refundTargets.size() < allEntitlements.size()) {
-            long refundableCeiling = refundTargets.stream()
-                    .mapToLong(e -> perTicketShare(order, e, allEntitlements.size()))
-                    .sum();
-            if (amountCent > refundableCeiling) {
-                throw ApiException.badRequest("VALIDATION_FAILED",
-                        "refund amount exceeds refundable ticket value");
+        Instant now = Instant.now();
+        // 申请即冻结：逐实例 CAS active→refund_pending；并发抢先者胜，命中 0 行=该票在途/已用/已退 → 整笔回滚拒。
+        for (TicketInstanceRecord ti : targets) {
+            if (repository.markTicketInstanceRefundPending(ti.id(), now) == 0) {
+                throw ApiException.conflict("TICKET_INSTANCE_REFUND_IN_PROGRESS",
+                        "ticket instance " + ti.id() + " cannot be frozen for refund in its current status");
             }
         }
-        Instant now = Instant.now();
         String requestedBy = currentActorId();
         // Stage B 分级授权（功能标志 refund.tiered_authorization.enabled，默认关）：判定本笔退款能否当场自助完成。
-        //   额度内(WITHIN_LIMIT)/规则既定(RULE_AUTO) → 发起人当场自助自动退；超额/无额度(REVIEW_REQUIRED) → 留待二人复核。
-        //   手动发起无规则上下文(autoRuleType=null)，故此路径只会落「额度自助」或「复核」；到期未用规则自动退另走
-        //   autoRefundExpiredUnusedTickets。关闭功能标志或引擎未注入 → 维持现状：一律建 requested、等人工 approveRefund。
+        //   额度内/规则既定 → 发起人当场自助自动退；超额/无额度 → 留待二人复核。关闭/未注入 → 一律 requested 等人工审批。
         boolean selfComplete = tieredRefundEnabled && refundAuthorizationService != null
                 && refundAuthorizationService.classify("ticket", amountCent, requestedBy, null)
                         != RefundAuthorizationService.RefundTier.REVIEW_REQUIRED;
@@ -142,9 +182,9 @@ public class TicketRefundService {
                 now,
                 order.merchantId()   // V220：退款受理商户=原销售订单 merchant_id（平台直营单为 null）
         ));
-        createRefundLines(refund, order, refundTargets, now);
+        createRefundLines(refund, order, targets, entByInstance, shareByInstance, now);
         if (selfComplete) {
-            finalizeApprovedRefund(refund, now);
+            finalizeApprovedRefund(refund, now, true);
         }
         return refund;
     }
@@ -158,8 +198,7 @@ public class TicketRefundService {
         // 防商户A审批通过商户B的退款。原单缺失时不做归属判定（交由下方既有 null 容错路径）。
         repository.findTicketOrderById(current.targetId())
                 .ifPresent(order -> enforceMerchantScope(order.merchantId()));
-        // Stage B 职责分离（SoD，功能标志开时）：复核档退款的审批人不得为发起人——仿 FinanceService.decideAdjustment
-        //   （approver≠requestedBy，SELF_APPROVAL_FORBIDDEN）。关闭功能标志 → 维持现状：审批人记字面量 "staff"、不做 SoD。
+        // Stage B 职责分离（SoD，功能标志开时）：复核档退款的审批人不得为发起人（approver≠requestedBy，SELF_APPROVAL_FORBIDDEN）。
         String approver = tieredRefundEnabled ? currentActorId() : null;
         if (tieredRefundEnabled && approver != null && approver.equals(current.requestedBy())) {
             throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
@@ -167,8 +206,7 @@ public class TicketRefundService {
         }
         String approvedBy = approver != null ? approver : "staff";
         Instant now = Instant.now();
-        // F-TXN-04 并发双拨付防护：退款状态翻转改用 CAS（WHERE status='requested'），并发只一路过闸，
-        // 杜绝并发审批同一退款单各发一次 TicketRefundApprovedEvent（双拨付）。原读检+saveTicketRefund 的 TOCTOU 消除。
+        // F-TXN-04 并发双拨付防护：退款状态翻转改用 CAS（WHERE status='requested'），并发只一路过闸。
         int approvedRows = repository.markTicketRefundApproved(current.id(), approvedBy, now);
         if (approvedRows == 0) {
             throw ApiException.conflict(
@@ -178,90 +216,146 @@ public class TicketRefundService {
                 current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
                 "approved", current.requestedBy(), approvedBy, now, current.createdAt(), now, current.merchantId()
         );
-        finalizeApprovedRefund(approved, now);
+        finalizeApprovedRefund(approved, now, true);
         return approved;
     }
 
     /**
-     * 退款审批生效后的统一兑付副作用（approveRefund 人工审批通过 与 requestRefund 额度内自助完成 共用）：
-     * 退款行置 approved + 冻结对应权益（active→refunded，防退款后照常入场）+ 按比例发积分冲减 + 累计全额时回补库存 + 发打款拨付事件。
-     * 不含 SoD/CAS（由各入口先行把关）。
+     * 方案2 复核驳回：退款单 requested→rejected + 行 rejected + 父票 refund_pending→active 解冻（恢复可用）。
+     * SoD 同 approve（发起人不得驳回自己，防自发自撤洗留痕）；不打款、不冲积分、不回补库存。
      */
-    private void finalizeApprovedRefund(TicketRefundRecord approved, Instant now) {
+    TicketRefundRecord rejectRefund(String refundId, StatusChangeRequest request) {
+        StatusChangeRequest actual = requireRequest(request);
+        requireText(actual.reason(), "reason");
+        TicketRefundRecord current = repository.findTicketRefundById(requireText(refundId, "refund_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "ticket refund not found"));
+        repository.findTicketOrderById(current.targetId())
+                .ifPresent(order -> enforceMerchantScope(order.merchantId()));
+        String reviewer = tieredRefundEnabled ? currentActorId() : null;
+        if (tieredRefundEnabled && reviewer != null && reviewer.equals(current.requestedBy())) {
+            throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
+                    "the requester of a refund cannot reject it; a different reviewer is required");
+        }
+        String decidedBy = reviewer != null ? reviewer : "staff";
+        Instant now = Instant.now();
+        int rejectedRows = repository.markTicketRefundRejected(current.id(), decidedBy, now);
+        if (rejectedRows == 0) {
+            throw ApiException.conflict(
+                    "TICKET_REFUND_NOT_REJECTABLE", "ticket refund cannot be rejected in current status");
+        }
+        // 行 requested→rejected + 收集本单实例解冻。
+        Map<String, String> entToParent = entToParentMap(current.targetId());
+        LinkedHashSet<String> instanceIds = new LinkedHashSet<>();
+        repository.listTicketRefundLines(current.id()).forEach(line -> {
+            repository.saveTicketRefundLine(new TicketRefundLineRecord(
+                    line.id(), line.refundId(), line.orderId(), line.entitlementId(), line.entitlementType(),
+                    line.lineType(), line.refundAmountCent(), line.remainingTimesBefore(), line.usedTimesBefore(),
+                    "rejected", line.createdAt(), now));
+            if (line.entitlementId() != null) {
+                String parent = entToParent.get(line.entitlementId());
+                if (parent != null) {
+                    instanceIds.add(parent);
+                }
+            }
+        });
+        for (String instanceId : instanceIds) {
+            repository.restoreTicketInstanceActive(instanceId, now);
+        }
+        return new TicketRefundRecord(
+                current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
+                "rejected", current.requestedBy(), decidedBy, now, current.createdAt(), now, current.merchantId());
+    }
+
+    /**
+     * 退款审批生效后的统一兑付副作用（人工审批通过 / 额度内自助完成 / 到期自动退 共用）：
+     * 退款行置 approved + 强 CAS 冻结对应权益（active∧used=0→refunded，失配整笔回滚）+ 父票 refund_pending→refunded
+     * + 限量票按本笔退成功实例数回补名额（退一张放一个）+ 发打款事件；deductPoints=true 时按比例发积分冲减。
+     */
+    private void finalizeApprovedRefund(TicketRefundRecord approved, Instant now, boolean deductPoints) {
+        TicketOrderRecord order = repository.findTicketOrderById(approved.targetId()).orElse(null);
+        Map<String, String> entToParent = entToParentMap(approved.targetId());
+        LinkedHashSet<String> refundedInstances = new LinkedHashSet<>();
         repository.listTicketRefundLines(approved.id()).forEach(line -> {
             repository.saveTicketRefundLine(new TicketRefundLineRecord(
                     line.id(), line.refundId(), line.orderId(), line.entitlementId(), line.entitlementType(), line.lineType(),
                     line.refundAmountCent(), line.remainingTimesBefore(), line.usedTimesBefore(), "approved", line.createdAt(), now
             ));
-            // 2a-3 退款冻结：退款审批生效 → 冻结对应权益（active→refunded），使其不可再核销（防"退款后照常入场"双重损失）。
+            // 2a-3 退款冻结（强 CAS）：active∧used_times=0 → refunded。命中 0 行=申请→审批空窗内被核销 → 整笔回滚拒退。
             if (line.entitlementId() != null && !line.entitlementId().isBlank()) {
-                repository.freezeEntitlementForRefund(line.entitlementId(), now);
+                int frozen = repository.freezeEntitlementForRefund(line.entitlementId(), now);
+                if (frozen == 0) {
+                    throw ApiException.conflict("TICKET_INSTANCE_VERIFIED_NO_REFUND",
+                            "ticket entitlement was verified after the refund request; refund rolled back");
+                }
+                String parent = entToParent.get(line.entitlementId());
+                if (parent != null) {
+                    refundedInstances.add(parent);
+                }
             }
         });
-        // P0 清单#2：退款审批通过（生效）→ 发积分冲减事件，customer 域按退款比例冲减原单已 confirmed 积分。
-        // 幂等键 source_doc=ticket_refund/refundId；无会员/未入账由 LoyaltyService 侧 noop。
-        publishPointsDeductRequested(approved);
-        // 票务退款打款闭环：①累计全额退款回补库存（限量票名额返还，与下单即扣对称）②发打款拨付事件（解耦）。
-        TicketOrderRecord order = repository.findTicketOrderById(approved.targetId()).orElse(null);
+        // 父票 refund_pending→refunded（终态，CAS）。
+        for (String instanceId : refundedInstances) {
+            repository.markTicketInstanceRefunded(instanceId, now);
+        }
+        // P0 清单#2：退款生效 → 按退款比例发积分冲减事件（到期自动退全未核销无已确认积分口径 → 不发）。
+        if (deductPoints) {
+            publishPointsDeductRequested(approved);
+        }
         if (order != null) {
-            // 累计全额退款（含本笔的已审批退款合计 ≥ 原单额）视为整单取消 → 回补该票种库存 order.quantity。
-            // 用"恰好跨过阈值"判定（priorApproved < 全额 且 累计 ≥ 全额）保证多次部分退款累计达全额时**恰回补一次**，
-            // 既修复"单笔判定致分次退款永不回补"，又避免重复回补（幂等，无需额外标记）。
-            long cumulativeApproved = repository.sumApprovedRefundAmountByOrderId(order.id());
-            long priorApproved = cumulativeApproved - approved.refundAmountCent();
-            if (order.amountCent() > 0 && order.quantity() > 0
-                    && priorApproved < order.amountCent() && cumulativeApproved >= order.amountCent()) {
-                repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
+            // 限量票名额回补：退一张放一个可售名额（退成功的父票实例数），与下单即扣对称；无限量票 GREATEST(0,..) 兜底无害。
+            if (!refundedInstances.isEmpty()) {
+                repository.releaseTicketStock(order.ticketTypeId(), refundedInstances.size());
             }
-            // 打款拨付信号：金额已落 ticket_refunds（net 按业务表扣减，C1），此事件只承载实际打款，不重复入账。
+            // 打款拨付信号：金额已落 ticket_refunds，此事件只承载实际打款，不重复入账。
             eventPublisher.publishEvent(new TicketRefundApprovedEvent(
                     order.id(), approved.id(), approved.refundAmountCent(), approved.refundChannel()));
         }
     }
 
     /**
-     * F-TXN-03 门票到期自动退款（系统发起，无 auth 上下文）：全未核销的已付到期订单整单原渠道直批退款。
-     * 与手动退款生效效果一致（退款记录 + 行直批 approved、冻结权益 active→refunded、全额回补库存、发打款事件），
-     * 但**跳过商户范围闸**（系统动作）；全未核销 → 无已确认积分可冲减，不发 points deduct。
-     * 幂等：非 paid / 0 元 / 有核销 / 已有退款（pending/approved）→ 跳过返回 null（由调用方对到期未用权益另作作废）。
-     * {@code @Transactional} 保多写原子（失败回滚，权益保持 active、下轮重试）。
-     */
-    /**
-     * F-TXN-03 门票到期按票实例自动退款（系统发起，无 auth 上下文，2026-06-29 裁决）：对该订单**到期未核销**的票
-     * 逐张原渠道自动退款，金额=这些票的份额合计（恰覆盖订单全部票则=整单额，避免整除舍入）；
-     * **不再因同单其他票已核销而连坐作废**。直批生效：退款行 approved、冻结对应票(active→refunded)、
-     * 累计达全额时回补一次库存、发打款事件；全未核销无已确认积分，故不发 points deduct。
-     * 非 paid / 0 元 / 无未核销票 / 已有退款在途或完成 → 返回 null（由调用方对到期票作废）。{@code @Transactional} 保多写原子。
+     * 方案2 门票到期整票自动退款（系统发起，无 auth 上下文）：对该订单**完全未核销**的父票实例整张原渠道直批退款，
+     * 金额=这些实例出票时定格分摊额合计；任一权益已核销的实例（部分使用）不在此退（由调用方作废，规则2口径）。
+     * 直批生效（冻结权益 active→refunded、父票 refund_pending→refunded、按实例数回补名额、发打款事件）；
+     * 全未核销无已确认积分 → 不发 points deduct；跳过商户闸（系统动作）。
+     * 非 paid / 0 元 / 无完全未核销实例 / 已有退款在途或完成 → 返回 null。{@code @Transactional} 保多写原子。
      */
     @Transactional
-    public TicketRefundRecord autoRefundExpiredUnusedTickets(
-            TicketOrderRecord order, List<IssuedEntitlementRecord> expiredUnusedTickets, Instant now) {
+    public TicketRefundRecord autoRefundExpiredWholeTickets(TicketOrderRecord order, Instant now) {
         if (order == null || !"paid".equals(order.payStatus()) || order.amountCent() <= 0) {
             return null;
-        }
-        List<IssuedEntitlementRecord> refundable = expiredUnusedTickets.stream()
-                .filter(e -> e.usedTimes() == 0).toList();
-        if (refundable.isEmpty()) {
-            return null; // 无未核销票可退（防御；调用方应已过滤）。
         }
         if (repository.sumApprovedRefundAmountByOrderId(order.id()) > 0
                 || repository.sumPendingRefundAmountByOrderId(order.id()) > 0) {
             return null; // 已有退款（手动/自动）→ 幂等跳过。
         }
-        // 退款额：到期未核销票的份额合计；恰覆盖订单全部票则取整单额（规避按张均摊的整除舍入误差）。
-        List<IssuedEntitlementRecord> all = repository.listIssuedEntitlementsByOrderId(order.id());
-        long amountCent = refundable.size() == all.size()
-                ? order.amountCent()
-                : Math.min(order.amountCent(),
-                        refundable.stream().mapToLong(e -> perTicketShare(order, e, all.size())).sum());
+        List<TicketInstanceRecord> allInstances = repository.listTicketInstancesByOrderId(order.id());
+        if (allInstances.isEmpty()) {
+            return null;
+        }
+        Map<String, List<IssuedEntitlementRecord>> entByInstance =
+                groupByParent(repository.listIssuedEntitlementsByOrderId(order.id()));
+        List<TicketInstanceRecord> targets = allInstances.stream()
+                .filter(ti -> isFullyUnusedActive(ti, entByInstance.get(ti.id())))
+                .toList();
+        if (targets.isEmpty()) {
+            return null; // 无完全未核销实例（全部部分使用/已退）→ 交由调用方作废。
+        }
+        Map<String, Long> shareByInstance = perInstanceShares(order, allInstances);
+        long amountCent = targets.stream().mapToLong(ti -> shareByInstance.getOrDefault(ti.id(), 0L)).sum();
         if (amountCent <= 0) {
             return null;
+        }
+        // 申请即冻结（系统直批同样先置 refund_pending，复用 finalize 的 refund_pending→refunded CAS）。
+        for (TicketInstanceRecord ti : targets) {
+            if (repository.markTicketInstanceRefundPending(ti.id(), now) == 0) {
+                return null; // 并发抢先 → 让下轮/退款链处理。
+            }
         }
         TicketRefundRecord refund = repository.saveTicketRefund(new TicketRefundRecord(
                 "ticket_refund_auto_expiry_" + slug(order.id()),
                 order.id(),
                 amountCent,
-                "ticket entitlements expired unused — system auto refund (per-ticket)",
+                "ticket expired unused — system auto refund (whole ticket)",
                 "original",
                 "approved",
                 "system",
@@ -270,33 +364,133 @@ public class TicketRefundService {
                 now,
                 now,
                 order.merchantId()));   // V220：自动退款受理商户=原订单 merchant_id
-        createRefundLines(refund, order, refundable, now);
-        // 直批生效（镜像 finalizeApprovedRefund 的兑付副作用；系统动作跳过商户闸；未核销无已确认积分故不冲减）：
-        repository.listTicketRefundLines(refund.id()).forEach(line -> {
-            repository.saveTicketRefundLine(new TicketRefundLineRecord(
-                    line.id(), line.refundId(), line.orderId(), line.entitlementId(), line.entitlementType(),
-                    line.lineType(), line.refundAmountCent(), line.remainingTimesBefore(), line.usedTimesBefore(),
-                    "approved", line.createdAt(), now));
-            if (line.entitlementId() != null && !line.entitlementId().isBlank()) {
-                repository.freezeEntitlementForRefund(line.entitlementId(), now);
-            }
-        });
-        // 库存回补：累计退款恰达整单额时回补一次（与手动 finalizeApprovedRefund 一致，分批不重复回补）。
-        long cumulativeApproved = repository.sumApprovedRefundAmountByOrderId(order.id());
-        long priorApproved = cumulativeApproved - refund.refundAmountCent();
-        if (order.quantity() > 0 && priorApproved < order.amountCent() && cumulativeApproved >= order.amountCent()) {
-            repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
-        }
-        eventPublisher.publishEvent(new TicketRefundApprovedEvent(
-                order.id(), refund.id(), refund.refundAmountCent(), refund.refundChannel()));
+        createRefundLines(refund, order, targets, entByInstance, shareByInstance, now);
+        finalizeApprovedRefund(refund, now, false);
         return refund;
     }
 
-    /** 单张票退款份额：优先票面价 value_amount_cent，缺省则按订单额 / 票数均摊（至少 1 分）。 */
-    private long perTicketShare(TicketOrderRecord order, IssuedEntitlementRecord entitlement, int entitlementCount) {
-        return entitlement.valueAmountCent() != null && entitlement.valueAmountCent() > 0
-                ? entitlement.valueAmountCent()
-                : Math.max(1L, order.amountCent() / Math.max(1, entitlementCount));
+    /** 每票出票时定格的实付分摊额：复现方案1 出票均分（allocateEvenly 按实例数分订单实付，seq 定序，分到分不丢分）。 */
+    private Map<String, Long> perInstanceShares(TicketOrderRecord order, List<TicketInstanceRecord> instances) {
+        List<TicketInstanceRecord> sorted = new ArrayList<>(instances);
+        sorted.sort(Comparator.comparingInt(TicketInstanceRecord::seqInOrder)
+                .thenComparing(TicketInstanceRecord::id));
+        long[] shares = allocateEvenly(order.amountCent(), sorted.size());
+        Map<String, Long> out = new LinkedHashMap<>();
+        for (int i = 0; i < sorted.size(); i++) {
+            out.put(sorted.get(i).id(), shares[i]);
+        }
+        return out;
+    }
+
+    /** 整数均分（base + 前 remainder 张各多 1 分），合计恒等于总额，与 TicketOrderService 出票均分一致。 */
+    private long[] allocateEvenly(long total, int count) {
+        long[] out = new long[count];
+        if (count <= 0) {
+            return out;
+        }
+        long base = total / count;
+        long remainder = total - base * count;
+        for (int i = 0; i < count; i++) {
+            out[i] = base + (i < remainder ? 1 : 0);
+        }
+        return out;
+    }
+
+    private Map<String, List<IssuedEntitlementRecord>> groupByParent(List<IssuedEntitlementRecord> entitlements) {
+        Map<String, List<IssuedEntitlementRecord>> out = new LinkedHashMap<>();
+        for (IssuedEntitlementRecord e : entitlements) {
+            if (e.parentTicketId() == null) {
+                continue;
+            }
+            out.computeIfAbsent(e.parentTicketId(), k -> new ArrayList<>()).add(e);
+        }
+        return out;
+    }
+
+    private Map<String, String> entToParentMap(String orderId) {
+        Map<String, String> out = new HashMap<>();
+        for (IssuedEntitlementRecord e : repository.listIssuedEntitlementsByOrderId(orderId)) {
+            if (e.parentTicketId() != null) {
+                out.put(e.id(), e.parentTicketId());
+            }
+        }
+        return out;
+    }
+
+    /** 父票实例是否「完全未核销且 active」：状态 active、未首用、其全部权益 used=0 且 active。无权益=不可退。 */
+    private boolean isFullyUnusedActive(TicketInstanceRecord ti, List<IssuedEntitlementRecord> entitlements) {
+        if (ti == null || !"active".equals(ti.status()) || ti.firstUsedAt() != null) {
+            return false;
+        }
+        if (entitlements == null || entitlements.isEmpty()) {
+            return false;
+        }
+        for (IssuedEntitlementRecord e : entitlements) {
+            if (e.usedTimes() > 0 || !"active".equals(e.status())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 解析要退的父票实例：
+     * 传 ticket_instance_ids → 校验属本单、去重、整票连坐可退（任一权益已核销/冻结或已首用则整张拒）；
+     * 不传/空 → 该单全部"完全未核销 active"的实例（已核销/已退实例不连坐、自动跳过）。
+     */
+    private List<TicketInstanceRecord> resolveRefundInstances(
+            List<TicketInstanceRecord> allInstances,
+            Map<String, List<IssuedEntitlementRecord>> entByInstance,
+            List<String> requestedIds) {
+        List<TicketInstanceRecord> targets = new ArrayList<>();
+        if (requestedIds != null && !requestedIds.isEmpty()) {
+            Map<String, TicketInstanceRecord> byId = new LinkedHashMap<>();
+            for (TicketInstanceRecord ti : allInstances) {
+                byId.put(ti.id(), ti);
+            }
+            Set<String> seen = new HashSet<>();
+            for (String id : requestedIds) {
+                if (!seen.add(id)) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "ticket_instance_ids contains a duplicate id");
+                }
+                TicketInstanceRecord ti = byId.get(id);
+                if (ti == null) {
+                    throw ApiException.badRequest("TICKET_INSTANCE_NOT_IN_ORDER",
+                            "ticket_instance_ids contains an id that does not belong to this order");
+                }
+                requireInstanceRefundable(ti, entByInstance.get(id));
+                targets.add(ti);
+            }
+            return targets;
+        }
+        for (TicketInstanceRecord ti : allInstances) {
+            if (isFullyUnusedActive(ti, entByInstance.get(ti.id()))) {
+                targets.add(ti);
+            }
+        }
+        return targets;
+    }
+
+    /** 整票连坐可退性校验（显式选票时）：任一不满足即整笔拒（不做部分放行）。 */
+    private void requireInstanceRefundable(TicketInstanceRecord ti, List<IssuedEntitlementRecord> entitlements) {
+        if ("refund_pending".equals(ti.status()) || "transferring".equals(ti.status())) {
+            throw ApiException.conflict("TICKET_INSTANCE_REFUND_IN_PROGRESS",
+                    "ticket instance " + ti.id() + " is already frozen (refund in progress or transferring)");
+        }
+        if (!"active".equals(ti.status()) || ti.firstUsedAt() != null) {
+            throw ApiException.conflict("TICKET_INSTANCE_VERIFIED_NO_REFUND",
+                    "ticket instance " + ti.id() + " has been verified or is not refundable; whole ticket is not refundable");
+        }
+        if (entitlements == null || entitlements.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "ticket instance " + ti.id() + " has no entitlements to refund");
+        }
+        for (IssuedEntitlementRecord e : entitlements) {
+            if (e.usedTimes() > 0 || !"active".equals(e.status())) {
+                throw ApiException.conflict("TICKET_INSTANCE_VERIFIED_NO_REFUND",
+                        "ticket instance " + ti.id() + " has a verified or frozen entitlement; whole ticket is not refundable");
+            }
+        }
     }
 
     private void publishPointsDeductRequested(TicketRefundRecord refund) {
@@ -314,80 +508,51 @@ public class TicketRefundService {
     }
 
     /**
-     * 按票实例解析本次退款目标（F-TXN-03，2026-06-29 裁决）：
-     * 传 entitlement_ids → 校验每张属于本单且未核销（已核销按票实例拒退 TICKET_ENTITLEMENT_VERIFIED_NO_REFUND）；
-     * 不传 → 该订单全部未核销票（已核销票不连坐、自动跳过）；订单全核销=无可退（同码拒退）。
-     * 订单尚未出票（无权益）→ 返回空，下游落 order 级退款行（沿用旧行为）。
+     * 建退款行（按实例分组，明细仍逐权益一行）：每实例分摊额在其权益间按 allocated_revenue/票面价权重再分，末条补尾，
+     * 合计恒等于实例分摊额、全部合计恒等于退款单额。
      */
-    private List<IssuedEntitlementRecord> resolveRefundTargets(
-            List<IssuedEntitlementRecord> all, List<String> entitlementIds) {
-        List<IssuedEntitlementRecord> targets = new java.util.ArrayList<>();
-        if (entitlementIds != null && !entitlementIds.isEmpty()) {
-            java.util.Map<String, IssuedEntitlementRecord> byId = new java.util.LinkedHashMap<>();
-            for (IssuedEntitlementRecord e : all) {
-                byId.put(e.id(), e);
-            }
-            java.util.Set<String> seen = new java.util.HashSet<>();
-            for (String id : entitlementIds) {
-                if (!seen.add(id)) {
-                    throw ApiException.badRequest("VALIDATION_FAILED",
-                            "entitlement_ids contains a duplicate id");
-                }
-                IssuedEntitlementRecord e = byId.get(id);
-                if (e == null) {
-                    throw ApiException.badRequest("VALIDATION_FAILED",
-                            "entitlement_ids contains an id that does not belong to this order");
-                }
-                if (e.usedTimes() > 0) {
-                    throw ApiException.conflict("TICKET_ENTITLEMENT_VERIFIED_NO_REFUND",
-                            "ticket entitlement has been verified (checked-in) and is no longer refundable");
-                }
-                targets.add(e);
-            }
-            return targets;
-        }
-        for (IssuedEntitlementRecord e : all) {
-            if (e.usedTimes() == 0) {
-                targets.add(e);
+    private void createRefundLines(TicketRefundRecord refund, TicketOrderRecord order,
+            List<TicketInstanceRecord> targets, Map<String, List<IssuedEntitlementRecord>> entByInstance,
+            Map<String, Long> shareByInstance, Instant now) {
+        int index = 0;
+        for (TicketInstanceRecord ti : targets) {
+            List<IssuedEntitlementRecord> ents = entByInstance.getOrDefault(ti.id(), List.of());
+            long share = shareByInstance.getOrDefault(ti.id(), 0L);
+            long[] lineAmounts = allocateInstanceShare(share, ents);
+            for (int i = 0; i < ents.size(); i++) {
+                IssuedEntitlementRecord e = ents.get(i);
+                repository.saveTicketRefundLine(new TicketRefundLineRecord(
+                        refundLineId(refund.id(), index++), refund.id(), order.id(), e.id(), e.entitlementType(),
+                        "entitlement", lineAmounts[i], e.remainingTimes(), e.usedTimes(), "requested", now, now
+                ));
             }
         }
-        if (!all.isEmpty() && targets.isEmpty()) {
-            throw ApiException.conflict("TICKET_ENTITLEMENT_VERIFIED_NO_REFUND",
-                    "all ticket entitlements in this order are verified; nothing is refundable");
-        }
-        return targets;
     }
 
-    private void createRefundLines(TicketRefundRecord refund, TicketOrderRecord order,
-            List<IssuedEntitlementRecord> entitlements, Instant now) {
-        if (entitlements.isEmpty()) {
-            repository.saveTicketRefundLine(new TicketRefundLineRecord(
-                    refundLineId(refund.id(), 0), refund.id(), order.id(), null, null, "order",
-                    refund.refundAmountCent(), 0, 0, "requested", now, now
-            ));
-            return;
+    /** 把某实例的分摊额按各权益 allocated_revenue（缺省票面价、再缺省等权）加权分，末条补尾使合计恒等于 share。 */
+    private long[] allocateInstanceShare(long share, List<IssuedEntitlementRecord> entitlements) {
+        int n = entitlements.size();
+        long[] out = new long[n];
+        if (n == 0) {
+            return out;
         }
-
-        long remaining = refund.refundAmountCent();
-        for (int index = 0; index < entitlements.size() && remaining > 0; index++) {
-            IssuedEntitlementRecord entitlement = entitlements.get(index);
-            boolean lastLine = index == entitlements.size() - 1;
-            long suggestedAmount = entitlement.valueAmountCent() == null || entitlement.valueAmountCent() <= 0
-                    ? Math.max(1L, order.amountCent() / Math.max(1, entitlements.size()))
-                    : entitlement.valueAmountCent();
-            long lineAmount = lastLine ? remaining : Math.min(suggestedAmount, remaining);
-            if (lineAmount <= 0) {
-                continue;
-            }
-            remaining -= lineAmount;
-            repository.saveTicketRefundLine(new TicketRefundLineRecord(
-                    refundLineId(refund.id(), index), refund.id(), order.id(), entitlement.id(), entitlement.entitlementType(),
-                    "entitlement", lineAmount, entitlement.remainingTimes(), entitlement.usedTimes(), "requested", now, now
-            ));
+        long[] weights = new long[n];
+        long totalWeight = 0;
+        for (int i = 0; i < n; i++) {
+            IssuedEntitlementRecord e = entitlements.get(i);
+            long w = e.allocatedRevenueCent() != null && e.allocatedRevenueCent() > 0
+                    ? e.allocatedRevenueCent()
+                    : (e.valueAmountCent() != null && e.valueAmountCent() > 0 ? e.valueAmountCent() : 1L);
+            weights[i] = w;
+            totalWeight += w;
         }
-        if (remaining > 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "refund amount cannot be allocated to entitlement lines");
+        long assigned = 0;
+        for (int i = 0; i < n - 1; i++) {
+            out[i] = share * weights[i] / totalWeight;
+            assigned += out[i];
         }
+        out[n - 1] = share - assigned; // 末条补尾（floor 合计 ≤ share → 余数 ≥ 0）。
+        return out;
     }
 
     private String refundLineId(String refundId, int index) {
@@ -399,16 +564,6 @@ public class TicketRefundService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
-    }
-
-    private long requirePositiveLong(Long value, String fieldName) {
-        if (value == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        if (value <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
-        }
-        return value;
     }
 
     private String requireText(String value, String fieldName) {

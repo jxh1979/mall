@@ -345,6 +345,16 @@ public class TicketingController {
         return ApiResponse.ok(service.approveTicketRefund(refundId, request));
     }
 
+    @PostMapping("/ticketing/refunds/{refund_id}/reject")
+    public ApiResponse<TicketRefundRecord> rejectTicketRefund(
+            @PathVariable("refund_id") String refundId,
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("ticket.refund.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.rejectTicketRefund(refundId, request));
+    }
+
     @GetMapping("/ticketing/refunds/{refund_id}/lines")
     public ApiResponse<PageResponse<TicketRefundLineRecord>> listTicketRefundLines(
             @PathVariable("refund_id") String refundId

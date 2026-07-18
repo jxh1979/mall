@@ -516,21 +516,36 @@ public class TicketingService {
         }
         for (var entry : byOrder.entrySet()) {
             String orderId = entry.getKey();
-            // F-TXN-03 按票实例（2026-06-29 裁决）：到期未核销票逐张原渠道自动退款，**不再因同单有核销而连坐作废**；
+            java.util.List<IssuedEntitlementRecord> expiredUnused = entry.getValue();
             // 已有退款在途/完成则交由退款链、跳过。
             TicketOrderRecord order = repository.findTicketOrderById(orderId).orElse(null);
             if (order != null && (repository.sumApprovedRefundAmountByOrderId(orderId) > 0
                     || repository.sumPendingRefundAmountByOrderId(orderId) > 0)) {
                 continue;
             }
-            TicketRefundRecord refund = refundService.autoRefundExpiredUnusedTickets(order, entry.getValue(), now);
-            if (refund != null) {
-                processed += entry.getValue().size();
-            } else {
-                // 0 元 / 非 paid 无可退 → 作废到期未用权益，避免反复扫描。
-                for (IssuedEntitlementRecord e : entry.getValue()) {
+            // 规则2 可退配置：票种默认不可退 → 到期直接作废不退（客人到期无退款）。
+            TicketTypeRecord ticketType = order == null
+                    ? null : repository.findTicketTypeById(order.ticketTypeId()).orElse(null);
+            boolean refundable = ticketType != null && ticketType.refundable();
+            if (!refundable) {
+                for (IssuedEntitlementRecord e : expiredUnused) {
                     processed += repository.forfeitEntitlement(e.id(), now);
                 }
+                continue;
+            }
+            // 可退票整票口径（方案2）：完全未核销的父票实例整张自动退；部分使用实例的到期未核销权益 → 作废不退。
+            TicketRefundRecord refund = refundService.autoRefundExpiredWholeTickets(order, now);
+            java.util.Set<String> refundedEntIds = refund == null ? java.util.Set.of()
+                    : repository.listTicketRefundLines(refund.id()).stream()
+                            .map(TicketRefundLineRecord::entitlementId)
+                            .filter(java.util.Objects::nonNull)
+                            .collect(java.util.stream.Collectors.toSet());
+            for (IssuedEntitlementRecord e : expiredUnused) {
+                if (refundedEntIds.contains(e.id())) {
+                    processed += 1; // 已随整票退款冻结，计入处理数。
+                    continue;
+                }
+                processed += repository.forfeitEntitlement(e.id(), now); // 部分使用实例的剩余到期票 → 作废不退。
             }
         }
         return processed;
@@ -645,6 +660,20 @@ public class TicketingService {
                 TicketRefundRecord.class,
                 TicketingWriteOperation.APPROVE_TICKET_REFUND,
                 () -> refundService.approveRefund(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.approve", admissionAction = "ticketing.refund_reject", objectType = "ticket_refund")
+    @Transactional
+    public TicketRefundRecord rejectTicketRefund(String refundId, StatusChangeRequest request) {
+        String id = operations.requireText(refundId, "refund_id");
+        return operations.executeWrite(
+                "rejectTicketRefund:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketRefundRecord.class,
+                TicketingWriteOperation.REJECT_TICKET_REFUND,
+                () -> refundService.rejectRefund(id, request)
         );
     }
 
