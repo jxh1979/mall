@@ -1,7 +1,9 @@
 package com.complex.platform.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -84,6 +86,103 @@ class InventoryCostLedgerConcurrencyJdbcIntegrationTests {
             assertThat(outCost).isIn(500L, 1000L);
         } finally {
             cleanup(itemId);
+        }
+    }
+
+    // ── I-3 重放护栏活证据（资金路径）。 ──
+
+    /** ① 同 id 同载荷重放 → 幂等读回：成本列取库中已定稿值，状态行不二次滚动。 */
+    @Test
+    void sameIdSamePayloadReplayIsIdempotent() throws Exception {
+        String itemId = seedItem();
+        try {
+            TransactionTemplate tx = new TransactionTemplate(txManager);
+            String movementId = "mv_rp_" + itemId;
+            tx.execute(s -> repository.saveStockMovement(inbound(itemId, movementId, 10, 100L), null));
+            StockMovementRecord replayed = tx.execute(s ->
+                    repository.saveStockMovement(inbound(itemId, movementId, 10, 100L), null));
+            // 读回库中定稿成本列。
+            assertThat(replayed.unitCostCent()).isEqualTo(100L);
+            assertThat(replayed.totalCostCent()).isEqualTo(1000L);
+            // 状态行未二次滚动。
+            InventoryItemCostStateRecord state = lockFreeState(itemId);
+            assertThat(state.onHandQuantity()).isEqualTo(10L);
+            assertThat(state.totalCostCent()).isEqualTo(1000L);
+            assertThat(state.cumulativeInCostCent()).isEqualTo(1000L);
+        } finally {
+            cleanup(itemId);
+        }
+    }
+
+    /** ② 同 id 改 quantity 重放 → 409 STOCK_MOVEMENT_REPLAY_MISMATCH，状态行未滚动。 */
+    @Test
+    void sameIdDifferentQuantityReplayIsRejectedWithoutStateRoll() throws Exception {
+        String itemId = seedItem();
+        try {
+            TransactionTemplate tx = new TransactionTemplate(txManager);
+            String movementId = "mv_rq_" + itemId;
+            tx.execute(s -> repository.saveStockMovement(inbound(itemId, movementId, 10, 100L), null));
+            assertThatThrownBy(() -> tx.execute(s ->
+                    repository.saveStockMovement(inbound(itemId, movementId, 5, 100L), null)))
+                    .isInstanceOfSatisfying(ApiException.class, e ->
+                            assertThat(e.code()).isEqualTo("STOCK_MOVEMENT_REPLAY_MISMATCH"));
+            InventoryItemCostStateRecord state = lockFreeState(itemId);
+            assertThat(state.onHandQuantity()).isEqualTo(10L);
+            assertThat(state.totalCostCent()).isEqualTo(1000L);
+            assertThat(state.cumulativeInCostCent()).isEqualTo(1000L);
+        } finally {
+            cleanup(itemId);
+        }
+    }
+
+    /**
+     * ③ 并发同 id 插入（跨物料——同物料被状态行锁串行化，构造不出撞主键）：恰一方落账；
+     * 后到者按时序走两条路之一（插入撞主键经 DuplicateKeyException 转重放读回，或存在性检查直接命中重放），
+     * 两条路都因物料不一致收敛为 409 STOCK_MOVEMENT_REPLAY_MISMATCH（受控冲突），
+     * 绝不向外泄裸 DuplicateKeyException。
+     */
+    @Test
+    void concurrentSameIdInsertConvergesToControlledConflict() throws Exception {
+        String itemA = seedItem();
+        String itemB = seedItem();
+        try {
+            TransactionTemplate tx = new TransactionTemplate(txManager);
+            String movementId = "mv_dk_" + itemA;
+            List<Object> outcomes = new java.util.concurrent.CopyOnWriteArrayList<>();
+            runBoth(
+                    () -> {
+                        try {
+                            return outcomes.add(tx.execute(s ->
+                                    repository.saveStockMovement(inbound(itemA, movementId, 10, 100L), null)));
+                        } catch (ApiException e) {
+                            return outcomes.add(e);
+                        }
+                    },
+                    () -> {
+                        try {
+                            return outcomes.add(tx.execute(s ->
+                                    repository.saveStockMovement(inbound(itemB, movementId, 10, 200L), null)));
+                        } catch (ApiException e) {
+                            return outcomes.add(e);
+                        }
+                    });
+            long successes = outcomes.stream().filter(o -> o instanceof StockMovementRecord).count();
+            long conflicts = outcomes.stream()
+                    .filter(o -> o instanceof ApiException e && "STOCK_MOVEMENT_REPLAY_MISMATCH".equals(e.code()))
+                    .count();
+            assertThat(successes).isEqualTo(1L); // 恰一方赢
+            assertThat(conflicts).isEqualTo(1L); // 后到者=受控 409，非裸 DuplicateKey
+            // 流水行恰一条，赢家物料的状态行滚动一次、输家未滚动。
+            Integer rows = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM inventory_stock_movements WHERE id = ?", Integer.class, movementId);
+            assertThat(rows).isEqualTo(1);
+            InventoryItemCostStateRecord stateA = lockFreeState(itemA);
+            InventoryItemCostStateRecord stateB = lockFreeState(itemB);
+            assertThat(stateA.onHandQuantity() + stateB.onHandQuantity()).isEqualTo(10L);
+            assertThat(stateA.totalCostCent() + stateB.totalCostCent()).isIn(1000L, 2000L);
+        } finally {
+            cleanup(itemA);
+            cleanup(itemB);
         }
     }
 

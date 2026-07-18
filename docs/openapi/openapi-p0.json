@@ -6745,7 +6745,10 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "STOCK_MOVEMENT_REPLAY_MISMATCH"
+        ]
       }
     },
     "/api/v1/inventory/saved-bottles": {
@@ -7113,7 +7116,10 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "STOCK_MOVEMENT_REPLAY_MISMATCH"
+        ]
       }
     },
     "/api/v1/inventory/stock-balances": {
@@ -7179,7 +7185,10 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "STOCK_MOVEMENT_REPLAY_MISMATCH"
+        ]
       }
     },
     "/api/v1/inventory/stock-movements": {
@@ -7216,7 +7225,10 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "STOCK_MOVEMENT_REPLAY_MISMATCH"
+        ]
       },
       "get": {
         "tags": [
@@ -7285,7 +7297,10 @@
         "x-auth-context": "staff-token",
         "requestBody": {
           "$ref": "#/components/requestBodies/StockMovementRequest"
-        }
+        },
+        "x-failure-codes": [
+          "STOCK_MOVEMENT_REPLAY_MISMATCH"
+        ]
       }
     },
     "/api/v1/inventory/transfer-orders/{order_id}/return": {
@@ -7488,7 +7503,10 @@
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/StockMovementRequest"
-        }
+        },
+        "x-failure-codes": [
+          "STOCK_MOVEMENT_REPLAY_MISMATCH"
+        ]
       }
     },
     "/api/v1/inventory/suppliers": {

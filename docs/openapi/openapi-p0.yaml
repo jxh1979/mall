@@ -5011,6 +5011,8 @@ paths:
       tags:
         - inventory
       operationId: receivePurchaseRequest
+      x-failure-codes:
+        - STOCK_MOVEMENT_REPLAY_MISMATCH
       summary: 采购单入库确认(arrived→received,生成入库流水)
       x-permission: inventory.purchase.approve
       x-data-scope: project-warehouse-bar
@@ -5318,6 +5320,8 @@ paths:
       tags:
         - inventory
       operationId: createStockAdjustment
+      x-failure-codes:
+        - STOCK_MOVEMENT_REPLAY_MISMATCH
       summary: 盘点差异、报损、报溢
       description: 报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review
         调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。
@@ -5368,6 +5372,8 @@ paths:
       tags:
         - inventory
       operationId: createStockIn
+      x-failure-codes:
+        - STOCK_MOVEMENT_REPLAY_MISMATCH
       summary: 入库
       x-permission: inventory.stock.move
       x-data-scope: project-warehouse
@@ -5394,6 +5400,8 @@ paths:
       tags:
         - inventory
       operationId: createStockMovement
+      x-failure-codes:
+        - STOCK_MOVEMENT_REPLAY_MISMATCH
       summary: 库存移动或扣减
       x-permission: inventory.stock.move
       x-data-scope: project-warehouse
@@ -5504,6 +5512,8 @@ paths:
       tags:
         - inventory
       operationId: transferStockMovement
+      x-failure-codes:
+        - STOCK_MOVEMENT_REPLAY_MISMATCH
       summary: 调拨库存流水
       description: 用于调拨库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: inventory.stock.move
@@ -5638,6 +5648,8 @@ paths:
       tags:
         - inventory
       operationId: createTypedStockMovement
+      x-failure-codes:
+        - STOCK_MOVEMENT_REPLAY_MISMATCH
       summary: 创建typed库存流水
       description: 用于创建typed库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: inventory.stock.move
