@@ -500,6 +500,9 @@ export type StockMovementRow = {
   movementType?: string;
   status?: string;
   createdAt?: string;
+  /** V296 成本台账（移动加权，整数分）；null=无成本基准（存量未录进货价，不编造）。 */
+  unitCostCent?: number | null;
+  totalCostCent?: number | null;
 };
 
 export type FinanceLedgerRow = {

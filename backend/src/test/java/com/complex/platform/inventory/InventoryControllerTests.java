@@ -96,6 +96,10 @@ class InventoryControllerTests {
         when(service.listRiskAlerts()).thenReturn(new PageResponse<>(List.of(riskAlert()), 1, 50, 1));
         when(service.listSupplierReconciliations()).thenReturn(new PageResponse<>(List.of(supplierReconciliation()), 1, 50, 1));
         when(service.listStockMovements(anyInt(), anyInt())).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+        // V296 成本台账两端点（要求 inventory.cost.view）。
+        when(service.listCostLedger(any(), anyInt(), anyInt())).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+        when(service.getCostSummary(any(), any(), any())).thenReturn(new InventoryCostSummaryRecord(
+                null, "2026-07-01", "2026-07-18", 0L, 0L, 0L));
         when(service.listInventorySuppliers()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.createInventoryItem(any(InventoryItemRequest.class))).thenReturn(item());
         when(service.createPurchaseRequest(any(PurchaseRequestCreate.class))).thenReturn(purchaseRequest());
@@ -144,6 +148,8 @@ class InventoryControllerTests {
             "POST,/api/v1/inventory/supplier-reconciliations,inventory.supplier.reconcile",
             "POST,/api/v1/inventory/stock-in,inventory.stock.move",
             "GET,/api/v1/inventory/stock-movements,inventory.stock.view",
+            "GET,/api/v1/inventory/cost-ledger,inventory.cost.view",
+            "GET,/api/v1/inventory/cost-summary?period_start=2026-07-01&period_end=2026-07-18,inventory.cost.view",
             "POST,/api/v1/inventory/stock-movements,inventory.stock.move",
             "POST,/api/v1/inventory/stock-movements/transfer,inventory.stock.move",
             "POST,/api/v1/inventory/stock-movements/damage,inventory.stock.move",
@@ -384,7 +390,39 @@ class InventoryControllerTests {
 
     private StockMovementRecord stockMovement(String movementType) {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new StockMovementRecord("movement_1", movementType, "item_1", "wh_1", "bar_1", 1, "manual", null, null, null, List.of(), "completed", now, null);
+        return new StockMovementRecord("movement_1", movementType, "item_1", "wh_1", "bar_1", 1, null, null, "manual", null, null, null, List.of(), "completed", now, null);
+    }
+
+    /** I-2(V296)：成本=内部口径——无 inventory.cost.view 权限时流水响应成本列脱敏置 null。 */
+    @Test
+    void stockMovementCostColumnsMaskedWithoutCostViewPermission() throws Exception {
+        when(service.listStockMovements(anyInt(), anyInt()))
+                .thenReturn(new PageResponse<>(List.of(costedMovement()), 1, 50, 1));
+        when(authorizationService.currentActorHasPermission("inventory.cost.view")).thenReturn(false);
+
+        mockMvc.perform(get("/api/v1/inventory/stock-movements").with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value("movement_cost_1"))
+                .andExpect(jsonPath("$.data.items[0].unit_cost_cent").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.items[0].total_cost_cent").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void stockMovementCostColumnsVisibleWithCostViewPermission() throws Exception {
+        when(service.listStockMovements(anyInt(), anyInt()))
+                .thenReturn(new PageResponse<>(List.of(costedMovement()), 1, 50, 1));
+        when(authorizationService.currentActorHasPermission("inventory.cost.view")).thenReturn(true);
+
+        mockMvc.perform(get("/api/v1/inventory/stock-movements").with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].unit_cost_cent").value(500))
+                .andExpect(jsonPath("$.data.items[0].total_cost_cent").value(1500));
+    }
+
+    private StockMovementRecord costedMovement() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new StockMovementRecord("movement_cost_1", "outbound", "item_1", "wh_1", null, 3,
+                500L, 1500L, "manual", null, null, null, List.of(), "completed", now, null);
     }
 
     private StockAdjustmentRecord stockAdjustment() {

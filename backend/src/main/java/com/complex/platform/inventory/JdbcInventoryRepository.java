@@ -386,32 +386,217 @@ class JdbcInventoryRepository implements InventoryRepository {
 
     @Override
     public StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId) {
-        jdbcTemplate.update("""
+        // V296 成本台账：所有流水写入的单一汇聚点，在此统一按移动加权口径计成本（各入口无须自理）。
+        // 先 FOR UPDATE 锁状态行（同物料并发出入库串行化；写路径均在 @Transactional 内），
+        // 再查流水 id 是否已存在——幂等重放不得二次滚动状态、保留库中已定稿的成本列。
+        initCostStateIfAbsent(movement.itemId());
+        Optional<InventoryItemCostStateRecord> state = lockCostStateForUpdate(movement.itemId());
+        if (stockMovementRowExists(movement.id())) {
+            return replayExisting(movement, projectId);
+        }
+        InventoryCostMath.Result result = state
+                .map(current -> InventoryCostMath.apply(
+                        current,
+                        InventoryCostMath.direction(movement.sourceLocationId(), movement.targetLocationId()),
+                        movement.quantity(),
+                        movement.unitCostCent(),
+                        java.time.Instant.now()))
+                // 状态行缺席（物料不存在等异常路径）：忠实透传入库单价，不滚动状态。
+                .orElseGet(() -> new InventoryCostMath.Result(
+                        movement.unitCostCent(),
+                        movement.unitCostCent() == null ? null : movement.unitCostCent() * movement.quantity(),
+                        null));
+        StockMovementRecord stamped = withCosts(movement, result.unitCostCent(), result.totalCostCent());
+        // I-3：并发同 id 先到先赢用 ON CONFLICT (id) DO NOTHING + 行数判定，不能用 catch(DuplicateKeyException)——
+        // PG 重复键错误会把整个事务置为中止态（25P02），事务内（酒吧改道路径）后续读回必死。
+        // 冲突目标限定 (id)（表上唯一约束仅主键），不会误吞其它约束冲突。行数判定必须先于滚状态：
+        // =1 本方落账继续滚状态；=0 别人已插入（跨物料同 id 的边缘路径，同物料已被状态行锁串行化）→
+        // 转幂等重放读回（一致性校验→读回或 409），本方状态行未动，绝不 updateCostState。
+        int inserted = jdbcTemplate.update("""
                 INSERT INTO inventory_stock_movements (
                     id, movement_type, item_id, source_location_id, target_location_id, quantity,
                     business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                    status, created_at, merchant_id, project_id
+                    status, created_at, merchant_id, project_id, unit_cost_cent, total_cost_cent
                 )
                 VALUES (
                     :id, :movement_type, :item_id, :source_location_id, :target_location_id, :quantity,
                     :business_type, :business_id, :trace_code, :operator_id, CAST(:evidence_attachment_ids AS jsonb),
-                    :status, :created_at, :merchant_id, :project_id
+                    :status, :created_at, :merchant_id, :project_id, :unit_cost_cent, :total_cost_cent
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    movement_type = EXCLUDED.movement_type,
-                    item_id = EXCLUDED.item_id,
-                    source_location_id = EXCLUDED.source_location_id,
-                    target_location_id = EXCLUDED.target_location_id,
-                    quantity = EXCLUDED.quantity,
-                    business_type = EXCLUDED.business_type,
-                    business_id = EXCLUDED.business_id,
-                    trace_code = EXCLUDED.trace_code,
-                    operator_id = EXCLUDED.operator_id,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    status = EXCLUDED.status,
-                    project_id = COALESCE(EXCLUDED.project_id, inventory_stock_movements.project_id)
+                ON CONFLICT (id) DO NOTHING
+                """, stockMovementParameters(stamped).addValue("project_id", projectId));
+        if (inserted == 0) {
+            return replayExisting(movement, projectId);
+        }
+        if (result.newState() != null) {
+            updateCostState(result.newState());
+        }
+        return stamped;
+    }
+
+    private boolean stockMovementRowExists(String id) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_stock_movements WHERE id = :id", Map.of("id", id), Long.class);
+        return count != null && count > 0;
+    }
+
+    /** I-3 幂等重放护栏：既存行的 item/数量/方向必须与本次一致，否则 409（拒绝借同 id 静默改写台账语义）。 */
+    private record ReplayRow(String itemId, int quantity, String sourceLocationId, String targetLocationId,
+            Long unitCostCent, Long totalCostCent) {
+    }
+
+    private StockMovementRecord replayExisting(StockMovementRecord movement, String projectId) {
+        ReplayRow row = jdbcTemplate.query("""
+                SELECT item_id, quantity, source_location_id, target_location_id, unit_cost_cent, total_cost_cent
+                  FROM inventory_stock_movements
+                 WHERE id = :id
+                """, Map.of("id", movement.id()), (rs, i) -> new ReplayRow(
+                        rs.getString("item_id"),
+                        rs.getInt("quantity"),
+                        rs.getString("source_location_id"),
+                        rs.getString("target_location_id"),
+                        rs.getObject("unit_cost_cent", Long.class),
+                        rs.getObject("total_cost_cent", Long.class))).stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("stock movement row vanished during replay: " + movement.id()));
+        if (!row.itemId().equals(movement.itemId())
+                || row.quantity() != movement.quantity()
+                || !java.util.Objects.equals(row.sourceLocationId(), movement.sourceLocationId())
+                || !java.util.Objects.equals(row.targetLocationId(), movement.targetLocationId())) {
+            throw com.complex.platform.common.api.ApiException.conflict("STOCK_MOVEMENT_REPLAY_MISMATCH",
+                    "stock movement id already exists with different item/quantity/direction");
+        }
+        // 一致性通过：更新其余字段（既有 upsert 语义），成本列与状态行保持不动（不二次滚动）。
+        jdbcTemplate.update("""
+                UPDATE inventory_stock_movements SET
+                    movement_type = :movement_type,
+                    business_type = :business_type,
+                    business_id = :business_id,
+                    trace_code = :trace_code,
+                    operator_id = :operator_id,
+                    evidence_attachment_ids = CAST(:evidence_attachment_ids AS jsonb),
+                    status = :status,
+                    project_id = COALESCE(:project_id, project_id)
+                WHERE id = :id
                 """, stockMovementParameters(movement).addValue("project_id", projectId));
-        return movement;
+        return withCosts(movement, row.unitCostCent(), row.totalCostCent());
+    }
+
+    private StockMovementRecord withCosts(StockMovementRecord movement, Long unitCostCent, Long totalCostCent) {
+        return new StockMovementRecord(
+                movement.id(), movement.movementType(), movement.itemId(), movement.sourceLocationId(),
+                movement.targetLocationId(), movement.quantity(), unitCostCent, totalCostCent,
+                movement.businessType(), movement.businessId(), movement.traceCode(), movement.operatorId(),
+                movement.evidenceAttachmentIds(), movement.status(), movement.createdAt(), movement.merchantId());
+    }
+
+    @Override
+    public void initCostStateIfAbsent(String itemId) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_item_cost_state (item_id, merchant_id, updated_at)
+                SELECT id, merchant_id, NOW() FROM inventory_items WHERE id = :item_id
+                ON CONFLICT (item_id) DO NOTHING
+                """, Map.of("item_id", itemId));
+    }
+
+    @Override
+    public Optional<InventoryItemCostStateRecord> lockCostStateForUpdate(String itemId) {
+        return jdbcTemplate.query("""
+                SELECT item_id, merchant_id, on_hand_quantity, total_cost_cent, avg_unit_cost_cent,
+                       cumulative_in_cost_cent, cumulative_out_cost_cent, cost_method, has_cost_basis, updated_at
+                  FROM inventory_item_cost_state
+                 WHERE item_id = :item_id
+                 FOR UPDATE
+                """, Map.of("item_id", itemId), (rs, i) -> new InventoryItemCostStateRecord(
+                        rs.getString("item_id"),
+                        rs.getString("merchant_id"),
+                        rs.getLong("on_hand_quantity"),
+                        rs.getLong("total_cost_cent"),
+                        rs.getLong("avg_unit_cost_cent"),
+                        rs.getLong("cumulative_in_cost_cent"),
+                        rs.getLong("cumulative_out_cost_cent"),
+                        rs.getString("cost_method"),
+                        rs.getBoolean("has_cost_basis"),
+                        rs.getTimestamp("updated_at").toInstant())).stream().findFirst();
+    }
+
+    @Override
+    public void updateCostState(InventoryItemCostStateRecord state) {
+        jdbcTemplate.update("""
+                UPDATE inventory_item_cost_state SET
+                    on_hand_quantity = :on_hand_quantity,
+                    total_cost_cent = :total_cost_cent,
+                    avg_unit_cost_cent = :avg_unit_cost_cent,
+                    cumulative_in_cost_cent = :cumulative_in_cost_cent,
+                    cumulative_out_cost_cent = :cumulative_out_cost_cent,
+                    has_cost_basis = :has_cost_basis,
+                    updated_at = NOW()
+                WHERE item_id = :item_id
+                """, new MapSqlParameterSource()
+                        .addValue("item_id", state.itemId())
+                        .addValue("on_hand_quantity", state.onHandQuantity())
+                        .addValue("total_cost_cent", state.totalCostCent())
+                        .addValue("avg_unit_cost_cent", state.avgUnitCostCent())
+                        .addValue("cumulative_in_cost_cent", state.cumulativeInCostCent())
+                        .addValue("cumulative_out_cost_cent", state.cumulativeOutCostCent())
+                        .addValue("has_cost_basis", state.hasCostBasis()));
+    }
+
+    // V296 成本流水分页：与 listStockMovementsPaged 同租户谓词，另支持按物料过滤。
+    @Override
+    public com.complex.platform.common.api.PageResponse<StockMovementRecord> listCostLedgerPaged(
+            String merchantId, String projectId, String itemId, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 50 : Math.min(size, 200);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_id", projectId, java.sql.Types.VARCHAR)
+                .addValue("item_id", itemId, java.sql.Types.VARCHAR);
+        String where = """
+                 WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
+                   AND (:project_id IS NULL OR project_id = :project_id)
+                   AND (:item_id IS NULL OR item_id = :item_id)
+                """;
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_stock_movements" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<StockMovementRecord> items = jdbcTemplate.query("""
+                SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
+                       business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
+                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
+                  FROM inventory_stock_movements
+                """ + where + """
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, rowMapper::mapStockMovement);
+        return new com.complex.platform.common.api.PageResponse<>(
+                items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public InventoryCostSummaryRecord sumOutboundCost(
+            String merchantId, String projectId, String periodStart, String periodEnd,
+            java.time.Instant from, java.time.Instant to) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_id", projectId, java.sql.Types.VARCHAR)
+                .addValue("from", java.time.OffsetDateTime.ofInstant(from, java.time.ZoneOffset.UTC))
+                .addValue("to", java.time.OffsetDateTime.ofInstant(to, java.time.ZoneOffset.UTC));
+        return jdbcTemplate.query("""
+                SELECT COUNT(*) AS movement_count,
+                       COALESCE(SUM(total_cost_cent), 0) AS total_cost,
+                       COUNT(*) FILTER (WHERE total_cost_cent IS NULL) AS no_basis_count
+                  FROM inventory_stock_movements
+                 WHERE source_location_id IS NOT NULL
+                   AND target_location_id IS NULL
+                   AND (:merchant_id IS NULL OR merchant_id = :merchant_id)
+                   AND (:project_id IS NULL OR project_id = :project_id)
+                   AND created_at >= :from
+                   AND created_at < :to
+                """, params, (rs, i) -> new InventoryCostSummaryRecord(
+                        merchantId, periodStart, periodEnd,
+                        rs.getLong("total_cost"),
+                        rs.getLong("movement_count"),
+                        rs.getLong("no_basis_count"))).getFirst();
     }
 
     @Override
@@ -419,7 +604,7 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id
+                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
                   FROM inventory_stock_movements
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapStockMovement);
@@ -445,7 +630,7 @@ class JdbcInventoryRepository implements InventoryRepository {
         List<StockMovementRecord> items = jdbcTemplate.query("""
                 SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id
+                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
                   FROM inventory_stock_movements
                 """ + where + """
                  ORDER BY created_at DESC, id
@@ -859,7 +1044,7 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id
+                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
                   FROM inventory_stock_movements
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -872,7 +1057,7 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id
+                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
                   FROM inventory_stock_movements
                  WHERE project_id = :project_id
                  ORDER BY created_at DESC, id
@@ -1065,7 +1250,10 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("evidence_attachment_ids", writeList(movement.evidenceAttachmentIds()))
                 .addValue("status", movement.status())
                 .addValue("created_at", offset(movement.createdAt()))
-                .addValue("merchant_id", movement.merchantId());
+                .addValue("merchant_id", movement.merchantId())
+                // V296：成本列（可空=无成本基准）。
+                .addValue("unit_cost_cent", movement.unitCostCent())
+                .addValue("total_cost_cent", movement.totalCostCent());
     }
 
     private MapSqlParameterSource stockAdjustmentParameters(StockAdjustmentRecord adjustment) {

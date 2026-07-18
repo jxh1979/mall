@@ -1,11 +1,14 @@
 package com.complex.platform.bar;
 
 import com.complex.platform.finance.PaymentIntentRecord;
+import com.complex.platform.inventory.InventoryRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Repository
 class JdbcBarRepository implements BarRepository {
@@ -16,7 +19,14 @@ class JdbcBarRepository implements BarRepository {
     private final JdbcBarSessionRepository sessionRepository;
     private final JdbcBarInventoryPaymentRepository inventoryPayment;
 
-    JdbcBarRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    // C-1(V296)：注入库存仓储 + 事务管理器——酒吧域流水写入改道库存域成本管道（见
+    // JdbcBarInventoryPaymentRepository.saveStockMovement），不再裸 INSERT inventory_stock_movements。
+    JdbcBarRepository(
+            NamedParameterJdbcTemplate jdbcTemplate,
+            ObjectMapper objectMapper,
+            InventoryRepository inventoryRepository,
+            PlatformTransactionManager transactionManager
+    ) {
         var jdbcObjectMapper = objectMapper.copy().findAndRegisterModules();
         var rowMapper = new JdbcBarRowMapper(jdbcObjectMapper);
         var parameterSource = new JdbcBarParameterSource(jdbcObjectMapper);
@@ -24,7 +34,9 @@ class JdbcBarRepository implements BarRepository {
         this.orderRepository = new JdbcBarOrderRepository(jdbcTemplate, rowMapper, parameterSource);
         this.billing = new JdbcBarBillingRepository(jdbcTemplate, rowMapper, parameterSource);
         this.sessionRepository = new JdbcBarSessionRepository(jdbcTemplate, rowMapper, parameterSource);
-        this.inventoryPayment = new JdbcBarInventoryPaymentRepository(jdbcTemplate, rowMapper, parameterSource);
+        this.inventoryPayment = new JdbcBarInventoryPaymentRepository(
+                jdbcTemplate, rowMapper, parameterSource, inventoryRepository,
+                new TransactionTemplate(transactionManager));
     }
     @Override
     public BarTableRecord saveTable(BarTableRecord table) {
