@@ -33,6 +33,16 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     private static final LocalDate DAY = LocalDate.parse("2026-06-20");
 
+    /**
+     * 可复跑范式：种子 id 全部经 sid() 带每次运行的随机后缀——共享 complex_test 上历史失败可能留下残留行
+     * （事务回滚不保证在所有 runner 配置下发生），固定 id/唯一键的种子会撞残留必炸。基线差值断言本就容忍库内既有数据。
+     */
+    private final String run = java.util.UUID.randomUUID().toString().substring(0, 8);
+
+    private String sid(String stem) {
+        return stem + "_" + run;
+    }
+
     @Autowired
     private JdbcAnalyticsRepository repository;
 
@@ -160,6 +170,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     }
 
     private void insertTicketOrder(String id, long amountCent, String payStatus) {
+        id = sid(id);
         Instant at = DAY.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(at);
         jdbcTemplate.update("""
@@ -175,13 +186,16 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     }
 
     private void insertReconBatch(String id) {
+        // scope_id 列 NOT NULL：照仓内真实 scope 口径（scope_type ∈ DAILY_CLOSE_SCOPES，单综合体合成 project_1）。
         jdbcTemplate.update("""
                 INSERT INTO finance_reconciliation_batches (id, batch_no, scope_type, scope_id, business_date, status, created_at)
-                VALUES (:id, :id, 'platform', NULL, :day, 'open', now())
-                """, new MapSqlParameterSource().addValue("id", id).addValue("day", DAY));
+                VALUES (:id, :id, 'project', 'project_1', :day, 'open', now())
+                """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("day", DAY));
     }
 
     private void insertReconDifference(String id, String batchId, long amountCent, String status) {
+        id = sid(id);
+        batchId = sid(batchId);
         jdbcTemplate.update("""
                 INSERT INTO finance_reconciliation_differences (id, batch_id, difference_type, business_ref,
                         amount_cent, expected_amount_cent, actual_amount_cent, source, status, created_at)
@@ -191,6 +205,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     }
 
     private void insertMeter(String id, String meterType) {
+        id = sid(id);
         jdbcTemplate.update("""
                 INSERT INTO energy_meters (id, name, meter_type, gather_object, read_mode)
                 VALUES (:id, :id, :meter_type, 'public_area', 'manual')
@@ -198,17 +213,22 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     }
 
     private void insertReading(String id, String meterId, String consumption) {
+        // uq(meter_id, period) 且 period VARCHAR(16)：period=「run(8)/序号」——同表计多行（序号不同）、
+        // 跨运行（run 不同）均不撞唯一键；此前同表计两行同 period 首跑即炸。
+        String period = run + "/" + id.substring(id.lastIndexOf('_') + 1);
+        id = sid(id);
         jdbcTemplate.update("""
                 INSERT INTO energy_meter_readings (id, meter_id, period, reading_value, prev_reading_value,
                         consumption, status, abnormal_reason, read_mode, read_at)
                 VALUES (:id, :meter_id, :period, :consumption::numeric, 0, :consumption::numeric,
                         'recorded', NULL, 'manual', :read_at::timestamptz)
-                """, new MapSqlParameterSource().addValue("id", id).addValue("meter_id", meterId)
-                .addValue("consumption", consumption).addValue("period", DAY.toString())
+                """, new MapSqlParameterSource().addValue("id", id).addValue("meter_id", sid(meterId))
+                .addValue("consumption", consumption).addValue("period", period)
                 .addValue("read_at", DAY + "T10:00:00Z"));
     }
 
     private void insertSpace(String id, String type, String area, String status) {
+        id = sid(id);
         jdbcTemplate.update("""
                 INSERT INTO spaces (id, space_name, space_type, floor_no, area_square_meter, polygon_points, status, created_at, updated_at)
                 VALUES (:id, :id, :type, '1F', :area, '[]'::jsonb, :status, now(), now())
@@ -217,6 +237,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     }
 
     private void insertArItem(String id, long unpaidCent, LocalDate dueDate) {
+        id = sid(id);
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, amount_cent, paid_amount_cent,
                         unpaid_amount_cent, currency, due_date, status, created_at, updated_at, merchant_id)
