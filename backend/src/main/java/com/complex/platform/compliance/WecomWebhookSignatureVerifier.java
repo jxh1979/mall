@@ -89,39 +89,48 @@ public class WecomWebhookSignatureVerifier {
             throw ApiException.unauthorized("WECOM_WEBHOOK_TIMESTAMP_EXPIRED",
                     "wecom webhook timestamp is outside the allowed window");
         }
+        // AUD-017：标识字段拒绝控制字符（自由文本 content 除外）——结构样式文本混进标识字段=篡改信号。
+        validateIdentifierFields(request, nonce);
         String expected = sign(canonical(request, nonce, timestamp));
         if (!MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8))) {
             throw ApiException.unauthorized("WECOM_WEBHOOK_SIGNATURE_INVALID", "wecom webhook signature is invalid");
         }
-        // AUD 复核 P1-2：验签通过后原子登记 nonce；窗口内重复 nonce → 判重放拒绝（fail-closed）。
-        if (nonceStore != null && !nonceStore.registerFresh(nonce, clock.instant(), TOLERANCE_SECONDS)) {
+        // AUD 复核 P1-2 + AUD-021：验签通过后原子登记 nonce+报文指纹。异指纹=nonce 被挪用于不同报文，判重放拒绝；
+        // 同指纹=同一报文合法重投递，放行给业务幂等层精确重放——首次业务失败/响应丢失后的重试不再被 401 卡死。
+        if (nonceStore != null
+                && nonceStore.registerFresh(nonce, bodyDigest(request), clock.instant(), TOLERANCE_SECONDS)
+                        == WecomWebhookNonceStore.Registration.REPLAY) {
             throw ApiException.unauthorized("WECOM_WEBHOOK_NONCE_REPLAY", "wecom webhook nonce was already used");
         }
     }
 
     /**
-     * 规范串：不可篡改字段按字段名字母序以「key=value」换行拼接（与 OpenPlatformCrypto webhookCanonical 同范式），
-     * 首项 body_digest 覆盖报文体全字段摘要，使 owner/customer/messages 任一改动都改变签名。
+     * 规范串：不可篡改字段按字段名字母序以「key=编码值」换行拼接（首项 body_digest 覆盖报文体全字段摘要）。
+     * AUD-017：所有取自请求的值经 {@link #lengthPrefixed} 长度前缀编码——值内嵌换行/「  .content=」等
+     * 结构样式文本无法移动字段边界，规范串解析唯一，杜绝跨字段碰撞。
      */
     String canonical(WecomConversationSyncRequest request, String nonce, long timestamp) {
         return "body_digest=" + bodyDigest(request)
-                + "\nexternal_conversation_id=" + nullToEmpty(request == null ? null : request.externalConversationId())
-                + "\nidempotency_key=" + nullToEmpty(request == null ? null : request.idempotencyKey())
-                + "\nnonce=" + nullToEmpty(nonce)
-                + "\nproject_id=" + nullToEmpty(request == null ? null : request.projectId())
+                + "\nexternal_conversation_id=" + lengthPrefixed(request == null ? null : request.externalConversationId())
+                + "\nidempotency_key=" + lengthPrefixed(request == null ? null : request.idempotencyKey())
+                + "\nnonce=" + lengthPrefixed(nonce)
+                + "\nproject_id=" + lengthPrefixed(request == null ? null : request.projectId())
                 + "\ntimestamp=" + timestamp;
     }
 
     /**
      * 报文体全字段规范化摘要（SHA-256 十六进制）：ownerStaffId/customerRef + messages 逐条的
      * externalMessageId/senderRef/content/sentAt 与消息条数全部纳入。任一字段被篡改/增删都改变摘要 → 验签失败。
+     * AUD-017：每个值长度前缀编码——此前「key=value」裸拼接时，senderRef='Alice\n  .content=私收款' 与
+     * content 前移的篡改报文会产生完全相同的摘要（字段边界被值内容伪造），持有在途合法报文者无需密钥即可
+     * 改变字段归属并绕过只扫 content 的风险词识别。
      */
     String bodyDigest(WecomConversationSyncRequest request) {
         StringBuilder sb = new StringBuilder();
         if (request != null) {
-            sb.append("owner_staff_id=").append(nullToEmpty(request.ownerStaffId())).append('\n');
-            sb.append("customer_ref=").append(nullToEmpty(request.customerRef())).append('\n');
+            sb.append("owner_staff_id=").append(lengthPrefixed(request.ownerStaffId())).append('\n');
+            sb.append("customer_ref=").append(lengthPrefixed(request.customerRef())).append('\n');
             List<WecomConversationSyncRequest.Message> messages =
                     request.messages() == null ? List.of() : request.messages();
             sb.append("message_count=").append(messages.size()).append('\n');
@@ -134,13 +143,57 @@ public class WecomWebhookSignatureVerifier {
                     continue;
                 }
                 sb.append("message[").append(index++).append("].external_message_id=")
-                        .append(nullToEmpty(message.externalMessageId())).append('\n');
-                sb.append("  .sender_ref=").append(nullToEmpty(message.senderRef())).append('\n');
-                sb.append("  .content=").append(nullToEmpty(message.content())).append('\n');
+                        .append(lengthPrefixed(message.externalMessageId())).append('\n');
+                sb.append("  .sender_ref=").append(lengthPrefixed(message.senderRef())).append('\n');
+                sb.append("  .content=").append(lengthPrefixed(message.content())).append('\n');
                 sb.append("  .sent_at=").append(message.sentAt() == null ? "" : message.sentAt().toString()).append('\n');
             }
         }
         return HexFormat.of().formatHex(sha256(sb.toString()));
+    }
+
+    /**
+     * AUD-017 长度前缀编码：{@code <UTF-8字节数>:<原值>}（null 视同空串=「0:」）。
+     * 解析从长度读起、按字节数取值，值内容（含换行/等号/字段名样式文本）不可能被解释为字段边界。
+     */
+    private static String lengthPrefixed(String value) {
+        String actual = value == null ? "" : value;
+        return actual.getBytes(StandardCharsets.UTF_8).length + ":" + actual;
+    }
+
+    /** AUD-017：标识字段（会话/项目/幂等键/人员引用/消息id/发送者）不得含控制字符；content 为自由文本不限。 */
+    private static void validateIdentifierFields(WecomConversationSyncRequest request, String nonce) {
+        requireNoControlChars(nonce, "nonce");
+        if (request == null) {
+            return;
+        }
+        requireNoControlChars(request.externalConversationId(), "external_conversation_id");
+        requireNoControlChars(request.projectId(), "project_id");
+        requireNoControlChars(request.idempotencyKey(), "idempotency_key");
+        requireNoControlChars(request.ownerStaffId(), "owner_staff_id");
+        requireNoControlChars(request.customerRef(), "customer_ref");
+        List<WecomConversationSyncRequest.Message> messages =
+                request.messages() == null ? List.of() : request.messages();
+        for (WecomConversationSyncRequest.Message message : messages) {
+            if (message == null) {
+                continue;
+            }
+            requireNoControlChars(message.externalMessageId(), "external_message_id");
+            requireNoControlChars(message.senderRef(), "sender_ref");
+        }
+    }
+
+    private static void requireNoControlChars(String value, String field) {
+        if (value == null) {
+            return;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < 0x20 || c == 0x7F) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        field + " must not contain control characters");
+            }
+        }
     }
 
     /** 对规范串计算 HMAC-SHA256，返回十六进制串。 */
