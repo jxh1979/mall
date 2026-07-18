@@ -46,7 +46,7 @@ U1=$(post /api/v1/access/users "{\"idempotency_key\":\"mz-ev-u1-$STAMP\",\"usern
 ROLE=$(post /api/v1/access/roles "{\"idempotency_key\":\"mz-ev-role-$STAMP\",\"role_name\":\"MZ商户账单只读$STAMP\",\"description\":\"商户专区活证据最小权限\",\"permission_codes\":[\"merchant.billing.view\"],\"data_scope\":\"merchant\",\"operator_note\":\"mz evidence\",\"evidence_attachment_ids\":[\"att-mz-$STAMP\"]}" | jid)
 # 授权装配:merchant.billing.view 为高危权限,API 直配走 V169 审批链(有独立职级/rank 闸,另有专项验收)。
 # 本活证据聚焦商户身份闸+终端开关,装配按"初始化种子"口径直接落 user_roles(与生产 bootstrap 同范式)。
-psql -q postgresql://complex:complex_dev_pwd@127.0.0.1:5432/complex -c "INSERT INTO user_roles (user_id, role_id) VALUES ('$U1', '$ROLE') ON CONFLICT DO NOTHING;"
+psql -q postgresql://complex:${COMPLEX_DATABASE_PASSWORD:-complex_dev_pwd}@127.0.0.1:5432/complex -c "INSERT INTO user_roles (user_id, role_id) VALUES ('$U1', '$ROLE') ON CONFLICT DO NOTHING;"
 echo "U1=$U1 ROLE=$ROLE (role granted via bootstrap SQL)"
 
 echo "== 3. 商户账号登录,GET bills(X-Terminal-Type: merchant_portal)只见本商户 =="
@@ -86,7 +86,7 @@ echo "PASS: switch restored, merchant requests back to 200"
 
 echo "== 7. 无商户归属的普通员工按权限仍拿不到数据口径(菜单不显示;此处验证后端 fail-closed) =="
 U2=$(post /api/v1/access/users "{\"idempotency_key\":\"mz-ev-u2-$STAMP\",\"username\":\"mz_ev_staff_$STAMP\",\"password\":\"$PW\",\"account_type\":\"staff\",\"organization_id\":\"$ORG\",\"status\":\"active\",\"operator_note\":\"mz evidence\",\"evidence_attachment_ids\":[\"att-mz-$STAMP\"]}" | jid)
-psql -q postgresql://complex:complex_dev_pwd@127.0.0.1:5432/complex -c "INSERT INTO user_roles (user_id, role_id) VALUES ('$U2', '$ROLE') ON CONFLICT DO NOTHING;"
+psql -q postgresql://complex:${COMPLEX_DATABASE_PASSWORD:-complex_dev_pwd}@127.0.0.1:5432/complex -c "INSERT INTO user_roles (user_id, role_id) VALUES ('$U2', '$ROLE') ON CONFLICT DO NOTHING;"
 U2_TOK=$(tok "mz_ev_staff_$STAMP" "$PW")
 CODE3=$(curl -s -o /tmp/mz_ev_staff.json -w '%{http_code}' "$API/api/v1/merchant-billing/bills" -H "Authorization: Bearer $U2_TOK" -H "X-Terminal-Type: web")
 head -c 200 /tmp/mz_ev_staff.json; echo

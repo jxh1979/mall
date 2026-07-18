@@ -6,7 +6,7 @@ API=http://127.0.0.1:8080
 STAMP=$(date +%s)
 J='Content-Type: application/json'
 TH='X-Terminal-Type: staff_work_phone'   # 2026-07-03用户裁决:现场资金操作禁私人手机,改公司工作手机
-PG=postgresql://complex:complex_dev_pwd@127.0.0.1:5432/complex
+PG=postgresql://complex:${COMPLEX_DATABASE_PASSWORD:-complex_dev_pwd}@127.0.0.1:5432/complex
 
 TOK=$(curl -s -X POST $API/api/v1/auth/login -H "$J" -d '{"login_name":"admin","password":"admin-pass"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["access_token"])')
 AH="Authorization: Bearer $TOK"

@@ -27,7 +27,7 @@ assert d.get('success') is False, str(d)[:200]
 print('PASS: adjustment without reason rejected')
 "
 
-PG=postgresql://complex:complex_dev_pwd@127.0.0.1:5432/complex
+PG=postgresql://complex:${COMPLEX_DATABASE_PASSWORD:-complex_dev_pwd}@127.0.0.1:5432/complex
 # 重放清场:上轮活证据的定格单属测试数据,删掉以验证「月结前不可见」。
 psql $PG -c "DELETE FROM staff_payroll_statements WHERE user_id='$ME' AND month='$LAST_MONTH';" > /dev/null
 
