@@ -93,6 +93,36 @@ public class PartnerService {
         }
     }
 
+    /**
+     * 2026-07-18 收尾：解绑机构入口（bind 的逆操作，此前只能换绑不能清空）。
+     * 校验该账号当前绑的就是这个机构（防误解他人绑定）；机构状态不限（停用/过期机构也要能解绑）。
+     */
+    public void unbindUserFromOrg(String orgId, String userId) {
+        try {
+            if (userId == null || userId.isBlank()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "user_id is required");
+            }
+            repository.findOrgById(orgId)
+                    .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "partner org not found"));
+            String trimmedUserId = userId.trim();
+            repository.findAccessUserAccountType(trimmedUserId)
+                    .orElseThrow(() -> ApiException.notFound("ACCESS_USER_NOT_FOUND", "access user not found"));
+            String boundOrgId = repository.findPartnerOrgIdForUser(trimmedUserId).orElse(null);
+            if (!orgId.equals(boundOrgId)) {
+                throw ApiException.conflict("PARTNER_ORG_USER_NOT_BOUND", "user is not bound to this partner org");
+            }
+            repository.updateUserPartnerOrg(trimmedUserId, null);
+            auditEventService.recordSuccess("partner.org.user_unbound", "partner.org.manage",
+                    "external_partner_org", orgId, null, null,
+                    Map.of("user_id", trimmedUserId));
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("partner.org.user_unbind_failed", "partner.org.manage",
+                    "external_partner_org", orgId, null, null,
+                    exception instanceof ApiException apiException ? apiException.code() : "INTERNAL_ERROR");
+            throw exception;
+        }
+    }
+
     // ---- 机构管理员：自助管下属 ----
 
     public PageResponse<PartnerSubordinateRecord> listMySubordinates() {

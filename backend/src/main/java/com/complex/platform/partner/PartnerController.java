@@ -54,6 +54,17 @@ public class PartnerController {
         return ApiResponse.ok(null);
     }
 
+    /** 2026-07-18 收尾：解绑机构（bind 的逆操作）；校验该账号当前绑的就是这个机构。 */
+    @PostMapping("/orgs/{org_id}/unbind-user")
+    public ApiResponse<Void> unbindUserFromOrg(
+            @PathVariable("org_id") String orgId,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.partner.dto.PartnerOrgUserBindRequest request) {
+        authorizationService.requirePermission("partner.org.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        service.unbindUserFromOrg(orgId, request.userId());
+        return ApiResponse.ok(null);
+    }
+
     @GetMapping("/subordinates")
     public ApiResponse<PageResponse<PartnerSubordinateRecord>> listSubordinates() {
         authorizationService.requirePermission("partner.subordinate.view");

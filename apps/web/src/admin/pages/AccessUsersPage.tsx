@@ -196,6 +196,29 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
     }
   }
 
+  // 2026-07-18 收尾：解绑机构（绑定的逆操作）；后端校验该账号当前绑的就是所选机构。
+  async function unbindPartnerOrg() {
+    if (!bindUserId || !bindOrgId) {
+      setFormError("请选择账号与外部协作机构。");
+      return;
+    }
+    setFormError("");
+    setBindBusy(true);
+    try {
+      await api.post(`/api/v1/partner/orgs/${encodeURIComponent(bindOrgId)}/unbind-user`, {
+        idempotency_key: crypto.randomUUID(),
+        user_id: bindUserId,
+      });
+      setActionResult({ action: "partner_org_user_unbound", userId: bindUserId, orgId: bindOrgId });
+      setBindUserId("");
+      setBindOrgId("");
+    } catch (unbindError) {
+      setFormError(unbindError instanceof Error ? unbindError.message : "解绑失败");
+    } finally {
+      setBindBusy(false);
+    }
+  }
+
   return (
     <section data-testid="access-users-page">
       <AdminPageHeader title="员工账号" description="管理员工账号、岗位角色和企业微信同步结果；禁用、手动录入和分配权限模板必须留痕。" />
@@ -218,6 +241,9 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           </select>
           <PermissionButton permissionsState={effectivePermissions} permissions={["partner.org.manage"]} data-testid="partner-bind-submit" onClick={() => void bindPartnerOrg()} disabled={bindBusy}>
             绑定机构
+          </PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["partner.org.manage"]} data-testid="partner-unbind-submit" onClick={() => void unbindPartnerOrg()} disabled={bindBusy}>
+            解绑
           </PermissionButton>
         </div>
         <div className="admin-table-scroll">

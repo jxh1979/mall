@@ -72,4 +72,42 @@ describe("AccessUsersPage 账号绑定外部协作机构", () => {
     expect(bindCall.url).toContain("/api/v1/partner/orgs/epo-1/bind-user");
     expect((bindCall.body as Record<string, unknown>).user_id).toBe("u-1");
   });
+
+  it("2026-07-18 收尾:选账号与机构点解绑 → 调 unbind-user 端点", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === "POST" && url.includes("/unbind-user")) {
+          calls.push({ url, body: JSON.parse(String(init.body)) });
+          return Promise.resolve(new Response(
+            JSON.stringify({ success: true, code: "OK", message: "success", data: null }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ));
+        }
+        if (url.includes("partner/orgs")) return Promise.resolve(envelope(ORGS));
+        if (url.includes("access/users")) return Promise.resolve(envelope(USERS));
+        return Promise.resolve(envelope([]));
+      }),
+    );
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<AccessUsersPage {...props} />);
+
+    await waitFor(() => expect(screen.getByTestId("partner-bind-user")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("partner-bind-user"), { target: { value: "u-1" } });
+    fireEvent.change(screen.getByTestId("partner-bind-org"), { target: { value: "epo-1" } });
+    fireEvent.click(screen.getByTestId("partner-unbind-submit"));
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    const unbindCall = calls[0]!;
+    expect(unbindCall.url).toContain("/api/v1/partner/orgs/epo-1/unbind-user");
+    expect((unbindCall.body as Record<string, unknown>).user_id).toBe("u-1");
+  });
 });

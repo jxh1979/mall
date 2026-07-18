@@ -30609,6 +30609,59 @@
           }
         }
       }
+    },
+    "/api/v1/partner/orgs/{org_id}/unbind-user": {
+      "post": {
+        "tags": [
+          "partner"
+        ],
+        "x-permission": "partner.org.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "partner.org.user_unbound",
+        "x-audit-event-failure": "partner.org.user_unbind_failed",
+        "x-auth-context": "staff-token",
+        "operationId": "unbindUserFromPartnerOrg",
+        "summary": "账号解绑外部协作机构",
+        "description": "平台管理员把账号与外部协作机构解绑（校验该账号当前绑的就是这个机构）；机构停用/过期也可解绑。",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "机构ID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PartnerOrgUserBindRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {

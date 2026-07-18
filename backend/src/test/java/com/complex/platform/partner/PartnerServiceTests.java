@@ -86,6 +86,44 @@ class PartnerServiceTests {
         verify(repository, org.mockito.Mockito.never()).updateUserPartnerOrg(any(), any());
     }
 
+    @Test
+    void unbindUserFromOrgClearsBindingWhenUserBoundToThisOrg() {
+        // 2026-07-18 收尾:解绑=bind 逆操作;机构非 active 也允许解绑(停用/过期机构要能清挂靠)。
+        when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "suspended", null)));
+        when(repository.findAccessUserAccountType("u1")).thenReturn(Optional.of("outsourced_vendor"));
+        when(repository.findPartnerOrgIdForUser("u1")).thenReturn(Optional.of(ORG));
+        service.unbindUserFromOrg(ORG, " u1 ");
+        verify(repository).updateUserPartnerOrg("u1", null);
+    }
+
+    @Test
+    void unbindUserFromOrgRejectsWhenUserBoundElsewhereOrUnbound() {
+        // 校验该账号当前绑的就是这个机构:绑在别处/本就未绑 → 409,不写库。
+        when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "active", null)));
+        when(repository.findAccessUserAccountType("u1")).thenReturn(Optional.of("outsourced_vendor"));
+        when(repository.findPartnerOrgIdForUser("u1")).thenReturn(Optional.of("epo-other"));
+        assertThatThrownBy(() -> service.unbindUserFromOrg(ORG, "u1"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PARTNER_ORG_USER_NOT_BOUND"));
+        when(repository.findPartnerOrgIdForUser("u1")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.unbindUserFromOrg(ORG, "u1"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PARTNER_ORG_USER_NOT_BOUND"));
+        verify(repository, org.mockito.Mockito.never()).updateUserPartnerOrg(any(), any());
+    }
+
+    @Test
+    void unbindUserFromOrgRejectsMissingOrgOrUser() {
+        when(repository.findOrgById("ghost")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.unbindUserFromOrg("ghost", "u1"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PARTNER_ORG_NOT_FOUND"));
+        when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "active", null)));
+        when(repository.findAccessUserAccountType("ghost_user")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.unbindUserFromOrg(ORG, "ghost_user"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("ACCESS_USER_NOT_FOUND"));
+        verify(repository, org.mockito.Mockito.never()).updateUserPartnerOrg(any(), any());
+    }
+
     private ExternalPartnerOrgRecord org(int max, String status, Instant validUntil) {
         Instant now = Instant.parse("2026-06-30T00:00:00Z");
         return new ExternalPartnerOrgRecord(ORG, null, "维保甲", "facility_maintenance", null, max, validUntil, status, now, now);
