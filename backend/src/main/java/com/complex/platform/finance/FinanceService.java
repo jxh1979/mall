@@ -1177,9 +1177,11 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // 支付渠道开关（payment.gateway.enabled，后台可配，默认关）。
         //   关 → 不调外部渠道，支付意图标 reserved（占位，由 markPaymentIntentSucceeded 内部确认，不阻塞）。
         //   开 → 路由到 PaymentGatewayPort（当前无真实厂商=占位 NOT_CONFIGURED，留接缝，不崩）。
+        // AUD-013：网关请求携带收款商户与定格资金模式（无则为 null=平台收款），真实适配器据此路由收款主体。
         com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.initiatePayment(
-                com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
-                        businessOrderType, businessOrderId, amountCent, channel));
+                new com.complex.platform.finance.gateway.PaymentGatewayRequest(
+                        businessOrderType, businessOrderId, amountCent, currency, channel, null,
+                        trimToNull(actual.payeeMerchantId()), trimToNull(actual.fundMode())));
 
         return repository.savePaymentIntent(new PaymentIntentRecord(
                 "pay_intent_" + slug(actual.idempotencyKey()),
@@ -1234,6 +1236,11 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         if (arApItemId != null) {
             settleArApItem(arApItemId, confirmedAmount, paymentMethod,
                     actual.confirmedAt(), null, actual.idempotencyKey());
+        }
+        // AUD-014：柜台确认收款=该笔支付成功——同事务内把支付意图 created→succeeded（CAS，已成功幂等跳过），
+        // 否则储值充值等依赖意图状态的入账链永远停留 created/409（生产无其他成功触发器）。
+        if ("created".equals(intent.status())) {
+            markPaymentIntentSucceeded(bodyPaymentId);
         }
         return confirmation;
     }

@@ -9524,6 +9524,44 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/loyalty/stored-value/{customer_id}/counter-refund:
+    post:
+      tags:
+        - customer
+      operationId: counterRefundStoredValueAccount
+      summary: 会员储值到店柜台退款（商户预收卡唯一可达退款路径）
+      x-permission: customer.stored_value.refund
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: stored_value.counter_refund
+      x-audit-event-failure: stored_value.counter_refund_failed
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 会员ID
+      requestBody:
+        $ref: "#/components/requestBodies/StoredValueCounterRefundRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/bar/orders/{order_id}/void-item:
     post:
       tags:
@@ -22900,6 +22938,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StoredValueRefundRequest"
+    StoredValueCounterRefundRequest:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StoredValueCounterRefundRequest"
     StoredValueFreezeRequest:
       required: false
       content:
@@ -29206,6 +29250,43 @@ components:
           type: string
           description: B1d⑤ 储值卡范围：非空=商户级卡（只能在该发卡商户消费、按商户隔离）；空=综合体通用卡。
           maxLength: 64
+    StoredValueCounterRefundRequest:
+      type: object
+      description: 请求载荷 `StoredValueCounterRefundRequest`；AUD-003
+        本店柜台/到店退款（商户预收卡唯一可达退款路径；款项柜台现场兑付，凭证号入审计留痕）。
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键；同键重复提交返回首次结果。
+          maxLength: 128
+        project_id:
+          type: string
+          description: 综合体项目隔离键；空=综合体级全局账户。
+          maxLength: 255
+        amount_cent:
+          type: integer
+          format: int64
+          description: 退款金额（分），必须为正且不超过余额。
+        reason:
+          type: string
+          description: 退款事由描述。
+          maxLength: 255
+        close_account:
+          type: boolean
+          description: 退款后余额为 0 时是否关闭账户。
+        merchant_id:
+          type: string
+          description: 发卡商户（必填）：柜台退款仅限商户级卡，须与调用方商户 scope 一致。
+          maxLength: 64
+        redemption_voucher_no:
+          type: string
+          description: 兑付凭证号（必填）：柜台现场兑付（现金/原路人工）的凭据编号，入审计事件供对账/稽核。
+          maxLength: 128
+      required:
+        - merchant_id
+        - amount_cent
+        - redemption_voucher_no
     StoredValueFreezeRequest:
       type: object
       description: 请求载荷 `StoredValueFreezeRequest`；储值账户冻结/解冻（后台风控）。
