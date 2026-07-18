@@ -218,8 +218,8 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
               <h3>机器人指标</h3>
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="t3a-robot-table">
-                  <thead><tr><th>机器人</th><th>供应商</th><th>任务</th><th>成功</th><th>失败</th><th>日期</th></tr></thead>
-                  <tbody>{data.robot.slice(0, 50).map((row) => (<tr key={row.metricId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-robot-row-${row.metricId}`} onClick={() => openRobotDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRobotDetail(row); } }}><td>{row.robotId ?? "-"}</td><td>{row.providerCode ?? "-"}</td><td>{row.taskCount ?? 0}</td><td>{row.successCount ?? 0}</td><td>{row.failureCount ?? 0}</td><td>{cnDate(row.businessDate)}</td></tr>))}</tbody>
+                  <thead><tr><th>机器人</th><th>供应商</th><th>任务</th><th>成功</th><th>失败</th><th>日期</th><th>详情</th></tr></thead>
+                  <tbody>{data.robot.slice(0, 50).map((row) => (<tr key={row.metricId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-robot-row-${row.metricId}`} onClick={() => openRobotDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRobotDetail(row); } }}><td>{row.robotId ?? "-"}</td><td>{row.providerCode ?? "-"}</td><td>{row.taskCount ?? 0}</td><td>{row.successCount ?? 0}</td><td>{row.failureCount ?? 0}</td><td>{cnDate(row.businessDate)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看机器人指标详情" onClick={(event) => { event.stopPropagation(); openRobotDetail(row); }}>查看详情</button></td></tr>))}</tbody>
                 </table>
               </div>
             </>)}
@@ -227,8 +227,8 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
               <h3>商户健康分</h3>
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="t3a-merchant-table">
-                  <thead><tr><th>商户</th><th>分数</th><th>等级</th><th>风险数</th><th>逾期应收</th></tr></thead>
-                  <tbody>{data.merchant.slice(0, 50).map((row) => (<tr key={row.merchantId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-merchant-row-${row.merchantId}`} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td>{row.merchantId ?? "-"}</td><td>{row.score ?? "-"}</td><td>{formatBusinessStatus(row.scoreLevel)}</td><td>{row.riskCount ?? 0}</td><td>{money(row.overdueArAmountCents)}</td></tr>))}</tbody>
+                  <thead><tr><th>商户</th><th>分数</th><th>等级</th><th>风险数</th><th>逾期应收</th><th>详情</th></tr></thead>
+                  <tbody>{data.merchant.slice(0, 50).map((row) => (<tr key={row.merchantId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-merchant-row-${row.merchantId}`} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td>{row.merchantId ?? "-"}</td><td>{row.score ?? "-"}</td><td>{formatBusinessStatus(row.scoreLevel)}</td><td>{row.riskCount ?? 0}</td><td>{money(row.overdueArAmountCents)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户健康分详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>))}</tbody>
                 </table>
               </div>
             </>)}
@@ -236,8 +236,8 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
               <h3>员工服务分</h3>
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="t3a-staff-table">
-                  <thead><tr><th>员工</th><th>岗位</th><th>服务分</th><th>投诉</th><th>风险</th></tr></thead>
-                  <tbody>{data.staff.slice(0, 50).map((row) => (<tr key={row.scoreId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-staff-row-${row.scoreId}`} onClick={() => openStaffDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openStaffDetail(row); } }}><td>{row.staffName ?? "-"}</td><td>{formatBusinessStatus(row.roleCode)}</td><td>{row.serviceScore ?? "-"}</td><td>{row.complaintCount ?? 0}</td><td>{formatBusinessStatus(row.riskLevel)}</td></tr>))}</tbody>
+                  <thead><tr><th>员工</th><th>岗位</th><th>服务分</th><th>投诉</th><th>风险</th><th>详情</th></tr></thead>
+                  <tbody>{data.staff.slice(0, 50).map((row) => (<tr key={row.scoreId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-staff-row-${row.scoreId}`} onClick={() => openStaffDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openStaffDetail(row); } }}><td>{row.staffName ?? "-"}</td><td>{formatBusinessStatus(row.roleCode)}</td><td>{row.serviceScore ?? "-"}</td><td>{row.complaintCount ?? 0}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看员工服务分详情" onClick={(event) => { event.stopPropagation(); openStaffDetail(row); }}>查看详情</button></td></tr>))}</tbody>
                 </table>
               </div>
             </>)}
@@ -245,8 +245,8 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
               <h3>客户意向</h3>
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="t3a-intent-table">
-                  <thead><tr><th>客户</th><th>意向类型</th><th>风险</th><th>摘要</th></tr></thead>
-                  <tbody>{data.intent.slice(0, 50).map((row) => (<tr key={row.intentId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-intent-row-${row.intentId}`} onClick={() => openIntentDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openIntentDetail(row); } }}><td>{row.customerRef ?? "-"}</td><td>{row.intentType ?? "-"}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{row.summary ?? "-"}</td></tr>))}</tbody>
+                  <thead><tr><th>客户</th><th>意向类型</th><th>风险</th><th>摘要</th><th>详情</th></tr></thead>
+                  <tbody>{data.intent.slice(0, 50).map((row) => (<tr key={row.intentId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-intent-row-${row.intentId}`} onClick={() => openIntentDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openIntentDetail(row); } }}><td>{row.customerRef ?? "-"}</td><td>{row.intentType ?? "-"}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{row.summary ?? "-"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看客户意向详情" onClick={(event) => { event.stopPropagation(); openIntentDetail(row); }}>查看详情</button></td></tr>))}</tbody>
                 </table>
               </div>
             </>)}
@@ -254,8 +254,8 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
               <h3>指标定义</h3>
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="t3a-definition-table">
-                  <thead><tr><th>指标</th><th>名称</th><th>业务域</th><th>单位</th><th>状态</th></tr></thead>
-                  <tbody>{data.definition.slice(0, 50).map((row) => (<tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-definition-row-${row.metricKey}`} onClick={() => openDefinitionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDefinitionDetail(row); } }}><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{row.name ?? "-"}</td><td>{row.domain ? formatMetricDomain(row.domain) : "-"}</td><td>{row.unit ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td></tr>))}</tbody>
+                  <thead><tr><th>指标</th><th>名称</th><th>业务域</th><th>单位</th><th>状态</th><th>详情</th></tr></thead>
+                  <tbody>{data.definition.slice(0, 50).map((row) => (<tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-definition-row-${row.metricKey}`} onClick={() => openDefinitionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDefinitionDetail(row); } }}><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{row.name ?? "-"}</td><td>{row.domain ? formatMetricDomain(row.domain) : "-"}</td><td>{row.unit ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看指标定义详情" onClick={(event) => { event.stopPropagation(); openDefinitionDetail(row); }}>查看详情</button></td></tr>))}</tbody>
                 </table>
               </div>
             </>)}

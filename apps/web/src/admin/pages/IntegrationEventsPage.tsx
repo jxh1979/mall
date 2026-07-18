@@ -310,7 +310,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="integration-events-table">
-            <thead><tr><th>{TEXT.source}</th><th>{TEXT.taskNo}</th><th>{TEXT.provider}</th><th>{TEXT.eventType}</th><th>{TEXT.status}</th><th>{TEXT.retryCount}</th><th>{TEXT.updatedAt}</th></tr></thead>
+            <thead><tr><th>{TEXT.source}</th><th>{TEXT.taskNo}</th><th>{TEXT.provider}</th><th>{TEXT.eventType}</th><th>{TEXT.status}</th><th>{TEXT.retryCount}</th><th>{TEXT.updatedAt}</th><th>详情</th></tr></thead>
             <tbody>{paged.pageRows.map((row, index) => (
               <tr key={eventKey(row, index)} className="admin-row-clickable" tabIndex={0} data-testid={`integration-event-row-${row.id ?? row.taskNo ?? index}`}
                 onClick={() => openEventDetail(row)}
@@ -322,7 +322,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
                 <td>{formatBusinessStatus(row.status)}</td>
                 <td>{row.retryCount ?? "-"}</td>
                 <td>{cnDate(row.updatedAt ?? row.createdAt ?? row.occurredAt)}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看事件详情" onClick={(event) => { event.stopPropagation(); openEventDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
           <TablePager testid="integration-events-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />

@@ -485,9 +485,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <h3>开台会话</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-table-sessions-table">
-            <thead><tr><th>选择</th><th>会话</th><th>卡座</th><th>人数</th><th>状态</th><th>版本</th></tr></thead>
+            <thead><tr><th>选择</th><th>会话</th><th>卡座</th><th>人数</th><th>状态</th><th>版本</th><th>详情</th></tr></thead>
             <tbody>{sessions.length === 0 ? (
-              <tr><td colSpan={6} className="admin-muted-action">暂无开台会话</td></tr>
+              <tr><td colSpan={7} className="admin-muted-action">暂无开台会话</td></tr>
             ) : pagedSessions.pageRows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-session-row-${row.id}`}
                 onClick={() => openSessionDetail(row)}
@@ -498,7 +498,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
                 <td>{row.guestCount ?? "-"}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
                 <td>{row.sessionVersion ?? "-"}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看开台会话详情" onClick={(event) => { event.stopPropagation(); openSessionDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
           <TablePager testid="bar-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} />
@@ -507,9 +507,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <h3>订台预定</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-reservations-table">
-            <thead><tr><th>选择</th><th>预定号</th><th>卡座</th><th>人数</th><th>定金状态</th><th>状态</th></tr></thead>
+            <thead><tr><th>选择</th><th>预定号</th><th>卡座</th><th>人数</th><th>定金状态</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>{reservations.length === 0 ? (
-              <tr><td colSpan={6} className="admin-muted-action">暂无订台预定</td></tr>
+              <tr><td colSpan={7} className="admin-muted-action">暂无订台预定</td></tr>
             ) : pagedReservations.pageRows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-reservation-row-${row.id}`}
                 onClick={() => openReservationDetail(row)}
@@ -520,7 +520,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
                 <td>{row.guestCount ?? "-"}</td>
                 <td>{formatBusinessStatus(row.depositStatus)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看订台预定详情" onClick={(event) => { event.stopPropagation(); openReservationDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
           <TablePager testid="bar-reservations-pager" page={pagedReservations.page} pageCount={pagedReservations.pageCount} total={pagedReservations.total} onPrev={pagedReservations.prev} onNext={pagedReservations.next} />
@@ -529,8 +529,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <h3>卡座</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-tables-table">
-            <thead><tr><th>卡座</th><th>容量</th><th>状态</th></tr></thead>
-            <tbody>{tables.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-table-row-${row.id}`} onClick={() => openTableDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTableDetail(row); } }}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{formatBusinessStatus(row.status)}</td></tr>)}</tbody>
+            <thead><tr><th>卡座</th><th>容量</th><th>状态</th><th>详情</th></tr></thead>
+            <tbody>{tables.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-table-row-${row.id}`} onClick={() => openTableDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTableDetail(row); } }}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看卡座详情" onClick={(event) => { event.stopPropagation(); openTableDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
       </AdminDataState>

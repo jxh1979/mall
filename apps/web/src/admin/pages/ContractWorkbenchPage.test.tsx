@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ContractWorkbenchPage } from "./ContractWorkbenchPage";
@@ -182,5 +182,22 @@ describe("ContractWorkbenchPage focusObjectId 下钻定位（既有逻辑不破�
     expect(row.className).toContain("admin-row-clickable");
     // focus 命中会联动加载该合同子表（既有 selectContract 副作用保留）。
     await waitFor(() => expect(screen.getByTestId("contract-change-change-cccc3333")).toBeTruthy());
+  });
+});
+
+// AUD-023:可点击行的读屏可操作语义——行尾「详情」列原生按钮(全站统一做法,此处取一页做代表性断言)。
+describe("AUD-023 行「查看详情」按钮", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("合同行有原生「查看详情」按钮:aria-label 正确,点击打开行明细抽屉", async () => {
+    render(<ContractWorkbenchPage {...baseProps()} />);
+    await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    const row = screen.getByTestId("contract-contract-aaaa1111");
+    const buttons = within(row).getAllByRole("button", { name: "查看合同详情" });
+    expect(buttons.length).toBe(1);
+    expect(buttons[0]!.getAttribute("aria-label")).toBe("查看合同详情");
+    fireEvent.click(buttons[0]!);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    expect(screen.getByRole("dialog").textContent).toContain("合同明细");
   });
 });

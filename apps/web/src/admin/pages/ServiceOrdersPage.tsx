@@ -292,7 +292,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="service-catalog-table">
-            <thead><tr><th>服务</th><th>参考价</th><th>时长</th><th>状态</th><th>存档</th><th>操作</th></tr></thead>
+            <thead><tr><th>服务</th><th>参考价</th><th>时长</th><th>状态</th><th>存档</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>
               {catalog.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`service-catalog-row-${row.id}`}
@@ -316,7 +316,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
                     }
                     return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`svc-catalog-actions-${row.id}`} />;
                   })()}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看服务项目详情" onClick={(event) => { event.stopPropagation(); openCatalogDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -339,7 +339,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
         )}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="service-orders-table">
-            <thead><tr><th>单号</th><th>服务</th><th>价格</th><th>桌台</th><th>履约人</th><th>管理费</th><th>舞者应得</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>单号</th><th>服务</th><th>价格</th><th>桌台</th><th>履约人</th><th>管理费</th><th>舞者应得</th><th>状态</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>
               {visibleOrders.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`service-order-row-${row.id}`}
@@ -358,7 +358,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
                       <button type="button" data-testid={`svc-cancel-${row.id}`} onClick={() => void cancelOrder(row.id)}>取消</button>
                     ) : "—"}
                   </td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看服务单详情" onClick={(event) => { event.stopPropagation(); openOrderDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

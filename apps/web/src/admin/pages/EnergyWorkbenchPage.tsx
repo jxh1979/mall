@@ -288,7 +288,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
         <h3>表计台账（4 类 / 总分表）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-meters-table">
-            <thead><tr><th>表计码</th><th>名称</th><th>类型</th><th>归集对象</th><th>上级总表</th><th>空间/商户/项目</th><th>读数方式</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>表计码</th><th>名称</th><th>类型</th><th>归集对象</th><th>上级总表</th><th>空间/商户/项目</th><th>读数方式</th><th>状态</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{meters.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-meter-${row.id}`}
                 onClick={() => openMeterDetail(row)}
@@ -296,7 +296,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
                 <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.meterType)}</td><td>{zh(row.gatherObject)}</td><td className="admin-id-cell" title={row.parentMeterId ?? ""}>{row.parentMeterId ? shortId(row.parentMeterId) : "-"}</td>
                 <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink></td><td>{zh(row.readMode)}</td><td>{row.active === false ? "停用" : "启用"}</td>
                 <td onClick={(event) => event.stopPropagation()}><IconButton icon={<SelectOutlined />} tip="选中该表计填入表单" onClick={() => selectMeter(row)} testId={`energy-meter-select-${row.id}`} /></td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看表计详情" onClick={(event) => { event.stopPropagation(); openMeterDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -380,7 +380,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-readings-table">
-            <thead><tr><th>读数码</th><th>表计</th><th>期间</th><th>读数/上期/用量</th><th>状态</th><th>异常</th><th>抄表/复核</th><th>操作</th></tr></thead>
+            <thead><tr><th>读数码</th><th>表计</th><th>期间</th><th>读数/上期/用量</th><th>状态</th><th>异常</th><th>抄表/复核</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{readings.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-reading-${row.id}`}
                 onClick={() => openReadingDetail(row)}
@@ -390,7 +390,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
                 <td>{statusBadge(row.status)}</td><td>{row.abnormalReason ?? "-"}</td>
                 <td>{row.readerId ?? "-"} / {row.reviewedBy ?? "-"}</td>
                 <td onClick={(event) => event.stopPropagation()}>{row.status === "abnormal" ? <PermissionButton permissionsState={effectivePermissions} permissions={READING} data-testid={`energy-reading-review-${row.id}`} onClick={() => void reviewReading(row)}>复核</PermissionButton> : null}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看抄表详情" onClick={(event) => { event.stopPropagation(); openReadingDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -417,7 +417,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-settlements-table">
-            <thead><tr><th>结算码</th><th>合同/商户</th><th>期间</th><th>分摊口径</th><th>金额(元)</th><th>应收</th><th>状态</th></tr></thead>
+            <thead><tr><th>结算码</th><th>合同/商户</th><th>期间</th><th>分摊口径</th><th>金额(元)</th><th>应收</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>{settlements.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`energy-settlement-${row.id}`}
                 onClick={() => openSettlementDetail(row)}
@@ -425,7 +425,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
                 <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td>
                 <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink></td>
                 <td>{row.period}</td><td>{zh(row.energyFeeBasis)}</td><td>{yuanFromCent(row.amountCent)}</td><td>{row.arApItemId ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看能源费结算详情" onClick={(event) => { event.stopPropagation(); openSettlementDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>

@@ -216,7 +216,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         <h3>当月薪资单(月结后生成;员工端仅见已定格月份)</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="payroll-table">
-            <thead><tr><th>员工</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>请假扣薪</th><th>代扣个税</th><th>实发合计</th></tr></thead>
+            <thead><tr><th>员工</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>请假扣薪</th><th>代扣个税</th><th>实发合计</th><th>详情</th></tr></thead>
             <tbody>
               {payroll.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`payroll-row-${row.id}`}
@@ -230,7 +230,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
                   <td>{money(row.leaveDeductionCent)}</td>
                   <td>{money(row.taxCent)}</td>
                   <td>{money(row.totalCent)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看薪资单详情" onClick={(event) => { event.stopPropagation(); openPayrollDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -238,7 +238,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         <h3>待审请假(排班主管审批)</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="leave-table">
-            <thead><tr><th>员工</th><th>类型</th><th>起止</th><th>事由</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>员工</th><th>类型</th><th>起止</th><th>事由</th><th>状态</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>
               {leaves.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leave-row-${row.id}`}
@@ -258,7 +258,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
                       return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`leave-actions-${row.id}`} />;
                     })()}
                   </td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看请假申请详情" onClick={(event) => { event.stopPropagation(); openLeaveDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

@@ -296,7 +296,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
             <thead>
               <tr>
                 <th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.orderStatus}</th><th>{TEXT.billStatus}</th><th>{TEXT.amount}</th><th>{TEXT.commissionBasis}</th><th>{TEXT.createdAt}</th><th>{TEXT.paidAt}</th>
-              </tr>
+              <th>详情</th></tr>
             </thead>
             <tbody>
               {pagedOrders.pageRows.map((order) => {
@@ -314,7 +314,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                     <td>{order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}`}</td>
                     <td>{cnDate(order.createdAt)}</td>
                     <td data-testid={`bar-order-paid-at-${order.id}`}>{cnDate(bill?.paidAt ?? order.paidAt)}</td>
-                  </tr>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看订单详情" onClick={(event) => { event.stopPropagation(); openOrderDetail(order); }}>查看详情</button></td></tr>
                 );
               })}
             </tbody>

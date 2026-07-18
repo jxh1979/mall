@@ -199,7 +199,7 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
             </div>
             <h3>候选明细</h3>
             <table className="admin-table" data-testid="floor-plan-candidates-table">
-              <thead><tr><th>序号</th><th>类型</th><th>关联</th><th>标签</th><th>状态</th></tr></thead>
+              <thead><tr><th>序号</th><th>类型</th><th>关联</th><th>标签</th><th>状态</th><th>详情</th></tr></thead>
               <tbody>
                 {(floorPlanImportDetails.candidates ?? []).slice(0, 50).map((candidate) => (
                   <tr key={candidate.id} className="admin-row-clickable" tabIndex={0} data-testid={`floor-plan-candidate-row-${candidate.id}`}
@@ -207,19 +207,19 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCandidateDetail(candidate); } }}>
                     <td>{candidate.candidateNo ?? "-"}</td><td>{fpLabel(SHAPE_TYPE_LABELS, candidate.shapeType)}</td>
                     <td>{fpLabel(REF_TYPE_LABELS, candidate.refType)}:{candidate.refId ?? "-"}</td><td>{candidate.label ?? "-"}</td><td>{formatBusinessStatus(candidate.status)}</td>
-                  </tr>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看候选详情" onClick={(event) => { event.stopPropagation(); openCandidateDetail(candidate); }}>查看详情</button></td></tr>
                 ))}
               </tbody>
             </table>
             <h3>导入错误</h3>
             <table className="admin-table" data-testid="floor-plan-errors-table">
-              <thead><tr><th>行号</th><th>字段</th><th>错误码</th><th>说明</th></tr></thead>
+              <thead><tr><th>行号</th><th>字段</th><th>错误码</th><th>说明</th><th>详情</th></tr></thead>
               <tbody>
                 {(floorPlanImportDetails.errors ?? []).slice(0, 50).map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`floor-plan-error-row-${row.id}`}
                     onClick={() => openErrorDetail(row)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openErrorDetail(row); } }}>
-                    <td>{row.lineNo ?? "-"}</td><td>{row.fieldName ?? "-"}</td><td>{row.errorCode ?? "-"}</td><td>{row.errorMessage ?? "-"}</td></tr>
+                    <td>{row.lineNo ?? "-"}</td><td>{row.fieldName ?? "-"}</td><td>{row.errorCode ?? "-"}</td><td>{row.errorMessage ?? "-"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看导入错误详情" onClick={(event) => { event.stopPropagation(); openErrorDetail(row); }}>查看详情</button></td></tr>
                 ))}
               </tbody>
             </table>

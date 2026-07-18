@@ -447,9 +447,9 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
 
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="permission-templates-table">
-            <thead><tr><th>选择</th><th>模板名称</th><th>类型</th><th>状态</th><th>有效性</th><th>权限数</th></tr></thead>
+            <thead><tr><th>选择</th><th>模板名称</th><th>类型</th><th>状态</th><th>有效性</th><th>权限数</th><th>详情</th></tr></thead>
             <tbody>{rows.length === 0 ? (
-              <tr><td colSpan={6} className="admin-muted-action">暂无权限模板，可先新建基础模板或临时模板。</td></tr>
+              <tr><td colSpan={7} className="admin-muted-action">暂无权限模板，可先新建基础模板或临时模板。</td></tr>
             ) : rows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`permission-template-row-${row.id}`} onClick={() => openTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
                 <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此权限模板 ${row.id}`} data-testid={`permission-template-select-${row.id}`} checked={mode === "existing" && selectedId === row.id} onChange={() => { setMode("existing"); setSelectedId(row.id); }} /></td>
@@ -458,7 +458,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
                 <td>{formatBusinessStatus(row.status)}</td>
                 <td>{validityLabel(row)}</td>
                 <td>{templatePermissionCodes(row).length || "-"}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看权限模板详情" onClick={(event) => { event.stopPropagation(); openTemplateDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>

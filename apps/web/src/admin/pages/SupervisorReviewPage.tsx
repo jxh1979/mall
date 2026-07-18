@@ -211,7 +211,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
   const policyTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="supervisor-review-table">
-        <thead><tr><th>{TEXT.policy}</th><th>{TEXT.actionType}</th><th>{TEXT.reviewerLevel}</th><th>{TEXT.defaultBlocked}</th><th>{TEXT.requiredEvidence}</th><th>{TEXT.status}</th></tr></thead>
+        <thead><tr><th>{TEXT.policy}</th><th>{TEXT.actionType}</th><th>{TEXT.reviewerLevel}</th><th>{TEXT.defaultBlocked}</th><th>{TEXT.requiredEvidence}</th><th>{TEXT.status}</th><th>详情</th></tr></thead>
         <tbody>{(kpiFocus ? focusRows : rows).map((row) => (
           <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`supervisor-review-row-${row.id}`}
             onClick={() => openPolicyDetail(row)}
@@ -222,7 +222,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
             <td>{displayValue(row.blocksByDefault)}</td>
             <td>{displayValue(row.requiredEvidenceTypes)}</td>
             <td>{formatBusinessStatus(row.status)}</td>
-          </tr>
+          <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看复核策略详情" onClick={(event) => { event.stopPropagation(); openPolicyDetail(row); }}>查看详情</button></td></tr>
         ))}</tbody>
       </table>
     </div>

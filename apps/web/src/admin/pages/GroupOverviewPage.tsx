@@ -88,7 +88,7 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
               {METRIC_COLUMNS.map((col) => (
                 <th key={col.code} title={col.hint}>{col.label}</th>
               ))}
-            </tr>
+            <th>详情</th></tr>
           </thead>
           <tbody>
             {projects.map((project) => (
@@ -106,7 +106,7 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
                     </td>
                   );
                 })}
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看项目汇总详情" onClick={(event) => { event.stopPropagation(); openProjectDetail(project); }}>查看详情</button></td></tr>
             ))}
           </tbody>
         </table>

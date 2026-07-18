@@ -60,7 +60,7 @@ export function LeasingRentalStatusPage({ api, setGlobalError, navigateTo }: Adm
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="leasing-rental-status-table">
-            <thead><tr><th>铺位</th><th>状态</th><th>距到期（天）</th></tr></thead>
+            <thead><tr><th>铺位</th><th>状态</th><th>距到期（天）</th><th>详情</th></tr></thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.spaceId} className="admin-row-clickable" tabIndex={0} data-testid={`rental-status-${row.spaceId}`}
@@ -70,7 +70,7 @@ export function LeasingRentalStatusPage({ api, setGlobalError, navigateTo }: Adm
                   <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.spaceId}>{row.spaceName || row.spaceId}</TraceLink></td>
                   <td data-testid={`rental-status-state-${row.spaceId}`}>{cnStatus(row.rentalStatus)}</td>
                   <td>{row.daysToExpiry == null ? "-" : row.daysToExpiry}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看铺位租赁详情" onClick={(event) => { event.stopPropagation(); openRentalDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

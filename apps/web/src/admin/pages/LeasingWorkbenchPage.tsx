@@ -402,7 +402,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       ) : (
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="leasing-leads-table">
-          <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="leasing-leads-sort-contactName" onClick={() => leadSort.toggle("contactName")} {...leadSort.thProps("contactName")}>联系人{leadSort.indicator("contactName")}</th><th>电话</th><th className="admin-sort-th" data-testid="leasing-leads-sort-source" onClick={() => leadSort.toggle("source")} {...leadSort.thProps("source")}>来源{leadSort.indicator("source")}</th><th>意向业态</th><th className="admin-sort-th" data-testid="leasing-leads-sort-status" onClick={() => leadSort.toggle("status")} {...leadSort.thProps("status")}>状态{leadSort.indicator("status")}</th><th className="admin-sort-th" data-testid="leasing-leads-sort-owner" onClick={() => leadSort.toggle("owner")} {...leadSort.thProps("owner")}>负责人{leadSort.indicator("owner")}</th></tr></thead>
+          <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="leasing-leads-sort-contactName" onClick={() => leadSort.toggle("contactName")} {...leadSort.thProps("contactName")}>联系人{leadSort.indicator("contactName")}</th><th>电话</th><th className="admin-sort-th" data-testid="leasing-leads-sort-source" onClick={() => leadSort.toggle("source")} {...leadSort.thProps("source")}>来源{leadSort.indicator("source")}</th><th>意向业态</th><th className="admin-sort-th" data-testid="leasing-leads-sort-status" onClick={() => leadSort.toggle("status")} {...leadSort.thProps("status")}>状态{leadSort.indicator("status")}</th><th className="admin-sort-th" data-testid="leasing-leads-sort-owner" onClick={() => leadSort.toggle("owner")} {...leadSort.thProps("owner")}>负责人{leadSort.indicator("owner")}</th><th>详情</th></tr></thead>
           <tbody>
             {pagedLeads.pageRows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leasing-lead-row-${row.id}`}
@@ -415,7 +415,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
                 <td>{label(BUSINESS_TYPE_LABELS, row.intendedBusinessType)}</td>
                 <td>{label(LEAD_STATUS_LABELS, row.status)}</td>
                 <td>{row.ownerUserId ?? "-"}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看线索详情" onClick={(event) => { event.stopPropagation(); openLeadDetail(row); }}>查看详情</button></td></tr>
             ))}
           </tbody>
         </table>
@@ -428,7 +428,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const intentsTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="leasing-intents-table">
-        <thead><tr><th>选择</th><th>意向号</th><th>来源线索</th><th>阶段</th><th>意向空间</th></tr></thead>
+        <thead><tr><th>选择</th><th>意向号</th><th>来源线索</th><th>阶段</th><th>意向空间</th><th>详情</th></tr></thead>
         <tbody>
           {intents.map((row) => (
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leasing-intent-row-${row.id}`}
@@ -439,7 +439,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <td>{row.leadId ?? "-"}</td>
               <td>{label(STAGE_LABELS, row.stage)}</td>
               <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.intendedSpaceId}>{row.intendedSpaceId ?? "-"}</TraceLink></td>
-            </tr>
+            <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看租赁意向详情" onClick={(event) => { event.stopPropagation(); openIntentDetail(row); }}>查看详情</button></td></tr>
           ))}
         </tbody>
       </table>
@@ -449,7 +449,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const brandsTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="leasing-brands-table">
-        <thead><tr><th>选择</th><th>品牌</th><th>类型</th><th>业态</th><th>黑名单原因</th></tr></thead>
+        <thead><tr><th>选择</th><th>品牌</th><th>类型</th><th>业态</th><th>黑名单原因</th><th>详情</th></tr></thead>
         <tbody>
           {brands.map((row) => (
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leasing-brand-row-${row.id}`}
@@ -460,7 +460,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <td>{label(BRAND_TYPE_LABELS, row.brandType)}</td>
               <td>{label(BUSINESS_TYPE_LABELS, row.businessType)}</td>
               <td>{row.blacklistReason || "-"}</td>
-            </tr>
+            <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看品牌详情" onClick={(event) => { event.stopPropagation(); openBrandDetail(row); }}>查看详情</button></td></tr>
           ))}
         </tbody>
       </table>
@@ -556,7 +556,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             {brandsTable}
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="leasing-follow-ups-table">
-                <thead><tr><th>对象</th><th>方式</th><th>内容</th><th>下次计划</th></tr></thead>
+                <thead><tr><th>对象</th><th>方式</th><th>内容</th><th>下次计划</th><th>详情</th></tr></thead>
                 <tbody>
                   {followUps.map((row) => (
                     <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leasing-follow-up-row-${row.id}`}
@@ -566,7 +566,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
                       <td>{label(METHOD_LABELS, row.method)}</td>
                       <td>{row.content ?? "-"}</td>
                       <td>{cnDate(row.nextPlanAt)}</td>
-                    </tr>
+                    <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看跟进详情" onClick={(event) => { event.stopPropagation(); openFollowUpDetail(row); }}>查看详情</button></td></tr>
                   ))}
                 </tbody>
               </table>

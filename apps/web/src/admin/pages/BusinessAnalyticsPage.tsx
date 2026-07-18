@@ -369,8 +369,8 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             {(!kpiFocus || kpiFocus === "snapshots" || kpiFocus === "upward") && (
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-table">
-                <thead><tr><th>{TEXT.businessDate}</th><th>{TEXT.metricKey}</th><th>{TEXT.domain}</th><th>{TEXT.actualValue}</th><th>{TEXT.baselineValue}</th><th>{TEXT.varianceRate}</th><th>{TEXT.trend}</th><th>{TEXT.segment}</th></tr></thead>
-                <tbody>{(kpiFocus === "upward" ? filteredSnapshots.filter((r) => r.trendDirection === "up") : filteredSnapshots).map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`} className="admin-row-clickable" tabIndex={0} data-testid={`business-analytics-row-${row.snapshotId ?? row.metricKey}`} onClick={() => openSnapshotDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSnapshotDetail(row); } }}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{segmentLabel(row)}</td></tr>)}</tbody>
+                <thead><tr><th>{TEXT.businessDate}</th><th>{TEXT.metricKey}</th><th>{TEXT.domain}</th><th>{TEXT.actualValue}</th><th>{TEXT.baselineValue}</th><th>{TEXT.varianceRate}</th><th>{TEXT.trend}</th><th>{TEXT.segment}</th><th>详情</th></tr></thead>
+                <tbody>{(kpiFocus === "upward" ? filteredSnapshots.filter((r) => r.trendDirection === "up") : filteredSnapshots).map((row) => <tr key={row.snapshotId ?? `${row.metricKey}-${row.businessDate}`} className="admin-row-clickable" tabIndex={0} data-testid={`business-analytics-row-${row.snapshotId ?? row.metricKey}`} onClick={() => openSnapshotDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSnapshotDetail(row); } }}><td>{row.businessDate ?? "-"}</td><td title={row.metricKey ?? undefined}>{formatMetricName(row.metricKey)}</td><td>{formatMetricDomain(row.domain)}</td><td>{formatNumber(row.actualValue)}</td><td>{formatNumber(row.baselineValue)}</td><td>{formatPercent(row.varianceRate)}</td><td>{trendLabel(row.trendDirection)}</td><td>{segmentLabel(row)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看指标快照详情" onClick={(event) => { event.stopPropagation(); openSnapshotDetail(row); }}>查看详情</button></td></tr>)}</tbody>
               </table>
             </div>
             )}
@@ -379,7 +379,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             <h3>{TEXT.definition}</h3>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-definitions-table">
-                <thead><tr><th>指标</th><th>业务域</th><th>单位</th><th>口径说明</th><th>状态</th></tr></thead>
+                <thead><tr><th>指标</th><th>业务域</th><th>单位</th><th>口径说明</th><th>状态</th><th>详情</th></tr></thead>
                 <tbody>{definitions.map((row) => (
                   <tr key={row.metricKey} className="admin-row-clickable" tabIndex={0} data-testid={`business-analytics-definition-row-${row.metricKey}`}
                     onClick={() => openDefinitionDetail(row)}
@@ -389,7 +389,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
                     <td>{row.unit ?? "—"}</td>
                     <td>{row.calculationNote ?? "—"}</td>
                     <td>{row.status === "active" ? "启用" : "停用(数据源未就绪)"}</td>
-                  </tr>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看指标定义详情" onClick={(event) => { event.stopPropagation(); openDefinitionDetail(row); }}>查看详情</button></td></tr>
                 ))}</tbody>
               </table>
             </div>
@@ -399,7 +399,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             <h3>{TEXT.anomalies}</h3>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-anomalies-table">
-                <thead><tr><th>指标</th><th>风险</th><th>观测值</th><th>基准值</th><th>说明</th><th>状态</th><th>发现时间</th></tr></thead>
+                <thead><tr><th>指标</th><th>风险</th><th>观测值</th><th>基准值</th><th>说明</th><th>状态</th><th>发现时间</th><th>详情</th></tr></thead>
                 <tbody>{anomalies.map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`business-analytics-anomaly-row-${row.id}`}
                     onClick={() => openAnomalyDetail(row)}
@@ -411,7 +411,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
                     <td>{row.summary ?? "—"}</td>
                     <td>{row.status === "open" ? "待处置" : formatBusinessStatus(row.status)}</td>
                     <td>{row.detectedAt ? new Date(row.detectedAt).toLocaleString("zh-CN", { hour12: false }) : "—"}</td>
-                  </tr>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看异常指标详情" onClick={(event) => { event.stopPropagation(); openAnomalyDetail(row); }}>查看详情</button></td></tr>
                 ))}</tbody>
               </table>
             </div>

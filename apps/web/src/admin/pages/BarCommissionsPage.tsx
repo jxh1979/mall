@@ -201,7 +201,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-commissions-table">
             <thead>
-              <tr><th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.bill}</th><th>{TEXT.amount}</th><th>{TEXT.sellerRole}</th><th>{TEXT.rate}</th><th>{TEXT.status}</th><th>{TEXT.time}</th></tr>
+              <tr><th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.bill}</th><th>{TEXT.amount}</th><th>{TEXT.sellerRole}</th><th>{TEXT.rate}</th><th>{TEXT.status}</th><th>{TEXT.time}</th><th>详情</th></tr>
             </thead>
             <tbody>
               {visibleOrders.map((order) => {
@@ -219,7 +219,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
                     <td>{commissionRate(order)}</td>
                     <td>{formatBusinessStatus(rowBill?.status ?? order.status)}</td>
                     <td>{cnDate(order.createdAt)}</td>
-                  </tr>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看提成单详情" onClick={(event) => { event.stopPropagation(); openCommissionDetail(order); }}>查看详情</button></td></tr>
                 );
               })}
             </tbody>

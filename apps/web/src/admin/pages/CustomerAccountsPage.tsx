@@ -128,7 +128,7 @@ export function CustomerAccountsPage({ api, setActionResult, setGlobalError, eff
                   <th>账号状态</th>
                   <th>封禁到期</th>
                   <th>注册时间</th>
-                </tr>
+                <th>详情</th></tr>
               </thead>
               <tbody>
                 <tr data-testid={`customer-account-${account.id}`} className="admin-row-clickable" tabIndex={0}
@@ -138,7 +138,7 @@ export function CustomerAccountsPage({ api, setActionResult, setGlobalError, eff
                   <td data-testid="customer-account-status">{STATUS_LABELS[account.status] ?? account.status}</td>
                   <td>{account.suspendedUntil ? cnDate(account.suspendedUntil) : "—"}</td>
                   <td>{cnDate(account.createdAt)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看客人账号详情" onClick={(event) => { event.stopPropagation(); openAccountDetail(account); }}>查看详情</button></td></tr>
               </tbody>
             </table>
           </div>

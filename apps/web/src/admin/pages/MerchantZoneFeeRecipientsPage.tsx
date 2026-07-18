@@ -150,7 +150,7 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="merchant-zone-fee-recipients-table">
         <thead>
-          <tr><th>费用事件</th><th>接收人</th><th>手机号</th><th>状态</th><th>操作</th></tr>
+          <tr><th>费用事件</th><th>接收人</th><th>手机号</th><th>状态</th><th>操作</th><th>详情</th></tr>
         </thead>
         <tbody>
           {(kpiFocus ? focusRows : rows).map((row) => (
@@ -172,7 +172,7 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
                   >{TEXT.deactivate}</PermissionButton>
                 ) : "-"}
               </td>
-            </tr>
+            <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看费用接收人详情" onClick={(event) => { event.stopPropagation(); openRecipientDetail(row); }}>查看详情</button></td></tr>
           ))}
         </tbody>
       </table>

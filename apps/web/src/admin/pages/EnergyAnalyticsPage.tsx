@@ -98,7 +98,7 @@ export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPa
         <h3>异常读数明细(实时,与异常计数同口径)</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-abnormal-table">
-            <thead><tr><th>表计</th><th>类型</th><th>抄表期</th><th>用量</th><th>异常原因</th><th>抄表时间</th></tr></thead>
+            <thead><tr><th>表计</th><th>类型</th><th>抄表期</th><th>用量</th><th>异常原因</th><th>抄表时间</th><th>详情</th></tr></thead>
             <tbody>
               {paged.pageRows.map((row) => (
                 <tr key={row.readingId} className="admin-row-clickable" tabIndex={0} data-testid={`energy-abnormal-row-${row.readingId}`}
@@ -110,7 +110,7 @@ export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPa
                   <td>{consumptionText(row.consumption)}</td>
                   <td>{REASON_LABELS[row.abnormalReason ?? ""] ?? row.abnormalReason ?? "—"}</td>
                   <td>{localTime(row.readAt)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看异常读数详情" onClick={(event) => { event.stopPropagation(); openAbnormalDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

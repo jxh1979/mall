@@ -193,7 +193,7 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
 
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="subject-bindings-table">
-                <thead><tr><th>{TEXT.select}</th><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>合同主体 ID</th><th>结算主体</th><th>结算主体 ID</th><th>状态</th><th>留痕证据</th></tr></thead>
+                <thead><tr><th>{TEXT.select}</th><th>业务对象</th><th>运营主体</th><th>合同主体</th><th>合同主体 ID</th><th>结算主体</th><th>结算主体 ID</th><th>状态</th><th>留痕证据</th><th>详情</th></tr></thead>
                 <tbody>{visibleBindings.map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`subject-bindings-row-${row.id}`}
                     onClick={() => openBindingDetail(row)}
@@ -207,7 +207,7 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
                     <td>{display(row.settlementSubjectId)}</td>
                     <td>{formatBusinessStatus(row.status)}</td>
                     <td>{display(row.auditEvidenceRef)}</td>
-                  </tr>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看主体绑定详情" onClick={(event) => { event.stopPropagation(); openBindingDetail(row); }}>查看详情</button></td></tr>
                 ))}</tbody>
               </table>
             </div>

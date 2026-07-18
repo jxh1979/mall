@@ -349,7 +349,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
           <AdminDataState loading={opLoading} error={opError} empty={opRows.length === 0} onRetry={loadOperations}>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="audit-events-operations-table">
-                <thead><tr><th>{TEXT.opsEventName}</th><th>{TEXT.result}</th><th>{TEXT.opsActorCol}</th><th>{TEXT.opsBusinessType}</th><th>{TEXT.opsBusinessId}</th><th>{TEXT.opsTerminal}</th><th>{TEXT.occurredAt}</th></tr></thead>
+                <thead><tr><th>{TEXT.opsEventName}</th><th>{TEXT.result}</th><th>{TEXT.opsActorCol}</th><th>{TEXT.opsBusinessType}</th><th>{TEXT.opsBusinessId}</th><th>{TEXT.opsTerminal}</th><th>{TEXT.occurredAt}</th><th>详情</th></tr></thead>
                 <tbody>{opRows.map((row, index) => (
                   <tr key={`${row.id ?? row.requestId ?? "op"}-${index}`} className="admin-row-clickable" tabIndex={0} data-testid={`audit-events-op-row-${index}`}
                     onClick={() => openOperationDetail(row)}
@@ -361,7 +361,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                     <td>{row.businessId ?? "-"}</td>
                     <td>{formatBusinessStatus(row.terminal)}</td>
                     <td>{cnDate(row.occurredAt)}</td>
-                  </tr>
+                  <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看操作日志详情" onClick={(event) => { event.stopPropagation(); openOperationDetail(row); }}>查看详情</button></td></tr>
                 ))}</tbody>
               </table>
             </div>
@@ -402,7 +402,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
         {filteredRows.length === 0 ? <div className="admin-state admin-empty" data-testid="audit-events-filter-empty">{TEXT.noMatch}</div> : (
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="audit-events-table">
-              <thead><tr><th>{TEXT.detail}</th><th>{TEXT.eventType}</th><th>{TEXT.category}</th><th>{TEXT.result}</th><th>{TEXT.risk}</th><th>{TEXT.source}</th><th>{TEXT.trace}</th><th>{TEXT.object}</th><th>{TEXT.summary}</th><th>{TEXT.occurredAt}</th></tr></thead>
+              <thead><tr><th>{TEXT.detail}</th><th>{TEXT.eventType}</th><th>{TEXT.category}</th><th>{TEXT.result}</th><th>{TEXT.risk}</th><th>{TEXT.source}</th><th>{TEXT.trace}</th><th>{TEXT.object}</th><th>{TEXT.summary}</th><th>{TEXT.occurredAt}</th><th>详情</th></tr></thead>
               <tbody>{filteredRows.map((row) => {
                 const index = filteredRows.indexOf(row);
                 return (
@@ -419,7 +419,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                   <td>{eventObject(row)}</td>
                   <td>{row.summary ?? "-"}</td>
                   <td>{cnDate(row.occurredAt ?? row.occurred_at ?? row.receivedAt ?? row.received_at)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看审计事件详情" onClick={(event) => { event.stopPropagation(); openEventDetail(row); }}>查看详情</button></td></tr>
                 );
               })}</tbody>
             </table>

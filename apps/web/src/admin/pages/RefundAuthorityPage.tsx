@@ -166,7 +166,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
                 <th>退款域</th>
                 <th>单笔额度（元）</th>
                 <th>状态</th>
-              </tr>
+              <th>详情</th></tr>
             </thead>
             <tbody>
               {limits.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">暂无额度配置，点「新增额度」开始</td></tr> : null}
@@ -179,7 +179,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
                   <td>{formatBusinessStatus(row.refundDomain)}</td>
                   <td>{(row.limitAmountCent / 100).toFixed(2)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看员工自助退款额度详情" onClick={(event) => { event.stopPropagation(); openLimitDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -230,7 +230,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
                 <th>启用</th>
                 <th>状态</th>
                 <th>操作</th>
-              </tr>
+              <th>详情</th></tr>
             </thead>
             <tbody>
               {rules.length === 0 ? <tr><td colSpan={99} className="admin-empty-cell">暂无规则配置</td></tr> : null}
@@ -252,7 +252,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
                       {row.enabled ? "停用" : "启用"}
                     </PermissionButton>
                   </td>
-                </tr>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看退款自动放行规则详情" onClick={(event) => { event.stopPropagation(); openRuleDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>

@@ -111,7 +111,7 @@ export function SettlementReviewPage({ api, setGlobalError }: AdminPageProps) {
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="settlement-review-table">
-            <thead><tr><th>流水号</th><th>项目</th><th>商户</th><th>核销张数</th><th>核销金额（元）</th><th>结算状态</th></tr></thead>
+            <thead><tr><th>流水号</th><th>项目</th><th>商户</th><th>核销张数</th><th>核销金额（元）</th><th>结算状态</th><th>详情</th></tr></thead>
             <tbody>{rows.rows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`settlement-review-row-${row.id}`}
                 onClick={() => openDetail(row)}
@@ -122,7 +122,7 @@ export function SettlementReviewPage({ api, setGlobalError }: AdminPageProps) {
                 <td className="admin-num" style={{ textAlign: "right" }}>{row.verifiedCount}</td>
                 <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.verifiedAmountCent)}</td>
                 <td>{formatBusinessStatus(row.settlementStatus ?? "—")}</td>
-              </tr>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看结算流水详情" onClick={(event) => { event.stopPropagation(); openDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
           <TablePager testid="settlement-review-pager" page={rows.page} pageCount={rows.pageCount} total={rows.total} onPrev={rows.prev} onNext={rows.next} />
