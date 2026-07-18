@@ -407,22 +407,25 @@ class JdbcInventoryRepository implements InventoryRepository {
                         movement.unitCostCent() == null ? null : movement.unitCostCent() * movement.quantity(),
                         null));
         StockMovementRecord stamped = withCosts(movement, result.unitCostCent(), result.totalCostCent());
-        try {
-            jdbcTemplate.update("""
-                    INSERT INTO inventory_stock_movements (
-                        id, movement_type, item_id, source_location_id, target_location_id, quantity,
-                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                        status, created_at, merchant_id, project_id, unit_cost_cent, total_cost_cent
-                    )
-                    VALUES (
-                        :id, :movement_type, :item_id, :source_location_id, :target_location_id, :quantity,
-                        :business_type, :business_id, :trace_code, :operator_id, CAST(:evidence_attachment_ids AS jsonb),
-                        :status, :created_at, :merchant_id, :project_id, :unit_cost_cent, :total_cost_cent
-                    )
-                    """, stockMovementParameters(stamped).addValue("project_id", projectId));
-        } catch (org.springframework.dao.DuplicateKeyException exception) {
-            // I-3：并发同 id 先到先赢——插入撞主键（跨物料同 id 的边缘路径，同物料已被状态行锁串行化）
-            // 转幂等重放读回，状态行未滚动（插入失败先于 updateCostState）。
+        // I-3：并发同 id 先到先赢用 ON CONFLICT (id) DO NOTHING + 行数判定，不能用 catch(DuplicateKeyException)——
+        // PG 重复键错误会把整个事务置为中止态（25P02），事务内（酒吧改道路径）后续读回必死。
+        // 冲突目标限定 (id)（表上唯一约束仅主键），不会误吞其它约束冲突。行数判定必须先于滚状态：
+        // =1 本方落账继续滚状态；=0 别人已插入（跨物料同 id 的边缘路径，同物料已被状态行锁串行化）→
+        // 转幂等重放读回（一致性校验→读回或 409），本方状态行未动，绝不 updateCostState。
+        int inserted = jdbcTemplate.update("""
+                INSERT INTO inventory_stock_movements (
+                    id, movement_type, item_id, source_location_id, target_location_id, quantity,
+                    business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
+                    status, created_at, merchant_id, project_id, unit_cost_cent, total_cost_cent
+                )
+                VALUES (
+                    :id, :movement_type, :item_id, :source_location_id, :target_location_id, :quantity,
+                    :business_type, :business_id, :trace_code, :operator_id, CAST(:evidence_attachment_ids AS jsonb),
+                    :status, :created_at, :merchant_id, :project_id, :unit_cost_cent, :total_cost_cent
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, stockMovementParameters(stamped).addValue("project_id", projectId));
+        if (inserted == 0) {
             return replayExisting(movement, projectId);
         }
         if (result.newState() != null) {
