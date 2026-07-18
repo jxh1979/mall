@@ -2,6 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import { MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, OverviewPayload } from "../types";
@@ -36,6 +37,7 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
   const [appliedRange, setAppliedRange] = React.useState<string | null>(null);
+  const [appliedDates, setAppliedDates] = React.useState<{ from: string; to: string }>({ from: "", to: "" });
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -50,10 +52,21 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
 
   function applyDateRange() {
     setAppliedRange(dateFrom || dateTo ? `${dateFrom || "不限"} ~ ${dateTo || "不限"}` : null);
+    setAppliedDates({ from: dateFrom, to: dateTo });
     void reload();
   }
 
-  const revenueValues = REVENUE_BARS.map((item) => metricValue(data, item.code) ?? 0);
+  // 首批接线（指标登记簿方案A）：票务收入/应收欠费余额两个 KPI 数字改走统一明细端点（与明细页同源，
+  // 数字=明细合计按构造成立）；as-of 日与总览端点同规则（to 优先，退化 from，再退最新经营日）。
+  // 端点失败（含无权限）→ 回退既有快照值并隐藏「完整明细」入口，体验不降级。
+  const asOfDay = appliedDates.to || appliedDates.from || data?.businessDate || "";
+  const ticketKpi = useMetricKpiValue(api, "revenue.ticket", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
+  const arKpi = useMetricKpiValue(api, "finance.ar_balance", { to: asOfDay, enabled: !!asOfDay });
+  const ticketDisplay = ticketKpi.status === "ready" && ticketKpi.value !== null ? ticketKpi.value : metricValue(data, "revenue.ticket");
+  const arDisplay = arKpi.status === "ready" && arKpi.value !== null ? arKpi.value : metricValue(data, "ar.balance");
+
+  const revenueValues = REVENUE_BARS.map((item) =>
+    (item.code === "revenue.ticket" ? ticketDisplay : metricValue(data, item.code)) ?? 0);
   const volumeValues = VOLUME_BARS.map((item) => metricValue(data, item.code) ?? 0);
   const hasRevenue = revenueValues.some((value) => value > 0);
   const hasVolume = volumeValues.some((value) => value > 0);
@@ -69,12 +82,13 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
       </div>
       <AdminDataState loading={loading} error={error} empty={!data} onRetry={reload}>
         <div className="admin-kpi-grid">
-          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-ticket"><span>票务收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-ticket-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{metricText(data, "revenue.ticket")}</button><small>已支付订单实付（分），查看出票与核销追踪</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-ticket"><span>票务收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-ticket-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{ticketDisplay === null ? "—" : String(ticketDisplay)}</button><small>已支付订单实付（分），查看出票与核销追踪{ticketKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="revenue.ticket" from={asOfDay} to={asOfDay} testid="overview-metric-detail-ticket" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-bar"><span>酒吧收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-bar-value" onClick={() => navigateTo?.("ADM-BAR-002")}>{metricText(data, "revenue.bar")}</button><small>已结算账单实收（分），查看酒吧账单</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-amusement"><span>游乐核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-amusement-value" onClick={() => navigateTo?.("ADM-AMU-001")}>{metricText(data, "traffic.amusement")}</button><small>成功核销人次，查看游乐核销</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-verify"><span>票务核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-verify-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{metricText(data, "verify.done")}</button><small>成功核销数，查看出票与核销追踪</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-member"><span>新增会员</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-member-value" onClick={() => navigateTo?.("ADM-CUS-001")}>{metricText(data, "member.new")}</button><small>当日新建，查看客人账号管理</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-risk"><span>待复核</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-risk-value" onClick={() => navigateTo?.("ADM-GOV-006")}>{metricText(data, "risk.pending_review")}</button><small>复核 + 风险预警，查看主管复核</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-ar"><span>应收欠费余额</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-ar-value" onClick={() => navigateTo?.("ADM-ANA-004")}>{arDisplay === null ? "—" : String(arDisplay)}</button><small>逾期未清应收（分），查看欠费与回款{arKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="finance.ar_balance" to={asOfDay} testid="overview-metric-detail-ar" /></> : null}</small></div>
         </div>
         {hasRevenue || hasVolume ? (
           <div className="admin-chart-panel" data-testid="overview-charts">

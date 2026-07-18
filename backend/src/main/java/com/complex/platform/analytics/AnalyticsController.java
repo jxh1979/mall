@@ -346,6 +346,31 @@ public class AnalyticsController {
         return ApiResponse.ok(service.listAnalyticsMerchants(authorizationService.currentMerchantScope()));
     }
 
+    @GetMapping("/metric-detail")
+    public ApiResponse<AnalyticsRecords.MetricDetailResponse> getMetricDetail(
+            @org.springframework.web.bind.annotation.RequestParam("metric") String metric,
+            @org.springframework.web.bind.annotation.RequestParam(value = "part", required = false) String part,
+            @org.springframework.web.bind.annotation.RequestParam(value = "project_id", required = false) String projectId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "merchant_id", required = false) String merchantId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "from", required = false) String from,
+            @org.springframework.web.bind.annotation.RequestParam(value = "to", required = false) String to,
+            @org.springframework.web.bind.annotation.RequestParam(value = "page", required = false, defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(value = "size", required = false, defaultValue = "20") int size) {
+        // KPI 统一明细（指标登记簿，2026-07-18 方案A）：契约宽权限（analytics.dashboard.view）+
+        // 按登记项权限二次校验，双重 fail-closed；首批登记指标均为平台口径 → 拒绝 merchant-scoped 调用方。
+        authorizationService.requirePermission("analytics.dashboard.view");
+        MetricRegistry.MetricDefinition definition = MetricRegistry.require(metric);
+        authorizationService.requirePermission(definition.permission());
+        authorizationService.requirePlatformScope();
+        if (merchantId != null && !merchantId.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "首批登记指标为平台口径，暂不支持商户维度（merchant_id）过滤");
+        }
+        if (projectId != null && !projectId.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "当前为单综合体部署，暂不支持按项目维度（project_id）过滤");
+        }
+        return ApiResponse.ok(service.metricDetail(metric, part, parseOverviewDate(from), parseOverviewDate(to), page, size));
+    }
+
     @GetMapping("/metric-anomalies")
     public ApiResponse<PageResponse<MetricAnomalyRecord>> listMetricAnomalies() {
         authorizationService.requirePermission("analytics.risk_alert.view");

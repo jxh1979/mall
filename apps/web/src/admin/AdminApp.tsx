@@ -93,6 +93,7 @@ const FloorPlanImportPage = React.lazy(() => import("./pages/FloorPlanImportPage
 const T3AReadonlyAnalyticsPage = React.lazy(() => import("./pages/T3AReadonlyAnalyticsPage").then((m) => ({ default: m.T3AReadonlyAnalyticsPage })));
 const ComplianceRemindersPage = React.lazy(() => import("./pages/ComplianceRemindersPage").then((m) => ({ default: m.ComplianceRemindersPage })));
 const WecomComplianceReviewPage = React.lazy(() => import("./pages/WecomComplianceReviewPage").then((m) => ({ default: m.WecomComplianceReviewPage })));
+const MetricDetailPage = React.lazy(() => import("./pages/MetricDetailPage").then((m) => ({ default: m.MetricDetailPage })));
 
 // 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
 const ICON_PATHS: Record<string, string> = {
@@ -295,6 +296,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AiThresholdsPage {...props} />;
     case "ADM-ANA-011":
       return <NotificationWindowsPage {...props} />;
+    case "ADM-ANA-012":
+      return <MetricDetailPage {...props} />;
     case "ADM-GOV-007":
       return <SpaceTypesPage {...props} />;
     case "ADM-VND-004":

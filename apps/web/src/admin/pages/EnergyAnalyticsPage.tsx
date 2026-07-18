@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
@@ -57,11 +58,18 @@ export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPa
   );
 
   const metrics = dashboard?.metrics ?? {};
-  const electricity = num(metrics["energy.total_electricity"]);
+  // 首批接线（指标登记簿方案A）：用电/每平米电耗两个数字改走统一明细端点（与明细页同源）；
+  // 区间=当前经营日（与快照口径同日）；端点失败 → 回退快照值并隐藏「完整明细」入口。
+  const businessDate = dashboard?.businessDate ?? "";
+  const electricityKpi = useMetricKpiValue(api, "energy.total_electricity", { from: businessDate, to: businessDate, enabled: !!businessDate });
+  const perSqmKpi = useMetricKpiValue(api, "energy.electricity_per_sqm", { from: businessDate, to: businessDate, enabled: !!businessDate });
+  const electricity = electricityKpi.status === "ready" && electricityKpi.value !== null
+    ? electricityKpi.value : num(metrics["energy.total_electricity"]);
   const water = num(metrics["energy.total_water"]);
   const gas = num(metrics["energy.total_gas"]);
   const heatCold = num(metrics["energy.total_heat_cold"]);
-  const perSqm = num(metrics["energy.electricity_per_sqm"]);
+  const perSqm = perSqmKpi.status === "ready" && perSqmKpi.value !== null
+    ? perSqmKpi.value : num(metrics["energy.electricity_per_sqm"]);
   const abnormalCount = num(metrics["energy.abnormal_count"]);
 
   const paged = usePagedRows(abnormal, 10);
@@ -88,11 +96,11 @@ export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPa
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-muted-action" data-testid="energy-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(快照口径,异常明细为实时同口径;环比/同比随快照逐日积累后自动可比)</div>
         <div className="admin-kpi-grid" data-testid="energy-summary">
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>用电</span><button type="button" className="admin-kpi-value" data-testid="energy-total-electricity" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(electricity, "kWh")}</button><small>当日经营窗合计，查看能源工作台</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>用电</span><button type="button" className="admin-kpi-value" data-testid="energy-total-electricity" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(electricity, "kWh")}</button><small>当日经营窗合计，查看能源工作台{electricityKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="energy.total_electricity" from={businessDate} to={businessDate} testid="energy-metric-detail-electricity" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>用水</span><button type="button" className="admin-kpi-value" data-testid="energy-total-water" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(water, "吨")}</button><small>当日经营窗合计，查看能源工作台</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>用气</span><button type="button" className="admin-kpi-value" data-testid="energy-total-gas" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(gas, "m³")}</button><small>当日经营窗合计，查看能源工作台</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>冷热量</span><button type="button" className="admin-kpi-value" data-testid="energy-total-heat-cold" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(heatCold, "单位")}</button><small>当日经营窗合计，查看能源工作台</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>每平米电耗</span><button type="button" className="admin-kpi-value" data-testid="energy-per-sqm" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(perSqm, "kWh/㎡")}</button><small>分母=可租面积，查看能源工作台</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>每平米电耗</span><button type="button" className="admin-kpi-value" data-testid="energy-per-sqm" onClick={() => navigateTo?.("ADM-ENE-001")}>{qty(perSqm, "kWh/㎡")}</button><small>分母=可租面积，查看能源工作台{perSqmKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="energy.electricity_per_sqm" from={businessDate} to={businessDate} testid="energy-metric-detail-per-sqm" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>异常读数</span><button type="button" className="admin-kpi-value" data-testid="energy-abnormal-count" onClick={() => navigateTo?.("ADM-ENE-001")}>{abnormalCount === null ? "—" : abnormalCount}</button><small>待核查，查看能源工作台</small></div>
         </div>
         <h3>异常读数明细(实时,与异常计数同口径)</h3>

@@ -1,6 +1,7 @@
 package com.complex.platform.analytics;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -166,6 +167,58 @@ class AnalyticsControllerTests {
                 .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"));
 
         verify(service, never()).groupOverview(any());
+    }
+
+    @Test
+    void metricDetailChecksContractPermissionThenRegistryPermission() throws Exception {
+        // KPI 统一明细(指标登记簿): 契约宽权限(analytics.dashboard.view)+登记项权限二次校验, 双重 fail-closed。
+        when(service.metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt())).thenReturn(metricDetailResponse());
+
+        mockMvc.perform(get("/api/v1/analytics/metric-detail")
+                        .param("metric", "finance.recon_diff_count")
+                        .with(user("analytics").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.data.metric_key").value("finance.recon_diff_count"))
+                .andExpect(jsonPath("$.data.summary_value").value(3));
+
+        verify(authorizationService).requirePermission("analytics.dashboard.view");
+        verify(authorizationService).requirePermission("finance.reconciliation.view");
+        verify(authorizationService).requirePlatformScope();
+    }
+
+    @Test
+    void metricDetailRejectsUnknownMetricFailClosed() throws Exception {
+        mockMvc.perform(get("/api/v1/analytics/metric-detail")
+                        .param("metric", "revenue.unknown")
+                        .with(user("analytics").roles("P0_SMOKE")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+
+        verify(service, never()).metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt());
+    }
+
+    @Test
+    void metricDetailRejectsReservedDimensionParams() throws Exception {
+        // 首批登记指标均为平台口径: project_id/merchant_id 为预留维度, 传入即校验失败(不静默忽略)。
+        mockMvc.perform(get("/api/v1/analytics/metric-detail")
+                        .param("metric", "revenue.ticket")
+                        .param("merchant_id", "merchant-1")
+                        .with(user("analytics").roles("P0_SMOKE")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+
+        verify(service, never()).metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt());
+    }
+
+    private AnalyticsRecords.MetricDetailResponse metricDetailResponse() {
+        return new AnalyticsRecords.MetricDetailResponse(
+                "finance.recon_diff_count", "对账差异笔数", "additive", "笔",
+                "对账差异逐笔计数", "对账差异台账(实时查询)", null, null, null, now(),
+                new BigDecimal("3"), null, null, null,
+                List.of(new MetricRegistry.MetricColumn("id", "差异号")),
+                List.of(Map.of("id", "diff-1")),
+                1, 20, 3, "ADM-FIN-002", "id");
     }
 
     @ParameterizedTest

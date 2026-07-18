@@ -499,4 +499,42 @@ public final class AnalyticsRecords {
             String idempotencyKey
     ) {
     }
+
+    /** KPI 统一明细（指标登记簿）：仓储层返回 当前页明细行 + 总行数 + 合计校验值（同一谓词同源）。 */
+    public record MetricDetailRows(
+            java.util.List<java.util.Map<String, Object>> rows,
+            long totalRows,
+            BigDecimal summaryValue
+    ) {
+    }
+
+    /**
+     * KPI 统一明细端点响应：分页明细行 + 合计校验值 + 口径说明 + 数据截至时间。
+     * 比率类：part=numerator|denominator（两页签），numeratorValue/denominatorValue 恒返回；
+     * summaryValue=当前口径合计（可加=区间求和；余额=区间末值；比率=分子/分母，分母 0 → null + summaryNote）。
+     */
+    public record MetricDetailResponse(
+            String metricKey,
+            String name,
+            String valueType,
+            String unit,
+            String caliber,
+            String source,
+            String part,
+            LocalDate from,
+            LocalDate to,
+            Instant dataAsOf,
+            BigDecimal summaryValue,
+            BigDecimal numeratorValue,
+            BigDecimal denominatorValue,
+            String summaryNote,
+            java.util.List<MetricRegistry.MetricColumn> columns,
+            java.util.List<java.util.Map<String, Object>> rows,
+            int page,
+            int size,
+            long totalRows,
+            String traceLinkPageId,
+            String traceLinkColumnKey
+    ) {
+    }
 }
