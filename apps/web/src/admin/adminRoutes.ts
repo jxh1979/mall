@@ -37,7 +37,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-FIN-002", label: "对账差异", module: "财务", group: "finance", route: "/admin/finance/reconciliation", requiredPermissions: ["finance.reconciliation.view"] },
   { pageId: "ADM-FIN-003", label: "退款分级授权", module: "财务", group: "finance", route: "/admin/finance/refund-authority", requiredPermissions: ["refund.authority.view"] },
   { pageId: "ADM-FIN-004", label: "物业费管理", module: "财务", group: "finance", route: "/admin/finance/property-fee", requiredPermissions: ["finance.property_fee.manage"] },
-  { pageId: "ADM-FIN-006", label: "商户费用台账", module: "财务", group: "finance", route: "/admin/finance/merchant-expenses", requiredPermissions: ["finance.merchant_expense.view", "finance.merchant_expense.manage"] },
+  { pageId: "ADM-FIN-006", label: "商户费用台账", module: "财务", group: "finance", route: "/admin/finance/merchant-expenses", requiredPermissions: ["finance.merchant_expense.view"] },
   { pageId: "ADM-MER-001", label: "商户服务工单", module: "商户服务", group: "governance", route: "/admin/merchant-service/tickets", requiredPermissions: ["merchant.service_work_order.view"] },
   { pageId: "ADM-MER-002", label: "商户授权工作台", module: "商户门户", group: "governance", route: "/admin/merchant-portal/scope", requiredPermissions: ["merchant.service_work_order.view", "merchant.billing.view"] },
   { pageId: "ADM-VND-001", label: "外包维保工单", module: "外包工作台", group: "vendor", route: "/admin/vendor/work-orders", requiredPermissions: ["facility.work_order.view_assigned"], accountForms: ["vendor"] },

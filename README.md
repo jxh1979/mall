@@ -101,7 +101,7 @@ npm run verify:closed-loop-runtime      # 闭环运行态总验收（后端测�
 | 指标 | 当前值 | 取证方式 |
 |---|---|---|
 | Flyway 最新迁移 | **V297**（290 个迁移） | `backend/src/main/resources/db/migration` 实时统计 |
-| OpenAPI operation 数 | **626** | `docs/openapi/openapi-p0.json` 方法统计（与 `npm run verify:operation-matrix` 同口径） |
+| OpenAPI operation 数 | **627** | `docs/openapi/openapi-p0.json` 方法统计（与 `npm run verify:operation-matrix` 同口径） |
 | 后端测试 | **2043** tests（现有 surefire 报告） | `backend/target/surefire-reports` 合计；无报告时保留上次快照，不声明刚完成全量测试 |
 | 前端 E2E | 以 `npx playwright test --list` 实时输出为准 | 不写死快照数 |
 <!-- baseline:auto-end -->

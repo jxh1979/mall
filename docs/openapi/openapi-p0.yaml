@@ -15212,7 +15212,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/v1/finance/merchant-expenses:
     get:
-      tags: &a1
+      tags: &mexp_tags
         - finance
       operationId: listMerchantExpenses
       summary: 商户费用归集台账分页查询（分红净利润费用侧）
@@ -15279,7 +15279,7 @@ paths:
             maximum: 200
             default: 50
           description: 每页行数（上限 200）。
-      responses: &a2
+      responses: &mexp_resp_read
         "200":
           $ref: "#/components/responses/Success"
         "400":
@@ -15289,7 +15289,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
     post:
-      tags: *a1
+      tags: *mexp_tags
       operationId: createMerchantExpenseEntry
       summary: 手工录入商户费用（人工/摊销/其他，理由必填）
       x-auth-context: staff-token
@@ -15302,7 +15302,7 @@ paths:
       x-audit-event-failure: merchant_expense.manual_create_failed
       requestBody:
         $ref: "#/components/requestBodies/MerchantExpenseEntryRequest"
-      responses: &a3
+      responses: &mexp_resp_write
         "200":
           $ref: "#/components/responses/Success"
         "400":
@@ -15315,7 +15315,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/v1/finance/merchant-expenses/summary:
     get:
-      tags: *a1
+      tags: *mexp_tags
       operationId: summarizeMerchantExpenses
       summary: 商户费用期间汇总（按商户+月份分类型合计，分红引擎费用侧取数点）
       x-auth-context: staff-token
@@ -15341,10 +15341,10 @@ paths:
             type: string
             maxLength: 64
           description: 商户 ID；空=全部商户。商户 scope 账号强制只看自己。
-      responses: *a2
+      responses: *mexp_resp_read
   /api/v1/finance/merchant-expenses/{id}/reverse:
     post:
-      tags: *a1
+      tags: *mexp_tags
       operationId: reverseMerchantExpenseEntry
       summary: 红字冲销费用台账行（负金额新行，不改历史行，理由必填）
       x-auth-context: staff-token
@@ -15375,7 +15375,7 @@ paths:
           $ref: "#/components/responses/Error"
   /api/v1/finance/merchant-expenses/sync-auto:
     post:
-      tags: *a1
+      tags: *mexp_tags
       operationId: syncMerchantExpenseAuto
       summary: 自动挂接能耗费/物业费账单到费用台账（按期幂等可重跑）
       x-auth-context: staff-token
@@ -15388,7 +15388,7 @@ paths:
       x-audit-event-failure: merchant_expense.auto_sync_failed
       requestBody:
         $ref: "#/components/requestBodies/MerchantExpenseSyncRequest"
-      responses: *a3
+      responses: *mexp_resp_write
   /api/v1/finance/refund-authority/limits:
     get:
       tags:

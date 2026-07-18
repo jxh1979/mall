@@ -805,6 +805,24 @@ export type MerchantExpenseSummaryRow = {
   totalCent?: number;
 };
 
+// 自动挂接金额漂移行（上游改账后台账净额与上游当前金额不一致；处置=红字冲销旧行+手工录入修正额）。
+export type MerchantExpenseDriftRow = {
+  entryId?: string;
+  merchantId?: string;
+  source?: string;
+  sourceRef?: string;
+  ledgerNetCent?: number;
+  upstreamAmountCent?: number;
+};
+
+export type MerchantExpenseSyncResult = {
+  period?: string;
+  energyInserted?: number;
+  propertyInserted?: number;
+  contractPropertyInserted?: number;
+  drift?: MerchantExpenseDriftRow[];
+};
+
 export type MerchantZoneSettlementRow = {
   id: string;
   contractId?: string;

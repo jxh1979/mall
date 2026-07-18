@@ -19,7 +19,8 @@ public record MerchantExpenseEntryRecord(
         String operatorUserId,
         Instant createdAt) {
 
-    /** 是否红字冲销行（manual 且携带原行引用）。 */
+    /** 是否红字冲销行（manual 且携带原行引用）。派生值不进 JSON（幂等重放按 record 组件反序列化）。 */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     public boolean isReversal() {
         return "manual".equals(source) && sourceRef != null;
     }

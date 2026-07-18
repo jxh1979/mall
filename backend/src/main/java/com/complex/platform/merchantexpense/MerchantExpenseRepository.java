@@ -23,6 +23,12 @@ public interface MerchantExpenseRepository {
     /** 能耗费自动挂接：ar_ap_items(source_type='energy_fee', 应收) 按期汇入；返回新计入行数。 */
     int attachEnergyFees(String period, String operatorUserId, Instant now);
 
-    /** 物业费自动挂接：property_fee_bills 按期汇入；返回新计入行数。 */
+    /** 物业费自动挂接（账单路径）：property_fee_bills 按期汇入；返回新计入行数。 */
     int attachPropertyFees(String period, String operatorUserId, Instant now);
+
+    /** 物业费自动挂接（合同计费路径）：ar_ap_items(source_type='contract_property_fee', 应收) 按期汇入；返回新计入行数。 */
+    int attachContractPropertyFees(String period, String operatorUserId, Instant now);
+
+    /** 金额漂移报告：该期每个已挂接源的台账净额（原行+冲销行合计）对上游单据当前金额，不一致的清单。 */
+    List<MerchantExpenseDriftRecord> listAutoDrift(String period);
 }

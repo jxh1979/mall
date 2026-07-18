@@ -1697,6 +1697,12 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         PropertyFeeBillRequest actual = requireRequest(request);
         String projectId = requireText(actual.projectId(), "project_id");
         String period = requireText(actual.period(), "period");
+        // 期格式强校验（yyyy-MM）：错格式期会生成商户费用台账/AR 都对不上的孤儿账期，入口即拒。
+        try {
+            java.time.YearMonth.parse(period);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "period must be yyyy-MM, e.g. 2026-07");
+        }
         List<String> merchantIds = actual.merchantIds();
         if (merchantIds == null || merchantIds.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "merchant_ids is required");

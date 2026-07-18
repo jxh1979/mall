@@ -13,8 +13,10 @@ import type { PagedResult } from "../client/adminClient";
 import type {
   AdminPageProps,
   MerchantAdmissionRow,
+  MerchantExpenseDriftRow,
   MerchantExpenseEntryRow,
   MerchantExpenseSummaryRow,
+  MerchantExpenseSyncResult,
 } from "../types";
 
 // 商户费用归集台账（持股分红净利润制费用侧）：能耗/物业费自动挂接 + 人工/摊销/其他手工录入，
@@ -76,14 +78,20 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
   const [summaryNotice, setSummaryNotice] = React.useState<string | null>(null);
 
   // 筛选（即选即查）：商户 / 月份 / 类型 / 来源。月份默认当月（期间汇总必须有月份口径）。
+  // 当月按本地时间拼 yyyy-MM：toISOString 是 UTC，东八区每月 1 日 8 点前会错一个月。
   const [merchantFilter, setMerchantFilter] = React.useState("");
-  const [periodFilter, setPeriodFilter] = React.useState(() => new Date().toISOString().slice(0, 7));
+  const [periodFilter, setPeriodFilter] = React.useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [typeFilter, setTypeFilter] = React.useState("");
   const [sourceFilter, setSourceFilter] = React.useState("");
 
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [reverseTarget, setReverseTarget] = React.useState<MerchantExpenseEntryRow | null>(null);
+  // 自动挂接返回的金额漂移清单（上游改账后台账净额与上游当前金额不一致；处置=红字冲销旧行+手工录入修正额）。
+  const [driftRows, setDriftRows] = React.useState<MerchantExpenseDriftRow[]>([]);
 
   // 手工录入表单
   const [formMerchant, setFormMerchant] = React.useState("");
@@ -226,7 +234,11 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
     }
     const request = { idempotencyKey: nextKey("merchant-expense-sync"), period: periodFilter };
     await runAction("merchant_expense_auto_synced", request,
-      () => api.post("/api/v1/finance/merchant-expenses/sync-auto", request));
+      async () => {
+        const result = await api.post<MerchantExpenseSyncResult>("/api/v1/finance/merchant-expenses/sync-auto", request);
+        setDriftRows(result?.drift ?? []);
+        return result;
+      });
   }
 
   function openDetail(row: MerchantExpenseEntryRow) {
@@ -290,8 +302,24 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
           disabled={busyAction === "merchant_expense_auto_synced"}
           onClick={runSync}
         >自动挂接能耗/物业费</PermissionButton>
-        <span className="admin-muted-action">自动挂接把所选月份已出账的能耗费应收与物业费账单汇入台账，重跑不重复计入。</span>
+        <span className="admin-muted-action">自动挂接把所选月份已出账的能耗费应收、物业费账单与合同计费物业费（双路径均自动归集）汇入台账，重跑不重复计入；上游账单事后被更正的，挂接结果会附金额漂移提示。</span>
       </div>
+
+      {/* ── 金额漂移提示（自动挂接响应附带；上游改账后台账不自动追改）──────── */}
+      {driftRows.length > 0 ? (
+        <div className="admin-form-error" data-testid="merchant-expense-drift-panel">
+          <strong>发现 {driftRows.length} 条金额漂移：</strong>
+          上游单据在挂接后被更正过，台账净额与上游当前金额不一致。处置办法：对台账旧行做「红字冲销」，再手工录入修正金额（台账仅追加，不回改历史行）。
+          <ul>
+            {driftRows.map((d) => (
+              <li key={d.entryId} data-testid={`merchant-expense-drift-${d.entryId}`}>
+                台账行 {d.entryId}（{SOURCE_LABELS[d.source ?? ""] ?? d.source}·上游单据 {d.sourceRef}）：
+                台账净额 ¥{centToYuan(d.ledgerNetCent)} ≠ 上游当前 ¥{centToYuan(d.upstreamAmountCent)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* ── 期间汇总卡（分红引擎费用侧取数口径）───────────────── */}
       <h3>期间费用汇总{periodFilter ? `（${periodFilter}）` : ""}</h3>

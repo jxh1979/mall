@@ -137,4 +137,40 @@ class MerchantExpenseJdbcIntegrationTests {
         assertThat(attached.source()).isEqualTo("auto_property");
         assertThat(attached.amountCent()).isEqualTo(250000L);
     }
+
+    @Test
+    void negativeReversalRowPassesRealCheckConstraints() {
+        // 红字冲销行 = 负金额：必须能通过真实 CHECK（chk_mex_amount_nonzero 只拦 0，不拦负数）落库。
+        repository.insertEntry(manualEntry("mex_jdbc_neg_orig", "merchant_jdbc", 300_00L));
+        MerchantExpenseEntryRecord reversal = new MerchantExpenseEntryRecord(
+                "mex_r_mex_jdbc_neg_orig", "merchant_jdbc", "2026-07", "labor", -300_00L,
+                "manual", "mex_jdbc_neg_orig", "JDBC 集成测试红字冲销", "usr_test",
+                Instant.parse("2026-07-18T00:00:00Z"));
+        assertThat(repository.insertEntry(reversal)).isTrue();
+        assertThat(repository.findById("mex_r_mex_jdbc_neg_orig").orElseThrow().amountCent())
+                .isEqualTo(-300_00L);
+        // 汇总净额归零（分红费用基数口径对真实 SUM 生效）。
+        assertThat(repository.summarize("2026-07", "merchant_jdbc"))
+                .anySatisfy(row -> {
+                    assertThat(row.expenseType()).isEqualTo("labor");
+                    assertThat(row.totalCent()).isZero();
+                });
+    }
+
+    @Test
+    void autoSourceRefUniqueIndexGuardsIndependentlyOfPrimaryKey() {
+        // (source, source_ref) 部分唯一索引须独立于 id 主键生效：不同 id、同 (source, source_ref) 的
+        // 自动挂接行必须被拒（防绕过 id 派生规则手插重复挂接行、双计费用）。
+        repository.insertEntry(new MerchantExpenseEntryRecord(
+                "mex_ae_dup_src_a", "merchant_jdbc", "2026-07", "energy", 100_00L,
+                "auto_energy", "arap_dup_src", "JDBC 集成测试挂接行 A", "usr_test",
+                Instant.parse("2026-07-18T00:00:00Z")));
+        assertThatThrownBy(() -> repository.insertEntry(new MerchantExpenseEntryRecord(
+                "mex_ae_dup_src_b", "merchant_jdbc", "2026-07", "energy", 100_00L,
+                "auto_energy", "arap_dup_src", "JDBC 集成测试挂接行 B（应被唯一索引拒绝）", "usr_test",
+                Instant.parse("2026-07-18T00:00:00Z"))))
+                .hasMessageContaining("uq_mex_auto_source_ref");
+        // manual 冲销行不受该索引约束（部分索引 WHERE source <> 'manual'）：同一原行的冲销行照常可插。
+        assertThat(repository.findById("mex_ae_dup_src_b")).isEmpty();
+    }
 }
