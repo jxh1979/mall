@@ -222,7 +222,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
   const tasksTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="vendor-inspections-table">
-        <thead><tr><th>选择</th><th>任务</th><th>类型</th><th>状态</th><th>排程</th><th>空间</th><th>处理人</th><th>计划/到期</th><th>关联工单</th></tr></thead>
+        <thead><tr><th>选择</th><th>任务</th><th>类型</th><th>状态</th><th>排程</th><th>空间</th><th>处理人</th><th>计划/到期</th><th>关联工单</th><th>详情</th></tr></thead>
         <tbody>
           {(kpiFocus ? focusRows : rows).map((row) => (
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-inspection-row-${row.id}`}
@@ -237,6 +237,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
               <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
               <td>{cnDate(row.scheduledDate)} / {cnDate(row.dueDate)}</td>
               <td>{row.workOrderId ?? "-"}</td>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看巡检任务详情" onClick={(event) => { event.stopPropagation(); openTaskDetail(row); }}>查看详情</button></td>
             </tr>
           ))}
         </tbody>
@@ -285,7 +286,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
             ) : (
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="vendor-inspection-templates-table">
-                <thead><tr><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>检查要求</th><th>状态</th></tr></thead>
+                <thead><tr><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>检查要求</th><th>状态</th><th>详情</th></tr></thead>
                 <tbody>
                   {(visibleTemplates.length > 0 ? visibleTemplates : templates).map((row) => (
                     <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-inspection-template-row-${row.id}`}
@@ -297,9 +298,10 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
                       <td>{formatBusinessStatus(row.abnormalMode)}</td>
                       <td>{checklistText(row.checklist)} {row.scopeNote ?? ""}</td>
                       <td>{row.active === false ? "停用" : "启用"}</td>
+                      <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看巡检模板详情" onClick={(event) => { event.stopPropagation(); openTemplateDetail(row); }}>查看详情</button></td>
                     </tr>
                   ))}
-                  {templates.length === 0 ? <tr><td colSpan={6}>暂无巡检模板</td></tr> : null}
+                  {templates.length === 0 ? <tr><td colSpan={7}>暂无巡检模板</td></tr> : null}
                 </tbody>
               </table>
             </div>

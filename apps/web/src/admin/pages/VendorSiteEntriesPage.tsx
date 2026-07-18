@@ -209,7 +209,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
   const entriesTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="vendor-site-entries-table">
-        <thead><tr><th>选择</th><th>施工范围</th><th>项目/空间</th><th>计划日期</th><th>人数</th><th>联系人</th><th>外包账号</th><th>状态</th><th>审核/验收</th><th>完工材料</th></tr></thead>
+        <thead><tr><th>选择</th><th>施工范围</th><th>项目/空间</th><th>计划日期</th><th>人数</th><th>联系人</th><th>外包账号</th><th>状态</th><th>审核/验收</th><th>完工材料</th><th>详情</th></tr></thead>
         <tbody>
           {(kpiFocus ? focusRows : rows).map((row) => (
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-site-entry-row-${row.id}`}
@@ -225,6 +225,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
               <td>{formatBusinessStatus(row.status)}</td>
               <td>{row.reviewComment ?? "-"} / {row.acceptanceComment ?? "-"}</td>
               <td>{row.completionNote ?? "-"} / {(row.completionAttachmentIds ?? []).join("、") || "-"}</td>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看进场报备详情" onClick={(event) => { event.stopPropagation(); openEntryDetail(row); }}>查看详情</button></td>
             </tr>
           ))}
         </tbody>

@@ -181,7 +181,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
   const workOrdersTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="vendor-work-orders-table">
-        <thead><tr><th>选择</th><th>工单号</th><th>标题</th><th>类型</th><th>优先级</th><th>状态</th><th>空间/设备</th><th>处理人</th><th>处理时限</th></tr></thead>
+        <thead><tr><th>选择</th><th>工单号</th><th>标题</th><th>类型</th><th>优先级</th><th>状态</th><th>空间/设备</th><th>处理人</th><th>处理时限</th><th>详情</th></tr></thead>
         <tbody>
           {pagedRows.pageRows.map((row) => (
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-work-order-row-${row.id}`}
@@ -196,6 +196,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
               <td>{row.spaceId ?? "-"} / {row.equipmentId ?? "-"}</td>
               <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td>
               <td>{cnDate(row.handleDueAt)}</td>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td>
             </tr>
           ))}
         </tbody>
@@ -241,7 +242,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
             ) : (
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="vendor-work-order-equipment-table">
-                <thead><tr><th>设备</th><th>类型</th><th>状态</th><th>项目/空间</th><th>品牌/责任人</th><th>下次维保</th></tr></thead>
+                <thead><tr><th>设备</th><th>类型</th><th>状态</th><th>项目/空间</th><th>品牌/责任人</th><th>下次维保</th><th>详情</th></tr></thead>
                 <tbody>
                   {(visibleEquipmentRows.length > 0 ? visibleEquipmentRows : equipmentRows).map((row) => (
                     <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-work-order-equipment-row-${row.id}`}
@@ -253,9 +254,10 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
                       <td>{row.projectId ?? "-"} / {row.spaceId ?? "-"}</td>
                       <td>{row.brand ?? "-"} / {row.responsibleUserId ?? "-"}</td>
                       <td>{cnDate(row.nextMaintenanceDue)}</td>
+                      <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看设备详情" onClick={(event) => { event.stopPropagation(); openEquipmentDetail(row); }}>查看详情</button></td>
                     </tr>
                   ))}
-                  {equipmentRows.length === 0 ? <tr><td colSpan={6}>暂无关联设备</td></tr> : null}
+                  {equipmentRows.length === 0 ? <tr><td colSpan={7}>暂无关联设备</td></tr> : null}
                 </tbody>
               </table>
             </div>
