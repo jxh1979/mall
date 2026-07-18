@@ -1317,6 +1317,42 @@ class JdbcCustomerRepository implements CustomerRepository {
         return count != null && count > 0;
     }
 
+    // AUD-058 充值支付意图 ↔ 卡范围绑定（V284 stored_value_topup_intents）。
+    @Override
+    public void bindStoredValueTopupIntent(String paymentIntentId, String customerId, String projectId,
+                                           String merchantId, Instant createdAt) {
+        jdbcTemplate.update("""
+                INSERT INTO stored_value_topup_intents (payment_intent_id, customer_id, project_id, merchant_id, created_at)
+                VALUES (:payment_intent_id, :customer_id, :project_id, :merchant_id, :created_at)
+                ON CONFLICT (payment_intent_id) DO UPDATE SET
+                    customer_id = EXCLUDED.customer_id,
+                    project_id = EXCLUDED.project_id,
+                    merchant_id = EXCLUDED.merchant_id
+                """, new MapSqlParameterSource()
+                .addValue("payment_intent_id", paymentIntentId)
+                .addValue("customer_id", customerId)
+                .addValue("project_id", projectId)
+                .addValue("merchant_id", merchantId)
+                .addValue("created_at", timestampWithTimeZone(createdAt)));
+    }
+
+    @Override
+    public Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String paymentIntentId) {
+        if (paymentIntentId == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query("""
+                SELECT payment_intent_id, customer_id, project_id, merchant_id
+                  FROM stored_value_topup_intents
+                 WHERE payment_intent_id = :payment_intent_id
+                """, Map.of("payment_intent_id", paymentIntentId),
+                (rs, rowNumber) -> new StoredValueTopupIntentScope(
+                        rs.getString("payment_intent_id"),
+                        rs.getString("customer_id"),
+                        rs.getString("project_id"),
+                        rs.getString("merchant_id"))).stream().findFirst();
+    }
+
     @Override
     public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accountId) {
         return jdbcTemplate.query("""

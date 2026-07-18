@@ -725,6 +725,27 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         );
     }
 
+    /**
+     * AUD-060 储值退款打款台账：储值退款在渠道未真正兑付（RESERVED/NOT_CONFIGURED/PENDING）时登记一笔
+     * status=requested 的退款待办（内部/手工确认打款），复用 finance_refunds 状态机。target_id 承载储值账户 id
+     * （该列无外键）。不复用 {@link #createRefund}：其内部强制 target 为 ar_ap_payment 单据，储值退款无 ar_ap 单据。
+     * 仅供储值域服务内部调用（调用方已过 customer.stored_value.refund 权限闸并在同一事务/审计留痕），不暴露控制器入口。
+     * 幂等：id 由储值退款幂等键派生（sv_ 命名空间与财务退款隔离），saveRefund ON CONFLICT(id) 重试安全。
+     */
+    public String recordStoredValuePayoutRefund(String accountId, long payoutCent, String reason,
+                                                String channel, String idempotencyKey) {
+        FinanceRefundRecord saved = repository.saveRefund(new FinanceRefundRecord(
+                "refund_sv_" + slug(idempotencyKey),
+                requireText(accountId, "account_id"),
+                requirePositive(payoutCent, "payout_cent"),
+                trimToDefault(reason, "stored value refund payout"),
+                trimToDefault(channel, "manual"),
+                DEFAULT_REFUND_DIRECTION,
+                "requested",
+                Instant.now()));
+        return saved.id();
+    }
+
     public PageResponse<DailyCloseSummaryRecord> listDailyCloseSummaries(String dailyCloseId) {
         String id = requireText(dailyCloseId, "daily_close_id");
         return readPage(

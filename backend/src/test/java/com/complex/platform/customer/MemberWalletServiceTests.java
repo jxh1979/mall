@@ -122,6 +122,57 @@ class MemberWalletServiceTests {
         service.refund("c1", null, null, 5_000L, "refund all", true, "refund-1");
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
         assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("closed");
+        // AUD-060：渠道未兑付（开关关=RESERVED）→ 登记一笔 requested 退款待办，不得静默记成功。
+        assertThat(finance.payoutRefunds).hasSize(1);
+        assertThat(finance.payoutRefunds.get(0)).contains("5000");
+    }
+
+    @Test
+    void settleTopupRejectsWhenScopeDiffersFromTopupBinding() {
+        // AUD-058：入账只认充值时绑定的卡范围——指名商户卡/跨项目/他人 customerId 均拒，资金不入错卡。
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-scope");
+        finance.markPaymentIntentSucceeded(intent.id());
+
+        // 通用卡充值被指名入商户卡 → 拒（结算口径错位）。
+        assertThatThrownBy(() -> service.settleTopup("c1", null, "m1", intent.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_SCOPE_MISMATCH"));
+        // 跨项目 → 拒。
+        assertThatThrownBy(() -> service.settleTopup("c1", "p9", null, intent.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_SCOPE_MISMATCH"));
+        // 他人 customerId → 意图不属于该充值。
+        repo.saveCustomer(new CustomerRecord("c2", "139", "139", "active", null, T0, T0, T0));
+        assertThatThrownBy(() -> service.settleTopup("c2", null, null, intent.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        // 与绑定一致 → 照常入账。
+        service.settleTopup("c1", null, null, intent.id());
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(5_000L);
+    }
+
+    @Test
+    void refundFailedAtGatewayThrowsSoTransactionRollsBack() {
+        // AUD-060：渠道明确 FAILED → 抛异常（生产 @Transactional 整单回滚：余额不扣、不写流水），不得记成功。
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        com.complex.platform.finance.gateway.PaymentGatewayRouter failing =
+                org.mockito.Mockito.mock(com.complex.platform.finance.gateway.PaymentGatewayRouter.class);
+        org.mockito.Mockito.when(failing.refund(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new com.complex.platform.finance.gateway.PaymentGatewayResult(
+                        com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED,
+                        "prov", null, "declined"));
+        StoredValueService service = new StoredValueService(repo, finance, audit(), failing,
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-gwfail");
+        finance.markPaymentIntentSucceeded(intent.id());
+        service.settleTopup("c1", null, null, intent.id());
+
+        assertThatThrownBy(() -> service.refund("c1", null, null, 5_000L, "r", true, "rf-fail"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_REFUND_FAILED"));
+        // FAILED 不登记 requested 待办（余额回滚由生产事务保证，内存 repo 不模拟回滚故不断言余额）。
+        assertThat(finance.payoutRefunds).isEmpty();
     }
 
     @Test
@@ -449,6 +500,17 @@ class MemberWalletServiceTests {
             intents.put(id, s);
             return s;
         }
+
+        // AUD-060 储值退款未兑付登记退款待办：记录调用供断言（真实实现落 finance_refunds requested）。
+        final List<String> payoutRefunds = new ArrayList<>();
+
+        @Override
+        public String recordStoredValuePayoutRefund(String accountId, long payoutCent, String reason,
+                                                    String channel, String idempotencyKey) {
+            String id = "refund_sv_" + idempotencyKey;
+            payoutRefunds.add(id + "|" + accountId + "|" + payoutCent + "|" + channel);
+            return id;
+        }
     }
 
     /** 复用 V090 相关方法的内存 repo（只实现本测试用到的方法）。 */
@@ -529,6 +591,14 @@ class MemberWalletServiceTests {
         }
         @Override public boolean storedValueTransactionExistsForPaymentIntent(String pi) {
             return storedValueTxns.stream().anyMatch(t -> "topup".equals(t.txnType()) && pi.equals(t.paymentIntentId()));
+        }
+        // AUD-058 充值支付意图 ↔ 卡范围绑定
+        final Map<String, StoredValueTopupIntentScope> topupIntents = new java.util.LinkedHashMap<>();
+        @Override public void bindStoredValueTopupIntent(String pi, String cid, String pjid, String mid, Instant at) {
+            topupIntents.put(pi, new StoredValueTopupIntentScope(pi, cid, pjid, mid));
+        }
+        @Override public Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String pi) {
+            return Optional.ofNullable(topupIntents.get(pi));
         }
         @Override public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accId) {
             return storedValueTxns.stream().filter(t -> accId.equals(t.accountId())).toList();

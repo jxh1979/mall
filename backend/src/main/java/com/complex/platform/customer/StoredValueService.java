@@ -139,9 +139,13 @@ public class StoredValueService {
         // B1d⑤ 资金归属：商户卡走 stored_value_topup_merchant（finance 据此把预收记入发卡商户，按开关结算）；
         // 通用卡仍走 stored_value_topup（平台综合体级余额）。businessOrderId=customerId 保持既有归属链。
         String businessOrderType = merchantId == null ? "stored_value_topup" : "stored_value_topup_merchant";
-        return financeService.createPaymentIntent(new PaymentIntentRequest(
+        PaymentIntentRecord intent = financeService.createPaymentIntent(new PaymentIntentRequest(
                 key, null, null, businessOrderType, customerId, amountCent, "CNY",
                 channel == null || channel.isBlank() ? "wechat" : channel));
+        // AUD-058：把本次充值的卡范围（customer/project/merchant）绑定到支付意图，settle 只认此绑定范围入账，
+        // 杜绝请求体在入账时指名入他卡/跨商户/跨项目。绑定与账户创建同一事务落库。
+        repository.bindStoredValueTopupIntent(intent.id(), customerId, projectId, merchantId, now());
+        return intent;
     }
 
     /**
@@ -159,10 +163,18 @@ public class StoredValueService {
         if (!"succeeded".equals(intent.status())) {
             throw ApiException.conflict("PAYMENT_NOT_SUCCEEDED", "payment intent is not succeeded");
         }
-        boolean merchantTopup = !"stored_value_topup".equals(intent.businessOrderType());
-        if ((merchantTopup && !"stored_value_topup_merchant".equals(intent.businessOrderType()))
-                || !customerId.equals(intent.businessOrderId())) {
+        // AUD-058：入账账户范围只认充值时绑定的卡范围（customer/project/merchant），请求体范围必须与之一致，
+        // 否则=通用卡充值被指名入商户卡/跨商户/跨项目。绑定行由 topup 落库，按支付意图 id 读回校验。
+        StoredValueTopupIntentScope bound = repository.findStoredValueTopupIntent(paymentIntentId)
+                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
+                        "payment intent does not belong to this top-up"));
+        if (!customerId.equals(bound.customerId())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "payment intent does not belong to this top-up");
+        }
+        if (!java.util.Objects.equals(projectId, bound.projectId())
+                || !java.util.Objects.equals(merchantId, bound.merchantId())) {
+            throw ApiException.conflict("STORED_VALUE_SCOPE_MISMATCH",
+                    "settle card scope does not match the top-up card scope");
         }
         if (repository.storedValueTransactionExistsForPaymentIntent(paymentIntentId)) {
             return repository.findStoredValueTransactionByIdempotencyKey("sv_settle_" + paymentIntentId)
@@ -306,10 +318,26 @@ public class StoredValueService {
         com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.refund(
                 com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
                         "stored_value_refund", account.id(), payoutCent, null));
+        // AUD-060：退款打款状态如实反映，不得一律记成功。
+        //   FAILED（渠道明确失败）→ 整单回滚（@Transactional）：余额不扣、不写流水，避免"扣了余额没退钱还显示成功"。
+        if (gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.FAILED) {
+            throw ApiException.conflict("STORED_VALUE_REFUND_FAILED", "refund payout failed at payment gateway");
+        }
+        //   非 SUCCEEDED（RESERVED/NOT_CONFIGURED/PENDING=未真正兑付）→ 复用财务退款状态机登记一笔 requested 的
+        //   退款台账（内部/手工确认打款），让实际打款成为可追踪待办而非仅留审计面包屑；SUCCEEDED（渠道已兑付）→ settled。
+        //   payoutCent=0（商户规则退款比例 0%）无需打款，不登记。
+        boolean payoutSettled = gw.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.SUCCEEDED;
+        String payoutRefundId = payoutSettled || payoutCent <= 0 ? null
+                : financeService.recordStoredValuePayoutRefund(account.id(), payoutCent, reason,
+                        gw.requiresInternalFallback() ? "manual" : gw.gatewayProvider(), idempotencyKey);
         Map<String, Object> detail = consumeRefundDetail(account, amountCent, balanceAfter);
         detail.put("closed", newStatus.equals("closed"));
         detail.put("payout_cent", payoutCent);
         detail.put("payout_gateway_status", gw.status().name());
+        detail.put("payout_status", payoutSettled ? "settled" : "requested");
+        if (payoutRefundId != null) {
+            detail.put("payout_refund_id", payoutRefundId);
+        }
         auditEventService.recordSuccess(EVENT_REFUND, "customer.stored_value.refund",
                 "customer_stored_value", account.id(), null, null, detail);
         return txn;

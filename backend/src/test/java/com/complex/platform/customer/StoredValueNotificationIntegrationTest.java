@@ -124,7 +124,20 @@ class StoredValueNotificationIntegrationTest {
     ) {
         String paymentIntentId = prefix + "_payment_intent";
         insertSucceededPaymentIntent(paymentIntentId, customerId, amountCent);
+        // AUD-058：settleTopup 只认充值时绑定的卡范围，夹具需同步落绑定行（等价 topup 落库动作）。
+        insertTopupIntentBinding(paymentIntentId, customerId);
         return storedValueService.settleTopup(customerId, PROJECT_ID, null, paymentIntentId);
+    }
+
+    private void insertTopupIntentBinding(String paymentIntentId, String customerId) {
+        jdbcTemplate.update("""
+                INSERT INTO stored_value_topup_intents (payment_intent_id, customer_id, project_id, merchant_id, created_at)
+                VALUES (?, ?, ?, NULL, now())
+                ON CONFLICT (payment_intent_id) DO UPDATE SET
+                    customer_id = EXCLUDED.customer_id,
+                    project_id = EXCLUDED.project_id,
+                    merchant_id = EXCLUDED.merchant_id
+                """, paymentIntentId, customerId, PROJECT_ID);
     }
 
     private void insertSucceededPaymentIntent(String id, String customerId, long amountCent) {
