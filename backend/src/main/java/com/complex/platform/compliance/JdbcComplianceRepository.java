@@ -296,11 +296,12 @@ class JdbcComplianceRepository implements ComplianceRepository {
     }
 
 
+    // AUD-020：序列化失败/库内坏 JSON 是服务端数据问题，须走 500 并记堆栈（IllegalArgumentException 会被全局映射 400 掩盖）。
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("json field is not serializable", exception);
+            throw new IllegalStateException("json field is not serializable", exception);
         }
     }
 
@@ -308,7 +309,7 @@ class JdbcComplianceRepository implements ComplianceRepository {
         try {
             return value == null ? List.of() : objectMapper.readValue(value, STRING_LIST_TYPE);
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("json string list is not readable", exception);
+            throw new IllegalStateException("json string list is not readable", exception);
         }
     }
 
@@ -316,7 +317,7 @@ class JdbcComplianceRepository implements ComplianceRepository {
         try {
             return value == null ? List.of() : objectMapper.readValue(value, INTEGER_LIST_TYPE);
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("json integer list is not readable", exception);
+            throw new IllegalStateException("json integer list is not readable", exception);
         }
     }
 }

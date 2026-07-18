@@ -26,9 +26,4 @@ public final class ReservedPaymentGateway implements PaymentGatewayPort {
     public PaymentGatewayResult refund(PaymentGatewayRequest request) {
         return PaymentGatewayResult.notConfigured(MSG);
     }
-
-    @Override
-    public PaymentGatewayResult autoRenewCharge(PaymentGatewayRequest request) {
-        return PaymentGatewayResult.notConfigured(MSG);
-    }
 }
