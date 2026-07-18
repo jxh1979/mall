@@ -44,6 +44,28 @@ class WecomWebhookSignatureVerifierTests {
                 .doesNotThrowAnyException();
     }
 
+    // ── AUD 复核 P3：报文体 messages 含 null 元素时 bodyDigest/verify 不 NPE→500 ──────────────────────
+    @Test
+    void bodyDigestAndVerifyToleratesNullMessageElement() {
+        long ts = NOW.getEpochSecond();
+        // messages 含 null 元素（与 WecomConversationService 跳过 null message 的处理一致）
+        WecomConversationSyncRequest req = new WecomConversationSyncRequest(
+                "idem-1", "ext-1", "proj-1", "owner-1", "cust-1",
+                java.util.Arrays.asList(
+                        new WecomConversationSyncRequest.Message(
+                                "msg-1", "sender-1", "普通消息", Instant.parse("2026-07-17T11:59:00Z")),
+                        null));
+        // bodyDigest 对含 null 的报文体仍确定可算（稳定 marker），不抛 NPE
+        assertThatCode(() -> verifier.bodyDigest(req)).doesNotThrowAnyException();
+        // 有效签名放行（含 null 报文体验签一致通过，不落 500）
+        assertThatCode(() -> verifier.verify(validSignature(req, ts), ts, "nonce-1", req))
+                .doesNotThrowAnyException();
+        // 伪造签名仍 fail-closed 拒绝（是签名失配而非 NPE→500）
+        assertThatThrownBy(() -> verifier.verify(validSignature(req, ts) + "00", ts, "nonce-1", req))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("WECOM_WEBHOOK_SIGNATURE_INVALID"));
+    }
+
     @Test
     void rejectsTamperedSignature() {
         long ts = NOW.getEpochSecond();

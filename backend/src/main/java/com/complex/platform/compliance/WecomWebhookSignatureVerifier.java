@@ -127,6 +127,12 @@ public class WecomWebhookSignatureVerifier {
             sb.append("message_count=").append(messages.size()).append('\n');
             int index = 0;
             for (WecomConversationSyncRequest.Message message : messages) {
+                if (message == null) {
+                    // AUD 复核 P3：null 消息元素写稳定 marker（不静默跳过），对含 null 的报文体摘要仍确定可验；
+                    // 与 WecomConversationService 跳过 null message 的处理一致，避免 NPE→500。
+                    sb.append("message[").append(index++).append("]=null\n");
+                    continue;
+                }
                 sb.append("message[").append(index++).append("].external_message_id=")
                         .append(nullToEmpty(message.externalMessageId())).append('\n');
                 sb.append("  .sender_ref=").append(nullToEmpty(message.senderRef())).append('\n');

@@ -286,6 +286,18 @@ class TicketTransferJdbcIntegrationTests {
         assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessA", now)).isEqualTo(1);
     }
 
+    // ── AUD 复核回归修：单人多次票（num_people=1）第二次跨场次核销不被 CAS 误伤（WHERE num_people<=1 恒真）──
+    @Test
+    void singlePersonMultiTimesSecondSessionNotRejectedByCas() {
+        Fixture f = seedSinglePerson();
+        // 第一次核销抢占 sessA（1 行，顺带写入 first_session_key，对单人票无害）
+        assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessA", now)).isEqualTo(1);
+        // 第二次在不同场次/自然日 sessB 核销：单人票 WHERE num_people<=1 恒真 → 仍更新 1 行，不被拒（回归防线）
+        assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessB", now)).isEqualTo(1);
+        // 再换一个场次 sessC 亦放行（单人多次票可多次核销于任意场次）
+        assertThat(repository.markTicketInstanceFirstUse(f.parent, "sessC", now)).isEqualTo(1);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
     private CustomerTicketTransferRequest link(String parent, Integer slot) {
         return new CustomerTicketTransferRequest(UUID.randomUUID().toString(), parent, slot, "link", null);

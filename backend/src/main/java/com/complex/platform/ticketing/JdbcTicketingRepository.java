@@ -368,13 +368,15 @@ class JdbcTicketingRepository implements TicketingRepository {
     public int markTicketInstanceFirstUse(String id, String sessionKey, java.time.Instant now) {
         // AUD-066 + AUD 复核 P2-6：原子抢占首场次键。CAS 只在 first_session_key 为空或等于本次 key 时成功（1 行），
         // 已被别的场次抢占 → 0 行，调用方据此回滚本次消费（并发首刷两 slot 不同场次只放行一个）。first_used_at 仍只写一次。
+        // AUD 复核回归修：num_people <= 1（单人票，含单人多次票）WHERE 恒真恒更新 1 行，场次互斥只对多人票生效，
+        // 单人多次票第二次跨场次/跨日核销不再被 CAS 误伤（first_session_key 顺带写入无害，enforceMultiPersonSameSession 对单人票不比对）。
         return jdbcTemplate.update("""
                 UPDATE ticket_instances
                    SET first_used_at = COALESCE(first_used_at, :now),
                        first_session_key = :session_key,
                        updated_at = :now
                  WHERE id = :id
-                   AND (first_session_key IS NULL OR first_session_key = :session_key)
+                   AND (num_people <= 1 OR first_session_key IS NULL OR first_session_key = :session_key)
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("session_key", sessionKey, java.sql.Types.VARCHAR)
