@@ -2660,6 +2660,17 @@ class AmusementServiceTests {
         }
 
         @Override
+        public com.complex.platform.common.api.PageResponse<AmusementGroupBookingRecord> listGroupBookingsPaged(
+                String merchantId, int page, int size) {
+            List<AmusementGroupBookingRecord> all = listGroupBookings();
+            int safePage = Math.max(1, page);
+            int safeSize = Math.min(Math.max(1, size), 200);
+            int from = Math.min((safePage - 1) * safeSize, all.size());
+            int to = Math.min(from + safeSize, all.size());
+            return new com.complex.platform.common.api.PageResponse<>(all.subList(from, to), safePage, safeSize, all.size());
+        }
+
+        @Override
         public Optional<AmusementGroupBookingRecord> findGroupBookingById(String id) {
             return Optional.ofNullable(groupBookings.get(id));
         }
@@ -2857,6 +2868,17 @@ class AmusementServiceTests {
         }
 
         @Override
+        public com.complex.platform.common.api.PageResponse<AmusementQueueEntryRecord> listQueueEntriesPaged(
+                String merchantId, int page, int size) {
+            List<AmusementQueueEntryRecord> all = listQueueEntries();
+            int safePage = Math.max(1, page);
+            int safeSize = Math.min(Math.max(1, size), 200);
+            int from = Math.min((safePage - 1) * safeSize, all.size());
+            int to = Math.min(from + safeSize, all.size());
+            return new com.complex.platform.common.api.PageResponse<>(all.subList(from, to), safePage, safeSize, all.size());
+        }
+
+        @Override
         public Optional<AmusementQueueEntryRecord> findQueueEntryById(String id) {
             return Optional.ofNullable(queueEntries.get(id));
         }
@@ -2870,6 +2892,17 @@ class AmusementServiceTests {
         @Override
         public List<AmusementReservationRecord> listReservations() {
             return new ArrayList<>(reservations.values());
+        }
+
+        @Override
+        public com.complex.platform.common.api.PageResponse<AmusementReservationRecord> listReservationsPaged(
+                String merchantId, int page, int size) {
+            List<AmusementReservationRecord> all = listReservations();
+            int safePage = Math.max(1, page);
+            int safeSize = Math.min(Math.max(1, size), 200);
+            int from = Math.min((safePage - 1) * safeSize, all.size());
+            int to = Math.min(from + safeSize, all.size());
+            return new com.complex.platform.common.api.PageResponse<>(all.subList(from, to), safePage, safeSize, all.size());
         }
 
         @Override

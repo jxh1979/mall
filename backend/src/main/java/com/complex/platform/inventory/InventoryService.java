@@ -1321,8 +1321,8 @@ public class InventoryService {
         return stockMovementService.createStockIn(request);
     }
 
-    public PageResponse<StockMovementRecord> listStockMovements() {
-        return stockMovementService.listStockMovements();
+    public PageResponse<StockMovementRecord> listStockMovements(int page, int size) {
+        return stockMovementService.listStockMovements(page, size);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")

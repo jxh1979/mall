@@ -176,6 +176,9 @@ public interface AmusementRepository {
 
     List<AmusementGroupBookingRecord> listGroupBookingsByMerchant(String merchantId);
 
+    com.complex.platform.common.api.PageResponse<AmusementGroupBookingRecord> listGroupBookingsPaged(
+            String merchantId, int page, int size);
+
     Optional<AmusementGroupBookingRecord> findGroupBookingById(String id);
 
     Optional<AmusementGroupBookingRecord> approveGroupBookingWithCapacityLock(
@@ -253,6 +256,9 @@ public interface AmusementRepository {
 
     List<AmusementQueueEntryRecord> listQueueEntriesByMerchant(String merchantId);
 
+    com.complex.platform.common.api.PageResponse<AmusementQueueEntryRecord> listQueueEntriesPaged(
+            String merchantId, int page, int size);
+
     Optional<AmusementQueueEntryRecord> findQueueEntryById(String id);
 
     AmusementReservationRecord saveReservation(AmusementReservationRecord reservation);
@@ -260,6 +266,9 @@ public interface AmusementRepository {
     List<AmusementReservationRecord> listReservations();
 
     List<AmusementReservationRecord> listReservationsByMerchant(String merchantId);
+
+    com.complex.platform.common.api.PageResponse<AmusementReservationRecord> listReservationsPaged(
+            String merchantId, int page, int size);
 
     Optional<AmusementReservationRecord> findReservationById(String id);
 

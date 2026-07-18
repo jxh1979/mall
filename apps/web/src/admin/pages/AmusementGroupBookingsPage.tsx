@@ -82,7 +82,9 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      setBookings(await api.get<AmusementGroupBookingRow[]>("/api/v1/amusement/group-bookings"));
+      // AUD-013: 后端已改真分页(默认 50)。本页仍客户端分页 → 显式取一页上限(后端 size 封顶 200)。
+      // ponytail: 200 上限, 超量需改 useServerPagedRows+getPaged 服务端分页(并加汇总端点还原 KPI 全量口径)。
+      setBookings(await api.get<AmusementGroupBookingRow[]>("/api/v1/amusement/group-bookings?size=200"));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );

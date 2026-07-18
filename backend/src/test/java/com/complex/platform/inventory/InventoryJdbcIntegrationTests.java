@@ -159,6 +159,11 @@ class InventoryJdbcIntegrationTests {
         assertThat(repository.listStockMovements())
                 .extracting(StockMovementRecord::id, StockMovementRecord::traceCode, StockMovementRecord::quantity)
                 .contains(tuple("movement_jdbc", "TRACE-JDBC", 10));
+        // AUD-013 真分页: page size 1 只回 1 行, total 取 COUNT 真值。
+        var movementPage = repository.listStockMovementsPaged(null, null, 1, 1);
+        assertThat(movementPage.items()).hasSize(1);
+        assertThat(movementPage.pageSize()).isEqualTo(1);
+        assertThat(movementPage.total()).isGreaterThanOrEqualTo(1L);
         assertThat(repository.listPurchaseRequests())
                 .extracting(PurchaseRequestRecord::id, PurchaseRequestRecord::supplierId, PurchaseRequestRecord::quantity)
                 .contains(tuple("purchase_jdbc", "supplier_jdbc", 5));

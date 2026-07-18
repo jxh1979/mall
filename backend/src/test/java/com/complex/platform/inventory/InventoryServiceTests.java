@@ -2112,6 +2112,21 @@ class InventoryServiceTests {
         }
 
         @Override
+        public com.complex.platform.common.api.PageResponse<StockMovementRecord> listStockMovementsPaged(
+                String merchantId, String projectId, int page, int size) {
+            List<StockMovementRecord> filtered = stockMovements.stream()
+                    .filter(m -> merchantId == null || merchantId.equals(m.merchantId()))
+                    .filter(m -> projectId == null || projectId.equals(movementProjects.get(m.id())))
+                    .toList();
+            int safePage = Math.max(1, page);
+            int safeSize = Math.min(Math.max(1, size), 200);
+            int from = Math.min((safePage - 1) * safeSize, filtered.size());
+            int to = Math.min(from + safeSize, filtered.size());
+            return new com.complex.platform.common.api.PageResponse<>(
+                    filtered.subList(from, to), safePage, safeSize, filtered.size());
+        }
+
+        @Override
         public StockAdjustmentRecord saveStockAdjustment(StockAdjustmentRecord adjustment) {
             stockAdjustments.removeIf(a -> a.id().equals(adjustment.id()));
             stockAdjustments.add(adjustment);

@@ -313,9 +313,11 @@ public class InventoryController {
     }
 
     @GetMapping("/stock-movements")
-    public ApiResponse<PageResponse<StockMovementRecord>> listStockMovements() {
+    public ApiResponse<PageResponse<StockMovementRecord>> listStockMovements(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size) {
         authorizationService.requirePermission("inventory.stock.view");
-        return ApiResponse.ok(service.listStockMovements());
+        return ApiResponse.ok(service.listStockMovements(page, size));
     }
 
     @PostMapping("/stock-movements")

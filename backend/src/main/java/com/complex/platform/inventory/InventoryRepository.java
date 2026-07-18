@@ -70,6 +70,9 @@ public interface InventoryRepository {
 
     List<StockMovementRecord> listStockMovements();
 
+    com.complex.platform.common.api.PageResponse<StockMovementRecord> listStockMovementsPaged(
+            String merchantId, String projectId, int page, int size);
+
     StockAdjustmentRecord saveStockAdjustment(StockAdjustmentRecord adjustment);
 
     /** R5 T6-4：高价值复核 approve/reject 时按 id 行锁读取报损/盘点差异调整单（生效/收口）。 */

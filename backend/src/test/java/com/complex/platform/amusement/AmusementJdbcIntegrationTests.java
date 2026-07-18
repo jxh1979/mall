@@ -304,6 +304,16 @@ class AmusementJdbcIntegrationTests {
         assertThat(repository.listReservations())
                 .extracting(AmusementReservationRecord::id, AmusementReservationRecord::reservationStatus)
                 .contains(tuple("reservation_jdbc", "reserved"));
+        // AUD-013 真分页: SQL LIMIT/OFFSET + COUNT, total 取真值。
+        var queuePage = repository.listQueueEntriesPaged(null, 1, 1);
+        assertThat(queuePage.items()).hasSize(1);
+        assertThat(queuePage.total()).isGreaterThanOrEqualTo(1L);
+        var reservationPage = repository.listReservationsPaged(null, 1, 1);
+        assertThat(reservationPage.items()).hasSize(1);
+        assertThat(reservationPage.total()).isGreaterThanOrEqualTo(1L);
+        var groupBookingPage = repository.listGroupBookingsPaged(null, 1, 1);
+        assertThat(groupBookingPage.items()).hasSize(1);
+        assertThat(groupBookingPage.total()).isGreaterThanOrEqualTo(1L);
         assertThat(repository.findReservationById("reservation_jdbc"))
                 .get()
                 .extracting(AmusementReservationRecord::id, AmusementReservationRecord::reservationStatus)

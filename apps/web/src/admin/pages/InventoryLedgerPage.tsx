@@ -117,7 +117,9 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       const [itemRows, balanceRows, movementRows] = await Promise.all([
         api.get<InventoryItemRow[]>("/api/v1/inventory/items"),
         api.get<StockBalanceRow[]>("/api/v1/inventory/stock-balances"),
-        api.get<StockMovementRow[]>("/api/v1/inventory/stock-movements"),
+        // AUD-013: 后端已改真分页(默认 50)。本页仍客户端分页 → 显式取一页上限(后端 size 封顶 200)。
+        // ponytail: 200 上限, 超量需改 useServerPagedRows+getPaged 服务端分页(并加汇总端点还原 KPI 全量口径)。
+        api.get<StockMovementRow[]>("/api/v1/inventory/stock-movements?size=200"),
       ]);
       setItems(itemRows);
       setBalances(balanceRows);

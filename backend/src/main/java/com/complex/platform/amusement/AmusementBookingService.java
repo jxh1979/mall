@@ -9,7 +9,6 @@ import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HexFormat;
-import java.util.Optional;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -19,8 +18,6 @@ import java.util.function.Supplier;
 
 final class AmusementBookingService {
 
-    private static final int DEFAULT_PAGE = 1;
-    private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> RESERVATION_STATUSES = Set.of("reserved", "cancelled", "completed", "no_show");
     private static final Set<String> QUEUE_STATUSES = Set.of("waiting", "called", "checked_in", "cancelled", "no_show");
     private static final Set<String> GROUP_BOOKING_TYPES = Set.of("group", "private");
@@ -43,14 +40,14 @@ final class AmusementBookingService {
         this.authorizationService = authorizationService;
     }
 
-    PageResponse<AmusementQueueEntryRecord> listQueueEntries() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
+    PageResponse<AmusementQueueEntryRecord> listQueueEntries(int page, int size) {
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         return readPage(
                 "amusement.queue.viewed",
                 "amusement.queue.viewed_failed",
                 "amusement.queue.view",
                 "amusement_queue_entry",
-                scope.isPresent() ? () -> repository.listQueueEntriesByMerchant(scope.get()) : repository::listQueueEntries
+                () -> repository.listQueueEntriesPaged(merchantId, page, size)
         );
     }
 
@@ -83,14 +80,14 @@ final class AmusementBookingService {
         );
     }
 
-    PageResponse<AmusementReservationRecord> listReservations() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
+    PageResponse<AmusementReservationRecord> listReservations(int page, int size) {
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         return readPage(
                 "amusement.reservation.viewed",
                 "amusement.reservation.viewed_failed",
                 "amusement.reservation.view",
                 "amusement_reservation",
-                scope.isPresent() ? () -> repository.listReservationsByMerchant(scope.get()) : repository::listReservations
+                () -> repository.listReservationsPaged(merchantId, page, size)
         );
     }
 
@@ -123,14 +120,14 @@ final class AmusementBookingService {
         );
     }
 
-    PageResponse<AmusementGroupBookingRecord> listGroupBookings() {
-        Optional<String> scope = authorizationService.currentMerchantScope();
+    PageResponse<AmusementGroupBookingRecord> listGroupBookings(int page, int size) {
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         return readPage(
                 "amusement.group_booking.viewed",
                 "amusement.group_booking.view_failed",
                 "amusement.group_booking.view",
                 "amusement_group_booking",
-                scope.isPresent() ? () -> repository.listGroupBookingsByMerchant(scope.get()) : repository::listGroupBookings
+                () -> repository.listGroupBookingsPaged(merchantId, page, size)
         );
     }
 
@@ -361,10 +358,10 @@ final class AmusementBookingService {
             String failureEvent,
             String permissionCode,
             String businessType,
-            Supplier<List<T>> action
+            Supplier<PageResponse<T>> action
     ) {
         try {
-            List<T> items = action.get();
+            PageResponse<T> page = action.get();
             auditEventService.recordSuccess(
                     successEvent,
                     permissionCode,
@@ -372,9 +369,9 @@ final class AmusementBookingService {
                     "all",
                     null,
                     null,
-                    Map.of("count", items.size())
+                    Map.of("count", page.total())
             );
-            return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
+            return page;
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     failureEvent,
