@@ -16,6 +16,12 @@ public interface PartnerRepository {
     /** 某账号所属的机构 id（access_users.partner_org_id）。 */
     Optional<String> findPartnerOrgIdForUser(String userId);
 
+    /** AUD-033：账号的 account_type（绑定机构前校验存在性与类型）。 */
+    java.util.Optional<String> findAccessUserAccountType(String userId);
+
+    /** AUD-033：把账号绑到机构（覆盖旧绑定）。返回受影响行数（0=账号不存在）。 */
+    int updateUserPartnerOrg(String userId, String partnerOrgId);
+
     List<PartnerSubordinateRecord> listSubordinates(String partnerOrgId);
 
     Optional<PartnerSubordinateRecord> findSubordinate(String userId);

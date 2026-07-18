@@ -58,6 +58,41 @@ public class PartnerService {
         return saved;
     }
 
+    /**
+     * AUD-033 账号绑机构：顶层外包账号（平台代建）此前无任何入口写 partner_org_id，导致外包模块按机构
+     * 过滤时整段不可用。仅平台侧（partner.org.manage 权限，控制器闸）可绑；机构须存在且 active；
+     * 覆盖旧绑定（换机构=重绑）。审计留痕成功/失败事件。
+     */
+    public void bindUserToOrg(String orgId, String userId) {
+        try {
+            if (userId == null || userId.isBlank()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "user_id is required");
+            }
+            ExternalPartnerOrgRecord org = repository.findOrgById(orgId)
+                    .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "partner org not found"));
+            if (!"active".equals(org.status())) {
+                throw ApiException.conflict("PARTNER_ORG_NOT_ACTIVE", "partner org is not active");
+            }
+            String accountType = repository.findAccessUserAccountType(userId.trim())
+                    .orElseThrow(() -> ApiException.notFound("ACCESS_USER_NOT_FOUND", "access user not found"));
+            // 复核 Important:只允许外包类账号入机构——机构管理员可停用其"下属"、机构到期批量禁用挂靠账号,
+            // 平台/员工/商户账号被误绑=外部方可停用平台账号(权限倒挂)+配额被吃+名单外泄。
+            if (!"outsourced_vendor".equals(accountType)) {
+                throw ApiException.badRequest("ACCESS_USER_NOT_OUTSOURCED",
+                        "only outsourced vendor accounts can be bound to a partner org");
+            }
+            repository.updateUserPartnerOrg(userId.trim(), orgId);
+            auditEventService.recordSuccess("partner.org.user_bound", "partner.org.manage",
+                    "external_partner_org", orgId, null, null,
+                    java.util.Map.of("user_id", userId.trim()));
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("partner.org.user_bind_failed", "partner.org.manage",
+                    "external_partner_org", orgId, null, null,
+                    exception instanceof ApiException apiException ? apiException.code() : "INTERNAL_ERROR");
+            throw exception;
+        }
+    }
+
     // ---- 机构管理员：自助管下属 ----
 
     public PageResponse<PartnerSubordinateRecord> listMySubordinates() {

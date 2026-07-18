@@ -82,6 +82,23 @@ class JdbcPartnerRepository implements PartnerRepository {
     }
 
     @Override
+    public java.util.Optional<String> findAccessUserAccountType(String userId) {
+        return java.util.Optional.ofNullable(jdbcTemplate.query(
+                "SELECT account_type FROM access_users WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", userId),
+                rs -> rs.next() ? rs.getString(1) : null));
+    }
+
+    @Override
+    public int updateUserPartnerOrg(String userId, String partnerOrgId) {
+        return jdbcTemplate.update(
+                "UPDATE access_users SET partner_org_id = :org WHERE id = :id",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("org", partnerOrgId)
+                        .addValue("id", userId));
+    }
+
+    @Override
     public List<PartnerSubordinateRecord> listSubordinates(String partnerOrgId) {
         return jdbcTemplate.query("""
                 SELECT id, username, partner_org_id, account_type, status, created_at
