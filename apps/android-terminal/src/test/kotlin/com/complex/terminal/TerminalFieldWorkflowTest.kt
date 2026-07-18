@@ -256,6 +256,36 @@ class TerminalFieldWorkflowTest {
     assertTrue(threw, "online amusement verify should require network")
   }
 
+  @Test
+  fun syncPendingTasksOnlyUploadsCurrentOperatorTasks() {
+    val syncBodies = mutableListOf<String>()
+    val api = newApi { req ->
+      assertEquals("/api/v1/terminals/sync-tasks", req.path)
+      syncBodies += req.body
+      okJson("""{"synced_at":"t","results":[]}""")
+    }
+    val store = storeWithSessionAndBinding() // 会话 staff-1
+    val workflow = TerminalWorkflow(api, store)
+
+    // staff-1 离线核销产生待同步任务(归属固化到 staff-1)。
+    workflow.networkOnline = false
+    val task = workflow.amusementVerifyOffline("E-AMUSE-9")
+    workflow.networkOnline = true
+
+    // 换人:同一设备换 staff-2 登录(binding 不变,仅会话改)。
+    store.saveSession(TerminalSession("token2", "staff-2", "operator2"))
+    workflow.syncPendingTasks()
+    assertTrue(syncBodies.isEmpty(), "新员工不得上送上一员工的待同步任务")
+    assertEquals(1, store.pendingTaskCount(), "外来任务应保持 PENDING")
+
+    // 原员工 staff-1 重登后可正常同步自己的任务,且以 staff-1 身份上送。
+    store.saveSession(TerminalSession("token1", "staff-1", "operator"))
+    workflow.syncPendingTasks()
+    assertEquals(1, syncBodies.size)
+    assertTrue(task.clientTaskId in syncBodies.first())
+    assertTrue("\"staff_id\":\"staff-1\"" in syncBodies.first())
+  }
+
   private fun okJson(body: String): HttpResponse<String> = StubResponse(200, body)
 }
 

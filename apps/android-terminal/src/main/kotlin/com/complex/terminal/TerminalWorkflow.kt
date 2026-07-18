@@ -119,6 +119,8 @@ class TerminalWorkflow(
         "mode" to "offline",
       ),
       occurredAt = nowIso(),
+      originStaffId = store.session?.staffId,
+      originDeviceCode = store.binding?.deviceCode,
     )
     store.enqueue(task)
     store.addEvent(
@@ -138,6 +140,8 @@ class TerminalWorkflow(
       taskType = "manual_supplement",
       payload = mapOf("reason" to reason, "note" to note),
       occurredAt = nowIso(),
+      originStaffId = store.session?.staffId,
+      originDeviceCode = store.binding?.deviceCode,
     )
     store.enqueue(task)
     store.addEvent(
@@ -154,16 +158,20 @@ class TerminalWorkflow(
   fun syncPendingTasks(): SyncTasksResponse {
     requireOnline()
     val binding = requireNotNull(store.binding) { "device binding is missing" }
-    val pending = store.pendingTasks()
-    if (pending.isEmpty()) return SyncTasksResponse(results = emptyList(), syncedAt = nowIso())
+    val currentStaffId = requireNotNull(store.session?.staffId) { "terminal session is missing" }
+    // 归属校验:只上送「原操作员=当前登录员工」的待同步任务。换人(clearSensitiveData 保留
+    // PENDING)后,上一员工遗留的任务归属不符即不上送,绝不冒充新员工身份补登;这些任务
+    // 保持 PENDING,待原员工重登后自行同步(或由主管交接处理)。
+    val mine = store.pendingTasks().filter { it.originStaffId == currentStaffId }
+    if (mine.isEmpty()) return SyncTasksResponse(results = emptyList(), syncedAt = nowIso())
 
     val response = api.syncTasks(
       SyncTasksRequest(
         idempotencyKey = newClientTaskId("sync-tasks"),
         operatorNote = "Android terminal pending task sync",
         deviceCode = binding.deviceCode,
-        staffId = store.session?.staffId,
-        tasks = pending.map {
+        staffId = currentStaffId,
+        tasks = mine.map {
           SyncTaskRequest(
             clientTaskId = it.clientTaskId,
             taskType = it.taskType,
@@ -279,6 +287,8 @@ class TerminalWorkflow(
         if (sessionId != null) put("sessionId", sessionId)
       },
       occurredAt = nowIso(),
+      originStaffId = store.session?.staffId,
+      originDeviceCode = store.binding?.deviceCode,
     )
     store.enqueue(task)
     store.addEvent(
