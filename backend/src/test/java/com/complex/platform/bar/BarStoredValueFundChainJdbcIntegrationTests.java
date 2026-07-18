@@ -171,8 +171,13 @@ class BarStoredValueFundChainJdbcIntegrationTests {
         assertThat(financeService.findPaymentIntent(intent.id()).orElseThrow().status()).isEqualTo("succeeded");
         assertThat(projectCardBalance(customerId, PROJECT_ID)).isEqualTo(6000L);
 
-        // 重复确认（柜台重试）：确认/入账全链幂等，不得二次加余额。
+        // 重复确认（柜台重试，同幂等键）：确认/入账全链幂等，不得二次加余额。
         storedValueService.confirmOfflineTopupAndSettle(intent.id(), confirm);
+        assertThat(projectCardBalance(customerId, PROJECT_ID)).isEqualTo(6000L);
+
+        // 异键重复确认（另一台柜台/另一次点击）：确认记录可再落一条，但入账仍单次。
+        storedValueService.confirmOfflineTopupAndSettle(intent.id(), new OfflinePaymentConfirmRequest(
+                "confirm_svchain6_again", null, null, intent.id(), 6000L, "cash", Instant.now()));
         assertThat(projectCardBalance(customerId, PROJECT_ID)).isEqualTo(6000L);
     }
 
@@ -203,6 +208,29 @@ class BarStoredValueFundChainJdbcIntegrationTests {
                 "SELECT status FROM customer_stored_value_accounts WHERE customer_id = ? AND merchant_id = ?",
                 String.class, customerId, "merchant_svchain7");
         assertThat(status).isEqualTo("closed");
+
+        // 柜台路径同参重试：命中 svcr_ 命名空间原流水，安全重放同一笔。
+        CustomerStoredValueTransactionRecord replay = storedValueService.counterRefund(customerId, null,
+                "merchant_svchain7", 10000L, "counter refund", true, "VOUCHER-7788", "refund_svchain7");
+        assertThat(replay.id()).isEqualTo(txn.id());
+    }
+
+    @Test
+    void onlineAndCounterRefundKeysLiveInSeparateNamespaces() {
+        String customerId = seedCustomer("svchain8");
+        seedAccount(customerId, null, "merchant_svchain8", 9000L, "platform_collect");
+
+        // 线上退款(platform_collect 卡允许)用键 X。
+        CustomerStoredValueTransactionRecord online = storedValueService.refund(customerId, null,
+                "merchant_svchain8", 3000L, "cross path key", false, "xpathkey_svchain8");
+        assertThat(accountBalance(customerId, "merchant_svchain8")).isEqualTo(6000L);
+
+        // 柜台退款复用同一个客户端键 X：不得命中线上流水冒充「柜台退款成功」（否则柜台再兑付现金=双重兑付），
+        // 而是作为柜台命名空间下的独立新退款正常执行。
+        CustomerStoredValueTransactionRecord counter = storedValueService.counterRefund(customerId, null,
+                "merchant_svchain8", 3000L, "cross path key", false, "VOUCHER-8899", "xpathkey_svchain8");
+        assertThat(counter.id()).isNotEqualTo(online.id());
+        assertThat(accountBalance(customerId, "merchant_svchain8")).isEqualTo(3000L);
     }
 
     // ---------------- 造数 ----------------

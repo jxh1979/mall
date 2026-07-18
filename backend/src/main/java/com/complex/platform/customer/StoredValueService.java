@@ -57,8 +57,10 @@ public class StoredValueService {
 
     // AUD-002 操作命名空间隔离：内部派生幂等键的保留前缀。客户端/后台传入的幂等键不得占用，
     // 否则可预占 sv_settle_<intentId> 使正常充值入账永久冲突，或伪造 barsv_ 命中错误重放。
+    // svcr_ = 柜台退款命名空间（复核发现：与线上退款共享命名空间时，跨路径同键重放会把线上退款流水
+    // 错当柜台退款成功返回——不落柜台审计/凭证还可能引发双重兑付）。
     private static final String[] RESERVED_IDEMPOTENCY_PREFIXES = {
-            "sv_settle_", "sv_topup_", "svtop_", "barsv_", "svtxn_", "svacc_"};
+            "sv_settle_", "sv_topup_", "svtop_", "barsv_", "svtxn_", "svacc_", "svcr_"};
 
     private final CustomerRepository repository;
     private final FinanceService financeService;
@@ -200,10 +202,9 @@ public class StoredValueService {
         return confirmation;
     }
 
-    /** 入账内核（不带客户充值权限闸）：供 {@link #settleTopup} 与柜台确认链复用，校验逻辑完全一致。 */
-    @Transactional
-    public CustomerStoredValueTransactionRecord settleTopupInternal(String customerId, String projectId,
-                                                                    String merchantId, String paymentIntentId) {
+    /** 入账内核（不带客户充值权限闸）：仅供 {@link #settleTopup} 与柜台确认链两个带闸入口复用，不对外开放。 */
+    private CustomerStoredValueTransactionRecord settleTopupInternal(String customerId, String projectId,
+                                                                     String merchantId, String paymentIntentId) {
         Instant now = now();
         requireCustomer(customerId);
         PaymentIntentRecord intent = financeService.findPaymentIntent(paymentIntentId)
@@ -331,6 +332,7 @@ public class StoredValueService {
     public CustomerStoredValueTransactionRecord refund(String customerId, String projectId, String merchantId,
                                                        long amountCent, String reason, boolean closeAccount,
                                                        String idempotencyKey) {
+        requireClientIdempotencyKey(idempotencyKey);
         return doRefund(customerId, projectId, merchantId, amountCent, reason, closeAccount,
                 idempotencyKey, false, null);
     }
@@ -353,8 +355,15 @@ public class StoredValueService {
         if (voucher == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "redemption_voucher_no is required");
         }
+        requireClientIdempotencyKey(idempotencyKey);
+        if (idempotencyKey != null && idempotencyKey.length() > 120) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is too long");
+        }
+        // 柜台退款独立幂等命名空间：同一客户端键在线上/柜台两条路径各自幂等，互不重放（复核 Important 项）。
+        String namespacedKey = idempotencyKey == null || idempotencyKey.isBlank()
+                ? idempotencyKey : "svcr_" + idempotencyKey;
         return doRefund(customerId, projectId, merchantId, amountCent, reason, closeAccount,
-                idempotencyKey, true, voucher);
+                namespacedKey, true, voucher);
     }
 
     private CustomerStoredValueTransactionRecord doRefund(String customerId, String projectId, String merchantId,
@@ -364,7 +373,6 @@ public class StoredValueService {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
         }
-        requireClientIdempotencyKey(idempotencyKey);
         if (amountCent <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be positive");
         }
@@ -372,6 +380,7 @@ public class StoredValueService {
         CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
         if (existing != null) {
             // AUD-002: 幂等命中核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，不再只看 customerId。
+            // 路径隔离由键命名空间保证（柜台=svcr_ 前缀），线上/柜台不会互相命中。
             return verifyIdempotentReplay(existing, customerId, projectId, merchantId,
                     "refund", -amountCent, reason);
         }
