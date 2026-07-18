@@ -174,6 +174,28 @@ class EnergyServiceTests {
     }
 
     @Test
+    void settleEnergyFee_sameMerchantMultipleContractsEachBilledNotDeduped() {
+        // AUD-005：同一商户两份合同同期,均 by_contract 固定费,应各自计费(2 条),不因 merchant+period 去重漏掉第二份。
+        repo.contracts.add(new EnergyContractSnapshot("ct_multi_a", "mch_multi", "proj_1",
+                "by_contract", 500L, bd("10"), 10L));
+        repo.contracts.add(new EnergyContractSnapshot("ct_multi_b", "mch_multi", "proj_1",
+                "by_contract", 800L, bd("10"), 10L));
+
+        List<EnergyFeeSettlementRecord> out = service.settleEnergyFee("2026-06");
+
+        assertThat(out).hasSize(2);
+        assertThat(out).extracting(EnergyFeeSettlementRecord::contractId)
+                .containsExactlyInAnyOrder("ct_multi_a", "ct_multi_b");
+        assertThat(out).allMatch(r -> "mch_multi".equals(r.merchantId()));
+        assertThat(out).extracting(EnergyFeeSettlementRecord::amountCent)
+                .containsExactlyInAnyOrder(500L, 800L);
+        assertThat(repo.arItems).hasSize(2);
+        // 幂等重跑不新增。
+        assertThat(service.settleEnergyFee("2026-06")).isEmpty();
+        assertThat(repo.arItems).hasSize(2);
+    }
+
+    @Test
     void settleEnergyFee_noEffectiveContractsReturnsEmptyList() {
         assertThat(service.settleEnergyFee("2026-06")).isEmpty();
         assertThat(repo.arItems).isEmpty();
@@ -308,8 +330,8 @@ class EnergyServiceTests {
         }
 
         @Override
-        public boolean energyFeeArExists(String merchantId, String period) {
-            return arItems.containsKey(EnergyService.energyFeeSourceId(merchantId, period));
+        public boolean energyFeeArExists(String merchantId, String contractId, String period) {
+            return arItems.containsKey(EnergyService.energyFeeSourceId(merchantId, contractId, period));
         }
 
         @Override

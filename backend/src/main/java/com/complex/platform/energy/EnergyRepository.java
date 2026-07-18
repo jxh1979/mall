@@ -33,7 +33,7 @@ public interface EnergyRepository {
 
     BigDecimal sumMerchantConsumption(String merchantId, String period, String projectId);
 
-    boolean energyFeeArExists(String merchantId, String period);
+    boolean energyFeeArExists(String merchantId, String contractId, String period);
 
     EnergyFeeSettlementRecord insertEnergyFeeAr(EnergyFeeSettlementRecord record);
 

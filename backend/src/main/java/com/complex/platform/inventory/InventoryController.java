@@ -400,6 +400,25 @@ public class InventoryController {
         return ApiResponse.ok(service.receiveTransferOrder(orderId, request));
     }
 
+    // ── V277 借调归还 / 取消(AUD-002/003)：借用型收货后可归还翻回归属；created/shipped 可取消并冲销已挂应付。 ──
+    @PostMapping("/transfer-orders/{order_id}/return")
+    public ApiResponse<InventoryTransferOrderRecord> returnTransferOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.returnTransferOrder(orderId, request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/cancel")
+    public ApiResponse<InventoryTransferOrderRecord> cancelTransferOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.cancelTransferOrder(orderId, request));
+    }
+
     // ── V128 / REQ-39：溯源码主数据 CRUD（贴码登记 → 出库打印 → 责任链查询/列表）。 ──
     @GetMapping("/trace-codes")
     public ApiResponse<PageResponse<InventoryTraceCodeRecord>> listTraceCodes() {

@@ -213,13 +213,13 @@ class JdbcEnergyRepository implements EnergyRepository {
     }
 
     @Override
-    public boolean energyFeeArExists(String merchantId, String period) {
+    public boolean energyFeeArExists(String merchantId, String contractId, String period) {
         Boolean exists = jdbcTemplate.queryForObject("""
                 SELECT EXISTS (
                     SELECT 1 FROM ar_ap_items
                      WHERE direction = 'receivable' AND source_type = 'energy_fee' AND source_id = :source_id
                 )
-                """, new MapSqlParameterSource("source_id", EnergyService.energyFeeSourceId(merchantId, period)),
+                """, new MapSqlParameterSource("source_id", EnergyService.energyFeeSourceId(merchantId, contractId, period)),
                 Boolean.class);
         return Boolean.TRUE.equals(exists);
     }
