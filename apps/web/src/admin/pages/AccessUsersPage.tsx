@@ -30,6 +30,11 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   const [organizationId, setOrganizationId] = React.useState("org-1");
   const [merchantId, setMerchantId] = React.useState("");
   const [merchants, setMerchants] = React.useState<Array<{ id: string; displayName?: string; companyName?: string }>>([]);
+  // AUD-033: 账号绑外部协作机构(此前 partner_org_id 无任何后台入口,顶层外包账号绑不到机构)。
+  const [partnerOrgs, setPartnerOrgs] = React.useState<Array<{ id: string; orgName?: string; status?: string }>>([]);
+  const [bindUserId, setBindUserId] = React.useState("");
+  const [bindOrgId, setBindOrgId] = React.useState("");
+  const [bindBusy, setBindBusy] = React.useState(false);
   const [status, setStatus] = React.useState("active");
   const [selectedTemplateId, setSelectedTemplateId] = React.useState("");
   // 组织 / 商户显名字典（页面级拉取，失败降级回 ID）。
@@ -57,6 +62,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         const [entities, merchants] = await Promise.all([
           api.get<Array<{ id: string; name?: string; code?: string }>>("/api/v1/platform/business-entities"),
           api.get<Array<{ id: string; displayName?: string; companyName?: string }>>("/api/v1/platform/merchants"),
+          api.get<Array<{ id: string; orgName?: string; status?: string }>>("/api/v1/partner/orgs").then(setPartnerOrgs).catch(() => setPartnerOrgs([])),
         ]);
         setOrgNames(Object.fromEntries((entities ?? []).filter((e) => e.name || e.code).map((e) => [e.id, (e.name ?? e.code) as string])));
         setMerchantNames(Object.fromEntries((merchants ?? []).filter((m) => m.displayName || m.companyName).map((m) => [m.id, (m.displayName ?? m.companyName) as string])));
@@ -168,6 +174,28 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
     });
   }
 
+  async function bindPartnerOrg() {
+    if (!bindUserId || !bindOrgId) {
+      setFormError("请选择账号与外部协作机构。");
+      return;
+    }
+    setFormError("");
+    setBindBusy(true);
+    try {
+      await api.post(`/api/v1/partner/orgs/${encodeURIComponent(bindOrgId)}/bind-user`, {
+        idempotency_key: crypto.randomUUID(),
+        user_id: bindUserId,
+      });
+      setActionResult({ action: "partner_org_user_bound", userId: bindUserId, orgId: bindOrgId });
+      setBindUserId("");
+      setBindOrgId("");
+    } catch (bindError) {
+      setFormError(bindError instanceof Error ? bindError.message : "绑定失败");
+    } finally {
+      setBindBusy(false);
+    }
+  }
+
   return (
     <section data-testid="access-users-page">
       <AdminPageHeader title="员工账号" description="管理员工账号、岗位角色和企业微信同步结果；禁用、手动录入和分配权限模板必须留痕。" />
@@ -177,6 +205,21 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           <PermissionButton permissionsState={effectivePermissions} permissions={["access.user.manage"]} data-testid="access-user-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ 新建员工账号</PermissionButton>
         </div>
         {formError ? <div data-testid="access-users-error" className="admin-inline-error">{formError}</div> : null}
+        <div className="admin-inline-form" data-testid="access-partner-org-bind">
+          <h3>账号绑定外部协作机构</h3>
+          <p className="admin-preview">外包/审计等机构的顶层账号须绑定所属机构后,外包工作台才能按机构过滤其工单/巡检数据;换机构=重新绑定覆盖。</p>
+          <select aria-label="选择账号" data-testid="partner-bind-user" value={bindUserId} onChange={(event) => setBindUserId(event.target.value)}>
+            <option value="">选择账号</option>
+            {rows.map((u) => (<option key={u.id} value={u.id}>{u.username}（{shortId(u.id)}）</option>))}
+          </select>
+          <select aria-label="选择外部协作机构" data-testid="partner-bind-org" value={bindOrgId} onChange={(event) => setBindOrgId(event.target.value)}>
+            <option value="">选择机构</option>
+            {partnerOrgs.filter((o) => o.status === "active").map((o) => (<option key={o.id} value={o.id}>{o.orgName ?? o.id}</option>))}
+          </select>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["partner.org.manage"]} data-testid="partner-bind-submit" onClick={() => void bindPartnerOrg()} disabled={bindBusy}>
+            绑定机构
+          </PermissionButton>
+        </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-users-table">
             <thead><tr><th>员工账号</th><th>手机号</th><th>账号类型</th><th>组织</th><th>商户</th><th>状态</th><th>详情</th></tr></thead>

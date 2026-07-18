@@ -52,6 +52,29 @@ class PartnerServiceTests {
         assertThatThrownBy(service::listPartnerOrgs).isInstanceOf(ApiException.class);
     }
 
+    @Test
+    void bindUserToOrgValidatesOrgActiveAndUserExistsThenUpdates() {
+        when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "active", null)));
+        when(repository.accessUserExists("u1")).thenReturn(true);
+        service.bindUserToOrg(ORG, " u1 ");
+        verify(repository).updateUserPartnerOrg("u1", ORG);
+    }
+
+    @Test
+    void bindUserToOrgRejectsMissingOrInactiveOrgAndMissingUser() {
+        when(repository.findOrgById("ghost")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.bindUserToOrg("ghost", "u1"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PARTNER_ORG_NOT_FOUND"));
+        when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "suspended", null)));
+        assertThatThrownBy(() -> service.bindUserToOrg(ORG, "u1"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PARTNER_ORG_NOT_ACTIVE"));
+        when(repository.findOrgById(ORG)).thenReturn(Optional.of(org(3, "active", null)));
+        when(repository.accessUserExists("ghost_user")).thenReturn(false);
+        assertThatThrownBy(() -> service.bindUserToOrg(ORG, "ghost_user"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("ACCESS_USER_NOT_FOUND"));
+        verify(repository, org.mockito.Mockito.never()).updateUserPartnerOrg(any(), any());
+    }
+
     private ExternalPartnerOrgRecord org(int max, String status, Instant validUntil) {
         Instant now = Instant.parse("2026-06-30T00:00:00Z");
         return new ExternalPartnerOrgRecord(ORG, null, "维保甲", "facility_maintenance", null, max, validUntil, status, now, now);

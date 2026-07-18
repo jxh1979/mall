@@ -6,8 +6,8 @@
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 620,
+  "openapi_operation_count": 621,
   "security_baseline_version": "V1",
   "plaintext_secret_present": false,
-  "notes": "Formal security baseline and findings register are generated and verified. Re-synced to 620 operations after fix/aud-b2-ticketing-bar (AUD-019 retirement of the direct ticket-type issuance endpoint; net -1 on top of the 621 baseline). Re-verified via npm run verify:security-baseline and verify:production-readiness-evidence. P0/P1 open findings remain production blockers until real external or IT evidence is supplied."
+  "notes": "Formal security baseline and findings register are generated and verified. Re-synced to 621 operations after feat/aud-033-partner-org-binding (bindUserToPartnerOrg endpoint). Re-verified via npm run verify:security-baseline and verify:production-readiness-evidence. P0/P1 open findings remain production blockers until real external or IT evidence is supplied."
 }

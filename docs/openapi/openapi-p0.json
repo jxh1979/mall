@@ -30541,6 +30541,59 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/partner/orgs/{org_id}/bind-user": {
+      "post": {
+        "tags": [
+          "partner"
+        ],
+        "x-permission": "partner.org.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "partner.org.user_bound",
+        "x-audit-event-failure": "partner.org.user_bind_failed",
+        "x-auth-context": "staff-token",
+        "operationId": "bindUserToPartnerOrg",
+        "summary": "账号绑定外部协作机构",
+        "description": "平台管理员把既有后台账号绑到外部协作机构（机构须 active）；外包工作台按机构过滤的前置。",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "机构ID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PartnerOrgUserBindRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -33026,6 +33079,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/StoredValueCounterRefundRequest"
+            }
+          }
+        }
+      },
+      "PartnerOrgUserBindRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PartnerOrgUserBindRequest"
             }
           }
         }
@@ -43774,6 +43837,26 @@
           "amount_cent",
           "redemption_voucher_no"
         ]
+      },
+      "PartnerOrgUserBindRequest": {
+        "type": "object",
+        "description": "请求载荷 `PartnerOrgUserBindRequest`；AUD-033 平台把既有后台账号绑定到外部协作机构（此前 partner_org_id 无任何 API 入口，顶层外包账号绑不到机构、外包模块整段不可用）。",
+        "additionalProperties": false,
+        "required": [
+          "user_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同键重复提交返回首次结果。",
+            "maxLength": 128
+          },
+          "user_id": {
+            "type": "string",
+            "description": "要绑定的后台账号 id；换机构=重绑覆盖旧绑定。",
+            "maxLength": 64
+          }
+        }
       }
     }
   },

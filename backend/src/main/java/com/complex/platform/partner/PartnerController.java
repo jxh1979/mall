@@ -1,5 +1,7 @@
 package com.complex.platform.partner;
 
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -39,6 +41,17 @@ public class PartnerController {
             @RequestBody @jakarta.validation.Valid ExternalPartnerOrgRequest request) {
         authorizationService.requirePermission("partner.org.manage");
         return ApiResponse.ok(service.createPartnerOrg(request));
+    }
+
+    /** AUD-033：平台把既有后台账号绑到外部协作机构（外包模块按机构过滤的前置）。 */
+    @PostMapping("/orgs/{org_id}/bind-user")
+    public ApiResponse<Void> bindUserToOrg(
+            @PathVariable("org_id") String orgId,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.partner.dto.PartnerOrgUserBindRequest request) {
+        authorizationService.requirePermission("partner.org.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        service.bindUserToOrg(orgId, request.userId());
+        return ApiResponse.ok(null);
     }
 
     @GetMapping("/subordinates")
