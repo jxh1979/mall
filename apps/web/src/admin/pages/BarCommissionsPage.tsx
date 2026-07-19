@@ -90,7 +90,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
         { label: "订单号", value: order.orderNo ?? order.id },
         { label: "卡座", value: order.tableId ?? "—" },
         { label: "账单", value: rowBill?.id ?? order.billId ?? "—" },
-        { label: "消费额", value: formatAmount(order.totalAmount) },
+        { label: "消费额", value: formatAmount(order.totalAmountCent ?? order.totalAmount) },
         { label: "销售角色", value: sellerLabel(order) },
         { label: "计提比例", value: commissionRate(order) },
         { label: "状态", value: formatBusinessStatus(rowBill?.status ?? order.status) },
@@ -134,7 +134,8 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   const billId = firstBillId(selectedOrder);
   const salesOrders = orders.filter((order) => commissionRate(order) === "15%").length;
   const nonSalesOrders = orders.length - salesOrders;
-  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0);
+  // 列表接口返回 totalAmountCent（旧 totalAmount 字段兼容保留）：此前读幽灵字段恒为 0。
+  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmountCent ?? order.totalAmount ?? 0), 0);
 
   // 第二批接线（指标登记簿）：订单数卡（笔数+金额）改走统一明细端点（与订单/出品/账单页同一登记项同源，
   // 全历史口径与本页全量列表一致）；失败回退本地计算并隐藏「完整明细」入口。销售/非销售为本页口径拆分，保持本地。
@@ -222,7 +223,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
                     <td>{order.orderNo ?? order.id}</td>
                     <td>{order.tableId ?? "-"}</td>
                     <td>{rowBill?.id ?? order.billId ?? "-"}</td>
-                    <td>{formatAmount(order.totalAmount)}</td>
+                    <td>{formatAmount(order.totalAmountCent ?? order.totalAmount)}</td>
                     <td>{sellerLabel(order)}</td>
                     <td>{commissionRate(order)}</td>
                     <td>{formatBusinessStatus(rowBill?.status ?? order.status)}</td>

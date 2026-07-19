@@ -122,7 +122,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         { label: TEXT.table, value: order.tableId ?? "—" },
         { label: TEXT.orderStatus, value: displayStatus(order.status) },
         { label: TEXT.billStatus, value: bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill },
-        { label: TEXT.amount, value: formatAmount(order.totalAmount) },
+        { label: TEXT.amount, value: formatAmount(order.totalAmountCent ?? order.totalAmount) },
         { label: TEXT.commissionBasis, value: order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}` },
         { label: TEXT.createdAt, value: cnDate(order.createdAt) },
         { label: TEXT.paidAt, value: cnDate(bill?.paidAt ?? order.paidAt) },
@@ -164,7 +164,8 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
 
   const openOrders = orders.filter((order) => !["paid", "cancelled"].includes(order.status ?? "")).length;
   const billCount = orders.filter((order) => firstBill(order)).length;
-  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0);
+  // 列表接口返回 totalAmountCent（旧 totalAmount 字段兼容保留）：此前读幽灵字段恒为 0。
+  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmountCent ?? order.totalAmount ?? 0), 0);
   const salesCommissionOrders = orders.filter((order) => order.sellerRole === "sales" || order.commissionRate === "15%").length;
 
   // 第二批接线（指标登记簿）：订单数/未完结/订单金额三个 KPI 数字改走统一明细端点（与明细页同源，全历史口径
@@ -237,7 +238,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
     }
     await runOrderAction("bar_bill_settled", () => api.post(`/api/v1/bar/bills/${billId}/settle`, {
       paymentId: "payment-admin-web",
-      settlementAmountCent: selectedOrder?.totalAmount ?? 0,
+      settlementAmountCent: selectedOrder?.totalAmountCent ?? selectedOrder?.totalAmount ?? 0,
       paymentChannel,
       cashierStaffId: paymentChannel === "cash" ? cashierStaffId.trim() || undefined : undefined,
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
@@ -320,7 +321,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                     <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-BAR-001" objectId={order.tableId}>{order.tableId ?? "-"}</TraceLink></td>
                     <td>{displayStatus(order.status)}</td>
                     <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>
-                    <td>{formatAmount(order.totalAmount)}</td>
+                    <td>{formatAmount(order.totalAmountCent ?? order.totalAmount)}</td>
                     <td>{order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}`}</td>
                     <td>{cnDate(order.createdAt)}</td>
                     <td data-testid={`bar-order-paid-at-${order.id}`}>{cnDate(bill?.paidAt ?? order.paidAt)}</td>

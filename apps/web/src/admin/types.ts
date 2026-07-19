@@ -281,6 +281,8 @@ export type BarOrderRow = {
   sellerRole?: string;
   commissionRate?: string;
   status?: string;
+  /** 列表接口实际返回字段（BarOrderRecord.totalAmountCent，分）；totalAmount 为旧字段兼容保留。 */
+  totalAmountCent?: number;
   totalAmount?: number;
   createdAt?: string;
   paidAt?: string;
