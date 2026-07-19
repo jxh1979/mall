@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AmusementVerificationRecordsPage } from "./AmusementVerificationRecordsPage";
@@ -55,6 +55,21 @@ describe("AmusementVerificationRecordsPage 第三批接线：入场/出场改走
     expect(screen.getByTestId("amu-verif-kpi-exit").textContent).toBe("8");
     expect(screen.getByTestId("amu-verif-metric-detail-entry")).toBeTruthy();
     expect(screen.getByTestId("amu-verif-metric-detail-exit")).toBeTruthy();
+  });
+
+  it("从无筛选(ready全量)加筛选→统一取数禁用、回退本地筛选计数且入口隐藏（enabled true→false 须重置 state）", async () => {
+    renderPage(makeApi());
+
+    // 初始无筛选：ready 全量。
+    await waitFor(() => expect(screen.getByTestId("amu-verif-kpi-entry").textContent).toBe("22"));
+    expect(screen.getByTestId("amu-verif-metric-detail-entry")).toBeTruthy();
+
+    // 加方向筛选 → query≠""，enabled 由 true→false：卡片必须回退本地计数（入场 2 / 出场 1）并隐藏入口。
+    fireEvent.change(screen.getByTestId("amu-verif-filter-direction"), { target: { value: "entry" } });
+    await waitFor(() => expect(screen.getByTestId("amu-verif-kpi-entry").textContent).toBe("2"));
+    expect(screen.getByTestId("amu-verif-kpi-exit").textContent).toBe("1");
+    expect(screen.queryByTestId("amu-verif-metric-detail-entry")).toBeNull();
+    expect(screen.queryByTestId("amu-verif-metric-detail-exit")).toBeNull();
   });
 
   it("统一端点失败（含无权限）→ 回退本地筛选后计数并隐藏完整明细入口，体验不降级", async () => {
