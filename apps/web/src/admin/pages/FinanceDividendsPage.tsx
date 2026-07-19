@@ -466,7 +466,15 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.principalGrossCent)}</td>
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.taxCent)}</td>
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.principalNetCent)}</td>
-                  <td>{DIVIDEND_STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}</td>
+                  <td>
+                    {DIVIDEND_STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}
+                    {row.kind !== "preview" && (row.status === "approved" || row.status === "paid") ? (
+                      <span className="admin-muted-action" data-testid={`dividend-period-locked-${row.id}`}
+                        title="该期间已完成分红核算，费用台账（含自动挂接）已冻结，不能再录入/冲销">
+                        {" "}· 期间已关账
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="admin-row-detail-cell" onClick={(event) => event.stopPropagation()}>
                     <button type="button" className="admin-row-detail-btn" aria-label="查看分红计算单明细" onClick={(event) => { event.stopPropagation(); void openDetail(row); }}>查看详情</button>
                     {row.status === "draft" ? (

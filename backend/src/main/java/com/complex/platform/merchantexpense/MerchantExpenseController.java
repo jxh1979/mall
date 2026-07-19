@@ -43,6 +43,11 @@ public class MerchantExpenseController {
         return ApiResponse.ok(service.summarize(period, merchantId));
     }
 
+    @GetMapping("/period-locks")
+    public ApiResponse<List<String>> periodLocks(@RequestParam("period") String period) {
+        return ApiResponse.ok(service.listLockedMerchants(period));
+    }
+
     @PostMapping
     public ApiResponse<MerchantExpenseEntryRecord> createManual(
             @RequestBody MerchantExpenseEntryRequest request) {

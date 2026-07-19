@@ -93,6 +93,8 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
   const [reverseTarget, setReverseTarget] = React.useState<MerchantExpenseEntryRow | null>(null);
   // 自动挂接返回的金额漂移清单（上游改账后台账净额与上游当前金额不一致；处置=红字冲销旧行+手工录入修正额）。
   const [driftRows, setDriftRows] = React.useState<MerchantExpenseDriftRow[]>([]);
+  // 分红期间关账锁：当前月份已关账（approved/paid 正式分红单覆盖）的商户 id。已关账商户禁止录入/冲销。
+  const [lockedMerchants, setLockedMerchants] = React.useState<string[]>([]);
 
   // 手工录入表单
   const [formMerchant, setFormMerchant] = React.useState("");
@@ -151,6 +153,26 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
     void loadSummary();
   }, [loadSummary]);
 
+  // 关账锁清单：随月份刷新（该月已完成分红核算=关账的商户，禁止录入/冲销）。读失败不阻断页面（后端硬闸兜底）。
+  const loadLocks = React.useCallback(async () => {
+    if (!periodFilter) {
+      setLockedMerchants([]);
+      return;
+    }
+    try {
+      const locked = await api.get<string[]>(
+        `/api/v1/finance/merchant-expenses/period-locks?period=${encodeURIComponent(periodFilter)}`);
+      // 端点回商户 id 字符串数组；防御性只取字符串项（非数组/异常形态一律视为无锁定）。
+      setLockedMerchants(Array.isArray(locked) ? locked.filter((x): x is string => typeof x === "string") : []);
+    } catch {
+      setLockedMerchants([]);
+    }
+  }, [api, periodFilter]);
+
+  React.useEffect(() => {
+    void loadLocks();
+  }, [loadLocks]);
+
   // 筛选条件变化 → 列表回第 1 页重取。
   React.useEffect(() => {
     rows.reload();
@@ -178,9 +200,18 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
     setCreateOpen(true);
   }
 
+  // 关账锁提示文案。lockedMerchants 是 periodFilter 月的清单——仅当表单月份=筛选月份时能据此前置拦截；
+  // 其他月份由后端 DIVIDEND_PERIOD_LOCKED（409）兜底。
+  const lockedHint = () =>
+    `该商户 ${periodFilter} 月已完成分红核算（关账），费用台账不可再录入/冲销；如需更正请先作废对应分红计算单解锁。`;
+  function isLockedForForm(): boolean {
+    return !!formMerchant && formPeriod.trim() === periodFilter && lockedMerchants.includes(formMerchant);
+  }
+
   function validateCreate(): string | null {
     if (!formMerchant) return TEXT.merchantRequired;
     if (!formPeriod.trim()) return TEXT.periodRequired;
+    if (isLockedForForm()) return lockedHint();
     const amount = Number(formAmountYuan);
     if (!Number.isFinite(amount) || amount === 0) return TEXT.amountRequired;
     if (!formNote.trim()) return TEXT.noteRequired;
@@ -238,6 +269,8 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
       async () => {
         const result = await api.post<MerchantExpenseSyncResult>("/api/v1/finance/merchant-expenses/sync-auto", request);
         setDriftRows(result?.drift ?? []);
+        // 自动挂接响应带回该月关账（跳过）商户清单，直接刷新锁定态（省一次 period-locks 往返）。
+        setLockedMerchants(result?.lockedMerchants ?? []);
         return result;
       });
   }
@@ -261,9 +294,14 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
     });
   }
 
-  // 冲销行（manual + source_ref）不允许再冲销，按钮不渲染。
+  // 该行是否处于关账锁（仅当行月份=当前筛选月份且商户在锁定清单内可判；后端硬闸兜底其余情况）。
+  function isRowLocked(row: MerchantExpenseEntryRow): boolean {
+    return !!row.merchantId && row.period === periodFilter && lockedMerchants.includes(row.merchantId);
+  }
+
+  // 冲销行（manual + source_ref）不允许再冲销；关账月份的行也禁止冲销，按钮不渲染。
   function reversible(row: MerchantExpenseEntryRow): boolean {
-    return !(row.source === "manual" && row.sourceRef);
+    return !(row.source === "manual" && row.sourceRef) && !isRowLocked(row);
   }
 
   const summaryTotal = summary.reduce((acc, row) => acc + (row.totalCent ?? 0), 0);
@@ -316,6 +354,21 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
               <li key={d.entryId} data-testid={`merchant-expense-drift-${d.entryId}`}>
                 台账行 {d.entryId}（{SOURCE_LABELS[d.source ?? ""] ?? d.source}·上游单据 {d.sourceRef}）：
                 台账净额 ¥{centToYuan(d.ledgerNetCent)} ≠ 上游当前 ¥{centToYuan(d.upstreamAmountCent)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {/* ── 分红期间关账锁提示（已完成分红核算的月份，费用台账冻结）──────── */}
+      {lockedMerchants.length > 0 ? (
+        <div className="admin-form-error" data-testid="merchant-expense-lock-panel">
+          <strong>{periodFilter} 有 {lockedMerchants.length} 家商户已完成分红核算（关账）：</strong>
+          这些商户本月费用台账已冻结，不能再录入/冲销（避免已发放分红的基数被追改）。如确需更正，请先作废对应分红计算单解锁。
+          <ul>
+            {lockedMerchants.map((mid) => (
+              <li key={mid} data-testid={`merchant-expense-lock-${mid}`}>
+                {merchants.find((m) => m.id === mid) ? merchantLabel(merchants.find((m) => m.id === mid)!) : mid}
               </li>
             ))}
           </ul>

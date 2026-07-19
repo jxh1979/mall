@@ -827,6 +827,8 @@ export type MerchantExpenseSyncResult = {
   contractPropertyInserted?: number;
   rentInserted?: number;
   drift?: MerchantExpenseDriftRow[];
+  // 分红期间关账锁跳过清单：该月被 approved/paid 正式分红单覆盖（关账）的商户 id，自动挂接对其跳过。
+  lockedMerchants?: string[];
 };
 
 // 持股分红（V299）：方案配置 / 期间计算单 / 算式明细行 / 期间作业结果。

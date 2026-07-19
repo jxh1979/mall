@@ -75,6 +75,24 @@ public class MerchantExpenseService {
                 });
     }
 
+    /**
+     * 期间关账锁清单：某月被 approved/paid 正式分红单覆盖（关账）的商户 id 列表。
+     * 前端据此对已关账商户禁用「录入/冲销」按钮并给锁定提示（后端 requirePeriodOpen 是硬闸）。
+     */
+    public List<String> listLockedMerchants(String period) {
+        authorizationService.requirePermission(VIEW_PERM);
+        return operations.readSingle(
+                AuditedOperation.of("merchant_expense.period_locks_viewed",
+                        "merchant_expense.period_locks_view_failed", VIEW_PERM, BUSINESS_TYPE),
+                () -> {
+                    List<String> locked = repository.listLockedMerchants(requirePeriod(period));
+                    // x-data-scope: merchant——商户 scope 账号只回自己商户的关账状态（0 或 1 条），不外泄他商户。
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(own -> locked.stream().filter(own::equals).toList()).orElse(locked);
+                },
+                result -> "period:" + period);
+    }
+
     /** 期间汇总：按商户 + 月份返回分类型费用合计（分红引擎费用侧取数点）。 */
     public List<MerchantExpenseSummaryRecord> summarize(String period, String merchantId) {
         authorizationService.requirePermission(VIEW_PERM);
