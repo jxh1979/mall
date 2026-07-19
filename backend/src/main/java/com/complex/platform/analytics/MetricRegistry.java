@@ -723,7 +723,118 @@ public final class MetricRegistry {
                 "id",
                 staffHeadcountColumns(),
                 null));
+
+        // ==== 第六批（P0 总控驾驶舱剩余卡，2026-07-19）：谓词逐字抄总览 ETL 聚合（DashboardAggregationJob）====
+        // 目的：总控页「游乐核销 / 票务核销 / 新增会员 / 待复核」四卡数字改走统一明细端点，与登记簿同源（数字=明细合计），
+        // 点开即得逐条明细。口径逐字复刻 ETL：单日 as-of 时，登记项经营日窗 == ETL dayRange(domain, date) 窗口。
+        // 游乐核销：countAmusementVerificationSuccess = 成功核销记录数（入场+出场两方向，与总览快照 traffic.amusement 同）。
+        register(registry, new MetricDefinition(
+                "traffic.amusement",
+                "游乐核销数",
+                TYPE_ADDITIVE,
+                "次",
+                "游乐核销逐条计数（verification_result='success'，含入场/出场两方向，与总控总览「游乐核销」卡 ETL 口径 "
+                        + "countAmusementVerificationSuccess 逐字同）。可加口径=区间求和：按核销时间落游乐经营日窗计数；"
+                        + "不传日期=全部历史。平台口径（amusement_verifications 无 merchant_id 维度）。",
+                "游乐核销台账（amusement_verifications，实时查询）。",
+                "amusement.verification.view",
+                "amusement",
+                true,
+                false,
+                "ADM-AMU-005",
+                "ADM-AMU-005",
+                "id",
+                verificationColumns(),
+                null));
+        // 票务核销：countTicketVerificationSuccessByMerchant 平台合计 = 成功核销记录数（status='success'）。
+        register(registry, new MetricDefinition(
+                "verify.done",
+                "票务核销数",
+                TYPE_ADDITIVE,
+                "次",
+                "票务核销逐条计数（status='success'，与总控总览「票务核销」卡 ETL 口径 "
+                        + "countTicketVerificationSuccessByMerchant 平台合计逐字同）。可加口径=区间求和：按核销时间落票务经营日窗计数；"
+                        + "不传日期=全部历史。平台口径（跨商户合计）。",
+                "票务核销台账（ticket_verifications，实时查询）。",
+                "ticket.verify.view",
+                "ticketing",
+                true,
+                false,
+                "ADM-TKT-003",
+                "ADM-TKT-003",
+                "id",
+                ticketVerificationColumns(),
+                null));
+        // 新增会员：countNewMembers = 建号落经营日窗且状态非注销/拉黑的客人计数。仅读脱敏列，不含 PII 明文。
+        register(registry, new MetricDefinition(
+                "member.new",
+                "新增会员数",
+                TYPE_ADDITIVE,
+                "人",
+                "新增会员逐条计数（建号时间落客人经营日窗、状态 NOT IN ('deregistered','blacklisted')，与总控总览「新增会员」卡 "
+                        + "ETL 口径 countNewMembers 逐字同）。可加口径=区间求和；不传日期=全部历史。平台口径。"
+                        + "明细仅展示脱敏手机号，不含 PII 明文（与聚合同不读 phone 明文列）。",
+                "客人账号台账（customers，实时查询）。",
+                "customer.account.manage",
+                "customer",
+                true,
+                false,
+                "ADM-CUS-001",
+                "ADM-CUS-001",
+                "id",
+                memberColumns(),
+                null));
+        // 待复核：countPendingReview = 待复核主管审批（review_status='pending_review'）+ 未处置风险预警（status='open'）。
+        register(registry, new MetricDefinition(
+                "risk.pending_review",
+                "待复核数",
+                TYPE_BALANCE,
+                "项",
+                "当前待复核数=待复核主管审批（supervisor_review_decisions.review_status='pending_review'）"
+                        + "+ 未处置风险预警（analytics_risk_alerts.status='open'）合计（与总控总览「待复核」卡 ETL 口径 "
+                        + "countPendingReview 同，两源并计）。余额口径=区间末值：取结束日期（缺省=当前经营日）为截至日，"
+                        + "仅计入产生时间早于截至日窗末的条目；状态按台账当前值计。起始日期不参与。平台口径。",
+                "主管复核台账 + 风险预警台账（supervisor_review_decisions / analytics_risk_alerts，实时查询）。",
+                "governance.supervisor_review.view",
+                "governance",
+                false,
+                false,
+                "ADM-GOV-006",
+                "ADM-GOV-006",
+                "id",
+                pendingReviewColumns(),
+                null));
         return registry;
+    }
+
+    private static List<MetricColumn> ticketVerificationColumns() {
+        return List.of(
+                new MetricColumn("verificationNo", "核销单号"),
+                new MetricColumn("entitlementCode", "权益编码"),
+                new MetricColumn("status", "核销结果"),
+                new MetricColumn("sourceType", "来源"),
+                new MetricColumn("createdAt", "核销时间"),
+                new MetricColumn("id", "记录编号"));
+    }
+
+    private static List<MetricColumn> memberColumns() {
+        return List.of(
+                new MetricColumn("maskedPhone", "脱敏手机号"),
+                new MetricColumn("status", "状态"),
+                new MetricColumn("createdAt", "建号时间"),
+                new MetricColumn("lastLoginAt", "最近登录"),
+                new MetricColumn("id", "客人编号"));
+    }
+
+    private static List<MetricColumn> pendingReviewColumns() {
+        return List.of(
+                new MetricColumn("source", "来源"),
+                new MetricColumn("objectType", "对象类型"),
+                new MetricColumn("objectId", "对象"),
+                new MetricColumn("detail", "说明"),
+                new MetricColumn("status", "状态"),
+                new MetricColumn("createdAt", "产生时间"),
+                new MetricColumn("id", "编号"));
     }
 
     private static List<MetricColumn> ticketOrderColumns() {

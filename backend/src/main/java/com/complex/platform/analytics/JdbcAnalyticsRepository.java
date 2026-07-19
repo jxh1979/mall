@@ -758,8 +758,10 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public BigDecimal countPendingReview() {
+        // 待复核主管审批的规范状态值=SupervisorReviewService 写入的 'pending_review'（V050 索引亦以此为准）；
+        // 曾误写 'pending' 致主管复核部分恒为 0（总控「待复核」卡漏计），修正与 JdbcPlatformRepository.listPendingReviews 同谓词。
         BigDecimal reviews = jdbcTemplate.queryForObject("""
-                SELECT COUNT(*) FROM supervisor_review_decisions WHERE review_status = 'pending'
+                SELECT COUNT(*) FROM supervisor_review_decisions WHERE review_status = 'pending_review'
                 """, new MapSqlParameterSource(), BigDecimal.class);
         BigDecimal alerts = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM analytics_risk_alerts WHERE status = 'open'
@@ -2774,6 +2776,128 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         row.put("id", rs.getString("id"));
         row.put("username", rs.getString("username"));
         row.put("accountType", rs.getString("account_type"));
+        row.put("status", rs.getString("status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        return row;
+    }
+
+    // ==== KPI 统一明细·第六批（总控驾驶舱剩余卡）：谓词逐字抄总览 ETL 聚合（DashboardAggregationJob）====
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows amusementVerificationSuccessDetail(Instant start, Instant end, int limit, int offset) {
+        // 谓词同 ETL countAmusementVerificationSuccess：verification_result='success'（入场+出场两方向）。start/end 可空=全历史。
+        String where = composeWhere("verification_result = 'success'", start != null);
+        MapSqlParameterSource params = start == null ? pagedParams(limit, offset) : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, project_id, session_id, direction, verification_result, verified_people, created_at
+                  FROM amusement_verifications
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(where), params, (rs, n) -> amusementVerificationRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM amusement_verifications
+                 %s
+                """.formatted(where), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows ticketVerificationSuccessDetail(Instant start, Instant end, int limit, int offset) {
+        // 谓词同 ETL countTicketVerificationSuccessByMerchant 平台合计：status='success'。start/end 可空=全历史。
+        String where = composeWhere("status = 'success'", start != null);
+        MapSqlParameterSource params = start == null ? pagedParams(limit, offset) : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, verification_no, entitlement_code, status, source_type, created_at
+                  FROM ticket_verifications
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(where), params, (rs, n) -> ticketVerificationRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM ticket_verifications
+                 %s
+                """.formatted(where), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows newMemberDetail(Instant start, Instant end, int limit, int offset) {
+        // 谓词同 ETL countNewMembers：建号落窗 + status NOT IN ('deregistered','blacklisted')。仅读脱敏列，不读 phone 明文。start/end 可空=全历史。
+        String where = composeWhere("status NOT IN ('deregistered', 'blacklisted')", start != null);
+        MapSqlParameterSource params = start == null ? pagedParams(limit, offset) : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, masked_phone, status, created_at, last_login_at
+                  FROM customers
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(where), params, (rs, n) -> memberRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM customers
+                 %s
+                """.formatted(where), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows pendingReviewDetail(LocalDate asOf, int limit, int offset) {
+        // 谓词同 ETL countPendingReview（两源并计）：待复核主管审批（review_status='pending_review'）+ 未处置风险预警（status='open'）；
+        // 余额口径：仅计入产生时间（评估/建立）早于截至日自然日窗末的条目，状态按台账当前值。
+        java.util.Objects.requireNonNull(asOf, "pending review detail asOf must not be null");
+        MapSqlParameterSource params = pagedParams(limit, offset)
+                .addValue("as_of_end", timestampWithTimeZone(asOf.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()));
+        String union = """
+                SELECT '主管复核' AS source, review_id AS id, object_type, object_id,
+                       policy_code AS detail, review_status AS status, evaluated_at AS created_at
+                  FROM supervisor_review_decisions
+                 WHERE review_status = 'pending_review' AND evaluated_at < :as_of_end
+                UNION ALL
+                SELECT '风险预警' AS source, id, object_type, object_id,
+                       summary AS detail, status, created_at
+                  FROM analytics_risk_alerts
+                 WHERE status = 'open' AND created_at < :as_of_end
+                """;
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT source, id, object_type, object_id, detail, status, created_at
+                  FROM ( %s ) u
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(union), params, (rs, n) -> pendingReviewRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM ( %s ) u
+                """.formatted(union), params));
+    }
+
+    private java.util.Map<String, Object> ticketVerificationRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("verificationNo", rs.getString("verification_no"));
+        row.put("entitlementCode", rs.getString("entitlement_code"));
+        row.put("status", rs.getString("status"));
+        row.put("sourceType", rs.getString("source_type"));
+        row.put("createdAt", instant(rs, "created_at"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> memberRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("maskedPhone", rs.getString("masked_phone"));
+        row.put("status", rs.getString("status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        row.put("lastLoginAt", instant(rs, "last_login_at"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> pendingReviewRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("source", rs.getString("source"));
+        row.put("id", rs.getString("id"));
+        row.put("objectType", rs.getString("object_type"));
+        row.put("objectId", rs.getString("object_id"));
+        row.put("detail", rs.getString("detail"));
         row.put("status", rs.getString("status"));
         row.put("createdAt", instant(rs, "created_at"));
         return row;

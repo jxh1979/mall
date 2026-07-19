@@ -972,7 +972,7 @@ class AnalyticsJdbcIntegrationTests {
                     review_id, policy_code, action_type, object_type, object_id, blocked,
                     review_status, required_level, evaluated_at
                 )
-                VALUES (:id, 'pol_etl', 'high_risk', 'merchant', 'merchant_etl', TRUE, 'pending', 5, now())
+                VALUES (:id, 'pol_etl', 'high_risk', 'merchant', 'merchant_etl', TRUE, 'pending_review', 5, now())
                 """, Map.of("id", reviewId));
     }
 
