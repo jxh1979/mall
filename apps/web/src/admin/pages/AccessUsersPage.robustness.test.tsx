@@ -38,6 +38,7 @@ describe("AccessUsersPage 副资源降级（副资源加载健壮性批）", () 
 
     await waitFor(() => expect(screen.getByTestId("access-user-row-u-9")).toBeTruthy());
     expect(screen.getByTestId("access-users-table")).toBeTruthy();
+    expect(screen.getByTestId("access-user-template-degraded")).toBeTruthy();
     expect(screen.queryByTestId("admin-error")).toBeNull();
     expect(setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
   });

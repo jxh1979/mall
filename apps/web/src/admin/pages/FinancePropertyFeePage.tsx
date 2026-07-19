@@ -260,10 +260,11 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
           permissionsState={effectivePermissions}
           permissions={MANAGE_PERMS}
           data-testid="property-fee-bill-run"
-          disabled={busyAction === "property_fee_billed"}
+          disabled={busyAction === "property_fee_billed" || !!merchantNotice}
           onClick={runBill}
         >{TEXT.runBill}</PermissionButton>
         <span className="admin-muted-action">按「所选项目当期费率 × 商户面积」逐户挂应收；不退不补、同一(项目·期·商户)重复出账自动跳过。</span>
+        {merchantNotice ? <span className="admin-muted-action" data-testid="property-fee-bill-blocked">商户名单加载失败，名单不全恐误出账，暂不能出账（请刷新重试）。</span> : null}
       </div>
       {merchantNotice ? (
         <div className="admin-state" data-testid="property-fee-merchants-degraded">{merchantNotice}</div>

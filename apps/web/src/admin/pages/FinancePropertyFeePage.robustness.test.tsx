@@ -39,5 +39,8 @@ describe("FinancePropertyFeePage 副资源降级（副资源加载健壮性批�
     expect(screen.getByTestId("property-fee-merchants-table")).toBeTruthy();
     expect(screen.queryByTestId("admin-error")).toBeNull();
     expect(setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
+    // P2 双保险：商户名单加载失败时禁用出账按钮 + 提示，防止名单不全误出账。
+    expect((screen.getByTestId("property-fee-bill-run") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("property-fee-bill-blocked")).toBeTruthy();
   });
 });

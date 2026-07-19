@@ -231,6 +231,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         <div className="admin-form-row">
           <PermissionButton permissionsState={effectivePermissions} permissions={["access.user.manage"]} data-testid="access-user-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ 新建员工账号</PermissionButton>
         </div>
+        {templateNotice ? <div className="admin-state" data-testid="access-user-template-degraded">权限模板{templateNotice}，创建账号时暂无法套用模板</div> : null}
         {formError ? <div data-testid="access-users-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-inline-form" data-testid="access-partner-org-bind">
           <h3>账号绑定外部协作机构</h3>
@@ -334,7 +335,6 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
                   <option value="">暂不赋权</option>
                   {templates.map((template) => <option key={template.id} value={template.id}>{templateLabel(template)}</option>)}
                 </select></label>
-                {templateNotice ? <div className="admin-state" data-testid="access-user-template-degraded">{templateNotice}</div> : null}
               </>
             ),
           },
