@@ -255,6 +255,19 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, metric_key, domain, risk_level, observed_value, expected_value,
+                       summary, status, detected_at, resolved_at,
+                       disposition_note, disposed_by, disposed_at, escalated_alert_id
+                  FROM analytics_metric_anomalies
+                 WHERE id = :id
+                 FOR UPDATE
+                """, new MapSqlParameterSource("id", id), this::mapMetricAnomaly)
+                .stream().findFirst();
+    }
+
+    @Override
     public MetricAnomalyRecord updateMetricAnomalyDisposition(String id, String status, String note,
             String disposedBy, java.time.Instant disposedAt, String escalatedAlertId,
             java.time.Instant resolvedAt) {

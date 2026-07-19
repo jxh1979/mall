@@ -834,6 +834,19 @@ class AnalyticsServiceTests {
         assertThat(second).isEqualTo(first);
     }
 
+    @Test
+    void disposeMetricAnomalyConcurrentEscalateDoesNotCreateOrphanAlert() {
+        // 并发守卫:行锁串行化后,第二个 escalate 读到 status=escalated(已升级),转移非法被拦,
+        // 不再建第二条风险告警(否则前者的 escalated_alert_id 成孤儿)。
+        service.disposeMetricAnomaly("anomaly_1", new AnomalyDispositionRequest("esc-a", "escalate", "首个升级"));
+        long alertsAfterFirst = service.listRiskAlerts().items().size();
+        assertThatThrownBy(() -> service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("esc-b", "escalate", "并发升级")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("METRIC_ANOMALY_INVALID_TRANSITION"));
+        assertThat(service.listRiskAlerts().items()).hasSize((int) alertsAfterFirst);
+    }
+
     private void seedReadModels() {
         Instant now = Instant.now(FIXED_CLOCK);
         analyticsRepository.metricDefinitions.add(new MetricDefinitionRecord(
@@ -1321,6 +1334,11 @@ class AnalyticsServiceTests {
         @Override
         public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyById(String id) {
             return metricAnomalies.stream().filter(a -> a.id().equals(id)).findFirst();
+        }
+
+        @Override
+        public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyByIdForUpdate(String id) {
+            return findMetricAnomalyById(id);
         }
 
         @Override

@@ -9,15 +9,17 @@ ALTER TABLE analytics_metric_anomalies
     ADD COLUMN IF NOT EXISTS disposed_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS escalated_alert_id VARCHAR(64);
 
--- 2. 旧状态 'ignored'(V017 遗留枚举,当前无写入路径)语义并入 'false_positive' 误报,便于统一状态机。
+-- 2. 先撤旧 CHECK,再做枚举回填——否则回填出的 'false_positive' 会撞旧 CHECK(open/resolved/ignored)致迁移失败。
+ALTER TABLE analytics_metric_anomalies DROP CONSTRAINT IF EXISTS chk_analytics_metric_anomalies_status;
+
+-- 3. 旧状态 'ignored'(V017 遗留枚举,当前无写入路径)语义并入 'false_positive' 误报,便于统一状态机。
 UPDATE analytics_metric_anomalies SET status = 'false_positive' WHERE status = 'ignored';
 
--- 3. 状态机改版:open(未处置)/acknowledged(已阅)/resolved(已处置)/false_positive(误报)/escalated(已转告警)。
-ALTER TABLE analytics_metric_anomalies DROP CONSTRAINT IF EXISTS chk_analytics_metric_anomalies_status;
+-- 4. 状态机改版:open(未处置)/acknowledged(已阅)/resolved(已处置)/false_positive(误报)/escalated(已转告警)。
 ALTER TABLE analytics_metric_anomalies ADD CONSTRAINT chk_analytics_metric_anomalies_status
     CHECK (status IN ('open', 'acknowledged', 'resolved', 'false_positive', 'escalated'));
 
--- 4. 处置权限(高危,但不需审批——运营处置为日常动作,审批会阻断闭环)。
+-- 5. 处置权限(高危,但不需审批——运营处置为日常动作,审批会阻断闭环)。
 INSERT INTO permissions (permission_code, permission_name, domain, risk_level, requires_approval, status)
 VALUES
     ('analytics.metric_anomaly.manage', '处置指标异常', 'analytics', 'high', FALSE, 'active')
@@ -28,14 +30,14 @@ ON CONFLICT (permission_code) DO UPDATE SET
     requires_approval = EXCLUDED.requires_approval,
     status = EXCLUDED.status;
 
--- 5. 授予现有具备风险告警处置权的角色(与 analytics.risk_alert.manage 同一批人)。
+-- 6. 授予现有具备风险告警处置权的角色(与 analytics.risk_alert.manage 同一批人)。
 INSERT INTO role_permissions (role_id, permission_code)
 SELECT DISTINCT role_id, 'analytics.metric_anomaly.manage'
   FROM role_permissions
  WHERE permission_code = 'analytics.risk_alert.manage'
 ON CONFLICT (role_id, permission_code) DO NOTHING;
 
--- 6. 生产受限运行时权限(铁律:新列一律再 GRANT complex_app 兜底,防列级权限漂移)。
+-- 7. 生产受限运行时权限(铁律:新列一律再 GRANT complex_app 兜底,防列级权限漂移)。
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'complex_app') THEN

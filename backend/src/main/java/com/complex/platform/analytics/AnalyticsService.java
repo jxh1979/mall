@@ -902,7 +902,8 @@ public class AnalyticsService {
     private MetricAnomalyRecord disposeMetricAnomalyInternal(String anomalyId, AnomalyDispositionRequest request) {
         AnomalyDispositionRequest actual = requireRequest(request);
         String action = requireText(actual.action(), "action");
-        MetricAnomalyRecord current = repository.findMetricAnomalyById(anomalyId)
+        // 行锁读:并发处置串行化,第二个处置在第一个提交后读到新状态,升级/终态守卫在建告警前拦截,杜绝孤儿告警。
+        MetricAnomalyRecord current = repository.findMetricAnomalyByIdForUpdate(anomalyId)
                 .orElseThrow(() -> ApiException.notFound("METRIC_ANOMALY_NOT_FOUND", "metric anomaly not found"));
         String targetStatus = anomalyDispositionTarget(current.status(), action);
         // acknowledge 说明可选;其余处置动作必须留说明(审计留痕/升级依据)。
