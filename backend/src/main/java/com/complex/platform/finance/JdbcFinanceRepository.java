@@ -113,7 +113,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("kw", trimmed.isEmpty() ? null : "%" + trimmed + "%", java.sql.Types.VARCHAR);
         String where = """
                  WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
-                   AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw)
+                   AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw OR source_type ILIKE :kw)
                 """;
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);
@@ -146,7 +146,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         String where = """
                  WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
                    AND (:project_id IS NULL OR project_id = :project_id)
-                   AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw)
+                   AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw OR source_type ILIKE :kw)
                 """;
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);

@@ -30,4 +30,4 @@ operation-matrix→closure→security-baseline→latest.json→清 surefire→en
 无迁移故跳 domain-ownership-scope/data-isolation-spec。
 
 ## 状态
-进行中。完成即 commit+push（禁 PR）。
+完成。后端(单测32绿)+前端(vitest15绿+typecheck绿)+verify:predeploy全链绿。已 commit+push。

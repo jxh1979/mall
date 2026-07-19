@@ -28,7 +28,7 @@ type ContractRow = {
 type FlowStep = { stageSeq: number; stageName: string; approverPermissionCode: string };
 type ColorRule = { id: string; categoryName: string; color: string; thresholdDays: number };
 type ChangeRow = { id: string; contractId: string; changeType: string; approvalStatus: string };
-type SettlementRow = { id: string; contractId: string; triggerType: string; status: string };
+type SettlementRow = { id: string; contractId: string; triggerType: string; status: string; settlementItems?: Array<Record<string, unknown>> };
 type SpaceRental = { spaceId: string; spaceName: string; rentalStatus: string; color?: string | null; daysToExpiry?: number | null };
 
 const DRAFT = ["contract.draft.manage"];
@@ -373,18 +373,41 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
 
   // 退租结算整行明细：结算单号/触发/状态（均中文），并挂本合同下钻。
   function openSettlementDetail(st: SettlementRow) {
-    setDetail({
-      title: `退租结算明细 · ${shortId(st.id)}`,
-      fields: [
-        { label: "结算单号", value: st.id },
-        {
-          label: "所属合同",
-          value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={st.contractId}>{shortId(st.contractId)}</TraceLink>,
-        },
-        { label: "触发方式", value: formatBusinessStatus(st.triggerType) },
-        { label: "结算状态", value: formatBusinessStatus(st.status) },
-      ],
-    });
+    const yuan = (v: unknown): string => {
+      const n = Number(v);
+      return Number.isFinite(n)
+        ? new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n / 100)
+        : "—";
+    };
+    const fields: RowDetailField[] = [
+      { label: "结算单号", value: st.id },
+      {
+        label: "所属合同",
+        value: <TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={st.contractId}>{shortId(st.contractId)}</TraceLink>,
+      },
+      { label: "触发方式", value: formatBusinessStatus(st.triggerType) },
+      { label: "结算状态", value: formatBusinessStatus(st.status) },
+    ];
+    // 退租结算清单逐项：未清清算 / 押金处置（抵扣·净额或仍欠） / 提前退租违约金。
+    for (const raw of Array.isArray(st.settlementItems) ? st.settlementItems : []) {
+      const it = raw as Record<string, unknown>;
+      const key = String(it.item ?? "");
+      if (key === "unpaid_receivable_summary") {
+        fields.push({ label: "未清应收合计", value: `¥${yuan(it.amountCent)}（已在应收台账，不重复挂账）` });
+      } else if (key === "deposit_disposal") {
+        fields.push({ label: "保证金", value: `¥${yuan(it.depositCent)}` });
+        fields.push({ label: "抵扣未清", value: `¥${yuan(it.offsetCent)}` });
+        if (Number(it.netRefundCent ?? 0) > 0) {
+          fields.push({ label: "应退押金净额", value: `¥${yuan(it.netRefundCent)}（挂应付给商户）` });
+        } else {
+          fields.push({ label: "商户仍欠差额", value: `¥${yuan(it.merchantStillOwesCent)}（不挂应付，列示）` });
+        }
+      } else if (key === "termination_penalty") {
+        fields.push({ label: "提前退租违约金", value: `¥${yuan(it.amountCent)}（挂应收）` });
+        if (it.reason) fields.push({ label: "违约金理由", value: String(it.reason) });
+      }
+    }
+    setDetail({ title: `退租结算明细 · ${shortId(st.id)}`, fields });
   }
 
   return (

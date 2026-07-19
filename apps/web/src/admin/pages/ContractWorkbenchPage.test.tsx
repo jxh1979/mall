@@ -201,3 +201,47 @@ describe("AUD-023 行「查看详情」按钮", () => {
     expect(screen.getByRole("dialog").textContent).toContain("合同明细");
   });
 });
+
+describe("ContractWorkbenchPage 退租结算明细", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("退租结算详情展示押金抵扣净额与违约金（清单逐项）", async () => {
+    const richSettlements = [{
+      id: "settle-rich9999", contract_id: "contract-aaaa1111", trigger_type: "early_termination", status: "settled",
+      settlement_items: [
+        { item: "unpaid_receivable_summary", amountCent: 300000, status: "listed" },
+        { item: "deposit_disposal", depositCent: 500000, offsetCent: 300000, netRefundCent: 200000, merchantStillOwesCent: 0, amountCent: 200000, status: "payable_posted" },
+        { item: "termination_penalty", amountCent: 150000, status: "receivable_posted", reason: "提前退租违约" },
+      ],
+    }];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/contracts/approval-flow")) return Promise.resolve(envelope(FLOW));
+      if (url.includes("/contracts/expiry-color-rules")) return Promise.resolve(envelope(COLORS));
+      if (url.includes("/contracts/space-rental-status")) return Promise.resolve(envelope([]));
+      if (url.includes("/platform/merchants")) return Promise.resolve(envelope(MERCHANTS));
+      if (url.includes("/changes")) return Promise.resolve(envelope(CHANGES));
+      if (url.includes("/settlements")) return Promise.resolve(envelope(richSettlements));
+      if (url.endsWith("/api/v1/contracts")) return Promise.resolve(envelope(CONTRACTS));
+      return Promise.resolve(envelope([]));
+    }));
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+      navigateTo: vi.fn(),
+    };
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-actions-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("contract-detail-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-detail-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("contract-settlement-settle-rich9999")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-settlement-settle-rich9999"));
+    await waitFor(() => expect(screen.getByText("应退押金净额")).toBeTruthy());
+    expect(screen.getByText("提前退租违约金")).toBeTruthy();
+    expect(screen.getByText("未清应收合计")).toBeTruthy();
+  });
+});

@@ -515,6 +515,7 @@ export type FinanceLedgerRow = {
   itemNo?: string;
   billNo?: string;
   sourceDoc?: string;
+  sourceType?: string; // ar_ap 来源类型（含退租相关 termination_penalty/deposit_refund）
   counterparty?: string;
   direction?: string;
   /** 单位：分（amount_cent / paid_amount_cent / unpaid_amount_cent）。 */
