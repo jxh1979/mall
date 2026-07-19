@@ -201,6 +201,35 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public Optional<ArApItemRecord> findReserveWithheldByStatementForUpdate(String statementId) {
+        // V304：某计算单的待释放留存应付（唯一：uq(direction,source_type,source_id)），FOR UPDATE 行锁串行化并发释放。
+        return jdbcTemplate.query("""
+                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
+                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                  FROM ar_ap_items
+                 WHERE direction = 'payable'
+                   AND source_type = 'dividend_reserve_withheld'
+                   AND source_id = :statement_id
+                   FOR UPDATE
+                """, Map.of("statement_id", statementId), this::mapArApItem).stream().findFirst();
+    }
+
+    @Override
+    public int retagArApItemSourceType(String id, String expectedSourceType, String newSourceType, Instant now) {
+        // V304：re-tag 源类型（前态守卫幂等——仅当现值=expected 才翻）；append-only(V145 delete_only) 允许 UPDATE。
+        return jdbcTemplate.update("""
+                UPDATE ar_ap_items
+                   SET source_type = :new_source_type, updated_at = :now
+                 WHERE id = :id AND source_type = :expected_source_type
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("expected_source_type", expectedSourceType)
+                .addValue("new_source_type", newSourceType)
+                .addValue("now", timestampWithTimeZone(now)));
+    }
+
+    @Override
     public ArApPaymentRecord saveArApPayment(ArApPaymentRecord payment) {
         // DO NOTHING on conflict: idempotency is enforced at the service layer via IdempotencyService.
         // The payment ID includes the ar_ap_item_id in its slug (fixed P0 collision), so a genuine

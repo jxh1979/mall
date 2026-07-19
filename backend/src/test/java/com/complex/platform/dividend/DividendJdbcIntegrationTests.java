@@ -11,12 +11,15 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementLineRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.DividendPayoutPort;
+import com.complex.platform.finance.FinanceService;
+import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.inventory.InventoryRepository;
 import com.complex.platform.support.TestSecurityActors;
 import java.sql.Connection;
@@ -69,6 +72,10 @@ class DividendJdbcIntegrationTests {
 
     @Autowired
     private DividendPayoutPort payoutPort;
+
+    // V304 支付守卫端到端：真调 FinanceService.registerArApPayment 验证 withheld 拒付 / released 放行。
+    @Autowired
+    private FinanceService financeService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -633,5 +640,110 @@ class DividendJdbcIntegrationTests {
         assertThat(((Number) reserve.get("amount_cent")).longValue()).isEqualTo(16_000L);
         assertThat(reserve.get("counterparty_id")).isEqualTo("usr_principal_jdbc");
         assertThat(reserve.get("direction")).isEqualTo("payable");
+    }
+
+    // ── V304 发放保护线留存·释放（真调 FinanceService re-tag 待释放应付）──
+
+    @Test
+    void migrationCreatesReserveReleaseTableAndPlanColumns() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT to_regclass('dividend_reserve_releases')::text", String.class))
+                .isEqualTo("dividend_reserve_releases");
+        // 新方案列存在且默认值正确（默认手动释放、延后 1 期）。
+        repository.insertPlan(plan("divp_jdbc_relcol", "monthly"));
+        Map<String, Object> cfg = jdbcTemplate.queryForMap(
+                "SELECT reserve_release_mode, reserve_release_delay_periods FROM dividend_plans WHERE id = ?",
+                "divp_jdbc_relcol");
+        assertThat(cfg.get("reserve_release_mode")).isEqualTo("manual");
+        assertThat(((Number) cfg.get("reserve_release_delay_periods")).intValue()).isEqualTo(1);
+    }
+
+    /**
+     * 留存释放端到端：审批挂 dividend_reserve_withheld 待释放应付 → 手动释放 re-tag 为 dividend_reserve_released
+     * （金额不变、仍 pending_payment 可付=主理人能真正拿到）+ 释放台账落一行；重复释放幂等拒绝（不重复释放）。
+     */
+    @Test
+    void reserveReleaseFlipsWithheldToReleasedIdempotently() {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("rel", 1_000_000L, ts);
+        repository.insertPlan(floorPlan("divp_jdbc_rel"));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("rel-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.reserveWithheldCent()).isEqualTo(16_000L);
+        service.submit(s.id(), new DividendActionRequest("rel-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        approver.approve(s.id(), new DividendActionRequest("rel-jdbc-a1", null));
+
+        String withheldId = jdbcTemplate.queryForObject(
+                "SELECT id FROM ar_ap_items WHERE source_type = 'dividend_reserve_withheld' AND source_id = ?",
+                String.class, s.id());
+
+        // 释放：re-tag → dividend_reserve_released（金额不变、仍 pending_payment=可付）+ 释放台账落一行。
+        DividendReserveReleaseRecord released = approver.releaseReserve(
+                s.id(), new DividendActionRequest("rel-jdbc-rel1", "季度到期返还"));
+        assertThat(released.reserveCent()).isEqualTo(16_000L);       // 金额=原留存额（不多不少）
+        assertThat(released.triggerType()).isEqualTo("manual");
+
+        Map<String, Object> flipped = jdbcTemplate.queryForMap(
+                "SELECT source_type, amount_cent, status FROM ar_ap_items WHERE id = ?", withheldId);
+        assertThat(flipped.get("source_type")).isEqualTo("dividend_reserve_released");
+        assertThat(((Number) flipped.get("amount_cent")).longValue()).isEqualTo(16_000L);
+        assertThat(flipped.get("status")).isEqualTo("pending_payment"); // 仍可付=主理人能真正拿到
+
+        // 支付守卫放行方向（活证据）：已释放应付真调 settle → 落账 settled（主理人真正拿到）。
+        TestSecurityActors.asPlatformAdmin();   // registerArApPayment 经 checkMerchantOwnership 需认证上下文。
+        var payResp = financeService.registerArApPayment(withheldId, new ArApPaymentRequest(
+                "rel-jdbc-pay1", "释放后发放", List.of(), 16_000L, "bank_transfer",
+                Instant.parse("2026-07-20T01:00:00Z"), "bank_flow_rel_jdbc"));
+        assertThat(payResp.item().status()).isEqualTo("settled");
+        assertThat(payResp.item().unpaidAmountCent()).isZero();
+
+        Map<String, Object> ledger = jdbcTemplate.queryForMap("""
+                SELECT reserve_cent, trigger_type, ar_ap_item_id, released_by
+                  FROM dividend_reserve_releases WHERE statement_id = ?
+                """, s.id());
+        assertThat(((Number) ledger.get("reserve_cent")).longValue()).isEqualTo(16_000L);
+        assertThat(ledger.get("trigger_type")).isEqualTo("manual");
+        assertThat(ledger.get("ar_ap_item_id")).isEqualTo(withheldId);
+        assertThat(ledger.get("released_by")).isEqualTo("usr_div_jdbc_approver");
+
+        // 待释放台账：释放后该单在 released 视图、不在 pending 视图。
+        assertThat(approver.listReserveLedger(MERCHANT, "released", 1, 50).items())
+                .anyMatch(l -> l.statementId().equals(s.id()) && l.released());
+        assertThat(approver.listReserveLedger(MERCHANT, "pending", 1, 50).items())
+                .noneMatch(l -> l.statementId().equals(s.id()));
+
+        // 幂等/不重复释放：重复释放 → DIVIDEND_RESERVE_ALREADY_RELEASED（re-tag 后已无待释放应付）。
+        assertThatThrownBy(() -> approver.releaseReserve(s.id(),
+                new DividendActionRequest("rel-jdbc-rel2", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
+                        .isEqualTo("DIVIDEND_RESERVE_ALREADY_RELEASED"));
+    }
+
+    /**
+     * V304 支付守卫拒付方向（活证据，隔离事务）：未释放的 dividend_reserve_withheld 应付真调 settle →
+     * DIVIDEND_RESERVE_NOT_RELEASED 拒付——「待释放」是真锁不是标签，settleArApItem 是唯一放款出口。
+     */
+    @Test
+    void reserveWithheldPaymentBlockedBeforeReleaseJdbc() {
+        TestSecurityActors.asPlatformAdmin();   // registerArApPayment 经 checkMerchantOwnership 需认证上下文。
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-19T12:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
+                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
+                        status, created_at, updated_at, merchant_id)
+                VALUES ('arap_res_guard_jdbc', 'ARAP-RES-GUARD-JDBC', 'payable', 'usr_principal_jdbc',
+                        'dividend_reserve_withheld', 'divs_guard_jdbc', 16000, 0, 16000, 'CNY', '2026-07-19',
+                        '2026-07', 'pending_payment', ?, ?, ?)
+                """, ts, ts, MERCHANT);
+        assertThatThrownBy(() -> financeService.registerArApPayment("arap_res_guard_jdbc", new ArApPaymentRequest(
+                "res-guard-jdbc-pay", "待释放拒付", List.of(), 16_000L, "bank_transfer",
+                Instant.parse("2026-07-19T13:00:00Z"), "bank_flow_res_guard_jdbc")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
+                        .isEqualTo("DIVIDEND_RESERVE_NOT_RELEASED"));
     }
 }

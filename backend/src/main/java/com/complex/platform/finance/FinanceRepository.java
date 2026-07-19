@@ -180,6 +180,27 @@ public interface FinanceRepository {
 
     ArApItemRecord updateArApItemLedger(ArApItemRecord item);
 
+    /**
+     * V304 分红留存释放：某计算单的待释放留存应付（direction=payable, source_type='dividend_reserve_withheld',
+     * source_id=statementId），FOR UPDATE 行锁（须在事务内调用）。default 兜底内存 filter 供测试双子。
+     */
+    default Optional<ArApItemRecord> findReserveWithheldByStatementForUpdate(String statementId) {
+        return listArApItems().stream()
+                .filter(i -> "payable".equals(i.direction())
+                        && "dividend_reserve_withheld".equals(i.sourceType())
+                        && statementId.equals(i.sourceId()))
+                .findFirst();
+    }
+
+    /**
+     * V304 分红留存释放：re-tag 应付项 source_type（前态守卫：仅当现值=expected 才翻，幂等）。返回影响行数。
+     * default 兜底返回 0（测试双子无需真改；真 Jdbc @Override 为带守卫的 UPDATE）。
+     */
+    default int retagArApItemSourceType(
+            String id, String expectedSourceType, String newSourceType, java.time.Instant now) {
+        return 0;
+    }
+
     ArApPaymentRecord saveArApPayment(ArApPaymentRecord payment);
 
     Optional<ArApPaymentRecord> findArApPaymentById(String id);

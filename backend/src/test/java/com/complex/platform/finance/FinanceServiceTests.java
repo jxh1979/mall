@@ -242,6 +242,35 @@ class FinanceServiceTests {
         assertThat(response.item().status()).isEqualTo("settled");
     }
 
+    /**
+     * V304 支付守卫（资金安全命根）：分红发放保护线留存（待释放）应付未释放前禁止付款——「待释放」是真锁；
+     * 释放（re-tag → dividend_reserve_released）后同一笔应付放行可付。两个方向都有活证据（拒付 / 放行）。
+     */
+    @Test
+    void reserveWithheldPayableBlockedFromPaymentUntilReleased() {
+        Instant now = Instant.parse("2026-07-19T00:00:00Z");
+        financeRepository.saveArApItem(new ArApItemRecord(
+                "arap_res_guard", "ARAP-RES-GUARD", "payable", "usr_principal",
+                "dividend_reserve_withheld", "divs_guard", 16000L, 0L, 16000L, "CNY",
+                LocalDate.parse("2026-07-19"), "2026-07", "pending_payment", now, now, "merchant_guard"));
+
+        // 未释放 → 拒付。
+        assertThatThrownBy(() ->
+                service.registerArApPayment("arap_res_guard", paymentRequest("res-guard-pay", 16000L)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_RESERVE_NOT_RELEASED"));
+
+        // 释放：re-tag 待释放 → 已释放（金额不变）。
+        assertThat(service.releaseDividendReserveWithholding("divs_guard")).isPresent();
+
+        // 已释放 → 放行可付，落账 settled。
+        ArApPaymentResponse resp = service.registerArApPayment(
+                "arap_res_guard", paymentRequest("res-guard-pay2", 16000L));
+        assertThat(resp.item().sourceType()).isEqualTo("dividend_reserve_released");
+        assertThat(resp.item().status()).isEqualTo("settled");
+        assertThat(resp.item().unpaidAmountCent()).isZero();
+    }
+
     @Test
     void createArApItemRejectsNegativeAmountWithValidationFailed() {
         // P1-13：金额下界负向测试——createArApItem 负数金额必须被 requirePositive 拒绝（填补"只测上界"的真空，
@@ -1754,6 +1783,20 @@ class FinanceServiceTests {
         public ArApItemRecord updateArApItemLedger(ArApItemRecord item) {
             arApItems.put(item.id(), item);
             return item;
+        }
+
+        // V304 释放：re-tag source_type（前态守卫），内存版真改（默认接口实现是 no-op）。
+        @Override
+        public int retagArApItemSourceType(String id, String expectedSourceType, String newSourceType, Instant now) {
+            ArApItemRecord cur = arApItems.get(id);
+            if (cur == null || !expectedSourceType.equals(cur.sourceType())) {
+                return 0;
+            }
+            arApItems.put(id, new ArApItemRecord(cur.id(), cur.itemNo(), cur.direction(), cur.counterpartyId(),
+                    newSourceType, cur.sourceId(), cur.amountCent(), cur.paidAmountCent(), cur.unpaidAmountCent(),
+                    cur.currency(), cur.dueDate(), cur.accountingPeriod(), cur.status(), cur.createdAt(), now,
+                    cur.merchantId(), cur.projectId()));
+            return 1;
         }
 
         @Override

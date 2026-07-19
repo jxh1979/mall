@@ -46,7 +46,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
             "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
             "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout",
-            "dividend_reserve_withheld", "termination_penalty", "deposit_refund");
+            "dividend_reserve_withheld", "dividend_reserve_released", "termination_penalty", "deposit_refund");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -80,6 +80,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             Map.entry("deposit", "保证金"), Map.entry("property_fee", "物业费"),
             Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"),
             Map.entry("dividend_payout", "持股分红发放"), Map.entry("dividend_reserve_withheld", "分红留存待释放"),
+            Map.entry("dividend_reserve_released", "分红留存已释放"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"));
 
     private final FinanceRepository repository;
@@ -1054,6 +1055,12 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         checkProjectScope(current.projectId());
         // R5 T7 硬拦截：已锁定台账禁止直接登记收付款，必须走补录审批。
         requireNotLocked(current.id());
+        // V304 硬拦截：分红发放保护线留存（待释放）应付未释放前禁止付款——「待释放」是真锁不是标签，
+        // 须先经释放（re-tag 为 dividend_reserve_released）才可发放给主理人，否则绕过释放规则提前发放留存。
+        if ("dividend_reserve_withheld".equals(current.sourceType())) {
+            throw ApiException.conflict("DIVIDEND_RESERVE_NOT_RELEASED",
+                    "该应付为分红发放保护线留存（待释放），需先释放才能发放给主理人");
+        }
         if (amountCent > current.unpaidAmountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "payment amount exceeds unpaid amount");
         }
@@ -1523,6 +1530,28 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 "payable", principalUserId, "dividend_reserve_withheld", statementId, reserveCent, statementId,
                 merchantId);
         return item.id();
+    }
+
+    /**
+     * V304 发放保护线留存·释放：把该计算单的待释放留存应付 re-tag 为已释放（source_type flip，金额不变）。
+     * FOR UPDATE 行锁串行化并发释放 + 前态守卫（仅 dividend_reserve_withheld 可翻）幂等：
+     * 已释放（他线程先翻 / 无待释放应付）返回 empty，由分红侧抛 DIVIDEND_RESERVE_ALREADY_RELEASED。
+     * released 应付走既有付款流程真正发放给主理人（不再被待释放支付守卫拦截）。
+     */
+    @Override
+    public java.util.Optional<DividendReserveReleaseRef> releaseDividendReserveWithholding(String statementId) {
+        java.util.Optional<ArApItemRecord> withheld = repository.findReserveWithheldByStatementForUpdate(statementId);
+        if (withheld.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        ArApItemRecord item = withheld.get();
+        int flipped = repository.retagArApItemSourceType(
+                item.id(), "dividend_reserve_withheld", "dividend_reserve_released", Instant.now());
+        if (flipped == 0) {
+            return java.util.Optional.empty();   // 并发下已被他线程释放
+        }
+        return java.util.Optional.of(new DividendReserveReleaseRef(
+                item.id(), item.amountCent(), item.counterpartyId(), item.merchantId()));
     }
 
     /**

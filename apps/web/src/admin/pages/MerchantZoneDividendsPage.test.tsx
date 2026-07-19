@@ -11,7 +11,20 @@ const PLANS = [
     id: "divp_1", merchant_id: "merchant-1", principal_user_id: "usr_principal", principal_name: "主理人甲",
     platform_share_bps: 8000, tax_rate_bps: 2000, period_type: "quarterly",
     revenue_domains: ["bar", "ticket"], include_inventory_cost: true, expense_types: ["labor"],
-    status: "active",
+    status: "active", payout_floor_enabled: true, reserve_release_mode: "next_period",
+  },
+];
+const RESERVES = [
+  {
+    statement_id: "divs_q2", merchant_id: "merchant-1", principal_user_id: "usr_principal",
+    period_label: "2026-Q2", statement_status: "approved", reserve_withheld_cent: 16000,
+    released: false, trigger_type: null, released_by: null, released_at: null,
+  },
+  {
+    statement_id: "divs_q1", merchant_id: "merchant-1", principal_user_id: "usr_principal",
+    period_label: "2026-Q1", statement_status: "paid", reserve_withheld_cent: 12000,
+    released: true, trigger_type: "scheduled", released_by: "system_dividend_reserve_release",
+    released_at: "2026-07-19T04:00:00Z",
   },
 ];
 const STATEMENTS = [
@@ -52,6 +65,9 @@ function makeApi(): AdminApi {
             { id: "l3", statement_id: "divs_q2", seq: 3, line_type: "principal_net", amount_cent: 104000, detail: "净发放额" },
           ],
         }));
+      }
+      if (url.includes("/dividends/reserve-releases")) {
+        return Promise.resolve(envelope({ items: RESERVES, page: 1, page_size: 10, total: RESERVES.length }));
       }
       if (url.includes("/dividends/statements")) {
         return Promise.resolve(envelope({ items: STATEMENTS, page: 1, page_size: 10, total: STATEMENTS.length }));
@@ -100,6 +116,20 @@ describe("MerchantZoneDividendsPage 我的分红", () => {
     // 只读页：无提交/审批/驳回/发放入口。
     expect(screen.queryByTestId("dividend-submit-divs_q2")).toBeNull();
     expect(screen.queryByTestId("dividend-approve-divs_q2")).toBeNull();
+  });
+
+  it("我的留存：展示待释放/已释放状态 + 方案释放时点提示（只读）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-dividend-reserve-row-divs_q2")).toBeTruthy());
+    // 待释放行（暂扣）。
+    expect(screen.getByTestId("merchant-dividend-reserve-row-divs_q2").textContent).toContain("待释放（暂扣）");
+    expect(screen.getByTestId("merchant-dividend-reserve-row-divs_q2").textContent).toContain("160.00");
+    // 已释放行（可发放）。
+    expect(screen.getByTestId("merchant-dividend-reserve-row-divs_q1").textContent).toContain("已释放（可发放）");
+    // 方案摘要含释放时点提示。
+    expect(screen.getByTestId("merchant-dividend-reserve-hint").textContent).toContain("下期返还");
+    // 只读：无释放按钮。
+    expect(screen.queryByTestId("dividend-reserve-release-divs_q2")).toBeNull();
   });
 
   it("点行打开算式明细抽屉：逐项金额 + 取数口径说明", async () => {

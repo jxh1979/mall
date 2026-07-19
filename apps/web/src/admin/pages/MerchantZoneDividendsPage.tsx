@@ -7,8 +7,19 @@ import { TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import type { PagedResult } from "../client/adminClient";
-import type { AdminPageProps, DividendPlanRow, DividendStatementDetail, DividendStatementRow } from "../types";
-import { DIVIDEND_KIND_LABELS, DIVIDEND_LINE_LABELS, DIVIDEND_STATUS_LABELS } from "./FinanceDividendsPage";
+import type {
+  AdminPageProps,
+  DividendPlanRow,
+  DividendReserveLedgerRow,
+  DividendStatementDetail,
+  DividendStatementRow,
+} from "../types";
+import {
+  DIVIDEND_KIND_LABELS,
+  DIVIDEND_LINE_LABELS,
+  DIVIDEND_STATUS_LABELS,
+  RESERVE_RELEASE_MODE_LABELS,
+} from "./FinanceDividendsPage";
 
 // 商户专区 · 我的分红（主理人只读视图）：本商户每期分红计算单（基数/比例/扣税/实发/状态）+
 // 算式明细逐项可查。后端按登录主体商户 scope 硬闸，只见本商户；月度预览单同样可见（只看不发）。
@@ -54,6 +65,17 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
     fallbackMessage: TEXT.loadFailed,
   });
 
+  // V304 我的留存（待释放/已释放，只读）；后端按登录商户 scope 强制过滤。
+  const fetchReservePage = React.useCallback(
+    (page: number, size: number): Promise<PagedResult<DividendReserveLedgerRow>> =>
+      api.getPaged<DividendReserveLedgerRow>(`/api/v1/finance/dividends/reserve-releases?page=${page}&page_size=${size}`),
+    [api],
+  );
+  const reserveRows = useServerPagedRows<DividendReserveLedgerRow>(fetchReservePage, PAGE_SIZE, {
+    onError: setGlobalError,
+    fallbackMessage: TEXT.loadFailed,
+  });
+
   const activePlan = plans.find((plan) => plan.status === "active");
 
   async function openDetail(row: DividendStatementRow) {
@@ -89,6 +111,9 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
       {activePlan ? (
         <div className="admin-form-row" data-testid="merchant-dividend-plan-summary">
           <span>当前方案：平台 {bpsToPercentText(activePlan.platformShareBps)} / 主理人 {bpsToPercentText(activePlan.platformShareBps === undefined ? undefined : 10000 - activePlan.platformShareBps)}，代扣税率 {bpsToPercentText(activePlan.taxRateBps)}，{activePlan.periodType === "monthly" ? "月度出正式单" : "季度出正式单 + 月度预览"}。</span>
+          {activePlan.payoutFloorEnabled ? (
+            <span className="admin-muted-action" data-testid="merchant-dividend-reserve-hint">发放保护线：部分留存暂扣待释放（欠你、非平台白拿），{RESERVE_RELEASE_MODE_LABELS[activePlan.reserveReleaseMode ?? "manual"] ?? "手动释放"}后全额返还。</span>
+          ) : null}
         </div>
       ) : null}
 
@@ -120,6 +145,31 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
           <TablePager testid="merchant-dividend-pager" page={rows.page} pageCount={rows.pageCount} total={rows.total} onPrev={rows.prev} onNext={rows.next} />
         </div>
       </AdminDataState>
+
+      {/* ── 我的留存（发放保护线留存·待释放/已释放，只读）─────────── */}
+      {reserveRows.total > 0 || reserveRows.loading ? (
+        <>
+          <h3>我的发放保护线留存</h3>
+          <AdminDataState loading={reserveRows.loading} error={reserveRows.error} empty={!reserveRows.loading && reserveRows.total === 0} onRetry={reserveRows.reload}>
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="merchant-dividend-reserve-table">
+                <thead><tr><th>期间</th><th>留存额（元）</th><th>状态</th><th>释放时间</th></tr></thead>
+                <tbody>
+                  {reserveRows.rows.map((row) => (
+                    <tr key={row.statementId} data-testid={`merchant-dividend-reserve-row-${row.statementId}`}>
+                      <td>{row.periodLabel ?? "—"}</td>
+                      <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.reserveWithheldCent)}</td>
+                      <td>{row.released ? "已释放（可发放）" : "待释放（暂扣）"}</td>
+                      <td>{row.released ? cnDate(row.releasedAt) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <TablePager testid="merchant-dividend-reserve-pager" page={reserveRows.page} pageCount={reserveRows.pageCount} total={reserveRows.total} onPrev={reserveRows.prev} onNext={reserveRows.next} />
+            </div>
+          </AdminDataState>
+        </>
+      ) : null}
 
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>

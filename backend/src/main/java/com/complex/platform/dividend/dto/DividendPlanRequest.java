@@ -10,6 +10,10 @@ import java.util.List;
  * <p>V303 扣除项三开关（可空=修改时不改现值 / 新建时默认关）：
  * lossCarryforwardEnabled 亏损结转、arrearsOffsetEnabled 欠款抵扣、payoutFloorEnabled 发放保护线；
  * payoutFloorBps/payoutFloorFixedCent 为保护线留存参数（比例万分比 / 固定额分）。
+ *
+ * <p>V304 发放保护线留存·释放规则（可空=修改时不改现值 / 新建时默认手动）：
+ * reserveReleaseMode 释放时点（manual/next_period/fixed_delay/annual）、
+ * reserveReleaseDelayPeriods 固定延后模式的周期数（>=1）。
  */
 public record DividendPlanRequest(
         String idempotencyKey,
@@ -29,5 +33,20 @@ public record DividendPlanRequest(
         Boolean arrearsOffsetEnabled,
         Boolean payoutFloorEnabled,
         Integer payoutFloorBps,
-        Long payoutFloorFixedCent) {
+        Long payoutFloorFixedCent,
+        String reserveReleaseMode,
+        Integer reserveReleaseDelayPeriods) {
+
+    /** 向后兼容构造（V304 之前的 18 参形态）：释放规则两参默认 null（服务层补默认手动）。 */
+    public DividendPlanRequest(
+            String idempotencyKey, String merchantId, String principalUserId, String principalName,
+            Integer platformShareBps, Integer taxRateBps, String periodType, List<String> revenueDomains,
+            Boolean includeInventoryCost, List<String> expenseTypes, String effectiveFrom, String status,
+            String note, Boolean lossCarryforwardEnabled, Boolean arrearsOffsetEnabled, Boolean payoutFloorEnabled,
+            Integer payoutFloorBps, Long payoutFloorFixedCent) {
+        this(idempotencyKey, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
+                revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note,
+                lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled, payoutFloorBps,
+                payoutFloorFixedCent, null, null);
+    }
 }

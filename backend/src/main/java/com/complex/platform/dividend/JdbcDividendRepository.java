@@ -32,7 +32,7 @@ class JdbcDividendRepository implements DividendRepository {
             + "revenue_domains, include_inventory_cost, expense_types, effective_from, status, note, updated_by, "
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled, payout_floor_bps, "
-            + "payout_floor_fixed_cent";
+            + "payout_floor_fixed_cent, reserve_release_mode, reserve_release_delay_periods";
 
     private static final String STMT_COLS =
             "id, merchant_id, plan_id, kind, period_label, period_start, period_end, principal_user_id, "
@@ -107,12 +107,14 @@ class JdbcDividendRepository implements DividendRepository {
                         period_type, revenue_domains, include_inventory_cost, expense_types, effective_from,
                         status, note, updated_by, created_at, updated_at,
                         loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled,
-                        payout_floor_bps, payout_floor_fixed_cent)
+                        payout_floor_bps, payout_floor_fixed_cent,
+                        reserve_release_mode, reserve_release_delay_periods)
                     VALUES (:id, :merchant_id, :principal_user_id, :principal_name, :platform_share_bps,
                             :tax_rate_bps, :period_type, :revenue_domains, :include_inventory_cost, :expense_types,
                             :effective_from, :status, :note, :updated_by, :created_at, :updated_at,
                             :loss_carryforward_enabled, :arrears_offset_enabled, :payout_floor_enabled,
-                            :payout_floor_bps, :payout_floor_fixed_cent)
+                            :payout_floor_bps, :payout_floor_fixed_cent,
+                            :reserve_release_mode, :reserve_release_delay_periods)
                     ON CONFLICT (id) DO NOTHING
                     """, planParams(plan)) > 0;
         } catch (DuplicateKeyException conflict) {
@@ -151,7 +153,9 @@ class JdbcDividendRepository implements DividendRepository {
                     arrears_offset_enabled = :arrears_offset_enabled,
                     payout_floor_enabled = :payout_floor_enabled,
                     payout_floor_bps = :payout_floor_bps,
-                    payout_floor_fixed_cent = :payout_floor_fixed_cent
+                    payout_floor_fixed_cent = :payout_floor_fixed_cent,
+                    reserve_release_mode = :reserve_release_mode,
+                    reserve_release_delay_periods = :reserve_release_delay_periods
                  WHERE id = :id
                 """, planParams(plan));
     }
@@ -178,7 +182,9 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("arrears_offset_enabled", plan.arrearsOffsetEnabled())
                 .addValue("payout_floor_enabled", plan.payoutFloorEnabled())
                 .addValue("payout_floor_bps", plan.payoutFloorBps())
-                .addValue("payout_floor_fixed_cent", plan.payoutFloorFixedCent());
+                .addValue("payout_floor_fixed_cent", plan.payoutFloorFixedCent())
+                .addValue("reserve_release_mode", plan.reserveReleaseMode())
+                .addValue("reserve_release_delay_periods", plan.reserveReleaseDelayPeriods());
     }
 
     private DividendPlanRecord mapPlan(ResultSet rs, int rowNum) throws SQLException {
@@ -203,7 +209,9 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getBoolean("arrears_offset_enabled"),
                 rs.getBoolean("payout_floor_enabled"),
                 rs.getInt("payout_floor_bps"),
-                rs.getLong("payout_floor_fixed_cent"));
+                rs.getLong("payout_floor_fixed_cent"),
+                rs.getString("reserve_release_mode"),
+                rs.getInt("reserve_release_delay_periods"));
     }
 
     // ── 计算单 ────────────────────────────────────────────────
@@ -464,6 +472,107 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getLong("arrears_offset_cent"),
                 rs.getLong("reserve_withheld_cent"),
                 rs.getLong("payout_cent"));
+    }
+
+    // ── V304 发放保护线留存·释放 ──────────────────────────────
+
+    @Override
+    public boolean insertReserveRelease(DividendRecords.DividendReserveReleaseRecord release) {
+        try {
+            return jdbcTemplate.update("""
+                    INSERT INTO dividend_reserve_releases (
+                        id, statement_id, merchant_id, principal_user_id, reserve_cent, ar_ap_item_id,
+                        trigger_type, released_by, released_at, note)
+                    VALUES (:id, :statement_id, :merchant_id, :principal_user_id, :reserve_cent, :ar_ap_item_id,
+                        :trigger_type, :released_by, :released_at, :note)
+                    ON CONFLICT (statement_id) DO NOTHING
+                    """, new MapSqlParameterSource()
+                    .addValue("id", release.id())
+                    .addValue("statement_id", release.statementId())
+                    .addValue("merchant_id", release.merchantId())
+                    .addValue("principal_user_id", release.principalUserId())
+                    .addValue("reserve_cent", release.reserveCent())
+                    .addValue("ar_ap_item_id", release.arApItemId())
+                    .addValue("trigger_type", release.triggerType())
+                    .addValue("released_by", release.releasedBy(), Types.VARCHAR)
+                    .addValue("released_at", timestampWithTimeZone(release.releasedAt()))
+                    .addValue("note", release.note(), Types.VARCHAR)) > 0;
+        } catch (DuplicateKeyException conflict) {
+            // uq_dividend_reserve_releases_statement：同一计算单已释放（并发兜底）。
+            return false;
+        }
+    }
+
+    private static final String RESERVE_LEDGER_WHERE = """
+             WHERE s.kind = 'official' AND s.status IN ('approved', 'paid') AND s.reserve_withheld_cent > 0
+               AND (:merchant_id IS NULL OR s.merchant_id = :merchant_id)
+               AND (:released_filter IS NULL
+                    OR (:released_filter = 'released' AND r.id IS NOT NULL)
+                    OR (:released_filter = 'pending' AND r.id IS NULL))
+            """;
+
+    @Override
+    public PageResponse<DividendRecords.DividendReserveLedgerRecord> pageReserveLedger(
+            String merchantId, String releasedFilter, int page, int pageSize) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, Types.VARCHAR)
+                .addValue("released_filter", releasedFilter, Types.VARCHAR)
+                .addValue("limit", pageSize)
+                .addValue("offset", (long) (page - 1) * pageSize);
+        List<DividendRecords.DividendReserveLedgerRecord> items = jdbcTemplate.query("""
+                SELECT s.id AS statement_id, s.merchant_id, s.principal_user_id, s.period_label,
+                       s.period_start, s.period_end, s.status AS statement_status, s.reserve_withheld_cent,
+                       r.id AS release_id, r.trigger_type, r.released_by, r.released_at
+                  FROM dividend_statements s
+                  LEFT JOIN dividend_reserve_releases r ON r.statement_id = s.id
+                """ + RESERVE_LEDGER_WHERE + """
+                 ORDER BY (r.id IS NOT NULL), s.period_label DESC, s.merchant_id LIMIT :limit OFFSET :offset
+                """, params, this::mapReserveLedger);
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM dividend_statements s
+                  LEFT JOIN dividend_reserve_releases r ON r.statement_id = s.id
+                """ + RESERVE_LEDGER_WHERE, params, Long.class);
+        return new PageResponse<>(items, page, pageSize, total == null ? 0L : total);
+    }
+
+    private DividendRecords.DividendReserveLedgerRecord mapReserveLedger(ResultSet rs, int rowNum)
+            throws SQLException {
+        boolean released = rs.getString("release_id") != null;
+        return new DividendRecords.DividendReserveLedgerRecord(
+                rs.getString("statement_id"),
+                rs.getString("merchant_id"),
+                rs.getString("principal_user_id"),
+                rs.getString("period_label"),
+                nullableDate(rs, "period_start"),
+                nullableDate(rs, "period_end"),
+                rs.getString("statement_status"),
+                rs.getLong("reserve_withheld_cent"),
+                released,
+                rs.getString("trigger_type"),
+                rs.getString("released_by"),
+                nullableInstant(rs, "released_at"));
+    }
+
+    @Override
+    public List<DividendRecords.DividendReserveReleaseCandidateRecord> listReserveReleaseCandidates() {
+        return jdbcTemplate.query("""
+                SELECT s.id AS statement_id, s.merchant_id, s.principal_user_id, s.reserve_withheld_cent,
+                       s.period_end, p.period_type, p.reserve_release_mode, p.reserve_release_delay_periods
+                  FROM dividend_statements s
+                  JOIN dividend_plans p ON p.id = s.plan_id
+                 WHERE s.kind = 'official' AND s.status IN ('approved', 'paid') AND s.reserve_withheld_cent > 0
+                   AND NOT EXISTS (SELECT 1 FROM dividend_reserve_releases r WHERE r.statement_id = s.id)
+                 ORDER BY s.period_end, s.id
+                """, new MapSqlParameterSource(),
+                (rs, n) -> new DividendRecords.DividendReserveReleaseCandidateRecord(
+                        rs.getString("statement_id"),
+                        rs.getString("merchant_id"),
+                        rs.getString("principal_user_id"),
+                        rs.getLong("reserve_withheld_cent"),
+                        nullableDate(rs, "period_end"),
+                        rs.getString("period_type"),
+                        rs.getString("reserve_release_mode"),
+                        rs.getInt("reserve_release_delay_periods")));
     }
 
     // ── 三来源期间取数 ─────────────────────────────────────────
