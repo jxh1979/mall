@@ -462,6 +462,30 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(repository.readAnomalyConfig().highPct()).isEqualByComparingTo("0.9");
     }
 
+    @Test
+    void metricAnomalyDispositionPersistsAndSurvivesRedetection() {
+        // V306:处置状态直接叠加在检测行(稳定键 ano_*),重检测 ON CONFLICT DO NOTHING 不覆盖处置。
+        java.time.Instant now = java.time.Instant.parse("2099-06-01T00:00:00Z");
+        repository.insertMetricAnomaly("ano_dispose_test", "revenue.net", "finance", "high",
+                new java.math.BigDecimal("300"), new java.math.BigDecimal("100"), "disposition roundtrip", now);
+
+        AnalyticsRecords.MetricAnomalyRecord resolved = repository.updateMetricAnomalyDisposition(
+                "ano_dispose_test", "resolved", "已核对为真实波动", "user_jdbc", now, null, now);
+        assertThat(resolved.status()).isEqualTo("resolved");
+        assertThat(resolved.dispositionNote()).isEqualTo("已核对为真实波动");
+        assertThat(resolved.disposedBy()).isEqualTo("user_jdbc");
+        assertThat(resolved.disposedAt()).isNotNull();
+        assertThat(resolved.resolvedAt()).isNotNull();
+
+        // 同一异常键再次被检测到:不新增行、不回退处置结果。
+        repository.insertMetricAnomaly("ano_dispose_test", "revenue.net", "finance", "high",
+                new java.math.BigDecimal("300"), new java.math.BigDecimal("100"), "redetect", now);
+        assertThat(countRows("SELECT COUNT(*) FROM analytics_metric_anomalies WHERE id='ano_dispose_test'")).isEqualTo(1);
+        AnalyticsRecords.MetricAnomalyRecord after = repository.findMetricAnomalyById("ano_dispose_test").orElseThrow();
+        assertThat(after.status()).isEqualTo("resolved");
+        assertThat(after.dispositionNote()).isEqualTo("已核对为真实波动");
+    }
+
     private long countRows(String sql) {
         Long value = jdbcTemplate.queryForObject(sql, java.util.Map.of(), Long.class);
         return value == null ? 0 : value;

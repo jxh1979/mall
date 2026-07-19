@@ -847,6 +847,18 @@ class DashboardAggregationJobNetRevenueTests {
         }
 
         @Override
+        public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyById(String id) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public MetricAnomalyRecord updateMetricAnomalyDisposition(String id, String status, String note,
+                String disposedBy, java.time.Instant disposedAt, String escalatedAlertId,
+                java.time.Instant resolvedAt) {
+            throw new UnsupportedOperationException("not used in aggregation job tests");
+        }
+
+        @Override
         public List<MetricDefinitionRecord> listMetricDefinitions() {
             return List.of();
         }

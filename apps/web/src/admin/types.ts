@@ -714,6 +714,10 @@ export type MetricAnomalyRow = {
   status?: string;
   detectedAt?: string;
   resolvedAt?: string | null;
+  dispositionNote?: string | null;
+  disposedBy?: string | null;
+  disposedAt?: string | null;
+  escalatedAlertId?: string | null;
 };
 
 export type MerchantScopeWorkOrderRow = {

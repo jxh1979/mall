@@ -59,6 +59,9 @@ public class AnalyticsService {
             "low", "normal",
             "warning", "suspicious");
     private static final Set<String> RISK_ALERT_RESOLVE_ACTIONS = Set.of("investigating", "resolved", "dismissed");
+    // 指标异常处置动作与终态(状态机纯函数 anomalyDispositionTarget 使用)。
+    static final Set<String> ANOMALY_DISPOSITION_ACTIONS = Set.of("acknowledge", "resolve", "false_positive", "escalate");
+    static final Set<String> ANOMALY_TERMINAL_STATUSES = Set.of("resolved", "false_positive");
     private static final Set<String> TERMINAL_ALERT_STATUSES = Set.of("resolved", "dismissed");
     // V218 阈值可配置化:LOCAL_LLM_MIN_CONFIDENCE 迁入 analytics_ai_thresholds,从 repository 读(默认 0.60 兜底)。
     private static final int MAX_SOURCE_TEXT_CHARS = 12_000;
@@ -843,6 +846,84 @@ public class AnalyticsService {
                 "analytics_metric_anomaly",
                 repository::listMetricAnomalies
         );
+    }
+
+    /**
+     * 指标异常处置状态机(纯函数,便于单测):校验 action 合法、当前态可迁移,返回目标状态。
+     * open(未处置) -> acknowledged/resolved/false_positive/escalated;
+     * acknowledged(已阅) -> resolved/false_positive/escalated;
+     * escalated(已转告警) -> resolved/false_positive;
+     * resolved/false_positive 为终态,重复处置抛 409。
+     */
+    static String anomalyDispositionTarget(String currentStatus, String action) {
+        if (!ANOMALY_DISPOSITION_ACTIONS.contains(action)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "action is invalid");
+        }
+        if (ANOMALY_TERMINAL_STATUSES.contains(currentStatus)) {
+            throw ApiException.conflict("METRIC_ANOMALY_ALREADY_DISPOSED", "metric anomaly is already disposed");
+        }
+        return switch (action) {
+            case "acknowledge" -> {
+                if (!"open".equals(currentStatus)) {
+                    throw ApiException.conflict("METRIC_ANOMALY_INVALID_TRANSITION",
+                            "only open anomalies can be acknowledged");
+                }
+                yield "acknowledged";
+            }
+            case "escalate" -> {
+                if (!"open".equals(currentStatus) && !"acknowledged".equals(currentStatus)) {
+                    throw ApiException.conflict("METRIC_ANOMALY_INVALID_TRANSITION",
+                            "anomaly cannot be escalated from " + currentStatus);
+                }
+                yield "escalated";
+            }
+            case "resolve" -> "resolved";
+            case "false_positive" -> "false_positive";
+            default -> throw ApiException.badRequest("VALIDATION_FAILED", "action is invalid");
+        };
+    }
+
+    @Transactional
+    public MetricAnomalyRecord disposeMetricAnomaly(String id, AnomalyDispositionRequest request) {
+        String anomalyId = requireText(id, "id");
+        return executeWrite(
+                "analytics.dispose-metric-anomaly",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                MetricAnomalyRecord.class,
+                "analytics.metric_anomaly.disposed",
+                "analytics.metric_anomaly.disposed_failed",
+                "analytics.metric_anomaly.manage",
+                "analytics_metric_anomaly",
+                () -> disposeMetricAnomalyInternal(anomalyId, request)
+        );
+    }
+
+    private MetricAnomalyRecord disposeMetricAnomalyInternal(String anomalyId, AnomalyDispositionRequest request) {
+        AnomalyDispositionRequest actual = requireRequest(request);
+        String action = requireText(actual.action(), "action");
+        MetricAnomalyRecord current = repository.findMetricAnomalyById(anomalyId)
+                .orElseThrow(() -> ApiException.notFound("METRIC_ANOMALY_NOT_FOUND", "metric anomaly not found"));
+        String targetStatus = anomalyDispositionTarget(current.status(), action);
+        // acknowledge 说明可选;其余处置动作必须留说明(审计留痕/升级依据)。
+        String note = "acknowledge".equals(action)
+                ? optionalLimitedText(actual.note(), "note", 1000)
+                : requireLimitedText(actual.note(), "note", 1000);
+        Instant now = Instant.now(clock);
+        String escalatedAlertId = current.escalatedAlertId();
+        Instant resolvedAt = current.resolvedAt();
+        if ("escalate".equals(action)) {
+            // 转告警:在分析域风险告警工作台落一条可跟进的告警,回挂其 id 形成闭环(object=该异常)。
+            RiskAlertRecord alert = createRiskAlertInternal(new RiskAlertRequest(
+                    null, note, List.of(), null, "metric_anomaly", current.riskLevel(),
+                    "metric_anomaly", current.id(), "指标异常升级:" + current.summary()));
+            escalatedAlertId = alert.id();
+        }
+        if ("resolved".equals(targetStatus) || "false_positive".equals(targetStatus)) {
+            resolvedAt = now;
+        }
+        return repository.updateMetricAnomalyDisposition(
+                anomalyId, targetStatus, note, reviewLockActorId(), now, escalatedAlertId, resolvedAt);
     }
 
     public PageResponse<MetricDefinitionRecord> listMetricDefinitions() {

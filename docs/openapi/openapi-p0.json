@@ -2193,6 +2193,60 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/analytics/metric-anomalies/{id}/dispose": {
+      "post": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "disposeMetricAnomaly",
+        "summary": "处置指标异常",
+        "description": "用于处置指标异常(已阅/已处置/误报/转告警),形成发现到闭环的处置流转。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "analytics.metric_anomaly.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "analytics.metric_anomaly.disposed",
+        "x-audit-event-failure": "analytics.metric_anomaly.disposed_failed",
+        "x-failure-codes": [
+          "METRIC_ANOMALY_NOT_FOUND",
+          "METRIC_ANOMALY_ALREADY_DISPOSED",
+          "METRIC_ANOMALY_INVALID_TRANSITION",
+          "VALIDATION_FAILED"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "异常记录 ID;处置目标。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AnomalyDisposition"
+        }
+      }
+    },
     "/api/v1/analytics/metric-definitions": {
       "get": {
         "tags": [
@@ -32768,6 +32822,16 @@
           }
         }
       },
+      "AnomalyDisposition": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AnomalyDispositionRequest"
+            }
+          }
+        }
+      },
       "PaymentIntent": {
         "required": true,
         "content": {
@@ -35451,6 +35515,37 @@
           }
         },
         "description": "风险alert状态变更请求体。action 只能进入调查、解决或关闭，不能提交任意业务动作。"
+      },
+      "AnomalyDispositionRequest": {
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "action"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键;同一异常的同一处置动作重试必须复用。",
+            "maxLength": 128
+          },
+          "action": {
+            "type": "string",
+            "description": "处置动作:acknowledge 已阅 / resolve 已处置 / false_positive 误报 / escalate 转告警。",
+            "enum": [
+              "acknowledge",
+              "resolve",
+              "false_positive",
+              "escalate"
+            ],
+            "maxLength": 64
+          },
+          "note": {
+            "type": "string",
+            "description": "处置说明;resolve、false_positive、escalate 时必填,acknowledge 时可选。",
+            "maxLength": 1000
+          }
+        },
+        "description": "指标异常处置请求体。action 只能进入已阅/已处置/误报/转告警,不能提交任意业务动作。"
       },
       "PaymentIntentRequest": {
         "type": "object",

@@ -378,6 +378,17 @@ public class AnalyticsController {
         return ApiResponse.ok(service.listMetricAnomalies());
     }
 
+    @PostMapping("/metric-anomalies/{id}/dispose")
+    public ApiResponse<MetricAnomalyRecord> disposeMetricAnomaly(
+            @PathVariable String id,
+            @RequestBody(required = false) @jakarta.validation.Valid AnomalyDispositionRequest request
+    ) {
+        authorizationService.requirePermission("analytics.metric_anomaly.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(service.disposeMetricAnomaly(id, request));
+    }
+
     @GetMapping("/metric-definitions")
     public ApiResponse<PageResponse<MetricDefinitionRecord>> listMetricDefinitions() {
         authorizationService.requirePermission("analytics.dashboard.view");

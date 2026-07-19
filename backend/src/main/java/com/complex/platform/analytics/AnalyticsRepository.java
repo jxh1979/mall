@@ -77,6 +77,12 @@ public interface AnalyticsRepository {
 
     List<MetricAnomalyRecord> listMetricAnomalies();
 
+    java.util.Optional<MetricAnomalyRecord> findMetricAnomalyById(String id);
+
+    MetricAnomalyRecord updateMetricAnomalyDisposition(String id, String status, String note,
+            String disposedBy, java.time.Instant disposedAt, String escalatedAlertId,
+            java.time.Instant resolvedAt);
+
     List<MetricDefinitionRecord> listMetricDefinitions();
 
     List<RiskAlertRecord> listRiskAlerts();
