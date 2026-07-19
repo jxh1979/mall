@@ -7,7 +7,8 @@ type JsonBody = Record<string, unknown>;
 function getApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
   if (configured) return configured.replace(/\/$/, "");
-  if (window.location.port === "3000") return `${window.location.protocol}//${window.location.hostname}:8080`;
+  // 令牌迁 HttpOnly Cookie 后必须同源（否则跨源 XHR 不带 Cookie）：dev（vite 3000）走同源，
+  // 由 vite server.proxy 的 /api → 后端转发；prod 由 nginx 同源转发 /api。VITE_API_BASE_URL 显式跨源覆盖需自配 CORS。
   return "";
 }
 
@@ -48,6 +49,14 @@ function unwrap(value: unknown): JsonValue {
   return normalized;
 }
 
+/** 读取非 HttpOnly 的 XSRF-TOKEN Cookie，回填 X-XSRF-TOKEN 头（CSRF 双提交）。HttpOnly 的令牌 Cookie 由浏览器自动携带、JS 读不到。 */
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const escaped = name.replace(/([.*+?^${}()|[\]\\])/g, "\\$1");
+  const match = document.cookie.match(new RegExp("(?:^|; )" + escaped + "=([^;]*)"));
+  return match && match[1] !== undefined ? decodeURIComponent(match[1]) : null;
+}
+
 export interface PagedResult<T> {
   items: T[];
   total: number;
@@ -82,6 +91,8 @@ function normalizeRequestBody(body: JsonBody): JsonValue {
   return mapKeys({ ...body, idempotencyKey: body.idempotencyKey ?? nextIdempotencyKey() }, toSnakeCaseKey);
 }
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 export class AdminApi {
   private readonly apiBaseUrl = getApiBaseUrl();
 
@@ -91,16 +102,8 @@ export class AdminApi {
   /** 商户专区（3.18 方案A）：merchant 归属账号按 merchant_portal 终端上报，受 V197 商户门户总开关约束；员工/平台账号仍为 web。 */
   terminalType: string = "web";
 
-  /** 会话续期（用户裁决 localStorage+refresh_token）：401 时用它调 /auth/refresh，成功重放原请求一次。 */
-  refreshToken: string | null = null;
-
-  /** 刷新成功回调（AdminApp 持久化新 token 并更新状态）。 */
-  onTokensRefreshed: ((tokens: { accessToken: string; refreshToken: string | null }) => void) | null = null;
-
-  /** 刷新失败/无刷新凭证回调（AdminApp 清凭证回登录页，提示「登录已过期」）。 */
+  /** 会话失效回调（AdminApp 清会话回登录页，提示「登录已过期」）。 */
   onSessionExpired: (() => void) | null = null;
-
-  private accessToken: string;
 
   /** 并发 401 只发一次刷新请求。 */
   private refreshing: Promise<boolean> | null = null;
@@ -108,8 +111,11 @@ export class AdminApi {
   /** 并发多个 401 只广播一次会话失效（防跳转风暴）；重新登录会新建 AdminApi 实例，标记自然复位。 */
   private sessionExpiredNotified = false;
 
-  constructor(accessToken: string) {
-    this.accessToken = accessToken;
+  // 令牌迁 HttpOnly Cookie 后 AdminApi 不再需要令牌。保留可选形参仅为兼容既有大量调用点
+  // （new AdminApi("token")/new AdminApi("")），传入值一律忽略——鉴权全靠浏览器自动携带的 Cookie。
+  // ponytail: 兼容垫片，待所有调用点改为无参后可删。
+  constructor(_legacyAccessTokenIgnored?: string) {
+    void _legacyAccessTokenIgnored;
   }
 
   get<T>(path: string): Promise<T> {
@@ -138,18 +144,18 @@ export class AdminApi {
     return this.request<T>(path, "DELETE");
   }
 
-  /** multipart 上传：复用 auth/终端头，但不设 content-type（浏览器带 boundary），不转键。走 401 刷新重放一次。 */
+  /** multipart 上传：复用终端/CSRF 头，但不设 content-type（浏览器带 boundary），不转键。走 401 刷新重放一次。 */
   async postForm<T>(path: string, form: FormData): Promise<T> {
     const buildInit = (): RequestInit => {
       const headers = new Headers();
-      if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);
       headers.set("x-terminal-type", this.terminalType);
       if (this.moduleCode) headers.set("x-module-code", this.moduleCode);
-      return { method: "POST", headers, body: form };
+      this.applyCsrf(headers, "POST");
+      return { method: "POST", headers, body: form, credentials: "include" };
     };
     let response = await fetch(`${this.apiBaseUrl}${path}`, buildInit());
     if (response.status === 401 && !path.includes("/auth/")) {
-      if (this.refreshToken && (await this.tryRefresh())) {
+      if (await this.tryRefresh()) {
         response = await fetch(`${this.apiBaseUrl}${path}`, buildInit());
       }
       if (response.status === 401) this.notifySessionExpired();
@@ -159,13 +165,21 @@ export class AdminApi {
     return (text ? unwrap(JSON.parse(text)) : null) as T;
   }
 
+  /** 写请求带 CSRF 双提交头（X-XSRF-TOKEN = XSRF-TOKEN Cookie）；读请求不需要。 */
+  private applyCsrf(headers: Headers, method: string): void {
+    if (SAFE_METHODS.has(method)) return;
+    const csrf = readCookie("XSRF-TOKEN");
+    if (csrf) headers.set("x-xsrf-token", csrf);
+  }
+
   private buildInit(method: string, body: JsonBody | undefined): RequestInit {
     const headers = new Headers();
-    if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);
     // 3.19 二期：声明终端后后端按 terminal.enabled 逐请求强制（矩阵页关端/关模块=接口硬拒）。
     headers.set("x-terminal-type", this.terminalType);
     if (this.moduleCode) headers.set("x-module-code", this.moduleCode);
-    const init: RequestInit = { method, headers };
+    this.applyCsrf(headers, method);
+    // 令牌在 HttpOnly Cookie 里，浏览器自动携带（credentials:include 覆盖同源/跨源），JS 不再手动加 Authorization 头。
+    const init: RequestInit = { method, headers, credentials: "include" };
     if (body) {
       headers.set("content-type", "application/json");
       init.body = JSON.stringify(normalizeRequestBody(body));
@@ -178,8 +192,7 @@ export class AdminApi {
     const isAuthEndpoint = path.includes("/auth/");
     let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
     if (response.status === 401 && !isAuthEndpoint) {
-      // 先静默续期重放一次；无 refresh_token / 刷新失败 / 重放仍 401 → 会话失效回登录页。
-      if (this.refreshToken && (await this.tryRefresh())) {
+      if (await this.tryRefresh()) {
         response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
       }
       if (response.status === 401) this.notifySessionExpired();
@@ -196,8 +209,8 @@ export class AdminApi {
     const isAuthEndpoint = path.includes("/auth/");
     let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
     if (response.status === 401 && !isAuthEndpoint) {
-      // 先静默续期重放一次；无 refresh_token / 刷新失败 / 重放仍 401 → 会话失效回登录页。
-      if (this.refreshToken && (await this.tryRefresh())) {
+      // 先静默续期重放一次；刷新失败 / 重放仍 401 → 会话失效回登录页。
+      if (await this.tryRefresh()) {
         response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
       }
       if (response.status === 401) this.notifySessionExpired();
@@ -222,21 +235,17 @@ export class AdminApi {
 
   private async doRefresh(): Promise<boolean> {
     try {
+      // 刷新令牌在 HttpOnly Cookie 里（浏览器自动携带）；空体即可，后端从 Cookie 取。带 CSRF 头 + credentials。
       const headers = new Headers({ "content-type": "application/json", "x-terminal-type": this.terminalType });
-      if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);
+      this.applyCsrf(headers, "POST");
       const response = await fetch(`${this.apiBaseUrl}/api/v1/auth/refresh`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ refresh_token: this.refreshToken }),
+        body: "{}",
+        credentials: "include",
       });
-      if (!response.ok) return false;
-      const text = await response.text();
-      const data = (text ? unwrap(JSON.parse(text)) : null) as { accessToken?: string; refreshToken?: string } | null;
-      if (!data?.accessToken) return false;
-      this.accessToken = data.accessToken;
-      if (data.refreshToken) this.refreshToken = data.refreshToken;
-      this.onTokensRefreshed?.({ accessToken: this.accessToken, refreshToken: this.refreshToken });
-      return true;
+      // 成功即续期：后端已用 Set-Cookie 轮转新令牌 Cookie，JS 无需读取令牌本身。
+      return response.ok;
     } catch {
       return false;
     }

@@ -14,23 +14,54 @@ function errorResponse(status: number, body: Record<string, unknown>): Response 
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
+function clearCookies(): void {
+  for (const part of document.cookie.split(";")) {
+    const name = part.split("=")[0]?.trim();
+    if (name) document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+  }
+}
+
 describe("AdminApi", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    clearCookies();
   });
 
-  it("unwraps API envelopes and normalizes response keys", async () => {
+  it("unwraps API envelopes, sends cookies, and never adds an Authorization header", async () => {
+    // 令牌迁 HttpOnly Cookie：请求不再手动加 Authorization 头，改由 credentials:include 让浏览器自动携带 Cookie。
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ items: [{ ticket_type_id: "ticket-1" }] }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(new AdminApi("token").get("/api/v1/ticketing/ticket-types")).resolves.toEqual([
+    await expect(new AdminApi().get("/api/v1/ticketing/ticket-types")).resolves.toEqual([
       { ticketTypeId: "ticket-1" },
     ]);
 
-    const firstCall = fetchMock.mock.calls[0]!;
-    const init = firstCall[1] as RequestInit;
-    expect((init?.headers as Headers).get("authorization")).toBe("Bearer token");
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect((init.headers as Headers).get("authorization")).toBeNull();
+    expect(init.credentials).toBe("include");
+  });
+
+  it("attaches the CSRF double-submit header on writes when XSRF-TOKEN cookie is present", async () => {
+    document.cookie = "XSRF-TOKEN=csrf-abc; path=/";
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new AdminApi().post("/api/v1/ticketing/orders", { ticketTypeId: "ticket-1" });
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect((init.headers as Headers).get("x-xsrf-token")).toBe("csrf-abc");
+  });
+
+  it("does not attach the CSRF header on safe reads", async () => {
+    document.cookie = "XSRF-TOKEN=csrf-abc; path=/";
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ items: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new AdminApi().get("/api/v1/ticketing/ticket-types");
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect((init.headers as Headers).get("x-xsrf-token")).toBeNull();
   });
 
   it("keeps dotted dictionary keys verbatim (metric maps stay addressable)", async () => {
@@ -42,7 +73,7 @@ describe("AdminApi", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(new AdminApi("token").get("/api/v1/analytics/dashboards/finance")).resolves.toEqual({
+    await expect(new AdminApi().get("/api/v1/analytics/dashboards/finance")).resolves.toEqual({
       businessDate: "2026-07-01",
       metrics: { "ar.aging_31_60": { value: 900, unit: "cent" } },
     });
@@ -52,10 +83,9 @@ describe("AdminApi", () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await new AdminApi("token").post("/api/v1/ticketing/orders", { ticketTypeId: "ticket-1" });
+    await new AdminApi().post("/api/v1/ticketing/orders", { ticketTypeId: "ticket-1" });
 
-    const firstCall = fetchMock.mock.calls[0]!;
-    const init = firstCall[1] as RequestInit;
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
     expect(JSON.parse(String(init?.body))).toMatchObject({
       ticket_type_id: "ticket-1",
       idempotency_key: expect.stringMatching(/^admin-web-/),
@@ -68,7 +98,7 @@ describe("AdminApi", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const error = await new AdminApi("").post("/api/v1/auth/login", { loginName: "admin" }).catch((e: unknown) => e);
+    const error = await new AdminApi().post("/api/v1/auth/login", { loginName: "admin" }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).message).toBe("账号或密码不正确");
     expect((error as ApiError).detail).toMatchObject({ path: "/api/v1/auth/login", status: 401, requestId: "req-1" });
@@ -84,31 +114,29 @@ describe("AdminApi", () => {
     ];
     for (const [response, expected] of cases) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
-      await expect(new AdminApi("token").get("/api/v1/x")).rejects.toThrow(expected);
+      await expect(new AdminApi().get("/api/v1/x")).rejects.toThrow(expected);
     }
   });
 
-  it("refreshes on 401 with refresh_token and replays the original request once", async () => {
+  it("refreshes on 401 via the cookie refresh flow and replays the original request once", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(errorResponse(401, { code: "UNAUTHORIZED", message: "expired" }))
-      .mockResolvedValueOnce(jsonResponse({ access_token: "new-token", refresh_token: "new-refresh" }))
+      .mockResolvedValueOnce(jsonResponse({ user: { id: "u-1" } })) // /auth/refresh：后端已用 Set-Cookie 轮转令牌
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const api = new AdminApi("stale-token");
-    api.refreshToken = "refresh-1";
-    const refreshed = vi.fn();
-    api.onTokensRefreshed = refreshed;
-
+    const api = new AdminApi();
     await expect(api.get("/api/v1/ticketing/orders")).resolves.toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+
     const refreshCall = fetchMock.mock.calls[1]!;
     expect(String(refreshCall[0])).toContain("/api/v1/auth/refresh");
-    expect(JSON.parse(String((refreshCall[1] as RequestInit).body))).toMatchObject({ refresh_token: "refresh-1" });
-    // 重放使用新 access token
+    expect((refreshCall[1] as RequestInit).credentials).toBe("include");
+    // 刷新令牌来自 HttpOnly Cookie，请求体不再携带 refresh_token（JS 读不到它）。
+    expect(String((refreshCall[1] as RequestInit).body)).not.toContain("refresh_token");
+    // 重放不带 Authorization 头（靠 Cookie）。
     const replayHeaders = (fetchMock.mock.calls[2]![1] as RequestInit).headers as Headers;
-    expect(replayHeaders.get("authorization")).toBe("Bearer new-token");
-    expect(refreshed).toHaveBeenCalledWith({ accessToken: "new-token", refreshToken: "new-refresh" });
+    expect(replayHeaders.get("authorization")).toBeNull();
   });
 
   it("expires the session when refresh fails", async () => {
@@ -117,28 +145,14 @@ describe("AdminApi", () => {
       .mockResolvedValueOnce(errorResponse(401, { code: "UNAUTHORIZED", message: "refresh rejected" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const api = new AdminApi("stale-token");
-    api.refreshToken = "refresh-1";
+    const api = new AdminApi();
     const expired = vi.fn();
     api.onSessionExpired = expired;
 
     await expect(api.get("/api/v1/ticketing/orders")).rejects.toThrow("登录已过期，请重新登录");
     expect(expired).toHaveBeenCalledTimes(1);
+    // 原请求 401 → 尝试一次 Cookie 刷新（也 401）→ 回登录。
     expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it("expires the session on 401 even without a refresh token", async () => {
-    // 会话失效全局回登录：无 refresh_token（老会话/被吊销）时 401 也必须触发回登录，不能卡死在页面。
-    const fetchMock = vi.fn().mockResolvedValue(errorResponse(401, { code: "UNAUTHORIZED", message: "expired" }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const api = new AdminApi("stale-token");
-    const expired = vi.fn();
-    api.onSessionExpired = expired;
-
-    await expect(api.get("/api/v1/ticketing/orders")).rejects.toThrow("登录已过期，请重新登录");
-    expect(expired).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not expire the session on 403 (real permission denial stays on page)", async () => {
@@ -147,7 +161,7 @@ describe("AdminApi", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const api = new AdminApi("valid-token");
+    const api = new AdminApi();
     const expired = vi.fn();
     api.onSessionExpired = expired;
 
@@ -159,7 +173,7 @@ describe("AdminApi", () => {
     const fetchMock = vi.fn().mockResolvedValue(errorResponse(401, { code: "UNAUTHORIZED", message: "expired" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const api = new AdminApi("stale-token");
+    const api = new AdminApi();
     const expired = vi.fn();
     api.onSessionExpired = expired;
 
@@ -174,7 +188,7 @@ describe("AdminApi", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const api = new AdminApi("");
+    const api = new AdminApi();
     const expired = vi.fn();
     api.onSessionExpired = expired;
 

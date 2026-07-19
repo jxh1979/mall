@@ -97,7 +97,7 @@ graph TB
 
 ```mermaid
 graph LR
-  UI["前端/终端"] -->|"REST + Bearer"| CTRL["Controller<br/>(29 个)"]
+  UI["前端/终端"] -->|"REST + Cookie(后台Web,HttpOnly)/Bearer(设备端)"| CTRL["Controller<br/>(29 个)"]
   CTRL -->|"@GuardedAction<br/>权限+终端开关+准入闸"| SVC["Service<br/>(60 个)"]
   SVC -->|"JdbcTemplate<br/>scope 注入"| REPO["Repository (JDBC)"]
   REPO --> PG[("PostgreSQL")]

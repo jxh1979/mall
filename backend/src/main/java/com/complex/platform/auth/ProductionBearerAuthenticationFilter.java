@@ -29,9 +29,15 @@ public class ProductionBearerAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
+        // 双通道令牌来源：设备端走 Authorization: Bearer 头；后台 Web 走 HttpOnly Cookie。头优先，Cookie 兜底。
+        String token = null;
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring("Bearer ".length()).trim();
+            token = header.substring("Bearer ".length()).trim();
+        } else {
+            token = AuthCookies.readAccessToken(request);
+        }
+        if (token != null && !token.isBlank()) {
             authService.authenticateToken(token).ifPresent(actor -> {
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         actor,
