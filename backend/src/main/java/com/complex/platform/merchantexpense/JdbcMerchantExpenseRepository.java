@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -20,6 +21,21 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
 
     private static final String COLS =
             "id, merchant_id, period, expense_type, amount_cent, source, source_ref, note, operator_user_id, created_at";
+
+    // 分红期间关账锁：某商户某月被非 preview 且 approved/paid 正式单按 [period_start,period_end] 覆盖即关账。
+    // 自动挂接对已关账 (商户,月份) 跳过 → 相关子查询 NOT EXISTS（商户列表达式随上游别名注入 :lock_merchant_expr）。
+    private static String lockNotExists(String merchantExpr) {
+        return "\n                   AND NOT EXISTS (SELECT 1 FROM dividend_statements ds"
+                + " WHERE ds.merchant_id = " + merchantExpr
+                + " AND ds.kind <> 'preview' AND ds.status IN ('approved', 'paid')"
+                + " AND ds.period_start <= :month_end AND ds.period_end >= :month_start)";
+    }
+
+    private static void addMonthBounds(MapSqlParameterSource params, String period) {
+        YearMonth month = YearMonth.parse(period);
+        params.addValue("month_start", month.atDay(1), Types.DATE)
+                .addValue("month_end", month.atEndOfMonth(), Types.DATE);
+    }
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -109,12 +125,46 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
         return inserted > 0;
     }
 
+    @Override
+    public boolean isPeriodLocked(String merchantId, String period) {
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("merchant_id", merchantId);
+        addMonthBounds(params, period);
+        Boolean locked = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM dividend_statements ds
+                 WHERE ds.merchant_id = :merchant_id
+                   AND ds.kind <> 'preview'
+                   AND ds.status IN ('approved', 'paid')
+                   AND ds.period_start <= :month_end
+                   AND ds.period_end >= :month_start)
+                """, params, Boolean.class);
+        return Boolean.TRUE.equals(locked);
+    }
+
+    @Override
+    public List<String> listLockedMerchants(String period) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        addMonthBounds(params, period);
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT ds.merchant_id FROM dividend_statements ds
+                 WHERE ds.kind <> 'preview'
+                   AND ds.status IN ('approved', 'paid')
+                   AND ds.period_start <= :month_end
+                   AND ds.period_end >= :month_start
+                 ORDER BY ds.merchant_id
+                """, params, String.class);
+    }
+
     /**
      * 能耗费自动挂接：金额口径 = ar_ap_items.amount_cent（应收全额，非已收），
      * 行 id 由上游单据 id 派生（'mex_ae_' || id）+ (source, source_ref) 部分唯一索引，双重幂等。
      */
     @Override
     public int attachEnergyFees(String period, String operatorUserId, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("period", period)
+                .addValue("operator", operatorUserId, Types.VARCHAR)
+                .addValue("created_at", timestampWithTimeZone(now));
+        addMonthBounds(params, period);
         return jdbcTemplate.update("""
                 INSERT INTO merchant_expense_entries (
                     id, merchant_id, period, expense_type, amount_cent, source, source_ref,
@@ -127,12 +177,9 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
                    AND i.source_type = 'energy_fee'
                    AND i.accounting_period = :period
                    AND i.merchant_id IS NOT NULL
-                   AND i.amount_cent <> 0
-                ON CONFLICT (id) DO NOTHING
-                """, new MapSqlParameterSource()
-                .addValue("period", period)
-                .addValue("operator", operatorUserId, Types.VARCHAR)
-                .addValue("created_at", timestampWithTimeZone(now)));
+                   AND i.amount_cent <> 0"""
+                + lockNotExists("i.merchant_id")
+                + "\n                ON CONFLICT (id) DO NOTHING", params);
     }
 
     /**
@@ -141,6 +188,11 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
      */
     @Override
     public int attachPropertyFees(String period, String operatorUserId, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("period", period)
+                .addValue("operator", operatorUserId, Types.VARCHAR)
+                .addValue("created_at", timestampWithTimeZone(now));
+        addMonthBounds(params, period);
         return jdbcTemplate.update("""
                 INSERT INTO merchant_expense_entries (
                     id, merchant_id, period, expense_type, amount_cent, source, source_ref,
@@ -150,12 +202,9 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
                        '物业费自动挂接（账单 ' || b.id || '）', :operator, :created_at
                   FROM property_fee_bills b
                  WHERE b.period = :period
-                   AND b.amount_cent <> 0
-                ON CONFLICT (id) DO NOTHING
-                """, new MapSqlParameterSource()
-                .addValue("period", period)
-                .addValue("operator", operatorUserId, Types.VARCHAR)
-                .addValue("created_at", timestampWithTimeZone(now)));
+                   AND b.amount_cent <> 0"""
+                + lockNotExists("b.merchant_id")
+                + "\n                ON CONFLICT (id) DO NOTHING", params);
     }
 
     /**
@@ -165,6 +214,11 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
      */
     @Override
     public int attachContractPropertyFees(String period, String operatorUserId, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("period", period)
+                .addValue("operator", operatorUserId, Types.VARCHAR)
+                .addValue("created_at", timestampWithTimeZone(now));
+        addMonthBounds(params, period);
         return jdbcTemplate.update("""
                 INSERT INTO merchant_expense_entries (
                     id, merchant_id, period, expense_type, amount_cent, source, source_ref,
@@ -177,12 +231,9 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
                    AND i.source_type = 'contract_property_fee'
                    AND i.accounting_period = :period
                    AND i.merchant_id IS NOT NULL
-                   AND i.amount_cent <> 0
-                ON CONFLICT (id) DO NOTHING
-                """, new MapSqlParameterSource()
-                .addValue("period", period)
-                .addValue("operator", operatorUserId, Types.VARCHAR)
-                .addValue("created_at", timestampWithTimeZone(now)));
+                   AND i.amount_cent <> 0"""
+                + lockNotExists("i.merchant_id")
+                + "\n                ON CONFLICT (id) DO NOTHING", params);
     }
 
     /**
@@ -195,6 +246,11 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
      */
     @Override
     public int attachContractRent(String period, String operatorUserId, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("period", period)
+                .addValue("operator", operatorUserId, Types.VARCHAR)
+                .addValue("created_at", timestampWithTimeZone(now));
+        addMonthBounds(params, period);
         return jdbcTemplate.update("""
                 INSERT INTO merchant_expense_entries (
                     id, merchant_id, period, expense_type, amount_cent, source, source_ref,
@@ -207,12 +263,9 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
                    AND i.source_type IN ('contract_rent', 'turnover_rent')
                    AND i.accounting_period = :period
                    AND i.merchant_id IS NOT NULL
-                   AND i.amount_cent <> 0
-                ON CONFLICT (id) DO NOTHING
-                """, new MapSqlParameterSource()
-                .addValue("period", period)
-                .addValue("operator", operatorUserId, Types.VARCHAR)
-                .addValue("created_at", timestampWithTimeZone(now)));
+                   AND i.amount_cent <> 0"""
+                + lockNotExists("i.merchant_id")
+                + "\n                ON CONFLICT (id) DO NOTHING", params);
     }
 
     /**

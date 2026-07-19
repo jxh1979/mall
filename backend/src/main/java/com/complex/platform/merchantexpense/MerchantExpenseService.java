@@ -113,6 +113,7 @@ public class MerchantExpenseService {
         String merchantId = requireText(request.merchantId(), "merchant_id");
         checkMerchantOwnership(merchantId);
         String period = requirePeriod(request.period());
+        requirePeriodOpen(merchantId, period);
         String expenseType = requireText(request.expenseType(), "expense_type");
         if (!EXPENSE_TYPES.contains(expenseType)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "unknown expense_type: " + expenseType);
@@ -162,6 +163,8 @@ public class MerchantExpenseService {
                 .orElseThrow(() -> ApiException.notFound("EXPENSE_ENTRY_NOT_FOUND", "expense entry not found: " + entryId));
         // I-2 归属校验（FinanceService.checkMerchantOwnership 同款）：商户 scope 账号不得冲销他商户的台账行。
         checkMerchantOwnership(original.merchantId());
+        // 关账锁：已被 approved/paid 正式分红单覆盖的月份禁止冲销（否则已发放分红的基数被改）。
+        requirePeriodOpen(original.merchantId(), original.period());
         if (original.isReversal()) {
             throw ApiException.conflict("EXPENSE_REVERSAL_NOT_ALLOWED", "冲销行不可再被冲销；如需更正请冲销原始行后重新录入");
         }
@@ -201,12 +204,15 @@ public class MerchantExpenseService {
                     String period = requirePeriod(request.period());
                     Instant now = Instant.now();
                     String operator = currentOperator();
+                    // 关账锁：attach* 的 SQL 已对 approved/paid 正式分红单覆盖的 (商户,月份) NOT EXISTS 跳过；
+                    // 这里另列出被跳过的商户清单，让操作员知道哪些商户该期已关账未挂接。
                     int energyInserted = repository.attachEnergyFees(period, operator, now);
                     int propertyInserted = repository.attachPropertyFees(period, operator, now);
                     int contractPropertyInserted = repository.attachContractPropertyFees(period, operator, now);
                     int rentInserted = repository.attachContractRent(period, operator, now);
                     return new MerchantExpenseSyncResultRecord(period, energyInserted, propertyInserted,
-                            contractPropertyInserted, rentInserted, repository.listAutoDrift(period));
+                            contractPropertyInserted, rentInserted, repository.listAutoDrift(period),
+                            repository.listLockedMerchants(period));
                 },
                 MerchantExpenseService::businessId,
                 java.util.Map.of());
@@ -224,6 +230,18 @@ public class MerchantExpenseService {
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                     "access to another merchant's resource is not allowed");
+        }
+    }
+
+    /**
+     * 分红期间关账锁：该商户该月被 approved/paid 正式分红单覆盖时，拒绝录入/冲销费用（响亮 409
+     * DIVIDEND_PERIOD_LOCKED，进 x-failure-codes）；否则已发放分红的基数被追改而静默漂移。
+     * 解锁=作废该分红单（判定式不含 voided，天然解锁）。
+     */
+    private void requirePeriodOpen(String merchantId, String period) {
+        if (repository.isPeriodLocked(merchantId, period)) {
+            throw ApiException.conflict("DIVIDEND_PERIOD_LOCKED",
+                    "该商户 " + period + " 月已完成分红核算（关账），费用台账不可再录入/冲销；如需更正请先作废对应分红计算单解锁");
         }
     }
 

@@ -20,6 +20,15 @@ public interface MerchantExpenseRepository {
     /** 插入一行（ON CONFLICT (id) DO NOTHING 幂等）；返回是否真的新插入。 */
     boolean insertEntry(MerchantExpenseEntryRecord entry);
 
+    /**
+     * 分红期间关账锁判定：该商户该月份（yyyy-MM）是否被某张非 preview 且 status∈(approved,paid) 的
+     * 分红计算单按 [period_start,period_end] 覆盖（季度单覆盖 3 个月）。已关账月禁止再录入/冲销费用。
+     */
+    boolean isPeriodLocked(String merchantId, String period);
+
+    /** 该月份处于关账（approved/paid 正式单覆盖）状态的商户 id 列表（自动挂接的跳过清单来源）。 */
+    List<String> listLockedMerchants(String period);
+
     /** 能耗费自动挂接：ar_ap_items(source_type='energy_fee', 应收) 按期汇入；返回新计入行数。 */
     int attachEnergyFees(String period, String operatorUserId, Instant now);
 
