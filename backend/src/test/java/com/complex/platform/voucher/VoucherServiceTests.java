@@ -51,6 +51,8 @@ class VoucherServiceTests {
         final Map<String, VoucherRedemptionEntryRecord> redemptions = new LinkedHashMap<>();
         final Map<String, String> catalogLinks = new LinkedHashMap<>();
         final List<VoucherOverviewRecord> partnerOverviewRows = new ArrayList<>();
+        String lastOverviewMerchantScope = "UNSET";
+        String lastOverviewCustomerId = "UNSET";
 
         @Override
         public Optional<VoucherDefinitionRecord> findDefinitionById(String id) {
@@ -153,6 +155,8 @@ class VoucherServiceTests {
         @Override
         public PageResponse<VoucherOverviewRecord> overview(
                 String merchantScope, String customerId, int page, int pageSize) {
+            lastOverviewMerchantScope = merchantScope;
+            lastOverviewCustomerId = customerId;
             List<VoucherOverviewRecord> rows = new ArrayList<>();
             for (VoucherInstanceRecord i : instances.values()) {
                 if (customerId != null && !i.customerId().equals(customerId)) {
@@ -161,7 +165,8 @@ class VoucherServiceTests {
                 VoucherDefinitionRecord d = definitions.get(i.definitionId());
                 rows.add(new VoucherOverviewRecord(i.id(), "unified", d == null ? "?" : d.name(),
                         d == null ? "?" : d.voucherKind(), i.customerId(), i.status(),
-                        "issued".equals(i.status()) ? 1 : 0, i.expiresAt()));
+                        "issued".equals(i.status()) ? 1 : 0, i.expiresAt(),
+                        d == null ? null : d.faceValueCent(), d == null ? null : d.redeemMethod()));
             }
             partnerOverviewRows.stream()
                     .filter(r -> customerId == null || customerId.equals(r.customerId()))
@@ -566,7 +571,7 @@ class VoucherServiceTests {
         issueTo("customer-1", definition, "issue-ov");
         repository.partnerOverviewRows.add(new VoucherOverviewRecord(
                 "ie_1", "pass_partner", "餐厅第三方券", "external_partner", "customer-1", "active", 3,
-                Instant.parse("2026-12-31T00:00:00Z")));
+                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow"));
 
         PageResponse<VoucherOverviewRecord> page = service.overview("customer-1", 1, 50);
 
@@ -575,6 +580,53 @@ class VoucherServiceTests {
         // 计次模型兼容映射：通票第三方券带剩余次数展示，不硬套一次性状态机。
         assertThat(page.items()).filteredOn(row -> "pass_partner".equals(row.source()))
                 .singleElement().satisfies(row -> assertThat(row.remainingTimes()).isEqualTo(3));
+    }
+
+    // ── 客人端「我的券包」自助只读 ─────────────────────────────────────────
+
+    @Test
+    void customerWalletForcesCallerCustomerIdAndDropsMerchantScope() {
+        // 两个客人各持券 + 一张第三方券挂 customer-2；客人自助只看本人（不可查他人）。
+        VoucherDefinitionRecord def = discountDefinition("vdef_cw", "merchant-1");
+        issueTo("customer-1", def, "cw-1");
+        issueTo("customer-2", def, "cw-2");
+        repository.partnerOverviewRows.add(new VoucherOverviewRecord(
+                "ie_cw", "pass_partner", "第三方券", "external_partner", "customer-2", "active", 2,
+                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow"));
+
+        PageResponse<VoucherOverviewRecord> page = service.customerOverview("customer-1", 1, 50);
+
+        // 强制本人 customer_id：统一券 + 第三方券都不越界，只见 customer-1。
+        assertThat(page.items()).extracting(VoucherOverviewRecord::customerId).containsOnly("customer-1");
+        // merchantScope 传 null（客人不受商户 scope 限制），customer_id 传本人。
+        assertThat(repository.lastOverviewMerchantScope).isNull();
+        assertThat(repository.lastOverviewCustomerId).isEqualTo("customer-1");
+    }
+
+    @Test
+    void customerWalletCarriesFaceValueAndMethodButHasNoInternalPriceField() {
+        // 面额/折扣 + 核销方式随聚合视图返回，供券卡展示。
+        VoucherDefinitionRecord def = discountDefinition("vdef_cw2", "merchant-1"); // 面额 5000，核销方式 in_store_staff
+        issueTo("customer-9", def, "cw2-1");
+
+        PageResponse<VoucherOverviewRecord> page = service.customerOverview("customer-9", 1, 50);
+
+        assertThat(page.items()).singleElement().satisfies(row -> {
+            assertThat(row.faceValueCent()).isEqualTo(5000L);
+            assertThat(row.redeemMethod()).isEqualTo("in_store_staff");
+        });
+        // 结构性铁证：聚合视图 record 无任何内部结算价/成本访问器（客人天然不可见）。
+        assertThat(java.util.Arrays.stream(VoucherOverviewRecord.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName))
+                .doesNotContain("internalPriceCent", "settlementAmountCent");
+    }
+
+    @Test
+    void customerWalletRejectsBlankCustomerId() {
+        // 兜底防越权：空/空白 customer_id 直接 401，绝不退化为读全部客人券。
+        assertThatThrownBy(() -> service.customerOverview("  ", 1, 50))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("CUSTOMER_REQUIRED"));
     }
 
     // ── 内部结算价脱敏（V279 bar 同款铁律，成本仅授权后台可见）─────────────

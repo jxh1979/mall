@@ -1,5 +1,6 @@
 import {
   CalendarOutlined,
+  GiftOutlined,
   HomeOutlined,
   ShoppingOutlined,
   StarOutlined,
@@ -32,6 +33,7 @@ import { MyOrdersPage } from "./pages/MyOrdersPage";
 import { PointsPage } from "./pages/PointsPage";
 import { TicketTransferPage } from "./pages/TicketTransferPage";
 import { WalletPage } from "./pages/WalletPage";
+import { VoucherWalletPage } from "./pages/VoucherWalletPage";
 import type { CustomerSession } from "./types";
 
 // antd 组件（日期选择器等）中文化；dayjs 同步切中文，避免 "Select date" 类英文文案。
@@ -39,9 +41,9 @@ dayjs.locale("zh-cn");
 
 const { Header, Content, Sider } = Layout;
 
-type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet" | "transfer";
+type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet" | "vouchers" | "transfer";
 
-const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet", "transfer"];
+const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet", "vouchers", "transfer"];
 
 // 页面标题单一来源：侧栏菜单与每页 h1（语义地标）共用。
 const PAGE_TITLES: Record<PageKey, string> = {
@@ -53,6 +55,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   orders: "我的订单 / 票 / 二维码",
   points: "积分 / 签到",
   wallet: "储值 / 会员",
+  vouchers: "我的券包",
   transfer: "门票转赠",
 };
 
@@ -191,6 +194,7 @@ export default function CustomerApp(): React.ReactElement {
               { key: "orders", icon: <UnorderedListOutlined />, label: PAGE_TITLES.orders },
               { key: "points", icon: <StarOutlined />, label: PAGE_TITLES.points },
               { key: "wallet", icon: <WalletOutlined />, label: PAGE_TITLES.wallet },
+              { key: "vouchers", icon: <GiftOutlined />, label: PAGE_TITLES.vouchers },
               { key: "transfer", icon: <ShoppingOutlined />, label: PAGE_TITLES.transfer },
             ]}
             onClick={(info) => goTo(info.key as PageKey)}
@@ -214,6 +218,7 @@ export default function CustomerApp(): React.ReactElement {
             {page === "orders" ? <MyOrdersPage service={service} /> : null}
             {page === "points" ? <PointsPage service={service} /> : null}
             {page === "wallet" ? <WalletPage service={service} /> : null}
+            {page === "vouchers" ? <VoucherWalletPage service={service} /> : null}
             {page === "transfer" ? <TicketTransferPage service={service} /> : null}
           </Content>
         </Layout>

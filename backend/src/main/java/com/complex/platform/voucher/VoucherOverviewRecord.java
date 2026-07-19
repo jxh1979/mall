@@ -15,6 +15,10 @@ public record VoucherOverviewRecord(
         String customerId,
         String status,
         Integer remainingTimes,
-        Instant expiresAt
+        Instant expiresAt,
+        // 面额/折扣（客人端展示；统一券取定义面额，通票第三方券为 null）与核销方式（客人端「核销方式说明」）。
+        // 内部结算价（成本）刻意不入此聚合视图——客人/店员天然不可见。
+        Long faceValueCent,
+        String redeemMethod
 ) {
 }

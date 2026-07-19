@@ -184,6 +184,34 @@ class VoucherJdbcIntegrationTests {
         });
     }
 
+    @Test
+    void customerWalletReadReturnsOwnRowsWithFaceValueAndNeverInternalPrice() {
+        // 面额券（merchant_discount 带面额）+ 另一客人的券；客人端读法＝merchantScope=null + 强制本人 customer_id。
+        repository.insertDefinition(new VoucherDefinitionRecord(
+                "vdef_jdbc_cw", "JDBC 折扣券", "merchant_discount", "in_store_staff", "none", "merchant_jdbc",
+                5000L, null, null, null, null, 30, null, "active", T0, T0));
+        repository.insertInstance(issuedInstance("vi_jdbc_cw", "vdef_jdbc_cw", "marketing_grant", "vgrant_cw"));
+        repository.insertInstance(new VoucherInstanceRecord(
+                "vi_jdbc_cw_other", "vdef_jdbc_cw", "customer_other", "VCother", "marketing_grant", "vgrant_other",
+                "issued", T0, T0.plusSeconds(86400L), null, null, null, T0, T0));
+
+        PageResponse<VoucherOverviewRecord> mine = repository.overview(null, "customer_jdbc", 1, 50);
+
+        // 只见本人券，看不到 customer_other 的券（不能查他人）。
+        assertThat(mine.items()).extracting(VoucherOverviewRecord::customerId).containsOnly("customer_jdbc");
+        assertThat(mine.items()).extracting(VoucherOverviewRecord::id)
+                .contains("vi_jdbc_cw").doesNotContain("vi_jdbc_cw_other");
+        // 面额/核销方式随视图返回，供券卡展示。
+        assertThat(mine.items()).filteredOn(r -> "vi_jdbc_cw".equals(r.id())).singleElement().satisfies(r -> {
+            assertThat(r.faceValueCent()).isEqualTo(5000L);
+            assertThat(r.redeemMethod()).isEqualTo("in_store_staff");
+        });
+        // 结构性铁证：聚合视图 record 无内部结算价/成本字段，客人天然不可见。
+        assertThat(java.util.Arrays.stream(VoucherOverviewRecord.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName))
+                .doesNotContain("internalPriceCent", "settlementAmountCent");
+    }
+
     private void seedRedeemedVoucher(String instanceId) {
         String definitionId = "vdef_" + instanceId.replace("vi_", "");
         repository.insertDefinition(goodsDefinition(definitionId, "merchant_jdbc", null));

@@ -279,7 +279,8 @@ class JdbcVoucherRepository implements VoucherRepository {
             SELECT vi.id AS id, 'unified' AS source, vd.name AS name, vd.voucher_kind AS voucher_kind,
                    vi.customer_id AS customer_id, vi.status AS status,
                    CASE WHEN vi.status = 'issued' THEN 1 ELSE 0 END AS remaining_times,
-                   vi.expires_at AS expires_at, vi.issued_at AS sort_time
+                   vi.expires_at AS expires_at, vd.face_value_cent AS face_value_cent,
+                   vd.redeem_method AS redeem_method, vi.issued_at AS sort_time
               FROM voucher_instances vi
               JOIN voucher_definitions vd ON vd.id = vi.definition_id
              WHERE (:merchant_scope IS NULL OR vd.merchant_id = :merchant_scope OR vd.merchant_id IS NULL)
@@ -288,7 +289,8 @@ class JdbcVoucherRepository implements VoucherRepository {
             SELECT ie.id AS id, 'pass_partner' AS source, et.name AS name, 'external_partner' AS voucher_kind,
                    o.customer_id AS customer_id, ie.status AS status,
                    GREATEST(ie.total_times - ie.used_times, 0) AS remaining_times,
-                   ie.valid_to AS expires_at, ie.created_at AS sort_time
+                   ie.valid_to AS expires_at, CAST(NULL AS BIGINT) AS face_value_cent,
+                   'external_reflow' AS redeem_method, ie.created_at AS sort_time
               FROM issued_entitlements ie
               JOIN partner_voucher_configs pvc ON pvc.entitlement_template_id = ie.entitlement_template_id
               JOIN entitlement_templates et ON et.id = ie.entitlement_template_id
@@ -306,7 +308,7 @@ class JdbcVoucherRepository implements VoucherRepository {
                 .addValue("limit", pageSize)
                 .addValue("offset", (long) (page - 1) * pageSize);
         List<VoucherOverviewRecord> items = jdbcTemplate.query(
-                "SELECT id, source, name, voucher_kind, customer_id, status, remaining_times, expires_at FROM ("
+                "SELECT id, source, name, voucher_kind, customer_id, status, remaining_times, expires_at, face_value_cent, redeem_method FROM ("
                         + OVERVIEW_UNION
                         + ") all_vouchers ORDER BY sort_time DESC, id DESC LIMIT :limit OFFSET :offset",
                 params,
@@ -318,7 +320,9 @@ class JdbcVoucherRepository implements VoucherRepository {
                         rs.getString("customer_id"),
                         rs.getString("status"),
                         rs.getInt("remaining_times"),
-                        nullableInstant(rs, "expires_at")));
+                        nullableInstant(rs, "expires_at"),
+                        rs.getObject("face_value_cent", Long.class),
+                        rs.getString("redeem_method")));
         Long total = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM (" + OVERVIEW_UNION + ") all_vouchers", params, Long.class);
         return new PageResponse<>(items, page, pageSize, total == null ? 0L : total);
