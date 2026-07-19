@@ -393,7 +393,9 @@ class MetricDetailServiceTests {
                         // 第五批（人事域）
                         "staff.shift_count", "staff.attendance_count", "staff.attendance_late_count",
                         "staff.payroll_net_total", "staff.payroll_statement_count",
-                        "staff.pending_leave_count", "staff.active_headcount");
+                        "staff.pending_leave_count", "staff.active_headcount",
+                        // P0总览剩余四卡
+                        "traffic.amusement", "verify.done", "member.new", "risk.pending_review");
         assertThat(MetricRegistry.all()).extracting(MetricRegistry.MetricDefinition::valueType)
                 .contains(MetricRegistry.TYPE_ADDITIVE, MetricRegistry.TYPE_RATIO, MetricRegistry.TYPE_BALANCE);
         assertThat(MetricRegistry.require("finance.recon_diff_count").permission()).isEqualTo("finance.reconciliation.view");
