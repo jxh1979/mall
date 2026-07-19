@@ -17,19 +17,23 @@
 ## 2. 已拍板口径（2026-07-18 终稿）
 
 1. **基数 = 净利润制（方案 B）**：期间收入 − 期间销货成本（V296）− 期间费用（V297）。
-2. **主理人 = 真实股东（工商登记持股）→ 税目 = 股息红利，固定 20% 代扣**（税率本身可配）。
+2. **主理人分个人 / 公司两类（V308，2026-07-19 拍板 #28）**：**个人股东**（自然人真实持股）→ 税目 =
+   股息红利，按方案税率代扣（默认 20%，税率可配）；**公司股东**（法人持股）→ **不代扣个税、按约定全额发放**
+   （发放单据代扣额=0）。类型落方案配置 `principal_type`，历史分红单按单内类型快照追溯。
 3. **周期 = 季度正式发放 + 月度预览**（默认口径；周期类型可配为月度正式）。
 4. **凡涉数据皆可配**：比例（80/20 仅默认值）、基数构成（计入哪些收入域/是否扣成本/计入哪些费用类别）、
-   周期类型、税率，全部为后台可调配置，禁止硬编码；配置改动走审计事件留痕。
+   周期类型、税率、主理人类型、自定义扣除项，全部为后台可调配置，禁止硬编码；配置改动走审计事件留痕。
 
 ## 3. 分红方案（配置层，`dividend_plans`）
 
 - 挂在**商户**上（一个商户=一个经营标的），不挂合同：提成规则挂合同是「租户交平台」方向，
   持股分红是「平台分主理人」方向，主体是经营实体本身、不随租约换签中断。
-- 字段：主理人账户（`principal_user_id`，发放走应付台账挂该账户）、平台比例 `platform_share_bps`
-  （默认 8000）、代扣税率 `tax_rate_bps`（默认 2000）、周期类型 `period_type`（quarterly 默认 / monthly）、
+- 字段：主理人账户（`principal_user_id`，发放走应付台账挂该账户）、主理人类型 `principal_type`
+  （individual 默认 / company，见 §2.2）、平台比例 `platform_share_bps`（默认 8000）、代扣税率 `tax_rate_bps`
+  （默认 2000，公司股东单强制生效 0）、周期类型 `period_type`（quarterly 默认 / monthly）、
   基数构成开关（`revenue_domains` 默认 bar+ticket、`include_inventory_cost` 默认 true、
-  `expense_types` 默认全部六类）、生效起始日、状态（active/ended）、备注。
+  `expense_types` 默认全部六类）、自定义扣除项 `dividend_deduction_items`（子表，见 §5A）、
+  生效起始日、状态（active/ended）、备注。
 - **一个商户同一时期只允许一个生效中方案**（部分唯一索引硬保证）；调整=直接改当前方案行
   （审计事件留痕），历史分红单按单内配置快照追溯、不受影响（见 §5 快照冻结）。停用走 status=ended。
 
@@ -44,6 +48,13 @@
 - **幂等可重跑**：同期同商户同类别只允许一张未作废单（部分唯一索引）；重跑时 preview/draft/rejected
   作废（voided）重算=红字更正范式；pending_review/approved/paid 已进入审批流，跳过并回报原因。
   写路径统一幂等键+载荷指纹（同键不同载荷拒绝）。
+- **周期可配 + 跨季度处理不算错（2026-07-19 核查 #34：现状已支持，无需改码）**：分红「会计期间」由方案
+  `period_type`（季度 / 月度）+ 期间标签共同决定，是一个**固定的自然日窗口**；三来源金额按**各交易自身
+  时间戳**（结账 `settled_at` / 退款 `refunded_at` / 售票 `created_at` / 费用月份桶）归入其所属期间，**不按作业
+  运行日归集**。因此：财务对账按固定日子（一个月/一周的某几天）而非每天触发时，某笔结算即便**跨季度才被
+  处理到**，也只是落进其时间戳所属的那个期间——`compute` 端点**接受任意历史期间标签、任意时点触发**、幂等可
+  重跑，**不存在「处理太晚 / 跨季度」的报错**。对账触发节奏是运维触发面（何时 POST compute），与会计期间窗口
+  完全解耦。
 
 ## 5. 算式与三来源对账（恒等式 DB CHECK 硬保证）
 
@@ -59,17 +70,38 @@
 可分配额 distributable = max(净利润, 0)          （亏损期不倒扣主理人现金）
 平台分成 platform_share = distributable × platform_share_bps / 10000   （整除链截断）
 主理人应得 principal_gross = distributable − platform_share            （余数归主理人，不丢分）
-代扣个税 tax = principal_gross × tax_rate_bps / 10000                  （整除链截断，与薪资税表 V217 同口径）
+生效税率 eff_tax_rate = 主理人类型=company ? 0 : tax_rate_bps        （V308 #28：公司股东不代扣，快照 eff 于 tax_rate_bps 列）
+代扣个税 tax = principal_gross × eff_tax_rate / 10000                  （整除链截断，与薪资税表 V217 同口径）
 净发放额 principal_net = principal_gross − tax
 ```
 
 - 五条恒等式落 `dividend_statements` DB CHECK（净利恒等/可分配额/劈分守恒/净发放/税额边界），
-  不恒等的单**无法落库**。
+  不恒等的单**无法落库**。**公司股东单** `principal_type='company'` 时 `chk_ds_company_no_tax` 硬保证 `tax_cent=0`
+  （V308 #28）。
 - **算式明细行**（`dividend_statement_lines`，append-only：V140 触发器禁 UPDATE/DELETE + REVOKE）：
   每张单逐项留痕（各收入域收入与退款/成本/分类型费用/净利/劈分/税/净发放），detail 注明取数谓词与窗口，
   可追溯到三个来源台账；来源行合计 = 净利润（单测+集成测试断言）。
-- 计算单头快照冻结当期配置（比例/税率/基数构成/主理人），历史单永远按当期口径追溯；
+- 计算单头快照冻结当期配置（比例/税率/基数构成/主理人/主理人类型/自定义扣除合计），历史单永远按当期口径追溯；
   头部金额列冻结由仓储保证（UPDATE 只触状态/审批留痕列）。
+
+## 5A. 自定义扣除项（V309，2026-07-19 拍板 #35）
+
+在 V303 默认三项扣除（亏损结转 / 欠款抵扣 / 发放保护线）之外，方案可**按需新增任意条自定义扣除项**，
+配置模型可扩展（新增来源=加枚举值 + 纯算式分支，非硬编码固定项数）：
+
+- **配置**（`dividend_deduction_items` 子表，挂方案；随方案配置整表替换，历史单靠算式明细快照留痕不受影响）：
+  - `name` 名称；`source_type` 金额来源（`fixed` 固定额 → `amount_cent`；`ratio` 比例 → `ratio_bps` ×
+    `ratio_basis` 基数，基数 ∈ {`net_profit` 净利润 / `revenue` 营收}）；`enabled` 开关；`sort_order` 扣减顺序。
+  - 后台经方案新建/修改请求携带 `customDeductions` 列表整表落地（缺省=不改现值，空列表=清空）。
+- **落账口径**（不破坏 V299 净利/劈分/税恒等，也不破坏 V303「各扣除」语义）：自定义扣除与欠款抵扣/留存
+  同属「税后应得的各扣除」，在欠款抵扣之后、留存之前，对 (税后应得 − 欠款抵扣) 余额**逐项按 `sort_order`
+  封顶扣减**（不透支），合计冻结在 `custom_deduction_cent`，逐项落 `custom_deduction` 算式明细行留痕。
+- **发放额恒等改写**：`payout_cent = principal_net_cent − arrears_offset_cent − custom_deduction_cent −
+  reserve_withheld_cent`（由 `chk_ds_payout_identity` 重写硬保证；`chk_ds_custom_deduction_range` 保证
+  `0 ≤ custom_deduction_cent ≤ principal_net − arrears`，`chk_ds_payout_nonneg` 保证实发非负）。留存保护线
+  的比例/固定额作用基数随之变为「自定义扣除后余额」（无自定义项时逐分等于 V303 现状）。
+- **诚实边界**：自定义扣除额由平台留存（隐式=少发即留），本轮**不单独挂应付/应收台账**；如需指定去向
+  （如计入某科目/挂某方应付）另立项。
 
 ## 6. 审阅审批与发放（状态机）
 
@@ -126,10 +158,11 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
     审批时把留存额记为**欠主理人的待释放应付**（`FinanceService.createDividendReserveWithholdingPayable`：payable, counterparty=主理人,
     source_type=`dividend_reserve_withheld`, source_id=计算单 id 一单一挂；状态沿用 pending_payment，source_type 即待释放标识）。
     **释放机制（下期/年度末返还规则 + 手动释放端点 + UI）为后续独立构建 R**，本轮只落待释放负债。
-  - 发放额恒等 `payout_cent = principal_net_cent − arrears_offset_cent − reserve_withheld_cent`（均非负、抵扣不超税后应得）由
-    `chk_ds_payout_identity` / `chk_ds_arrears_range` / `chk_ds_payout_nonneg` DB CHECK 硬保证；净利/劈分/税恒等（V299）不变，
+  - 发放额恒等（V309 后含自定义扣除）`payout_cent = principal_net_cent − arrears_offset_cent − custom_deduction_cent − reserve_withheld_cent`
+    （均非负、抵扣不超税后应得）由 `chk_ds_payout_identity`（V309 重写）/ `chk_ds_arrears_range` / `chk_ds_custom_deduction_range` /
+    `chk_ds_payout_nonneg` DB CHECK 硬保证；净利/劈分/税恒等（V299）不变，
     可分配额只扣本期结转弥补额（`chk_ds_distributable` 重写为 GREATEST(净利 − `loss_carryforward_applied_cent`, 0)，关闭期 applied=0 退化为原式）。
-  - 三扣除只削减「发放额」，**审批挂应付口径由 `principal_net_cent` 改为 `payout_cent`**（默认全关时二者相等，行为不变）。
+  - 三扣除（+ V309 自定义扣除，见 §5A）只削减「发放额」，**审批挂应付口径由 `principal_net_cent` 改为 `payout_cent`**（默认全关/无自定义项时二者相等，行为不变）。
 - **正式单仍手动触发**：正式单（进入审批发放）维持手动触发端点（费用侧关账节奏由人把关，防不完整基数入正式单）。
   **月度预览定时作业已上**（V302，`DividendMonthlyPreviewJob`）：默认关闭（`dividend.preview.scheduled.enabled=true`
   才注册，cron 可配，默认每月 1 日 02:00 跑上月），对每个生效中季度方案自动出上月 preview 单（只读不可审批），
@@ -161,3 +194,6 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
 | 2026-07-18 二轮复核 I-2 | 增 | V302 分红期间关账锁 + 月度预览定时作业：关账判定纯函数 `DividendPeriodLock` + 部分索引 `ix_dividend_statements_lock`；费用台账三写路径挂锁（手工录入/冲销拒 `DIVIDEND_PERIOD_LOCKED` 409，自动挂接四路 NOT EXISTS 跳过 + lockedMerchants 清单）；`DividendMonthlyPreviewJob`（默认关，@ConditionalOnProperty，刷新式出上月季度方案预览单）；新增只读端点 `GET /finance/merchant-expenses/period-locks`（前端禁用已关账月份录入/冲销）；分红页 approved/paid 单标「期间已关账」。§9 边界更新 | 二轮复核 I-2 敞口（已发放单来源台账静默漂移）；封死费用侧追改口子 |
 | 2026-07-19 | 增 | V303 扣除项三开关（设计稿 §5 落地，§9 留档项）：方案级 `loss_carryforward_enabled`/`arrears_offset_enabled`/`payout_floor_enabled` + 保护线参数 `payout_floor_bps`/`payout_floor_fixed_cent`，**默认全关时逐分等于 V299 现状**。计算单快照增 `loss_carryforward_in/applied/after_cent`、`arrears_offset_cent`、`reserve_withheld_cent`、`payout_cent` 七列（存量单回填 payout=principal_net）；`chk_ds_distributable` 随亏损结转开关重写，新增结转链/发放额恒等 CHECK；明细行增 `loss_carryforward`/`arrears_offset`/`reserve_withheld`/`payout` 四类留痕；`DividendMath.compute` 纯函数统一三扣除算式；亏损累计以已结正式单快照 projection 结转（不另建可变台账）；欠款抵扣审批时逐项结算应收（`DividendPayoutPort.applyDividendOffsetToReceivables` 复用 `settleArApItem`，实结≠冻结额抛 `DIVIDEND_ARREARS_CHANGED` 回滚重算）；审批挂应付口径由 principal_net 改为 payout。DividendMathTests +12 / DividendServiceTests +6 / JDBC +2（CHECK 拦截+结转端到端）/ vitest +3；前端方案引导式增「扣除项」分节、计算单实发额与扣除项逐行留痕。 | 设计稿 §5 已 deferred 项落地；快照结构可扩展兑现 |
 | 2026-07-19 用户裁决 | 改 | #2 亏损结转=**累计恒结转**（开关只控本期扣不扣可分配额，关闭期不清零累计）：`DividendMath.compute` applied 随开关、after 恒累计式；service 恒读往期累计（不再按开关门控）；`chk_ds_lcf_after` 去 CASE 改无条件、`chk_ds_distributable` 改扣 `loss_carryforward_applied_cent`，存量单 after 回填 GREATEST(−净利,0)；反例测试 开→亏→关一期→再开（Q3 carryIn=保留累计非 0）。#3 发放保护线留存=**暂扣待释放**（欠主理人、非白拿）：审批时 `createDividendReserveWithholdingPayable` 挂 `dividend_reserve_withheld` 待释放应付（counterparty=主理人，进 SOURCE_TYPES+中文标签），释放规则/端点/UI 为后续独立构建 R。欠款抵扣改**原子 by construction**（预检不足一分不结算）。DividendServiceTests +1（累计切换）+留存待释放断言、JDBC +3（欠款真实结算×2 / 留存待释放）、entry 基线刷 650 ops、rebase 到 main 46a1ba8e。 | 2026-07-19 用户对 §9 两项待裁口径拍板 |
+| 2026-07-19 | 增 | **#28 按主理人类型区分代扣个税**（V308）：方案增 `principal_type`（individual/company），公司股东生效税率强制 0、全额发放；计算单快照 `principal_type` + `chk_ds_company_no_tax`（公司单 tax_cent=0 硬保证）；税额行 detail 按类型分流。见 §2.2 / §5。 | 2026-07-19 用户拍板 #28 |
+| 2026-07-19 | 增 | **#35 自定义扣除项**（V309）：新 `dividend_deduction_items` 子表（name/source_type[fixed/ratio]/amount_cent/ratio_bps/ratio_basis[net_profit/revenue]/enabled/sort_order），经方案请求 `customDeductions` 整表替换；`DividendMath.compute` 增 `clampDeductions` 逐项封顶（欠款抵扣后、留存前，对 (税后−抵扣) 余额扣减不透支）+ `customDeductionCent`；计算单增 `custom_deduction_cent` 列，`chk_ds_payout_identity` 重写含自定义扣除、新增 `chk_ds_custom_deduction_range`；明细行增 `custom_deduction` 留痕。DividendMathTests +4 / DividendServiceTests +5 / JDBC +5。见 §5A。 | 2026-07-19 用户拍板 #35 |
+| 2026-07-19 核查 | — | **#34 分红周期真可配置**：核查结论**现状已支持、无需改码**——会计期间由 `period_type`+期间标签定义为固定自然日窗口，三来源按交易时间戳归期（非运行日），`compute` 接受任意历史期间、任意时点、幂等重跑，**无跨季度/迟处理报错**；对账触发节奏与会计窗口解耦。见 §4。 | 2026-07-19 用户 #34 先核查 |

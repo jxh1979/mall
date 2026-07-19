@@ -80,6 +80,13 @@ public class DividendService {
     /** V304 留存释放规则可选值；默认手动=不自动释放（最安全，每笔人工决策）。 */
     static final Set<String> RESERVE_RELEASE_MODES = Set.of("manual", "next_period", "fixed_delay", "annual");
     private static final String DEFAULT_RESERVE_RELEASE_MODE = "manual";
+    /** V308 主理人类型：individual 个人（代扣股息红利个税）/ company 公司（不代扣、全额发放）。 */
+    static final Set<String> PRINCIPAL_TYPES = Set.of("individual", "company");
+    private static final String DEFAULT_PRINCIPAL_TYPE = "individual";
+    /** V309 自定义扣除项来源类型 / 比例基数可选值。 */
+    static final Set<String> DEDUCTION_SOURCE_TYPES = Set.of("fixed", "ratio");
+    static final Set<String> DEDUCTION_RATIO_BASES = Set.of("net_profit", "revenue");
+    private static final String DEFAULT_DEDUCTION_BASIS = "net_profit";
 
     // 默认口径（仅新建方案时的默认值，全部可配）。
     private static final int DEFAULT_PLATFORM_SHARE_BPS = 8000;
@@ -172,11 +179,17 @@ public class DividendService {
                 requireEnum(orDefault(request.reserveReleaseMode(), DEFAULT_RESERVE_RELEASE_MODE),
                         RESERVE_RELEASE_MODES, "reserve_release_mode"),
                 requirePositiveInt(orDefault(request.reserveReleaseDelayPeriods(), 1),
-                        "reserve_release_delay_periods"));
+                        "reserve_release_delay_periods"),
+                // V308 主理人类型（默认个人=代扣个税）；V309 自定义扣除项另表持久化，插入记录先占空。
+                requireEnum(orDefault(request.principalType(), DEFAULT_PRINCIPAL_TYPE),
+                        PRINCIPAL_TYPES, "principal_type"),
+                List.of());
         if (!repository.insertPlan(plan)) {
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
                     "该商户已有生效中的分红方案；请修改现有方案或先停用（status=ended）再新建");
         }
+        // V309 自定义扣除项：新建时按请求整表落地（空/缺省=无自定义扣除）。
+        repository.replaceCustomDeductions(plan.id(), parseCustomDeductions(plan.id(), request.customDeductions()));
         return repository.findPlanById(plan.id())
                 .orElseThrow(() -> ApiException.conflict("DIVIDEND_PLAN_EXISTS", "dividend plan insert lost race"));
     }
@@ -242,14 +255,49 @@ public class DividendService {
                 requireEnum(orDefault(request.reserveReleaseMode(), existing.reserveReleaseMode()),
                         RESERVE_RELEASE_MODES, "reserve_release_mode"),
                 request.reserveReleaseDelayPeriods() == null ? existing.reserveReleaseDelayPeriods()
-                        : requirePositiveInt(request.reserveReleaseDelayPeriods(), "reserve_release_delay_periods"));
+                        : requirePositiveInt(request.reserveReleaseDelayPeriods(), "reserve_release_delay_periods"),
+                // V308 主理人类型（可空=不改现值）；V309 自定义扣除项另表持久化，更新记录先占空。
+                requireEnum(orDefault(request.principalType(), existing.principalType()),
+                        PRINCIPAL_TYPES, "principal_type"),
+                List.of());
         if (!repository.updatePlan(updated)) {
             // ended 改回 active 撞同商户唯一生效索引（uq_dividend_plans_active_merchant）→ 业务 409 非 500。
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
                     "该商户已有另一生效中的分红方案，无法再启用本方案；请先停用另一方案");
         }
+        // V309 自定义扣除项：请求提供 customDeductions 才整表替换（null=不改现值，历史配置保留）。
+        if (request.customDeductions() != null) {
+            repository.replaceCustomDeductions(planId, parseCustomDeductions(planId, request.customDeductions()));
+        }
         return repository.findPlanById(planId)
                 .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "dividend plan lost race"));
+    }
+
+    /** V309 请求项 → 校验 + 落地记录（sort_order=输入序）。fixed 用固定额；ratio 用比例+基数。 */
+    private List<DividendRecords.DividendCustomDeductionRecord> parseCustomDeductions(
+            String planId, List<DividendPlanRequest.CustomDeductionItem> items) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        List<DividendRecords.DividendCustomDeductionRecord> parsed = new ArrayList<>();
+        int order = 0;
+        for (DividendPlanRequest.CustomDeductionItem item : items) {
+            if (item == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "custom_deduction item must not be null");
+            }
+            String name = requireText(item.name(), "custom_deduction.name");
+            String sourceType = requireEnum(orDefault(item.sourceType(), "fixed"),
+                    DEDUCTION_SOURCE_TYPES, "custom_deduction.source_type");
+            long amountCent = requireNonNegLong(orDefault(item.amountCent(), 0L), "custom_deduction.amount_cent");
+            int ratioBps = requireBps(orDefault(item.ratioBps(), 0), "custom_deduction.ratio_bps");
+            String ratioBasis = requireEnum(orDefault(item.ratioBasis(), DEFAULT_DEDUCTION_BASIS),
+                    DEDUCTION_RATIO_BASES, "custom_deduction.ratio_basis");
+            boolean enabled = item.enabled() == null || item.enabled();
+            parsed.add(new DividendRecords.DividendCustomDeductionRecord(
+                    "divd_" + UUID.randomUUID().toString().replace("-", ""),
+                    planId, name, sourceType, amountCent, ratioBps, ratioBasis, enabled, order++));
+        }
+        return parsed;
     }
 
     // ── 期间作业 ──────────────────────────────────────────────
@@ -412,10 +460,23 @@ public class DividendService {
         long arrearsOutstanding = arrearsItems.stream()
                 .mapToLong(DividendPayoutPort.DividendArrearsItem::unpaidCent).sum();
 
+        // V308 主理人类型分支：公司股东不代扣个税（生效税率强制 0，全额发放）；个人股东按方案税率代扣。
+        boolean isCompany = "company".equals(plan.principalType());
+        int effectiveTaxBps = isCompany ? 0 : plan.taxRateBps();
+
+        // V309 自定义扣除项：取启用项（仓储已按 sort_order 排序），逐项解析原始扣除额（fixed 固定额 / ratio 比例）。
+        List<DividendRecords.DividendCustomDeductionRecord> customItems = plan.customDeductions().stream()
+                .filter(DividendRecords.DividendCustomDeductionRecord::enabled).toList();
+        long[] customRaws = new long[customItems.size()];
+        for (int i = 0; i < customItems.size(); i++) {
+            customRaws[i] = resolveDeductionRaw(customItems.get(i), netProfit, revenue);
+        }
+
         DividendMath.Distribution dist = DividendMath.compute(
-                netProfit, plan.platformShareBps(), plan.taxRateBps(),
+                netProfit, plan.platformShareBps(), effectiveTaxBps,
                 plan.lossCarryforwardEnabled(), carryIn,
                 plan.arrearsOffsetEnabled(), arrearsOutstanding,
+                customRaws,
                 plan.payoutFloorEnabled(), plan.payoutFloorBps(), plan.payoutFloorFixedCent());
 
         addLine(lines, statementId, merchantId, seq, "net_profit", netProfit,
@@ -434,7 +495,9 @@ public class DividendService {
         addLine(lines, statementId, merchantId, seq, "principal_gross", dist.principalGrossCent(),
                 "主理人应得（可分配额 − 平台分成，余数归主理人）", now);
         addLine(lines, statementId, merchantId, seq, "tax_withheld", -dist.taxCent(),
-                "代扣股息红利个税（真实股东口径，税率 " + plan.taxRateBps() + " 万分比，整除链截断）", now);
+                isCompany
+                        ? "公司股东不代扣个税，按约定全额发放（代扣 0 分）"
+                        : "代扣股息红利个税（个人真实股东口径，税率 " + effectiveTaxBps + " 万分比，整除链截断）", now);
         addLine(lines, statementId, merchantId, seq, "principal_net", dist.principalNetCent(),
                 "税后应得 = 主理人应得 − 代扣税", now);
         if (plan.arrearsOffsetEnabled() && dist.arrearsOffsetCent() > 0) {
@@ -450,24 +513,40 @@ public class DividendService {
                         "欠款抵扣：应收 " + item.itemNo() + "（未清 " + item.unpaidCent() + " 分）抵扣 " + applied + " 分", now);
             }
         }
+        // V309 自定义扣除项逐项留痕：与 DividendMath 同源 clampDeductions，对 (税后应得 − 欠款抵扣) 余额封顶扣减。
+        if (!customItems.isEmpty()) {
+            long[] customApplied = DividendMath.clampDeductions(
+                    dist.principalNetCent() - dist.arrearsOffsetCent(), customRaws);
+            for (int i = 0; i < customItems.size(); i++) {
+                DividendRecords.DividendCustomDeductionRecord item = customItems.get(i);
+                if (customApplied[i] <= 0 && customRaws[i] <= 0) {
+                    continue;   // 原始额与实扣额皆 0（如比例基数亏损）：不落零额行，减噪。
+                }
+                addLine(lines, statementId, merchantId, seq, "custom_deduction", -customApplied[i],
+                        "自定义扣除「" + item.name() + "」（" + deductionSourceLabel(item)
+                                + "，原始 " + customRaws[i] + " 分，封顶实扣 " + customApplied[i] + " 分）", now);
+            }
+        }
         if (plan.payoutFloorEnabled() && dist.reserveWithheldCent() > 0) {
             addLine(lines, statementId, merchantId, seq, "reserve_withheld", -dist.reserveWithheldCent(),
                     "发放保护线留存风险准备金 " + dist.reserveWithheldCent() + " 分（比例 " + plan.payoutFloorBps()
                             + " 万分比 / 固定额 " + plan.payoutFloorFixedCent() + " 分，取大并钳到可发额），本期不发放", now);
         }
         addLine(lines, statementId, merchantId, seq, "payout", dist.payoutCent(),
-                "实发额 = 税后应得 − 欠款抵扣 − 留存；审批通过后按此额挂应付发放", now);
+                "实发额 = 税后应得 − 欠款抵扣 − 自定义扣除 − 留存；审批通过后按此额挂应付发放", now);
 
+        // V308 快照生效税率（公司=0）与主理人类型；V309 快照自定义扣除合计（逐项留痕见明细行）。
         DividendStatementRecord statement = new DividendStatementRecord(
                 statementId, merchantId, plan.id(), kind, period.label(), period.start(), period.end(),
-                plan.principalUserId(), plan.platformShareBps(), plan.taxRateBps(), plan.revenueDomains(),
+                plan.principalUserId(), plan.platformShareBps(), effectiveTaxBps, plan.revenueDomains(),
                 plan.includeInventoryCost(), plan.expenseTypes(),
                 revenue, cost, expense, netProfit, dist.distributableCent(), dist.platformShareCent(),
                 dist.principalGrossCent(), dist.taxCent(), dist.principalNetCent(), noCostBasisCount,
                 "preview".equals(kind) ? "preview" : "draft",
                 null, null, operator, null, null, null, null, null, null, now, now,
                 plan.lossCarryforwardEnabled(), dist.carryInCent(), dist.carryAppliedCent(),
-                dist.carryAfterCent(), dist.arrearsOffsetCent(), dist.reserveWithheldCent(), dist.payoutCent());
+                dist.carryAfterCent(), dist.arrearsOffsetCent(), dist.reserveWithheldCent(), dist.payoutCent(),
+                plan.principalType(), dist.customDeductionCent());
         repository.insertStatement(statement);
         for (DividendStatementLineRecord line : lines) {
             repository.insertLine(line);
@@ -480,6 +559,28 @@ public class DividendService {
         seq[0]++;
         lines.add(new DividendStatementLineRecord(
                 statementId + "_" + seq[0], statementId, merchantId, seq[0], lineType, amountCent, detail, now));
+    }
+
+    /**
+     * V309 自定义扣除项原始扣除额（分，未封顶）：fixed 取固定额；ratio 取基数（净利润/营收）× 比例，
+     * 基数按 max(figure,0) 取（亏损/负基数不倒扣）。封顶（不透支税后余额）由 {@link DividendMath#clampDeductions} 处理。
+     */
+    private static long resolveDeductionRaw(
+            DividendRecords.DividendCustomDeductionRecord item, long netProfit, long revenue) {
+        if ("fixed".equals(item.sourceType())) {
+            return Math.max(item.amountCent(), 0L);
+        }
+        long basis = "revenue".equals(item.ratioBasis()) ? revenue : netProfit;
+        return Math.max(basis, 0L) * item.ratioBps() / DividendMath.BPS_DENOMINATOR;
+    }
+
+    /** 自定义扣除项来源的中文口径说明（供算式明细行 detail 留痕）。 */
+    private static String deductionSourceLabel(DividendRecords.DividendCustomDeductionRecord item) {
+        if ("fixed".equals(item.sourceType())) {
+            return "固定额 " + item.amountCent() + " 分";
+        }
+        String basis = "revenue".equals(item.ratioBasis()) ? "营收" : "净利润";
+        return "比例 " + item.ratioBps() + " 万分比 × " + basis;
     }
 
     // ── 查询 ──────────────────────────────────────────────────

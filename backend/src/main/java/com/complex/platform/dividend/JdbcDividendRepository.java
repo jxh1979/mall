@@ -32,7 +32,7 @@ class JdbcDividendRepository implements DividendRepository {
             + "revenue_domains, include_inventory_cost, expense_types, effective_from, status, note, updated_by, "
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled, payout_floor_bps, "
-            + "payout_floor_fixed_cent, reserve_release_mode, reserve_release_delay_periods";
+            + "payout_floor_fixed_cent, reserve_release_mode, reserve_release_delay_periods, principal_type";
 
     private static final String STMT_COLS =
             "id, merchant_id, plan_id, kind, period_label, period_start, period_end, principal_user_id, "
@@ -42,7 +42,8 @@ class JdbcDividendRepository implements DividendRepository {
             + "ar_ap_item_id, computed_by, submitted_by, submitted_at, approved_by, approved_at, paid_by, paid_at, "
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent, "
-            + "loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent";
+            + "loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent, "
+            + "principal_type, custom_deduction_cent";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -108,13 +109,13 @@ class JdbcDividendRepository implements DividendRepository {
                         status, note, updated_by, created_at, updated_at,
                         loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled,
                         payout_floor_bps, payout_floor_fixed_cent,
-                        reserve_release_mode, reserve_release_delay_periods)
+                        reserve_release_mode, reserve_release_delay_periods, principal_type)
                     VALUES (:id, :merchant_id, :principal_user_id, :principal_name, :platform_share_bps,
                             :tax_rate_bps, :period_type, :revenue_domains, :include_inventory_cost, :expense_types,
                             :effective_from, :status, :note, :updated_by, :created_at, :updated_at,
                             :loss_carryforward_enabled, :arrears_offset_enabled, :payout_floor_enabled,
                             :payout_floor_bps, :payout_floor_fixed_cent,
-                            :reserve_release_mode, :reserve_release_delay_periods)
+                            :reserve_release_mode, :reserve_release_delay_periods, :principal_type)
                     ON CONFLICT (id) DO NOTHING
                     """, planParams(plan)) > 0;
         } catch (DuplicateKeyException conflict) {
@@ -155,7 +156,8 @@ class JdbcDividendRepository implements DividendRepository {
                     payout_floor_bps = :payout_floor_bps,
                     payout_floor_fixed_cent = :payout_floor_fixed_cent,
                     reserve_release_mode = :reserve_release_mode,
-                    reserve_release_delay_periods = :reserve_release_delay_periods
+                    reserve_release_delay_periods = :reserve_release_delay_periods,
+                    principal_type = :principal_type
                  WHERE id = :id
                 """, planParams(plan));
     }
@@ -184,10 +186,13 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("payout_floor_bps", plan.payoutFloorBps())
                 .addValue("payout_floor_fixed_cent", plan.payoutFloorFixedCent())
                 .addValue("reserve_release_mode", plan.reserveReleaseMode())
-                .addValue("reserve_release_delay_periods", plan.reserveReleaseDelayPeriods());
+                .addValue("reserve_release_delay_periods", plan.reserveReleaseDelayPeriods())
+                .addValue("principal_type", plan.principalType());
     }
 
     private DividendPlanRecord mapPlan(ResultSet rs, int rowNum) throws SQLException {
+        // ponytail: 每行一次子查询装填自定义扣除项（N+1，方案数量小=每商户一张生效方案，可接受）；
+        // 若方案量级增大改批量 IN 装填。
         return new DividendPlanRecord(
                 rs.getString("id"),
                 rs.getString("merchant_id"),
@@ -211,7 +216,50 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getInt("payout_floor_bps"),
                 rs.getLong("payout_floor_fixed_cent"),
                 rs.getString("reserve_release_mode"),
-                rs.getInt("reserve_release_delay_periods"));
+                rs.getInt("reserve_release_delay_periods"),
+                rs.getString("principal_type"),
+                listCustomDeductions(rs.getString("id")));
+    }
+
+    // ── V309 自定义扣除项 ──────────────────────────────────────
+
+    @Override
+    public List<DividendRecords.DividendCustomDeductionRecord> listCustomDeductions(String planId) {
+        return jdbcTemplate.query("""
+                SELECT id, plan_id, name, source_type, amount_cent, ratio_bps, ratio_basis, enabled, sort_order
+                  FROM dividend_deduction_items
+                 WHERE plan_id = :plan_id
+                 ORDER BY sort_order, id
+                """, new MapSqlParameterSource("plan_id", planId),
+                (rs, n) -> new DividendRecords.DividendCustomDeductionRecord(
+                        rs.getString("id"), rs.getString("plan_id"), rs.getString("name"),
+                        rs.getString("source_type"), rs.getLong("amount_cent"), rs.getInt("ratio_bps"),
+                        rs.getString("ratio_basis"), rs.getBoolean("enabled"), rs.getInt("sort_order")));
+    }
+
+    @Override
+    public void replaceCustomDeductions(
+            String planId, List<DividendRecords.DividendCustomDeductionRecord> items) {
+        // 整表替换（先删后插）：配置类，历史单靠算式明细快照留痕，不受此重置影响。
+        jdbcTemplate.update("DELETE FROM dividend_deduction_items WHERE plan_id = :plan_id",
+                new MapSqlParameterSource("plan_id", planId));
+        for (DividendRecords.DividendCustomDeductionRecord item : items) {
+            jdbcTemplate.update("""
+                    INSERT INTO dividend_deduction_items (
+                        id, plan_id, name, source_type, amount_cent, ratio_bps, ratio_basis, enabled, sort_order)
+                    VALUES (:id, :plan_id, :name, :source_type, :amount_cent, :ratio_bps, :ratio_basis,
+                            :enabled, :sort_order)
+                    """, new MapSqlParameterSource()
+                    .addValue("id", item.id())
+                    .addValue("plan_id", planId)
+                    .addValue("name", item.name())
+                    .addValue("source_type", item.sourceType())
+                    .addValue("amount_cent", item.amountCent())
+                    .addValue("ratio_bps", item.ratioBps())
+                    .addValue("ratio_basis", item.ratioBasis())
+                    .addValue("enabled", item.enabled())
+                    .addValue("sort_order", item.sortOrder()));
+        }
     }
 
     // ── 计算单 ────────────────────────────────────────────────
@@ -290,7 +338,8 @@ class JdbcDividendRepository implements DividendRepository {
                     ar_ap_item_id, computed_by, submitted_by, submitted_at, approved_by, approved_at, paid_by,
                     paid_at, created_at, updated_at,
                     loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent,
-                    loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent)
+                    loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent,
+                    principal_type, custom_deduction_cent)
                 VALUES (:id, :merchant_id, :plan_id, :kind, :period_label, :period_start, :period_end,
                     :principal_user_id, :platform_share_bps, :tax_rate_bps, :revenue_domains,
                     :include_inventory_cost, :expense_types, :revenue_cent, :cost_cent, :expense_cent,
@@ -298,7 +347,8 @@ class JdbcDividendRepository implements DividendRepository {
                     :principal_net_cent, :no_cost_basis_count, :status, :reject_reason, :ar_ap_item_id,
                     :computed_by, NULL, NULL, NULL, NULL, NULL, NULL, :created_at, :updated_at,
                     :loss_carryforward_enabled, :loss_carryforward_in_cent, :loss_carryforward_applied_cent,
-                    :loss_carryforward_after_cent, :arrears_offset_cent, :reserve_withheld_cent, :payout_cent)
+                    :loss_carryforward_after_cent, :arrears_offset_cent, :reserve_withheld_cent, :payout_cent,
+                    :principal_type, :custom_deduction_cent)
                 """, new MapSqlParameterSource()
                 .addValue("id", s.id())
                 .addValue("merchant_id", s.merchantId())
@@ -335,7 +385,9 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("loss_carryforward_after_cent", s.lossCarryforwardAfterCent())
                 .addValue("arrears_offset_cent", s.arrearsOffsetCent())
                 .addValue("reserve_withheld_cent", s.reserveWithheldCent())
-                .addValue("payout_cent", s.payoutCent()));
+                .addValue("payout_cent", s.payoutCent())
+                .addValue("principal_type", s.principalType())
+                .addValue("custom_deduction_cent", s.customDeductionCent()));
     }
 
     @Override
@@ -471,7 +523,9 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getLong("loss_carryforward_after_cent"),
                 rs.getLong("arrears_offset_cent"),
                 rs.getLong("reserve_withheld_cent"),
-                rs.getLong("payout_cent"));
+                rs.getLong("payout_cent"),
+                rs.getString("principal_type"),
+                rs.getLong("custom_deduction_cent"));
     }
 
     // ── V304 发放保护线留存·释放 ──────────────────────────────

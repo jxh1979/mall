@@ -70,27 +70,52 @@ class DividendServiceTests {
         final Map<String, Long> ticketAllocated = new HashMap<>();
         final Map<String, Long> ticketRefund = new HashMap<>();
         final Map<String, List<ExpenseTypeSumRecord>> expenses = new HashMap<>();
+        // V309 自定义扣除项按方案存（模拟子表）；读方案时装填回记录（镜像 jdbc mapPlan）。
+        final Map<String, List<DividendRecords.DividendCustomDeductionRecord>> customDeductions = new HashMap<>();
+
+        /** 装填自定义扣除项（读路径镜像 jdbc mapPlan：从子表读回附到方案记录）。 */
+        private DividendPlanRecord enrich(DividendPlanRecord p) {
+            return new DividendPlanRecord(p.id(), p.merchantId(), p.principalUserId(), p.principalName(),
+                    p.platformShareBps(), p.taxRateBps(), p.periodType(), p.revenueDomains(),
+                    p.includeInventoryCost(), p.expenseTypes(), p.effectiveFrom(), p.status(), p.note(),
+                    p.updatedBy(), p.createdAt(), p.updatedAt(), p.lossCarryforwardEnabled(),
+                    p.arrearsOffsetEnabled(), p.payoutFloorEnabled(), p.payoutFloorBps(), p.payoutFloorFixedCent(),
+                    p.reserveReleaseMode(), p.reserveReleaseDelayPeriods(), p.principalType(),
+                    customDeductions.getOrDefault(p.id(), List.of()));
+        }
 
         @Override
         public List<DividendPlanRecord> listPlans(String merchantId) {
             return plans.values().stream()
-                    .filter(p -> merchantId == null || p.merchantId().equals(merchantId)).toList();
+                    .filter(p -> merchantId == null || p.merchantId().equals(merchantId)).map(this::enrich).toList();
         }
 
         @Override
         public Optional<DividendPlanRecord> findPlanById(String id) {
-            return Optional.ofNullable(plans.get(id));
+            return Optional.ofNullable(plans.get(id)).map(this::enrich);
         }
 
         @Override
         public Optional<DividendPlanRecord> findActivePlanByMerchant(String merchantId) {
             return plans.values().stream()
-                    .filter(p -> p.merchantId().equals(merchantId) && "active".equals(p.status())).findFirst();
+                    .filter(p -> p.merchantId().equals(merchantId) && "active".equals(p.status()))
+                    .map(this::enrich).findFirst();
         }
 
         @Override
         public List<DividendPlanRecord> listActivePlans() {
-            return plans.values().stream().filter(p -> "active".equals(p.status())).toList();
+            return plans.values().stream().filter(p -> "active".equals(p.status())).map(this::enrich).toList();
+        }
+
+        @Override
+        public List<DividendRecords.DividendCustomDeductionRecord> listCustomDeductions(String planId) {
+            return customDeductions.getOrDefault(planId, List.of());
+        }
+
+        @Override
+        public void replaceCustomDeductions(
+                String planId, List<DividendRecords.DividendCustomDeductionRecord> items) {
+            customDeductions.put(planId, List.copyOf(items));
         }
 
         @Override
@@ -194,7 +219,8 @@ class DividendServiceTests {
                     approvedBy != null ? approvedBy : s.approvedBy(), s.approvedAt(),
                     paidBy != null ? paidBy : s.paidBy(), s.paidAt(), s.createdAt(), s.updatedAt(),
                     s.lossCarryforwardEnabled(), s.lossCarryforwardInCent(), s.lossCarryforwardAppliedCent(),
-                    s.lossCarryforwardAfterCent(), s.arrearsOffsetCent(), s.reserveWithheldCent(), s.payoutCent());
+                    s.lossCarryforwardAfterCent(), s.arrearsOffsetCent(), s.reserveWithheldCent(), s.payoutCent(),
+                    s.principalType(), s.customDeductionCent());
         }
 
         @Override
@@ -1072,5 +1098,115 @@ class DividendServiceTests {
                 .anyMatch(l -> l.statementId().equals(s.id()) && l.released() && "manual".equals(l.triggerType()));
         assertThat(service.listReserveLedger(null, "pending", 1, 50).items())
                 .noneMatch(l -> l.statementId().equals(s.id()));
+    }
+
+    // ── V308 主理人类型（个人/公司）代扣个税分支（#28）──────────────────────
+
+    /** #28 公司股东不代扣个税：生效税率快照 0、tax=0、全额发放；类型快照与算式行体现。 */
+    @Test
+    void companyPrincipalWithholdsNoTaxAndPaysGross() {
+        service.createPlan(new DividendPlanRequest("co-key", MERCHANT, "usr_co", "公司主理人甲",
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, "company", null));
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+        DividendStatementRecord s = computeOfficialQuarter();
+        // 净利 100 万 → 平台 80% = 80 万；主理人毛额 20 万；公司不代扣 → 税 0、税后=毛额、实发=毛额。
+        assertThat(s.principalType()).isEqualTo("company");
+        assertThat(s.taxRateBps()).isZero();                 // 生效税率快照为 0（公司分支）
+        assertThat(s.principalGrossCent()).isEqualTo(200_000L);
+        assertThat(s.taxCent()).isZero();
+        assertThat(s.principalNetCent()).isEqualTo(200_000L);
+        assertThat(s.payoutCent()).isEqualTo(200_000L);
+        assertThat(repository.listLines(s.id(), null))
+                .anyMatch(l -> l.lineType().equals("tax_withheld") && l.amountCent() == 0L
+                        && l.detail().contains("公司股东"));
+    }
+
+    /** #28 个人股东按方案税率代扣（对照公司分支，验证类型分流）。 */
+    @Test
+    void individualPrincipalWithholdsDividendTax() {
+        createDefaultPlan();                                  // 默认 individual + 股息红利 20%
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+        DividendStatementRecord s = computeOfficialQuarter();
+        assertThat(s.principalType()).isEqualTo("individual");
+        assertThat(s.taxRateBps()).isEqualTo(2000);
+        assertThat(s.principalGrossCent()).isEqualTo(200_000L);
+        assertThat(s.taxCent()).isEqualTo(40_000L);          // 20 万 × 20%
+        assertThat(s.principalNetCent()).isEqualTo(160_000L);
+        assertThat(s.payoutCent()).isEqualTo(160_000L);
+    }
+
+    // ── V309 自定义扣除项（#35）──────────────────────────────────────────
+
+    /** #35 自定义扣除项：固定额 + 比例逐项封顶扣减实发，合计快照 + 逐项算式行 + 发放额恒等；停用项不算。 */
+    @Test
+    void customDeductionsReducePayoutWithSnapshotAndLines() {
+        service.createPlan(new DividendPlanRequest("cd-key", MERCHANT, "usr_principal", "主理人甲",
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                List.of(
+                        new DividendPlanRequest.CustomDeductionItem("固定管理费", "fixed", 30_000L, null, null, true),
+                        new DividendPlanRequest.CustomDeductionItem("营收提成", "ratio", null, 1000, "net_profit", true),
+                        new DividendPlanRequest.CustomDeductionItem("停用项", "fixed", 99_999L, null, null, false))));
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+        DividendStatementRecord s = computeOfficialQuarter();
+        // 净利 100 万 → 主理人毛额 20 万 → 税 4 万 → 税后 16 万；固定扣 3 万 + 比例(净利 10%)=10 万，合计 13 万；实发 3 万。
+        assertThat(s.principalNetCent()).isEqualTo(160_000L);
+        assertThat(s.customDeductionCent()).isEqualTo(130_000L);
+        assertThat(s.payoutCent()).isEqualTo(30_000L);
+        // 发放额恒等：payout = principal_net − arrears − custom − reserve。
+        assertThat(s.payoutCent()).isEqualTo(
+                s.principalNetCent() - s.arrearsOffsetCent() - s.customDeductionCent() - s.reserveWithheldCent());
+        List<DividendStatementLineRecord> lines = repository.listLines(s.id(), null);
+        assertThat(lines).filteredOn(l -> l.lineType().equals("custom_deduction"))
+                .extracting(DividendStatementLineRecord::amountCent)
+                .containsExactlyInAnyOrder(-30_000L, -100_000L);
+        assertThat(lines).noneMatch(l -> l.lineType().equals("custom_deduction") && l.detail().contains("停用项"));
+    }
+
+    /** #35 自定义扣除封顶不透支：合计超过税后余额时逐项封顶，实发不为负。 */
+    @Test
+    void customDeductionsClampToAvailableAndNeverNegativePayout() {
+        service.createPlan(new DividendPlanRequest("cd-clamp", MERCHANT, "usr_principal", null,
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                List.of(new DividendPlanRequest.CustomDeductionItem(
+                        "超额扣除", "fixed", 999_999_999L, null, null, true))));
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+        DividendStatementRecord s = computeOfficialQuarter();
+        // 税后 16 万；固定扣远超 → 封顶实扣 16 万，实发 0（非负）。
+        assertThat(s.customDeductionCent()).isEqualTo(160_000L);
+        assertThat(s.payoutCent()).isZero();
+    }
+
+    /** #35 更新方案：提供 customDeductions 整表替换（空=清空）；不提供（null）保留现值。 */
+    @Test
+    void updatePlanReplacesCustomDeductionsButNullPreserves() {
+        DividendPlanRecord plan = service.createPlan(new DividendPlanRequest("u-cd", MERCHANT, "usr_principal", null,
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                List.of(new DividendPlanRequest.CustomDeductionItem("原扣除", "fixed", 10_000L, null, null, true))));
+        assertThat(plan.customDeductions()).hasSize(1);
+        // 不提供 customDeductions（null）→ 保留现值。
+        DividendPlanRecord unchanged = service.updatePlan(plan.id(), new DividendPlanRequest("u-cd-2", null,
+                null, null, 7000, null, null, null, null, null, null, null, "只改比例",
+                null, null, null, null, null, null, null, null, null));
+        assertThat(unchanged.customDeductions()).hasSize(1);
+        // 提供空列表 → 清空。
+        DividendPlanRecord cleared = service.updatePlan(plan.id(), new DividendPlanRequest("u-cd-3", null,
+                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, List.of()));
+        assertThat(cleared.customDeductions()).isEmpty();
+    }
+
+    /** #35 自定义扣除项来源类型非法被拒（配置校验）。 */
+    @Test
+    void customDeductionValidatesSourceType() {
+        assertThatThrownBy(() -> service.createPlan(new DividendPlanRequest("bad-src", MERCHANT, "usr_p", null,
+                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                List.of(new DividendPlanRequest.CustomDeductionItem("坏来源", "percent", null, 100, null, true)))))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
     }
 }

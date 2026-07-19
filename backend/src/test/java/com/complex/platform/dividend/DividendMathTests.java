@@ -263,4 +263,55 @@ class DividendMathTests {
         assertThatThrownBy(() -> DividendMath.compute(100L, 8000, 2000, false, 0L, false, 0L, true, 10001, 0L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // ── V309 自定义扣除项（#35）纯算式 ─────────────────────────────────
+
+    @Test
+    void clampDeductionsSequentiallyCapsAtBudgetNeverNegative() {
+        // 预算 100；三项 40/50/30 → 40（余 60）、50（余 10）、10（余 0，第三项原 30 只扣 10）。
+        long[] applied = DividendMath.clampDeductions(100L, new long[] {40L, 50L, 30L});
+        assertThat(applied).containsExactly(40L, 50L, 10L);
+        // 合计不超预算；负预算/负原始额按 0。
+        assertThat(DividendMath.clampDeductions(-5L, new long[] {10L})).containsExactly(0L);
+        assertThat(DividendMath.clampDeductions(100L, new long[] {-10L, 20L})).containsExactly(0L, 20L);
+        assertThat(DividendMath.clampDeductions(100L, null)).isEmpty();
+    }
+
+    @Test
+    void emptyCustomDeductionsEqualsLegacyDistribution() {
+        // 无自定义扣除时，11 参 compute 逐分等于 10 参（V303）现状。
+        DividendMath.Distribution legacy = DividendMath.compute(
+                1_000_000L, 8000, 2000, false, 0L, true, 1000L, true, 1000, 0L);
+        DividendMath.Distribution withEmpty = DividendMath.compute(
+                1_000_000L, 8000, 2000, false, 0L, true, 1000L, new long[0], true, 1000, 0L);
+        assertThat(withEmpty).isEqualTo(legacy);
+        assertThat(legacy.customDeductionCent()).isZero();
+    }
+
+    @Test
+    void customDeductionsReducePayoutAfterArrearsBeforeReserve() {
+        // 净利 100 万 → 毛 20 万、税 4 万 → 税后 16 万；无欠款；自定义扣 3 万 + 10 万 = 13 万 → 余 3 万；
+        // 留存 10% 作用于自定义扣后余额 3 万 = 3000，实发 27000。
+        DividendMath.Distribution d = DividendMath.compute(
+                1_000_000L, 8000, 2000, false, 0L, false, 0L,
+                new long[] {30_000L, 100_000L}, true, 1000, 0L);
+        assertThat(d.principalNetCent()).isEqualTo(160_000L);
+        assertThat(d.customDeductionCent()).isEqualTo(130_000L);
+        assertThat(d.reserveWithheldCent()).isEqualTo(3_000L);   // 30000×10%
+        assertThat(d.payoutCent()).isEqualTo(27_000L);
+        // 发放额恒等：payout = principal_net − arrears − custom − reserve。
+        assertThat(d.payoutCent()).isEqualTo(
+                d.principalNetCent() - d.arrearsOffsetCent() - d.customDeductionCent() - d.reserveWithheldCent());
+    }
+
+    @Test
+    void customDeductionsClampToAfterArrearsBudget() {
+        // 税后 16 万；欠款抵扣 6 万 → 余 10 万；自定义扣 8 万 + 5 万，合计封顶 10 万 → 实发 0。
+        DividendMath.Distribution d = DividendMath.compute(
+                1_000_000L, 8000, 2000, false, 0L, true, 60_000L,
+                new long[] {80_000L, 50_000L}, false, 0, 0L);
+        assertThat(d.arrearsOffsetCent()).isEqualTo(60_000L);
+        assertThat(d.customDeductionCent()).isEqualTo(100_000L);   // 封顶到 (160000−60000)
+        assertThat(d.payoutCent()).isZero();
+    }
 }

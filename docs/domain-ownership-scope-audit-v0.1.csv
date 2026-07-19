@@ -104,6 +104,7 @@ customer_stored_value_transactions,single_complex_default,P0_SINGLE_COMPLEX,sing
 customers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 data_cleanup_jobs,global_reference,global_reference,global reference/configuration table,safe as global reference; tenant-specific overrides require separate scoped table,covered
 deposit_ledger,direct,merchant_id,merchant_id column on deposit_ledger,ready for project/merchant scoped query enforcement,covered
+dividend_deduction_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 dividend_plans,direct,merchant_id,merchant_id column on dividend_plans,ready for project/merchant scoped query enforcement,covered
 dividend_reserve_releases,direct,merchant_id,merchant_id column on dividend_reserve_releases,ready for project/merchant scoped query enforcement,covered
 dividend_statement_lines,direct,merchant_id,merchant_id column on dividend_statement_lines,ready for project/merchant scoped query enforcement,covered

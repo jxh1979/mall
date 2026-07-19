@@ -36,9 +36,29 @@ public final class DividendRecords {
             long payoutFloorFixedCent,
             // V304 发放保护线留存·释放规则（默认手动=不自动释放）。
             String reserveReleaseMode,
-            int reserveReleaseDelayPeriods) {
+            int reserveReleaseDelayPeriods,
+            // V308 主理人类型（individual 个人 / company 公司）：公司股东不代扣个税、全额发放。
+            String principalType,
+            // V309 自定义扣除项（读路径由仓储装填；写路径经方案请求整表替换）。
+            List<DividendCustomDeductionRecord> customDeductions) {
 
-        /** 向后兼容构造（V304 之前的 21 参形态）：释放规则默认手动、延后 1 期。 */
+        /** 向后兼容构造（V308/V309 之前的 23 参形态）：类型默认个人、自定义扣除空。 */
+        public DividendPlanRecord(
+                String id, String merchantId, String principalUserId, String principalName,
+                int platformShareBps, int taxRateBps, String periodType, List<String> revenueDomains,
+                boolean includeInventoryCost, List<String> expenseTypes, LocalDate effectiveFrom, String status,
+                String note, String updatedBy, Instant createdAt, Instant updatedAt,
+                boolean lossCarryforwardEnabled, boolean arrearsOffsetEnabled, boolean payoutFloorEnabled,
+                int payoutFloorBps, long payoutFloorFixedCent, String reserveReleaseMode,
+                int reserveReleaseDelayPeriods) {
+            this(id, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
+                    revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note, updatedBy,
+                    createdAt, updatedAt, lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled,
+                    payoutFloorBps, payoutFloorFixedCent, reserveReleaseMode, reserveReleaseDelayPeriods,
+                    "individual", List.of());
+        }
+
+        /** 向后兼容构造（V304 之前的 21 参形态）：释放规则默认手动、延后 1 期；类型默认个人、自定义扣除空。 */
         public DividendPlanRecord(
                 String id, String merchantId, String principalUserId, String principalName,
                 int platformShareBps, int taxRateBps, String periodType, List<String> revenueDomains,
@@ -49,8 +69,24 @@ public final class DividendRecords {
             this(id, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
                     revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note, updatedBy,
                     createdAt, updatedAt, lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled,
-                    payoutFloorBps, payoutFloorFixedCent, "manual", 1);
+                    payoutFloorBps, payoutFloorFixedCent, "manual", 1, "individual", List.of());
         }
+    }
+
+    /**
+     * V309 自定义扣除项（方案级配置）。sourceType=fixed 用 amountCent；ratio 用 ratioBps × ratioBasis
+     * （net_profit 净利润 / revenue 营收）。enabled=false 不参与算式。
+     */
+    public record DividendCustomDeductionRecord(
+            String id,
+            String planId,
+            String name,
+            String sourceType,
+            long amountCent,
+            int ratioBps,
+            String ratioBasis,
+            boolean enabled,
+            int sortOrder) {
     }
 
     /** 期间分红计算单头（配置快照 + 算式结果 + 状态机）。 */
@@ -97,7 +133,11 @@ public final class DividendRecords {
             long lossCarryforwardAfterCent,
             long arrearsOffsetCent,
             long reserveWithheldCent,
-            long payoutCent) {
+            long payoutCent,
+            // V308 主理人类型快照（公司股东单 taxCent 恒 0，chk_ds_company_no_tax 硬保证）。
+            String principalType,
+            // V309 自定义扣除合计快照（逐项留痕在明细行；发放额恒等含本项）。
+            long customDeductionCent) {
 
         /** 商户侧（主理人视图）脱敏：内部操作员 id 与应付款项 id 不外发（平台侧照旧全量）。 */
         @com.fasterxml.jackson.annotation.JsonIgnore
@@ -109,7 +149,8 @@ public final class DividendRecords {
                     rejectReason, null, null, null, submittedAt, null, approvedAt, null, paidAt,
                     createdAt, updatedAt,
                     lossCarryforwardEnabled, lossCarryforwardInCent, lossCarryforwardAppliedCent,
-                    lossCarryforwardAfterCent, arrearsOffsetCent, reserveWithheldCent, payoutCent);
+                    lossCarryforwardAfterCent, arrearsOffsetCent, reserveWithheldCent, payoutCent,
+                    principalType, customDeductionCent);
         }
     }
 

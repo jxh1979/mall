@@ -26,6 +26,13 @@ public interface DividendRepository {
     /** 更新方案；ended 改回 active 撞同商户唯一生效索引时返回 false（insertPlan 同口径）。 */
     boolean updatePlan(DividendPlanRecord plan);
 
+    // ── V309 自定义扣除项（方案级配置，随方案整表替换）────────────────────────
+    /** 某方案的自定义扣除项（按 sort_order 升序）；供读方案与算式取数。 */
+    List<DividendRecords.DividendCustomDeductionRecord> listCustomDeductions(String planId);
+
+    /** 整表替换某方案的自定义扣除项（先删后插）；配置改动不影响历史单（历史靠算式明细快照）。 */
+    void replaceCustomDeductions(String planId, List<DividendRecords.DividendCustomDeductionRecord> items);
+
     // ── 计算单 ────────────────────────────────────────────────
     PageResponse<DividendStatementRecord> pageStatements(
             String merchantId, String kind, String periodLabel, String status, int page, int pageSize);

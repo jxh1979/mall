@@ -17,6 +17,10 @@ package com.complex.platform.dividend;
  *   <li>欠款抵扣：税后应得先抵扣未清应收 arrearsOutstanding（钳到 principalNet 上限）</li>
  *   <li>发放保护线：留存 = min(抵扣后余额, max(余额×bps/10000, 固定额))，实发 = 抵扣后余额 − 留存</li>
  * </ul>
+ *
+ * <p>V309 自定义扣除项（#35）：欠款抵扣之后、留存之前，对 (税后应得 − 欠款抵扣) 余额逐项按顺序封顶扣减
+ * （{@link #clampDeductions}，不透支）；合计 customDeductionCent 参与发放额恒等：
+ * payout = principalNet − arrears − customDeduction − reserve。默认无自定义项时逐分等于 V303 现状。
  */
 public final class DividendMath {
 
@@ -31,7 +35,7 @@ public final class DividendMath {
             long principalNetCent) {
     }
 
-    /** V303 完整分配结果：V299 劈分链 + 亏损结转 + 欠款抵扣 + 发放保护线（全部整数分，非负）。 */
+    /** V303 完整分配结果：V299 劈分链 + 亏损结转 + 欠款抵扣 + V309 自定义扣除 + 发放保护线（全部整数分，非负）。 */
     public record Distribution(
             long carryInCent,
             long carryAppliedCent,
@@ -42,6 +46,7 @@ public final class DividendMath {
             long taxCent,
             long principalNetCent,
             long arrearsOffsetCent,
+            long customDeductionCent,
             long reserveWithheldCent,
             long payoutCent) {
 
@@ -50,7 +55,29 @@ public final class DividendMath {
         }
     }
 
+    private static final long[] NO_CUSTOM_DEDUCTIONS = new long[0];
+
     private DividendMath() {
+    }
+
+    /**
+     * V309 自定义扣除逐项封顶扣减（纯函数，无副作用；服务层写逐项算式明细行与本处合计同源，杜绝漂移）。
+     * 对给定预算 budget（=税后应得 − 欠款抵扣）按顺序对每项原始额 raw 取 min(剩余预算, max(raw,0))，
+     * 返回每项实扣额（逐项非负、合计 ≤ budget，保证发放额不透支）。
+     *
+     * @param budget       可供自定义扣除的余额（分，非负；负数按 0 处理）
+     * @param rawCents     各扣除项原始额（分，按扣减先后顺序；负值按 0 处理）
+     * @return 各扣除项实扣额（与 rawCents 等长同序）
+     */
+    public static long[] clampDeductions(long budget, long[] rawCents) {
+        long[] applied = new long[rawCents == null ? 0 : rawCents.length];
+        long remaining = Math.max(budget, 0L);
+        for (int i = 0; i < applied.length; i++) {
+            long a = Math.min(remaining, Math.max(rawCents[i], 0L));
+            applied[i] = a;
+            remaining -= a;
+        }
+        return applied;
     }
 
     /**
@@ -81,6 +108,24 @@ public final class DividendMath {
             boolean lossCarryforward, long carryInCent,
             boolean arrearsOffset, long arrearsOutstandingCent,
             boolean payoutFloor, int reserveBps, long reserveFixedCent) {
+        return compute(netProfitCent, platformShareBps, taxRateBps, lossCarryforward, carryInCent,
+                arrearsOffset, arrearsOutstandingCent, NO_CUSTOM_DEDUCTIONS,
+                payoutFloor, reserveBps, reserveFixedCent);
+    }
+
+    /**
+     * V309 完整分配（V303 三扣除 + 自定义扣除项）。customDeductionRawCents 为空时逐分等于 {@link #compute(long,
+     * int, int, boolean, long, boolean, long, boolean, int, long)}。
+     *
+     * @param customDeductionRawCents 各自定义扣除项原始额（分，按扣减先后顺序；在欠款抵扣后、留存前对
+     *        (税后应得 − 欠款抵扣) 余额逐项封顶扣减，见 {@link #clampDeductions}）
+     */
+    public static Distribution compute(
+            long netProfitCent, int platformShareBps, int taxRateBps,
+            boolean lossCarryforward, long carryInCent,
+            boolean arrearsOffset, long arrearsOutstandingCent,
+            long[] customDeductionRawCents,
+            boolean payoutFloor, int reserveBps, long reserveFixedCent) {
         requireBps(platformShareBps, "platformShareBps");
         requireBps(taxRateBps, "taxRateBps");
         requireBps(reserveBps, "reserveBps");
@@ -100,15 +145,22 @@ public final class DividendMath {
         long arrears = arrearsOffset ? Math.min(principalNet, Math.max(arrearsOutstandingCent, 0L)) : 0L;
         long afterArrears = principalNet - arrears;
 
+        // V309 自定义扣除：对 (税后应得 − 欠款抵扣) 余额逐项封顶扣减（与服务层写明细行同源 clampDeductions）。
+        long custom = 0L;
+        for (long a : clampDeductions(afterArrears, customDeductionRawCents)) {
+            custom += a;
+        }
+        long afterCustom = afterArrears - custom;
+
         long reserve = 0L;
         if (payoutFloor) {
-            long byRate = afterArrears * reserveBps / BPS_DENOMINATOR;
-            reserve = Math.min(afterArrears, Math.max(byRate, Math.max(reserveFixedCent, 0L)));
+            long byRate = afterCustom * reserveBps / BPS_DENOMINATOR;
+            reserve = Math.min(afterCustom, Math.max(byRate, Math.max(reserveFixedCent, 0L)));
         }
-        long payout = afterArrears - reserve;
+        long payout = afterCustom - reserve;
 
         return new Distribution(carryIn, carryApplied, carryAfter, distributable, platformShare,
-                principalGross, tax, principalNet, arrears, reserve, payout);
+                principalGross, tax, principalNet, arrears, custom, reserve, payout);
     }
 
     private static void requireBps(int bps, String name) {
