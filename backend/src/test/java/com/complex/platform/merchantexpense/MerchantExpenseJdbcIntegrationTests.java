@@ -234,4 +234,58 @@ class MerchantExpenseJdbcIntegrationTests {
         assertThat(repository.findById("mex_ae_dup_src_b")).isEmpty();
         assertThat(repository.findById("mex_ae_dup_src_a")).isPresent();
     }
+
+    @Test
+    void dividendPeriodLockGuardsWritesAndSkipsAutoAttach() {
+        // V302 关账锁：approved 正式分红单覆盖的 (商户,月份) → isPeriodLocked=true，自动挂接跳过该商户。
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        // 先落一张生效方案（statements.plan_id FK），再落一张 approved 全零单（满足五条恒等 CHECK）覆盖 2026-07。
+        jdbcTemplate.update("""
+                INSERT INTO dividend_plans (id, merchant_id, principal_user_id, platform_share_bps, tax_rate_bps,
+                    period_type, revenue_domains, include_inventory_cost, expense_types, status)
+                VALUES ('divp_lock_jdbc', 'merchant_locked', 'usr_p', 8000, 2000, 'quarterly',
+                    'bar,ticket', TRUE, 'labor', 'active')
+                ON CONFLICT (id) DO NOTHING
+                """);
+        jdbcTemplate.update("""
+                INSERT INTO dividend_statements (id, merchant_id, plan_id, kind, period_label, period_start, period_end,
+                    principal_user_id, platform_share_bps, tax_rate_bps, revenue_domains, include_inventory_cost,
+                    expense_types, revenue_cent, cost_cent, expense_cent, net_profit_cent, distributable_cent,
+                    platform_share_cent, principal_gross_cent, tax_cent, principal_net_cent, status)
+                VALUES ('divs_lock_jdbc', 'merchant_locked', 'divp_lock_jdbc', 'official', '2026-Q3',
+                    DATE '2026-07-01', DATE '2026-09-30', 'usr_p', 8000, 2000, 'bar,ticket', TRUE, 'labor',
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 'approved')
+                ON CONFLICT (id) DO NOTHING
+                """);
+
+        // 锁判定：季度单覆盖 2026-07/08/09；相邻月不锁。
+        assertThat(repository.isPeriodLocked("merchant_locked", "2026-07")).isTrue();
+        assertThat(repository.isPeriodLocked("merchant_locked", "2026-08")).isTrue();
+        assertThat(repository.isPeriodLocked("merchant_locked", "2026-06")).isFalse();
+        assertThat(repository.isPeriodLocked("merchant_open", "2026-07")).isFalse();
+        assertThat(repository.listLockedMerchants("2026-07")).contains("merchant_locked");
+
+        // 自动挂接跳过关账商户：为关账商户 + 未关账商户各插一张 2026-07 能耗应收，attach 只挂未关账者。
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
+                    amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
+                    status, created_at, updated_at, merchant_id)
+                VALUES
+                ('arap_lock_energy', 'ENERGY-LOCK', 'receivable', 'merchant_locked', 'energy_fee', 'ef_lock',
+                 50000, 0, 50000, 'CNY', DATE '2026-07-01', '2026-07', 'pending_collection', now(), now(),
+                 'merchant_locked'),
+                ('arap_open_energy', 'ENERGY-OPEN', 'receivable', 'merchant_open', 'energy_fee', 'ef_open',
+                 60000, 0, 60000, 'CNY', DATE '2026-07-01', '2026-07', 'pending_collection', now(), now(),
+                 'merchant_open')
+                ON CONFLICT (id) DO NOTHING
+                """);
+        repository.attachEnergyFees("2026-07", "usr_test", now);
+        assertThat(repository.findById("mex_ae_arap_lock_energy")).isEmpty();   // 关账商户被 NOT EXISTS 跳过
+        assertThat(repository.findById("mex_ae_arap_open_energy")).isPresent(); // 未关账商户正常挂接
+
+        // V302 部分索引存在。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT to_regclass('ix_dividend_statements_lock')::text", String.class))
+                .isEqualTo("ix_dividend_statements_lock");
+    }
 }

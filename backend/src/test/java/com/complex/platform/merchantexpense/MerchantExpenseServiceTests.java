@@ -34,6 +34,25 @@ class MerchantExpenseServiceTests {
     /** 内存仓储：只实现单测所需路径（自动挂接/漂移 SQL 属 JDBC 集成测试范畴，此处返回空）。 */
     private static class InMemoryRepo implements MerchantExpenseRepository {
         final Map<String, MerchantExpenseEntryRecord> rows = new LinkedHashMap<>();
+        // 关账锁：键 = merchantId|period（关账判定 SQL 走 dividend_statements，此处以内存集合模拟）。
+        final java.util.Set<String> lockedPeriods = new java.util.HashSet<>();
+
+        void lock(String merchantId, String period) {
+            lockedPeriods.add(merchantId + "|" + period);
+        }
+
+        @Override
+        public boolean isPeriodLocked(String merchantId, String period) {
+            return lockedPeriods.contains(merchantId + "|" + period);
+        }
+
+        @Override
+        public List<String> listLockedMerchants(String period) {
+            return lockedPeriods.stream()
+                    .filter(key -> key.endsWith("|" + period))
+                    .map(key -> key.substring(0, key.length() - period.length() - 1))
+                    .distinct().sorted().toList();
+        }
 
         @Override
         public PageResponse<MerchantExpenseEntryRecord> listEntries(
@@ -314,5 +333,46 @@ class MerchantExpenseServiceTests {
         assertThat(result.propertyInserted()).isZero();
         assertThat(result.contractPropertyInserted()).isZero();
         assertThat(result.drift()).isEmpty();
+        assertThat(result.lockedMerchants()).isEmpty();
+    }
+
+    // ── 分红期间关账锁 ────────────────────────────────────────
+
+    @Test
+    void manualEntryOnLockedPeriodIsRejected() {
+        // 该商户该月已被 approved/paid 正式分红单覆盖（关账）→ 手工录入拒绝，不落库。
+        repository.lock("merchant-1", "2026-07");
+        assertThatThrownBy(() -> service.createManual(manualRequest("lk1", 100_00L, "关账后补录")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_PERIOD_LOCKED"));
+        assertThat(repository.rows).isEmpty();
+        // 未关账的其他月照常可录。
+        MerchantExpenseEntryRecord open = service.createManual(
+                new MerchantExpenseEntryRequest("lk1b", "merchant-1", "2026-08", "labor", 100_00L, "八月人工"));
+        assertThat(open.period()).isEqualTo("2026-08");
+    }
+
+    @Test
+    void reverseOnLockedPeriodIsRejected() {
+        // 先在未关账时录入，随后该月关账 → 冲销被拒（已发放分红的基数不可改）。
+        MerchantExpenseEntryRecord entry = service.createManual(manualRequest("lk2", 300_00L, "七月人工"));
+        repository.lock("merchant-1", "2026-07");
+        assertThatThrownBy(() -> service.reverse(entry.id(),
+                new MerchantExpenseReversalRequest("lk2-rev", "关账后想冲销")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_PERIOD_LOCKED"));
+        assertThat(repository.rows).hasSize(1);
+    }
+
+    @Test
+    void syncAutoListsLockedMerchantsAsSkipped() {
+        // 该月两个商户关账 → 自动挂接把它们列入 lockedMerchants 跳过清单（SQL 侧 NOT EXISTS 已跳过挂接）。
+        repository.lock("merchant-x", "2026-07");
+        repository.lock("merchant-y", "2026-07");
+        MerchantExpenseSyncResultRecord result = service.syncAuto(new MerchantExpenseSyncRequest("lk3", "2026-07"));
+        assertThat(result.lockedMerchants()).containsExactly("merchant-x", "merchant-y");
+        // 其他月无关账 → 清单空。
+        MerchantExpenseSyncResultRecord august = service.syncAuto(new MerchantExpenseSyncRequest("lk3b", "2026-08"));
+        assertThat(august.lockedMerchants()).isEmpty();
     }
 }
