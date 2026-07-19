@@ -7,8 +7,8 @@ import type { AdminApiClient, AdminPageProps, BarOrderRow, EffectivePermissionsS
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 const ORDERS: BarOrderRow[] = [
-  { id: "b-1", orderNo: "BAR-0001", tableId: "T-1", status: "billed", totalAmount: 8800, sellerRole: "sales" },
-  { id: "b-2", orderNo: "BAR-0002", tableId: "T-2", status: "billed", totalAmount: 6000, sellerRole: "waiter" },
+  { id: "b-1", orderNo: "BAR-0001", tableId: "T-1", status: "billed", totalAmount: 8800, salesStaffId: "staff_sales_1" },
+  { id: "b-2", orderNo: "BAR-0002", tableId: "T-2", status: "billed", totalAmount: 6000 },
 ];
 
 function makeApi(): AdminApiClient {

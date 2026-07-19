@@ -278,8 +278,9 @@ export type BarOrderRow = {
   orderNo?: string;
   tableId?: string;
   billId?: string | null;
-  sellerRole?: string;
-  commissionRate?: string;
+  // 后端 BarOrderRecord.sales_staff_id（adminClient 已 snake->camel）：有=销售归属(提成 15%)，无=非销售(10%)。
+  // 销售/非销售拆分统计据此推导；曾用的 sellerRole/commissionRate 是后端从不返回的幽灵字段，已删。
+  salesStaffId?: string;
   status?: string;
   /** 列表接口实际返回字段（BarOrderRecord.totalAmountCent，分）；totalAmount 为旧字段兼容保留。 */
   totalAmountCent?: number;

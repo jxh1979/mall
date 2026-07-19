@@ -7,6 +7,7 @@ import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
+import { isSalesOrder } from "./barSalesRole";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -123,7 +124,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         { label: TEXT.orderStatus, value: displayStatus(order.status) },
         { label: TEXT.billStatus, value: bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill },
         { label: TEXT.amount, value: formatAmount(order.totalAmountCent ?? order.totalAmount) },
-        { label: TEXT.commissionBasis, value: order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}` },
+        { label: TEXT.commissionBasis, value: isSalesOrder(order) ? TEXT.sales15 : `${TEXT.nonSales} 10%` },
         { label: TEXT.createdAt, value: cnDate(order.createdAt) },
         { label: TEXT.paidAt, value: cnDate(bill?.paidAt ?? order.paidAt) },
       ],
@@ -166,7 +167,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const billCount = orders.filter((order) => firstBill(order)).length;
   // 列表接口返回 totalAmountCent（旧 totalAmount 字段兼容保留）：此前读幽灵字段恒为 0。
   const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmountCent ?? order.totalAmount ?? 0), 0);
-  const salesCommissionOrders = orders.filter((order) => order.sellerRole === "sales" || order.commissionRate === "15%").length;
+  const salesCommissionOrders = orders.filter((order) => isSalesOrder(order)).length;
 
   // 第二批接线（指标登记簿）：订单数/未完结/订单金额三个 KPI 数字改走统一明细端点（与明细页同源，全历史口径
   // 与本页全量列表一致）；端点失败（含无权限）→ 回退本地列表计算并隐藏「完整明细」入口，体验不降级。
@@ -322,7 +323,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                     <td>{displayStatus(order.status)}</td>
                     <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>
                     <td>{formatAmount(order.totalAmountCent ?? order.totalAmount)}</td>
-                    <td>{order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}`}</td>
+                    <td>{isSalesOrder(order) ? TEXT.sales15 : `${TEXT.nonSales} 10%`}</td>
                     <td>{cnDate(order.createdAt)}</td>
                     <td data-testid={`bar-order-paid-at-${order.id}`}>{cnDate(bill?.paidAt ?? order.paidAt)}</td>
                   <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看订单详情" onClick={(event) => { event.stopPropagation(); openOrderDetail(order); }}>查看详情</button></td></tr>
