@@ -370,6 +370,11 @@ class BarJdbcIntegrationTests {
                 now
         ));
 
+        // 订单列表内联账单摘要（幽灵字段修复）：按订单批量取回账单，供后台账单列/结算/提成定位账单。
+        assertThat(repository.listBillsByOrderIds(java.util.List.of("order_jdbc")))
+                .extracting(BarBillRecord::id, BarBillRecord::billNo, BarBillRecord::paymentStatus)
+                .contains(tuple("bill_jdbc", "BILL-JDBC-001", "unpaid"));
+
         assertThat(repository.listTables(Optional.empty()))
                 .extracting(BarTableRecord::id, BarTableRecord::allowedPassFreeGuestCount, BarTableRecord::minConsumptionCent)
                 .contains(tuple("table_jdbc", 2, 50000L));

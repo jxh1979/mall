@@ -103,6 +103,9 @@ public interface BarRepository {
 
     List<BarOrderRecord> listOrders(Optional<String> merchantScope);
 
+    /** 订单列表内联账单摘要用：一次批量取回给定订单们的全部账单（created_at 倒序，最新在前）。 */
+    List<BarBillRecord> listBillsByOrderIds(List<String> orderIds);
+
     Optional<BarOrderRecord> findOrderById(String id);
 
     BarOrderItemRecord saveOrderItem(BarOrderItemRecord item);

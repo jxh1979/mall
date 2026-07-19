@@ -8,6 +8,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
 import { isSalesOrder } from "./barSalesRole";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -92,11 +93,11 @@ function formatAmount(amountCent: number | undefined) {
 }
 
 function firstBill(order: BarOrderRow | undefined): BarBillRow | undefined {
-  return order?.bills?.[0] ?? (order?.billId ? { id: order.billId, status: "created" } : undefined);
+  return order?.bills?.[0];
 }
 
 function firstBillId(order: BarOrderRow | undefined) {
-  return firstBill(order)?.id ?? order?.billId ?? "";
+  return firstBill(order)?.id ?? "";
 }
 
 export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
@@ -117,12 +118,12 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   function openOrderDetail(order: BarOrderRow) {
     const bill = firstBill(order);
     setDetail({
-      title: `订单明细 · ${order.orderNo ?? order.id}`,
+      title: `订单明细 · ${order.id}`,
       fields: [
-        { label: TEXT.orderNo, value: order.orderNo ?? order.id },
+        { label: TEXT.orderNo, value: order.id },
         { label: TEXT.table, value: order.tableId ?? "—" },
         { label: TEXT.orderStatus, value: displayStatus(order.status) },
-        { label: TEXT.billStatus, value: bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill },
+        { label: TEXT.billStatus, value: bill?.id ? `${bill.id} / ${formatBusinessStatus(bill.status)}` : TEXT.noBill },
         { label: TEXT.amount, value: formatAmount(order.totalAmountCent ?? order.totalAmount) },
         { label: TEXT.commissionBasis, value: isSalesOrder(order) ? TEXT.sales15 : `${TEXT.nonSales} 10%` },
         { label: TEXT.createdAt, value: cnDate(order.createdAt) },
@@ -266,7 +267,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           <div className="admin-kpi-card"><span>{TEXT.bill}</span><strong>{billCount}</strong><small>{TEXT.billHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.commission}</span><strong>{salesCommissionOrders}</strong><small>{TEXT.commissionHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong data-testid="bar-orders-kpi-amount">{formatAmount(orderAmountDisplay)}</strong><small>{TEXT.amountHelp}{orderAmountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.order_amount" testid="bar-orders-metric-detail-amount" /></> : null}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedOrder?.orderNo ?? "-"}>{selectedOrder?.orderNo ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedOrder?.id ?? "-"}>{selectedOrder?.id ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
         </div>
 
         <div className="admin-form-grid" data-testid="bar-settle-payment-form">
@@ -318,10 +319,10 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                     onClick={() => openOrderDetail(order)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOrderDetail(order); } }}>
                     <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此订单 ${order.id}`} data-testid={`bar-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
-                    <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={order.id}>{order.orderNo ?? order.id}</TraceLink></td>
+                    <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-003" objectId={order.id}>{order.id}</TraceLink></td>
                     <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-BAR-001" objectId={order.tableId}>{order.tableId ?? "-"}</TraceLink></td>
                     <td>{displayStatus(order.status)}</td>
-                    <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>
+                    <td>{bill?.id ? `${bill.id} / ${formatBusinessStatus(bill.status)}` : TEXT.noBill}</td>
                     <td>{formatAmount(order.totalAmountCent ?? order.totalAmount)}</td>
                     <td>{isSalesOrder(order) ? TEXT.sales15 : `${TEXT.nonSales} 10%`}</td>
                     <td>{cnDate(order.createdAt)}</td>

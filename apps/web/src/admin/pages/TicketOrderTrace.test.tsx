@@ -44,7 +44,7 @@ function baseProps(api: AdminApiClient, extra: Partial<AdminPageProps> = {}): Ad
 describe("票务订单链下钻（P1-B）", () => {
   it("酒吧订单页：点订单号跳 ADM-TKT-003 并带订单 id", async () => {
     const orders: BarOrderRow[] = [
-      { id: "bar-ord-1", orderNo: "BAR-0001", tableId: "T-1", status: "billed", totalAmount: 8800 },
+      { id: "bar-ord-1", tableId: "T-1", status: "billed", totalAmount: 8800 },
     ];
     const navigateTo = vi.fn();
     render(<BarOrdersPage {...baseProps(makeApi({ "/api/v1/bar/orders": orders }), { navigateTo })} />);

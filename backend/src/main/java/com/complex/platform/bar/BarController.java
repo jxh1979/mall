@@ -117,7 +117,7 @@ public class BarController {
     }
 
     @GetMapping("/orders")
-    public ApiResponse<PageResponse<BarOrderRecord>> listOrders() {
+    public ApiResponse<PageResponse<BarOrderView>> listOrders() {
         authorizationService.requirePermission("bar.order.view");
         return ApiResponse.ok(service.listOrders());
     }

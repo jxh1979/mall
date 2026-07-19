@@ -7,8 +7,8 @@ import type { AdminApiClient, AdminPageProps, BarOrderRow, EffectivePermissionsS
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 const ORDERS: BarOrderRow[] = [
-  { id: "b-1", orderNo: "BAR-0001", tableId: "T-1", status: "billed", totalAmount: 8800, salesStaffId: "staff_sales_1" },
-  { id: "b-2", orderNo: "BAR-0002", tableId: "T-2", status: "billed", totalAmount: 6000 },
+  { id: "b-1", tableId: "T-1", status: "billed", totalAmount: 8800, salesStaffId: "staff_sales_1" },
+  { id: "b-2", tableId: "T-2", status: "billed", totalAmount: 6000 },
 ];
 
 function makeApi(): AdminApiClient {
@@ -45,8 +45,8 @@ describe("BarCommissionsPage KPI 聚焦视图 + 英文全清", () => {
     expect(window.location.search).toContain("kpi=sales");
     expect(screen.getByTestId("bar-commissions-kpi-focus-banner").textContent).toContain("销售人员（1）");
     const table = screen.getByTestId("bar-commissions-table").textContent ?? "";
-    expect(table).toContain("BAR-0001");
-    expect(table).not.toContain("BAR-0002");
+    expect(table).toContain("b-1");
+    expect(table).not.toContain("b-2");
     expect(screen.queryByTestId("bar-commissions-summary")).toBeNull();
   });
 
@@ -58,8 +58,8 @@ describe("BarCommissionsPage KPI 聚焦视图 + 英文全清", () => {
     expect(window.location.search).not.toContain("kpi=");
     expect(screen.getByTestId("bar-commissions-summary")).toBeTruthy();
     const table = screen.getByTestId("bar-commissions-table").textContent ?? "";
-    expect(table).toContain("BAR-0001");
-    expect(table).toContain("BAR-0002");
+    expect(table).toContain("b-1");
+    expect(table).toContain("b-2");
   });
 
   it("带参直链 ?kpi=non_sales → 直接进聚焦视图（只剩非销售订单）", async () => {
@@ -68,8 +68,8 @@ describe("BarCommissionsPage KPI 聚焦视图 + 英文全清", () => {
     await waitFor(() => expect(screen.getByTestId("bar-commissions-kpi-focus-banner")).toBeTruthy());
     expect(screen.getByTestId("bar-commissions-kpi-focus-banner").textContent).toContain("非销售人员（1）");
     const table = screen.getByTestId("bar-commissions-table").textContent ?? "";
-    expect(table).toContain("BAR-0002");
-    expect(table).not.toContain("BAR-0001");
+    expect(table).toContain("b-2");
+    expect(table).not.toContain("b-1");
   });
 
   it("“不含通票”KPI 子标签为业务中文，不含 includeTicketAmount=false 技术标签", async () => {

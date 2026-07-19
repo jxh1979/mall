@@ -7,8 +7,8 @@ import type { AdminApiClient, AdminPageProps, BarOrderRow, EffectivePermissionsS
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 const ORDERS: BarOrderRow[] = [
-  { id: "b-1", orderNo: "BAR-0001", tableId: "T-1", status: "billed", totalAmount: 8800 },
-  { id: "b-2", orderNo: "BAR-0002", tableId: "T-2", status: "paid", totalAmount: 12000 },
+  { id: "b-1", tableId: "T-1", status: "billed", totalAmount: 8800 },
+  { id: "b-2", tableId: "T-2", status: "paid", totalAmount: 12000 },
 ];
 
 function makeApi(): AdminApiClient {
@@ -46,8 +46,8 @@ describe("BarOrdersPage KPI 聚焦视图", () => {
     expect(window.location.search).toContain("kpi=open");
     expect(screen.getByTestId("bar-orders-kpi-focus-banner").textContent).toContain("未完结（1）");
     const table = screen.getByTestId("bar-orders-table").textContent ?? "";
-    expect(table).toContain("BAR-0001");
-    expect(table).not.toContain("BAR-0002");
+    expect(table).toContain("b-1");
+    expect(table).not.toContain("b-2");
     expect(screen.queryByTestId("bar-orders-summary")).toBeNull();
     expect(screen.queryByTestId("bar-order-actions")).toBeNull();
   });
@@ -60,8 +60,8 @@ describe("BarOrdersPage KPI 聚焦视图", () => {
     expect(window.location.search).not.toContain("kpi=");
     expect(screen.getByTestId("bar-orders-summary")).toBeTruthy();
     const table = screen.getByTestId("bar-orders-table").textContent ?? "";
-    expect(table).toContain("BAR-0001");
-    expect(table).toContain("BAR-0002");
+    expect(table).toContain("b-1");
+    expect(table).toContain("b-2");
   });
 
   it("带参直链 ?kpi=open → 直接进聚焦视图", async () => {

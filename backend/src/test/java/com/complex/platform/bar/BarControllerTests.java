@@ -69,7 +69,7 @@ class BarControllerTests {
         when(service.splitBill(eq("bill_1"), any(BarBillSplitRequest.class))).thenReturn(billOperation("split"));
         when(service.mergeBills(eq("bill_1"), any(BarBillMergeRequest.class))).thenReturn(billOperation("merge"));
         when(service.listBillOperations(eq("bill_1"))).thenReturn(new PageResponse<>(List.of(billOperation("split")), 1, 50, 1));
-        when(service.listOrders()).thenReturn(new PageResponse<>(List.of(order()), 1, 50, 1));
+        when(service.listOrders()).thenReturn(new PageResponse<>(List.of(BarOrderView.of(order(), List.of())), 1, 50, 1));
         when(service.createOrder(any(BarOrderRequest.class))).thenReturn(order());
         when(service.createOrderBill(eq("order_1"), any(BarOrderBillCreateRequest.class))).thenReturn(bill());
         when(service.deliverOrder(eq("order_1"), any(BarOrderDeliveryRequest.class))).thenReturn(orderDelivered());

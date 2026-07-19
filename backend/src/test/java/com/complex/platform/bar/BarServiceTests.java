@@ -3187,6 +3187,19 @@ class BarServiceTests {
         }
     }
 
+    @Test
+    void listOrdersAttachesBillSummaryPerOrderSoFrontendLocatesBillAndSplitsTruthfully() {
+        BarBillRecord bill = billForOrder("list-view", "staff_sales");
+        PageResponse<BarOrderView> page = service.listOrders();
+        BarOrderView view = page.items().stream()
+                .filter(candidate -> candidate.id().equals(bill.orderId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(view.bills()).extracting(BarBillSummary::id).contains(bill.id());
+        assertThat(view.bills().get(0).status()).isEqualTo(bill.paymentStatus());
+        assertThat(view.salesStaffId()).isEqualTo("staff_sales");
+    }
+
     private BarBillRecord billForOrder(String key, String salesStaffId) {
         BarReservationRecord reservation = createReservation("reservation-" + key, "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
@@ -3492,6 +3505,13 @@ class BarServiceTests {
         @Override
         public Optional<BarBillRecord> findBillById(String id) {
             return Optional.ofNullable(bills.get(id));
+        }
+
+        @Override
+        public List<BarBillRecord> listBillsByOrderIds(List<String> orderIds) {
+            return bills.values().stream()
+                    .filter(candidate -> orderIds.contains(candidate.orderId()))
+                    .toList();
         }
 
         @Override

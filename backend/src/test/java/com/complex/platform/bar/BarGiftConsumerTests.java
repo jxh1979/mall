@@ -372,6 +372,7 @@ class BarGiftConsumerTests {
         @Override public List<BarProductionTicketEventRecord> listProductionTicketEvents(String ticketId) { return List.copyOf(productionTicketEvents); }
         @Override public BarBillRecord saveBill(BarBillRecord bill) { return bill; }
         @Override public Optional<BarBillRecord> findBillById(String id) { return Optional.empty(); }
+        @Override public List<BarBillRecord> listBillsByOrderIds(List<String> orderIds) { return List.of(); }
         @Override public Optional<BarBillRecord> findBillByIdForUpdate(String id) { return Optional.empty(); }
         @Override public Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId) { return Optional.empty(); }
         @Override public int markBillSettlementsReversed(String billId) { return 0; }

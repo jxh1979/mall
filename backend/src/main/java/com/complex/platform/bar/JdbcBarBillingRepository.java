@@ -116,6 +116,23 @@ final class JdbcBarBillingRepository {
                 """, Map.of("id", id), rowMapper::mapBill).stream().findFirst();
     }
 
+    List<BarBillRecord> listBillsByOrderIds(List<String> orderIds) {
+        if (orderIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT id, bill_no, order_id, bar_id, merchant_id, table_id, reservation_id,
+                       subtotal_amount_cent, discount_amount_cent, deposit_deduct_amount_cent,
+                       payable_amount_cent, paid_amount_cent, currency, payment_status,
+                       settlement_status, sales_staff_id, sales_role_type, created_at, updated_at,
+                       reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent,
+                       paid_at
+                  FROM bar_bills
+                 WHERE order_id IN (:order_ids)
+                 ORDER BY created_at DESC, id
+                """, Map.of("order_ids", orderIds), rowMapper::mapBill);
+    }
+
     // 2c-2 提成防重：按 bill_id 查已有提成计算（calculateCommission 查重守卫用，避免同一账单多幂等键重复计提）。
     public Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId) {
         return jdbcTemplate.query("""
