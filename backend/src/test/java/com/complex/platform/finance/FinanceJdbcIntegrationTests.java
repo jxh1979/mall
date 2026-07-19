@@ -345,6 +345,8 @@ class FinanceJdbcIntegrationTests {
         repository.saveDepositLedger(new DepositLedgerRecord(
                 "dep_collect_jdbc", "mch_refund_jdbc", "collect", 40000L, 40000L, null, "init", now));
         assertThat(repository.currentDepositBalanceForUpdate("mch_refund_jdbc")).isEqualTo(40000L);
+        // 退款行关联到刚挂的应付（满足 deposit_ledger_ar_ap_item_id_fkey）：先种真 ar_ap_items 行。
+        repository.saveArApItem(projItem("arap_x", "ARAP-X", "mch_refund_jdbc", "proj_x", now));
         repository.saveDepositLedger(new DepositLedgerRecord(
                 "dep_refund_jdbc", "mch_refund_jdbc", "refund", 25000L, 15000L, "arap_x", "退租应退押金结算", now));
         assertThat(repository.currentDepositBalance("mch_refund_jdbc")).isEqualTo(15000L);
