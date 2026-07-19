@@ -142,6 +142,20 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED", "a required request header is missing"));
     }
 
+    /**
+     * 唯一/主键约束冲突（如重复创建同键配置、并发抢占）此前掉进兜底 Exception 处理器返回 500;
+     * 契约上属状态冲突,应为 409 STATE_CONFLICT。仅拦精确的 DuplicateKeyException(SQLState 23505),
+     * 不拦父类 DataIntegrityViolationException——NOT NULL/CHECK/FK 违例多为服务端 bug,仍应落 500 +
+     * error 日志保留可观测性。不透传 getMessage(可能含约束名),返回固定文案。
+     */
+    @ExceptionHandler(org.springframework.dao.DuplicateKeyException.class)
+    ResponseEntity<ApiResponse<Void>> handleDuplicateKey(org.springframework.dao.DuplicateKeyException exception) {
+        log.warn("duplicate key violation: {}", exception.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("STATE_CONFLICT", "DUPLICATE_KEY", "resource with the same unique key already exists"));
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception exception) {
         log.error("Unhandled API exception", exception);

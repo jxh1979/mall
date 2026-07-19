@@ -23,10 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>租户隔离与 {@link CustomerPointsRuleAdminService} 同口径：项目级管理员一律绑定其 token scope（覆盖请求体 project_id，
  * 写路径不信任请求体）；平台管理员须显式给 project_id。更新时校验目标记录 project_id 与解析出的 project_id 完全一致，
- * 防跨租户篡改（借 id 改他项目）。</p>
+ * 防跨租户篡改（借 id 改他项目）。写路径 project_id 恒非空（token scope 或必填请求参数），故按 project 严格过滤成立。</p>
  *
- * <p>ponytail: 列表复用既有 list*（仅 status='active' + 项目匹配/平台缺省），故 status 置为非 active 后会从列表隐去，
- * v1 不做全状态列表（如需再改活跃项即重建同 levelCode）。</p>
+ * <p>GET 列表仍仅 status='active'（+ 项目匹配/平台缺省），停用/归档项从列表隐去；但更新路径（POST 带 id）
+ * 用状态无关的 list*ByProject 定位，故停用/归档项仍可按 id 恢复为 active（停用可逆，非单向门）。新增同键
+ * （同 project 重复 level_code/streak_days/rule_name，含已停用/归档项）在服务层预检返回 409，兜底再由全局
+ * DuplicateKeyException 处理器归一 409，杜绝裸 uq_* 约束违例落 500。</p>
  */
 @Service
 public class LoyaltyConfigAdminService {
@@ -72,12 +74,19 @@ public class LoyaltyConfigAdminService {
         try {
             MemberLevelConfigRequest r = require(request);
             String projectId = resolveWriteProjectId(r.projectId());
+            String levelCode = requireText(r.levelCode(), "level_code");
+            if (isCreate(r.id())
+                    && repository.listMemberLevelsByProject(projectId).stream()
+                            .anyMatch(x -> levelCode.equals(x.levelCode()))) {
+                throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE",
+                        "member level code already exists in this project");
+            }
             Instant now = Instant.now();
             String id = resolveId(r.id(), "member_level_", projectId, this::findLevelInProject);
             CustomerMemberLevelRecord saved = repository.saveMemberLevel(new CustomerMemberLevelRecord(
                     id,
                     projectId,
-                    requireText(r.levelCode(), "level_code"),
+                    levelCode,
                     requireText(r.levelName(), "level_name"),
                     (int) requireMin(r.levelRank(), 0, "level_rank"),
                     requireMinLong(r.upgradeThreshold(), 0, "upgrade_threshold"),
@@ -114,12 +123,19 @@ public class LoyaltyConfigAdminService {
         try {
             CheckInTierConfigRequest r = require(request);
             String projectId = resolveWriteProjectId(r.projectId());
+            int streakDays = (int) requireMin(r.streakDays(), 1, "streak_days");
+            if (isCreate(r.id())
+                    && repository.listCheckInTiersByProject(projectId).stream()
+                            .anyMatch(x -> x.streakDays() == streakDays)) {
+                throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE",
+                        "check-in tier for this streak already exists in this project");
+            }
             Instant now = Instant.now();
             String id = resolveId(r.id(), "check_in_tier_", projectId, this::findTierInProject);
             CustomerCheckInTierRecord saved = repository.saveCheckInTier(new CustomerCheckInTierRecord(
                     id,
                     projectId,
-                    (int) requireMin(r.streakDays(), 1, "streak_days"),
+                    streakDays,
                     requireMinLong(r.awardPoints(), 0, "award_points"),
                     normalizeStatus(r.status(), TIER_STATUSES),
                     now,
@@ -150,12 +166,19 @@ public class LoyaltyConfigAdminService {
         try {
             BirthdayRuleConfigRequest r = require(request);
             String projectId = resolveWriteProjectId(r.projectId());
+            String ruleName = requireText(r.ruleName(), "rule_name");
+            if (isCreate(r.id())
+                    && repository.listBirthdayRulesByProject(projectId).stream()
+                            .anyMatch(x -> ruleName.equals(x.ruleName()))) {
+                throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE",
+                        "birthday rule name already exists in this project");
+            }
             Instant now = Instant.now();
             String id = resolveId(r.id(), "birthday_rule_", projectId, this::findBirthdayInProject);
             CustomerBirthdayRuleRecord saved = repository.saveBirthdayRule(new CustomerBirthdayRuleRecord(
                     id,
                     projectId,
-                    requireText(r.ruleName(), "rule_name"),
+                    ruleName,
                     requireEnum(r.windowType(), BIRTHDAY_WINDOWS, "window_type"),
                     (int) requireMin(r.multiplierBasisPoints(), 10001, "multiplier_basis_points"),
                     normalizeStatus(r.status(), BIRTHDAY_STATUSES),
@@ -184,9 +207,14 @@ public class LoyaltyConfigAdminService {
         return scope.orElseGet(() -> requireText(requestedProjectId, "project_id"));
     }
 
+    /** id 空=新增；非空=更新。 */
+    private boolean isCreate(String requestedId) {
+        return requestedId == null || requestedId.isBlank();
+    }
+
     /**
      * 解析写入 id：空=新增（生成）；非空=更新，须目标记录存在且归属同一 project_id（防借 id 篡改他项目）。
-     * ponytail: 复用 status='active' 列表定位，非 active 记录无法定位=视为不存在（v1 已在类注释说明）。
+     * 用状态无关的 list*ByProject 定位，故 inactive/archived 记录仍可被更新（改回 active），停用不再是单向门。
      */
     private String resolveId(String requestedId, String prefix, String projectId,
                              java.util.function.BiPredicate<String, String> existsInProject) {
@@ -201,17 +229,17 @@ public class LoyaltyConfigAdminService {
     }
 
     private boolean findLevelInProject(String id, String projectId) {
-        return repository.listMemberLevels(projectId).stream()
+        return repository.listMemberLevelsByProject(projectId).stream()
                 .anyMatch(x -> id.equals(x.id()) && projectId.equals(x.projectId()));
     }
 
     private boolean findTierInProject(String id, String projectId) {
-        return repository.listCheckInTiers(projectId).stream()
+        return repository.listCheckInTiersByProject(projectId).stream()
                 .anyMatch(x -> id.equals(x.id()) && projectId.equals(x.projectId()));
     }
 
     private boolean findBirthdayInProject(String id, String projectId) {
-        return repository.listActiveBirthdayRules(projectId).stream()
+        return repository.listBirthdayRulesByProject(projectId).stream()
                 .anyMatch(x -> id.equals(x.id()) && projectId.equals(x.projectId()));
     }
 
