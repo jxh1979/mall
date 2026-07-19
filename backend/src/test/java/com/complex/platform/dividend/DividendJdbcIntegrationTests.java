@@ -444,4 +444,135 @@ class DividendJdbcIntegrationTests {
         assertThat(august.lossCarryforwardAfterCent()).isEqualTo(50_000L);
         assertThat(august.distributableCent()).isZero();
     }
+
+    // ── V303 欠款抵扣真实结算端到端（真调 FinanceService.settleArApItem，非 mock）──
+
+    /** 种子售票分量收入（allocated_revenue_cent），落 2026-07 窗；无退款/成本/费用 → 净利=收入。 */
+    private void seedTicketRevenue(String suffix, long allocatedCent, java.time.OffsetDateTime ts) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, status, created_at, updated_at)
+                VALUES (?, '分红欠款抵扣票', 'fixed', 'active', ?, ?)
+                """, "tt_" + suffix, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
+                        default_value_cent, status, created_at, updated_at)
+                VALUES (?, '分红欠款抵扣权益', 'admission', 1, 0, 'active', ?, ?)
+                """, "et_" + suffix, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
+                        pay_status, issue_status, status, created_at, updated_at)
+                VALUES (?, ?, ?, 1, 'web', ?, 'paid', 'issued', 'created', ?, ?)
+                """, "order_" + suffix, "ONO_" + suffix, "tt_" + suffix, allocatedCent, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id,
+                        entitlement_code, entitlement_type, merchant_id, total_times, used_times,
+                        allocated_revenue_cent, status, valid_from, valid_to, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'admission', ?, 1, 0, ?, 'active', ?, ?, ?, ?)
+                """, "ie_" + suffix, "tt_" + suffix, "order_" + suffix, "et_" + suffix, "code_" + suffix,
+                MERCHANT, allocatedCent, ts, ts, ts, ts);
+    }
+
+    /** 种子该商户一笔未清应收（direction=receivable, counterparty=merchant）。 */
+    private void seedReceivable(String id, String itemNo, long unpaidCent, java.time.OffsetDateTime ts) {
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
+                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
+                        status, created_at, updated_at, merchant_id)
+                VALUES (?, ?, 'receivable', ?, 'manual', ?, ?, 0, ?, 'CNY', '2026-07-01', '2026-07',
+                        'pending_collection', ?, ?, ?)
+                """, id, itemNo, MERCHANT, id, unpaidCent, unpaidCent, ts, ts, MERCHANT);
+    }
+
+    private static DividendPlanRecord arrearsPlan(String id) {
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+                8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
+                null, "active", null, "usr_div_jdbc", now, now,
+                false, true, false, 0, 0L);   // arrears_offset_enabled=true
+    }
+
+    /**
+     * 欠款抵扣端到端：种子售票收入 100 万 + 未清应收两笔（6 万+4 万）→ 开欠款抵扣算单（冻结抵扣 10 万、实发 6 万）→
+     * 审批时真调 settleArApItem 逐项 FOR UPDATE 结算两笔应收（dividend_offset 收款留痕）→ 按实发 6 万挂应付。
+     */
+    @Test
+    void arrearsOffsetSettlesReceivablesAndPaysNetAtApprove() {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("arr", 1_000_000L, ts);
+        seedReceivable("arap_r1_arr", "AR-ARR-001", 60_000L, ts);
+        seedReceivable("arap_r2_arr", "AR-ARR-002", 40_000L, ts);
+        repository.insertPlan(arrearsPlan("divp_jdbc_arr"));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("arr-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.principalNetCent()).isEqualTo(160_000L);
+        assertThat(s.arrearsOffsetCent()).isEqualTo(100_000L);
+        assertThat(s.payoutCent()).isEqualTo(60_000L);
+        // 逐项留痕：两笔应收各一行。
+        assertThat(repository.listLines(s.id(), null))
+                .filteredOn(l -> l.lineType().equals("arrears_offset")).hasSize(2);
+
+        service.submit(s.id(), new DividendActionRequest("arr-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        DividendStatementRecord approved = approver.approve(s.id(), new DividendActionRequest("arr-jdbc-a1", null));
+        assertThat(approved.status()).isEqualTo("approved");
+
+        // 两笔应收被真实结算（unpaid=0, settled），各有一笔 dividend_offset 收款留痕（bank_flow_ref=计算单号）。
+        for (String rid : List.of("arap_r1_arr", "arap_r2_arr")) {
+            Map<String, Object> item = jdbcTemplate.queryForMap(
+                    "SELECT unpaid_amount_cent, status FROM ar_ap_items WHERE id = ?", rid);
+            assertThat(((Number) item.get("unpaid_amount_cent")).longValue()).isZero();
+            assertThat(item.get("status")).isEqualTo("settled");
+        }
+        Long offsetPayments = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM ar_ap_payments p JOIN ar_ap_items i ON i.id = p.ar_ap_item_id
+                 WHERE i.merchant_id = ? AND p.payment_method = 'dividend_offset' AND p.bank_flow_ref = ?
+                """, Long.class, MERCHANT, s.id());
+        assertThat(offsetPayments).isEqualTo(2L);
+        // 抵扣后余额 6 万挂应付（payout=principal_net−arrears）。
+        Map<String, Object> payable = jdbcTemplate.queryForMap(
+                "SELECT amount_cent FROM ar_ap_items WHERE source_type = 'dividend_payout' AND source_id = ?", s.id());
+        assertThat(((Number) payable.get("amount_cent")).longValue()).isEqualTo(60_000L);
+    }
+
+    /**
+     * 欠款抵扣并发部分清偿：冻结抵扣 10 万后应收被并发清偿至仅剩 3 万 < 冻结额 → applyDividendOffset 预检不足一分不结算 →
+     * 抛 DIVIDEND_ARREARS_CHANGED；应收不半结（仍 3 万未清）、不挂应付、单不进 approved（整体回退）。
+     */
+    @Test
+    void arrearsOffsetConflictAtApproveRollsBackNoHalfSettle() {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("arr2", 1_000_000L, ts);
+        seedReceivable("arap_r_arr2", "AR-ARR2-001", 100_000L, ts);
+        repository.insertPlan(arrearsPlan("divp_jdbc_arr2"));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("arr2-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.arrearsOffsetCent()).isEqualTo(100_000L);
+
+        // 抵扣期间应收被并发部分清偿：未清 10 万 → 3 万。
+        jdbcTemplate.update("""
+                UPDATE ar_ap_items SET paid_amount_cent = 70000, unpaid_amount_cent = 30000, status = 'partial_paid'
+                 WHERE id = 'arap_r_arr2'
+                """);
+
+        service.submit(s.id(), new DividendActionRequest("arr2-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        assertThatThrownBy(() -> approver.approve(s.id(), new DividendActionRequest("arr2-jdbc-a1", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
+                        .isEqualTo("DIVIDEND_ARREARS_CHANGED"));
+        // 应收不半结（预检不足一分不结算，仍 3 万未清）。
+        Long unpaid = jdbcTemplate.queryForObject(
+                "SELECT unpaid_amount_cent FROM ar_ap_items WHERE id = 'arap_r_arr2'", Long.class);
+        assertThat(unpaid).isEqualTo(30_000L);
+        // 未挂应付、单未进 approved（整体回退，不半发放）。
+        Long payables = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ar_ap_items WHERE source_type = 'dividend_payout' AND source_id = ?",
+                Long.class, s.id());
+        assertThat(payables).isZero();
+        assertThat(repository.findStatementById(s.id()).orElseThrow().status()).isEqualTo("pending_review");
+    }
 }

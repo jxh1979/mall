@@ -113,9 +113,10 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
     本期 in/applied/after 三值冻结在单上，结转链恒等由 `chk_ds_lcf_applied` / `chk_ds_lcf_after` DB CHECK 硬保证。
     **累计更新时点**=审批通过（approve）——同 compute 幂等（draft 重算读的是上一张已结单，不受本期 draft 影响）。
   - **欠款抵扣 `arrears_offset_enabled`**：税后应得先抵扣该商户对平台未清应收（ar_ap direction=receivable, unpaid>0），
-    计算时快照抵扣额 `arrears_offset_cent`=min(税后应得, 未清应收合计) 并逐项留痕；**审批通过时**按冻结额对应收先欠先抵
-    逐项结算（`applyDividendOffsetToReceivables`，dividend_offset 收款，复用 `settleArApItem` 行锁），抵扣后余额（`payout_cent`）才挂应付。
-    实结 ≠ 冻结额（抵扣期间应收被并发清偿）抛 `DIVIDEND_ARREARS_CHANGED` 409、事务回滚，要求作废重算（快照冻结口径）。
+    计算时快照抵扣额 `arrears_offset_cent`=min(税后应得, 未清应收合计) 并逐项留痕；**审批通过时** `applyDividendOffsetToReceivables`
+    先预检该商户当前未清应收总额——不足冻结抵扣额（抵扣期间被并发清偿）则**一分不结算**直接返回实况、由服务层抛 `DIVIDEND_ARREARS_CHANGED`
+    409（**原子 by construction**：不留半结、不依赖事务回滚，因 `executeWrite` 非独立事务），要求作废重算（快照冻结口径）；
+    足额则按冻结额对应收先欠先抵逐项结算（dividend_offset 收款，复用 `settleArApItem` 行锁），抵扣后余额（`payout_cent`）才挂应付。
   - **发放保护线 `payout_floor_enabled`**：留存 `reserve_withheld_cent` = min(抵扣后余额, max(余额×`payout_floor_bps`/10000, `payout_floor_fixed_cent`))
     作为风险准备金不发放；留存的释放机制（下期返还等）留待后续迭代。
   - 发放额恒等 `payout_cent = principal_net_cent − arrears_offset_cent − reserve_withheld_cent`（均非负、抵扣不超税后应得）由

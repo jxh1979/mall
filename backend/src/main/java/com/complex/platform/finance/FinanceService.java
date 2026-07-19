@@ -1535,15 +1535,23 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         if (offsetCent <= 0) {
             return 0L;
         }
+        List<DividendPayoutPort.DividendArrearsItem> items = listOutstandingReceivables(merchantId);
+        long available = items.stream().mapToLong(DividendPayoutPort.DividendArrearsItem::unpaidCent).sum();
+        // 原子性 by construction：当前未清应收不足冻结抵扣额（抵扣期间被并发清偿）时一分不结算，直接返回实况，
+        // 由调用方抛 DIVIDEND_ARREARS_CHANGED 干净回退——不依赖事务回滚就不会留半结（executeWrite 非独立事务）。
+        if (available < offsetCent) {
+            return available;
+        }
         Instant now = Instant.now();
         long remaining = offsetCent;
         long settled = 0L;
-        for (DividendPayoutPort.DividendArrearsItem item : listOutstandingReceivables(merchantId)) {
+        for (DividendPayoutPort.DividendArrearsItem item : items) {
             if (remaining <= 0) {
                 break;
             }
             long apply = Math.min(remaining, item.unpaidCent());
             // idempotencyKey 纳入 statementId + 台账项 id：审批一次一结算，重放不重扣（settleArApItem 主键含两者）。
+            // ponytail: 先欠先抵到 offsetCent 封顶；预检已确保总额充足，逐笔 FOR UPDATE 仍防单笔并发（罕见单笔被清则抛超额、随本单事务回滚）。
             settleArApItem(item.arApItemId(), apply, "dividend_offset", now, statementId, statementId);
             remaining -= apply;
             settled += apply;
