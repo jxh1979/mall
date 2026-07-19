@@ -125,6 +125,35 @@ class ContractJdbcIntegrationTests {
                 .containsExactly("pending_settlement", 1);
     }
 
+    @Test
+    void terminationSettlementSnapshotRoundTripsRichItemsAndUnpaidSum() {
+        // 退租结算落台账写路径 DB 往返：富快照(未清汇总/押金处置净额/违约金,逐项 arApItemId) + 未清应收合计。
+        Instant now = Instant.parse("2026-07-05T00:00:00Z");
+        String cid = "ctr_term_jdbc";
+        repository.saveContract(new ContractRecord(cid, "mch_term", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
+                "fixed_ratio", "by_area", 500000L, Map.of("amountCent", 200000), List.of(), null, null, List.of(),
+                "effective", "proj_1", null, null, null, now, now));
+        repository.insertRentBill(new ContractRentBillRecord(
+                "crb_term_jdbc", cid, "mch_term", "proj_1", "2026-07", "rent", 300000L,
+                "arap_rent_term_jdbc", now), LocalDate.parse("2026-07-01"));
+        assertThat(repository.sumUnpaidArForContract(cid)).isEqualTo(300000L);
+        repository.saveSettlement(new ContractSettlementRecord("cst_term_jdbc", cid, "early_termination", "settled",
+                List.of(
+                        Map.of("item", "unpaid_receivable_summary", "amountCent", 300000L, "status", "listed"),
+                        Map.of("item", "deposit_disposal", "depositCent", 500000L, "offsetCent", 300000L,
+                                "netRefundCent", 200000L, "amountCent", 200000L, "status", "payable_posted",
+                                "arApItemId", "arap_deposit_refund_x"),
+                        Map.of("item", "termination_penalty", "amountCent", 200000L, "status", "receivable_posted",
+                                "arApItemId", "arap_termination_penalty_x")),
+                null, null, null, "proj_1", now, now));
+        ContractSettlementRecord back = repository.findSettlementById("cst_term_jdbc").orElseThrow();
+        assertThat(back.status()).isEqualTo("settled");
+        assertThat(back.settlementItems()).hasSize(3);
+        assertThat(back.settlementItems().get(1))
+                .containsEntry("netRefundCent", 200000).containsEntry("arApItemId", "arap_deposit_refund_x");
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass(?)::text", String.class, tableName);
     }

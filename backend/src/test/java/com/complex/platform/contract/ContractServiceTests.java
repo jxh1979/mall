@@ -392,10 +392,166 @@ class ContractServiceTests {
                         e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
     }
 
+    // ============ 退租结算落财务台账（move_out/early_termination 终审通过自动结算） ============
+    private static final class RecordingTerminationPort
+            implements com.complex.platform.finance.TerminationSettlementPort {
+        Long depositRefundCent;
+        Long penaltyCent;
+        int depositCalls;
+        int penaltyCalls;
+
+        @Override
+        public String createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
+            depositRefundCent = netRefundCent;
+            depositCalls++;
+            return "arap_dep_" + settlementId;
+        }
+
+        @Override
+        public String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId) {
+            this.penaltyCent = penaltyCent;
+            penaltyCalls++;
+            return "arap_pen_" + settlementId;
+        }
+    }
+
+    private ContractRecord effectiveContractRecord(String id, long depositCent, Map<String, Object> penaltyTerms) {
+        Instant now = Instant.now();
+        return repo.saveContract(new ContractRecord(id, "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
+                "fixed_ratio", "by_area", depositCent, penaltyTerms, List.of(), Map.of(), null, List.of(),
+                "effective", "proj_1", null, null, null, now, now));
+    }
+
+    private void approveTerminationChain(String changeId) {
+        approveChange(changeId, "contract.approve.business");
+        approveChange(changeId, "contract.approve.finance");
+        approveChange(changeId, "contract.approve.legal");
+        approveChange(changeId, "contract.approve.gm");
+    }
+
+    /** 镜像 ContractService.deterministicSuffix：SHA-256 前 48 hex。 */
+    private static String sha48(String key) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(key.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(d).substring(0, 48);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Test
+    void moveOutTerminationAutoSettlesPostsDepositRefundAndTerminates() {
+        RecordingTerminationPort port = new RecordingTerminationPort();
+        service.terminationSettlementPort = port;
+        ContractRecord c = effectiveContractRecord("ctr_t1", 500000L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t1", "move_out", Map.of()));
+        approveTerminationChain(ch.id());
+        assertThat(port.depositCalls).isEqualTo(1);
+        assertThat(port.depositRefundCent).isEqualTo(500000L);
+        assertThat(port.penaltyCalls).isZero();
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("terminated");
+        List<ContractSettlementRecord> sts = repo.listSettlementsByContract(c.id());
+        assertThat(sts).hasSize(1);
+        assertThat(sts.get(0).status()).isEqualTo("settled");
+        assertThat(sts.get(0).triggerType()).isEqualTo("move_out");
+    }
+
+    @Test
+    void earlyTerminationUsesContractPenaltyTermsWhenPresent() {
+        RecordingTerminationPort port = new RecordingTerminationPort();
+        service.terminationSettlementPort = port;
+        ContractRecord c = effectiveContractRecord("ctr_t2", 0L, Map.of("amountCent", 200000));
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t2", "early_termination", Map.of("penaltyAmountCent", 999999)));
+        approveTerminationChain(ch.id());
+        assertThat(port.penaltyCalls).isEqualTo(1);
+        assertThat(port.penaltyCent).isEqualTo(200000L);
+    }
+
+    @Test
+    void earlyTerminationFallsBackToManualPenaltyFromPayload() {
+        RecordingTerminationPort port = new RecordingTerminationPort();
+        service.terminationSettlementPort = port;
+        ContractRecord c = effectiveContractRecord("ctr_t3", 0L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t3", "early_termination",
+                        Map.of("penaltyAmountCent", 150000, "penaltyReason", "提前退租违约")));
+        approveTerminationChain(ch.id());
+        assertThat(port.penaltyCalls).isEqualTo(1);
+        assertThat(port.penaltyCent).isEqualTo(150000L);
+        ContractSettlementRecord st = repo.listSettlementsByContract(c.id()).get(0);
+        Map<String, Object> pen = st.settlementItems().stream()
+                .filter(i -> "termination_penalty".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(pen).containsEntry("reason", "提前退租违约").containsEntry("arApItemId", "arap_pen_" + st.id());
+    }
+
+    @Test
+    void unpaidReceivableOffsetsDepositNetPositivePayable() {
+        RecordingTerminationPort port = new RecordingTerminationPort();
+        service.terminationSettlementPort = port;
+        repo.unpaidAr = 300000L;
+        ContractRecord c = effectiveContractRecord("ctr_t4", 500000L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t4", "move_out", Map.of()));
+        approveTerminationChain(ch.id());
+        assertThat(port.depositRefundCent).isEqualTo(200000L);
+    }
+
+    @Test
+    void unpaidExceedsDepositPostsNoPayableMerchantStillOwes() {
+        RecordingTerminationPort port = new RecordingTerminationPort();
+        service.terminationSettlementPort = port;
+        repo.unpaidAr = 800000L;
+        ContractRecord c = effectiveContractRecord("ctr_t5", 500000L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t5", "move_out", Map.of()));
+        approveTerminationChain(ch.id());
+        assertThat(port.depositCalls).isZero();
+        ContractSettlementRecord st = repo.listSettlementsByContract(c.id()).get(0);
+        Map<String, Object> dep = st.settlementItems().stream()
+                .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(dep).containsEntry("merchantStillOwesCent", 300000L).containsEntry("status", "listed_only");
+    }
+
+    @Test
+    void terminationSettlementIsIdempotentAgainstReplay() {
+        RecordingTerminationPort port = new RecordingTerminationPort();
+        service.terminationSettlementPort = port;
+        ContractRecord c = effectiveContractRecord("ctr_t6", 500000L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t6", "move_out", Map.of()));
+        String settlementId = "cst_" + sha48(ch.id());
+        repo.saveSettlement(new ContractSettlementRecord(settlementId, c.id(), "move_out", "settled",
+                List.of(), null, null, null, "proj_1", Instant.now(), Instant.now()));
+        approveTerminationChain(ch.id());
+        assertThat(port.depositCalls).isZero();
+        assertThat(port.penaltyCalls).isZero();
+    }
+
+    @Test
+    void rejectedTerminationChangeDoesNotSettle() {
+        RecordingTerminationPort port = new RecordingTerminationPort();
+        service.terminationSettlementPort = port;
+        ContractRecord c = effectiveContractRecord("ctr_t7", 500000L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t7", "early_termination", Map.of("penaltyAmountCent", 100000)));
+        service.approveChange(ch.id(),
+                new ContractChangeApproveRequest("k_t7_r", "contract.approve.business", "reject", "no"));
+        assertThat(port.depositCalls).isZero();
+        assertThat(port.penaltyCalls).isZero();
+        assertThat(repo.listSettlementsByContract(c.id())).isEmpty();
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("effective");
+    }
+
     private static final class InMemoryContractRepository implements ContractRepository {
         // 3.13 测试基建：草稿预绑定存储 + 可控"空间已被生效合同占用"集合。
         final java.util.Map<String, java.util.Set<String>> boundSpaces = new java.util.HashMap<>();
         final java.util.Set<String> occupiedSpaces = new java.util.HashSet<>();
+        // 退租结算测试：可控未清应收合计。
+        long unpaidAr = 0L;
 
         private final Map<String, ContractRecord> contracts = new LinkedHashMap<>();
         private final Map<String, ContractApprovalRecord> approvals = new LinkedHashMap<>();
@@ -563,7 +719,7 @@ class ContractServiceTests {
 
         @Override
         public long sumUnpaidArForContract(String contractId) {
-            return 0L;
+            return unpaidAr;
         }
     }
 }

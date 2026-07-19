@@ -35,7 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort, DividendPayoutPort {
+public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort, DividendPayoutPort, TerminationSettlementPort {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -45,7 +45,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     private static final Set<String> SOURCE_TYPES = Set.of(
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
             "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
-            "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout");
+            "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout",
+            "termination_penalty", "deposit_refund");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -77,7 +78,9 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             Map.entry("employee_commission", "员工提成"), Map.entry("inventory_difference", "库存差异"),
             Map.entry("turnover_rent", "营业额抽成租金"), Map.entry("cam", "公共区域维护费"),
             Map.entry("deposit", "保证金"), Map.entry("property_fee", "物业费"),
-            Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"));
+            Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"),
+            Map.entry("dividend_payout", "持股分红发放"), Map.entry("termination_penalty", "退租违约金"),
+            Map.entry("deposit_refund", "退租押金退还"));
 
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
@@ -1513,6 +1516,22 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     public String createPartnerVoucherPayable(String partnerId, long internalPriceCent, String idempotencyKey) {
         ArApItemRecord item = persistDerivedArApItem(
                 "payable", partnerId, "partner_voucher", idempotencyKey, internalPriceCent, idempotencyKey, null);
+        return item.id();
+    }
+
+    /** 退租应退押金净额挂应付给商户（source_type='deposit_refund'）。幂等键=结算单 id。 */
+    @Override
+    public String createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
+        ArApItemRecord item = persistDerivedArApItem(
+                "payable", merchantId, "deposit_refund", settlementId, netRefundCent, settlementId, merchantId);
+        return item.id();
+    }
+
+    /** 提前退租违约金挂应收（source_type='termination_penalty'）。幂等键=结算单 id。 */
+    @Override
+    public String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId) {
+        ArApItemRecord item = persistDerivedArApItem(
+                "receivable", merchantId, "termination_penalty", settlementId, penaltyCent, settlementId, merchantId);
         return item.id();
     }
 
