@@ -222,8 +222,9 @@ public class MerchantExpenseService {
                     String period = requirePeriod(request.period());
                     Instant now = Instant.now();
                     String operator = currentOperator();
-                    // 关账锁：attach* 的 SQL 已对 approved/paid 正式分红单覆盖的 (商户,月份) NOT EXISTS 跳过；
-                    // 这里另列出被跳过的商户清单，让操作员知道哪些商户该期已关账未挂接。
+                    // 费用侧冻结锁：attach* 的 SQL 已对 approved/paid 正式分红单覆盖的 (商户,月份) NOT EXISTS 跳过；
+                    // lockedMerchants 回该期<b>全部关账商户</b>（非仅本次跳过的——见 MerchantExpenseSyncResultRecord），
+                    // 让操作员一眼知道哪些商户该期已关账、费用台账被冻结。
                     int energyInserted = repository.attachEnergyFees(period, operator, now);
                     int propertyInserted = repository.attachPropertyFees(period, operator, now);
                     int contractPropertyInserted = repository.attachContractPropertyFees(period, operator, now);
@@ -252,14 +253,20 @@ public class MerchantExpenseService {
     }
 
     /**
-     * 分红期间关账锁：该商户该月被 approved/paid 正式分红单覆盖时，拒绝录入/冲销费用（响亮 409
-     * DIVIDEND_PERIOD_LOCKED，进 x-failure-codes）；否则已发放分红的基数被追改而静默漂移。
+     * 分红期间「费用侧冻结」锁：该商户该月被 approved/paid 正式分红单覆盖时，拒绝录入/冲销费用（响亮 409
+     * DIVIDEND_PERIOD_LOCKED，进 x-failure-codes）；否则已发放分红的费用基数被追改而静默漂移。
+     * 锁的是费用台账 merchant_expense_entries——营收/成本源头按设计不锁；已发单金额靠 V299 计算单快照冻结兜底。
      * 解锁=作废该分红单（判定式不含 voided，天然解锁）。
+     *
+     * <p>ponytail: 读判定 → 插入之间有一个有界 TOCTOU 窗口（窗口内某分红单恰好被审批通过）；此处不加
+     * FOR SHARE 跨表行锁（费用写是热路径，跨 dividend_statements 加锁引入锁竞争得不偿失）。该窗口已被 V299
+     * 计算单快照冻结兜底自愈：已 approved 单的金额是 compute 时的快照，窗口内漏进的这行费用不会回改它；下次
+     * compute 会纳入并重出新单（重新审批）。要更强一致再上 FOR SHARE / 应用级期间锁。
      */
     private void requirePeriodOpen(String merchantId, String period) {
         if (repository.isPeriodLocked(merchantId, period)) {
             throw ApiException.conflict("DIVIDEND_PERIOD_LOCKED",
-                    "该商户 " + period + " 月已完成分红核算（关账），费用台账不可再录入/冲销；如需更正请先作废对应分红计算单解锁");
+                    "该商户 " + period + " 月已完成分红核算（关账），费用台账已冻结、不可再录入/冲销；如需更正请先作废对应分红计算单解锁");
         }
     }
 

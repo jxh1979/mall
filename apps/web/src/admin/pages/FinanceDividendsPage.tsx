@@ -470,8 +470,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                     {DIVIDEND_STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}
                     {row.kind !== "preview" && (row.status === "approved" || row.status === "paid") ? (
                       <span className="admin-muted-action" data-testid={`dividend-period-locked-${row.id}`}
-                        title="该期间已完成分红核算，费用台账（含自动挂接）已冻结，不能再录入/冲销">
-                        {" "}· 期间已关账
+                        title="该期间已完成分红核算：费用台账（含自动挂接）已冻结、不能再录入/冲销（费用侧冻结；营收/成本源头不锁，本单金额已快照冻结）">
+                        {" "}· 费用侧已关账
                       </span>
                     ) : null}
                   </td>

@@ -111,8 +111,10 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
   **月度预览定时作业已上**（V302，`DividendMonthlyPreviewJob`）：默认关闭（`dividend.preview.scheduled.enabled=true`
   才注册，cron 可配，默认每月 1 日 02:00 跑上月），对每个生效中季度方案自动出上月 preview 单（只读不可审批），
   刷新式幂等（同期未作废 preview 先作废再重出）；业务逻辑在可直调的 `DividendService.runScheduledMonthlyPreview`。
-- **分红期间关账锁已上**（V302）：某商户某月被非 preview 且 status∈(approved,paid) 的计算单按 [period_start,
-  period_end] 覆盖即「关账」（季度单覆盖 3 个月）。费用台账三写路径挂 app 层硬闸——手工录入/红字冲销对已关账
+- **分红期间关账锁已上**（V302，口径=「费用侧冻结」非全基数冻结）：某商户某月被非 preview 且
+  status∈(approved,paid) 的计算单按 [period_start, period_end] 覆盖即「关账」（季度单覆盖 3 个月）——
+  <b>锁的只是费用台账 merchant_expense_entries</b>（营收/成本源头按设计不锁）；已发放单的金额靠 V299 计算单快照
+  冻结另行兜底。费用台账三写路径挂 app 层硬闸——手工录入/红字冲销对已关账
   (商户,月份) 拒（响亮 409 `DIVIDEND_PERIOD_LOCKED`，进 x-failure-codes），自动挂接（能耗/物业/合同物业/租金四路）
   对已关账 (商户,月份) NOT EXISTS 跳过并在响应列出跳过清单；判定纯函数见 `DividendPeriodLock`，SQL 索引 V302
   `ix_dividend_statements_lock`。解锁=该单作废（判定式不含 voided，天然解锁）。营收/成本源头不锁（经营流水不因分红

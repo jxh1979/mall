@@ -15429,7 +15429,7 @@ paths:
     get:
       tags: *mexp_tags
       operationId: listMerchantExpensePeriodLocks
-      summary: 查询某月已关账（分红核算完成）的商户清单（前端据此禁用录入/冲销）
+      summary: 查询某月已关账（分红核算完成、费用台账冻结）的商户清单（前端据此禁用费用录入/冲销）
       x-auth-context: staff-token
       x-permission: finance.merchant_expense.view
       x-data-scope: merchant
@@ -15445,7 +15445,7 @@ paths:
           schema:
             type: string
             maxLength: 16
-          description: 月份（如 2026-07），必填；返回该月已关账（approved/paid 正式分红单覆盖）的商户 id 列表。
+          description: 月份（如 2026-07），必填；返回该月「费用侧冻结」（被 approved/paid 正式分红单覆盖）的商户 id 列表。只锁费用台账，营收/成本源头不锁。
       responses: *mexp_resp_read
   /api/v1/finance/merchant-expenses/{id}/reverse:
     post:

@@ -363,8 +363,8 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
       {/* ── 分红期间关账锁提示（已完成分红核算的月份，费用台账冻结）──────── */}
       {lockedMerchants.length > 0 ? (
         <div className="admin-form-error" data-testid="merchant-expense-lock-panel">
-          <strong>{periodFilter} 有 {lockedMerchants.length} 家商户已完成分红核算（关账）：</strong>
-          这些商户本月费用台账已冻结，不能再录入/冲销（避免已发放分红的基数被追改）。如确需更正，请先作废对应分红计算单解锁。
+          <strong>{periodFilter} 有 {lockedMerchants.length} 家商户已完成分红核算（费用侧冻结）：</strong>
+          这些商户本月费用台账已冻结，不能再录入/冲销（避免已发放分红的费用基数被追改；营收/成本源头不锁）。如确需更正，请先作废对应分红计算单解锁。
           <ul>
             {lockedMerchants.map((mid) => (
               <li key={mid} data-testid={`merchant-expense-lock-${mid}`}>
