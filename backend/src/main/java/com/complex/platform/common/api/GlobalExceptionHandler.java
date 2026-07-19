@@ -48,12 +48,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiResponse<Void>> handleApiException(ApiException exception) {
         // 顶层 code = 归一枚举；detail_code = 原细码（业务码），保留细粒度供前端下钻/排查。
-        return ResponseEntity
-                .status(exception.status())
-                .body(ApiResponse.error(
-                        topLevelCode(exception.status(), exception.code()),
-                        exception.code(),
-                        exception.getMessage()));
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(exception.status());
+        // 限速（429）带 Retry-After 头：无论来自拦截器（IP 维度）还是服务层（账号/手机号维度），统一在此写头。
+        if (exception.retryAfterSeconds() != null) {
+            builder.header("Retry-After", String.valueOf(exception.retryAfterSeconds()));
+        }
+        return builder.body(ApiResponse.error(
+                topLevelCode(exception.status(), exception.code()),
+                exception.code(),
+                exception.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

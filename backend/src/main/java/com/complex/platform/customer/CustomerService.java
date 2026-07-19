@@ -66,6 +66,10 @@ public class CustomerService {
 
     private final java.time.Clock clock;
 
+    // 手机验证码登录限速（按手机号）：OTP 无账号锁定，此维度防单号撞码；与 IP 维度（RateLimitInterceptor）互补。
+    private final com.complex.platform.common.ratelimit.RateLimiter rateLimiter;
+    private final com.complex.platform.common.ratelimit.RateLimitProperties rateLimitProperties;
+
     @org.springframework.beans.factory.annotation.Autowired
     public CustomerService(
             CustomerRepository repository,
@@ -77,11 +81,13 @@ public class CustomerService {
             LoyaltyService loyaltyService,
             BarRepository barRepository,
             BarOrderService barOrderService,
-            @org.springframework.context.annotation.Lazy com.complex.platform.voucher.VoucherIssuePort voucherIssuePort
+            @org.springframework.context.annotation.Lazy com.complex.platform.voucher.VoucherIssuePort voucherIssuePort,
+            com.complex.platform.common.ratelimit.RateLimiter rateLimiter,
+            com.complex.platform.common.ratelimit.RateLimitProperties rateLimitProperties
     ) {
         this(repository, otpVerifier, ticketingService, operations, auditEventService,
                 inventoryService, loyaltyService, barRepository, barOrderService, voucherIssuePort,
-                java.time.Clock.systemUTC());
+                java.time.Clock.systemUTC(), rateLimiter, rateLimitProperties);
     }
 
     /** 4.3 clock 化：注入 Clock 使可用期等时间比较可测（供单测传 fixed clock）。 */
@@ -96,9 +102,13 @@ public class CustomerService {
             BarRepository barRepository,
             BarOrderService barOrderService,
             com.complex.platform.voucher.VoucherIssuePort voucherIssuePort,
-            java.time.Clock clock
+            java.time.Clock clock,
+            com.complex.platform.common.ratelimit.RateLimiter rateLimiter,
+            com.complex.platform.common.ratelimit.RateLimitProperties rateLimitProperties
     ) {
         this.clock = clock;
+        this.rateLimiter = rateLimiter;
+        this.rateLimitProperties = rateLimitProperties;
         this.repository = repository;
         this.otpVerifier = otpVerifier;
         this.ticketingService = ticketingService;
@@ -111,12 +121,29 @@ public class CustomerService {
         this.voucherIssuePort = voucherIssuePort;
     }
 
+    /** 手机验证码登录限速（按手机号）：超阈值抛 429 RATE_LIMITED + Retry-After，防单号撞码。可配为关闭。 */
+    private void enforceOtpRateLimit(String phone) {
+        if (rateLimiter == null || rateLimitProperties == null || !rateLimitProperties.isEnabled()) {
+            return;
+        }
+        com.complex.platform.common.ratelimit.RateLimitProperties.Rule rule = rateLimitProperties.getOtpPhone();
+        com.complex.platform.common.ratelimit.RateLimiter.Decision decision =
+                rateLimiter.tryAcquire("otp:phone:" + phone, rule.getLimit(), rule.getWindow());
+        if (!decision.allowed()) {
+            throw com.complex.platform.common.api.ApiException.tooManyRequests(
+                    "CUSTOMER_OTP_RATE_LIMITED",
+                    "too many verification attempts, please retry later",
+                    decision.retryAfterSeconds());
+        }
+    }
+
     @Transactional
     public CustomerLoginResponse phoneLogin(CustomerPhoneLoginRequest request) {
         try {
             CustomerPhoneLoginRequest actual = requireRequest(request);
             String phone = requireText(actual.phone(), "phone");
             String smsCode = requireText(actual.smsCode(), "sms_code");
+            enforceOtpRateLimit(phone);
             otpVerifier.verify(phone, smsCode, actual.scene());
             Instant now = Instant.now();
             CustomerRecord customer = repository.findCustomerByPhone(phone)
