@@ -3,7 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint, auditTraceField } from "../components/AuditTrailHint";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
@@ -52,6 +52,7 @@ function today() {
 export function ServiceOrdersPage({ api, setGlobalError, setActionResult, navigateTo, effectivePermissions }: AdminPageProps) {
   const [date, setDate] = React.useState(today);
   const [catalog, setCatalog] = React.useState<CatalogRow[]>([]);
+  const [catalogNotice, setCatalogNotice] = React.useState<string | null>(null);
   const [orders, setOrders] = React.useState<OrderRow[]>([]);
   const [itemName, setItemName] = React.useState("");
   const [itemPrice, setItemPrice] = React.useState("");
@@ -123,11 +124,14 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [catalogRows, orderRows] = await Promise.all([
-        api.get<CatalogRow[]>("/api/v1/services/catalog/all"),
+      // 副资源容错（外包页范式）：服务目录另有 service.catalog 权限，仅可看服务单的账号可能无权（403）——
+      // 目录降级为区块提示，不拖垮当日服务单主内容。
+      const [catalogRes, orderRows] = await Promise.all([
+        loadSecondary(() => api.get<CatalogRow[]>("/api/v1/services/catalog/all"), [] as CatalogRow[]),
         api.get<OrderRow[]>(`/api/v1/services/orders?date=${date}`),
       ]);
-      setCatalog(catalogRows ?? []);
+      setCatalog(catalogRes.data);
+      setCatalogNotice(catalogRes.notice);
       setOrders(orderRows ?? []);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
@@ -290,6 +294,9 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
         })()}>保存公司收款码</button>
       </div>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        {catalogNotice ? (
+          <div className="admin-state" data-testid="service-catalog-degraded">{catalogNotice}</div>
+        ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="service-catalog-table">
             <thead><tr><th>服务</th><th>参考价</th><th>时长</th><th>状态</th><th>存档</th><th>操作</th><th>详情</th></tr></thead>
@@ -321,6 +328,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
             </tbody>
           </table>
         </div>
+        )}
         <div className="admin-toolbar">
           <label>服务单日期:<CnDatePicker data-testid="svc-date" value={date} onChange={(v) => setDate(v || today())} /></label>
         </div>

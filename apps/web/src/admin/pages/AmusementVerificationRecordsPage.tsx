@@ -4,7 +4,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { AuditTrailHint } from "../components/AuditTrailHint";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -66,6 +66,8 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
   const [snapshots, setSnapshots] = React.useState<AmusementCapacitySnapshotRow[]>([]);
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   const [sessions, setSessions] = React.useState<AmusementSessionRow[]>([]);
+  // 容量快照/项目/场次仅供筛选下拉、显名与超容小卡，属副资源，任一失败不拖垮核销记录主表。
+  const [auxNotice, setAuxNotice] = React.useState<string | null>(null);
 
   const [tab, setTab] = React.useState<TabKey>("records");
   // 筛选：项目/场次/方向/日期起止。空=不加谓词（后端同款语义）。
@@ -92,16 +94,19 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [nextRecords, nextSnapshots, nextProjects, nextSessions] = await Promise.all([
+      // 副资源容错（外包页范式）：容量快照/项目/场次为筛选与显名辅助数据，可能因权限/500 单独失败——
+      // 各自降级为空并合并一条区块提示，不拖垮核销记录主表。
+      const [nextRecords, snapRes, projRes, sessRes] = await Promise.all([
         api.get<AmusementVerificationRow[]>(`/api/v1/amusement/verifications${query}`),
-        api.get<AmusementCapacitySnapshotRow[]>("/api/v1/amusement/capacity-snapshots"),
-        api.get<AmusementProjectRow[]>("/api/v1/amusement/projects"),
-        api.get<AmusementSessionRow[]>("/api/v1/amusement/sessions"),
+        loadSecondary(() => api.get<AmusementCapacitySnapshotRow[]>("/api/v1/amusement/capacity-snapshots"), [] as AmusementCapacitySnapshotRow[]),
+        loadSecondary(() => api.get<AmusementProjectRow[]>("/api/v1/amusement/projects"), [] as AmusementProjectRow[]),
+        loadSecondary(() => api.get<AmusementSessionRow[]>("/api/v1/amusement/sessions"), [] as AmusementSessionRow[]),
       ]);
       setRecords(nextRecords);
-      setSnapshots(nextSnapshots);
-      setProjects(nextProjects);
-      setSessions(nextSessions);
+      setSnapshots(snapRes.data);
+      setProjects(projRes.data);
+      setSessions(sessRes.data);
+      setAuxNotice(snapRes.notice ?? projRes.notice ?? sessRes.notice);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -331,6 +336,9 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
       </div>
 
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        {auxNotice ? (
+          <div className="admin-state" data-testid="amu-verif-aux-degraded">辅助数据（筛选项/容量快照）{auxNotice}</div>
+        ) : null}
         <div className="admin-kpi-grid" data-testid="amu-verif-summary">
           <div className="admin-kpi-card"><span>入场</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-entry">{entryDisplay}</strong><small>入场核销数{entryKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.entry_count" testid="amu-verif-metric-detail-entry" /></> : null}</small></div>
           <div className="admin-kpi-card"><span>出场</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-exit">{exitDisplay}</strong><small>出场核销数{exitKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.exit_count" testid="amu-verif-metric-detail-exit" /></> : null}</small></div>

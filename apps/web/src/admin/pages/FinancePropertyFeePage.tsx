@@ -2,7 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -58,6 +58,7 @@ function merchantLabel(merchant: MerchantAdmissionRow): string {
 export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
+  const [merchantNotice, setMerchantNotice] = React.useState<string | null>(null);
   const [rates, setRates] = React.useState<PropertyFeeRateRow[]>([]);
   // 本次会话生成的账单（后端无账单列表端点；历史账单在「应收应付台账」按来源=物业费查看）。
   const [bills, setBills] = React.useState<PropertyFeeBillRow[]>([]);
@@ -75,12 +76,15 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
   // 项目 + 商户名单（下拉/勾选用）——一次拉齐；费率随所选项目按需刷新。
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [projectRows, merchantRows] = await Promise.all([
+      // 副资源容错（外包页范式）：商户名单仅供出账勾选，可能因权限/500 单独失败——降级为区块提示，
+      // 不拖垮费率维护主内容（项目为主资源，读失败才整页报错）。
+      const [projectRows, merchantRes] = await Promise.all([
         api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
-        api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"),
+        loadSecondary(() => api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"), [] as MerchantAdmissionRow[]),
       ]);
       setProjects(projectRows);
-      setMerchants(merchantRows);
+      setMerchants(merchantRes.data);
+      setMerchantNotice(merchantRes.notice);
       if (!projectId && projectRows[0]) setProjectId(projectRows[0].id);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
@@ -261,6 +265,9 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
         >{TEXT.runBill}</PermissionButton>
         <span className="admin-muted-action">按「所选项目当期费率 × 商户面积」逐户挂应收；不退不补、同一(项目·期·商户)重复出账自动跳过。</span>
       </div>
+      {merchantNotice ? (
+        <div className="admin-state" data-testid="property-fee-merchants-degraded">{merchantNotice}</div>
+      ) : null}
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="property-fee-merchants-table">
           <thead><tr><th>选择</th><th>商户</th><th>计费面积（㎡）</th><th>状态</th></tr></thead>
