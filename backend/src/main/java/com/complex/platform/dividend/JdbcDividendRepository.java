@@ -30,7 +30,9 @@ class JdbcDividendRepository implements DividendRepository {
     private static final String PLAN_COLS =
             "id, merchant_id, principal_user_id, principal_name, platform_share_bps, tax_rate_bps, period_type, "
             + "revenue_domains, include_inventory_cost, expense_types, effective_from, status, note, updated_by, "
-            + "created_at, updated_at";
+            + "created_at, updated_at, "
+            + "loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled, payout_floor_bps, "
+            + "payout_floor_fixed_cent";
 
     private static final String STMT_COLS =
             "id, merchant_id, plan_id, kind, period_label, period_start, period_end, principal_user_id, "
@@ -38,7 +40,9 @@ class JdbcDividendRepository implements DividendRepository {
             + "revenue_cent, cost_cent, expense_cent, net_profit_cent, distributable_cent, platform_share_cent, "
             + "principal_gross_cent, tax_cent, principal_net_cent, no_cost_basis_count, status, reject_reason, "
             + "ar_ap_item_id, computed_by, submitted_by, submitted_at, approved_by, approved_at, paid_by, paid_at, "
-            + "created_at, updated_at";
+            + "created_at, updated_at, "
+            + "loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent, "
+            + "loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -101,10 +105,14 @@ class JdbcDividendRepository implements DividendRepository {
                     INSERT INTO dividend_plans (
                         id, merchant_id, principal_user_id, principal_name, platform_share_bps, tax_rate_bps,
                         period_type, revenue_domains, include_inventory_cost, expense_types, effective_from,
-                        status, note, updated_by, created_at, updated_at)
+                        status, note, updated_by, created_at, updated_at,
+                        loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled,
+                        payout_floor_bps, payout_floor_fixed_cent)
                     VALUES (:id, :merchant_id, :principal_user_id, :principal_name, :platform_share_bps,
                             :tax_rate_bps, :period_type, :revenue_domains, :include_inventory_cost, :expense_types,
-                            :effective_from, :status, :note, :updated_by, :created_at, :updated_at)
+                            :effective_from, :status, :note, :updated_by, :created_at, :updated_at,
+                            :loss_carryforward_enabled, :arrears_offset_enabled, :payout_floor_enabled,
+                            :payout_floor_bps, :payout_floor_fixed_cent)
                     ON CONFLICT (id) DO NOTHING
                     """, planParams(plan)) > 0;
         } catch (DuplicateKeyException conflict) {
@@ -138,7 +146,12 @@ class JdbcDividendRepository implements DividendRepository {
                     status = :status,
                     note = :note,
                     updated_by = :updated_by,
-                    updated_at = :updated_at
+                    updated_at = :updated_at,
+                    loss_carryforward_enabled = :loss_carryforward_enabled,
+                    arrears_offset_enabled = :arrears_offset_enabled,
+                    payout_floor_enabled = :payout_floor_enabled,
+                    payout_floor_bps = :payout_floor_bps,
+                    payout_floor_fixed_cent = :payout_floor_fixed_cent
                  WHERE id = :id
                 """, planParams(plan));
     }
@@ -160,7 +173,12 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("note", plan.note(), Types.VARCHAR)
                 .addValue("updated_by", plan.updatedBy(), Types.VARCHAR)
                 .addValue("created_at", timestampWithTimeZone(plan.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(plan.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(plan.updatedAt()))
+                .addValue("loss_carryforward_enabled", plan.lossCarryforwardEnabled())
+                .addValue("arrears_offset_enabled", plan.arrearsOffsetEnabled())
+                .addValue("payout_floor_enabled", plan.payoutFloorEnabled())
+                .addValue("payout_floor_bps", plan.payoutFloorBps())
+                .addValue("payout_floor_fixed_cent", plan.payoutFloorFixedCent());
     }
 
     private DividendPlanRecord mapPlan(ResultSet rs, int rowNum) throws SQLException {
@@ -180,7 +198,12 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getString("note"),
                 rs.getString("updated_by"),
                 nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "updated_at"),
+                rs.getBoolean("loss_carryforward_enabled"),
+                rs.getBoolean("arrears_offset_enabled"),
+                rs.getBoolean("payout_floor_enabled"),
+                rs.getInt("payout_floor_bps"),
+                rs.getLong("payout_floor_fixed_cent"));
     }
 
     // ── 计算单 ────────────────────────────────────────────────
@@ -231,6 +254,24 @@ class JdbcDividendRepository implements DividendRepository {
     }
 
     @Override
+    public long priorLossCarryforwardCent(String merchantId, LocalDate periodStart) {
+        // 该商户 period_start 之前最近一张已结正式单的结转链余额（无则 0）；draft/preview/voided 不计。
+        Long balance = jdbcTemplate.query("""
+                SELECT loss_carryforward_after_cent
+                  FROM dividend_statements
+                 WHERE merchant_id = :merchant_id AND kind = 'official'
+                   AND status IN ('approved', 'paid')
+                   AND period_end < :period_start
+                 ORDER BY period_end DESC, created_at DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                        .addValue("merchant_id", merchantId)
+                        .addValue("period_start", periodStart, Types.DATE),
+                (rs, n) -> rs.getLong("loss_carryforward_after_cent")).stream().findFirst().orElse(0L);
+        return balance == null ? 0L : balance;
+    }
+
+    @Override
     public void insertStatement(DividendStatementRecord s) {
         jdbcTemplate.update("""
                 INSERT INTO dividend_statements (
@@ -239,13 +280,17 @@ class JdbcDividendRepository implements DividendRepository {
                     revenue_cent, cost_cent, expense_cent, net_profit_cent, distributable_cent, platform_share_cent,
                     principal_gross_cent, tax_cent, principal_net_cent, no_cost_basis_count, status, reject_reason,
                     ar_ap_item_id, computed_by, submitted_by, submitted_at, approved_by, approved_at, paid_by,
-                    paid_at, created_at, updated_at)
+                    paid_at, created_at, updated_at,
+                    loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent,
+                    loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent)
                 VALUES (:id, :merchant_id, :plan_id, :kind, :period_label, :period_start, :period_end,
                     :principal_user_id, :platform_share_bps, :tax_rate_bps, :revenue_domains,
                     :include_inventory_cost, :expense_types, :revenue_cent, :cost_cent, :expense_cent,
                     :net_profit_cent, :distributable_cent, :platform_share_cent, :principal_gross_cent, :tax_cent,
                     :principal_net_cent, :no_cost_basis_count, :status, :reject_reason, :ar_ap_item_id,
-                    :computed_by, NULL, NULL, NULL, NULL, NULL, NULL, :created_at, :updated_at)
+                    :computed_by, NULL, NULL, NULL, NULL, NULL, NULL, :created_at, :updated_at,
+                    :loss_carryforward_enabled, :loss_carryforward_in_cent, :loss_carryforward_applied_cent,
+                    :loss_carryforward_after_cent, :arrears_offset_cent, :reserve_withheld_cent, :payout_cent)
                 """, new MapSqlParameterSource()
                 .addValue("id", s.id())
                 .addValue("merchant_id", s.merchantId())
@@ -275,7 +320,14 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("ar_ap_item_id", s.arApItemId(), Types.VARCHAR)
                 .addValue("computed_by", s.computedBy(), Types.VARCHAR)
                 .addValue("created_at", timestampWithTimeZone(s.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(s.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(s.updatedAt()))
+                .addValue("loss_carryforward_enabled", s.lossCarryforwardEnabled())
+                .addValue("loss_carryforward_in_cent", s.lossCarryforwardInCent())
+                .addValue("loss_carryforward_applied_cent", s.lossCarryforwardAppliedCent())
+                .addValue("loss_carryforward_after_cent", s.lossCarryforwardAfterCent())
+                .addValue("arrears_offset_cent", s.arrearsOffsetCent())
+                .addValue("reserve_withheld_cent", s.reserveWithheldCent())
+                .addValue("payout_cent", s.payoutCent()));
     }
 
     @Override
@@ -404,7 +456,14 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getString("paid_by"),
                 nullableInstant(rs, "paid_at"),
                 nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "updated_at"),
+                rs.getBoolean("loss_carryforward_enabled"),
+                rs.getLong("loss_carryforward_in_cent"),
+                rs.getLong("loss_carryforward_applied_cent"),
+                rs.getLong("loss_carryforward_after_cent"),
+                rs.getLong("arrears_offset_cent"),
+                rs.getLong("reserve_withheld_cent"),
+                rs.getLong("payout_cent"));
     }
 
     // ── 三来源期间取数 ─────────────────────────────────────────

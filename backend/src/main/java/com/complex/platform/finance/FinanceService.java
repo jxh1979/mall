@@ -1511,6 +1511,46 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         return item.id();
     }
 
+    /**
+     * V303 欠款抵扣：该商户未清应收快照（direction=receivable, unpaid>0），按 created_at 升序=先欠先抵。
+     * 供分红计算单冻结欠款抵扣额与逐项留痕（只读，不改台账）。
+     */
+    @Override
+    public List<DividendPayoutPort.DividendArrearsItem> listOutstandingReceivables(String merchantId) {
+        return repository.listArApItemsByMerchant(merchantId).stream()
+                .filter(i -> "receivable".equals(i.direction()) && i.unpaidAmountCent() > 0)
+                .sorted(java.util.Comparator.comparing(ArApItemRecord::createdAt)
+                        .thenComparing(ArApItemRecord::id))
+                .map(i -> new DividendPayoutPort.DividendArrearsItem(i.id(), i.itemNo(), i.unpaidAmountCent()))
+                .toList();
+    }
+
+    /**
+     * V303 欠款抵扣：审批时按冻结抵扣额对该商户未清应收逐项结算（先欠先抵，dividend_offset 收款）。
+     * 逐项复用 settleArApItem（FOR UPDATE 行锁 + 跨商户/项目校验 + 锁定拦截 + 登记收款 + 回写 paid/unpaid/status）。
+     * 返回实际结算总额；调用方（DividendService.approve）在同一事务内断言 == 冻结抵扣额，不等则回滚并要求作废重算。
+     */
+    @Override
+    public long applyDividendOffsetToReceivables(String merchantId, long offsetCent, String statementId) {
+        if (offsetCent <= 0) {
+            return 0L;
+        }
+        Instant now = Instant.now();
+        long remaining = offsetCent;
+        long settled = 0L;
+        for (DividendPayoutPort.DividendArrearsItem item : listOutstandingReceivables(merchantId)) {
+            if (remaining <= 0) {
+                break;
+            }
+            long apply = Math.min(remaining, item.unpaidCent());
+            // idempotencyKey 纳入 statementId + 台账项 id：审批一次一结算，重放不重扣（settleArApItem 主键含两者）。
+            settleArApItem(item.arApItemId(), apply, "dividend_offset", now, statementId, statementId);
+            remaining -= apply;
+            settled += apply;
+        }
+        return settled;
+    }
+
     /** 批3:内部价采购券核销回流 -> 按内部结算价给第三方挂应付(payable, counterparty=partnerId)。 */
     @Override
     public String createPartnerVoucherPayable(String partnerId, long internalPriceCent, String idempotencyKey) {

@@ -89,17 +89,37 @@ class DividendJdbcIntegrationTests {
         return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
                 8000, 2000, periodType, List.of("bar", "ticket"), true,
                 List.of("rent_allocation", "energy", "property_fee", "labor", "amortization", "other"),
-                null, "active", null, "usr_div_jdbc", now, now);
+                null, "active", null, "usr_div_jdbc", now, now,
+                false, false, false, 0, 0L);
     }
 
     private static DividendStatementRecord statement(String id, String planId, long revenue, long cost,
             long expense, long netProfit, long distributable, long platformShare, long gross, long tax, long net) {
+        // V303：三扣除全关，实发=税后应得（payout=net），结转/抵扣/留存全 0。
         Instant now = Instant.parse("2026-07-18T00:00:00Z");
         return new DividendStatementRecord(id, MERCHANT, planId, "official", "2026-07",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-31"), "usr_principal_jdbc",
                 8000, 2000, List.of("bar", "ticket"), true, List.of("labor"),
                 revenue, cost, expense, netProfit, distributable, platformShare, gross, tax, net,
-                0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null, now, now);
+                0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null, now, now,
+                false, 0L, 0L, 0L, 0L, 0L, net);
+    }
+
+    /**
+     * V303 三扣除入账留痕的计算单构造（供 DB CHECK 拦截用例）。基口径恒等自洽（revenue=netProfit、cost/expense=0），
+     * 由调用方单独corrupt某个扣除留痕列以隔离触发对应 CHECK。
+     */
+    private static DividendStatementRecord deductionStatement(String id, String planId, long netProfit,
+            long distributable, long platformShare, long gross, long tax, long net,
+            boolean lcfEnabled, long lcfIn, long lcfApplied, long lcfAfter,
+            long arrearsOffset, long reserve, long payout) {
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        return new DividendStatementRecord(id, MERCHANT, planId, "official", "2026-07",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-31"), "usr_principal_jdbc",
+                8000, 2000, List.of("bar", "ticket"), true, List.of("labor"),
+                netProfit, 0L, 0L, netProfit, distributable, platformShare,
+                gross, tax, net, 0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null,
+                now, now, lcfEnabled, lcfIn, lcfApplied, lcfAfter, arrearsOffset, reserve, payout);
     }
 
     /** 唯一索引/CHECK 冲突 INSERT 用事务绑定连接上的手动 savepoint 吸收，25P02 不外溢（V297 同款）。 */
@@ -312,11 +332,15 @@ class DividendJdbcIntegrationTests {
         // 明细行落表且来源行合计 = 净利润（含独立的租金费用行）。
         List<DividendStatementLineRecord> lines = repository.listLines(statement.id(), null);
         long sourceSum = lines.stream()
-                .filter(l -> !List.of("net_profit", "platform_share", "principal_gross", "tax_withheld",
-                        "principal_net").contains(l.lineType()))
+                .filter(l -> !List.of("net_profit", "loss_carryforward", "platform_share", "principal_gross",
+                        "tax_withheld", "principal_net", "arrears_offset", "reserve_withheld", "payout")
+                        .contains(l.lineType()))
                 .mapToLong(DividendStatementLineRecord::amountCent).sum();
         assertThat(sourceSum).isEqualTo(statement.netProfitCent());
         assertThat(lines).anyMatch(l -> l.lineType().equals("expense_rent_allocation") && l.amountCent() == -40_000L);
+        // V303 默认全关：实发行落痕 = 税后应得，无扣除行。
+        assertThat(lines).anyMatch(l -> l.lineType().equals("payout") && l.amountCent() == 11_200L);
+        assertThat(lines).noneMatch(l -> l.lineType().equals("loss_carryforward"));
 
         // ── 审批链：draft → pending_review → approved 挂应付（真 FinanceService 端口）──
         // I-1 职责分离：提交与审批用不同 actor；同 actor 审批必须被拒。
@@ -362,5 +386,62 @@ class DividendJdbcIntegrationTests {
         DividendStatementRecord paid = approverService.markPaid(statement.id(),
                 new DividendActionRequest("div-jdbc-paid-1", null));
         assertThat(paid.status()).isEqualTo("paid");
+    }
+
+    /** V303 扣除项 DB CHECK 拦截：发放额恒等 / 亏损结转链恒等不满足的单不得落库。 */
+    @Test
+    void deductionCheckConstraintsRejectInconsistentStatements() {
+        repository.insertPlan(plan("divp_jdbc_ded", "monthly"));
+        // 发放额恒等破坏：payout ≠ principal_net − arrears − reserve → chk_ds_payout_identity。
+        assertInsertRejected(() -> repository.insertStatement(deductionStatement("divs_jdbc_ded_pay",
+                "divp_jdbc_ded", 1000L, 1000L, 0L, 1000L, 0L, 1000L,
+                false, 0L, 0L, 0L, 0L, 0L, 999L)), "chk_ds_payout_identity");
+        // 亏损结转链恒等破坏：启用时 after 应 = in − applied + max(−净利,0)=500，写 0 → chk_ds_lcf_after。
+        assertInsertRejected(() -> repository.insertStatement(deductionStatement("divs_jdbc_ded_lcf",
+                "divp_jdbc_ded", -500L, 0L, 0L, 0L, 0L, 0L,
+                true, 0L, 0L, 0L, 0L, 0L, 0L)), "chk_ds_lcf_after");
+    }
+
+    /**
+     * V303 亏损结转端到端（累计更新时点验证）：启用亏损结转的方案，某月亏损审批后结转链余额冻结，
+     * 下月计算单从「已结正式单」projection 读到期初累计并冻结在 loss_carryforward_in_cent（无需另建可变台账）。
+     */
+    @Test
+    void lossCarryforwardProjectionCarriesAcrossApprovedPeriods() {
+        Instant ts = Instant.parse("2026-07-15T12:00:00Z");
+        // 亏损结转开的月度方案。
+        DividendPlanRecord lcfPlan = new DividendRecords.DividendPlanRecord("divp_jdbc_lcf", MERCHANT,
+                "usr_principal_jdbc", "主理人甲", 8000, 2000, "monthly", List.of("bar", "ticket"), true,
+                List.of("rent_allocation", "energy", "property_fee", "labor", "amortization", "other"),
+                null, "active", null, "usr_div_jdbc", ts, ts,
+                true, false, false, 0, 0L);
+        repository.insertPlan(lcfPlan);
+        // 2026-07 亏损 500.00：仅一笔人工费，无收入 → 净利 −50000。
+        jdbcTemplate.update("""
+                INSERT INTO merchant_expense_entries (id, merchant_id, period, expense_type, amount_cent,
+                        source, source_ref, note, operator_user_id, created_at)
+                VALUES ('mex_jdbc_lcf', ?, '2026-07', 'labor', 50000, 'manual', NULL, '亏损结转JDBC', 'usr_div_jdbc', ?)
+                """, MERCHANT, java.time.OffsetDateTime.ofInstant(ts, java.time.ZoneOffset.UTC));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord july = service.compute(
+                new DividendComputeRequest("lcf-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(july.netProfitCent()).isEqualTo(-50_000L);
+        assertThat(july.distributableCent()).isZero();
+        assertThat(july.lossCarryforwardInCent()).isZero();
+        assertThat(july.lossCarryforwardAfterCent()).isEqualTo(50_000L);
+        // 审批 7 月（实发 0，不挂应付），结转链余额生效。
+        service.submit(july.id(), new DividendActionRequest("lcf-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        approver.approve(july.id(), new DividendActionRequest("lcf-jdbc-a1", null));
+
+        // 2026-08 无收支 → 净利 0；从已结 7 月单读到期初累计 50000 并冻结，继续结转。
+        DividendStatementRecord august = service.compute(
+                new DividendComputeRequest("lcf-jdbc-c2", "2026-08", "official", MERCHANT)).computed().get(0);
+        assertThat(august.netProfitCent()).isZero();
+        assertThat(august.lossCarryforwardInCent()).isEqualTo(50_000L);
+        assertThat(august.lossCarryforwardAppliedCent()).isZero();
+        assertThat(august.lossCarryforwardAfterCent()).isEqualTo(50_000L);
+        assertThat(august.distributableCent()).isZero();
     }
 }

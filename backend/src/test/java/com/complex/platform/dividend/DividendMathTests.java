@@ -120,4 +120,141 @@ class DividendMathTests {
         assertThatThrownBy(() -> DividendMath.split(100L, 8000, 10001))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // ── V303 扣除项三开关 ──────────────────────────────────────────
+
+    /** compute 全关（三 enabled=false）逐分等于 split（回归保证：默认口径不变）。 */
+    @Test
+    void computeAllTogglesOffEqualsLegacySplit() {
+        long[] samples = {-500_000L, 0L, 1L, 999L, 1_000_000L, 987_654_321L};
+        int[] shares = {0, 3333, 8000, 10000};
+        int[] taxes = {0, 2000, 9999};
+        for (long net : samples) {
+            for (int share : shares) {
+                for (int tax : taxes) {
+                    DividendMath.Split legacy = DividendMath.split(net, share, tax);
+                    DividendMath.Distribution d = DividendMath.compute(net, share, tax,
+                            false, 999_999L, false, 999_999L, false, 5000, 999_999L);
+                    assertThat(d.distributableCent()).as("dist net=%d", net).isEqualTo(legacy.distributableCent());
+                    assertThat(d.platformShareCent()).isEqualTo(legacy.platformShareCent());
+                    assertThat(d.principalGrossCent()).isEqualTo(legacy.principalGrossCent());
+                    assertThat(d.taxCent()).isEqualTo(legacy.taxCent());
+                    assertThat(d.principalNetCent()).isEqualTo(legacy.principalNetCent());
+                    // 三扣除全关：结转/抵扣/留存均 0，实发 = 税后应得。
+                    assertThat(d.carryInCent()).isZero();
+                    assertThat(d.carryAppliedCent()).isZero();
+                    assertThat(d.carryAfterCent()).isZero();
+                    assertThat(d.arrearsOffsetCent()).isZero();
+                    assertThat(d.reserveWithheldCent()).isZero();
+                    assertThat(d.payoutCent()).isEqualTo(legacy.principalNetCent());
+                }
+            }
+        }
+    }
+
+    @Test
+    void lossCarryforwardFirstLossAccumulatesAndDistributesZero() {
+        // 首个亏损期：期初累计 0，净利 −500 → 可分配 0、弥补 0、结转至下期 500。
+        DividendMath.Distribution d = DividendMath.compute(-500L, 8000, 2000, true, 0L, false, 0L, false, 0, 0L);
+        assertThat(d.distributableCent()).isZero();
+        assertThat(d.carryAppliedCent()).isZero();
+        assertThat(d.carryAfterCent()).isEqualTo(500L);
+        assertThat(d.payoutCent()).isZero();
+    }
+
+    @Test
+    void lossCarryforwardProfitPartiallyRecoversPriorLoss() {
+        // 净利 300 < 期初累计 1000 → 全额弥补 300、可分配 0、结转 700。
+        DividendMath.Distribution d = DividendMath.compute(300L, 8000, 2000, true, 1000L, false, 0L, false, 0, 0L);
+        assertThat(d.distributableCent()).isZero();
+        assertThat(d.carryAppliedCent()).isEqualTo(300L);
+        assertThat(d.carryAfterCent()).isEqualTo(700L);
+    }
+
+    @Test
+    void lossCarryforwardProfitExceedsPriorLoss() {
+        // 净利 1500 > 期初累计 1000 → 弥补 1000、可分配 500、结转 0。
+        DividendMath.Distribution d = DividendMath.compute(1500L, 10000, 0, true, 1000L, false, 0L, false, 0, 0L);
+        assertThat(d.carryAppliedCent()).isEqualTo(1000L);
+        assertThat(d.carryAfterCent()).isZero();
+        assertThat(d.distributableCent()).isEqualTo(500L);
+        assertThat(d.platformShareCent()).isEqualTo(500L);
+    }
+
+    @Test
+    void lossCarryforwardDisabledIgnoresCarryIn() {
+        // 关闭：即便传入 carryIn=1000 也不减可分配额（回归：与现状一致）。
+        DividendMath.Distribution d = DividendMath.compute(1500L, 0, 0, false, 1000L, false, 0L, false, 0, 0L);
+        assertThat(d.carryInCent()).isZero();
+        assertThat(d.distributableCent()).isEqualTo(1500L);
+        assertThat(d.carryAfterCent()).isZero();
+    }
+
+    @Test
+    void arrearsOffsetPartialReducesPayout() {
+        // 税后应得 1600（net 10000, 平台 80%, 税 20%）；欠款 1000 < 应得 → 抵扣 1000，实发 600。
+        DividendMath.Distribution d = DividendMath.compute(1_000_000L, 8000, 2000, false, 0L, true, 1000L, false, 0, 0L);
+        assertThat(d.principalNetCent()).isEqualTo(160_000L);
+        assertThat(d.arrearsOffsetCent()).isEqualTo(1000L);
+        assertThat(d.payoutCent()).isEqualTo(159_000L);
+    }
+
+    @Test
+    void arrearsOffsetClampsToPrincipalNetAndPayoutZero() {
+        // 欠款 999999 > 税后应得 160000 → 抵扣钳到 160000，实发 0（不倒欠主理人）。
+        DividendMath.Distribution d = DividendMath.compute(1_000_000L, 8000, 2000, false, 0L, true, 999_999L, false, 0, 0L);
+        assertThat(d.arrearsOffsetCent()).isEqualTo(160_000L);
+        assertThat(d.payoutCent()).isZero();
+    }
+
+    @Test
+    void arrearsOffsetDisabledIgnored() {
+        DividendMath.Distribution d = DividendMath.compute(1_000_000L, 8000, 2000, false, 0L, false, 999_999L, false, 0, 0L);
+        assertThat(d.arrearsOffsetCent()).isZero();
+        assertThat(d.payoutCent()).isEqualTo(160_000L);
+    }
+
+    @Test
+    void payoutFloorByPercentageWithholdsReserve() {
+        // 税后应得 160000，留 10%（1000 万分比）→ 留存 16000，实发 144000。
+        DividendMath.Distribution d = DividendMath.compute(1_000_000L, 8000, 2000, false, 0L, false, 0L, true, 1000, 0L);
+        assertThat(d.reserveWithheldCent()).isEqualTo(16_000L);
+        assertThat(d.payoutCent()).isEqualTo(144_000L);
+    }
+
+    @Test
+    void payoutFloorTakesMaxOfPctAndFixedThenCapsAtAvailable() {
+        // 应得 160000；比例 10%=16000，固定 20000 → 取大 20000，实发 140000。
+        DividendMath.Distribution d1 = DividendMath.compute(1_000_000L, 8000, 2000, false, 0L, false, 0L, true, 1000, 20_000L);
+        assertThat(d1.reserveWithheldCent()).isEqualTo(20_000L);
+        assertThat(d1.payoutCent()).isEqualTo(140_000L);
+        // 固定额 999999 > 可发额 → 留存钳到 160000，实发 0（不为负）。
+        DividendMath.Distribution d2 = DividendMath.compute(1_000_000L, 8000, 2000, false, 0L, false, 0L, true, 0, 999_999L);
+        assertThat(d2.reserveWithheldCent()).isEqualTo(160_000L);
+        assertThat(d2.payoutCent()).isZero();
+    }
+
+    @Test
+    void allThreeDeductionsComposeInOrderLossThenArrearsThenReserve() {
+        // 净利 1000000，期初亏损累计 200000 → 可分配 800000；平台 80% → 应得毛 160000，税 20% → 税后 128000；
+        // 欠款抵扣 28000 → 余 100000；留存 10% → 10000；实发 90000。
+        DividendMath.Distribution d = DividendMath.compute(
+                1_000_000L, 8000, 2000, true, 200_000L, true, 28_000L, true, 1000, 0L);
+        assertThat(d.distributableCent()).isEqualTo(800_000L);
+        assertThat(d.carryAppliedCent()).isEqualTo(200_000L);
+        assertThat(d.carryAfterCent()).isZero();
+        assertThat(d.principalNetCent()).isEqualTo(128_000L);
+        assertThat(d.arrearsOffsetCent()).isEqualTo(28_000L);
+        assertThat(d.reserveWithheldCent()).isEqualTo(10_000L);
+        assertThat(d.payoutCent()).isEqualTo(90_000L);
+        // 发放恒等：税后应得 − 抵扣 − 留存 = 实发。
+        assertThat(d.payoutCent())
+                .isEqualTo(d.principalNetCent() - d.arrearsOffsetCent() - d.reserveWithheldCent());
+    }
+
+    @Test
+    void reserveBpsValidated() {
+        assertThatThrownBy(() -> DividendMath.compute(100L, 8000, 2000, false, 0L, false, 0L, true, 10001, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

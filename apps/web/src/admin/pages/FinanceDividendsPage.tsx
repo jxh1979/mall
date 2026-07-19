@@ -72,10 +72,14 @@ export const DIVIDEND_LINE_LABELS: Record<string, string> = {
   expense_amortization: "费用·摊销",
   expense_other: "费用·其他",
   net_profit: "净利润",
+  loss_carryforward: "亏损结转（往期未弥补亏损）",
   platform_share: "平台分成",
   principal_gross: "主理人应得",
   tax_withheld: "代扣个税",
-  principal_net: "净发放额",
+  principal_net: "税后应得",
+  arrears_offset: "欠款抵扣（未清应收）",
+  reserve_withheld: "发放保护线留存",
+  payout: "实发额（挂应付）",
 };
 
 const TEXT = {
@@ -92,6 +96,8 @@ const TEXT = {
   expenseRequired: "至少勾选一种计入费用类别。",
   periodLabelRequired: "请填写期间标签（季度如 2026-Q3，月份如 2026-07）。",
   reasonRequired: "驳回理由必填（进入审计留痕）。",
+  floorPercentInvalid: "留存比例须在 0~100 之间。",
+  floorFixedInvalid: "留存固定额须为不小于 0 的金额（元）。",
 };
 
 function centToYuan(cent: number | undefined | null): string {
@@ -127,6 +133,12 @@ type PlanForm = {
   expenseTypes: string[];
   status: string;
   note: string;
+  // V303 扣除项三开关（默认全关=不改现有口径）+ 发放保护线参数。
+  lossCarryforwardEnabled: boolean;
+  arrearsOffsetEnabled: boolean;
+  payoutFloorEnabled: boolean;
+  payoutFloorPercent: string;
+  payoutFloorFixedYuan: string;
 };
 
 const DEFAULT_PLAN_FORM: PlanForm = {
@@ -141,6 +153,11 @@ const DEFAULT_PLAN_FORM: PlanForm = {
   expenseTypes: Object.keys(EXPENSE_TYPE_LABELS),
   status: "active",
   note: "",
+  lossCarryforwardEnabled: false,
+  arrearsOffsetEnabled: false,
+  payoutFloorEnabled: false,
+  payoutFloorPercent: "0",
+  payoutFloorFixedYuan: "0",
 };
 
 export function FinanceDividendsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
@@ -240,6 +257,11 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       expenseTypes: plan.expenseTypes ?? Object.keys(EXPENSE_TYPE_LABELS),
       status: plan.status ?? "active",
       note: plan.note ?? "",
+      lossCarryforwardEnabled: plan.lossCarryforwardEnabled === true,
+      arrearsOffsetEnabled: plan.arrearsOffsetEnabled === true,
+      payoutFloorEnabled: plan.payoutFloorEnabled === true,
+      payoutFloorPercent: plan.payoutFloorBps === undefined ? "0" : String(plan.payoutFloorBps / 100),
+      payoutFloorFixedYuan: plan.payoutFloorFixedCent === undefined ? "0" : String(plan.payoutFloorFixedCent / 100),
     });
     setPlanModalOpen(true);
   }
@@ -254,6 +276,12 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
     return Math.round(value * 100);
   }
 
+  function fixedYuanToCent(text: string): number | null {
+    const value = Number(text);
+    if (!Number.isFinite(value) || value < 0) return null;
+    return Math.round(value * 100);
+  }
+
   async function submitPlan() {
     const shareBps = percentToBps(planForm.platformSharePercent);
     const taxBps = percentToBps(planForm.taxRatePercent);
@@ -261,6 +289,11 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
     if (!planForm.principalUserId.trim()) return setFormError(TEXT.principalRequired);
     if (shareBps === null) return setFormError(TEXT.shareInvalid);
     if (taxBps === null) return setFormError(TEXT.taxInvalid);
+    // V303 发放保护线参数校验（仅开启时）。
+    const floorBps = planForm.payoutFloorEnabled ? percentToBps(planForm.payoutFloorPercent) : 0;
+    const floorFixedCent = planForm.payoutFloorEnabled ? fixedYuanToCent(planForm.payoutFloorFixedYuan) : 0;
+    if (floorBps === null) return setFormError(TEXT.floorPercentInvalid);
+    if (floorFixedCent === null) return setFormError(TEXT.floorFixedInvalid);
     const request = {
       idempotencyKey: nextKey("dividend-plan"),
       merchantId: planForm.merchantId,
@@ -274,6 +307,11 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       expenseTypes: planForm.expenseTypes,
       status: planForm.status,
       note: planForm.note.trim() || null,
+      lossCarryforwardEnabled: planForm.lossCarryforwardEnabled,
+      arrearsOffsetEnabled: planForm.arrearsOffsetEnabled,
+      payoutFloorEnabled: planForm.payoutFloorEnabled,
+      payoutFloorBps: floorBps,
+      payoutFloorFixedCent: floorFixedCent,
     };
     const ok = await runAction(editingPlan ? "dividend_plan_updated" : "dividend_plan_created", request, () =>
       editingPlan
@@ -451,7 +489,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       <AdminDataState loading={rows.loading || merchantsResource.loading || plansResource.loading} error={rows.error ?? merchantsResource.error ?? plansResource.error} empty={empty} onRetry={rows.reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="dividend-statement-table">
-            <thead><tr><th>期间</th><th>商户</th><th>类别</th><th>净利润（元）</th><th>主理人应得（元）</th><th>代扣税（元）</th><th>净发放（元）</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>期间</th><th>商户</th><th>类别</th><th>净利润（元）</th><th>主理人应得（元）</th><th>代扣税（元）</th><th>实发（元）</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
               {rows.rows.length === 0 ? (
                 <tr data-testid="dividend-statement-table-empty"><td colSpan={9} className="admin-muted-action">当前筛选下暂无计算单。</td></tr>
@@ -465,7 +503,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.netProfitCent)}</td>
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.principalGrossCent)}</td>
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.taxCent)}</td>
-                  <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.principalNetCent)}</td>
+                  <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.payoutCent ?? row.principalNetCent)}</td>
                   <td>
                     {DIVIDEND_STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}
                     {row.kind !== "preview" && (row.status === "approved" || row.status === "paid") ? (
@@ -590,6 +628,31 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
               </>
             ),
           },
+          {
+            title: "扣除项（可选，默认全关）",
+            description: "三个可选扣除只削减「发放额」，不改净利润/劈分/代扣口径。默认全关=按税后应得全额发放（与现有口径一致）。",
+            validate: () => {
+              if (planForm.payoutFloorEnabled) {
+                if (percentToBps(planForm.payoutFloorPercent) === null) return TEXT.floorPercentInvalid;
+                if (fixedYuanToCent(planForm.payoutFloorFixedYuan) === null) return TEXT.floorFixedInvalid;
+              }
+              return null;
+            },
+            content: (
+              <>
+                <label><input data-testid="dividend-plan-loss-carryforward" type="checkbox" checked={planForm.lossCarryforwardEnabled} onChange={() => setPlanForm({ ...planForm, lossCarryforwardEnabled: !planForm.lossCarryforwardEnabled })} />亏损结转：本期可分配额先扣减该商户往期未弥补亏损累计（关=每期独立，亏损不结转）</label>
+                <label><input data-testid="dividend-plan-arrears-offset" type="checkbox" checked={planForm.arrearsOffsetEnabled} onChange={() => setPlanForm({ ...planForm, arrearsOffsetEnabled: !planForm.arrearsOffsetEnabled })} />欠款抵扣：主理人应得先抵扣该商户对平台未清应收，抵扣后余额才发放（审批时逐项结算应收）</label>
+                <label><input data-testid="dividend-plan-payout-floor" type="checkbox" checked={planForm.payoutFloorEnabled} onChange={() => setPlanForm({ ...planForm, payoutFloorEnabled: !planForm.payoutFloorEnabled })} />发放保护线：留存一定比例或固定额作为风险准备金不发放（实发=余额−留存）</label>
+                {planForm.payoutFloorEnabled ? (
+                  <>
+                    <label>留存比例（%）<input data-testid="dividend-plan-floor-percent" type="number" step="0.01" min="0" max="100" value={planForm.payoutFloorPercent} onChange={(event) => setPlanForm({ ...planForm, payoutFloorPercent: event.target.value })} /></label>
+                    <label>留存固定额（元）<input data-testid="dividend-plan-floor-fixed" type="number" step="0.01" min="0" value={planForm.payoutFloorFixedYuan} onChange={(event) => setPlanForm({ ...planForm, payoutFloorFixedYuan: event.target.value })} /></label>
+                    <span className="admin-muted-action">留存 = 抵扣后余额 与 max(余额×比例, 固定额) 取小（钳到可发额上限，实发不为负）。</span>
+                  </>
+                ) : null}
+              </>
+            ),
+          },
         ]}
         summary={[
           { label: "经营商户", value: merchantOptions.find((m) => m.id === planForm.merchantId) ? merchantLabel(merchantOptions.find((m) => m.id === planForm.merchantId)!) : (planForm.merchantId || "未选择") },
@@ -598,6 +661,16 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
           { label: "代扣税率", value: `${planForm.taxRatePercent || "?"}%（股息红利）` },
           { label: "周期", value: PERIOD_TYPE_LABELS[planForm.periodType] ?? planForm.periodType },
           { label: "基数构成", value: `收入域：${planForm.revenueDomains.map((d) => DOMAIN_LABELS[d] ?? d).join("、") || "无"}；${planForm.includeInventoryCost ? "扣销货成本" : "不扣销货成本"}；费用：${planForm.expenseTypes.map((t) => EXPENSE_TYPE_LABELS[t] ?? t).join("、") || "无"}` },
+          {
+            label: "扣除项",
+            value: [
+              planForm.lossCarryforwardEnabled ? "亏损结转" : null,
+              planForm.arrearsOffsetEnabled ? "欠款抵扣" : null,
+              planForm.payoutFloorEnabled
+                ? `发放保护线（留 ${planForm.payoutFloorPercent || "0"}% 或 ${planForm.payoutFloorFixedYuan || "0"} 元取大）`
+                : null,
+            ].filter(Boolean).join("、") || "全关（按税后应得全额发放）",
+          },
           ...(editingPlan ? [{ label: "方案状态", value: planForm.status === "ended" ? "停用" : "生效中" }] : []),
         ]}
       />

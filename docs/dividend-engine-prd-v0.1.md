@@ -105,8 +105,23 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
 
 ## 9. 边界与后续迭代（如实留档）
 
-- **扣除项三开关未实现**（设计稿 §5：亏损结转/未结清款项抵扣/发放保护线）：本期口径为亏损期可分配额=0
-  （不倒扣、不结转）；负净利跨期补亏、主理人欠款抵扣、小额并入下期留待后续迭代，快照结构已可扩展。
+- **扣除项三开关已实现**（V303，设计稿 §5：亏损结转/欠款抵扣/发放保护线）：方案级三个可选开关，
+  **默认全关时逐分等于 V299 现状**（回归由 DividendMathTests `computeAllTogglesOffEqualsLegacySplit` 抽样组合断言）。
+  - **亏损结转 `loss_carryforward_enabled`**：可分配额 = GREATEST(净利 − 期初未弥补亏损累计, 0)。累计**不另建可变台账**——
+    以「已审批/已发放（approved/paid）的正式计算单」自身快照的 `loss_carryforward_after_cent` 逐期结转（`priorLossCarryforwardCent`
+    取 period_start 之前最近一张已结正式单），approved/paid 单即账本：draft/preview 不计（幂等，重算稳定）、voided 天然回滚。
+    本期 in/applied/after 三值冻结在单上，结转链恒等由 `chk_ds_lcf_applied` / `chk_ds_lcf_after` DB CHECK 硬保证。
+    **累计更新时点**=审批通过（approve）——同 compute 幂等（draft 重算读的是上一张已结单，不受本期 draft 影响）。
+  - **欠款抵扣 `arrears_offset_enabled`**：税后应得先抵扣该商户对平台未清应收（ar_ap direction=receivable, unpaid>0），
+    计算时快照抵扣额 `arrears_offset_cent`=min(税后应得, 未清应收合计) 并逐项留痕；**审批通过时**按冻结额对应收先欠先抵
+    逐项结算（`applyDividendOffsetToReceivables`，dividend_offset 收款，复用 `settleArApItem` 行锁），抵扣后余额（`payout_cent`）才挂应付。
+    实结 ≠ 冻结额（抵扣期间应收被并发清偿）抛 `DIVIDEND_ARREARS_CHANGED` 409、事务回滚，要求作废重算（快照冻结口径）。
+  - **发放保护线 `payout_floor_enabled`**：留存 `reserve_withheld_cent` = min(抵扣后余额, max(余额×`payout_floor_bps`/10000, `payout_floor_fixed_cent`))
+    作为风险准备金不发放；留存的释放机制（下期返还等）留待后续迭代。
+  - 发放额恒等 `payout_cent = principal_net_cent − arrears_offset_cent − reserve_withheld_cent`（均非负、抵扣不超税后应得）由
+    `chk_ds_payout_identity` / `chk_ds_arrears_range` / `chk_ds_payout_nonneg` DB CHECK 硬保证；净利/劈分/税恒等（V299）不变，
+    可分配额定义随亏损结转开关分支（`chk_ds_distributable` 重写为 GREATEST(净利 − `loss_carryforward_in_cent`, 0)，关时 in=0 退化为原式）。
+  - 三扣除只削减「发放额」，**审批挂应付口径由 `principal_net_cent` 改为 `payout_cent`**（默认全关时二者相等，行为不变）。
 - **正式单仍手动触发**：正式单（进入审批发放）维持手动触发端点（费用侧关账节奏由人把关，防不完整基数入正式单）。
   **月度预览定时作业已上**（V302，`DividendMonthlyPreviewJob`）：默认关闭（`dividend.preview.scheduled.enabled=true`
   才注册，cron 可配，默认每月 1 日 02:00 跑上月），对每个生效中季度方案自动出上月 preview 单（只读不可审批），
@@ -136,3 +151,4 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
 | 2026-07-18 | 增 | v0.1 初版：收编拍板终稿（净利润制/股息红利 20%/季度+月预览/全可配）+ V299 实现细节（三表/恒等式 CHECK/append-only 明细/状态机/应付挂账/两页面/10 operations） | 2026-07-18 用户拍板；V296/V297 数据基建就绪后的分红引擎本体交付 |
 | 2026-07-18 复核 | 改 | C-1 状态机 UPDATE 全带期望前态守卫（0 行=业务 409，杜绝并发 approve×reject 双付窗口）；I-1 审批职责分离（提交人不得审批自己提交的单 SELF_APPROVAL_FORBIDDEN）；rejected_by/rejected_at 留痕；商户侧 DTO 脱敏（内部操作员/应付 id 不外发）；租金计入费用台账并默认扣减（auto_rent 挂接 contract_rent+turnover_rent，turnover_rent 出账起落 accounting_period） | 一轮复核 1C+1I+4S + 用户拍板租金计入分红基数 |
 | 2026-07-18 二轮复核 I-2 | 增 | V302 分红期间关账锁 + 月度预览定时作业：关账判定纯函数 `DividendPeriodLock` + 部分索引 `ix_dividend_statements_lock`；费用台账三写路径挂锁（手工录入/冲销拒 `DIVIDEND_PERIOD_LOCKED` 409，自动挂接四路 NOT EXISTS 跳过 + lockedMerchants 清单）；`DividendMonthlyPreviewJob`（默认关，@ConditionalOnProperty，刷新式出上月季度方案预览单）；新增只读端点 `GET /finance/merchant-expenses/period-locks`（前端禁用已关账月份录入/冲销）；分红页 approved/paid 单标「期间已关账」。§9 边界更新 | 二轮复核 I-2 敞口（已发放单来源台账静默漂移）；封死费用侧追改口子 |
+| 2026-07-19 | 增 | V303 扣除项三开关（设计稿 §5 落地，§9 留档项）：方案级 `loss_carryforward_enabled`/`arrears_offset_enabled`/`payout_floor_enabled` + 保护线参数 `payout_floor_bps`/`payout_floor_fixed_cent`，**默认全关时逐分等于 V299 现状**。计算单快照增 `loss_carryforward_in/applied/after_cent`、`arrears_offset_cent`、`reserve_withheld_cent`、`payout_cent` 七列（存量单回填 payout=principal_net）；`chk_ds_distributable` 随亏损结转开关重写，新增结转链/发放额恒等 CHECK；明细行增 `loss_carryforward`/`arrears_offset`/`reserve_withheld`/`payout` 四类留痕；`DividendMath.compute` 纯函数统一三扣除算式；亏损累计以已结正式单快照 projection 结转（不另建可变台账）；欠款抵扣审批时逐项结算应收（`DividendPayoutPort.applyDividendOffsetToReceivables` 复用 `settleArApItem`，实结≠冻结额抛 `DIVIDEND_ARREARS_CHANGED` 回滚重算）；审批挂应付口径由 principal_net 改为 payout。DividendMathTests +12 / DividendServiceTests +6 / JDBC +2（CHECK 拦截+结转端到端）/ vitest +3；前端方案引导式增「扣除项」分节、计算单实发额与扣除项逐行留痕。 | 设计稿 §5 已 deferred 项落地；快照结构可扩展兑现 |

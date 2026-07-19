@@ -27,7 +27,13 @@ public final class DividendRecords {
             String note,
             String updatedBy,
             Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt,
+            // V303 扣除项三开关 + 发放保护线参数（默认全关；关时不改 V299 口径）。
+            boolean lossCarryforwardEnabled,
+            boolean arrearsOffsetEnabled,
+            boolean payoutFloorEnabled,
+            int payoutFloorBps,
+            long payoutFloorFixedCent) {
     }
 
     /** 期间分红计算单头（配置快照 + 算式结果 + 状态机）。 */
@@ -66,7 +72,15 @@ public final class DividendRecords {
             String paidBy,
             Instant paidAt,
             Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt,
+            // V303 三扣除入账留痕（冻结在单上，供逐项算式追溯；关时全 0，实发=税后应得）。
+            boolean lossCarryforwardEnabled,
+            long lossCarryforwardInCent,
+            long lossCarryforwardAppliedCent,
+            long lossCarryforwardAfterCent,
+            long arrearsOffsetCent,
+            long reserveWithheldCent,
+            long payoutCent) {
 
         /** 商户侧（主理人视图）脱敏：内部操作员 id 与应付款项 id 不外发（平台侧照旧全量）。 */
         @com.fasterxml.jackson.annotation.JsonIgnore
@@ -76,7 +90,9 @@ public final class DividendRecords {
                     expenseTypes, revenueCent, costCent, expenseCent, netProfitCent, distributableCent,
                     platformShareCent, principalGrossCent, taxCent, principalNetCent, noCostBasisCount, status,
                     rejectReason, null, null, null, submittedAt, null, approvedAt, null, paidAt,
-                    createdAt, updatedAt);
+                    createdAt, updatedAt,
+                    lossCarryforwardEnabled, lossCarryforwardInCent, lossCarryforwardAppliedCent,
+                    lossCarryforwardAfterCent, arrearsOffsetCent, reserveWithheldCent, payoutCent);
         }
     }
 
