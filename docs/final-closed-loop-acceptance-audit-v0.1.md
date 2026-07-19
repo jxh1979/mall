@@ -36,8 +36,8 @@
 | 模块 | 文档/矩阵证据 | 页面/路由证据 | API/服务证据 | 测试/验证证据 | 状态 |
 |---|---|---|---|---|---|
 | 总控/完整后台 | `full-admin-srs-v0.1.md`、`full-admin-page-permission-field-matrix-v0.1.csv` | `/admin/*` 30 个页面 | `apps/web/src/admin/*`、`DynamicPricingPage`、`TicketOrdersPage`、`BarOrdersPage`、`StoredWinePage`、`BarCommissionsPage`、`InventoryLedgerPage`、`ReconciliationPage`、`MerchantWorkOrdersPage`、`MerchantScopePage`、`AmusementSafetyPage`、`SupervisorReviewPage`、`SubjectBindingsPage`、`ContractApprovalPage`、`RiskAlertsPage`、`IntegrationEventsPage`、`AuditEventsPage`、`BusinessAnalyticsPage`、`AdmissionAuditsPage`、`GovernanceTopologyPage`、`OrganizationMerchantPage`、`AmusementSessionsPage`、`AmusementGroupBookingsPage`、正式 `/api/v1` 路径 | `tools/verify-full-admin-page-matrix.mjs`、`tests/e2e/full-admin-*.spec.ts` | 已闭环 |
-| 票务/动态定价 | `p2-ticket-dynamic-pricing-api-contract-v0.1.md`、需求矩阵 REQ-01~REQ-16 | `/admin/ticketing/policies`、`/admin/ticketing/dynamic-pricing`、旧控制台 ticketing 页 | `TicketingService` 332 行 facade，`TicketPricingService`、`TicketOrderService`、`TicketVerificationService` | `TicketingServiceTests`、OpenAPI 校验、UI 验收 | 已闭环 |
-| 酒吧/卡座/账单/提成 | `bar-business-operations-product-prd-v0.1.md`、P1 酒吧账单契约 | `/admin/bar/*`、旧控制台 bar 页 | `BarService` 356 行 facade，`BarOrderService`、`BarBillingService`、`BarTableSessionService`、`BarEntryService` | `BarServiceTests`、`BarJdbcIntegrationTests`、UI 验收；新增重复出品、跨订单出品、部分数量出品拒绝、出品照片证据保留测试 | 内部流程已闭环，真实支付/人脸/视频证据依赖外部 |
+| 票务/动态定价 | `p2-ticket-dynamic-pricing-api-contract-v0.1.md`、需求矩阵 REQ-01~REQ-16 | `/admin/ticketing/policies`、`/admin/ticketing/dynamic-pricing`、旧控制台 ticketing 页 | `TicketingService` 879 行 facade，`TicketPricingService`、`TicketOrderService`、`TicketVerificationService` | `TicketingServiceTests`、OpenAPI 校验、UI 验收 | 已闭环 |
+| 酒吧/卡座/账单/提成 | `bar-business-operations-product-prd-v0.1.md`、P1 酒吧账单契约 | `/admin/bar/*`、旧控制台 bar 页 | `BarService` 764 行 facade，`BarOrderService`、`BarBillingService`、`BarTableSessionService`、`BarEntryService` | `BarServiceTests`、`BarJdbcIntegrationTests`、UI 验收；新增重复出品、跨订单出品、部分数量出品拒绝、出品照片证据保留测试 | 内部流程已闭环，真实支付/人脸/视频证据依赖外部 |
 | 游乐/安全/团体包场 | `amusement-*` PRD/接口契约 | `/admin/amusement/*`、旧控制台 amusement 页 | `Amusement*` 服务与 OpenAPI | `Amusement*Tests`、UI 验收 | 已闭环 |
 | 平台治理/主体绑定/主管复核 | `platform-governance-*`、`business-entity-binding-development-design-v0.1.md` | `/admin/governance/*`、平台地基拓扑 | `PlatformService`、`SupervisorReviewService` | `SupervisorReview*Tests`、UI 验收、domain scope 审计 | 已闭环 |
 | 财务/应收应付/对账 | `finance-ar-ap-ledger-development-design-v0.1.md` | `/admin/finance/*` | `FinanceService`、AR/AP 与 reconciliation API | `Finance*Tests`、UI 验收 | 已闭环 |
@@ -65,24 +65,24 @@
 
 ## 6. 当前代码质量与架构状态
 
-- `apps/web/src/main.tsx` 为 55 行入口（三壳路由分流：默认 admin、customer、legacy 前缀）。
+- `apps/web/src/main.tsx` 为 43 行入口（三壳路由分流：默认 admin、customer、legacy 前缀）。
 - legacy 控制台已于 2026-06-23 整体退役删除（commit `9e20a44`）；其鉴权错误 UI 呈现验收由 admin 壳 `ADM-MVP-09/10` 承接。
 - 旧控制台业务动作已拆分到 `ticketingActions.ts`、`barActions.ts`、`amusementActions.ts`、`foundationActions.ts`、`floorPlanActions.ts`、`riskAndIntegrationActions.ts`。
-- `TicketingService` 当前 502 行，`BarService` 当前 649 行，仍为入口编排 + 子服务委托（行数随 R5/R6/goal 阶段新增业务回升）。
+- `TicketingService` 当前 879 行，`BarService` 当前 764 行，仍为入口编排 + 子服务委托（行数随 R5/R6/goal 阶段新增业务回升）。
 - `BarOrderService` 已新增出品前订单项归属校验、已出品校验和完整数量校验，防止跨订单串单、重复出品、部分数量出品误完成、二次扣库存，并保证 `delivery_photo_attachment_ids` 合并进入出品事件和库存流水审计证据链。
-- 后续可优化项：`BarValidation` 已抽出 131 行公共校验与 JSON 辅助，`BarBillRecords` 已抽出 108 行账单记录/快照辅助；`BarOrderService` 1108 行、`BarBillingService` 600 行、`BarTableSessionService` 453 行；R5/R6/goal 各阶段新增退菜退酒/反结/沽清、pour cost 强制采集、void 驳回反向冲销（含 FOR UPDATE 行锁与 facade 委派修复）、MDM 门控、班结对账等业务后行数明显回升，列为后续可继续瘦身项。
+- 后续可优化项：`BarValidation` 已抽出 131 行公共校验与 JSON 辅助，`BarBillRecords` 已抽出 108 行账单记录/快照辅助；`BarOrderService` 1307 行、`BarBillingService` 674 行、`BarTableSessionService` 465 行；R5/R6/goal 各阶段新增退菜退酒/反结/沽清、pour cost 强制采集、void 驳回反向冲销（含 FOR UPDATE 行锁与 facade 委派修复）、MDM 门控、班结对账等业务后行数明显回升，列为后续可继续瘦身项。
 
 ### 6.1 机器校验行数快照
 
 | 文件 | 当前行数 | 口径 |
 |---|---:|---|
-| `apps/web/src/main.tsx` | 55 行 | Web 入口薄层 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 502 行 | 票务 facade |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 649 行 | 酒吧 facade |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1108 行 | 酒吧订单/出品子服务 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 600 行 | 酒吧账单编排子服务 |
+| `apps/web/src/main.tsx` | 43 行 | Web 入口薄层 |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 879 行 | 票务 facade |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 764 行 | 酒吧 facade |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1307 行 | 酒吧订单/出品子服务 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 674 行 | 酒吧账单编排子服务 |
 | `backend/src/main/java/com/complex/platform/bar/BarBillRecords.java` | 108 行 | 酒吧账单记录/审计快照辅助 |
-| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 453 行 | 酒吧卡座/会话子服务 |
+| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 465 行 | 酒吧卡座/会话子服务 |
 
 ## 7. 最新验证证据
 
