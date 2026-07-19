@@ -946,6 +946,40 @@ class JdbcInventoryRepository implements InventoryRepository {
                 """, params);
     }
 
+    // V312 发券预占：available_quantity -> reserved_quantity（quantity 不变）。守卫式单语句 UPDATE：
+    // WHERE available_quantity>=:qty 与行锁一并生效，并发第二笔阻塞到第一笔提交后按新值复核，从而不超卖。
+    // 无商户 scope 谓词：预占是发券（含客人积分兑换，无商户上下文）触发的系统级台账操作，按 (item,location) 定位。
+    // V012 CHECK(reserved_quantity>=0 / available_quantity>=0) 为负库存兜底硬闸。
+    @Override
+    public int reserveStockBalance(String itemId, String locationId, int qty) {
+        return jdbcTemplate.update("""
+                UPDATE inventory_stock_balances
+                   SET reserved_quantity = reserved_quantity + :qty,
+                       available_quantity = available_quantity - :qty,
+                       updated_at = NOW()
+                 WHERE item_id = :item_id
+                   AND location_id = :location_id
+                   AND available_quantity >= :qty
+                """, new MapSqlParameterSource()
+                .addValue("qty", qty).addValue("item_id", itemId).addValue("location_id", locationId));
+    }
+
+    // V312 释放预占：reserved_quantity -> available_quantity（quantity 不变）。守卫 reserved_quantity>=:qty
+    // 防对未持预占的行误释放（历史券/漂移）。核销转实扣时先释放再走 redeem_consume（available->出库），净效果 reserved->出库。
+    @Override
+    public int releaseStockReservation(String itemId, String locationId, int qty) {
+        return jdbcTemplate.update("""
+                UPDATE inventory_stock_balances
+                   SET reserved_quantity = reserved_quantity - :qty,
+                       available_quantity = available_quantity + :qty,
+                       updated_at = NOW()
+                 WHERE item_id = :item_id
+                   AND location_id = :location_id
+                   AND reserved_quantity >= :qty
+                """, new MapSqlParameterSource()
+                .addValue("qty", qty).addValue("item_id", itemId).addValue("location_id", locationId));
+    }
+
     // P0-1: 原子增加库存，INSERT ON CONFLICT 保证幂等
     // C2: 余额行落归属 project_id（入库时由服务层从 currentProjectScopeQuietly 传入），供项目级读隔离。
     @Override

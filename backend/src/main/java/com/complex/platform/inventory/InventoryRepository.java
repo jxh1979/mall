@@ -153,6 +153,13 @@ public interface InventoryRepository {
     // C2: projectId 归属列，供项目级读隔离。
     void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId, String projectId);
 
+    // V312 发券预占：available -> reserved（守卫式 UPDATE，WHERE available>=qty，返回受影响行数，0=可用不足）。
+    // 单语句行锁+WHERE 复核即等价 SELECT FOR UPDATE 校验后再改，并发下第二笔阻塞到第一笔提交再按新值复核，防超卖。
+    int reserveStockBalance(String itemId, String locationId, int qty);
+
+    // V312 释放预占：reserved -> available（核销转实扣前把预占还回，或过期/作废时释放；WHERE reserved>=qty，返回受影响行数）。
+    int releaseStockReservation(String itemId, String locationId, int qty);
+
     // P0-2: 行锁读取，消除 claimSavedBottle 竞态
     Optional<SavedBottleRecord> findSavedBottleByIdForUpdate(String id);
 

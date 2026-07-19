@@ -650,6 +650,8 @@ class SupplyChainT6ServiceTests {
         @Override public Optional<TraceHandoverExceptionRecord> findTraceHandoverExceptionByIdForUpdate(String id) { throw nyi(); }
         @Override public void saveRobotTaskEvent(String id, String ref, String type, String h, String p, java.time.Instant t) { throw nyi(); }
         @Override public int atomicDecreaseStockBalance(String i, String l, int q, String scope) { throw nyi(); }
+        @Override public int reserveStockBalance(String i, String l, int q) { throw nyi(); }
+        @Override public int releaseStockReservation(String i, String l, int q) { throw nyi(); }
         @Override public void atomicIncreaseStockBalance(String i, String l, int q, String id, String m, String w, String p) {
             String key = i + ":" + l;
             StockBalanceRecord existing = balances.get(key);

@@ -44,7 +44,7 @@ class VoucherJdbcIntegrationTests {
     private static VoucherInstanceRecord issuedInstance(String id, String definitionId, String sourceType, String sourceRef) {
         return new VoucherInstanceRecord(
                 id, definitionId, "customer_jdbc", "VC" + id, sourceType, sourceRef,
-                "issued", T0, T0.plusSeconds(86400L * 30), null, null, null, T0, T0);
+                "issued", T0, T0.plusSeconds(86400L * 30), null, null, null, false, T0, T0);
     }
 
     @Test
@@ -193,7 +193,7 @@ class VoucherJdbcIntegrationTests {
         repository.insertInstance(issuedInstance("vi_jdbc_cw", "vdef_jdbc_cw", "marketing_grant", "vgrant_cw"));
         repository.insertInstance(new VoucherInstanceRecord(
                 "vi_jdbc_cw_other", "vdef_jdbc_cw", "customer_other", "VCother", "marketing_grant", "vgrant_other",
-                "issued", T0, T0.plusSeconds(86400L), null, null, null, T0, T0));
+                "issued", T0, T0.plusSeconds(86400L), null, null, null, false, T0, T0));
 
         PageResponse<VoucherOverviewRecord> mine = repository.overview(null, "customer_jdbc", 1, 50);
 

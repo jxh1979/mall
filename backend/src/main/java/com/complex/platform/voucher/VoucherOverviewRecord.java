@@ -19,6 +19,9 @@ public record VoucherOverviewRecord(
         // 面额/折扣（客人端展示；统一券取定义面额，通票第三方券为 null）与核销方式（客人端「核销方式说明」）。
         // 内部结算价（成本）刻意不入此聚合视图——客人/店员天然不可见。
         Long faceValueCent,
-        String redeemMethod
+        String redeemMethod,
+        // V312/#29：核销码（统一台账券实例的 code，供客人端「使用」时出示给店员/核销点扫码；
+        // 通票第三方券为 null，其核销走合作方系统）。非成本字段，客人可见其本人券码。
+        String code
 ) {
 }

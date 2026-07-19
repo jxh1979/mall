@@ -27,7 +27,7 @@ class JdbcVoucherRepository implements VoucherRepository {
                     + "valid_days, valid_until, status, created_at, updated_at";
     private static final String INSTANCE_COLS =
             "id, definition_id, customer_id, code, source_type, source_ref, status, issued_at, "
-                    + "expires_at, redeemed_at, revoked_at, revoke_reason, created_at, updated_at";
+                    + "expires_at, redeemed_at, revoked_at, revoke_reason, stock_reserved, created_at, updated_at";
     private static final String REDEMPTION_COLS =
             "id, voucher_instance_id, definition_id, voucher_kind, customer_id, merchant_id, operator_user_id, "
                     + "redeem_method, settlement_mode, settlement_amount_cent, ar_ap_item_id, stock_movement_ref, "
@@ -140,11 +140,11 @@ class JdbcVoucherRepository implements VoucherRepository {
         int inserted = jdbcTemplate.update("""
                 INSERT INTO voucher_instances (
                     id, definition_id, customer_id, code, source_type, source_ref, status, issued_at,
-                    expires_at, redeemed_at, revoked_at, revoke_reason, created_at, updated_at
+                    expires_at, redeemed_at, revoked_at, revoke_reason, stock_reserved, created_at, updated_at
                 )
                 VALUES (
                     :id, :definition_id, :customer_id, :code, :source_type, :source_ref, :status, :issued_at,
-                    :expires_at, :redeemed_at, :revoked_at, :revoke_reason, :created_at, :updated_at
+                    :expires_at, :redeemed_at, :revoked_at, :revoke_reason, :stock_reserved, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
@@ -160,9 +160,35 @@ class JdbcVoucherRepository implements VoucherRepository {
                 .addValue("redeemed_at", timestampWithTimeZone(instance.redeemedAt()))
                 .addValue("revoked_at", timestampWithTimeZone(instance.revokedAt()))
                 .addValue("revoke_reason", instance.revokeReason(), Types.VARCHAR)
+                .addValue("stock_reserved", instance.stockReserved())
                 .addValue("created_at", timestampWithTimeZone(instance.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(instance.updatedAt())));
         return inserted > 0;
+    }
+
+    // V313 转赠领取：券实例归属改受赠人。守卫 status='issued' 防对已核销/失效券误改归属；at 同刷 updated_at。
+    @Override
+    public int updateInstanceCustomer(String id, String newCustomerId, Instant at) {
+        return jdbcTemplate.update("""
+                UPDATE voucher_instances
+                   SET customer_id = :customer_id, updated_at = :at
+                 WHERE id = :id AND status = 'issued'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("customer_id", newCustomerId)
+                .addValue("at", timestampWithTimeZone(at)));
+    }
+
+    // V312 过期释放扫描：issued + 已预占 + 已过期的实例（定时作业逐条 CAS 过期并释放预占）。
+    @Override
+    public List<VoucherInstanceRecord> listExpiredReservedIssuedInstances(Instant now, int limit) {
+        return jdbcTemplate.query(
+                "SELECT " + INSTANCE_COLS + " FROM voucher_instances"
+                        + " WHERE status = 'issued' AND stock_reserved = true"
+                        + "   AND expires_at IS NOT NULL AND expires_at <= :now"
+                        + " ORDER BY expires_at ASC LIMIT :limit",
+                new MapSqlParameterSource().addValue("now", timestampWithTimeZone(now)).addValue("limit", limit),
+                this::mapInstance);
     }
 
     @Override
@@ -280,7 +306,7 @@ class JdbcVoucherRepository implements VoucherRepository {
                    vi.customer_id AS customer_id, vi.status AS status,
                    CASE WHEN vi.status = 'issued' THEN 1 ELSE 0 END AS remaining_times,
                    vi.expires_at AS expires_at, vd.face_value_cent AS face_value_cent,
-                   vd.redeem_method AS redeem_method, vi.issued_at AS sort_time
+                   vd.redeem_method AS redeem_method, vi.code AS code, vi.issued_at AS sort_time
               FROM voucher_instances vi
               JOIN voucher_definitions vd ON vd.id = vi.definition_id
              WHERE (:merchant_scope IS NULL OR vd.merchant_id = :merchant_scope OR vd.merchant_id IS NULL)
@@ -290,7 +316,7 @@ class JdbcVoucherRepository implements VoucherRepository {
                    o.customer_id AS customer_id, ie.status AS status,
                    GREATEST(ie.total_times - ie.used_times, 0) AS remaining_times,
                    ie.valid_to AS expires_at, CAST(NULL AS BIGINT) AS face_value_cent,
-                   'external_reflow' AS redeem_method, ie.created_at AS sort_time
+                   'external_reflow' AS redeem_method, CAST(NULL AS VARCHAR) AS code, ie.created_at AS sort_time
               FROM issued_entitlements ie
               JOIN partner_voucher_configs pvc ON pvc.entitlement_template_id = ie.entitlement_template_id
               JOIN entitlement_templates et ON et.id = ie.entitlement_template_id
@@ -308,7 +334,7 @@ class JdbcVoucherRepository implements VoucherRepository {
                 .addValue("limit", pageSize)
                 .addValue("offset", (long) (page - 1) * pageSize);
         List<VoucherOverviewRecord> items = jdbcTemplate.query(
-                "SELECT id, source, name, voucher_kind, customer_id, status, remaining_times, expires_at, face_value_cent, redeem_method FROM ("
+                "SELECT id, source, name, voucher_kind, customer_id, status, remaining_times, expires_at, face_value_cent, redeem_method, code FROM ("
                         + OVERVIEW_UNION
                         + ") all_vouchers ORDER BY sort_time DESC, id DESC LIMIT :limit OFFSET :offset",
                 params,
@@ -322,7 +348,8 @@ class JdbcVoucherRepository implements VoucherRepository {
                         rs.getInt("remaining_times"),
                         nullableInstant(rs, "expires_at"),
                         rs.getObject("face_value_cent", Long.class),
-                        rs.getString("redeem_method")));
+                        rs.getString("redeem_method"),
+                        rs.getString("code")));
         Long total = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM (" + OVERVIEW_UNION + ") all_vouchers", params, Long.class);
         return new PageResponse<>(items, page, pageSize, total == null ? 0L : total);
@@ -364,6 +391,7 @@ class JdbcVoucherRepository implements VoucherRepository {
                 nullableInstant(rs, "redeemed_at"),
                 nullableInstant(rs, "revoked_at"),
                 rs.getString("revoke_reason"),
+                rs.getBoolean("stock_reserved"),
                 nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "updated_at"));
     }

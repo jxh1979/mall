@@ -3,10 +3,12 @@ package com.complex.platform.voucher;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -108,8 +110,31 @@ class VoucherServiceTests {
                     "redeemed".equals(toStatus) ? at : current.redeemedAt(),
                     "revoked".equals(toStatus) ? at : current.revokedAt(),
                     "revoked".equals(toStatus) ? revokeReason : current.revokeReason(),
-                    current.createdAt(), at));
+                    current.stockReserved(), current.createdAt(), at));
             return 1;
+        }
+
+        @Override
+        public int updateInstanceCustomer(String id, String newCustomerId, Instant at) {
+            VoucherInstanceRecord current = instances.get(id);
+            if (current == null || !"issued".equals(current.status())) {
+                return 0;
+            }
+            instances.put(id, new VoucherInstanceRecord(
+                    current.id(), current.definitionId(), newCustomerId, current.code(),
+                    current.sourceType(), current.sourceRef(), current.status(), current.issuedAt(), current.expiresAt(),
+                    current.redeemedAt(), current.revokedAt(), current.revokeReason(),
+                    current.stockReserved(), current.createdAt(), at));
+            return 1;
+        }
+
+        @Override
+        public List<VoucherInstanceRecord> listExpiredReservedIssuedInstances(Instant now, int limit) {
+            return instances.values().stream()
+                    .filter(i -> "issued".equals(i.status()) && i.stockReserved())
+                    .filter(i -> i.expiresAt() != null && !i.expiresAt().isAfter(now))
+                    .limit(limit)
+                    .toList();
         }
 
         @Override
@@ -166,7 +191,7 @@ class VoucherServiceTests {
                 rows.add(new VoucherOverviewRecord(i.id(), "unified", d == null ? "?" : d.name(),
                         d == null ? "?" : d.voucherKind(), i.customerId(), i.status(),
                         "issued".equals(i.status()) ? 1 : 0, i.expiresAt(),
-                        d == null ? null : d.faceValueCent(), d == null ? null : d.redeemMethod()));
+                        d == null ? null : d.faceValueCent(), d == null ? null : d.redeemMethod(), i.code()));
             }
             partnerOverviewRows.stream()
                     .filter(r -> customerId == null || customerId.equals(r.customerId()))
@@ -205,6 +230,7 @@ class VoucherServiceTests {
     private AuthorizationService authorizationService;
     private InventoryService inventoryService;
     private PartnerVoucherSettlementPort settlementPort;
+    private VoucherTransferRepository transferRepository;
     private VoucherService service;
 
     @BeforeEach
@@ -215,11 +241,17 @@ class VoucherServiceTests {
         when(authorizationService.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
         inventoryService = mock(InventoryService.class);
+        // V312 发券预占：默认库存充足（reserveStock 成功）；释放预占返回 1。个别缺货用例在测内改写。
+        when(inventoryService.reserveStock(anyString(), anyString(), anyInt())).thenReturn(true);
+        when(inventoryService.releaseStockReservation(anyString(), anyString(), anyInt())).thenReturn(1);
         settlementPort = mock(PartnerVoucherSettlementPort.class);
+        // V313 转赠冻结：默认无在途转赠（existsPendingForInstance=false，mock 布尔默认即 false）。
+        transferRepository = mock(VoucherTransferRepository.class);
         AuditedOperationExecutor operations = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 mock(AuditEventService.class));
-        service = new VoucherService(repository, authorizationService, operations, inventoryService, settlementPort);
+        service = new VoucherService(repository, authorizationService, operations, inventoryService,
+                settlementPort, transferRepository);
     }
 
     // ── 定义构造辅助 ────────────────────────────────────────────────────────
@@ -373,16 +405,20 @@ class VoucherServiceTests {
     }
 
     @Test
-    void redeemGoodsVoucherDeductsStockAndHooksInternalSettlement() {
+    void redeemGoodsVoucherReleasesReservationDeductsStockAndHooksInternalSettlement() {
         VoucherDefinitionRecord definition = goodsDefinition("vdef_g1", "merchant-1", 1500L);
+        // V312：发券即预占 2 件（stock_quantity=2）。
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-g1");
-        when(inventoryService.availableStock("item_1", "loc_1")).thenReturn(10);
+        assertThat(instance.stockReserved()).isTrue();
+        verify(inventoryService).reserveStock("item_1", "loc_1", 2);
         when(settlementPort.createPartnerVoucherPayable(eq("merchant-1"), eq(1500L), anyString()))
                 .thenReturn("arap_voucher_1");
 
         VoucherRedemptionEntryRecord entry = service.redeem(
                 new VoucherRedeemRequest("redeem-g1", null, instance.id(), "实物领取"));
 
+        // V312：核销转实扣＝先释放预占（reserved->available）再 redeem_consume（available->出库+quantity），净 reserved->出库。
+        verify(inventoryService).releaseStockReservation("item_1", "loc_1", 2);
         // 实物出库发生在核销阶段（兑换只发券），出库幂等引用落核销记录。
         verify(inventoryService).createTypedStockMovement(eq("redeem_consume"), any(StockMovementRequest.class));
         assertThat(entry.stockMovementRef()).isEqualTo("voucher-redeem-" + instance.id());
@@ -394,18 +430,33 @@ class VoucherServiceTests {
     }
 
     @Test
-    void redeemGoodsVoucherOutOfStockRejectsWithoutConsumingVoucher() {
+    void issueGoodsVoucherRejectsWhenReservationInsufficientWithoutCreatingInstance() {
+        // V312 防超发：发券预占失败（可用不足）→ 拒绝发放、不建券实例（redeemPoints 场景即"不扣积分"由外层事务回滚兜底）。
         VoucherDefinitionRecord definition = goodsDefinition("vdef_g2", "merchant-1", null);
-        VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-g2");
+        when(inventoryService.reserveStock("item_1", "loc_1", 2)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.issueVouchers(new VoucherIssueRequest("issue-g2", definition.id(), "customer-1", 1)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_STOCK_INSUFFICIENT"));
+        assertThat(repository.instances).isEmpty();
+    }
+
+    @Test
+    void redeemLegacyGoodsVoucherOutOfStockRejectsWithoutConsumingVoucher() {
+        // 历史券（stock_reserved=false，本轮 V312 前发放）：核销仍走旧 available 直扣前置校验，缺货直接拒绝、券保持 issued。
+        VoucherDefinitionRecord definition = goodsDefinition("vdef_g2b", "merchant-1", null);
+        Instant t = Instant.parse("2026-07-18T00:00:00Z");
+        repository.insertInstance(new VoucherInstanceRecord(
+                "vi_legacy_g2b", definition.id(), "customer-1", "VCLEGACYG2B", "marketing_grant", "g1",
+                "issued", t, null, null, null, null, false, t, t));
         when(inventoryService.availableStock("item_1", "loc_1")).thenReturn(1); // 需 2 件
 
-        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("redeem-g2", instance.code(), null, null)))
+        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("redeem-g2b", "VCLEGACYG2B", null, null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_STOCK_INSUFFICIENT"));
         verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
         assertThat(repository.redemptions).isEmpty();
-        // 库存前置校验在任何状态迁移之前：券保持 issued，可换点/补货后再核。
-        assertThat(repository.instances.get(instance.id()).status()).isEqualTo("issued");
+        assertThat(repository.instances.get("vi_legacy_g2b").status()).isEqualTo("issued");
     }
 
     @Test
@@ -415,7 +466,7 @@ class VoucherServiceTests {
         Instant past = Instant.parse("2026-01-01T00:00:00Z");
         repository.insertInstance(new VoucherInstanceRecord(
                 "vi_expired", definition.id(), "customer-1", "VCEXPIRED", "marketing_grant", "g1",
-                "issued", past, past.plusSeconds(60), null, null, null, past, past));
+                "issued", past, past.plusSeconds(60), null, null, null, false, past, past));
         assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-exp", "VCEXPIRED", null, null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_EXPIRED"));
@@ -506,7 +557,7 @@ class VoucherServiceTests {
     // ── 积分兑券端口（redeemPoints 只发券不动库存）────────────────────────
 
     @Test
-    void pointsRedemptionIssuesDerivedVouchersWithoutTouchingInventory() {
+    void pointsRedemptionIssuesDerivedVouchersAndReservesGiftStock() {
         CustomerRedemptionCatalogItemRecord item = new CustomerRedemptionCatalogItemRecord(
                 "gift_1", "毛绒玩偶", "gift", 120L, "item_gift", "gift_shelf", 2, "active",
                 null, null, Instant.parse("2026-07-18T00:00:00Z"), Instant.parse("2026-07-18T00:00:00Z"));
@@ -523,15 +574,20 @@ class VoucherServiceTests {
         assertThat(issued).allSatisfy(instance -> {
             assertThat(instance.sourceType()).isEqualTo("points_redemption");
             assertThat(instance.sourceRef()).isEqualTo("redemption_abc");
+            // V312：兑换出的实物券已预占库存。
+            assertThat(instance.stockReserved()).isTrue();
         });
-        // 兑换阶段绝不动库存（实物出库在统一核销）。
-        verifyNoInteractions(inventoryService);
-        // 幂等重放（同兑换记录 id）：实例 id 派生一致，不重复发券。
+        // V312：兑换阶段预占礼品库存（防超发，对齐 PRD §5）；每张券预占 stock_quantity=2 件，共 2 张。
+        verify(inventoryService, times(2)).reserveStock("item_gift", "gift_shelf", 2);
+        // 实物出库仍在统一核销阶段，兑换阶段不出库。
+        verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
+        // 幂等重放（同兑换记录 id）：实例 id 派生一致，不重复发券、不重复预占。
         List<VoucherInstanceRecord> replay = service.issueForPointsRedemption(
                 item, "customer-1", "redemption_abc", 2, Instant.parse("2026-07-18T00:00:01Z"));
         assertThat(replay).extracting(VoucherInstanceRecord::id)
                 .containsExactlyElementsOf(issued.stream().map(VoucherInstanceRecord::id).toList());
         assertThat(repository.instances).hasSize(2);
+        verify(inventoryService, times(2)).reserveStock("item_gift", "gift_shelf", 2);
     }
 
     @Test
@@ -571,7 +627,7 @@ class VoucherServiceTests {
         issueTo("customer-1", definition, "issue-ov");
         repository.partnerOverviewRows.add(new VoucherOverviewRecord(
                 "ie_1", "pass_partner", "餐厅第三方券", "external_partner", "customer-1", "active", 3,
-                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow"));
+                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow", null));
 
         PageResponse<VoucherOverviewRecord> page = service.overview("customer-1", 1, 50);
 
@@ -592,7 +648,7 @@ class VoucherServiceTests {
         issueTo("customer-2", def, "cw-2");
         repository.partnerOverviewRows.add(new VoucherOverviewRecord(
                 "ie_cw", "pass_partner", "第三方券", "external_partner", "customer-2", "active", 2,
-                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow"));
+                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow", null));
 
         PageResponse<VoucherOverviewRecord> page = service.customerOverview("customer-1", 1, 50);
 

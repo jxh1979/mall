@@ -8,9 +8,14 @@ import com.complex.platform.customer.dto.StoredValueTopupRequest;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.voucher.VoucherOverviewRecord;
 import com.complex.platform.voucher.VoucherService;
+import com.complex.platform.voucher.VoucherTransferResponse;
+import com.complex.platform.voucher.VoucherTransferService;
+import com.complex.platform.voucher.dto.CustomerVoucherTransferClaimRequest;
+import com.complex.platform.voucher.dto.CustomerVoucherTransferRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -31,16 +36,19 @@ public class MemberWalletController {
     private final LoyaltyService loyaltyService;
     private final CustomerRepository repository;
     private final VoucherService voucherService;
+    private final VoucherTransferService voucherTransferService;
 
     public MemberWalletController(CustomerService customerService, StoredValueService storedValueService,
                                   LoyaltyService loyaltyService,
                                   CustomerRepository repository,
-                                  VoucherService voucherService) {
+                                  VoucherService voucherService,
+                                  VoucherTransferService voucherTransferService) {
         this.customerService = customerService;
         this.storedValueService = storedValueService;
         this.loyaltyService = loyaltyService;
         this.repository = repository;
         this.voucherService = voucherService;
+        this.voucherTransferService = voucherTransferService;
     }
 
     // ---- 储值 ----
@@ -113,7 +121,79 @@ public class MemberWalletController {
         return ApiResponse.ok(voucherService.customerOverview(customerId, page, pageSize));
     }
 
-    // 积分转赠（会员间转移）已下线：HTML 明确「积分不支持会员间转赠」，端点/表/记录类已随 V172 清理移除。
+    // 说明：积分本身仍不支持会员间转赠（HTML「积分不支持会员间转赠」，V172 下线）。以下为「积分兑换出的券实例」
+    //   （统一台账，积分已消耗）的会员间转赠，2026-07-19 用户拍板新增，范式对齐门票转赠/存酒转让（出让人发起冻结
+    //   → 接收方绑定 → 领取 CAS 改归属 / 撤回，双花窗口）。🔴 对客上线前须经用户确认并同步业务 HTML 增补。
+
+    // 券「使用」：客人端出示的核销码即 /vouchers 聚合里的 code 字段（本人可用券），由店员/核销点扫码走既有
+    //   staff 核销（POST /api/v1/vouchers/redeems，需 customer.voucher.redeem 权限）；客人端不独立发起核销，
+    //   故「使用」无独立后端端点，仅前端出示 code。
+
+    // 发起券转赠（channel=phone 需 receiverPhone；channel=link 服务端生成一次性领取码）。
+    @PostMapping("/voucher-transfers")
+    public ApiResponse<VoucherTransferResponse> initiateVoucherTransfer(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @Valid @RequestBody CustomerVoucherTransferRequest request
+    ) {
+        CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
+        return ApiResponse.ok(voucherTransferService.initiate(customer.id(), customer.phone(), request));
+    }
+
+    // 确认领取（link 渠道带 claimCode；phone 渠道校验登录手机号=受赠手机号）。
+    @PostMapping("/voucher-transfers/{transfer_id}/claim")
+    public ApiResponse<VoucherTransferResponse> claimVoucherTransfer(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("transfer_id") String transferId,
+            @RequestBody(required = false) @Valid CustomerVoucherTransferClaimRequest request
+    ) {
+        CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
+        String claimCode = request == null ? null : request.claimCode();
+        return ApiResponse.ok(voucherTransferService.claim(customer.id(), customer.phone(), transferId, claimCode));
+    }
+
+    // 出让人撤回。
+    @PostMapping("/voucher-transfers/{transfer_id}/revoke")
+    public ApiResponse<VoucherTransferResponse> revokeVoucherTransfer(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("transfer_id") String transferId
+    ) {
+        CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
+        return ApiResponse.ok(voucherTransferService.revoke(customer.id(), transferId));
+    }
+
+    // 领取预览（凭领取码，不算领取）。
+    @GetMapping("/voucher-transfers/preview")
+    public ApiResponse<VoucherTransferResponse> previewVoucherTransfer(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestParam("claim_code") String claimCode
+    ) {
+        customerService.requireCustomerRecord(token(customerToken, authorization));
+        return ApiResponse.ok(voucherTransferService.preview(claimCode));
+    }
+
+    // 我的待领取（手机号渠道）。
+    @GetMapping("/voucher-transfers/incoming")
+    public ApiResponse<List<VoucherTransferResponse>> listIncomingVoucherTransfers(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
+        return ApiResponse.ok(voucherTransferService.listIncoming(customer.phone()));
+    }
+
+    // 我发起的转赠。
+    @GetMapping("/voucher-transfers/outgoing")
+    public ApiResponse<List<VoucherTransferResponse>> listOutgoingVoucherTransfers(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
+        return ApiResponse.ok(voucherTransferService.listOutgoing(customer.id()));
+    }
 
     private String token(String customerToken, String authorization) {
         if (customerToken != null && !customerToken.isBlank()) {

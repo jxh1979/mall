@@ -23,6 +23,7 @@ import type {
   TicketCredential,
   TicketOrder,
   TicketProduct,
+  VoucherTransfer,
 } from "../types";
 
 export class CustomerService {
@@ -174,9 +175,46 @@ export class CustomerService {
     return this.api.get<PointsRedemption[]>("/api/v1/customer/points/redemptions");
   }
 
-  // 我的券包（只读）：积分兑换券 / 营销赠券 / 通票第三方券聚合，按 token 强制本人 customer_id。
+  // 我的券包（只读聚合）：积分兑换券 / 营销赠券 / 通票第三方券，按 token 强制本人 customer_id。
   listMyVouchers(): Promise<CustomerVoucher[]> {
     return this.api.get<CustomerVoucher[]>("/api/v1/customer/vouchers");
+  }
+
+  // V313 券转赠（会员间转移，范式对齐门票转赠）。channel=phone 需 receiverPhone；link 服务端生成一次性领取码。
+  initiateVoucherTransfer(req: {
+    voucherInstanceId: string;
+    channel: "phone" | "link";
+    receiverPhone?: string;
+  }): Promise<VoucherTransfer> {
+    return this.api.post<VoucherTransfer>("/api/v1/customer/voucher-transfers", req);
+  }
+
+  claimVoucherTransfer(transferId: string, claimCode?: string): Promise<VoucherTransfer> {
+    return this.api.post<VoucherTransfer>(
+      `/api/v1/customer/voucher-transfers/${encodeURIComponent(transferId)}/claim`,
+      { claimCode },
+    );
+  }
+
+  revokeVoucherTransfer(transferId: string): Promise<VoucherTransfer> {
+    return this.api.post<VoucherTransfer>(
+      `/api/v1/customer/voucher-transfers/${encodeURIComponent(transferId)}/revoke`,
+      {},
+    );
+  }
+
+  previewVoucherTransfer(claimCode: string): Promise<VoucherTransfer> {
+    return this.api.get<VoucherTransfer>(
+      `/api/v1/customer/voucher-transfers/preview?claim_code=${encodeURIComponent(claimCode)}`,
+    );
+  }
+
+  listIncomingVoucherTransfers(): Promise<VoucherTransfer[]> {
+    return this.api.get<VoucherTransfer[]>("/api/v1/customer/voucher-transfers/incoming");
+  }
+
+  listOutgoingVoucherTransfers(): Promise<VoucherTransfer[]> {
+    return this.api.get<VoucherTransfer[]>("/api/v1/customer/voucher-transfers/outgoing");
   }
 
   // AUD-077 门票转赠
