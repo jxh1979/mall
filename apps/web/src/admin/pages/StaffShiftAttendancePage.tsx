@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 type ShiftRow = { id: string; userId?: string; workDate?: string; startAt?: string; endAt?: string; pointSpaceIds?: string[]; note?: string };
 type AttendanceRow = { id: string; userId?: string; punchType?: string; punchedAt?: string; method?: string; judgement?: string; spaceId?: string; deviceFingerprint?: string };
@@ -29,7 +30,7 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult }: AdminPageProps) {
+export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult, navigateTo }: AdminPageProps) {
   const [date, setDate] = React.useState(today);
   const [shifts, setShifts] = React.useState<ShiftRow[]>([]);
   const [attendance, setAttendance] = React.useState<AttendanceRow[]>([]);
@@ -120,12 +121,24 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult 
     } catch (e) { setShiftError((e as Error).message); } finally { setShiftSaving(false); }
   };
 
+  // 第五批（人事域）KPI 接线：卡片数字=统一明细端点合计（与「排班/考勤」列表同谓词，平台口径）；
+  // 端点失败/无权 → status=fallback，卡回退「—」并隐藏「完整明细」入口（fail-safe）。
+  // 注：卡为平台口径聚合（requirePlatformScope 拦商户级/外包，放行项目级）；项目级主管看到平台口径数字（卡已标注），与其项目过滤列表口径不同=分析端点框架级边界。
+  const shiftKpi = useMetricKpiValue(api, "staff.shift_count", { from: date, to: date });
+  const attendanceKpi = useMetricKpiValue(api, "staff.attendance_count", { from: date, to: date });
+  const lateKpi = useMetricKpiValue(api, "staff.attendance_late_count", { from: date, to: date });
+
   return (
     <section data-testid="staff-shift-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="staff.shift.saved / staff.attendance.punched" />
       <div className="admin-toolbar">
         <label>日期:<CnDatePicker data-testid="shift-date" value={date} onChange={(v) => setDate(v || today())} /></label>
+      </div>
+      <div className="admin-kpi-grid" data-testid="staff-shift-summary">
+        <div className="admin-kpi-card"><span>排班班次数</span><strong className="admin-kpi-value--text" data-testid="staff-shift-kpi-count">{shiftKpi.status === "ready" && shiftKpi.value !== null ? shiftKpi.value : "—"}</strong><small>平台口径·{date}{shiftKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.shift_count" from={date} to={date} testid="staff-shift-metric-detail-count" /> : null}</small></div>
+        <div className="admin-kpi-card"><span>考勤打卡数</span><strong className="admin-kpi-value--text" data-testid="staff-attendance-kpi-count">{attendanceKpi.status === "ready" && attendanceKpi.value !== null ? attendanceKpi.value : "—"}</strong><small>平台口径·{date}{attendanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.attendance_count" from={date} to={date} testid="staff-attendance-metric-detail-count" /> : null}</small></div>
+        <div className="admin-kpi-card"><span>迟到打卡数</span><strong className="admin-kpi-value--text" data-testid="staff-late-kpi-count">{lateKpi.status === "ready" && lateKpi.value !== null ? lateKpi.value : "—"}</strong><small>平台口径·{date}{lateKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.attendance_late_count" from={date} to={date} testid="staff-late-metric-detail-count" /> : null}</small></div>
       </div>
       <h3>排班(同员工同开始时刻重复保存=覆盖修改)</h3>
       <div className="admin-form-row" data-testid="shift-editor">

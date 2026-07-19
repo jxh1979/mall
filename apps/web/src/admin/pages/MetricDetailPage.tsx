@@ -42,6 +42,14 @@ const CATALOG: Array<{ key: string; name: string; sourcePageId: string; sourceLa
   { key: "settlement.transaction_count", name: "结算笔数", sourcePageId: "ADM-FIN-005", sourceLabel: "通票结算审阅" },
   { key: "settlement.verified_amount", name: "核销金额合计", sourcePageId: "ADM-FIN-005", sourceLabel: "通票结算审阅" },
   { key: "settlement.verified_count", name: "核销张数合计", sourcePageId: "ADM-FIN-005", sourceLabel: "通票结算审阅" },
+  // 第五批（人事域）
+  { key: "staff.shift_count", name: "排班班次数", sourcePageId: "ADM-STF-001", sourceLabel: "排班与考勤" },
+  { key: "staff.attendance_count", name: "考勤打卡数", sourcePageId: "ADM-STF-001", sourceLabel: "排班与考勤" },
+  { key: "staff.attendance_late_count", name: "迟到打卡数", sourcePageId: "ADM-STF-001", sourceLabel: "排班与考勤" },
+  { key: "staff.payroll_net_total", name: "实发合计", sourcePageId: "ADM-STF-002", sourceLabel: "薪酬与请假" },
+  { key: "staff.payroll_statement_count", name: "薪资单数", sourcePageId: "ADM-STF-002", sourceLabel: "薪酬与请假" },
+  { key: "staff.pending_leave_count", name: "待审请假数", sourcePageId: "ADM-STF-002", sourceLabel: "薪酬与请假" },
+  { key: "staff.active_headcount", name: "在职员工数", sourcePageId: "ADM-ACC-001", sourceLabel: "员工账号" },
 ];
 
 const VALUE_TYPE_LABELS: Record<string, string> = { additive: "可加（区间求和）", ratio: "比率（分子/分母）", balance: "余额（区间末值）" };

@@ -7,6 +7,7 @@ import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 function templateLabel(template: PermissionTemplateRow) {
   return template.templateName ?? template.name ?? template.id;
@@ -18,7 +19,7 @@ function shortId(id: string | null | undefined): string {
   return id.length > 8 ? `…${id.slice(-8)}` : id;
 }
 
-export function AccessUsersPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+export function AccessUsersPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<AccessUserRow[]>([]);
   const [templates, setTemplates] = React.useState<PermissionTemplateRow[]>([]);
   const [templateNotice, setTemplateNotice] = React.useState<string | null>(null);
@@ -223,9 +224,15 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
     }
   }
 
+  // 第五批（人事域）KPI 接线：在职员工数=员工类启用账号计数（余额，平台口径），端点失败/无权回退「—」并隐藏入口。
+  const headcountKpi = useMetricKpiValue(api, "staff.active_headcount", {});
+
   return (
     <section data-testid="access-users-page">
       <AdminPageHeader title="员工账号" description="管理员工账号、岗位角色和企业微信同步结果；禁用、手动录入和分配权限模板必须留痕。" />
+      <div className="admin-kpi-grid" data-testid="access-users-summary">
+        <div className="admin-kpi-card"><span>在职员工数</span><strong className="admin-kpi-value--text" data-testid="access-users-kpi-headcount">{headcountKpi.status === "ready" && headcountKpi.value !== null ? headcountKpi.value : "—"}</strong><small>平台口径·员工类启用账号{headcountKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.active_headcount" testid="access-users-metric-detail-headcount" /> : null}</small></div>
+      </div>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {/* 引导式流程一期：内联填表收起为主按钮，点击弹出分步引导（GuidedFlowModal）。 */}
         <div className="admin-form-row">

@@ -389,7 +389,11 @@ class MetricDetailServiceTests {
                         "amusement.inspection_count", "amusement.inspection_pending_rectification",
                         // 第四批（财务域）
                         "finance.ap_balance", "finance.ar_balance_aging90p",
-                        "settlement.transaction_count", "settlement.verified_amount", "settlement.verified_count");
+                        "settlement.transaction_count", "settlement.verified_amount", "settlement.verified_count",
+                        // 第五批（人事域）
+                        "staff.shift_count", "staff.attendance_count", "staff.attendance_late_count",
+                        "staff.payroll_net_total", "staff.payroll_statement_count",
+                        "staff.pending_leave_count", "staff.active_headcount");
         assertThat(MetricRegistry.all()).extracting(MetricRegistry.MetricDefinition::valueType)
                 .contains(MetricRegistry.TYPE_ADDITIVE, MetricRegistry.TYPE_RATIO, MetricRegistry.TYPE_BALANCE);
         assertThat(MetricRegistry.require("finance.recon_diff_count").permission()).isEqualTo("finance.reconciliation.view");
@@ -415,6 +419,14 @@ class MetricDetailServiceTests {
         assertThat(MetricRegistry.require("settlement.transaction_count").permission()).isEqualTo("finance.settlement.view");
         assertThat(MetricRegistry.require("settlement.verified_amount").permission()).isEqualTo("finance.settlement.view");
         assertThat(MetricRegistry.require("settlement.verified_count").permission()).isEqualTo("finance.settlement.view");
+        // 第五批权限=各人事页既有域权限（宽权限 analytics.dashboard.view + 登记项二次校验范式）。
+        assertThat(MetricRegistry.require("staff.shift_count").permission()).isEqualTo("staff.shift.manage");
+        assertThat(MetricRegistry.require("staff.attendance_count").permission()).isEqualTo("staff.attendance.view");
+        assertThat(MetricRegistry.require("staff.attendance_late_count").permission()).isEqualTo("staff.attendance.view");
+        assertThat(MetricRegistry.require("staff.payroll_net_total").permission()).isEqualTo("staff.payroll.manage");
+        assertThat(MetricRegistry.require("staff.payroll_statement_count").permission()).isEqualTo("staff.payroll.manage");
+        assertThat(MetricRegistry.require("staff.pending_leave_count").permission()).isEqualTo("staff.shift.manage");
+        assertThat(MetricRegistry.require("staff.active_headcount").permission()).isEqualTo("access.user.view");
         // 每条登记必须有中文名/口径说明/数据源说明/列定义（明细页顶部展示，业务中文）。
         for (MetricRegistry.MetricDefinition definition : MetricRegistry.all()) {
             assertThat(definition.name()).isNotBlank();
@@ -459,6 +471,55 @@ class MetricDetailServiceTests {
         verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("amount"), eq(20), eq(0));
         service.metricDetail("settlement.verified_count", null, null, null, 1, 20);
         verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("tickets"), eq(20), eq(0));
+    }
+
+    @Test
+    void staffFifthBatchDispatchByMetricKey() {
+        // 可加类（人事域）：班次/考勤/薪资单按 LocalDate 区间端点分派（effectiveFrom/effectiveTo），缺省=当前经营日。
+        when(repository.staffShiftDetail(any(), any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "sh1")), 2, new BigDecimal("2")));
+        MetricDetailResponse shift = service.metricDetail("staff.shift_count", null, null, null, 1, 20);
+        assertThat(shift.valueType()).isEqualTo("additive");
+        assertThat(shift.unit()).isEqualTo("班");
+        assertThat(shift.from()).isEqualTo(CURRENT_BUSINESS_DAY);
+        assertThat(shift.to()).isEqualTo(CURRENT_BUSINESS_DAY);
+        assertThat(shift.summaryValue()).isEqualByComparingTo("2");
+        verify(repository).staffShiftDetail(eq(CURRENT_BUSINESS_DAY), eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+
+        // 考勤打卡数 / 迟到打卡数：同一 staffAttendanceDetail 按 lateOnly 分派。
+        when(repository.staffAttendanceDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "at1")), 3, new BigDecimal("3")));
+        service.metricDetail("staff.attendance_count", null, LocalDate.parse("2026-07-15"), LocalDate.parse("2026-07-15"), 1, 20);
+        verify(repository).staffAttendanceDetail(eq(LocalDate.parse("2026-07-15")), eq(LocalDate.parse("2026-07-15")), eq(false), eq(20), eq(0));
+        service.metricDetail("staff.attendance_late_count", null, LocalDate.parse("2026-07-15"), LocalDate.parse("2026-07-15"), 1, 20);
+        verify(repository).staffAttendanceDetail(eq(LocalDate.parse("2026-07-15")), eq(LocalDate.parse("2026-07-15")), eq(true), eq(20), eq(0));
+
+        // 实发合计 / 薪资单数：同一 staffPayrollDetail 按 sumTotal 分派。
+        when(repository.staffPayrollDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "pay1", "totalCent", 120000L)), 1, new BigDecimal("120000")));
+        MetricDetailResponse total = service.metricDetail("staff.payroll_net_total", null, LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-01"), 1, 20);
+        assertThat(total.unit()).isEqualTo("分");
+        assertThat(total.summaryValue()).isEqualByComparingTo("120000");
+        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(true), eq(20), eq(0));
+        service.metricDetail("staff.payroll_statement_count", null, LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-01"), 1, 20);
+        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(false), eq(20), eq(0));
+
+        // 余额类（人事域）：待审请假 / 在职员工数 as-of=to（缺省=当前经营日），from 不参与。
+        when(repository.staffPendingLeaveDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "lv1")), 1, new BigDecimal("1")));
+        MetricDetailResponse leave = service.metricDetail("staff.pending_leave_count", null, null, null, 1, 20);
+        assertThat(leave.valueType()).isEqualTo("balance");
+        assertThat(leave.unit()).isEqualTo("笔");
+        assertThat(leave.to()).isEqualTo(CURRENT_BUSINESS_DAY);
+        verify(repository).staffPendingLeaveDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+
+        when(repository.staffActiveHeadcountDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "u1")), 5, new BigDecimal("5")));
+        MetricDetailResponse headcount = service.metricDetail("staff.active_headcount", null, null, null, 1, 20);
+        assertThat(headcount.valueType()).isEqualTo("balance");
+        assertThat(headcount.unit()).isEqualTo("人");
+        assertThat(headcount.summaryValue()).isEqualByComparingTo("5");
+        verify(repository).staffActiveHeadcountDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
     }
 
     private static Map<String, Object> row(Object... kv) {

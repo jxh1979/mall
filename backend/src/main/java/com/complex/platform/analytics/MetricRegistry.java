@@ -590,6 +590,139 @@ public final class MetricRegistry {
                 "id",
                 settlementColumns(),
                 null));
+
+        // ==== 第五批（人事域，2026-07-19）：谓词逐字抄各页面既有取数（不自造口径）====
+        // 说明：人事三页原为纯列表（无 KPI 卡）；本批为各页新增「平台口径」汇总卡（数字=其明细列表的 COUNT/SUM），
+        // 谓词逐字同各列表端点（listShifts/listAttendanceOn/listPayrollStatements/listLeaves/listUsers 的平台口径=空 project_scope）。
+        // 端点 requirePlatformScope 拦商户级/外包供应商（放行项目级）：本批指标均为平台口径聚合。
+        // 项目级操作者（持 analytics.dashboard.view）取到的是平台口径数字（卡片已标注「平台口径」，不冒充其项目数），
+        // 与其项目过滤后的页内列表口径不同——这是全站分析端点的框架级边界（与批4财务共用），非本批引入。
+        // 排班与考勤（ADM-STF-001）：班次按 work_date 落 [起,止] 闭区间；考勤按 punched_at 纯自然日窗（同页 listAttendanceOn 的 00:00 UTC 日窗，不走经营日切）。
+        register(registry, new MetricDefinition(
+                "staff.shift_count",
+                "排班班次数",
+                TYPE_ADDITIVE,
+                "班",
+                "排班班次逐条计数（与排班与考勤页「排班」列表一致）。可加口径=区间求和：按排班日（work_date）落 [起,止] 闭区间计数；"
+                        + "缺省=当前日（卡片传 from=to=页面所选日期，明细合计=该日列表条数）。平台口径=空项目范围（同页列表在平台管理员下的全量）。",
+                "排班台账（staff_shift_schedules，实时查询）。",
+                "staff.shift.manage",
+                "staff",
+                false,
+                false,
+                "ADM-STF-001",
+                "ADM-STF-001",
+                "id",
+                staffShiftColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "staff.attendance_count",
+                "考勤打卡数",
+                TYPE_ADDITIVE,
+                "次",
+                "考勤打卡逐条计数（含正常/迟到/早退/无班次全部判定，与排班与考勤页「当日考勤记录」列表一致）。"
+                        + "可加口径=区间求和：按打卡时间（punched_at）落自然日窗 [起 00:00, 止次日 00:00) UTC 计数"
+                        + "（与页面 listAttendanceOn 同一自然日窗，刻意不走经营日切）；缺省=当前日。平台口径=空项目范围。",
+                "考勤台账（staff_attendance_records，实时查询）。",
+                "staff.attendance.view",
+                "staff",
+                false,
+                false,
+                "ADM-STF-001",
+                "ADM-STF-001",
+                "id",
+                staffAttendanceColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "staff.attendance_late_count",
+                "迟到打卡数",
+                TYPE_ADDITIVE,
+                "次",
+                "判定为「迟到」（judgement='late'）的打卡逐条计数（与考勤列表「判定」列迟到行一致）。可加口径=区间求和："
+                        + "按打卡时间落自然日窗（同考勤打卡数），加 judgement='late'；缺省=当前日。平台口径=空项目范围。",
+                "考勤台账（staff_attendance_records，实时查询）。",
+                "staff.attendance.view",
+                "staff",
+                false,
+                false,
+                "ADM-STF-001",
+                "ADM-STF-001",
+                "id",
+                staffAttendanceColumns(),
+                null));
+        // 薪酬与请假（ADM-STF-002）：薪资单按 month 字符串落区间（YYYY-MM 字典序即时序）；待审请假=当前 pending 计数（余额）。
+        register(registry, new MetricDefinition(
+                "staff.payroll_net_total",
+                "实发合计",
+                TYPE_ADDITIVE,
+                "分",
+                "已月结薪资单实发金额合计（Σtotal_cent，与薪酬与请假页「当月薪资单」各行「实发合计」列直加一致）。"
+                        + "可加口径=区间求和：按薪资单所属月份（month，YYYY-MM 字典序即时序）落 [起月,止月] 闭区间；"
+                        + "缺省=当前月（卡片传 from=to=所选月首日 → 单月合计）。平台口径=空项目范围（同页列表在平台管理员下的全量，不加状态过滤）。",
+                "薪资单台账（staff_payroll_statements，月结生成，实时查询）。",
+                "staff.payroll.manage",
+                "staff",
+                false,
+                false,
+                "ADM-STF-002",
+                "ADM-STF-002",
+                "id",
+                staffPayrollColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "staff.payroll_statement_count",
+                "薪资单数",
+                TYPE_ADDITIVE,
+                "份",
+                "已月结薪资单逐份计数（与薪酬与请假页「当月薪资单」列表一致）。可加口径=区间求和：按所属月份落 [起月,止月] 闭区间；"
+                        + "缺省=当前月。平台口径=空项目范围。",
+                "薪资单台账（staff_payroll_statements，实时查询）。",
+                "staff.payroll.manage",
+                "staff",
+                false,
+                false,
+                "ADM-STF-002",
+                "ADM-STF-002",
+                "id",
+                staffPayrollColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "staff.pending_leave_count",
+                "待审请假数",
+                TYPE_BALANCE,
+                "笔",
+                "当前待审请假数=状态为「待审」（status='pending'）的请假申请计数（与薪酬与请假页「待审请假」列表一致）。"
+                        + "余额口径=区间末值：取结束日期（缺省=当前经营日）为截至日，仅限制申请提交时间早于截至日自然日窗末；起始日期不参与。"
+                        + "注意：状态按台账当前值计。待审请假由排班主管审批，权限=staff.shift.manage（同 listLeaves 端点）。平台口径=空项目范围。",
+                "请假台账（staff_leave_requests，实时查询）。",
+                "staff.shift.manage",
+                "staff",
+                false,
+                false,
+                "ADM-STF-002",
+                "ADM-STF-002",
+                "id",
+                staffLeaveColumns(),
+                null));
+        // 员工账号（ADM-ACC-001）：在职员工数=员工类账号且启用（余额）。
+        register(registry, new MetricDefinition(
+                "staff.active_headcount",
+                "在职员工数",
+                TYPE_BALANCE,
+                "人",
+                "在职员工数=账号类型为「普通员工」（account_type='staff'）且状态为「启用」（status='active'）的账号计数"
+                        + "（与员工账号页员工类启用账号一致）。余额口径=区间末值：取结束日期（缺省=当前经营日）为截至日，"
+                        + "仅计入建号时间早于截至日自然日窗末的账号；状态按台账当前值计。仅统计员工类账号，不含外包/商户/平台管理账号。平台口径=空项目范围。",
+                "账号台账（access_users，实时查询）。",
+                "access.user.view",
+                "staff",
+                false,
+                false,
+                "ADM-ACC-001",
+                "ADM-ACC-001",
+                "id",
+                staffHeadcountColumns(),
+                null));
         return registry;
     }
 
@@ -701,6 +834,59 @@ public final class MetricRegistry {
                 new MetricColumn("verifiedAmountCent", "核销金额（分）"),
                 new MetricColumn("settlementStatus", "结算状态"),
                 new MetricColumn("createdAt", "发生时间"));
+    }
+
+    private static List<MetricColumn> staffShiftColumns() {
+        return List.of(
+                new MetricColumn("userId", "员工"),
+                new MetricColumn("workDate", "排班日"),
+                new MetricColumn("startAt", "开始"),
+                new MetricColumn("endAt", "结束"),
+                new MetricColumn("note", "备注"),
+                new MetricColumn("id", "排班编号"));
+    }
+
+    private static List<MetricColumn> staffAttendanceColumns() {
+        return List.of(
+                new MetricColumn("userId", "员工"),
+                new MetricColumn("punchType", "类型"),
+                new MetricColumn("punchedAt", "打卡时间"),
+                new MetricColumn("method", "方式"),
+                new MetricColumn("judgement", "判定"),
+                new MetricColumn("spaceId", "点位"),
+                new MetricColumn("id", "考勤编号"));
+    }
+
+    private static List<MetricColumn> staffPayrollColumns() {
+        return List.of(
+                new MetricColumn("userId", "员工"),
+                new MetricColumn("month", "月份"),
+                new MetricColumn("baseCent", "固定工资（分）"),
+                new MetricColumn("commissionCent", "提成（分）"),
+                new MetricColumn("bonusCent", "奖金（分）"),
+                new MetricColumn("penaltyCent", "处罚（分）"),
+                new MetricColumn("totalCent", "实发合计（分）"),
+                new MetricColumn("id", "薪资单号"));
+    }
+
+    private static List<MetricColumn> staffLeaveColumns() {
+        return List.of(
+                new MetricColumn("userId", "员工"),
+                new MetricColumn("leaveType", "请假类型"),
+                new MetricColumn("startDate", "开始"),
+                new MetricColumn("endDate", "结束"),
+                new MetricColumn("reason", "事由"),
+                new MetricColumn("status", "状态"),
+                new MetricColumn("id", "申请单号"));
+    }
+
+    private static List<MetricColumn> staffHeadcountColumns() {
+        return List.of(
+                new MetricColumn("username", "账号"),
+                new MetricColumn("accountType", "账号类型"),
+                new MetricColumn("status", "状态"),
+                new MetricColumn("createdAt", "创建时间"),
+                new MetricColumn("id", "账号编号"));
     }
 
     private static void register(Map<String, MetricDefinition> registry, MetricDefinition definition) {

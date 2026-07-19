@@ -669,4 +669,135 @@ class MetricDetailConsistencyJdbcIntegrationTests {
                 .addValue("template_id", sid(templateId)).addValue("overall", overallResult)
                 .addValue("rectification", rectificationStatus).addValue("at", dayTs()));
     }
+
+    // ==== 第五批（人事域）：数字=明细合计 真库一致性（基线差值口径） ====
+
+    @Test
+    void staffShiftCountEqualsPagedDetailCountOverWorkDateRange() {
+        LocalDate day = LocalDate.parse("2026-06-21");
+        BigDecimal baseline = repository.staffShiftDetail(day, day, 1, 0).summaryValue();
+        insertShift(sid("shift_a"), day);
+        insertShift(sid("shift_b"), day);
+        MetricDetailRows rows = repository.staffShiftDetail(day, day, 200, 0);
+        assertThat(rows.summaryValue().subtract(baseline)).isEqualByComparingTo("2");
+        assertThat(collectAllPages((limit, offset) -> repository.staffShiftDetail(day, day, limit, offset)))
+                .hasSize(rows.summaryValue().intValueExact());
+    }
+
+    @Test
+    void staffAttendanceCountAndLateSplitByJudgement() {
+        LocalDate day = LocalDate.parse("2026-06-22");
+        BigDecimal baseAll = repository.staffAttendanceDetail(day, day, false, 1, 0).summaryValue();
+        BigDecimal baseLate = repository.staffAttendanceDetail(day, day, true, 1, 0).summaryValue();
+        insertAttendance(sid("att_normal"), day, "normal");
+        insertAttendance(sid("att_late1"), day, "late");
+        insertAttendance(sid("att_late2"), day, "late");
+        assertThat(repository.staffAttendanceDetail(day, day, false, 1, 0).summaryValue().subtract(baseAll))
+                .isEqualByComparingTo("3");
+        assertThat(repository.staffAttendanceDetail(day, day, true, 1, 0).summaryValue().subtract(baseLate))
+                .isEqualByComparingTo("2");
+        assertThat(collectAllPages((limit, offset) -> repository.staffAttendanceDetail(day, day, true, limit, offset)))
+                .allSatisfy(r -> assertThat(r.get("judgement")).isEqualTo("late"));
+    }
+
+    @Test
+    void staffPayrollTotalAndCountEqualPagedDetailOverMonthRange() {
+        LocalDate monthDay = LocalDate.parse("2026-06-01");
+        BigDecimal baseTotal = repository.staffPayrollDetail(monthDay, monthDay, true, 1, 0).summaryValue();
+        BigDecimal baseCount = repository.staffPayrollDetail(monthDay, monthDay, false, 1, 0).summaryValue();
+        insertPayrollStatement(sid("pay_a"), "2026-06", 120000);
+        insertPayrollStatement(sid("pay_b"), "2026-06", 80000);
+        assertThat(repository.staffPayrollDetail(monthDay, monthDay, true, 1, 0).summaryValue().subtract(baseTotal))
+                .isEqualByComparingTo("200000");
+        assertThat(repository.staffPayrollDetail(monthDay, monthDay, false, 1, 0).summaryValue().subtract(baseCount))
+                .isEqualByComparingTo("2");
+        assertThat(sumLong(collectAllPages((limit, offset) -> repository.staffPayrollDetail(monthDay, monthDay, true, limit, offset)), "totalCent"))
+                .isEqualByComparingTo(repository.staffPayrollDetail(monthDay, monthDay, true, 200, 0).summaryValue());
+    }
+
+    @Test
+    void staffPendingLeaveCountCountsOnlyPendingAsOfEnd() {
+        LocalDate asOf = LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1);
+        BigDecimal baseline = repository.staffPendingLeaveDetail(asOf, 1, 0).summaryValue();
+        insertLeave(sid("lv_pending"), "pending");
+        insertLeave(sid("lv_approved"), "approved");
+        MetricDetailRows rows = repository.staffPendingLeaveDetail(asOf, 200, 0);
+        assertThat(rows.summaryValue().subtract(baseline)).isEqualByComparingTo("1");
+        assertThat(collectAllPages((limit, offset) -> repository.staffPendingLeaveDetail(asOf, limit, offset)))
+                .allSatisfy(r -> assertThat(r.get("status")).isEqualTo("pending"));
+    }
+
+    @Test
+    void staffActiveHeadcountCountsOnlyActiveStaffAccounts() {
+        LocalDate asOf = LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1);
+        BigDecimal baseline = repository.staffActiveHeadcountDetail(asOf, 1, 0).summaryValue();
+        insertUser(sid("u_staff_active"), "staff", "active");
+        insertUser(sid("u_staff_disabled"), "staff", "disabled");
+        insertUser(sid("u_vendor_active"), "outsourced_vendor", "active");
+        MetricDetailRows rows = repository.staffActiveHeadcountDetail(asOf, 200, 0);
+        assertThat(rows.summaryValue().subtract(baseline)).isEqualByComparingTo("1");
+        assertThat(collectAllPages((limit, offset) -> repository.staffActiveHeadcountDetail(asOf, limit, offset)))
+                .allSatisfy(r -> {
+                    assertThat(r.get("accountType")).isEqualTo("staff");
+                    assertThat(r.get("status")).isEqualTo("active");
+                });
+    }
+
+    private void insertShift(String id, LocalDate workDate) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_shift_schedules (id, user_id, work_date, start_at, end_at, created_at, updated_at)
+                VALUES (:id, :user_id, :work_date, :start_at, :end_at, now(), now())
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("user_id", id)
+                .addValue("work_date", workDate)
+                .addValue("start_at", java.sql.Timestamp.from(workDate.atTime(9, 0).toInstant(java.time.ZoneOffset.UTC)))
+                .addValue("end_at", java.sql.Timestamp.from(workDate.atTime(18, 0).toInstant(java.time.ZoneOffset.UTC))));
+    }
+
+    private void insertAttendance(String id, LocalDate day, String judgement) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_attendance_records (id, user_id, punch_type, punched_at, method, judgement, created_at)
+                VALUES (:id, :user_id, 'check_in', :punched_at, 'nfc', :judgement, now())
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("user_id", id)
+                .addValue("punched_at", java.sql.Timestamp.from(day.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC)))
+                .addValue("judgement", judgement));
+    }
+
+    private void insertPayrollStatement(String id, String month, long totalCent) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_payroll_statements
+                    (id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent,
+                     leave_deduction_cent, tax_cent, total_cent, status, closed_by, closed_at)
+                VALUES (:id, :user_id, :month, 0, 0, 0, 0, 0, 0, :total, 'closed', 'tester', now())
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("user_id", id)
+                .addValue("month", month)
+                .addValue("total", totalCent));
+    }
+
+    private void insertLeave(String id, String status) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_leave_requests
+                    (id, user_id, leave_type, start_date, end_date, reason, status, created_at, updated_at)
+                VALUES (:id, :user_id, 'personal', DATE '2026-06-20', DATE '2026-06-21', '测试请假', :status, now(), now())
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("user_id", id)
+                .addValue("status", status));
+    }
+
+    private void insertUser(String id, String accountType, String status) {
+        jdbcTemplate.update("""
+                INSERT INTO access_users (id, username, account_type, status, created_at)
+                VALUES (:id, :username, :account_type, :status, now())
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("username", id)
+                .addValue("account_type", accountType)
+                .addValue("status", status));
+    }
 }
