@@ -34,6 +34,7 @@ import com.complex.platform.inventory.InventoryCostSummaryRecord;
 import com.complex.platform.inventory.InventoryRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -626,5 +627,30 @@ class DividendServiceTests {
                 new DividendComputeRequest("same-key", "2026-Q4", "official", null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+    }
+
+    @Test
+    void scheduledMonthlyPreviewRefreshesQuarterlyAndSkipsMonthlyPlans() {
+        // 月度预览定时作业入口：季度方案出 preview 单（系统操作人，不可审批），月度方案跳过。
+        createDefaultPlan(); // 季度方案（MERCHANT）
+        service.createPlan(new DividendPlanRequest("plan-monthly", "merchant_monthly", "usr_p2", null,
+                null, null, "monthly", null, null, null, null, null, null));
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+
+        DividendComputeResultRecord first = service.runScheduledMonthlyPreview(YearMonth.of(2026, 7));
+        assertThat(first.computed()).hasSize(1);
+        DividendStatementRecord preview = first.computed().get(0);
+        assertThat(preview.kind()).isEqualTo("preview");
+        assertThat(preview.status()).isEqualTo("preview");
+        assertThat(preview.merchantId()).isEqualTo(MERCHANT);
+        assertThat(preview.computedBy()).isEqualTo("system_dividend_preview");
+        // 月度方案不出月度预览 → 跳过清单含它。
+        assertThat(first.skipped()).anySatisfy(s -> assertThat(s.merchantId()).isEqualTo("merchant_monthly"));
+
+        // 刷新式重跑：旧 preview 作废 + 新 preview（取后者，反映台账最新状态）。
+        DividendComputeResultRecord second = service.runScheduledMonthlyPreview(YearMonth.of(2026, 7));
+        assertThat(second.computed()).hasSize(1);
+        assertThat(second.computed().get(0).id()).isNotEqualTo(preview.id());
+        assertThat(repository.findStatementById(preview.id()).orElseThrow().status()).isEqualTo("voided");
     }
 }

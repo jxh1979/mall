@@ -107,8 +107,19 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
 
 - **扣除项三开关未实现**（设计稿 §5：亏损结转/未结清款项抵扣/发放保护线）：本期口径为亏损期可分配额=0
   （不倒扣、不结转）；负净利跨期补亏、主理人欠款抵扣、小额并入下期留待后续迭代，快照结构已可扩展。
-- **定时作业未上**：期末自动触发（定时器）依赖费用侧关账节奏，本期为手动触发端点；
-  配套的**分红期间关账锁**（已核算月份禁止再动费用台账）在 V297 PRD §14 留档，一并后续实现。
+- **正式单仍手动触发**：正式单（进入审批发放）维持手动触发端点（费用侧关账节奏由人把关，防不完整基数入正式单）。
+  **月度预览定时作业已上**（V302，`DividendMonthlyPreviewJob`）：默认关闭（`dividend.preview.scheduled.enabled=true`
+  才注册，cron 可配，默认每月 1 日 02:00 跑上月），对每个生效中季度方案自动出上月 preview 单（只读不可审批），
+  刷新式幂等（同期未作废 preview 先作废再重出）；业务逻辑在可直调的 `DividendService.runScheduledMonthlyPreview`。
+- **分红期间关账锁已上**（V302，口径=「费用侧冻结」非全基数冻结）：某商户某月被非 preview 且
+  status∈(approved,paid) 的计算单按 [period_start, period_end] 覆盖即「关账」（季度单覆盖 3 个月）——
+  <b>锁的只是费用台账 merchant_expense_entries</b>（营收/成本源头按设计不锁）；已发放单的金额靠 V299 计算单快照
+  冻结另行兜底。费用台账三写路径挂 app 层硬闸——手工录入/红字冲销对已关账
+  (商户,月份) 拒（响亮 409 `DIVIDEND_PERIOD_LOCKED`，进 x-failure-codes），自动挂接（能耗/物业/合同物业/租金四路）
+  对已关账 (商户,月份) NOT EXISTS 跳过并在响应列出跳过清单；判定纯函数见 `DividendPeriodLock`，SQL 索引 V302
+  `ix_dividend_statements_lock`。解锁=该单作废（判定式不含 voided，天然解锁）。营收/成本源头不锁（经营流水不因分红
+  停摆），其漂移靠 compute 前置的同期唯一部分索引兜（同商户同期不重复出正式单）。前端费用页对已关账月份禁用录入/
+  冲销按钮 + 锁定提示（读 `GET /finance/merchant-expenses/period-locks`），分红页对 approved/paid 正式单标「期间已关账」。
 - **收入域默认不含合同租金**：租金是商户对平台的支出（费用侧 rent_allocation 类别），计入收入会与
   费用侧重复；BI revenue.net 展示口径含租金分量，与分红基数口径有意不同。费用侧租金已默认计入
   （2026-07-18 拍板：auto_rent 自动挂接，分红方案基数构成默认勾选 rent_allocation，可按方案关闭）；
@@ -124,3 +135,4 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
 |---|---|---|---|
 | 2026-07-18 | 增 | v0.1 初版：收编拍板终稿（净利润制/股息红利 20%/季度+月预览/全可配）+ V299 实现细节（三表/恒等式 CHECK/append-only 明细/状态机/应付挂账/两页面/10 operations） | 2026-07-18 用户拍板；V296/V297 数据基建就绪后的分红引擎本体交付 |
 | 2026-07-18 复核 | 改 | C-1 状态机 UPDATE 全带期望前态守卫（0 行=业务 409，杜绝并发 approve×reject 双付窗口）；I-1 审批职责分离（提交人不得审批自己提交的单 SELF_APPROVAL_FORBIDDEN）；rejected_by/rejected_at 留痕；商户侧 DTO 脱敏（内部操作员/应付 id 不外发）；租金计入费用台账并默认扣减（auto_rent 挂接 contract_rent+turnover_rent，turnover_rent 出账起落 accounting_period） | 一轮复核 1C+1I+4S + 用户拍板租金计入分红基数 |
+| 2026-07-18 二轮复核 I-2 | 增 | V302 分红期间关账锁 + 月度预览定时作业：关账判定纯函数 `DividendPeriodLock` + 部分索引 `ix_dividend_statements_lock`；费用台账三写路径挂锁（手工录入/冲销拒 `DIVIDEND_PERIOD_LOCKED` 409，自动挂接四路 NOT EXISTS 跳过 + lockedMerchants 清单）；`DividendMonthlyPreviewJob`（默认关，@ConditionalOnProperty，刷新式出上月季度方案预览单）；新增只读端点 `GET /finance/merchant-expenses/period-locks`（前端禁用已关账月份录入/冲销）；分红页 approved/paid 单标「期间已关账」。§9 边界更新 | 二轮复核 I-2 敞口（已发放单来源台账静默漂移）；封死费用侧追改口子 |

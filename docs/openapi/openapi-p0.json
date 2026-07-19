@@ -20894,7 +20894,10 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "x-failure-codes": [
+          "DIVIDEND_PERIOD_LOCKED"
+        ]
       }
     },
     "/api/v1/finance/merchant-expenses/summary": {
@@ -20933,6 +20936,50 @@
               "maxLength": 64
             },
             "description": "商户 ID；空=全部商户。商户 scope 账号强制只看自己。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/merchant-expenses/period-locks": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listMerchantExpensePeriodLocks",
+        "summary": "查询某月已关账（分红核算完成、费用台账冻结）的商户清单（前端据此禁用费用录入/冲销）",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.merchant_expense.view",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "merchant_expense.period_locks_viewed",
+        "x-audit-event-failure": "merchant_expense.period_locks_view_failed",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 16
+            },
+            "description": "月份（如 2026-07），必填；返回该月「费用侧冻结」（被 approved/paid 正式分红单覆盖）的商户 id 列表。只锁费用台账，营收/成本源头不锁。"
           }
         ],
         "responses": {
@@ -20995,7 +21042,10 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "x-failure-codes": [
+          "DIVIDEND_PERIOD_LOCKED"
+        ]
       }
     },
     "/api/v1/finance/merchant-expenses/sync-auto": {

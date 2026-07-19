@@ -69,6 +69,8 @@ public class DividendService {
             "preview", "draft", "pending_review", "approved", "paid", "rejected", "voided");
     /** 可重算（作废+重出）的状态；已进入审批流的单不重算。 */
     private static final Set<String> RECOMPUTABLE_STATUSES = Set.of("preview", "draft", "rejected");
+    /** 月度预览定时作业的系统操作人标识（无请求上下文，落 computed_by/voided_by 便于留痕追溯）。 */
+    static final String SYSTEM_OPERATOR = "system_dividend_preview";
 
     // 默认口径（仅新建方案时的默认值，全部可配）。
     private static final int DEFAULT_PLATFORM_SHARE_BPS = 8000;
@@ -250,10 +252,27 @@ public class DividendService {
         } else {
             plans = repository.listActivePlans();
         }
+        return runCompute(plans, kind, period, currentOperator());
+    }
+
+    /**
+     * 月度预览定时作业入口（{@link DividendMonthlyPreviewJob} 调用）：无请求上下文、系统操作人，
+     * 对每个生效中方案出上月 preview 单（仅季度方案，月度方案跳过）。刷新式幂等——每次跑作废旧
+     * 未作废预览单再重出（runCompute 内 RECOMPUTABLE 含 preview）。preview 不可审批，维持 V299 拍板。
+     * 无鉴权闸：定时线程无 SecurityContext，本方法只对内部作业开放（无 Controller 绑定）。
+     */
+    @Transactional
+    public DividendComputeResultRecord runScheduledMonthlyPreview(java.time.YearMonth month) {
+        DividendPeriod period = DividendPeriod.parse(month.toString());
+        return runCompute(repository.listActivePlans(), "preview", period, SYSTEM_OPERATOR);
+    }
+
+    /** 期间作业核心循环（请求路径与定时预览共用；operator 显式传入以脱离鉴权上下文）。 */
+    private DividendComputeResultRecord runCompute(
+            List<DividendPlanRecord> plans, String kind, DividendPeriod period, String operator) {
         List<DividendStatementRecord> computed = new ArrayList<>();
         List<DividendComputeSkipRecord> skipped = new ArrayList<>();
         Instant now = Instant.now();
-        String operator = currentOperator();
         for (DividendPlanRecord plan : plans) {
             String mismatch = periodMismatchReason(kind, period, plan);
             if (mismatch != null) {
