@@ -4,7 +4,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
 
@@ -88,6 +88,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [orders, setOrders] = React.useState<TicketOrderRow[]>([]);
   const [entitlements, setEntitlements] = React.useState<TicketIssuedEntitlementRow[]>([]);
   const [verifications, setVerifications] = React.useState<TicketVerificationRow[]>([]);
+  const [entitlementsNotice, setEntitlementsNotice] = React.useState<string | null>(null);
+  const [verificationsNotice, setVerificationsNotice] = React.useState<string | null>(null);
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [entitlementCode, setEntitlementCode] = React.useState("ENT-0001");
   const [formError, setFormError] = React.useState("");
@@ -127,13 +129,16 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
     async () => {
       const [orderRows, entitlementRows, verificationRows] = await Promise.all([
         api.get<TicketOrderRow[]>("/api/v1/ticketing/orders"),
-        api.get<TicketIssuedEntitlementRow[]>("/api/v1/ticketing/issued-entitlements"),
-        api.get<TicketVerificationRow[]>("/api/v1/ticketing/verifications"),
+        // 权益/核销为副资源：403 或失败时降级（KPI 显「—」不静默归零），出票主表照常。
+        loadSecondary(() => api.get<TicketIssuedEntitlementRow[]>("/api/v1/ticketing/issued-entitlements"), [] as TicketIssuedEntitlementRow[]),
+        loadSecondary(() => api.get<TicketVerificationRow[]>("/api/v1/ticketing/verifications"), [] as TicketVerificationRow[]),
       ]);
       setOrders(orderRows);
-      setEntitlements(entitlementRows);
-      setVerifications(verificationRows);
-      setEntitlementCode((current) => current || entitlementRows[0]?.entitlementCode || "");
+      setEntitlements(entitlementRows.data);
+      setEntitlementsNotice(entitlementRows.notice);
+      setVerifications(verificationRows.data);
+      setVerificationsNotice(verificationRows.notice);
+      setEntitlementCode((current) => current || entitlementRows.data[0]?.entitlementCode || "");
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -253,8 +258,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orders}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orderCountDisplay}</button><small>{TEXT.ordersHelp}{orderCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="ticket.order_count" testid="ticket-orders-metric-detail-orders" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.paid}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-paid" onClick={() => enterKpiFocus("paid")}>{paidCountDisplay}</button><small>{TEXT.paidHelp}{paidOrderKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="ticket.paid_order_count" testid="ticket-orders-metric-detail-paid" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingIssue}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-not-issued" onClick={() => enterKpiFocus("not_issued")}>{pendingIssueDisplay}</button><small>{TEXT.pendingIssueHelp}{pendingIssueKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="ticket.pending_issue_count" testid="ticket-orders-metric-detail-not-issued" /></> : null}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.entitlements}</span><strong>{entitlements.length}</strong><small>{TEXT.entitlementsHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.verifications}</span><strong>{verifications.length}</strong><small>{TEXT.verificationsHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.entitlements}</span><strong data-testid="ticket-orders-kpi-entitlements">{entitlementsNotice ? "—" : entitlements.length}</strong><small data-testid={entitlementsNotice ? "ticket-orders-entitlements-degraded" : undefined}>{entitlementsNotice ?? TEXT.entitlementsHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.verifications}</span><strong data-testid="ticket-orders-kpi-verifications">{verificationsNotice ? "—" : verifications.length}</strong><small data-testid={verificationsNotice ? "ticket-orders-verifications-degraded" : undefined}>{verificationsNotice ?? TEXT.verificationsHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedLabel(selectedOrder)}>{selectedLabel(selectedOrder)}</strong><small>{formatBusinessStatus(selectedOrder?.issueStatus)}</small></div>
         </div>
 

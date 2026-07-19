@@ -4,7 +4,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { Sparkline, MiniBars } from "../components/MiniChart";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
@@ -97,6 +97,11 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
   // V216 真落库：加载时读回已锁定复盘（刷新/换人后仍可见），锁定按钮走后端接口。
   const [reviewLocks, setReviewLocks] = React.useState<BusinessReviewLockRow[]>([]);
   const [locking, setLocking] = React.useState(false);
+  // 批2 副资源容错：客流/定义/异常/复盘四块各自降级，主资源=指标快照(snapshots)始终裸取。
+  const [hourlyNotice, setHourlyNotice] = React.useState<string | null>(null);
+  const [definitionsNotice, setDefinitionsNotice] = React.useState<string | null>(null);
+  const [anomaliesNotice, setAnomaliesNotice] = React.useState<string | null>(null);
+  const [reviewLocksNotice, setReviewLocksNotice] = React.useState<string | null>(null);
   // 引导式流程 phase-9：新建复盘锁收起为主按钮 + 分步引导弹窗（业务域/说明分步核对后提交）。
   const [lockOpen, setLockOpen] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
@@ -180,16 +185,20 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
       // 异常=日环比突变检测(阈值经营参数页可调)。演示种子已随 V207 清除。
       const [snapshotRows, hourlyResp, definitionRows, anomalyRows, lockRows] = await Promise.all([
         api.get<BusinessMetricSnapshotRow[]>("/api/v1/analytics/business-metric-snapshots"),
-        api.get<{ businessDate?: string; buckets?: Array<{ hour: number; count: number }> }>("/api/v1/analytics/traffic-hourly"),
-        api.get<MetricDefinitionRow[]>("/api/v1/analytics/metric-definitions"),
-        api.get<MetricAnomalyRow[]>("/api/v1/analytics/metric-anomalies"),
-        api.get<BusinessReviewLockRow[]>("/api/v1/analytics/review-locks"),
+        loadSecondary(() => api.get<{ businessDate?: string; buckets?: Array<{ hour: number; count: number }> }>("/api/v1/analytics/traffic-hourly"), { buckets: [] as Array<{ hour: number; count: number }> }),
+        loadSecondary(() => api.get<MetricDefinitionRow[]>("/api/v1/analytics/metric-definitions"), [] as MetricDefinitionRow[]),
+        loadSecondary(() => api.get<MetricAnomalyRow[]>("/api/v1/analytics/metric-anomalies"), [] as MetricAnomalyRow[]),
+        loadSecondary(() => api.get<BusinessReviewLockRow[]>("/api/v1/analytics/review-locks"), [] as BusinessReviewLockRow[]),
       ]);
       setSnapshots(snapshotRows);
-      setHourly(hourlyResp?.buckets ?? []);
-      setDefinitions(definitionRows ?? []);
-      setAnomalies(anomalyRows ?? []);
-      setReviewLocks(lockRows ?? []);
+      setHourly(hourlyResp.data?.buckets ?? []);
+      setHourlyNotice(hourlyResp.notice);
+      setDefinitions(definitionRows.data);
+      setDefinitionsNotice(definitionRows.notice);
+      setAnomalies(anomalyRows.data);
+      setAnomaliesNotice(anomalyRows.notice);
+      setReviewLocks(lockRows.data);
+      setReviewLocksNotice(lockRows.notice);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -301,8 +310,8 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
             <div className="admin-kpi-grid" data-testid="business-analytics-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.totalMetrics}</span><button type="button" className="admin-kpi-value" data-testid="business-analytics-kpi-snapshots" onClick={() => enterKpiFocus("snapshots")}>{filteredSnapshots.length}</button><small>{domainFilter === "all" ? TEXT.allDomains : formatMetricDomain(domainFilter)}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.upward}</span><button type="button" className="admin-kpi-value" data-testid="business-analytics-kpi-upward" onClick={() => enterKpiFocus("upward")}>{upwardCount}</button><small>上升</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.anomalies}</span><button type="button" className="admin-kpi-value" data-testid="business-analytics-kpi-anomalies" onClick={() => enterKpiFocus("anomalies")}>{anomalies.filter((row) => row.status === "open").length}</button><small>待处置</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.avgVariance}</span><strong data-testid="business-analytics-anomaly-count" style={{ display: "none" }}>{anomalies.filter((row) => row.status === "open").length}</strong><strong>{formatPercent(averageVariance)}</strong><small>{TEXT.varianceRate}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.anomalies}</span><button type="button" className="admin-kpi-value" data-testid="business-analytics-kpi-anomalies" onClick={() => enterKpiFocus("anomalies")}>{anomaliesNotice ? "—" : anomalies.filter((row) => row.status === "open").length}</button><small data-testid={anomaliesNotice ? "business-analytics-anomalies-degraded" : undefined}>{anomaliesNotice ?? "待处置"}</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.avgVariance}</span><strong data-testid="business-analytics-anomaly-count" style={{ display: "none" }}>{anomaliesNotice ? "—" : anomalies.filter((row) => row.status === "open").length}</strong><strong>{formatPercent(averageVariance)}</strong><small>{TEXT.varianceRate}</small></div>
             </div>
             )}
 
@@ -319,7 +328,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
             <div className="admin-chart-panel" data-testid="business-analytics-review-locks">
               <div className="admin-chart-block">
                 <span>{TEXT.lockedTitle}（{reviewLocks.length}）</span>
-                {reviewLocks.length === 0 ? (
+                {reviewLocksNotice ? (
+                  <small className="admin-muted-action" data-testid="business-analytics-review-locks-degraded">{reviewLocksNotice}</small>
+                ) : reviewLocks.length === 0 ? (
                   <small className="admin-muted-action" data-testid="business-analytics-review-locks-empty">{TEXT.lockedEmpty}</small>
                 ) : (
                   <ul className="admin-plain-list" data-testid="business-analytics-review-locks-list">
@@ -365,10 +376,10 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
               <div className="admin-chart-block" data-testid="business-analytics-hourly">
                 <span>分时段客流（24 小时核销分布）</span>
                 <MiniBars values={hourly.map((bucket) => numberValue(bucket.count))} width={240} height={36} testid="business-analytics-hourly-bars" ariaLabel="分时段客流分布" />
-                <small className="admin-muted-action">
-                  {peakBucket && numberValue(peakBucket.count) > 0
+                <small className="admin-muted-action" data-testid={hourlyNotice ? "business-analytics-hourly-degraded" : undefined}>
+                  {hourlyNotice ?? (peakBucket && numberValue(peakBucket.count) > 0
                     ? `高峰时段 ${String(peakBucket.hour).padStart(2, "0")}:00（${formatNumber(peakBucket.count)} 人次）`
-                    : "暂无客流数据"}
+                    : "暂无客流数据")}
                 </small>
               </div>
             </div>
@@ -386,6 +397,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
 
             {!kpiFocus && (<>
             <h3>{TEXT.definition}</h3>
+            {definitionsNotice ? <div className="admin-state" data-testid="business-analytics-definitions-degraded">{definitionsNotice}</div> : null}
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-definitions-table">
                 <thead><tr><th>指标</th><th>业务域</th><th>单位</th><th>口径说明</th><th>状态</th><th>详情</th></tr></thead>
@@ -406,6 +418,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
 
             {(!kpiFocus || kpiFocus === "anomalies") && (<>
             <h3>{TEXT.anomalies}</h3>
+            {anomaliesNotice ? <div className="admin-state" data-testid="business-analytics-anomalies-table-degraded">{anomaliesNotice}</div> : null}
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-anomalies-table">
                 <thead><tr><th>指标</th><th>风险</th><th>观测值</th><th>基准值</th><th>说明</th><th>状态</th><th>发现时间</th><th>详情</th></tr></thead>
