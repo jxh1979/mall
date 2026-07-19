@@ -86,3 +86,20 @@
 - 付费会员：active（有效）、expired（到期）、cancelled（取消）。
 - 积分明细：获取、扣减、兑换消耗、过期、调整。
 - 积分过期：成长积分按自然年清零，或按后台配置有效天数清零。
+
+## 10. 后台运营配置入口（追溯，不改上文口径）
+
+> 本节仅登记「后台在哪配」，业务口径仍以上文 §3–§7 与三份业务 HTML 为准。以下页均改配置不改代码。
+
+| 配置项 | 后台页 | 承接端点 | 权限 |
+|---|---|---|---|
+| 积分获取方式/系数、等级累计成长积分阈值、有效期与过期策略（§3/§4） | 「积分规则配置」ADM-CUS-003 | `/api/v1/customer/points-rules`（CRUD，V060/V269） | 查看 customer.points_rule.view / 维护 customer.points_rule.manage |
+| 会员等级档位/升级门槛/保级/宽限/积分倍率（§3） | 「会员等级与忠诚度」ADM-CUS-004 | `/api/v1/loyalty/config/member-levels` | 查看 customer.loyalty.view / 维护 customer.loyalty.manage |
+| 连续签到阶梯奖励（§6） | 同上 | `/api/v1/loyalty/config/check-in-tiers` | 同上 |
+| 生日加倍规则（§6） | 同上 | `/api/v1/loyalty/config/birthday-rules` | 同上 |
+| 积分兑换券（商户折扣/店内实物/外部伙伴三类，§5） | 「券台账管理」ADM-CUS-002 | `/api/v1/vouchers/definitions` | customer.voucher.view / customer.voucher.manage |
+| 商户级储值卡：发卡资格、资金模式（充值入账归属：商户预收/平台代收）、可退规则（§7） | 「储值规则配置」ADM-CUS-005 | `/api/v1/loyalty/stored-value/merchant-card-config`、`/api/v1/loyalty/stored-value/merchant-refund-rules` | customer.stored_value.refund |
+
+- 综合体通用卡（平台缺省储值账户）全场通用，无商户级配置项；商户级卡按发卡商户配置上表末行三项。
+- 会员等级/签到/生日配置列表仅显示生效中（active）项；改为停用/归档后从列表隐去（v1 口径）。
+- 各配置均按综合体（project_id）隔离：项目级管理员只见/只写本项目（服务层按 token scope 覆盖请求体 project_id）。
