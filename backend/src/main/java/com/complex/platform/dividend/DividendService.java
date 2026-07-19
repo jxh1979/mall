@@ -152,7 +152,13 @@ public class DividendService {
                 blankToNull(request.note()),
                 currentOperator(),
                 now,
-                now);
+                now,
+                // V303 扣除项三开关（默认全关=不改 V299 口径）+ 保护线参数。
+                Boolean.TRUE.equals(request.lossCarryforwardEnabled()),
+                Boolean.TRUE.equals(request.arrearsOffsetEnabled()),
+                Boolean.TRUE.equals(request.payoutFloorEnabled()),
+                requireBps(orDefault(request.payoutFloorBps(), 0), "payout_floor_bps"),
+                requireNonNegLong(orDefault(request.payoutFloorFixedCent(), 0L), "payout_floor_fixed_cent"));
         if (!repository.insertPlan(plan)) {
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
                     "该商户已有生效中的分红方案；请修改现有方案或先停用（status=ended）再新建");
@@ -208,7 +214,16 @@ public class DividendService {
                 request.note() == null ? existing.note() : blankToNull(request.note()),
                 currentOperator(),
                 existing.createdAt(),
-                Instant.now());
+                Instant.now(),
+                request.lossCarryforwardEnabled() == null
+                        ? existing.lossCarryforwardEnabled() : request.lossCarryforwardEnabled(),
+                request.arrearsOffsetEnabled() == null
+                        ? existing.arrearsOffsetEnabled() : request.arrearsOffsetEnabled(),
+                request.payoutFloorEnabled() == null
+                        ? existing.payoutFloorEnabled() : request.payoutFloorEnabled(),
+                requireBps(orDefault(request.payoutFloorBps(), existing.payoutFloorBps()), "payout_floor_bps"),
+                requireNonNegLong(orDefault(request.payoutFloorFixedCent(), existing.payoutFloorFixedCent()),
+                        "payout_floor_fixed_cent"));
         if (!repository.updatePlan(updated)) {
             // ended 改回 active 撞同商户唯一生效索引（uq_dividend_plans_active_merchant）→ 业务 409 非 500。
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
@@ -369,26 +384,71 @@ public class DividendService {
         }
 
         long netProfit = revenue - cost - expense;
-        DividendMath.Split split = DividendMath.split(netProfit, plan.platformShareBps(), plan.taxRateBps());
+
+        // V303 扣除项三开关（默认全关时逐分等于 V299 现状）。
+        // 亏损结转累计恒结转：无论本期开关都读往期累计（关闭期不扣但不清零，用户 2026-07-19 拍板）。
+        long carryIn = repository.priorLossCarryforwardCent(merchantId, period.start());
+        List<DividendPayoutPort.DividendArrearsItem> arrearsItems = plan.arrearsOffsetEnabled()
+                ? payoutPort.listOutstandingReceivables(merchantId) : List.of();
+        long arrearsOutstanding = arrearsItems.stream()
+                .mapToLong(DividendPayoutPort.DividendArrearsItem::unpaidCent).sum();
+
+        DividendMath.Distribution dist = DividendMath.compute(
+                netProfit, plan.platformShareBps(), plan.taxRateBps(),
+                plan.lossCarryforwardEnabled(), carryIn,
+                plan.arrearsOffsetEnabled(), arrearsOutstanding,
+                plan.payoutFloorEnabled(), plan.payoutFloorBps(), plan.payoutFloorFixedCent());
+
         addLine(lines, statementId, merchantId, seq, "net_profit", netProfit,
                 "净利润 = 收入 − 销货成本 − 费用（亏损期可分配额为 0，不倒扣主理人）", now);
-        addLine(lines, statementId, merchantId, seq, "platform_share", split.platformShareCent(),
+        if (dist.carryInCent() > 0 || dist.carryAfterCent() > 0) {
+            // 累计恒结转留痕：开启期弥补（扣减可分配额）、关闭期仅结转不扣（累计保留）。
+            String note = plan.lossCarryforwardEnabled()
+                    ? "本期弥补 " + dist.carryAppliedCent() + " 分（扣减可分配额）"
+                    : "本期未启用抵扣（累计保留、不扣减）";
+            addLine(lines, statementId, merchantId, seq, "loss_carryforward", -dist.carryAppliedCent(),
+                    "亏损结转：期初未弥补亏损累计 " + carryIn + " 分，" + note
+                            + "，结转至下期 " + dist.carryAfterCent() + " 分", now);
+        }
+        addLine(lines, statementId, merchantId, seq, "platform_share", dist.platformShareCent(),
                 "平台分成（" + plan.platformShareBps() + " 万分比，整除链截断）", now);
-        addLine(lines, statementId, merchantId, seq, "principal_gross", split.principalGrossCent(),
+        addLine(lines, statementId, merchantId, seq, "principal_gross", dist.principalGrossCent(),
                 "主理人应得（可分配额 − 平台分成，余数归主理人）", now);
-        addLine(lines, statementId, merchantId, seq, "tax_withheld", -split.taxCent(),
+        addLine(lines, statementId, merchantId, seq, "tax_withheld", -dist.taxCent(),
                 "代扣股息红利个税（真实股东口径，税率 " + plan.taxRateBps() + " 万分比，整除链截断）", now);
-        addLine(lines, statementId, merchantId, seq, "principal_net", split.principalNetCent(),
-                "净发放额 = 主理人应得 − 代扣税；审批通过后按此额挂应付发放", now);
+        addLine(lines, statementId, merchantId, seq, "principal_net", dist.principalNetCent(),
+                "税后应得 = 主理人应得 − 代扣税", now);
+        if (plan.arrearsOffsetEnabled() && dist.arrearsOffsetCent() > 0) {
+            // 逐项留痕：先欠先抵（arrearsItems 已按 created_at 升序），单据审批时按此冻结额逐项结算。
+            long remaining = dist.arrearsOffsetCent();
+            for (DividendPayoutPort.DividendArrearsItem item : arrearsItems) {
+                if (remaining <= 0) {
+                    break;
+                }
+                long applied = Math.min(remaining, item.unpaidCent());
+                remaining -= applied;
+                addLine(lines, statementId, merchantId, seq, "arrears_offset", -applied,
+                        "欠款抵扣：应收 " + item.itemNo() + "（未清 " + item.unpaidCent() + " 分）抵扣 " + applied + " 分", now);
+            }
+        }
+        if (plan.payoutFloorEnabled() && dist.reserveWithheldCent() > 0) {
+            addLine(lines, statementId, merchantId, seq, "reserve_withheld", -dist.reserveWithheldCent(),
+                    "发放保护线留存风险准备金 " + dist.reserveWithheldCent() + " 分（比例 " + plan.payoutFloorBps()
+                            + " 万分比 / 固定额 " + plan.payoutFloorFixedCent() + " 分，取大并钳到可发额），本期不发放", now);
+        }
+        addLine(lines, statementId, merchantId, seq, "payout", dist.payoutCent(),
+                "实发额 = 税后应得 − 欠款抵扣 − 留存；审批通过后按此额挂应付发放", now);
 
         DividendStatementRecord statement = new DividendStatementRecord(
                 statementId, merchantId, plan.id(), kind, period.label(), period.start(), period.end(),
                 plan.principalUserId(), plan.platformShareBps(), plan.taxRateBps(), plan.revenueDomains(),
                 plan.includeInventoryCost(), plan.expenseTypes(),
-                revenue, cost, expense, netProfit, split.distributableCent(), split.platformShareCent(),
-                split.principalGrossCent(), split.taxCent(), split.principalNetCent(), noCostBasisCount,
+                revenue, cost, expense, netProfit, dist.distributableCent(), dist.platformShareCent(),
+                dist.principalGrossCent(), dist.taxCent(), dist.principalNetCent(), noCostBasisCount,
                 "preview".equals(kind) ? "preview" : "draft",
-                null, null, operator, null, null, null, null, null, null, now, now);
+                null, null, operator, null, null, null, null, null, null, now, now,
+                plan.lossCarryforwardEnabled(), dist.carryInCent(), dist.carryAppliedCent(),
+                dist.carryAfterCent(), dist.arrearsOffsetCent(), dist.reserveWithheldCent(), dist.payoutCent());
         repository.insertStatement(statement);
         for (DividendStatementLineRecord line : lines) {
             repository.insertLine(line);
@@ -481,11 +541,29 @@ public class DividendService {
                         throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
                                 "分红计算单的提交人不能审批自己提交的单；请由另一位审批人处理");
                     }
+                    // V303 欠款抵扣：先按冻结抵扣额对该商户未清应收逐项结算（先欠先抵，dividend_offset 收款）。
+                    // 实结 != 冻结额 = 抵扣期间应收被并发清偿——@Transactional 回滚，要求作废重算（快照冻结口径）。
+                    if (statement.arrearsOffsetCent() > 0) {
+                        long settled = payoutPort.applyDividendOffsetToReceivables(
+                                statement.merchantId(), statement.arrearsOffsetCent(), statement.id());
+                        if (settled != statement.arrearsOffsetCent()) {
+                            throw ApiException.conflict("DIVIDEND_ARREARS_CHANGED",
+                                    "欠款抵扣期间该商户未清应收发生变化（当前可抵 " + settled + " 分，单据冻结 "
+                                            + statement.arrearsOffsetCent() + " 分）；请作废重算后再审批");
+                        }
+                    }
+                    // 实发额（税后应得 − 欠款抵扣 − 留存）> 0 才给主理人挂应付（立即可付）。
                     String arApItemId = null;
-                    if (statement.principalNetCent() > 0) {
+                    if (statement.payoutCent() > 0) {
                         arApItemId = payoutPort.createDividendPayoutPayable(
                                 statement.principalUserId(), statement.merchantId(),
-                                statement.principalNetCent(), statement.id());
+                                statement.payoutCent(), statement.id());
+                    }
+                    // V303 发放保护线留存 → 记为欠主理人的待释放款（非平台白拿；释放为后续 R）。
+                    if (statement.reserveWithheldCent() > 0) {
+                        payoutPort.createDividendReserveWithholdingPayable(
+                                statement.principalUserId(), statement.merchantId(),
+                                statement.reserveWithheldCent(), statement.id());
                     }
                     requireTransition(repository.markApproved(statement.id(), operator, arApItemId, now), "审批通过");
                 });
@@ -625,6 +703,13 @@ public class DividendService {
     private static int requireBps(int value, String field) {
         if (value < 0 || value > DividendMath.BPS_DENOMINATOR) {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " must be within [0,10000]");
+        }
+        return value;
+    }
+
+    private static long requireNonNegLong(long value, String field) {
+        if (value < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be >= 0");
         }
         return value;
     }

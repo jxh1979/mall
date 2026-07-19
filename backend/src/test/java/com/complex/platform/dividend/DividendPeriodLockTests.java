@@ -71,6 +71,7 @@ class DividendPeriodLockTests {
                 LocalDate.parse(start), LocalDate.parse(end), "u", 8000, 2000,
                 List.of("bar"), true, List.of("labor"),
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, status,
-                null, null, null, null, null, null, null, null, null, now, now);
+                null, null, null, null, null, null, null, null, null, now, now,
+                false, 0L, 0L, 0L, 0L, 0L, 0L);
     }
 }

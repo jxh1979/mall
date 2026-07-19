@@ -35,6 +35,13 @@ public interface DividendRepository {
     /** 同商户同类别同期的未作废计算单（uq_dividend_statements_period 谓词同款）。 */
     Optional<DividendStatementRecord> findActiveStatement(String merchantId, String kind, String periodLabel);
 
+    /**
+     * V303 亏损结转期初累计：该商户 period_start 之前最近一张已结（approved/paid）正式单的
+     * loss_carryforward_after_cent；无则 0。累计不另建可变台账——已结正式单快照即账本，
+     * 天然幂等（draft/preview/voided 不计）+ voided 自动回滚。
+     */
+    long priorLossCarryforwardCent(String merchantId, java.time.LocalDate periodStart);
+
     void insertStatement(DividendStatementRecord statement);
 
     void insertLine(DividendStatementLineRecord line);

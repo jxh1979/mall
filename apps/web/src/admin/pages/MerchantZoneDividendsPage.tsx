@@ -95,7 +95,7 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
       <AdminDataState loading={rows.loading || plansResource.loading} error={rows.error ?? plansResource.error} empty={!rows.loading && rows.total === 0} onRetry={rows.reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="merchant-dividend-table">
-            <thead><tr><th>期间</th><th>类别</th><th>净利润（元）</th><th>主理人应得（元）</th><th>代扣税（元）</th><th>净发放（元）</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>期间</th><th>类别</th><th>净利润（元）</th><th>主理人应得（元）</th><th>代扣税（元）</th><th>实发（元）</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
               {rows.rows.length === 0 ? (
                 <tr data-testid="merchant-dividend-table-empty"><td colSpan={8} className="admin-muted-action">暂无分红计算单。</td></tr>
@@ -108,7 +108,7 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.netProfitCent)}</td>
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.principalGrossCent)}</td>
                   <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.taxCent)}</td>
-                  <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.principalNetCent)}</td>
+                  <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.payoutCent ?? row.principalNetCent)}</td>
                   <td>{DIVIDEND_STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—"}</td>
                   <td className="admin-row-detail-cell" onClick={(event) => event.stopPropagation()}>
                     <button type="button" className="admin-row-detail-btn" aria-label="查看分红算式明细" onClick={(event) => { event.stopPropagation(); void openDetail(row); }}>查看算式</button>

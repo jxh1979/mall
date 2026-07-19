@@ -849,6 +849,12 @@ export type DividendPlanRow = {
   updatedBy?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  // V303 扣除项三开关 + 发放保护线参数。
+  lossCarryforwardEnabled?: boolean;
+  arrearsOffsetEnabled?: boolean;
+  payoutFloorEnabled?: boolean;
+  payoutFloorBps?: number;
+  payoutFloorFixedCent?: number;
 };
 
 export type DividendStatementRow = {
@@ -880,6 +886,14 @@ export type DividendStatementRow = {
   arApItemId?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  // V303 三扣除入账留痕：亏损结转链 / 欠款抵扣 / 留存 / 实发额（挂应付发放口径）。
+  lossCarryforwardEnabled?: boolean;
+  lossCarryforwardInCent?: number;
+  lossCarryforwardAppliedCent?: number;
+  lossCarryforwardAfterCent?: number;
+  arrearsOffsetCent?: number;
+  reserveWithheldCent?: number;
+  payoutCent?: number;
 };
 
 export type DividendStatementLineRow = {

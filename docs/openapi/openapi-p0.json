@@ -31665,7 +31665,8 @@
           "DIVIDEND_STATEMENT_NOT_FOUND",
           "DIVIDEND_STATE_INVALID",
           "DIVIDEND_PREVIEW_NOT_APPROVABLE",
-          "SELF_APPROVAL_FORBIDDEN"
+          "SELF_APPROVAL_FORBIDDEN",
+          "DIVIDEND_ARREARS_CHANGED"
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/DividendActionRequest"
@@ -45926,6 +45927,29 @@
             "type": "string",
             "description": "备注（选填）。",
             "maxLength": 1000
+          },
+          "loss_carryforward_enabled": {
+            "type": "boolean",
+            "description": "亏损结转开关（默认 false=每期独立不结转）；开=可分配额先减该商户往期未弥补亏损累计。"
+          },
+          "arrears_offset_enabled": {
+            "type": "boolean",
+            "description": "欠款抵扣开关（默认 false）；开=主理人应得先抵扣该商户对平台未清应收，抵扣后余额才发放。"
+          },
+          "payout_floor_enabled": {
+            "type": "boolean",
+            "description": "发放保护线开关（默认 false）；开=按比例/固定额留存风险准备金不发放。"
+          },
+          "payout_floor_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "保护线留存比例（万分比，默认 0；仅 payout_floor_enabled=true 生效）。"
+          },
+          "payout_floor_fixed_cent": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "保护线留存固定额（分，默认 0；实取 max(比例额,固定额) 并钳到可发额上限）。"
           }
         }
       },

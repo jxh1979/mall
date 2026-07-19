@@ -61,10 +61,15 @@ function makeApi(): AdminApi {
       }
       if (/\/dividends\/statements\/[^/?]+$/.test(url)) {
         return Promise.resolve(envelope({
-          statement: STATEMENTS[0],
+          statement: { ...STATEMENTS[0], arrears_offset_cent: 28000, reserve_withheld_cent: 10000, payout_cent: 66000 },
           lines: [
             { id: "l1", statement_id: "divs_draft", seq: 1, line_type: "revenue_bar", amount_cent: 800000, detail: "酒吧结账实收" },
             { id: "l2", statement_id: "divs_draft", seq: 2, line_type: "net_profit", amount_cent: 650000, detail: "净利润" },
+            { id: "l3", statement_id: "divs_draft", seq: 3, line_type: "loss_carryforward", amount_cent: -50000, detail: "亏损结转弥补 50000" },
+            { id: "l4", statement_id: "divs_draft", seq: 4, line_type: "principal_net", amount_cent: 104000, detail: "税后应得" },
+            { id: "l5", statement_id: "divs_draft", seq: 5, line_type: "arrears_offset", amount_cent: -28000, detail: "应收 AR-001 抵扣 28000" },
+            { id: "l6", statement_id: "divs_draft", seq: 6, line_type: "reserve_withheld", amount_cent: -10000, detail: "留存 10%" },
+            { id: "l7", statement_id: "divs_draft", seq: 7, line_type: "payout", amount_cent: 66000, detail: "实发额" },
           ],
         }));
       }
@@ -170,5 +175,62 @@ describe("FinanceDividendsPage 持股分红", () => {
     fireEvent.click(screen.getByTestId("dividend-reject-save"));
     await waitFor(() => expect(lastWriteUrl).toContain("/api/v1/finance/dividends/statements/divs_pending/reject"));
     expect((lastWriteBody as Record<string, unknown>).note).toBe("费用未挂接完整");
+  });
+
+  // ── V303 扣除项三开关 ──────────────────────────────────────────
+
+  it("扣除项默认全关：新建方案 body 三开关为 false、保护线参数为 0", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
+    fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_default" } });
+    // 三开关默认渲染为未勾选，保护线参数输入未展开。
+    expect((screen.getByTestId("dividend-plan-loss-carryforward") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("dividend-plan-arrears-offset") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("dividend-plan-payout-floor") as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByTestId("dividend-plan-floor-percent")).toBeNull();
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dividend-plan-save"));
+    await waitFor(() => expect(lastWriteBody).toBeTruthy());
+    const body = lastWriteBody as Record<string, unknown>;
+    expect(body.loss_carryforward_enabled).toBe(false);
+    expect(body.arrears_offset_enabled).toBe(false);
+    expect(body.payout_floor_enabled).toBe(false);
+    expect(body.payout_floor_bps).toBe(0);
+    expect(body.payout_floor_fixed_cent).toBe(0);
+  });
+
+  it("开启三扣除 + 保护线留存 10%：body 携带开关与 payout_floor_bps", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
+    fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_ded" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-loss-carryforward"));
+    fireEvent.click(screen.getByTestId("dividend-plan-arrears-offset"));
+    fireEvent.click(screen.getByTestId("dividend-plan-payout-floor"));
+    // 保护线开启后留存比例输入展开。
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-floor-percent")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("dividend-plan-floor-percent"), { target: { value: "10" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dividend-plan-save"));
+    await waitFor(() => expect(lastWriteBody).toBeTruthy());
+    const body = lastWriteBody as Record<string, unknown>;
+    expect(body.loss_carryforward_enabled).toBe(true);
+    expect(body.arrears_offset_enabled).toBe(true);
+    expect(body.payout_floor_enabled).toBe(true);
+    expect(body.payout_floor_bps).toBe(1000);
+  });
+
+  it("计算单明细抽屉：逐行展示三扣除项 + 实发额", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dividend-statement-row-divs_draft")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dividend-statement-row-divs_draft"));
+    // 抽屉逐行渲染扣除项与实发额（DIVIDEND_LINE_LABELS 中文标签）。
+    expect(await screen.findByText("亏损结转（往期未弥补亏损）")).toBeTruthy();
+    expect(await screen.findByText("欠款抵扣（未清应收）")).toBeTruthy();
+    expect(await screen.findByText("发放保护线留存")).toBeTruthy();
+    expect(await screen.findByText("实发额（挂应付）")).toBeTruthy();
   });
 });

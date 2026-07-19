@@ -18,6 +18,7 @@ import com.complex.platform.dividend.dto.DividendComputeRequest;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.DividendPayoutPort;
 import com.complex.platform.inventory.InventoryRepository;
+import com.complex.platform.support.TestSecurityActors;
 import java.sql.Connection;
 import java.sql.Savepoint;
 import java.time.Instant;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.sql.DataSource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -74,6 +76,14 @@ class DividendJdbcIntegrationTests {
     @Autowired
     private DataSource dataSource;
 
+    // 欠款抵扣走真实 FinanceService.settleArApItem → checkMerchantOwnership → currentActor() 读 SecurityContextHolder；
+    // 用例内以 TestSecurityActors.asPlatformAdmin() 注入平台管理员上下文（生产 approve 必经 requirePlatformScope，恒有认证），
+    // @AfterEach 清理防跨用例污染（DividendService 自身鉴权走注入 mock，与此 ThreadLocal 互不干扰）。
+    @AfterEach
+    void clearSecurityContext() {
+        TestSecurityActors.clear();
+    }
+
     /** I-1 职责分离：提交与审批必须不同人，测试里按动作分配不同 actor 的服务实例。 */
     private DividendService serviceWithPlatformActor(String actorId) {
         AuthorizationService authorizationService = mock(AuthorizationService.class);
@@ -89,17 +99,37 @@ class DividendJdbcIntegrationTests {
         return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
                 8000, 2000, periodType, List.of("bar", "ticket"), true,
                 List.of("rent_allocation", "energy", "property_fee", "labor", "amortization", "other"),
-                null, "active", null, "usr_div_jdbc", now, now);
+                null, "active", null, "usr_div_jdbc", now, now,
+                false, false, false, 0, 0L);
     }
 
     private static DividendStatementRecord statement(String id, String planId, long revenue, long cost,
             long expense, long netProfit, long distributable, long platformShare, long gross, long tax, long net) {
+        // V303：三扣除全关，实发=税后应得（payout=net），结转/抵扣/留存全 0。
         Instant now = Instant.parse("2026-07-18T00:00:00Z");
         return new DividendStatementRecord(id, MERCHANT, planId, "official", "2026-07",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-31"), "usr_principal_jdbc",
                 8000, 2000, List.of("bar", "ticket"), true, List.of("labor"),
                 revenue, cost, expense, netProfit, distributable, platformShare, gross, tax, net,
-                0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null, now, now);
+                0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null, now, now,
+                false, 0L, 0L, 0L, 0L, 0L, net);
+    }
+
+    /**
+     * V303 三扣除入账留痕的计算单构造（供 DB CHECK 拦截用例）。基口径恒等自洽（revenue=netProfit、cost/expense=0），
+     * 由调用方单独corrupt某个扣除留痕列以隔离触发对应 CHECK。
+     */
+    private static DividendStatementRecord deductionStatement(String id, String planId, long netProfit,
+            long distributable, long platformShare, long gross, long tax, long net,
+            boolean lcfEnabled, long lcfIn, long lcfApplied, long lcfAfter,
+            long arrearsOffset, long reserve, long payout) {
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        return new DividendStatementRecord(id, MERCHANT, planId, "official", "2026-07",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-31"), "usr_principal_jdbc",
+                8000, 2000, List.of("bar", "ticket"), true, List.of("labor"),
+                netProfit, 0L, 0L, netProfit, distributable, platformShare,
+                gross, tax, net, 0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null,
+                now, now, lcfEnabled, lcfIn, lcfApplied, lcfAfter, arrearsOffset, reserve, payout);
     }
 
     /** 唯一索引/CHECK 冲突 INSERT 用事务绑定连接上的手动 savepoint 吸收，25P02 不外溢（V297 同款）。 */
@@ -312,11 +342,15 @@ class DividendJdbcIntegrationTests {
         // 明细行落表且来源行合计 = 净利润（含独立的租金费用行）。
         List<DividendStatementLineRecord> lines = repository.listLines(statement.id(), null);
         long sourceSum = lines.stream()
-                .filter(l -> !List.of("net_profit", "platform_share", "principal_gross", "tax_withheld",
-                        "principal_net").contains(l.lineType()))
+                .filter(l -> !List.of("net_profit", "loss_carryforward", "platform_share", "principal_gross",
+                        "tax_withheld", "principal_net", "arrears_offset", "reserve_withheld", "payout")
+                        .contains(l.lineType()))
                 .mapToLong(DividendStatementLineRecord::amountCent).sum();
         assertThat(sourceSum).isEqualTo(statement.netProfitCent());
         assertThat(lines).anyMatch(l -> l.lineType().equals("expense_rent_allocation") && l.amountCent() == -40_000L);
+        // V303 默认全关：实发行落痕 = 税后应得，无扣除行。
+        assertThat(lines).anyMatch(l -> l.lineType().equals("payout") && l.amountCent() == 11_200L);
+        assertThat(lines).noneMatch(l -> l.lineType().equals("loss_carryforward"));
 
         // ── 审批链：draft → pending_review → approved 挂应付（真 FinanceService 端口）──
         // I-1 职责分离：提交与审批用不同 actor；同 actor 审批必须被拒。
@@ -362,5 +396,242 @@ class DividendJdbcIntegrationTests {
         DividendStatementRecord paid = approverService.markPaid(statement.id(),
                 new DividendActionRequest("div-jdbc-paid-1", null));
         assertThat(paid.status()).isEqualTo("paid");
+    }
+
+    /** V303 扣除项 DB CHECK 拦截：发放额恒等 / 亏损结转链恒等不满足的单不得落库。 */
+    @Test
+    void deductionCheckConstraintsRejectInconsistentStatements() {
+        repository.insertPlan(plan("divp_jdbc_ded", "monthly"));
+        // 发放额恒等破坏：payout ≠ principal_net − arrears − reserve → chk_ds_payout_identity。
+        assertInsertRejected(() -> repository.insertStatement(deductionStatement("divs_jdbc_ded_pay",
+                "divp_jdbc_ded", 1000L, 1000L, 0L, 1000L, 0L, 1000L,
+                false, 0L, 0L, 0L, 0L, 0L, 999L)), "chk_ds_payout_identity");
+        // 亏损结转链恒等破坏：启用时 after 应 = in − applied + max(−净利,0)=500，写 0 → chk_ds_lcf_after。
+        assertInsertRejected(() -> repository.insertStatement(deductionStatement("divs_jdbc_ded_lcf",
+                "divp_jdbc_ded", -500L, 0L, 0L, 0L, 0L, 0L,
+                true, 0L, 0L, 0L, 0L, 0L, 0L)), "chk_ds_lcf_after");
+    }
+
+    /**
+     * V303 亏损结转端到端（累计更新时点验证）：启用亏损结转的方案，某月亏损审批后结转链余额冻结，
+     * 下月计算单从「已结正式单」projection 读到期初累计并冻结在 loss_carryforward_in_cent（无需另建可变台账）。
+     */
+    @Test
+    void lossCarryforwardProjectionCarriesAcrossApprovedPeriods() {
+        Instant ts = Instant.parse("2026-07-15T12:00:00Z");
+        // 亏损结转开的月度方案。
+        DividendPlanRecord lcfPlan = new DividendRecords.DividendPlanRecord("divp_jdbc_lcf", MERCHANT,
+                "usr_principal_jdbc", "主理人甲", 8000, 2000, "monthly", List.of("bar", "ticket"), true,
+                List.of("rent_allocation", "energy", "property_fee", "labor", "amortization", "other"),
+                null, "active", null, "usr_div_jdbc", ts, ts,
+                true, false, false, 0, 0L);
+        repository.insertPlan(lcfPlan);
+        // 2026-07 亏损 500.00：仅一笔人工费，无收入 → 净利 −50000。
+        jdbcTemplate.update("""
+                INSERT INTO merchant_expense_entries (id, merchant_id, period, expense_type, amount_cent,
+                        source, source_ref, note, operator_user_id, created_at)
+                VALUES ('mex_jdbc_lcf', ?, '2026-07', 'labor', 50000, 'manual', NULL, '亏损结转JDBC', 'usr_div_jdbc', ?)
+                """, MERCHANT, java.time.OffsetDateTime.ofInstant(ts, java.time.ZoneOffset.UTC));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord july = service.compute(
+                new DividendComputeRequest("lcf-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(july.netProfitCent()).isEqualTo(-50_000L);
+        assertThat(july.distributableCent()).isZero();
+        assertThat(july.lossCarryforwardInCent()).isZero();
+        assertThat(july.lossCarryforwardAfterCent()).isEqualTo(50_000L);
+        // 审批 7 月（实发 0，不挂应付），结转链余额生效。
+        service.submit(july.id(), new DividendActionRequest("lcf-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        approver.approve(july.id(), new DividendActionRequest("lcf-jdbc-a1", null));
+
+        // 2026-08 无收支 → 净利 0；从已结 7 月单读到期初累计 50000 并冻结，继续结转。
+        DividendStatementRecord august = service.compute(
+                new DividendComputeRequest("lcf-jdbc-c2", "2026-08", "official", MERCHANT)).computed().get(0);
+        assertThat(august.netProfitCent()).isZero();
+        assertThat(august.lossCarryforwardInCent()).isEqualTo(50_000L);
+        assertThat(august.lossCarryforwardAppliedCent()).isZero();
+        assertThat(august.lossCarryforwardAfterCent()).isEqualTo(50_000L);
+        assertThat(august.distributableCent()).isZero();
+    }
+
+    // ── V303 欠款抵扣真实结算端到端（真调 FinanceService.settleArApItem，非 mock）──
+
+    /** 种子售票分量收入（allocated_revenue_cent），落 2026-07 窗；无退款/成本/费用 → 净利=收入。 */
+    private void seedTicketRevenue(String suffix, long allocatedCent, java.time.OffsetDateTime ts) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, status, created_at, updated_at)
+                VALUES (?, '分红欠款抵扣票', 'fixed', 'active', ?, ?)
+                """, "tt_" + suffix, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
+                        default_value_cent, status, created_at, updated_at)
+                VALUES (?, '分红欠款抵扣权益', 'admission', 1, 0, 'active', ?, ?)
+                """, "et_" + suffix, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
+                        pay_status, issue_status, status, created_at, updated_at)
+                VALUES (?, ?, ?, 1, 'web', ?, 'paid', 'issued', 'created', ?, ?)
+                """, "order_" + suffix, "ONO_" + suffix, "tt_" + suffix, allocatedCent, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id,
+                        entitlement_code, entitlement_type, merchant_id, total_times, used_times,
+                        allocated_revenue_cent, status, valid_from, valid_to, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'admission', ?, 1, 0, ?, 'active', ?, ?, ?, ?)
+                """, "ie_" + suffix, "tt_" + suffix, "order_" + suffix, "et_" + suffix, "code_" + suffix,
+                MERCHANT, allocatedCent, ts, ts, ts, ts);
+    }
+
+    /** 种子该商户一笔未清应收（direction=receivable, counterparty=merchant）。 */
+    private void seedReceivable(String id, String itemNo, long unpaidCent, java.time.OffsetDateTime ts) {
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
+                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
+                        status, created_at, updated_at, merchant_id)
+                VALUES (?, ?, 'receivable', ?, 'manual', ?, ?, 0, ?, 'CNY', '2026-07-01', '2026-07',
+                        'pending_collection', ?, ?, ?)
+                """, id, itemNo, MERCHANT, id, unpaidCent, unpaidCent, ts, ts, MERCHANT);
+    }
+
+    private static DividendPlanRecord arrearsPlan(String id) {
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+                8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
+                null, "active", null, "usr_div_jdbc", now, now,
+                false, true, false, 0, 0L);   // arrears_offset_enabled=true
+    }
+
+    /**
+     * 欠款抵扣端到端：种子售票收入 100 万 + 未清应收两笔（6 万+4 万）→ 开欠款抵扣算单（冻结抵扣 10 万、实发 6 万）→
+     * 审批时真调 settleArApItem 逐项 FOR UPDATE 结算两笔应收（dividend_offset 收款留痕）→ 按实发 6 万挂应付。
+     */
+    @Test
+    void arrearsOffsetSettlesReceivablesAndPaysNetAtApprove() {
+        TestSecurityActors.asPlatformAdmin();   // 审批真调 settleArApItem 需认证上下文（平台管理员，scope 空）。
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("arr", 1_000_000L, ts);
+        seedReceivable("arap_r1_arr", "AR-ARR-001", 60_000L, ts);
+        seedReceivable("arap_r2_arr", "AR-ARR-002", 40_000L, ts);
+        repository.insertPlan(arrearsPlan("divp_jdbc_arr"));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("arr-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.principalNetCent()).isEqualTo(160_000L);
+        assertThat(s.arrearsOffsetCent()).isEqualTo(100_000L);
+        assertThat(s.payoutCent()).isEqualTo(60_000L);
+        // 逐项留痕：两笔应收各一行。
+        assertThat(repository.listLines(s.id(), null))
+                .filteredOn(l -> l.lineType().equals("arrears_offset")).hasSize(2);
+
+        service.submit(s.id(), new DividendActionRequest("arr-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        DividendStatementRecord approved = approver.approve(s.id(), new DividendActionRequest("arr-jdbc-a1", null));
+        assertThat(approved.status()).isEqualTo("approved");
+
+        // 两笔应收被真实结算（unpaid=0, settled），各有一笔 dividend_offset 收款留痕（bank_flow_ref=计算单号）。
+        for (String rid : List.of("arap_r1_arr", "arap_r2_arr")) {
+            Map<String, Object> item = jdbcTemplate.queryForMap(
+                    "SELECT unpaid_amount_cent, status FROM ar_ap_items WHERE id = ?", rid);
+            assertThat(((Number) item.get("unpaid_amount_cent")).longValue()).isZero();
+            assertThat(item.get("status")).isEqualTo("settled");
+        }
+        Long offsetPayments = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM ar_ap_payments p JOIN ar_ap_items i ON i.id = p.ar_ap_item_id
+                 WHERE i.merchant_id = ? AND p.payment_method = 'dividend_offset' AND p.bank_flow_ref = ?
+                """, Long.class, MERCHANT, s.id());
+        assertThat(offsetPayments).isEqualTo(2L);
+        // 抵扣后余额 6 万挂应付（payout=principal_net−arrears）。
+        Map<String, Object> payable = jdbcTemplate.queryForMap(
+                "SELECT amount_cent FROM ar_ap_items WHERE source_type = 'dividend_payout' AND source_id = ?", s.id());
+        assertThat(((Number) payable.get("amount_cent")).longValue()).isEqualTo(60_000L);
+    }
+
+    /**
+     * 欠款抵扣并发部分清偿：冻结抵扣 10 万后应收被并发清偿至仅剩 3 万 < 冻结额 → applyDividendOffset 预检不足一分不结算 →
+     * 抛 DIVIDEND_ARREARS_CHANGED；应收不半结（仍 3 万未清）、不挂应付、单不进 approved（整体回退）。
+     */
+    @Test
+    void arrearsOffsetConflictAtApproveRollsBackNoHalfSettle() {
+        TestSecurityActors.asPlatformAdmin();   // 预检原子路径本不达 settleArApItem，仍一致注入上下文（保险）。
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("arr2", 1_000_000L, ts);
+        seedReceivable("arap_r_arr2", "AR-ARR2-001", 100_000L, ts);
+        repository.insertPlan(arrearsPlan("divp_jdbc_arr2"));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("arr2-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.arrearsOffsetCent()).isEqualTo(100_000L);
+
+        // 抵扣期间应收被并发部分清偿：未清 10 万 → 3 万。
+        jdbcTemplate.update("""
+                UPDATE ar_ap_items SET paid_amount_cent = 70000, unpaid_amount_cent = 30000, status = 'partial_paid'
+                 WHERE id = 'arap_r_arr2'
+                """);
+
+        service.submit(s.id(), new DividendActionRequest("arr2-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        assertThatThrownBy(() -> approver.approve(s.id(), new DividendActionRequest("arr2-jdbc-a1", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
+                        .isEqualTo("DIVIDEND_ARREARS_CHANGED"));
+        // 应收不半结（预检不足一分不结算，仍 3 万未清）。
+        Long unpaid = jdbcTemplate.queryForObject(
+                "SELECT unpaid_amount_cent FROM ar_ap_items WHERE id = 'arap_r_arr2'", Long.class);
+        assertThat(unpaid).isEqualTo(30_000L);
+        // 未挂应付、单未进 approved（整体回退，不半发放）。
+        Long payables = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ar_ap_items WHERE source_type = 'dividend_payout' AND source_id = ?",
+                Long.class, s.id());
+        assertThat(payables).isZero();
+        assertThat(repository.findStatementById(s.id()).orElseThrow().status()).isEqualTo("pending_review");
+    }
+
+    // ── V303 发放保护线留存 = 暂扣待释放（真调 FinanceService 挂待释放应付）──
+
+    private static DividendPlanRecord floorPlan(String id) {
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+                8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
+                null, "active", null, "usr_div_jdbc", now, now,
+                false, false, true, 1000, 0L);   // payout_floor_enabled=true, 留 10%
+    }
+
+    /**
+     * 发放保护线留存端到端：种子售票收入 100 万 + 留 10% 保护线 → 算单税后应得 16 万、留存 1.6 万、实发 14.4 万 →
+     * 审批时按实发 14.4 万挂 dividend_payout 应付 + 把留存 1.6 万记为 dividend_reserve_withheld 待释放应付（欠主理人、非白扣）。
+     */
+    @Test
+    void payoutFloorWithholdsReserveAsReleasablePayableAtApprove() {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("floor", 1_000_000L, ts);
+        repository.insertPlan(floorPlan("divp_jdbc_floor"));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("floor-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.principalNetCent()).isEqualTo(160_000L);
+        assertThat(s.reserveWithheldCent()).isEqualTo(16_000L);
+        assertThat(s.payoutCent()).isEqualTo(144_000L);
+
+        service.submit(s.id(), new DividendActionRequest("floor-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        approver.approve(s.id(), new DividendActionRequest("floor-jdbc-a1", null));
+
+        // 实发 14.4 万挂正常应付（立即可付）。
+        Map<String, Object> payout = jdbcTemplate.queryForMap(
+                "SELECT amount_cent, counterparty_id FROM ar_ap_items WHERE source_type = 'dividend_payout' AND source_id = ?",
+                s.id());
+        assertThat(((Number) payout.get("amount_cent")).longValue()).isEqualTo(144_000L);
+        assertThat(payout.get("counterparty_id")).isEqualTo("usr_principal_jdbc");
+        // 留存 1.6 万记为欠主理人的待释放应付（非平台白拿；释放为后续 R）。
+        Map<String, Object> reserve = jdbcTemplate.queryForMap("""
+                SELECT amount_cent, counterparty_id, direction
+                  FROM ar_ap_items WHERE source_type = 'dividend_reserve_withheld' AND source_id = ?
+                """, s.id());
+        assertThat(((Number) reserve.get("amount_cent")).longValue()).isEqualTo(16_000L);
+        assertThat(reserve.get("counterparty_id")).isEqualTo("usr_principal_jdbc");
+        assertThat(reserve.get("direction")).isEqualTo("payable");
     }
 }

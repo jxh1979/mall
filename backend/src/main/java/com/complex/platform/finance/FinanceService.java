@@ -46,7 +46,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
             "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
             "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout",
-            "termination_penalty", "deposit_refund");
+            "dividend_reserve_withheld", "termination_penalty", "deposit_refund");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -79,8 +79,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             Map.entry("turnover_rent", "营业额抽成租金"), Map.entry("cam", "公共区域维护费"),
             Map.entry("deposit", "保证金"), Map.entry("property_fee", "物业费"),
             Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"),
-            Map.entry("dividend_payout", "持股分红发放"), Map.entry("termination_penalty", "退租违约金"),
-            Map.entry("deposit_refund", "退租押金退还"));
+            Map.entry("dividend_payout", "持股分红发放"), Map.entry("dividend_reserve_withheld", "分红留存待释放"),
+            Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"));
 
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
@@ -1509,6 +1509,68 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         ArApItemRecord item = persistDerivedArApItem(
                 "payable", principalUserId, "dividend_payout", statementId, netAmountCent, statementId, merchantId);
         return item.id();
+    }
+
+    /**
+     * V303 发放保护线留存 → 欠主理人的待释放负债（非平台白拿）：挂应付
+     * (payable, counterparty=主理人, source_type='dividend_reserve_withheld', source_id=计算单 id 一单一挂)。
+     * 状态沿用 pending_payment（source_type 即待释放标识）；释放规则/端点/UI 为后续独立构建 R。
+     */
+    @Override
+    public String createDividendReserveWithholdingPayable(
+            String principalUserId, String merchantId, long reserveCent, String statementId) {
+        ArApItemRecord item = persistDerivedArApItem(
+                "payable", principalUserId, "dividend_reserve_withheld", statementId, reserveCent, statementId,
+                merchantId);
+        return item.id();
+    }
+
+    /**
+     * V303 欠款抵扣：该商户未清应收快照（direction=receivable, unpaid>0），按 created_at 升序=先欠先抵。
+     * 供分红计算单冻结欠款抵扣额与逐项留痕（只读，不改台账）。
+     */
+    @Override
+    public List<DividendPayoutPort.DividendArrearsItem> listOutstandingReceivables(String merchantId) {
+        return repository.listArApItemsByMerchant(merchantId).stream()
+                .filter(i -> "receivable".equals(i.direction()) && i.unpaidAmountCent() > 0)
+                .sorted(java.util.Comparator.comparing(ArApItemRecord::createdAt)
+                        .thenComparing(ArApItemRecord::id))
+                .map(i -> new DividendPayoutPort.DividendArrearsItem(i.id(), i.itemNo(), i.unpaidAmountCent()))
+                .toList();
+    }
+
+    /**
+     * V303 欠款抵扣：审批时按冻结抵扣额对该商户未清应收逐项结算（先欠先抵，dividend_offset 收款）。
+     * 逐项复用 settleArApItem（FOR UPDATE 行锁 + 跨商户/项目校验 + 锁定拦截 + 登记收款 + 回写 paid/unpaid/status）。
+     * 返回实际结算总额；调用方（DividendService.approve）在同一事务内断言 == 冻结抵扣额，不等则回滚并要求作废重算。
+     */
+    @Override
+    public long applyDividendOffsetToReceivables(String merchantId, long offsetCent, String statementId) {
+        if (offsetCent <= 0) {
+            return 0L;
+        }
+        List<DividendPayoutPort.DividendArrearsItem> items = listOutstandingReceivables(merchantId);
+        long available = items.stream().mapToLong(DividendPayoutPort.DividendArrearsItem::unpaidCent).sum();
+        // 原子性 by construction：当前未清应收不足冻结抵扣额（抵扣期间被并发清偿）时一分不结算，直接返回实况，
+        // 由调用方抛 DIVIDEND_ARREARS_CHANGED 干净回退——不依赖事务回滚就不会留半结（executeWrite 非独立事务）。
+        if (available < offsetCent) {
+            return available;
+        }
+        Instant now = Instant.now();
+        long remaining = offsetCent;
+        long settled = 0L;
+        for (DividendPayoutPort.DividendArrearsItem item : items) {
+            if (remaining <= 0) {
+                break;
+            }
+            long apply = Math.min(remaining, item.unpaidCent());
+            // idempotencyKey 纳入 statementId + 台账项 id：审批一次一结算，重放不重扣（settleArApItem 主键含两者）。
+            // ponytail: 先欠先抵到 offsetCent 封顶；预检已确保总额充足，逐笔 FOR UPDATE 仍防单笔并发（罕见单笔被清则抛超额、随本单事务回滚）。
+            settleArApItem(item.arApItemId(), apply, "dividend_offset", now, statementId, statementId);
+            remaining -= apply;
+            settled += apply;
+        }
+        return settled;
     }
 
     /** 批3:内部价采购券核销回流 -> 按内部结算价给第三方挂应付(payable, counterparty=partnerId)。 */
