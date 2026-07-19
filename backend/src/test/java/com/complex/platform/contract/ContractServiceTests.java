@@ -38,12 +38,14 @@ class ContractServiceTests {
     private final InMemoryContractRepository repo = new InMemoryContractRepository();
     private final AuthorizationService authz = mock(AuthorizationService.class);
     private ContractService service;
+    private RecordingTerminationPort terminationPort;
 
     @BeforeEach
     void setUp() {
         when(authz.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
-        service = new ContractService(repo, mock(AuditEventService.class), authz, null, null);
+        terminationPort = new RecordingTerminationPort();
+        service = new ContractService(repo, mock(AuditEventService.class), authz, null, null, terminationPort);
     }
 
     // 3.13：草稿带意向空间——被生效合同占用即起草拒(409)；未占用则预绑定；提交审批时被占同样拒。
@@ -399,6 +401,7 @@ class ContractServiceTests {
         Long penaltyCent;
         int depositCalls;
         int penaltyCalls;
+        Long depositBalance;   // null=不封顶(返回固化额)；非 null=按此台账余额封顶
 
         @Override
         public String createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
@@ -412,6 +415,11 @@ class ContractServiceTests {
             this.penaltyCent = penaltyCent;
             penaltyCalls++;
             return "arap_pen_" + settlementId;
+        }
+
+        @Override
+        public long effectiveRefundableDeposit(String merchantId, long contractDepositCent) {
+            return depositBalance == null ? contractDepositCent : Math.min(contractDepositCent, depositBalance);
         }
     }
 
@@ -443,15 +451,13 @@ class ContractServiceTests {
 
     @Test
     void moveOutTerminationAutoSettlesPostsDepositRefundAndTerminates() {
-        RecordingTerminationPort port = new RecordingTerminationPort();
-        service.terminationSettlementPort = port;
         ContractRecord c = effectiveContractRecord("ctr_t1", 500000L, Map.of());
         ContractChangeRecord ch = service.raiseChange(c.id(),
                 new ContractChangeRequest("k_t1", "move_out", Map.of()));
         approveTerminationChain(ch.id());
-        assertThat(port.depositCalls).isEqualTo(1);
-        assertThat(port.depositRefundCent).isEqualTo(500000L);
-        assertThat(port.penaltyCalls).isZero();
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        assertThat(terminationPort.depositRefundCent).isEqualTo(500000L);
+        assertThat(terminationPort.penaltyCalls).isZero();
         assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("terminated");
         List<ContractSettlementRecord> sts = repo.listSettlementsByContract(c.id());
         assertThat(sts).hasSize(1);
@@ -461,27 +467,23 @@ class ContractServiceTests {
 
     @Test
     void earlyTerminationUsesContractPenaltyTermsWhenPresent() {
-        RecordingTerminationPort port = new RecordingTerminationPort();
-        service.terminationSettlementPort = port;
         ContractRecord c = effectiveContractRecord("ctr_t2", 0L, Map.of("amountCent", 200000));
         ContractChangeRecord ch = service.raiseChange(c.id(),
                 new ContractChangeRequest("k_t2", "early_termination", Map.of("penaltyAmountCent", 999999)));
         approveTerminationChain(ch.id());
-        assertThat(port.penaltyCalls).isEqualTo(1);
-        assertThat(port.penaltyCent).isEqualTo(200000L);
+        assertThat(terminationPort.penaltyCalls).isEqualTo(1);
+        assertThat(terminationPort.penaltyCent).isEqualTo(200000L);
     }
 
     @Test
     void earlyTerminationFallsBackToManualPenaltyFromPayload() {
-        RecordingTerminationPort port = new RecordingTerminationPort();
-        service.terminationSettlementPort = port;
         ContractRecord c = effectiveContractRecord("ctr_t3", 0L, Map.of());
         ContractChangeRecord ch = service.raiseChange(c.id(),
                 new ContractChangeRequest("k_t3", "early_termination",
                         Map.of("penaltyAmountCent", 150000, "penaltyReason", "提前退租违约")));
         approveTerminationChain(ch.id());
-        assertThat(port.penaltyCalls).isEqualTo(1);
-        assertThat(port.penaltyCent).isEqualTo(150000L);
+        assertThat(terminationPort.penaltyCalls).isEqualTo(1);
+        assertThat(terminationPort.penaltyCent).isEqualTo(150000L);
         ContractSettlementRecord st = repo.listSettlementsByContract(c.id()).get(0);
         Map<String, Object> pen = st.settlementItems().stream()
                 .filter(i -> "termination_penalty".equals(i.get("item"))).findFirst().orElseThrow();
@@ -489,27 +491,34 @@ class ContractServiceTests {
     }
 
     @Test
+    void earlyTerminationParsesStringPenaltyAmount() {
+        // S3：人工录入金额被序列化成字符串时不静默变 0。
+        ContractRecord c = effectiveContractRecord("ctr_t3s", 0L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t3s", "early_termination", Map.of("penaltyAmountCent", "120000")));
+        approveTerminationChain(ch.id());
+        assertThat(terminationPort.penaltyCalls).isEqualTo(1);
+        assertThat(terminationPort.penaltyCent).isEqualTo(120000L);
+    }
+
+    @Test
     void unpaidReceivableOffsetsDepositNetPositivePayable() {
-        RecordingTerminationPort port = new RecordingTerminationPort();
-        service.terminationSettlementPort = port;
         repo.unpaidAr = 300000L;
         ContractRecord c = effectiveContractRecord("ctr_t4", 500000L, Map.of());
         ContractChangeRecord ch = service.raiseChange(c.id(),
                 new ContractChangeRequest("k_t4", "move_out", Map.of()));
         approveTerminationChain(ch.id());
-        assertThat(port.depositRefundCent).isEqualTo(200000L);
+        assertThat(terminationPort.depositRefundCent).isEqualTo(200000L);
     }
 
     @Test
     void unpaidExceedsDepositPostsNoPayableMerchantStillOwes() {
-        RecordingTerminationPort port = new RecordingTerminationPort();
-        service.terminationSettlementPort = port;
         repo.unpaidAr = 800000L;
         ContractRecord c = effectiveContractRecord("ctr_t5", 500000L, Map.of());
         ContractChangeRecord ch = service.raiseChange(c.id(),
                 new ContractChangeRequest("k_t5", "move_out", Map.of()));
         approveTerminationChain(ch.id());
-        assertThat(port.depositCalls).isZero();
+        assertThat(terminationPort.depositCalls).isZero();
         ContractSettlementRecord st = repo.listSettlementsByContract(c.id()).get(0);
         Map<String, Object> dep = st.settlementItems().stream()
                 .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
@@ -517,9 +526,37 @@ class ContractServiceTests {
     }
 
     @Test
+    void depositRefundCappedByLedgerBalance() {
+        // I3：台账实收余额 300000 < 固化 500000 → 只退 300000（封顶）。
+        terminationPort.depositBalance = 300000L;
+        ContractRecord c = effectiveContractRecord("ctr_t9", 500000L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t9", "move_out", Map.of()));
+        approveTerminationChain(ch.id());
+        assertThat(terminationPort.depositRefundCent).isEqualTo(300000L);
+        ContractSettlementRecord st = repo.listSettlementsByContract(c.id()).get(0);
+        Map<String, Object> dep = st.settlementItems().stream()
+                .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(dep).containsEntry("depositCent", 300000L);
+    }
+
+    @Test
+    void twoTerminationChangesSettleOnlyOnceNoDoubleDepositRefund() {
+        // I2：同合同两个退租变更并存，A 先审终止合同，B 审批完成但结算被守卫跳过 → 押金只退一次。
+        ContractRecord c = effectiveContractRecord("ctr_t8", 500000L, Map.of());
+        ContractChangeRecord a = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t8a", "move_out", Map.of()));
+        ContractChangeRecord b = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_t8b", "early_termination", Map.of("penaltyAmountCent", 100000)));
+        approveTerminationChain(a.id());
+        approveTerminationChain(b.id());
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        assertThat(terminationPort.penaltyCalls).isZero();
+        assertThat(repo.listSettlementsByContract(c.id())).hasSize(1);
+    }
+
+    @Test
     void terminationSettlementIsIdempotentAgainstReplay() {
-        RecordingTerminationPort port = new RecordingTerminationPort();
-        service.terminationSettlementPort = port;
         ContractRecord c = effectiveContractRecord("ctr_t6", 500000L, Map.of());
         ContractChangeRecord ch = service.raiseChange(c.id(),
                 new ContractChangeRequest("k_t6", "move_out", Map.of()));
@@ -527,21 +564,19 @@ class ContractServiceTests {
         repo.saveSettlement(new ContractSettlementRecord(settlementId, c.id(), "move_out", "settled",
                 List.of(), null, null, null, "proj_1", Instant.now(), Instant.now()));
         approveTerminationChain(ch.id());
-        assertThat(port.depositCalls).isZero();
-        assertThat(port.penaltyCalls).isZero();
+        assertThat(terminationPort.depositCalls).isZero();
+        assertThat(terminationPort.penaltyCalls).isZero();
     }
 
     @Test
     void rejectedTerminationChangeDoesNotSettle() {
-        RecordingTerminationPort port = new RecordingTerminationPort();
-        service.terminationSettlementPort = port;
         ContractRecord c = effectiveContractRecord("ctr_t7", 500000L, Map.of());
         ContractChangeRecord ch = service.raiseChange(c.id(),
                 new ContractChangeRequest("k_t7", "early_termination", Map.of("penaltyAmountCent", 100000)));
         service.approveChange(ch.id(),
                 new ContractChangeApproveRequest("k_t7_r", "contract.approve.business", "reject", "no"));
-        assertThat(port.depositCalls).isZero();
-        assertThat(port.penaltyCalls).isZero();
+        assertThat(terminationPort.depositCalls).isZero();
+        assertThat(terminationPort.penaltyCalls).isZero();
         assertThat(repo.listSettlementsByContract(c.id())).isEmpty();
         assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("effective");
     }

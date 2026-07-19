@@ -68,18 +68,17 @@ public class ContractService {
     private final MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver;
     // 批2b:提成端口(finance 实现)。构造注入(@Lazy 防潜在初始化环);旧构造传 null=收租方式退化纯月租。
     private final com.complex.platform.finance.TurnoverRentPort turnoverRentPort;
-    // 退租结算落财务台账端口（finance 实现）：字段注入+@Lazy 防初始化环+required=false
-    // （旧构造/单测未注入=降级只留结算快照不落台账）；包私有便单测置桩。
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    @org.springframework.context.annotation.Lazy
-    com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort;
+    // 退租结算落财务台账端口(finance 实现)。构造器 @Lazy 注入(防初始化环,与 turnoverRentPort 同范式;
+    // 字段注入曾被判死刑=运行时可能注入 null 致静默跳过落账);旧构造传 null=降级只留结算快照。
+    private final com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort;
 
     @Autowired
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository,
             MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver,
-            @org.springframework.context.annotation.Lazy com.complex.platform.finance.TurnoverRentPort turnoverRentPort) {
+            @org.springframework.context.annotation.Lazy com.complex.platform.finance.TurnoverRentPort turnoverRentPort,
+            @org.springframework.context.annotation.Lazy com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
@@ -87,19 +86,29 @@ public class ContractService {
         this.platformRepository = platformRepository;
         this.merchantFeeRecipientResolver = merchantFeeRecipientResolver;
         this.turnoverRentPort = turnoverRentPort;
+        this.terminationSettlementPort = terminationSettlementPort;
     }
 
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository,
             MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver) {
-        this(repository, auditEventService, authorizationService, notificationService, platformRepository, merchantFeeRecipientResolver, null);
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, merchantFeeRecipientResolver, null, null);
     }
 
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository) {
-        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null, null);
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null, null, null);
+    }
+
+    // 单测便捷构造：仅注入退租结算端口（其余 finance 端口/依赖 null）。
+    ContractService(ContractRepository repository, AuditEventService auditEventService,
+            AuthorizationService authorizationService, NotificationService notificationService,
+            PlatformRepository platformRepository,
+            com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort) {
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository,
+                null, null, terminationSettlementPort);
     }
 
     // ============ 起草 ============
@@ -878,6 +887,21 @@ public class ContractService {
         return o instanceof Number n ? n.longValue() : 0L;
     }
 
+    /** 宽松取整数：Number 直取；字符串型数字（序列化差异）解析兜底；否则 0。用于人工录入金额字段。 */
+    private long numLongLoose(Object o) {
+        if (o instanceof Number n) {
+            return n.longValue();
+        }
+        if (o instanceof String s) {
+            try {
+                return Long.parseLong(s.trim());
+            } catch (NumberFormatException e) {
+                return 0L;
+            }
+        }
+        return 0L;
+    }
+
     // ============ engine helpers ============
     private void materializeStage(String contractId, String changeId,
             List<ContractApprovalFlowStepRecord> steps, int stageSeq) {
@@ -981,7 +1005,10 @@ public class ContractService {
     private List<Map<String, Object>> runSettlementRules(ContractRecord contract) {
         // 逐例按合同 settlement_rules 顺序产出结算项 + 真实金额：保证金抵扣(deposit)/违约金(penalty)/欠费追缴(未付AR)。
         List<Map<String, Object>> rules = contract.settlementRules() == null ? List.of() : contract.settlementRules();
-        long deposit = contract.depositCent() == null ? 0L : contract.depositCent();
+        // I3 押金抵扣按台账实收余额封顶（用户裁决，与退租自动结算同口径）；端口未接（旧构造）退化固化额。
+        long rawDeposit = contract.depositCent() == null ? 0L : contract.depositCent();
+        long deposit = terminationSettlementPort == null ? rawDeposit
+                : terminationSettlementPort.effectiveRefundableDeposit(contract.merchantId(), rawDeposit);
         long penalty = numLong(contract.penaltyTerms() == null ? null : contract.penaltyTerms().get("amountCent"));
         long arrears = repository.sumUnpaidArForContract(contract.id());
         List<Map<String, Object>> items = new ArrayList<>();
@@ -1012,23 +1039,33 @@ public class ContractService {
         if (!"move_out".equals(trigger) && !"early_termination".equals(trigger)) {
             return;
         }
+        // I2 双花守卫：合同已非生效（另一退租变更已结算并终止）→ 跳过，绝不重复退押金/结算。
+        // approveChange 每次重取 contract，B 审批时读到 terminated 即在此返回。
+        if (!"effective".equals(contract.lifecycleStatus())) {
+            return;
+        }
         String settlementId = "cst_" + deterministicSuffix(change.id());
         if (repository.findSettlementById(settlementId).isPresent()) {
             return;   // 已结算过（重复审批/重放）：不重复落账
         }
-        long deposit = contract.depositCent() == null ? 0L : contract.depositCent();
+        // I3 押金按台账实收余额封顶（用户裁决）：只退商户实际交纳的，不超退合同固化额。
+        // ponytail: deposit_ledger 按 merchant_id 记账（商户粒度），一商户多合同时用商户总押金余额封顶=
+        //   保守信号（不会超退商户实交总额），当前可得最佳信号；端口未接=按 0（I1 修好后生产不该发生）。
+        long rawDeposit = contract.depositCent() == null ? 0L : contract.depositCent();
+        long deposit = terminationSettlementPort == null ? 0L
+                : terminationSettlementPort.effectiveRefundableDeposit(contract.merchantId(), rawDeposit);
         long unpaid = repository.sumUnpaidArForContract(contract.id());
         // 违约金仅提前退租：合同条款 penaltyTerms.amountCent 优先；缺则取变更载荷人工录入 penaltyAmountCent+penaltyReason。
         Map<String, Object> payload = change.payload() == null ? Map.of() : change.payload();
         long penaltyCent = 0L;
         String penaltyReason = null;
         if ("early_termination".equals(trigger)) {
-            long termPenalty = numLong(contract.penaltyTerms() == null ? null : contract.penaltyTerms().get("amountCent"));
+            long termPenalty = numLongLoose(contract.penaltyTerms() == null ? null : contract.penaltyTerms().get("amountCent"));
             if (termPenalty > 0) {
                 penaltyCent = termPenalty;
                 penaltyReason = "合同条款违约金";
             } else {
-                penaltyCent = numLong(payload.get("penaltyAmountCent"));
+                penaltyCent = numLongLoose(payload.get("penaltyAmountCent"));
                 penaltyReason = trimToNull(strVal(payload.get("penaltyReason")));
             }
         }
@@ -1037,26 +1074,32 @@ public class ContractService {
         List<Map<String, Object>> items = new ArrayList<>(result.items());
         // 落财务台账（端口空=旧构造/未接 finance：降级只留结算快照不落账）：
         //   押金净额>0→挂应付；违约金>0→挂应收；未清应收本在台账不重复挂。
+        long postedDepositRefund = 0L;
+        long postedPenalty = 0L;
         if (terminationSettlementPort != null) {
             if (result.depositRefundCent() > 0) {
                 String arId = terminationSettlementPort.createDepositRefundPayable(
                         contract.merchantId(), result.depositRefundCent(), settlementId);
                 annotateSettlementItem(items, "deposit_disposal", arId);
+                postedDepositRefund = result.depositRefundCent();
             }
             if (result.penaltyCent() > 0) {
                 String arId = terminationSettlementPort.createTerminationPenaltyReceivable(
                         contract.merchantId(), result.penaltyCent(), settlementId);
                 annotateSettlementItem(items, "termination_penalty", arId);
+                postedPenalty = result.penaltyCent();
             }
         }
         Instant now = Instant.now();
         repository.saveSettlement(new ContractSettlementRecord(settlementId, contract.id(), trigger, "settled",
                 items, null, null, null, contract.projectId(), now, now));
         finalizeContractAfterSettlement(contract, trigger, now);
+        // I1c 审计只记实际落账金额（端口未落账则为 0）+ 落账标志，杜绝"已结算 X 元"而台账无痕的误导。
         auditEventService.recordSuccess("contract.termination_settled", "contract.change.manage",
                 "contract_settlement", settlementId, null, change.id(),
-                Map.of("trigger", trigger, "deposit_refund_cent", result.depositRefundCent(),
-                        "penalty_cent", result.penaltyCent(), "unpaid_cent", result.unpaidCent()));
+                Map.of("trigger", trigger, "deposit_refund_cent", postedDepositRefund,
+                        "penalty_cent", postedPenalty, "unpaid_cent", result.unpaidCent(),
+                        "ledger_posted", terminationSettlementPort != null));
     }
 
     /** 把落账后的台账项 id 回写到对应结算清单项（留痕：清单项 ↔ ar_ap_items）。 */

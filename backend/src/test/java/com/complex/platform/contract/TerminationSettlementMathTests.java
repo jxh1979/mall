@@ -76,4 +76,13 @@ class TerminationSettlementMathTests {
         assertThat(items).hasSize(1);
         assertThat(items.get(0)).containsEntry("item", "unpaid_receivable_summary").containsEntry("amountCent", 0L);
     }
+
+    @Test
+    void depositCappedByLedgerBalanceRefundsBalanceNotContractAmount() {
+        // 入参 deposit 已是台账余额封顶值（300000 < 固化 500000）：算法按 300000 退。
+        TerminationSettlementMath.Result r = TerminationSettlementMath.compute("move_out", 300000L, 0L, 0L, null);
+        assertThat(r.depositRefundCent()).isEqualTo(300000L);
+        Map<String, Object> dep = itemOf(r, "deposit_disposal");
+        assertThat(dep).containsEntry("depositCent", 300000L).containsEntry("status", "payable_posted");
+    }
 }

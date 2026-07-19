@@ -1535,6 +1535,13 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         return item.id();
     }
 
+    /** 应退押金封顶=min(合同固化额, 该商户押金台账实收余额)。只读余额（无锁），无台账=0。 */
+    @Override
+    public long effectiveRefundableDeposit(String merchantId, long contractDepositCent) {
+        long balance = repository.currentDepositBalance(merchantId);
+        return Math.min(contractDepositCent, balance);
+    }
+
     private ArApItemRecord billTurnoverRentInternal(TurnoverRentBillRequest request) {
         TurnoverRentBillRequest actual = requireRequest(request);
         String ruleId = requireText(actual.ruleId(), "rule_id");
