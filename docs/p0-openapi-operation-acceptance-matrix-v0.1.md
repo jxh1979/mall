@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 640 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 648 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -661,6 +661,14 @@
 | finance | `POST` | `/api/v1/finance/dividends/statements/{id}/approve` | `approveDividendStatement` | 审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）；提交人不得审批自己提交的单 | `DividendActionRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.approved` | `dividend.approve_failed` |
 | finance | `POST` | `/api/v1/finance/dividends/statements/{id}/reject` | `rejectDividendStatement` | 驳回：pending_review → rejected（理由必填；驳回后可重算） | `DividendActionRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.rejected` | `dividend.reject_failed` |
 | finance | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | `markDividendStatementPaid` | 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程） | `DividendActionRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.paid_marked` | `dividend.mark_paid_failed` |
+| customer | `GET` | `/api/v1/vouchers/definitions` | `listVoucherDefinitions` | 券定义列表（统一台账模板：类型/核销方式/结算口径；内部结算价按 voucher.internal_price.view 权限脱敏） | `-` | `customer.voucher.view` | `staff-token` | `merchant` | web | 否 | `voucher.definitions_viewed` | `voucher.definitions_view_failed` |
+| customer | `POST` | `/api/v1/vouchers/definitions` | `createVoucherDefinition` | 新建券定义（商户折扣券/店内实物券；外部伙伴券仍配置在通票权益模板 V282） | `VoucherDefinitionRequest` | `customer.voucher.manage` | `staff-token` | `merchant` | web | 是 | `voucher.definition_created` | `voucher.definition_create_failed` |
+| customer | `GET` | `/api/v1/vouchers/instances` | `listVoucherInstances` | 券实例台账（收编积分兑换券＋营销赠券；状态机 issued→redeemed/expired/revoked） | `-` | `customer.voucher.view` | `staff-token` | `merchant` | web | 否 | `voucher.instances_viewed` | `voucher.instances_view_failed` |
+| customer | `POST` | `/api/v1/vouchers/instances` | `issueVouchers` | 营销赠发券（按定义给客人发放；商户 scope 只能发自家券） | `VoucherIssueRequest` | `customer.voucher.manage` | `staff-token` | `merchant` | web | 是 | `voucher.issued` | `voucher.issue_failed` |
+| customer | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | `revokeVoucher` | 作废券（仅未核销可作废；理由必填进审计留痕） | `VoucherRevokeRequest` | `customer.voucher.manage` | `staff-token` | `merchant` | web | 是 | `voucher.revoked` | `voucher.revoke_failed` |
+| customer | `GET` | `/api/v1/vouchers/redemptions` | `listVoucherRedemptions` | 统一核销记录（append-only：核销点/操作员/结算挂钩一张表；settlement_amount_cent=内部结算价按 voucher.internal_price.view 权限脱敏） | `-` | `customer.voucher.view` | `staff-token` | `merchant` | web | 否 | `voucher.redemptions_viewed` | `voucher.redemptions_view_failed` |
+| customer | `POST` | `/api/v1/vouchers/redemptions` | `redeemVoucher` | 统一核销（三类口径：折扣券结账抵扣/实物券扣库存＋内部结算价挂应付；每券一次；响应 settlement_amount_cent 按 voucher.internal_price.view 权限脱敏） | `VoucherRedeemRequest` | `customer.voucher.redeem` | `staff-token` | `merchant` | web | 是 | `voucher.redeemed` | `voucher.redeem_failed` |
+| customer | `GET` | `/api/v1/vouchers/overview` | `listVoucherOverview` | 全部券聚合（读层并入不搬表：统一台账 ∪ 通票第三方合作券 V282） | `-` | `customer.voucher.view` | `staff-token` | `merchant` | web | 否 | `voucher.overview_viewed` | `voucher.overview_view_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -728,5 +736,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 640 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 648 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

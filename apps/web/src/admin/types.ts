@@ -1110,3 +1110,70 @@ export type MetricDetailPayload = {
   traceLinkPageId?: string | null;
   traceLinkColumnKey?: string | null;
 };
+
+// ── 积分/券统一台账（V301 方案A）：定义/实例/核销记录/全部券聚合 ──────────
+export type VoucherDefinitionRow = {
+  id: string;
+  name?: string;
+  voucherKind?: string;
+  redeemMethod?: string;
+  settlementMode?: string;
+  merchantId?: string | null;
+  faceValueCent?: number | null;
+  inventoryItemId?: string | null;
+  stockLocationId?: string | null;
+  stockQuantity?: number | null;
+  internalPriceCent?: number | null;
+  validDays?: number | null;
+  validUntil?: string | null;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type VoucherInstanceRow = {
+  id: string;
+  definitionId?: string;
+  customerId?: string;
+  code?: string;
+  sourceType?: string;
+  sourceRef?: string | null;
+  status?: string;
+  issuedAt?: string;
+  expiresAt?: string | null;
+  redeemedAt?: string | null;
+  revokedAt?: string | null;
+  revokeReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type VoucherRedemptionRow = {
+  id: string;
+  voucherInstanceId?: string;
+  definitionId?: string;
+  voucherKind?: string;
+  customerId?: string;
+  merchantId?: string | null;
+  operatorUserId?: string | null;
+  redeemMethod?: string;
+  settlementMode?: string;
+  settlementAmountCent?: number | null;
+  arApItemId?: string | null;
+  stockMovementRef?: string | null;
+  note?: string | null;
+  redeemedAt?: string;
+  createdAt?: string;
+};
+
+// "全部券"聚合行（读层并入：统一台账 ∪ 通票第三方合作券，计次模型带剩余次数）。
+export type VoucherOverviewRow = {
+  id: string;
+  source?: string;
+  name?: string;
+  voucherKind?: string;
+  customerId?: string | null;
+  status?: string;
+  remainingTimes?: number | null;
+  expiresAt?: string | null;
+};

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 640 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 313 | 人工权限矩阵正文未覆盖 211 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1280 | 人工事件矩阵正文未覆盖 1238 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 640 | 人工任务映射正文未逐项覆盖 634 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 384 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 648 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 316 | 人工权限矩阵正文未覆盖 214 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1296 | 人工事件矩阵正文未覆盖 1254 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 648 | 人工任务映射正文未逐项覆盖 642 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 388 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -153,6 +153,9 @@
 | `customer.stored_value.refund` | staff-token | merchant, platform, project | 5 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule, configureStoredValueMerchantCard, counterRefundStoredValueAccount | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.topup` | customer-token | customer | 2 | customerStoredValueTopup, customerStoredValueSettle | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.view` | customer-token | customer | 2 | customerStoredValueAccount, customerStoredValueAccounts | OpenAPI 补充，以本附录为准 |
+| `customer.voucher.manage` | staff-token | merchant | 3 | createVoucherDefinition, issueVouchers, revokeVoucher | OpenAPI 补充，以本附录为准 |
+| `customer.voucher.redeem` | staff-token | merchant | 1 | redeemVoucher | OpenAPI 补充，以本附录为准 |
+| `customer.voucher.view` | staff-token | merchant | 4 | listVoucherDefinitions, listVoucherInstances, listVoucherRedemptions, listVoucherOverview | OpenAPI 补充，以本附录为准 |
 | `energy.meter.manage` | staff-token | platform | 3 | listEnergyMeters, createEnergyMeter, updateEnergyMeter | OpenAPI 补充，以本附录为准 |
 | `energy.reading.manage` | staff-token | platform | 7 | listEnergyReadings, recordEnergyReading, reviewEnergyReading, getEnergyMeterDifference, settleEnergyFee, settleEnergyFeeShortcut, listAbnormalReadings | OpenAPI 补充，以本附录为准 |
 | `entity.binding.manage` | staff-token | project-merchant | 3 | createBusinessEntity, createBusinessEntityBinding, changeBusinessEntityBinding | 已在权限矩阵正文出现 |
@@ -1614,6 +1617,22 @@
 | `verification.succeeded` | success | `createTicketVerification` | `POST` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.execute` | 已在事件矩阵正文出现 |
 | `verification.view_failed` | failure | `listTicketVerifications` | `GET` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.view` | 接口级事件，以本附录为准 |
 | `verification.viewed` | success | `listTicketVerifications` | `GET` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.view` | 接口级事件，以本附录为准 |
+| `voucher.definition_create_failed` | failure | `createVoucherDefinition` | `POST` | `/api/v1/vouchers/definitions` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
+| `voucher.definition_created` | success | `createVoucherDefinition` | `POST` | `/api/v1/vouchers/definitions` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
+| `voucher.definitions_view_failed` | failure | `listVoucherDefinitions` | `GET` | `/api/v1/vouchers/definitions` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.definitions_viewed` | success | `listVoucherDefinitions` | `GET` | `/api/v1/vouchers/definitions` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.instances_view_failed` | failure | `listVoucherInstances` | `GET` | `/api/v1/vouchers/instances` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.instances_viewed` | success | `listVoucherInstances` | `GET` | `/api/v1/vouchers/instances` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.issue_failed` | failure | `issueVouchers` | `POST` | `/api/v1/vouchers/instances` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
+| `voucher.issued` | success | `issueVouchers` | `POST` | `/api/v1/vouchers/instances` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
+| `voucher.overview_view_failed` | failure | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.overview_viewed` | success | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.redeem_failed` | failure | `redeemVoucher` | `POST` | `/api/v1/vouchers/redemptions` | CUS-客人端 | `customer.voucher.redeem` | 接口级事件，以本附录为准 |
+| `voucher.redeemed` | success | `redeemVoucher` | `POST` | `/api/v1/vouchers/redemptions` | CUS-客人端 | `customer.voucher.redeem` | 接口级事件，以本附录为准 |
+| `voucher.redemptions_view_failed` | failure | `listVoucherRedemptions` | `GET` | `/api/v1/vouchers/redemptions` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.redemptions_viewed` | success | `listVoucherRedemptions` | `GET` | `/api/v1/vouchers/redemptions` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.revoke_failed` | failure | `revokeVoucher` | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
+| `voucher.revoked` | success | `revokeVoucher` | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
 | `wecom.conversation_sync_failed` | failure | `syncWecomConversation` | `POST` | `/api/v1/compliance/wecom/conversations/sync` | P0-待归类 | `wecom.sync` | 接口级事件，以本附录为准 |
 | `wecom.conversation_synced` | success | `syncWecomConversation` | `POST` | `/api/v1/compliance/wecom/conversations/sync` | P0-待归类 | `wecom.sync` | 接口级事件，以本附录为准 |
 | `wecom.raw_view_failed` | failure | `viewWecomConversationMessages` | `GET` | `/api/v1/compliance/wecom/conversations/{id}/messages` | P0-待归类 | `wecom.view_raw` | 接口级事件，以本附录为准 |
@@ -1838,6 +1857,7 @@
 | CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
 | CUS-客人端 | `counterRefundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/counter-refund` | 会员储值到店柜台退款（商户预收卡唯一可达退款路径） | `customer.stored_value.refund` | `stored_value.counter_refund` / `stored_value.counter_refund_failed` | web | operation 级补充 |
 | CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `createVoucherDefinition` | `POST` | `/api/v1/vouchers/definitions` | 新建券定义（商户折扣券/店内实物券；外部伙伴券仍配置在通票权益模板 V282） | `customer.voucher.manage` | `voucher.definition_created` / `voucher.definition_create_failed` | web | operation 级补充 |
 | CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | 客人登出（清除免登录会话 cookie） | `public` | `customer.logged_out` / `customer.logout_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | 客人手机号登录 | `public` | `customer.auth.login` / `customer.auth.login_failed` | web, miniapp, app, kiosk | operation 级补充 |
@@ -1854,15 +1874,22 @@
 | CUS-客人端 | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | 查询积分流水 | `not_applicable` | `customer.points.ledger_viewed` / `customer.points.ledger_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `getCustomerSession` | `GET` | `/api/v1/customer/session` | 客人会话恢复（免登录） | `not_applicable` | `customer.session_viewed` / `customer.session_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `getStoredValueMerchantRefundRule` | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | 查询商户级储值卡退款规则 | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_viewed` / `stored_value.merchant_refund_rule_view_failed` | web | operation 级补充 |
+| CUS-客人端 | `issueVouchers` | `POST` | `/api/v1/vouchers/instances` | 营销赠发券（按定义给客人发放；商户 scope 只能发自家券） | `customer.voucher.manage` | `voucher.issued` / `voucher.issue_failed` | web | operation 级补充 |
 | CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | 我的订单 | `not_applicable` | `customer.orders_viewed` / `customer.orders_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | 查询积分兑换商品目录 | `not_applicable` | `customer.points.redemption_items_viewed` / `customer.points.redemption_items_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | 查询我的积分兑换记录 | `not_applicable` | `customer.points.redemptions_viewed` / `customer.points.redemptions_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | 会员等级配置列表 | `customer.loyalty.view` | `customer.member_levels_viewed` / `customer.member_levels_view_failed` | web | operation 级补充 |
+| CUS-客人端 | `listVoucherDefinitions` | `GET` | `/api/v1/vouchers/definitions` | 券定义列表（统一台账模板：类型/核销方式/结算口径；内部结算价按 voucher.internal_price.view 权限脱敏） | `customer.voucher.view` | `voucher.definitions_viewed` / `voucher.definitions_view_failed` | web | operation 级补充 |
+| CUS-客人端 | `listVoucherInstances` | `GET` | `/api/v1/vouchers/instances` | 券实例台账（收编积分兑换券＋营销赠券；状态机 issued→redeemed/expired/revoked） | `customer.voucher.view` | `voucher.instances_viewed` / `voucher.instances_view_failed` | web | operation 级补充 |
+| CUS-客人端 | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | 全部券聚合（读层并入不搬表：统一台账 ∪ 通票第三方合作券 V282） | `customer.voucher.view` | `voucher.overview_viewed` / `voucher.overview_view_failed` | web | operation 级补充 |
+| CUS-客人端 | `listVoucherRedemptions` | `GET` | `/api/v1/vouchers/redemptions` | 统一核销记录（append-only：核销点/操作员/结算挂钩一张表；settlement_amount_cent=内部结算价按 voucher.internal_price.view 权限脱敏） | `customer.voucher.view` | `voucher.redemptions_viewed` / `voucher.redemptions_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `lookupCustomerAccountByPhone` | `POST` | `/api/v1/customer-accounts/lookup` | 按手机号精确查客人账号（盲索引，返回安全投影；手机号走请求体不入 URL） | `customer.account.manage` | `customer.account.viewed` / `customer.account.view_failed` | web | operation 级补充 |
 | CUS-客人端 | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | 提交积分兑换 | `not_applicable` | `customer.points.redeem` / `customer.points.redeem_failed` | app, miniapp, web | operation 级补充 |
+| CUS-客人端 | `redeemVoucher` | `POST` | `/api/v1/vouchers/redemptions` | 统一核销（三类口径：折扣券结账抵扣/实物券扣库存＋内部结算价挂应付；每券一次；响应 settlement_amount_cent 按 voucher.internal_price.view 权限脱敏） | `customer.voucher.redeem` | `voucher.redeemed` / `voucher.redeem_failed` | web | operation 级补充 |
 | CUS-客人端 | `refundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | 会员储值退卡/退余额（后台） | `customer.stored_value.refund` | `stored_value.refund` / `stored_value.refund_failed` | web | operation 级补充 |
 | CUS-客人端 | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | 恢复客人账号为正常（解封/解黑） | `customer.account.manage` | `customer.account.reinstated` / `customer.account.reinstate_failed` | web | operation 级补充 |
+| CUS-客人端 | `revokeVoucher` | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | 作废券（仅未核销可作废；理由必填进审计留痕） | `customer.voucher.manage` | `voucher.revoked` / `voucher.revoke_failed` | web | operation 级补充 |
 | CUS-客人端 | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | 封禁客人账号（临时，到期客人再登录自动恢复正常；期内购买/使用被拒） | `customer.account.manage` | `customer.account.suspended` / `customer.account.suspend_failed` | web | operation 级补充 |
 | CUS-客人端 | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | 解冻会员积分账户 | `customer.points.freeze` | `customer.points.unfrozen` / `customer.points.unfreeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `unfreezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/unfreeze` | 解冻会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.unfrozen` / `stored_value.unfrozen_failed` | web | operation 级补充 |

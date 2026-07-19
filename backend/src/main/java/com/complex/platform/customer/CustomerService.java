@@ -61,6 +61,8 @@ public class CustomerService {
     private final BarRepository barRepository;
     // 扫码点单跨域调入：客人自助下单复用 bar 下单逻辑（merchant/customer 取自会话），见 placeBarScanOrder。
     private final BarOrderService barOrderService;
+    // 统一台账发券端口（V301 方案A）：积分兑换只发券不动库存，实物出库/结算移到统一核销阶段。
+    private final com.complex.platform.voucher.VoucherIssuePort voucherIssuePort;
 
     private final java.time.Clock clock;
 
@@ -74,10 +76,12 @@ public class CustomerService {
             InventoryService inventoryService,
             LoyaltyService loyaltyService,
             BarRepository barRepository,
-            BarOrderService barOrderService
+            BarOrderService barOrderService,
+            @org.springframework.context.annotation.Lazy com.complex.platform.voucher.VoucherIssuePort voucherIssuePort
     ) {
         this(repository, otpVerifier, ticketingService, operations, auditEventService,
-                inventoryService, loyaltyService, barRepository, barOrderService, java.time.Clock.systemUTC());
+                inventoryService, loyaltyService, barRepository, barOrderService, voucherIssuePort,
+                java.time.Clock.systemUTC());
     }
 
     /** 4.3 clock 化：注入 Clock 使可用期等时间比较可测（供单测传 fixed clock）。 */
@@ -91,6 +95,7 @@ public class CustomerService {
             LoyaltyService loyaltyService,
             BarRepository barRepository,
             BarOrderService barOrderService,
+            com.complex.platform.voucher.VoucherIssuePort voucherIssuePort,
             java.time.Clock clock
     ) {
         this.clock = clock;
@@ -103,6 +108,7 @@ public class CustomerService {
         this.loyaltyService = loyaltyService;
         this.barRepository = barRepository;
         this.barOrderService = barOrderService;
+        this.voucherIssuePort = voucherIssuePort;
     }
 
     @Transactional
@@ -437,13 +443,10 @@ public class CustomerService {
                         throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
                     }
                     String redemptionId = "redemption_" + slug(key);
-                    // 虚拟券模式(2026-07-08 用户裁决):积分兑换只产出"虚拟券"(本兑换记录即券),此处不扣库存、不结算。
-                    // 实物扣库存 + 与商户/外部伙伴的内部结算,移到"券核销领取"阶段,由有商户范围的店员操作。
-                    // 客人自身无商户范围,此前在此调 createTypedStockMovement(强制要求商户范围)必崩——客人兑实物一直走不通。
-                    // 见 memory: complex-management-points-redemption-voucher-model(券三类核销 + 内部结算,待完整立项)。
-                    org.springframework.util.Assert.isTrue(
-                            quantity > 0 && item.inventoryItemId() != null && item.stockLocationId() != null,
-                            "redemption voucher must reference a positive quantity and a stocked item");
+                    // 统一台账（V301 方案A，2026-07-18 拍板）：积分兑换兑出的是统一台账券实例
+                    // （VoucherIssuePort），此处不扣库存、不结算；实物出库＋内部结算价挂应付移到
+                    // 统一核销（VoucherService.redeem，三类核销口径）。旧"核销领取"扣库存路径下线，
+                    // 仅对历史 pending_pickup 记录保留（见 fulfillPointsRedemption 状态守卫）。
                     long balanceAfter = account.balance() - totalPoints;
                     // FIFO 消耗获取批次剩余，使过期清零只清未用部分。
                     consumeFifoBatches(customer.id(), totalPoints);
@@ -479,6 +482,8 @@ public class CustomerService {
                             false,
                             now
                     ));
+                    // 兑出统一台账券实例（每件一张，可独立核销）；实例 id 由兑换记录 id 派生，重放不重复发券。
+                    voucherIssuePort.issueForPointsRedemption(item, customer.id(), redemptionId, quantity, now);
                     return repository.savePointsRedemption(new CustomerPointsRedemptionRecord(
                             redemptionId,
                             customer.id(),
@@ -491,7 +496,7 @@ public class CustomerService {
                             item.stockLocationId(),
                             item.stockQuantity() * quantity,
                             trimToDefault(actual.sourceTerminal(), "miniapp"),
-                            "pending_pickup",
+                            "voucher_issued",
                             now,
                             now
                     ));
@@ -500,8 +505,9 @@ public class CustomerService {
     }
 
     /**
-     * 券核销领取(店员端·有商户范围):库存足则扣库存标 picked_up;缺货则退回积分标 refunded。
-     * 客人兑换只发券(pending_pickup·不碰库存),真正扣库存/退积分发生在此。见 memory points-redemption-voucher-model。
+     * 【历史路径·仅存量】旧"券核销领取"（店员端）：库存足则扣库存标 picked_up；缺货则退回积分标 refunded。
+     * V301 统一台账后新兑换记录状态为 voucher_issued（核销走 VoucherService.redeem 统一路径），
+     * 本方法的 pending_pickup 状态守卫使其天然只对历史存量记录有效；历史记录保留只读可见。
      */
     @com.complex.platform.gate.GuardedAction(permission = "customer.loyalty.manage")
     public CustomerPointsRedemptionRecord fulfillPointsRedemption(String redemptionId) {

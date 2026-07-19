@@ -22682,6 +22682,351 @@ paths:
           type: string
           maxLength: 64
         description: 分红计算单 ID。
+  /api/v1/vouchers/definitions:
+    get:
+      tags:
+      - customer
+      operationId: listVoucherDefinitions
+      summary: 券定义列表（统一台账模板：类型/核销方式/结算口径；内部结算价按 voucher.internal_price.view 权限脱敏）
+      x-auth-context: staff-token
+      x-permission: customer.voucher.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: false
+      x-audit-event-success: voucher.definitions_viewed
+      x-audit-event-failure: voucher.definitions_view_failed
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - active
+          - disabled
+        description: 定义状态筛选。
+      - name: voucher_kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - merchant_discount
+          - in_store_goods
+          - external_partner
+        description: 券类型筛选（三类：商户折扣/店内实物/外部伙伴）。
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+        description: 页码（1 起）。
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        description: 每页行数（上限 200）。
+      responses:
+        '200': &id001
+          $ref: '#/components/responses/Success'
+        '400': &id002
+          $ref: '#/components/responses/Error'
+        '403': &id003
+          $ref: '#/components/responses/Error'
+        '500': &id004
+          $ref: '#/components/responses/Error'
+    post:
+      tags:
+      - customer
+      operationId: createVoucherDefinition
+      summary: 新建券定义（商户折扣券/店内实物券；外部伙伴券仍配置在通票权益模板 V282）
+      x-auth-context: staff-token
+      x-permission: customer.voucher.manage
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: voucher.definition_created
+      x-audit-event-failure: voucher.definition_create_failed
+      x-failure-codes:
+      - VOUCHER_KIND_NOT_SUPPORTED
+      requestBody:
+        $ref: '#/components/requestBodies/VoucherDefinitionRequest'
+      responses:
+        '200': &id005
+          $ref: '#/components/responses/Success'
+        '400': &id006
+          $ref: '#/components/responses/Error'
+        '403': &id007
+          $ref: '#/components/responses/Error'
+        '409': &id008
+          $ref: '#/components/responses/Error'
+        '500': &id009
+          $ref: '#/components/responses/Error'
+  /api/v1/vouchers/instances:
+    get:
+      tags:
+      - customer
+      operationId: listVoucherInstances
+      summary: 券实例台账（收编积分兑换券＋营销赠券；状态机 issued→redeemed/expired/revoked）
+      x-auth-context: staff-token
+      x-permission: customer.voucher.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: false
+      x-audit-event-success: voucher.instances_viewed
+      x-audit-event-failure: voucher.instances_view_failed
+      parameters:
+      - name: customer_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        description: 持有客人 ID 筛选。
+      - name: definition_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        description: 券定义 ID 筛选。
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - issued
+          - redeemed
+          - expired
+          - revoked
+        description: 实例状态筛选。
+      - name: source_type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - points_redemption
+          - marketing_grant
+        description: 来源筛选：积分兑换 / 营销赠发。
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+        description: 页码（1 起）。
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        description: 每页行数（上限 200）。
+      responses:
+        '200': *id001
+        '400': *id002
+        '403': *id003
+        '500': *id004
+    post:
+      tags:
+      - customer
+      operationId: issueVouchers
+      summary: 营销赠发券（按定义给客人发放；商户 scope 只能发自家券）
+      x-auth-context: staff-token
+      x-permission: customer.voucher.manage
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: voucher.issued
+      x-audit-event-failure: voucher.issue_failed
+      x-failure-codes:
+      - VOUCHER_DEFINITION_NOT_FOUND
+      - VOUCHER_DEFINITION_DISABLED
+      - CROSS_MERCHANT_FORBIDDEN
+      requestBody:
+        $ref: '#/components/requestBodies/VoucherIssueRequest'
+      responses:
+        '200': *id005
+        '400': *id006
+        '403': *id007
+        '404': &id010
+          $ref: '#/components/responses/Error'
+        '409': *id008
+        '500': *id009
+  /api/v1/vouchers/instances/{id}/revoke:
+    post:
+      tags:
+      - customer
+      operationId: revokeVoucher
+      summary: 作废券（仅未核销可作废；理由必填进审计留痕）
+      x-auth-context: staff-token
+      x-permission: customer.voucher.manage
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: voucher.revoked
+      x-audit-event-failure: voucher.revoke_failed
+      x-failure-codes:
+      - VOUCHER_NOT_FOUND
+      - VOUCHER_NOT_REVOCABLE
+      - CROSS_MERCHANT_FORBIDDEN
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+        description: 券实例 ID。
+      requestBody:
+        $ref: '#/components/requestBodies/VoucherRevokeRequest'
+      responses:
+        '200': *id005
+        '400': *id006
+        '403': *id007
+        '404': *id010
+        '409': *id008
+        '500': *id009
+  /api/v1/vouchers/redemptions:
+    get:
+      tags:
+      - customer
+      operationId: listVoucherRedemptions
+      summary: 统一核销记录（append-only：核销点/操作员/结算挂钩一张表；settlement_amount_cent=内部结算价按 voucher.internal_price.view 权限脱敏）
+      x-auth-context: staff-token
+      x-permission: customer.voucher.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: false
+      x-audit-event-success: voucher.redemptions_viewed
+      x-audit-event-failure: voucher.redemptions_view_failed
+      parameters:
+      - name: merchant_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        description: 核销点商户筛选；商户 scope 账号强制只看自己。
+      - name: voucher_instance_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        description: 按券实例查核销记录。
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+        description: 页码（1 起）。
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        description: 每页行数（上限 200）。
+      responses:
+        '200': *id001
+        '400': *id002
+        '403': *id003
+        '500': *id004
+    post:
+      tags:
+      - customer
+      operationId: redeemVoucher
+      summary: 统一核销（三类口径：折扣券结账抵扣/实物券扣库存＋内部结算价挂应付；每券一次；响应 settlement_amount_cent 按 voucher.internal_price.view 权限脱敏）
+      x-auth-context: staff-token
+      x-permission: customer.voucher.redeem
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: voucher.redeemed
+      x-audit-event-failure: voucher.redeem_failed
+      x-failure-codes:
+      - VOUCHER_NOT_FOUND
+      - VOUCHER_ALREADY_REDEEMED
+      - VOUCHER_REVOKED
+      - VOUCHER_EXPIRED
+      - VOUCHER_STOCK_INSUFFICIENT
+      - CROSS_MERCHANT_FORBIDDEN
+      requestBody:
+        $ref: '#/components/requestBodies/VoucherRedeemRequest'
+      responses:
+        '200': *id005
+        '400': *id006
+        '403': *id007
+        '404': *id010
+        '409': *id008
+        '500': *id009
+  /api/v1/vouchers/overview:
+    get:
+      tags:
+      - customer
+      operationId: listVoucherOverview
+      summary: 全部券聚合（读层并入不搬表：统一台账 ∪ 通票第三方合作券 V282）
+      x-auth-context: staff-token
+      x-permission: customer.voucher.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: false
+      x-audit-event-success: voucher.overview_viewed
+      x-audit-event-failure: voucher.overview_view_failed
+      parameters:
+      - name: customer_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        description: 持有客人 ID 筛选。
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+        description: 页码（1 起）。
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        description: 每页行数（上限 200）。
+      responses:
+        '200': *id001
+        '400': *id002
+        '403': *id003
+        '500': *id004
 components:
   securitySchemes:
     BearerAuth:
@@ -22893,6 +23238,30 @@ components:
         maxLength: 64
       description: ProjectId 路径参数；必须引用当前数据范围内存在且归属本商户的游乐项目。
   requestBodies:
+    VoucherDefinitionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VoucherDefinitionRequest'
+    VoucherIssueRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VoucherIssueRequest'
+    VoucherRevokeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VoucherRevokeRequest'
+    VoucherRedeemRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VoucherRedeemRequest'
     DividendPlanRequest:
       required: true
       content:
@@ -24368,6 +24737,139 @@ components:
             meta:
               server_time: 2026-06-12T12:00:00Z
   schemas:
+    VoucherDefinitionRequest:
+      type: object
+      description: 请求载荷 `VoucherDefinitionRequest`（新建券定义）：商户折扣券须带面额与归属商户；店内实物券须带货品/库位/件数；结算口径选内部结算时须带内部结算价与结算商户。外部伙伴券不在统一台账建定义（配置在通票权益模板，V282）。
+      additionalProperties: false
+      required:
+      - idempotency_key
+      - name
+      - voucher_kind
+      - redeem_method
+      - settlement_mode
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 操作幂等键；同键同载荷重放返回同一定义。
+        name:
+          type: string
+          maxLength: 200
+          description: 券名称（对客展示）。
+        voucher_kind:
+          type: string
+          enum:
+          - merchant_discount
+          - in_store_goods
+          description: 券类型：merchant_discount 商户折扣券（结账抵扣）/ in_store_goods 店内实物券（核销扣库存）。
+        redeem_method:
+          type: string
+          enum:
+          - in_store_staff
+          - onsite_code
+          description: 核销方式：店员核销 / 场内扫码（external_reflow 仅用于外部伙伴券对账回流）。
+        settlement_mode:
+          type: string
+          enum:
+          - none
+          - internal_price
+          description: 结算口径：none 不结算（免费营销）/ internal_price 核销按内部结算价给商户挂应付。
+        merchant_id:
+          type: string
+          maxLength: 64
+          description: 归属/结算商户 ID；空＝平台通用（折扣券与内部结算必填）。
+        face_value_cent:
+          type: integer
+          format: int64
+          description: 折扣券面额（分，大于 0；仅 merchant_discount）。
+        inventory_item_id:
+          type: string
+          maxLength: 64
+          description: 实物券货品 ID（仅 in_store_goods）。
+        stock_location_id:
+          type: string
+          maxLength: 64
+          description: 实物券出库库位 ID（仅 in_store_goods）。
+        stock_quantity:
+          type: integer
+          description: 每张券兑付件数（大于 0；仅 in_store_goods）。
+        internal_price_cent:
+          type: integer
+          format: int64
+          description: 内部结算价（分，大于 0；仅 settlement_mode=internal_price）。
+        valid_days:
+          type: integer
+          description: 自发放日起有效天数（大于 0）；空＝不按天数。
+        valid_until:
+          type: string
+          format: date-time
+          description: 固定截止时刻；与 valid_days 并存取更早；空＝不设固定截止。
+    VoucherIssueRequest:
+      type: object
+      description: 请求载荷 `VoucherIssueRequest`（营销赠发）：按券定义给客人发放 quantity 张券实例（来源记 marketing_grant）。
+      additionalProperties: false
+      required:
+      - idempotency_key
+      - definition_id
+      - customer_id
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 操作幂等键；实例 id 由此派生，重放不重复发券。
+        definition_id:
+          type: string
+          maxLength: 64
+          description: 券定义 ID（须为生效中）。
+        customer_id:
+          type: string
+          maxLength: 64
+          description: 持有客人 ID。
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 1
+          description: 发放张数（1-100）。
+    VoucherRevokeRequest:
+      type: object
+      description: 请求载荷 `VoucherRevokeRequest`（作废券）：仅未核销（issued）券可作废，理由必填进审计留痕。
+      additionalProperties: false
+      required:
+      - idempotency_key
+      - reason
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 操作幂等键；同键重放返回首次作废结果。
+        reason:
+          type: string
+          maxLength: 500
+          description: 作废理由（必填）。
+    VoucherRedeemRequest:
+      type: object
+      description: 请求载荷 `VoucherRedeemRequest`（统一核销）：按核销码或实例 id 二选一定位券。核销幂等三道闸＝载荷指纹幂等键＋实例状态 CAS＋核销记录实例级唯一索引；商户 scope 账号只能核自家可核的券。
+      additionalProperties: false
+      required:
+      - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 操作幂等键；同键同载荷重放返回首次核销记录。
+        code:
+          type: string
+          maxLength: 64
+          description: 核销码（与 voucher_instance_id 二选一）。
+        voucher_instance_id:
+          type: string
+          maxLength: 64
+          description: 券实例 ID（与 code 二选一）。
+        note:
+          type: string
+          maxLength: 500
+          description: 核销备注（选填）。
     DividendPlanRequest:
       type: object
       description: 请求载荷 `DividendPlanRequest`（分红方案新建/修改共用）：凡涉数据皆可配——比例/税率/周期/基数构成开关全部可调，空缺按默认口径补齐（平台 80%、股息红利 20%、季度+月度预览、净利润全项）。修改时 merchant_id 不可变更；status=ended 停用方案。一个商户同一时期只允许一个生效中方案。
