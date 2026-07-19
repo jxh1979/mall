@@ -9,8 +9,8 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 // 本地列表两单：回退口径 = 订单数 2 / 金额 ¥208.00。
 // mock 用真实序列化字段 totalAmountCent（BarOrderRecord），不用旧幽灵字段 totalAmount——回退断言才是真值自证。
 const ORDERS: BarOrderRow[] = [
-  { id: "b-1", orderNo: "BAR-0001", tableId: "T-1", status: "billed", totalAmountCent: 8800 },
-  { id: "b-2", orderNo: "BAR-0002", tableId: "T-2", status: "paid", totalAmountCent: 12000 },
+  { id: "b-1", tableId: "T-1", status: "billed", totalAmountCent: 8800 },
+  { id: "b-2", tableId: "T-2", status: "paid", totalAmountCent: 12000 },
 ];
 
 // 统一端点合计（与订单/出品/账单页共用同一登记项 bar.order_count / bar.order_amount）。

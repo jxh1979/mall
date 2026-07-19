@@ -322,6 +322,11 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public List<BarBillRecord> listBillsByOrderIds(List<String> orderIds) {
+        return billing.listBillsByOrderIds(orderIds);
+    }
+
+    @Override
     public Optional<BarBillRecord> findBillById(String id) {
         return billing.findBillById(id);
     }

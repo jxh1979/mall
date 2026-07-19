@@ -2,6 +2,9 @@ package com.complex.platform.bar;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
@@ -41,10 +44,27 @@ public class BarService {
     }
 
 
-    public PageResponse<BarOrderRecord> listOrders() {
+    public PageResponse<BarOrderView> listOrders() {
         return operations.readPage(
                 BarReadOperation.LIST_ORDERS,
-                () -> repository.listOrders(authorizationService.currentMerchantScope())
+                () -> {
+                    List<BarOrderRecord> orders = repository.listOrders(authorizationService.currentMerchantScope());
+                    if (orders.isEmpty()) {
+                        return List.of();
+                    }
+                    // 一次批量取回这些订单的账单并按订单分组为摘要（最新在前），避免 N+1；供前端账单列/结算/提成定位账单。
+                    Map<String, List<BarBillSummary>> billsByOrder = repository
+                            .listBillsByOrderIds(orders.stream().map(BarOrderRecord::id).toList())
+                            .stream()
+                            .collect(Collectors.groupingBy(
+                                    BarBillRecord::orderId,
+                                    Collectors.mapping(
+                                            bill -> new BarBillSummary(bill.id(), bill.billNo(), bill.paymentStatus()),
+                                            Collectors.toList())));
+                    return orders.stream()
+                            .map(order -> BarOrderView.of(order, billsByOrder.getOrDefault(order.id(), List.of())))
+                            .toList();
+                }
         );
     }
 

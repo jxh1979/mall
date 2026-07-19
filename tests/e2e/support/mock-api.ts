@@ -243,7 +243,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/bar/products": [{ id: "drink-1", barId: "bar-main", productName: "Mock Drink", productType: "spirit", priceCent: 3000, internalSettlementPriceCent: 1200, status: "active", soldOut: false }],
     "/api/v1/bar/production-tickets": empty,
     "/api/v1/bar/reservations": [{ id: "reservation-1", reservationNo: "RSV-1", customerName: "Guest A", partySize: 2, depositAmount: 2000, status: "reserved", reservedAt: now }],
-    "/api/v1/bar/orders": [{ id: "order-1", orderNo: "ORD-1", tableId: "table-1", billId: "bill-bar-1", salesStaffId: "staff_sales_1", status: "paid", totalAmount: 6000, createdAt: now, items: [], bills: [{ id: "bill-bar-1", status: "open" }] }],
+    "/api/v1/bar/orders": [{ id: "order-1", tableId: "table-1", salesStaffId: "staff_sales_1", status: "paid", totalAmount: 6000, createdAt: now, items: [], bills: [{ id: "bill-bar-1", status: "open" }] }],
     "/api/v1/bar/table-sessions": state.barTableSessions,
     "/api/v1/inventory/stock-movements": empty,
     "/api/v1/inventory/items": [{ id: "item-1", itemCode: "WINE", itemName: "Wine", category: "drink", unit: "bottle", status: "active", minQuantity: 2 }],
@@ -728,7 +728,7 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
   if (/^\/api\/v1\/finance\/ar-ap-items\/[^/]+\/payments$/.test(pathname)) return json(route, { id: "payment-1", status: "partial", amount: bodyValue(body, "amount"), reason: bodyValue(body, "reason") });
   if (pathname === "/api/v1/bar/tables") return json(route, { id: "table-created", tableCode: "A02", tableName: "A02", capacity: 4, minSpendAmount: 10000, status: "active" });
   if (pathname === "/api/v1/bar/products") return json(route, { id: "drink-created", barId: "bar-main", productName: "Mock Drink", productType: "spirit", priceCent: 3000, internalSettlementPriceCent: 1200, status: "active", soldOut: false });
-  if (pathname === "/api/v1/bar/orders") return json(route, { id: "order-created", orderNo: "ORD-CREATED", tableId: "table-created", status: "ordered", totalAmount: 3000, createdAt: now, items: [], bills: [] });
+  if (pathname === "/api/v1/bar/orders") return json(route, { id: "order-created", tableId: "table-created", status: "ordered", totalAmount: 3000, createdAt: now, items: [], bills: [] });
   if (/^\/api\/v1\/bar\/orders\/[^/]+\/items$/.test(pathname)) return json(route, { id: "order-item-1", status: "ordered", quantity: 1, lineAmount: 3000 });
   if (/^\/api\/v1\/bar\/orders\/[^/]+\/bill$/.test(pathname)) return json(route, { id: "bill-bar-1", status: "billed", paidAmount: 0, totalAmount: 3000 });
   if (/^\/api\/v1\/bar\/orders\/[^/]+\/deliver$/.test(pathname)) return json(route, { id: pathname.split("/").at(-2), status: "delivered" });

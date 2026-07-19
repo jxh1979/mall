@@ -359,7 +359,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("bar-orders-evidence")).toContainText("/api/v1/bar/orders");
         const barOrdersTable = page.getByTestId("bar-orders-table");
         await expect(barOrdersTable).toBeVisible();
-        await expect(barOrdersTable).toContainText("ORD-1");
+        await expect(barOrdersTable).toContainText("order-1");
         await expect(barOrdersTable).toContainText("15%");
         continue;
       }
@@ -398,7 +398,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("bar-commissions-boundary")).toContainText("不含通票");
         const commissionsTable = page.getByTestId("bar-commissions-table");
         await expect(commissionsTable).toBeVisible();
-        await expect(commissionsTable).toContainText("ORD-1");
+        await expect(commissionsTable).toContainText("order-1");
         await expect(commissionsTable).toContainText("15%");
         continue;
       }

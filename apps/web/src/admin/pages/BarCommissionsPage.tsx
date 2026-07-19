@@ -52,11 +52,11 @@ function readKpiFocusFromUrl(): KpiTarget | null {
 }
 
 function firstBill(order: BarOrderRow | undefined): BarBillRow | undefined {
-  return order?.bills?.[0] ?? (order?.billId ? { id: order.billId, status: "created" } : undefined);
+  return order?.bills?.[0];
 }
 
 function firstBillId(order: BarOrderRow | undefined) {
-  return firstBill(order)?.id ?? order?.billId ?? "";
+  return firstBill(order)?.id ?? "";
 }
 
 function formatAmount(amountCent: number | undefined) {
@@ -85,11 +85,11 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   function openCommissionDetail(order: BarOrderRow) {
     const rowBill = firstBill(order);
     setDetail({
-      title: `提成单明细 · ${order.orderNo ?? order.id}`,
+      title: `提成单明细 · ${order.id}`,
       fields: [
-        { label: "订单号", value: order.orderNo ?? order.id },
+        { label: "订单号", value: order.id },
         { label: "卡座", value: order.tableId ?? "—" },
-        { label: "账单", value: rowBill?.id ?? order.billId ?? "—" },
+        { label: "账单", value: rowBill?.id ?? "—" },
         { label: "消费额", value: formatAmount(order.totalAmountCent ?? order.totalAmount) },
         { label: "销售角色", value: sellerLabel(order) },
         { label: "计提比例", value: commissionRate(order) },
@@ -196,7 +196,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.salesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-sales" onClick={() => enterKpiFocus("sales")}>{salesOrders}</button><small>15% · {salesOrders} 单</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.nonSalesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-non-sales" onClick={() => enterKpiFocus("non_sales")}>{nonSalesOrders}</button><small>10% · {nonSalesOrders} 单</small></div>
           <div className="admin-kpi-card"><span>{TEXT.excludeTickets}</span><strong>是</strong><small>{TEXT.excludeTicketsHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.selectedBill}</span><strong className="admin-kpi-value--text" title={billId || "-"}>{billId || "-"}</strong><small>{selectedOrder?.orderNo ?? "-"}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedBill}</span><strong className="admin-kpi-value--text" title={billId || "-"}>{billId || "-"}</strong><small>{selectedOrder?.id ?? "-"}</small></div>
         </div>
 
         <div className="admin-form-row">
@@ -220,9 +220,9 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
                     onClick={() => openCommissionDetail(order)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCommissionDetail(order); } }}>
                     <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此提成单 ${order.id}`} data-testid={`bar-commission-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
-                    <td>{order.orderNo ?? order.id}</td>
+                    <td>{order.id}</td>
                     <td>{order.tableId ?? "-"}</td>
-                    <td>{rowBill?.id ?? order.billId ?? "-"}</td>
+                    <td>{rowBill?.id ?? "-"}</td>
                     <td>{formatAmount(order.totalAmountCent ?? order.totalAmount)}</td>
                     <td>{sellerLabel(order)}</td>
                     <td>{commissionRate(order)}</td>
