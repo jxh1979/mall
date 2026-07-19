@@ -727,6 +727,44 @@ class ContractServiceTests {
         assertThat(dep).containsEntry("actualRefundCent", 500000L);
     }
 
+    @Test
+    void expiredContractRejectsMoveOutSettleButAllowsExpiry() {
+        // I-3：到期合同点结算若误选 move_out 应被拒（否则确认时误作废、押金静默不退）；到期结算放行。
+        Instant now = Instant.now();
+        ContractRecord c = repo.saveContract(new ContractRecord("ctr_u9", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
+                "fixed_ratio", "by_area", 500000L, Map.of(), List.of(), Map.of(), null, List.of(),
+                "expired", "proj_1", null, null, null, now, now));
+        assertThatThrownBy(() -> service.settle(c.id(), new ContractSettleRequest("k_u9", "move_out", null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CONTRACT_NOT_SETTLEABLE"));
+        ContractSettlementRecord ok = service.settle(c.id(), new ContractSettleRequest("k_u9e", "expiry", null));
+        assertThat(ok.status()).isEqualTo("pending_settlement");
+    }
+
+    @Test
+    void confirmRecomputesUnpaidSoNewArrearsAfterOpenAreOffset() {
+        // I-4：开账后新增欠费，确认时按最新 unpaid 现算（押金优先抵欠费），不用开账快照——与自动路径同口径。
+        ContractRecord c = effectiveContractRecord("ctr_u10", 500000L, Map.of());
+        ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_u10", "move_out", null));
+        Map<String, Object> depOpen = opened.settlementItems().stream()
+                .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(depOpen).containsEntry("netRefundCent", 500000L);   // 开账 unpaid=0
+        repo.unpaidAr = 300000L;   // 开账→确认间新增欠费
+        service.completeSettlement(opened.id(), new ContractResolveDisputeRequest("k_u10c", null));
+        assertThat(terminationPort.depositRefundCent).isEqualTo(200000L);   // 500000 抵 300000 → 净退 200000（非快照 500000）
+    }
+
+    @Test
+    void confirmLocksContractRowForUpdate() {
+        // S-2：确认落账走 findContractByIdForUpdate（合同行加锁），串行化并发确认防违约金双挂。
+        ContractRecord c = effectiveContractRecord("ctr_u11", 500000L, Map.of());
+        ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_u11", "move_out", null));
+        int before = repo.forUpdateCalls;
+        service.completeSettlement(opened.id(), new ContractResolveDisputeRequest("k_u11c", null));
+        assertThat(repo.forUpdateCalls).isGreaterThan(before);
+    }
+
     private static final class InMemoryContractRepository implements ContractRepository {
         // 3.13 测试基建：草稿预绑定存储 + 可控"空间已被生效合同占用"集合。
         final java.util.Map<String, java.util.Set<String>> boundSpaces = new java.util.HashMap<>();
@@ -760,6 +798,14 @@ class ContractServiceTests {
         @Override
         public Optional<ContractRecord> findContractById(String id) {
             return Optional.ofNullable(contracts.get(id));
+        }
+
+        int forUpdateCalls = 0;
+
+        @Override
+        public Optional<ContractRecord> findContractByIdForUpdate(String id) {
+            forUpdateCalls++;   // S-2：无真锁，仅计数证明确认路径走加锁读
+            return findContractById(id);
         }
 
         @Override

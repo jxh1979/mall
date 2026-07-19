@@ -252,10 +252,11 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     reload();
   }
 
-  async function settle(row: ContractRow) {
+  async function settle(row: ContractRow, forceTrigger?: string) {
     // 退租/到期开账 → 待确认退押金（填争议原因则挂起有争议）。开账只算不落账，押金退还须在「确认退押金」时才落账。
+    // I-3 到期入口强制 expiry（按合同生命周期派生，不吃共享下拉默认 move_out，否则到期合同会被误作废、押金静默不退）。
     await api.post(`/api/v1/contracts/${row.id}/settle`, {
-      triggerType: settleTrigger, disputeReason: disputeReason.trim() || null,
+      triggerType: forceTrigger ?? settleTrigger, disputeReason: disputeReason.trim() || null,
     });
     setActionResult({ action: "contract_settle_opened", contractId: row.id });
     setDisputeReason("");
@@ -310,7 +311,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   async function confirmSettlement(st: SettlementRow) {
     const dep = (st.settlementItems ?? []).find((i) => i.item === "deposit_disposal");
     const refundYuan = (Number(dep?.netRefundCent ?? 0) / 100).toFixed(2);
-    if (!window.confirm(`确认退押金 ¥${refundYuan} 并落账？将挂应付给商户并扣减押金台账，同时结清并终止/到期合同，不可撤销。`)) return;
+    if (!window.confirm(`确认退押金（约 ¥${refundYuan}，最终以确认时最新欠费重算为准）并落账？将挂应付给商户并扣减押金台账，同时结清并终止/到期合同，不可撤销。`)) return;
     await api.post(`/api/v1/contracts/settlements/${st.id}/complete`, {});
     setActionResult({ action: "contract_settlement_complete", settlementId: st.id });
     await selectContract(selectedId);
@@ -476,7 +477,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                       }
                       if (row.lifecycleStatus === "expired") {
                         // 到期合同经带确认的结算入口落押金退还（选「到期」类型），堵住到期押金悬空。
-                        acts.push({ key: "settle", label: "结算开账", permissions: SETTLE, onClick: () => void settle(row), testId: `contract-settle-${row.id}` });
+                        acts.push({ key: "settle", label: "结算开账", permissions: SETTLE, onClick: () => void settle(row, "expiry"), testId: `contract-settle-${row.id}` });
                       }
                       acts.push({ key: "detail", label: "明细", onClick: () => void selectContract(row.id), testId: `contract-detail-${row.id}` });
                       return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`contract-actions-${row.id}`} />;

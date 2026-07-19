@@ -155,8 +155,8 @@ class ContractJdbcIntegrationTests {
     }
 
     @Test
-    void voidedSettlementStatusRoundTripsAfterV305() {
-        // V305：contract_settlements.status CHECK 接受新增「作废」态（悬挂单处置落点）。
+    void voidedSettlementStatusRoundTripsAfterV307() {
+        // V307：contract_settlements.status CHECK 接受新增「作废」态（悬挂单处置落点）。
         Instant now = Instant.parse("2026-07-19T00:00:00Z");
         String cid = "ctr_void_jdbc";
         repository.saveContract(new ContractRecord(cid, "mch_void", "subj_1", null, "subj_1",
@@ -175,7 +175,7 @@ class ContractJdbcIntegrationTests {
 
     @Test
     void manualSettlementDepositDisposalNetRefundRoundTripsForConfirmRead() {
-        // 手动确认闸从快照读 deposit_disposal.netRefundCent 落押金退还——DB JSONB 往返须原样带回该字段。
+        // 开账快照 deposit_disposal.netRefundCent 供 UI 展示（确认落账按最新 unpaid 现算）——DB JSONB 往返须原样带回该字段。
         Instant now = Instant.parse("2026-07-19T00:00:00Z");
         String cid = "ctr_manual_snap_jdbc";
         repository.saveContract(new ContractRecord(cid, "mch_manual", "subj_1", null, "subj_1",

@@ -460,6 +460,12 @@ public class ContractService {
         if (!Set.of("effective", "expired").contains(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_SETTLEABLE", "contract is not effective/expired");
         }
+        // I-3 退租/提前终止须合同仍生效（终止活跃租约）；到期合同只可走 expiry——否则确认时会被误判「被别的退租终止」而作废、押金静默不退。
+        if (("move_out".equals(trigger) || "early_termination".equals(trigger))
+                && !"effective".equals(contract.lifecycleStatus())) {
+            throw ApiException.conflict("CONTRACT_NOT_SETTLEABLE",
+                    "退租/提前终止结算仅限生效合同；到期合同请走到期结算");
+        }
         String dispute = trimToNull(actual.disputeReason());
         Instant now = Instant.now();
         // 开账即算结算清单（押金退还净额/违约金/未清清算），但不落账——落账须运营在结清时「确认退押金」才发生。
@@ -1000,6 +1006,11 @@ public class ContractService {
      * 押金按台账实收余额封顶后抵未清应收、净额&gt;0 应退、提前退租违约金取合同条款。纯算不落账。
      */
     private List<Map<String, Object>> computeTerminationItems(ContractRecord contract, String trigger) {
+        return new ArrayList<>(computeTerminationResult(contract, trigger).items());
+    }
+
+    /** 现算退租结算（押金台账余额封顶 → 抵当前未清应收 → 净额；提前退租违约金取合同条款）。开账与确认均调此，同口径。 */
+    private TerminationSettlementMath.Result computeTerminationResult(ContractRecord contract, String trigger) {
         long rawDeposit = contract.depositCent() == null ? 0L : contract.depositCent();
         long deposit = terminationSettlementPort == null ? rawDeposit
                 : terminationSettlementPort.effectiveRefundableDeposit(contract.merchantId(), rawDeposit);
@@ -1012,8 +1023,7 @@ public class ContractService {
                 penaltyReason = "合同条款违约金";
             }
         }
-        return new ArrayList<>(
-                TerminationSettlementMath.compute(trigger, deposit, unpaid, penaltyCent, penaltyReason).items());
+        return TerminationSettlementMath.compute(trigger, deposit, unpaid, penaltyCent, penaltyReason);
     }
 
     /**
@@ -1024,7 +1034,9 @@ public class ContractService {
      */
     private ContractSettlementRecord finalizeSettlementWithLedger(
             ContractSettlementRecord settlement, String idempotencyKey) {
-        ContractRecord contract = requireContract(settlement.contractId());
+        // S-2 资金路径窄竞态：对合同行 FOR UPDATE，串行化同一合同的并发确认（违约金侧无封顶，窄窗口双挂根治）。
+        ContractRecord contract = repository.findContractByIdForUpdate(settlement.contractId())
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
         String trigger = settlement.triggerType();
         Instant now = Instant.now();
         boolean alreadyPosted = repository.listSettlementsByContract(contract.id()).stream()
@@ -1041,12 +1053,12 @@ public class ContractService {
                     Map.of("trigger", trigger, "reason", alreadyPosted ? "already_settled" : "terminated_elsewhere"));
             return voided;
         }
-        List<Map<String, Object>> items = new ArrayList<>(
-                settlement.settlementItems() == null ? List.of() : settlement.settlementItems());
-        long depositRefundCent = settlementItemLong(items, "deposit_disposal", "netRefundCent");
-        long penaltyCent = settlementItemLong(items, "termination_penalty", "amountCent");
+        // I-4 口径统一：确认时按最新 unpaid 现算（与自动落账路径同口径），不用开账快照——
+        // 开账到确认间新增欠费也被押金优先抵扣；重算清单即为已落账留痕（二次示数）。
+        TerminationSettlementMath.Result result = computeTerminationResult(contract, trigger);
+        List<Map<String, Object>> items = new ArrayList<>(result.items());
         long[] posted = postTerminationLedger(
-                contract.merchantId(), settlement.id(), items, depositRefundCent, penaltyCent);
+                contract.merchantId(), settlement.id(), items, result.depositRefundCent(), result.penaltyCent());
         ContractSettlementRecord settled = repository.saveSettlement(new ContractSettlementRecord(settlement.id(),
                 settlement.contractId(), trigger, "settled", items, settlement.disputeReason(),
                 settlement.resolvedBy(), settlement.resolvedAt(), settlement.projectId(), settlement.createdAt(), now));
@@ -1056,16 +1068,6 @@ public class ContractService {
                 Map.of("trigger", trigger, "deposit_refund_cent", posted[0], "penalty_cent", posted[1],
                         "ledger_posted", terminationSettlementPort != null));
         return settled;
-    }
-
-    /** 从结算快照按 item 键读取金额字段（缺失=0）。 */
-    private long settlementItemLong(List<Map<String, Object>> items, String itemKey, String field) {
-        for (Map<String, Object> item : items) {
-            if (itemKey.equals(item.get("item"))) {
-                return numLong(item.get(field));
-            }
-        }
-        return 0L;
     }
 
     /**
