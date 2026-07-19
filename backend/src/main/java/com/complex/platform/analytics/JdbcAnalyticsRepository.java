@@ -2372,6 +2372,116 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 """.formatted(predicate), params));
     }
 
+    // ==== KPI 统一明细·第四批（财务域）：谓词逐字同各页面既有取数 ====
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset) {
+        // 应付镜像：与 arOpenReceivableDetail 同结构，方向取 payable（as-of=to，起始日不参与）。
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, COALESCE(merchant_id, counterparty_id) AS merchant_key, source_type,
+                       due_date, unpaid_amount_cent, status
+                  FROM ar_ap_items
+                 WHERE direction = 'payable'
+                   AND status <> 'closed'
+                   AND unpaid_amount_cent > 0
+                   AND due_date < :as_of
+                 ORDER BY due_date, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> arApBalanceRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(unpaid_amount_cent), 0) AS summary
+                  FROM ar_ap_items
+                 WHERE direction = 'payable'
+                   AND status <> 'closed'
+                   AND unpaid_amount_cent > 0
+                   AND due_date < :as_of
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset) {
+        // 与 ETL ar.aging_90p（arOverdueAgingByMerchant 最末桶：(:as_of - due_date) > 90）同谓词。
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, COALESCE(merchant_id, counterparty_id) AS merchant_key, source_type,
+                       due_date, unpaid_amount_cent, status
+                  FROM ar_ap_items
+                 WHERE direction = 'receivable'
+                   AND status <> 'closed'
+                   AND unpaid_amount_cent > 0
+                   AND due_date < :as_of
+                   AND (:as_of - due_date) > 90
+                 ORDER BY due_date, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> arApBalanceRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(unpaid_amount_cent), 0) AS summary
+                  FROM ar_ap_items
+                 WHERE direction = 'receivable'
+                   AND status <> 'closed'
+                   AND unpaid_amount_cent > 0
+                   AND due_date < :as_of
+                   AND (:as_of - due_date) > 90
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows settlementTransactionDetail(Instant start, Instant end, String summaryMode, int limit, int offset) {
+        // 与通票结算审阅页 listVerificationSettled 同基础谓词：transaction_type='verification_settled'（默认无项目/商户筛选=平台全量）。
+        // start/end 可空=全历史（与页面默认「共 N 条」一致）；有窗则按 created_at 落窗。
+        String window = start == null ? "" : "AND created_at >= :start AND created_at < :end";
+        MapSqlParameterSource params = start == null
+                ? pagedParams(limit, offset)
+                : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, transaction_no, project_id, merchant_id, entitlement_type,
+                       verified_count, num_people, verified_amount_cent, settlement_status, created_at
+                  FROM settlement_transactions
+                 WHERE transaction_type = 'verification_settled'
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(window), params, (rs, n) -> settlementRow(rs));
+        String summaryExpr = switch (summaryMode) {
+            case "amount" -> "COALESCE(SUM(verified_amount_cent), 0)";
+            case "tickets" -> "COALESCE(SUM(verified_count), 0)";
+            default -> "COUNT(*)";
+        };
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, %s AS summary
+                  FROM settlement_transactions
+                 WHERE transaction_type = 'verification_settled'
+                 %s
+                """.formatted(summaryExpr, window), params));
+    }
+
+    private java.util.Map<String, Object> arApBalanceRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("merchantId", rs.getString("merchant_key"));
+        row.put("sourceType", rs.getString("source_type"));
+        row.put("dueDate", rs.getObject("due_date", LocalDate.class));
+        row.put("unpaidAmountCent", rs.getLong("unpaid_amount_cent"));
+        row.put("status", rs.getString("status"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> settlementRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("transactionNo", rs.getString("transaction_no"));
+        row.put("projectId", rs.getString("project_id"));
+        row.put("merchantId", rs.getString("merchant_id"));
+        row.put("entitlementType", rs.getString("entitlement_type"));
+        row.put("verifiedCount", rs.getInt("verified_count"));
+        row.put("numPeople", rs.getInt("num_people"));
+        row.put("verifiedAmountCent", rs.getLong("verified_amount_cent"));
+        row.put("settlementStatus", rs.getString("settlement_status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        return row;
+    }
+
     /** 组装可选经营日窗谓词：base=附加基础条件（可空）；hasWindow=true 追加 created_at 区间。均空则返回空串（全表）。 */
     private static String composeWhere(String base, boolean hasWindow) {
         String window = hasWindow ? "created_at >= :start AND created_at < :end" : null;

@@ -483,4 +483,19 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows amusementInspectionPendingRectificationDetail(java.time.Instant asOfEnd, int limit, int offset) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
+
+    /** finance.ap_balance 明细：应付欠款余额（as-of），direction='payable'，同 arOpenReceivableDetail 结构。 */
+    default AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** finance.ar_balance_aging90p 明细：应收逾期90天以上余额（as-of），应收谓词 + 逾期天数>90。 */
+    default AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** settlement.* 明细：通票核销结算流水（transaction_type='verification_settled'）；summaryMode∈{count,amount,tickets}。 */
+    default AnalyticsRecords.MetricDetailRows settlementTransactionDetail(java.time.Instant start, java.time.Instant end, String summaryMode, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
 }

@@ -396,6 +396,78 @@ class MetricDetailConsistencyJdbcIntegrationTests {
         return rows.stream().map(row -> (BigDecimal) row.get(key)).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    // ==== 第四批（财务域）：谓词逐字同各页面既有取数（JDBC 一致性，按环境跑）====
+
+    @Test
+    void apBalanceSummaryEqualsPagedDetailSumOfPayableUnpaid() {
+        BigDecimal baseline = repository.apOpenPayableDetail(DAY, 1, 0).summaryValue();
+        insertApItem("ap_mdc_1", 40000, DAY.minusDays(10));   // 逾期未清应付 → 进口径
+        insertApItem("ap_mdc_future", 9999, DAY.plusDays(5)); // 未到期 → 不进口径
+
+        MetricDetailRows after = repository.apOpenPayableDetail(DAY, 200, 0);
+        assertThat(after.summaryValue().subtract(baseline)).isEqualByComparingTo("40000");
+        assertThat(sumLong(collectAllPages((limit, offset) -> repository.apOpenPayableDetail(DAY, limit, offset)), "unpaidAmountCent"))
+                .isEqualByComparingTo(after.summaryValue());
+    }
+
+    @Test
+    void arAging90pSummaryEqualsEtlAging90pBucket() {
+        BigDecimal baseline = repository.arOverdueAging90pDetail(DAY, 1, 0).summaryValue();
+        insertArItem("ar_ag_over", 55000, DAY.minusDays(120)); // 逾期120天 → 进坏账预警区
+        insertArItem("ar_ag_under", 3000, DAY.minusDays(45));  // 逾期45天 → 不进坏账预警区
+
+        MetricDetailRows after = repository.arOverdueAging90pDetail(DAY, 200, 0);
+        assertThat(after.summaryValue().subtract(baseline)).isEqualByComparingTo("55000");
+        // 与 ETL ar.aging_90p（最末桶合计）同谓词。
+        BigDecimal etl90p = repository.arOverdueAgingByMerchant(DAY).getOrDefault("a90p", java.util.Map.of()).values().stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(etl90p).isEqualByComparingTo(after.summaryValue());
+    }
+
+    @Test
+    void settlementCountAmountTicketsEqualPagedDetailAndPagePredicate() {
+        BigDecimal baseCount = repository.settlementTransactionDetail(null, null, "count", 1, 0).summaryValue();
+        BigDecimal baseAmount = repository.settlementTransactionDetail(null, null, "amount", 1, 0).summaryValue();
+        BigDecimal baseTickets = repository.settlementTransactionDetail(null, null, "tickets", 1, 0).summaryValue();
+        insertSettlementTxn("st_mdc_1", 20000, 2);
+        insertSettlementTxn("st_mdc_2", 5000, 3);
+
+        MetricDetailRows count = repository.settlementTransactionDetail(null, null, "count", 200, 0);
+        assertThat(count.summaryValue().subtract(baseCount)).isEqualByComparingTo("2");
+        // 数字=明细合计（计数类）：totalRows == summaryValue。
+        assertThat(BigDecimal.valueOf(count.totalRows())).isEqualByComparingTo(count.summaryValue());
+        assertThat(repository.settlementTransactionDetail(null, null, "amount", 200, 0).summaryValue().subtract(baseAmount))
+                .isEqualByComparingTo("25000");
+        assertThat(repository.settlementTransactionDetail(null, null, "tickets", 200, 0).summaryValue().subtract(baseTickets))
+                .isEqualByComparingTo("5");
+        // 与结算审阅页 listVerificationSettled 基础谓词交叉：transaction_type='verification_settled'。
+        BigDecimal tableCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM settlement_transactions WHERE transaction_type = 'verification_settled'", Map.of(), BigDecimal.class);
+        assertThat(tableCount).isEqualByComparingTo(count.summaryValue());
+    }
+
+    private void insertApItem(String id, long unpaidCent, LocalDate dueDate) {
+        id = sid(id);
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, amount_cent, paid_amount_cent,
+                        unpaid_amount_cent, currency, due_date, status, created_at, updated_at, merchant_id)
+                VALUES (:id, :id, 'payable', 'sup_mdc', :amount, 0, :amount, 'CNY', :due, 'open', now(), now(), NULL)
+                """, new MapSqlParameterSource().addValue("id", id).addValue("amount", unpaidCent).addValue("due", dueDate));
+    }
+
+    private void insertSettlementTxn(String id, long verifiedAmountCent, int verifiedCount) {
+        id = sid(id);
+        jdbcTemplate.update("""
+                INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
+                        entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
+                        verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
+                        settlement_status, entitlement_valid_to, created_at, updated_at)
+                VALUES (:id, :id, 'verification_settled', :id, 'ticket', :vc, :vc, :vc, :amount,
+                        :amount, 0, 'merchant', 'mch_mdc_st', 'proj_mdc_st', 'draft', :at, :at, :at)
+                """, new MapSqlParameterSource().addValue("id", id).addValue("vc", verifiedCount)
+                .addValue("amount", verifiedAmountCent).addValue("at", dayTs()));
+    }
+
     private void insertTicketOrder(String id, long amountCent, String payStatus) {
         id = sid(id);
         Instant at = DAY.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC);

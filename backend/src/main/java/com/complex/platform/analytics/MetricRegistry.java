@@ -498,6 +498,98 @@ public final class MetricRegistry {
                 "id",
                 safetyInspectionColumns(),
                 null));
+
+        // ==== 第四批（财务域，2026-07-19）：谓词逐字抄各页面现数字的既有取数（不自造口径）====
+        // 应收应付台账（ADM-FIN-001）：应付欠款余额=应收欠费余额(finance.ar_balance)的应付镜像，as-of 口径同 ar_balance。
+        register(registry, new MetricDefinition(
+                "finance.ap_balance",
+                "应付欠款余额",
+                TYPE_BALANCE,
+                "分",
+                "逾期未清应付余额=Σ未付金额（分）（应付方向、未关闭、未付金额>0、到期日早于截至日）。"
+                        + "余额口径=区间末值：取结束日期（缺省=当前财务经营日）为截至日，起始日期不参与；"
+                        + "与应收欠费余额(finance.ar_balance)同结构、方向取 payable。注意：明细按台账当前未付金额计，历史截至日仅影响到期日截止。",
+                "应收应付台账（ar_ap_items，实时查询）。",
+                "finance.ar_ap.view",
+                "finance",
+                false,
+                false,
+                "ADM-FIN-001",
+                "ADM-FIN-001",
+                "id",
+                arApBalanceColumns("未付金额（分）"),
+                null));
+        // 欠费与回款（ADM-ANA-004）：坏账预警区=应收逾期90天以上余额，与看板 ETL ar.aging_90p 桶同谓词。
+        register(registry, new MetricDefinition(
+                "finance.ar_balance_aging90p",
+                "坏账预警区余额",
+                TYPE_BALANCE,
+                "分",
+                "应收逾期90天以上未清余额=Σ未收金额（分）（应收方向、未关闭、未收金额>0、逾期天数>90）。"
+                        + "余额口径=区间末值：取结束日期（缺省=当前财务经营日）为截至日，起始日期不参与；"
+                        + "与欠费与回款页「坏账预警区」卡及看板 ETL ar.aging_90p（四桶最末桶）同一谓词同源。",
+                "应收应付台账（ar_ap_items，实时查询）。",
+                "finance.ar_ap.view",
+                "finance",
+                false,
+                false,
+                "ADM-ANA-004",
+                "ADM-FIN-001",
+                "id",
+                arApBalanceColumns("未收金额（分）"),
+                null));
+        // 通票结算审阅（ADM-FIN-005）：数字来自 GET /settlement/transactions 平台口径列表（transaction_type='verification_settled'）。
+        register(registry, new MetricDefinition(
+                "settlement.transaction_count",
+                "结算笔数",
+                TYPE_ADDITIVE,
+                "笔",
+                "通票核销结算流水逐笔计数（transaction_type='verification_settled'，与通票结算审阅页「共 N 条」一致）。"
+                        + "可加口径=区间求和：按发生时间落财务经营日窗计数；不传日期=全部历史（与页面默认无筛选全量列表一致）。",
+                "结算流水台账（settlement_transactions，实时查询）。",
+                "finance.settlement.view",
+                "finance",
+                true,
+                false,
+                "ADM-FIN-005",
+                "ADM-FIN-005",
+                "id",
+                settlementColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "settlement.verified_amount",
+                "核销金额合计",
+                TYPE_ADDITIVE,
+                "分",
+                "通票核销结算已核销金额合计（Σverified_amount_cent，同 transaction_type='verification_settled' 谓词，"
+                        + "与结算审阅页各行「核销金额」列直加一致）。可加口径=区间求和：按发生时间落财务经营日窗；不传日期=全部历史。",
+                "结算流水台账（settlement_transactions，实时查询）。",
+                "finance.settlement.view",
+                "finance",
+                true,
+                false,
+                "ADM-FIN-005",
+                "ADM-FIN-005",
+                "id",
+                settlementColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "settlement.verified_count",
+                "核销张数合计",
+                TYPE_ADDITIVE,
+                "张",
+                "通票核销结算已核销张数合计（Σverified_count，同 transaction_type='verification_settled' 谓词，"
+                        + "与结算审阅页各行「核销张数」列直加一致）。可加口径=区间求和：按发生时间落财务经营日窗；不传日期=全部历史。",
+                "结算流水台账（settlement_transactions，实时查询）。",
+                "finance.settlement.view",
+                "finance",
+                true,
+                false,
+                "ADM-FIN-005",
+                "ADM-FIN-005",
+                "id",
+                settlementColumns(),
+                null));
         return registry;
     }
 
@@ -586,6 +678,29 @@ public final class MetricRegistry {
                 new MetricColumn("consumption", "用量（kWh）"),
                 new MetricColumn("abnormalReason", "异常原因"),
                 new MetricColumn("readAt", "抄表时间"));
+    }
+
+    private static List<MetricColumn> arApBalanceColumns(String unpaidLabel) {
+        return List.of(
+                new MetricColumn("id", "单据号"),
+                new MetricColumn("merchantId", "往来单位"),
+                new MetricColumn("sourceType", "费用类型"),
+                new MetricColumn("dueDate", "到期日"),
+                new MetricColumn("unpaidAmountCent", unpaidLabel),
+                new MetricColumn("status", "状态"));
+    }
+
+    private static List<MetricColumn> settlementColumns() {
+        return List.of(
+                new MetricColumn("transactionNo", "流水号"),
+                new MetricColumn("projectId", "项目"),
+                new MetricColumn("merchantId", "商户"),
+                new MetricColumn("entitlementType", "权益类型"),
+                new MetricColumn("verifiedCount", "核销张数"),
+                new MetricColumn("numPeople", "人数"),
+                new MetricColumn("verifiedAmountCent", "核销金额（分）"),
+                new MetricColumn("settlementStatus", "结算状态"),
+                new MetricColumn("createdAt", "发生时间"));
     }
 
     private static void register(Map<String, MetricDefinition> registry, MetricDefinition definition) {

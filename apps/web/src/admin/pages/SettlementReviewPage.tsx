@@ -7,6 +7,7 @@ import type { AdminPageProps } from "../types";
 import type { PagedResult } from "../client/adminClient";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 // 平台侧结算审阅(审计断层②):只读列出通票核销产生的结算流水,供平台操作员查看。
 // 无写操作(确认/入账由月度 Job 负责);后端 /api/v1/settlement/transactions,权限 finance.settlement.view。
@@ -33,7 +34,7 @@ function centToYuan(cent: number | undefined | null): string {
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
 }
 
-export function SettlementReviewPage({ api, setGlobalError }: AdminPageProps) {
+export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [projectDraft, setProjectDraft] = React.useState("");
   const [merchantDraft, setMerchantDraft] = React.useState("");
   const [projectFilter, setProjectFilter] = React.useState("");
@@ -85,12 +86,25 @@ export function SettlementReviewPage({ api, setGlobalError }: AdminPageProps) {
     });
   }
 
+  // 第四批接线（指标登记簿方案A）：结算笔数/核销金额/核销张数改走统一明细端点（平台口径全量）。
+  // 有项目/商户筛选时=非平台口径 → enabled 关，卡回退本地（笔数=分页 total、金额/张数=不适用）并隐藏「完整明细」入口。
+  const noFilter = !projectFilter.trim() && !merchantFilter.trim();
+  const countKpi = useMetricKpiValue(api, "settlement.transaction_count", { enabled: noFilter });
+  const amountKpi = useMetricKpiValue(api, "settlement.verified_amount", { enabled: noFilter });
+  const ticketKpi = useMetricKpiValue(api, "settlement.verified_count", { enabled: noFilter });
+  const countDisplay = countKpi.status === "ready" && countKpi.value !== null ? countKpi.value : rows.total;
+
   const empty = !rows.loading && rows.total === 0 && !projectFilter && !merchantFilter;
 
   return (
     <section data-testid="settlement-review-page">
       <AdminPageHeader title="通票结算审阅" description="只读查看通票核销产生的结算流水（项目/商户/核销张数/金额/状态）。确认与入账由月度结算负责。" />
       <AdminDataState loading={rows.loading} error={rows.error} empty={empty} onRetry={rows.reload}>
+        <div className="admin-kpi-grid" data-testid="settlement-review-summary">
+          <div className="admin-kpi-card"><span>结算笔数</span><strong className="admin-kpi-value--text" data-testid="settlement-review-kpi-count">{countDisplay}</strong><small>{noFilter ? "平台全量" : "当前筛选"}{noFilter && countKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="settlement.transaction_count" testid="settlement-review-metric-detail-count" /> : null}</small></div>
+          <div className="admin-kpi-card"><span>核销金额合计（元）</span><strong className="admin-kpi-value--text" data-testid="settlement-review-kpi-amount">{noFilter && amountKpi.status === "ready" && amountKpi.value !== null ? centToYuan(amountKpi.value) : "—"}</strong><small>{noFilter && amountKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="settlement.verified_amount" testid="settlement-review-metric-detail-amount" /> : "筛选态平台合计不适用"}</small></div>
+          <div className="admin-kpi-card"><span>核销张数合计</span><strong className="admin-kpi-value--text" data-testid="settlement-review-kpi-tickets">{noFilter && ticketKpi.status === "ready" && ticketKpi.value !== null ? ticketKpi.value : "—"}</strong><small>{noFilter && ticketKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="settlement.verified_count" testid="settlement-review-metric-detail-tickets" /> : "筛选态平台合计不适用"}</small></div>
+        </div>
         <div className="admin-list-toolbar" data-testid="settlement-review-filter">
           <input
             data-testid="settlement-review-project"

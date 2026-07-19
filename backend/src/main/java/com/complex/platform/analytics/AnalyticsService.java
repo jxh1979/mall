@@ -1377,6 +1377,9 @@ public class AnalyticsService {
             LocalDate asOf = to != null ? to : currentBusinessDay;
             AnalyticsRecords.MetricDetailRows detail = switch (definition.metricKey()) {
                 case "finance.ar_balance" -> repository.arOpenReceivableDetail(asOf, safeSize, offset);
+                // 第四批（财务域）余额类：应付余额=应收镜像；坏账预警区=应收逾期90天以上（同 as-of 口径）。
+                case "finance.ap_balance" -> repository.apOpenPayableDetail(asOf, safeSize, offset);
+                case "finance.ar_balance_aging90p" -> repository.arOverdueAging90pDetail(asOf, safeSize, offset);
                 // 第二批（酒吧域）余额类：状态/剩余数量按台账当前值，截至日仅限制下单/存入时间早于该经营日窗末。
                 case "bar.open_order_count" -> repository.barOpenOrderDetail(
                         businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
@@ -1439,6 +1442,10 @@ public class AnalyticsService {
             case "amusement.entry_count" -> repository.amusementVerificationDirectionDetail(windowStart, windowEnd, true, safeSize, offset);
             case "amusement.exit_count" -> repository.amusementVerificationDirectionDetail(windowStart, windowEnd, false, safeSize, offset);
             case "amusement.inspection_count" -> repository.amusementInspectionDetail(windowStart, windowEnd, safeSize, offset);
+            // 第四批（财务域）可加类：通票核销结算流水，谓词同结算审阅页 listVerificationSettled 基础谓词。
+            case "settlement.transaction_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "count", safeSize, offset);
+            case "settlement.verified_amount" -> repository.settlementTransactionDetail(windowStart, windowEnd, "amount", safeSize, offset);
+            case "settlement.verified_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "tickets", safeSize, offset);
             default -> throw ApiException.badRequest("VALIDATION_FAILED",
                     "指标已登记但明细查询未接线：" + definition.metricKey());
         };

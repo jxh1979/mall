@@ -386,7 +386,10 @@ class MetricDetailServiceTests {
                         "amusement.session_count", "amusement.session_capacity",
                         "amusement.group_booking_count", "amusement.group_reserved_capacity",
                         "amusement.entry_count", "amusement.exit_count",
-                        "amusement.inspection_count", "amusement.inspection_pending_rectification");
+                        "amusement.inspection_count", "amusement.inspection_pending_rectification",
+                        // 第四批（财务域）
+                        "finance.ap_balance", "finance.ar_balance_aging90p",
+                        "settlement.transaction_count", "settlement.verified_amount", "settlement.verified_count");
         assertThat(MetricRegistry.all()).extracting(MetricRegistry.MetricDefinition::valueType)
                 .contains(MetricRegistry.TYPE_ADDITIVE, MetricRegistry.TYPE_RATIO, MetricRegistry.TYPE_BALANCE);
         assertThat(MetricRegistry.require("finance.recon_diff_count").permission()).isEqualTo("finance.reconciliation.view");
@@ -406,6 +409,12 @@ class MetricDetailServiceTests {
         assertThat(MetricRegistry.require("amusement.entry_count").permission()).isEqualTo("amusement.verification.view");
         assertThat(MetricRegistry.require("amusement.inspection_pending_rectification").permission())
                 .isEqualTo("amusement.safety_inspection.view");
+        // 第四批权限=各财务页既有域权限。
+        assertThat(MetricRegistry.require("finance.ap_balance").permission()).isEqualTo("finance.ar_ap.view");
+        assertThat(MetricRegistry.require("finance.ar_balance_aging90p").permission()).isEqualTo("finance.ar_ap.view");
+        assertThat(MetricRegistry.require("settlement.transaction_count").permission()).isEqualTo("finance.settlement.view");
+        assertThat(MetricRegistry.require("settlement.verified_amount").permission()).isEqualTo("finance.settlement.view");
+        assertThat(MetricRegistry.require("settlement.verified_count").permission()).isEqualTo("finance.settlement.view");
         // 每条登记必须有中文名/口径说明/数据源说明/列定义（明细页顶部展示，业务中文）。
         for (MetricRegistry.MetricDefinition definition : MetricRegistry.all()) {
             assertThat(definition.name()).isNotBlank();
@@ -416,6 +425,40 @@ class MetricDetailServiceTests {
                 assertThat(definition.denominatorColumns()).isNotEmpty();
             }
         }
+    }
+
+    @Test
+    void financeFourthBatchDispatchByMetricKey() {
+        // 应付余额（as-of=当前财务经营日；财务缺省日切回落全局日切）
+        when(repository.apOpenPayableDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "ap1", "unpaidAmountCent", 30000L)), 1, new BigDecimal("30000")));
+        MetricDetailResponse ap = service.metricDetail("finance.ap_balance", null, null, null, 1, 20);
+        assertThat(ap.valueType()).isEqualTo("balance");
+        assertThat(ap.unit()).isEqualTo("分");
+        assertThat(ap.to()).isEqualTo(CURRENT_BUSINESS_DAY);
+        assertThat(ap.summaryValue()).isEqualByComparingTo("30000");
+        verify(repository).apOpenPayableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+
+        // 坏账预警区（应收逾期90+，as-of 口径）
+        when(repository.arOverdueAging90pDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "ag1", "unpaidAmountCent", 12000L)), 1, new BigDecimal("12000")));
+        MetricDetailResponse aging = service.metricDetail("finance.ar_balance_aging90p", null, null, null, 1, 20);
+        assertThat(aging.valueType()).isEqualTo("balance");
+        assertThat(aging.summaryValue()).isEqualByComparingTo("12000");
+        verify(repository).arOverdueAging90pDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+
+        // 结算三指标：同一 settlementTransactionDetail 按 summaryMode 分派（count/amount/tickets），全历史（rangeFilterOptional）。
+        when(repository.settlementTransactionDetail(any(), any(), org.mockito.ArgumentMatchers.anyString(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "s1")), 4, new BigDecimal("4")));
+        MetricDetailResponse cnt = service.metricDetail("settlement.transaction_count", null, null, null, 1, 20);
+        assertThat(cnt.unit()).isEqualTo("笔");
+        assertThat(cnt.from()).isNull();
+        assertThat(cnt.to()).isNull();
+        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("count"), eq(20), eq(0));
+        service.metricDetail("settlement.verified_amount", null, null, null, 1, 20);
+        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("amount"), eq(20), eq(0));
+        service.metricDetail("settlement.verified_count", null, null, null, 1, 20);
+        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("tickets"), eq(20), eq(0));
     }
 
     private static Map<String, Object> row(Object... kv) {
