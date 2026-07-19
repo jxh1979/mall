@@ -1421,19 +1421,40 @@ public class AnalyticsService {
      * 口径铁律：可加=区间求和；比率=分子/分母（part 两页签）；余额=区间末值（取 to，from 不参与）。
      * 权限：控制器已做「契约宽权限 + 登记项权限」双重 fail-closed 校验；审计事件按登记项权限落账。
      */
+    /** 平台口径（空项目作用域=平台管理员看全量）便捷重载。项目级调用须走带 projectScope 的 7 参版本。 */
     public AnalyticsRecords.MetricDetailResponse metricDetail(
             String metricKey, String part, LocalDate from, LocalDate to, int page, int size) {
+        return metricDetail(metricKey, part, from, to, page, size, null);
+    }
+
+    /**
+     * KPI 统一明细（项目作用域收紧，2026-07-19 用户拍板）。
+     * projectScope：调用方所属综合体（controller 由 currentProjectScopeQuietly 派生，绝不取请求体）；
+     *   null=平台管理员/无组织归属=看全量（行为不变）；非空=项目员工→按登记项 scope 列过滤只见本项目。
+     * platform_only 指标（登记簿未声明 scope 列）遇非空 projectScope → fail-closed 403（服务层纵深防御，与 controller 一致）。
+     */
+    public AnalyticsRecords.MetricDetailResponse metricDetail(
+            String metricKey, String part, LocalDate from, LocalDate to, int page, int size, String projectScope) {
         MetricRegistry.MetricDefinition definition = MetricRegistry.require(metricKey);
         return readSingle(
                 "analytics.metric_detail.viewed",
                 "analytics.metric_detail.view_failed",
                 definition.permission(),
                 "analytics_metric_detail",
-                () -> buildMetricDetail(definition, part, from, to, page, size));
+                () -> buildMetricDetail(definition, part, from, to, page, size, projectScope));
     }
 
     private AnalyticsRecords.MetricDetailResponse buildMetricDetail(
-            MetricRegistry.MetricDefinition definition, String part, LocalDate from, LocalDate to, int page, int size) {
+            MetricRegistry.MetricDefinition definition, String part, LocalDate from, LocalDate to, int page, int size,
+            String projectScope) {
+        // 项目作用域收紧（fail-closed 纵深防御）：平台口径指标（无综合体维度）拒绝项目级下钻——
+        // 只有平台管理者能看平台口径聚合；项目级操作者只能看本项目内容（controller 已同判，此处防绕过服务层直调）。
+        if (projectScope != null && !MetricRegistry.isProjectScoped(definition)) {
+            throw ApiException.forbidden("PLATFORM_METRIC_PROJECT_FORBIDDEN",
+                    "该指标为平台口径，项目级不可下钻（仅平台管理者可见平台聚合）");
+        }
+        // 平台口径指标（非项目作用域）不注入项目谓词：传 null 给带 scope 的仓储方法保持平台全量。
+        String scope = MetricRegistry.isProjectScoped(definition) ? projectScope : null;
         if (from != null && to != null && from.isAfter(to)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "起始日期不能晚于结束日期");
         }
@@ -1458,10 +1479,10 @@ public class AnalyticsService {
             // 余额类=区间末值：as-of=to（缺省=当前经营日），from 不参与。
             LocalDate asOf = to != null ? to : currentBusinessDay;
             AnalyticsRecords.MetricDetailRows detail = switch (definition.metricKey()) {
-                case "finance.ar_balance" -> repository.arOpenReceivableDetail(asOf, safeSize, offset);
+                case "finance.ar_balance" -> repository.arOpenReceivableDetail(asOf, safeSize, offset, scope);
                 // 第四批（财务域）余额类：应付余额=应收镜像；坏账预警区=应收逾期90天以上（同 as-of 口径）。
-                case "finance.ap_balance" -> repository.apOpenPayableDetail(asOf, safeSize, offset);
-                case "finance.ar_balance_aging90p" -> repository.arOverdueAging90pDetail(asOf, safeSize, offset);
+                case "finance.ap_balance" -> repository.apOpenPayableDetail(asOf, safeSize, offset, scope);
+                case "finance.ar_balance_aging90p" -> repository.arOverdueAging90pDetail(asOf, safeSize, offset, scope);
                 // 第二批（酒吧域）余额类：状态/剩余数量按台账当前值，截至日仅限制下单/存入时间早于该经营日窗末。
                 case "bar.open_order_count" -> repository.barOpenOrderDetail(
                         businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
@@ -1475,14 +1496,15 @@ public class AnalyticsService {
                 case "amusement.inspection_pending_rectification" -> repository.amusementInspectionPendingRectificationDetail(
                         businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
                 // 第五批（人事域）余额类：待审请假/在职员工数按台账当前值，截至日仅限制提交/建号时间早于该自然日窗末。
-                case "staff.pending_leave_count" -> repository.staffPendingLeaveDetail(asOf, safeSize, offset);
-                case "staff.active_headcount" -> repository.staffActiveHeadcountDetail(asOf, safeSize, offset);
+                case "staff.pending_leave_count" -> repository.staffPendingLeaveDetail(asOf, safeSize, offset, scope);
+                case "staff.active_headcount" -> repository.staffActiveHeadcountDetail(asOf, safeSize, offset, scope);
                 // 第六批（总控驾驶舱）余额类：待复核=待复核主管审批+未处置风险预警合并；截至日仅限制产生时间早于该自然日窗末。
                 case "risk.pending_review" -> repository.pendingReviewDetail(asOf, safeSize, offset);
                 default -> throw ApiException.badRequest("VALIDATION_FAILED",
                         "指标已登记但明细查询未接线：" + definition.metricKey());
             };
-            String note = from != null ? "余额类指标取区间末值，起始日期不参与计算" : null;
+            String note = appendProjectScopeNote(
+                    from != null ? "余额类指标取区间末值，起始日期不参与计算" : null, scope);
             return assembleMetricDetail(definition, null, null, asOf, now, detail.summaryValue(), null, null, note,
                     definition.columns(), detail, safePage, safeSize, true);
         }
@@ -1530,16 +1552,16 @@ public class AnalyticsService {
             case "amusement.exit_count" -> repository.amusementVerificationDirectionDetail(windowStart, windowEnd, false, safeSize, offset);
             case "amusement.inspection_count" -> repository.amusementInspectionDetail(windowStart, windowEnd, safeSize, offset);
             // 第四批（财务域）可加类：通票核销结算流水，谓词同结算审阅页 listVerificationSettled 基础谓词。
-            case "settlement.transaction_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "count", safeSize, offset);
-            case "settlement.verified_amount" -> repository.settlementTransactionDetail(windowStart, windowEnd, "amount", safeSize, offset);
-            case "settlement.verified_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "tickets", safeSize, offset);
+            case "settlement.transaction_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "count", safeSize, offset, scope);
+            case "settlement.verified_amount" -> repository.settlementTransactionDetail(windowStart, windowEnd, "amount", safeSize, offset, scope);
+            case "settlement.verified_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "tickets", safeSize, offset, scope);
             // 第五批（人事域）可加类：谓词逐字同各列表端点。班次按 work_date 落日区间、考勤按 punched_at 自然日窗、薪资单按 month 字符串区间——
             // 均用经营日区间的 LocalDate 端点（effectiveFrom/effectiveTo），由仓储自建各自的日期/自然日窗谓词（见 MetricRegistry 口径说明）。
-            case "staff.shift_count" -> repository.staffShiftDetail(effectiveFrom, effectiveTo, safeSize, offset);
-            case "staff.attendance_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, false, safeSize, offset);
-            case "staff.attendance_late_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, true, safeSize, offset);
-            case "staff.payroll_net_total" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, true, safeSize, offset);
-            case "staff.payroll_statement_count" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, false, safeSize, offset);
+            case "staff.shift_count" -> repository.staffShiftDetail(effectiveFrom, effectiveTo, safeSize, offset, scope);
+            case "staff.attendance_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, false, safeSize, offset, scope);
+            case "staff.attendance_late_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, true, safeSize, offset, scope);
+            case "staff.payroll_net_total" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, true, safeSize, offset, scope);
+            case "staff.payroll_statement_count" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, false, safeSize, offset, scope);
             // 第六批（总控驾驶舱）可加类：谓词逐字抄总览 ETL 聚合（DashboardAggregationJob），单日 as-of 时窗口与 ETL dayRange 同。
             case "traffic.amusement" -> repository.amusementVerificationSuccessDetail(windowStart, windowEnd, safeSize, offset);
             case "verify.done" -> repository.ticketVerificationSuccessDetail(windowStart, windowEnd, safeSize, offset);
@@ -1548,7 +1570,16 @@ public class AnalyticsService {
                     "指标已登记但明细查询未接线：" + definition.metricKey());
         };
         return assembleMetricDetail(definition, null, effectiveFrom, effectiveTo, now, detail.summaryValue(),
-                null, null, null, definition.columns(), detail, safePage, safeSize, true);
+                null, null, appendProjectScopeNote(null, scope), definition.columns(), detail, safePage, safeSize, true);
+    }
+
+    /** 项目级作用域口径说明（全中文）：非空 scope 时在明细页顶部标注数字已限定为调用方所属综合体。 */
+    private static String appendProjectScopeNote(String base, String scope) {
+        if (scope == null) {
+            return base;
+        }
+        String scoped = "本明细已限定为您所属综合体（项目级作用域），非平台全量";
+        return base == null || base.isBlank() ? scoped : base + "；" + scoped;
     }
 
     private AnalyticsRecords.MetricDetailResponse assembleMetricDetail(
