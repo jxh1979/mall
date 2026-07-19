@@ -20,6 +20,8 @@ import com.complex.platform.analytics.AnalyticsRecords.StaffServiceScoreRecord;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditEvent;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -392,6 +394,14 @@ public class AnalyticsController {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.disposeMetricAnomaly(id, request));
+    }
+
+    @GetMapping("/metric-anomalies/{id}/timeline")
+    public ApiResponse<List<AuditEvent>> metricAnomalyTimeline(@PathVariable String id) {
+        // 处置历史时间线(append-only,不可改):与列表同权限(analytics.risk_alert.view)、平台作用域。
+        authorizationService.requirePermission("analytics.risk_alert.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(service.listMetricAnomalyTimeline(id));
     }
 
     @GetMapping("/metric-definitions")

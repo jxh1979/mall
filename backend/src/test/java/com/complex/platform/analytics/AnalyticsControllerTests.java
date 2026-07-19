@@ -98,6 +98,7 @@ class AnalyticsControllerTests {
         when(service.listMerchantHealthScores(any())).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
         when(service.listAnalyticsMerchants(any())).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
         when(service.listMetricAnomalies()).thenReturn(new PageResponse<>(List.of(metricAnomaly()), 1, 50, 1));
+        when(service.listMetricAnomalyTimeline(anyString())).thenReturn(List.of());
         when(service.listMetricDefinitions()).thenReturn(new PageResponse<>(List.of(metricDefinition()), 1, 50, 1));
         when(service.listRiskAlerts()).thenReturn(new PageResponse<>(List.of(riskAlert()), 1, 50, 1));
         when(service.createRiskAlert(any(RiskAlertRequest.class))).thenReturn(riskAlert());
@@ -123,6 +124,7 @@ class AnalyticsControllerTests {
             "GET,/api/v1/analytics/merchant-health,analytics.dashboard.view",
             "GET,/api/v1/analytics/merchants,analytics.dashboard.view",
             "GET,/api/v1/analytics/metric-anomalies,analytics.risk_alert.view",
+            "GET,/api/v1/analytics/metric-anomalies/anomaly_1/timeline,analytics.risk_alert.view",
             "GET,/api/v1/analytics/metric-definitions,analytics.dashboard.view",
             "GET,/api/v1/analytics/risk-alerts,analytics.risk_alert.view",
             "POST,/api/v1/analytics/risk-alerts,analytics.risk_alert.manage",

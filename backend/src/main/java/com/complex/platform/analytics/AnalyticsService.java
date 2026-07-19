@@ -21,6 +21,7 @@ import com.complex.platform.analytics.AnalyticsRecords.RobotMetricRecord;
 import com.complex.platform.analytics.AnalyticsRecords.StaffServiceScoreRecord;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.evidence.RiskAlertService;
@@ -899,6 +900,23 @@ public class AnalyticsService {
         );
     }
 
+    /**
+     * 异常处置历史时间线(append-only):按发生时间升序返回该异常的每次处置动作(who/when/from->to/说明/生成的告警号),
+     * 历史不可改(读 audit_events 的 disposition_recorded 事件)。供闭环回溯"这条异常经历了什么、谁处理的、去哪了"。
+     */
+    public List<AuditEvent> listMetricAnomalyTimeline(String id) {
+        String anomalyId = requireText(id, "id");
+        return operations.readSingle(
+                AuditedOperation.of(
+                        "analytics.metric_anomaly.timeline_viewed",
+                        "analytics.metric_anomaly.timeline_viewed_failed",
+                        "analytics.risk_alert.view",
+                        "analytics_metric_anomaly"),
+                () -> operations.readObjectTimeline(
+                        "analytics_metric_anomaly", anomalyId, "analytics.metric_anomaly.disposition_recorded"),
+                result -> anomalyId);
+    }
+
     private MetricAnomalyRecord disposeMetricAnomalyInternal(String anomalyId, AnomalyDispositionRequest request) {
         AnomalyDispositionRequest actual = requireRequest(request);
         String action = requireText(actual.action(), "action");
@@ -923,8 +941,23 @@ public class AnalyticsService {
         if ("resolved".equals(targetStatus) || "false_positive".equals(targetStatus)) {
             resolvedAt = now;
         }
-        return repository.updateMetricAnomalyDisposition(
+        MetricAnomalyRecord updated = repository.updateMetricAnomalyDisposition(
                 anomalyId, targetStatus, note, reviewLockActorId(), now, escalatedAlertId, resolvedAt);
+        // 处置历史留痕:每个动作追加一条不可改的时间线记录(who/when 由审计上下文自动填充,from->to/说明/生成的告警号),
+        // 供 /timeline 回溯完整处置历史。复用 audit_events(只增不改),与本次更新同事务原子落库;幂等重放不重复追加。
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("action", action);
+        detail.put("from_status", current.status());
+        detail.put("to_status", targetStatus);
+        if (note != null) {
+            detail.put("note", note);
+        }
+        if ("escalate".equals(action) && escalatedAlertId != null) {
+            detail.put("escalated_alert_id", escalatedAlertId);
+        }
+        operations.recordDetail("analytics.metric_anomaly.disposition_recorded",
+                "analytics.metric_anomaly.manage", "analytics_metric_anomaly", anomalyId, detail);
+        return updated;
     }
 
     public PageResponse<MetricDefinitionRecord> listMetricDefinitions() {

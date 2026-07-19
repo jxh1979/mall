@@ -2247,6 +2247,42 @@
         }
       }
     },
+    "/api/v1/analytics/metric-anomalies/{id}/timeline": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "listMetricAnomalyTimeline",
+        "summary": "查询指标异常处置历史时间线",
+        "description": "用于查询某指标异常的完整处置历史时间线(append-only:谁/何时/从什么状态到什么状态/处置说明/转告警时生成的告警号),供处置闭环回溯。历史只增不改(读 audit_events 的 disposition_recorded 事件)。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "analytics.risk_alert.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics.metric_anomaly.timeline_viewed",
+        "x-audit-event-failure": "analytics.metric_anomaly.timeline_viewed_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "异常记录 ID;查看其处置历史时间线。"
+          }
+        ]
+      }
+    },
     "/api/v1/analytics/metric-definitions": {
       "get": {
         "tags": [
