@@ -1048,9 +1048,10 @@ public class ContractService {
         if (repository.findSettlementById(settlementId).isPresent()) {
             return;   // 已结算过（重复审批/重放）：不重复落账
         }
-        // I3 押金按台账实收余额封顶（用户裁决）：只退商户实际交纳的，不超退合同固化额。
-        // ponytail: deposit_ledger 按 merchant_id 记账（商户粒度），一商户多合同时用商户总押金余额封顶=
-        //   保守信号（不会超退商户实交总额），当前可得最佳信号；端口未接=按 0（I1 修好后生产不该发生）。
+        // I3/#3② 押金按台账实收余额封顶（用户裁决）：只退商户实际交纳的，不超退合同固化额。
+        // 退押金落账时写 deposit_ledger refund 行扣减余额（见 FinanceService.createDepositRefundPayable），
+        // 故同一商户多合同退租按台账余额消费顺序封顶——第二个合同读到已扣减余额，杜绝叠加超退。
+        // 端口未接=按 0（I1 修好后生产不该发生）。
         long rawDeposit = contract.depositCent() == null ? 0L : contract.depositCent();
         long deposit = terminationSettlementPort == null ? 0L
                 : terminationSettlementPort.effectiveRefundableDeposit(contract.merchantId(), rawDeposit);
@@ -1078,10 +1079,11 @@ public class ContractService {
         long postedPenalty = 0L;
         if (terminationSettlementPort != null) {
             if (result.depositRefundCent() > 0) {
-                String arId = terminationSettlementPort.createDepositRefundPayable(
+                // 实退值以 FOR UPDATE 落账为准（余额被其它合同退租消费则低于算法净额）；回写快照/审计如实。
+                long actualRefund = terminationSettlementPort.createDepositRefundPayable(
                         contract.merchantId(), result.depositRefundCent(), settlementId);
-                annotateSettlementItem(items, "deposit_disposal", arId);
-                postedDepositRefund = result.depositRefundCent();
+                recordActualDepositRefund(items, actualRefund, result.depositRefundCent());
+                postedDepositRefund = actualRefund;
             }
             if (result.penaltyCent() > 0) {
                 String arId = terminationSettlementPort.createTerminationPenaltyReceivable(
@@ -1107,6 +1109,19 @@ public class ContractService {
         for (Map<String, Object> item : items) {
             if (itemKey.equals(item.get("item"))) {
                 item.put("arApItemId", arApItemId);
+            }
+        }
+    }
+
+    /** 退押金实退值（以 FOR UPDATE 落账为准，可能因余额被其它合同退租消费而低于算法净额）回写结算清单留痕。 */
+    private void recordActualDepositRefund(List<Map<String, Object>> items, long actualRefundCent, long computedNetCent) {
+        for (Map<String, Object> item : items) {
+            if ("deposit_disposal".equals(item.get("item"))) {
+                item.put("actualRefundCent", actualRefundCent);
+                if (actualRefundCent < computedNetCent) {
+                    item.put("status", actualRefundCent > 0 ? "payable_posted_capped" : "listed_only");
+                    item.put("note", "台账实收余额已被其它退租消费，按余额封顶实退（低于算法净额）");
+                }
             }
         }
     }

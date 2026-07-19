@@ -404,10 +404,14 @@ class ContractServiceTests {
         Long depositBalance;   // null=不封顶(返回固化额)；非 null=按此台账余额封顶
 
         @Override
-        public String createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
-            depositRefundCent = netRefundCent;
+        public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
+            long eff = depositBalance == null ? netRefundCent : Math.min(netRefundCent, Math.max(0L, depositBalance));
+            if (depositBalance != null) {
+                depositBalance -= eff;   // 模拟 deposit_ledger refund 行扣减余额
+            }
+            depositRefundCent = eff;
             depositCalls++;
-            return "arap_dep_" + settlementId;
+            return eff;
         }
 
         @Override
@@ -538,6 +542,26 @@ class ContractServiceTests {
         Map<String, Object> dep = st.settlementItems().stream()
                 .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
         assertThat(dep).containsEntry("depositCent", 300000L);
+    }
+
+    @Test
+    void twoContractsSameMerchantCapByLedgerBalanceNoOverRefund() {
+        // #3② 多合同同商户押金超退根治：退押金扣减台账余额，第二个合同按已减余额封顶。
+        terminationPort.depositBalance = 4000L;   // 商户押金台账实收余额
+        ContractRecord c1 = effectiveContractRecord("ctr_mc1", 2000L, Map.of());
+        ContractRecord c2 = effectiveContractRecord("ctr_mc2", 3000L, Map.of());
+        ContractChangeRecord ch1 = service.raiseChange(c1.id(),
+                new ContractChangeRequest("k_mc1", "move_out", Map.of()));
+        ContractChangeRecord ch2 = service.raiseChange(c2.id(),
+                new ContractChangeRequest("k_mc2", "move_out", Map.of()));
+        approveTerminationChain(ch1.id());
+        long refund1 = terminationPort.depositRefundCent;
+        approveTerminationChain(ch2.id());
+        long refund2 = terminationPort.depositRefundCent;
+        assertThat(refund1).isEqualTo(2000L);              // 固化 2000 ≤ 余额 4000
+        assertThat(refund2).isEqualTo(2000L);              // 固化 3000 但余额只剩 2000 → 封顶 2000
+        assertThat(refund1 + refund2).isEqualTo(4000L);    // 共退=实交，不超退
+        assertThat(terminationPort.depositBalance).isZero();
     }
 
     @Test

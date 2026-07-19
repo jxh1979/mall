@@ -7,8 +7,11 @@ package com.complex.platform.finance;
  */
 public interface TerminationSettlementPort {
 
-    /** 应退押金净额（押金抵未清后&gt;0）挂应付给商户：direction=payable, source_type='deposit_refund'。返回台账项 id。 */
-    String createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId);
+    /**
+     * 应退押金净额（押金抵未清后&gt;0）落台账：FOR UPDATE 锁定权威余额 → 按锁定余额封顶（race-safe）→
+     * 挂 ar_ap 应付 + 写 deposit_ledger refund 行扣减余额。返回实退值（≤ 请求净额；余额被其它退租消费则更低）。
+     */
+    long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId);
 
     /** 提前退租违约金挂应收：direction=receivable, source_type='termination_penalty'。返回台账项 id。 */
     String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId);

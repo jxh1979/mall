@@ -338,6 +338,18 @@ class FinanceJdbcIntegrationTests {
         return id;
     }
 
+    @Test
+    void depositRefundLedgerRowDecrementsRunningBalance() {
+        // #3② 底座：退押金写 deposit_ledger refund 行后运行余额下降（多合同退租按余额消费封顶所依赖）。
+        Instant now = Instant.parse("2026-07-06T00:00:00Z");
+        repository.saveDepositLedger(new DepositLedgerRecord(
+                "dep_collect_jdbc", "mch_refund_jdbc", "collect", 40000L, 40000L, null, "init", now));
+        assertThat(repository.currentDepositBalanceForUpdate("mch_refund_jdbc")).isEqualTo(40000L);
+        repository.saveDepositLedger(new DepositLedgerRecord(
+                "dep_refund_jdbc", "mch_refund_jdbc", "refund", 25000L, 15000L, "arap_x", "退租应退押金结算", now));
+        assertThat(repository.currentDepositBalance("mch_refund_jdbc")).isEqualTo(15000L);
+    }
+
     private void insertTicketOrder(String id, String ticketTypeId, String merchantId,
                                    long amountCent, LocalDate visitDate, String channel) {
         jdbcTemplate.update("""

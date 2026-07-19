@@ -1519,12 +1519,24 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         return item.id();
     }
 
-    /** 退租应退押金净额挂应付给商户（source_type='deposit_refund'）。幂等键=结算单 id。 */
+    /**
+     * 退租应退押金落台账（#3② 多合同超退根治）：FOR UPDATE 锁定权威余额（并发退租串行化）→ 按锁定余额封顶（race-safe）→
+     * 挂 ar_ap 应付（source_type='deposit_refund'）+ 写 deposit_ledger refund 行扣减余额，使同一商户后续合同读到已减余额、不叠加超退。
+     * 幂等键=结算单 id；返回实退值（≤ 请求净额）。
+     */
     @Override
-    public String createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
+    public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
+        long lockedBalance = repository.currentDepositBalanceForUpdate(merchantId);
+        long effectiveRefund = Math.min(Math.max(0L, netRefundCent), Math.max(0L, lockedBalance));
+        if (effectiveRefund <= 0) {
+            return 0L;   // 余额已被其它合同退租消费殆尽：不挂应付、不写台账
+        }
         ArApItemRecord item = persistDerivedArApItem(
-                "payable", merchantId, "deposit_refund", settlementId, netRefundCent, settlementId, merchantId);
-        return item.id();
+                "payable", merchantId, "deposit_refund", settlementId, effectiveRefund, settlementId, merchantId);
+        repository.saveDepositLedger(new DepositLedgerRecord(
+                "deposit_refund_" + slug(settlementId), merchantId, "refund", effectiveRefund,
+                lockedBalance - effectiveRefund, item.id(), "退租应退押金结算", Instant.now()));
+        return effectiveRefund;
     }
 
     /** 提前退租违约金挂应收（source_type='termination_penalty'）。幂等键=结算单 id。 */
