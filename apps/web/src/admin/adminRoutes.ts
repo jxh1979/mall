@@ -46,6 +46,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-VND-004", label: "外包下属账号", module: "外包工作台", group: "vendor", route: "/admin/vendor/subordinates", requiredPermissions: ["partner.subordinate.view"], accountForms: ["vendor"] },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", module: "终端", group: "integration", route: "/admin/terminals/switch-matrix", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-CUS-001", label: "客人账号管理", module: "客人", group: "governance", route: "/admin/customers/accounts", requiredPermissions: ["customer.account.manage"] },
+  { pageId: "ADM-CUS-002", label: "券台账管理", module: "客人", group: "governance", route: "/admin/customers/vouchers", requiredPermissions: ["customer.voucher.view"] },
   { pageId: "ADM-INT-004", label: "短信通知开关", module: "第三方接入", group: "integration", route: "/admin/integrations/sms-switches", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-LEASE-002", label: "租赁状态看板", module: "招商租赁", group: "governance", route: "/admin/leasing/rental-status", requiredPermissions: ["contract.draft.manage"] },
   { pageId: "ADM-VND-002", label: "外包巡检任务", module: "外包工作台", group: "vendor", route: "/admin/vendor/inspections", requiredPermissions: ["facility.inspection.view_assigned"], accountForms: ["vendor"] },

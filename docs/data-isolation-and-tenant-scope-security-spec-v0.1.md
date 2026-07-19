@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V300**，发现 **155** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V301**，发现 **157** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -211,6 +211,8 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `user_position_assignments` | `merchant_id` + `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
 | `venue_business_hours` | `venue_id` | inherited-or-location-scope | V226 | `V226__entitlement_session_kind_batch3.sql` |
 | `venue_sessions` | `venue_id` | inherited-or-location-scope | V226 | `V226__entitlement_session_kind_batch3.sql` |
+| `voucher_definitions` | `merchant_id` | direct | V301 | `V301__unified_voucher_ledger.sql` |
+| `voucher_redemption_records` | `merchant_id` | direct | V301 | `V301__unified_voucher_ledger.sql` |
 | `warehouses` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
 | `wecom_conversations` | `project_id` | direct | V087 | `V087__wecom_compliance.sql` |
 | `wecom_risk_hits` | `project_id` | direct | V106 | `V106__wecom_risk_hits_and_rules.sql` |

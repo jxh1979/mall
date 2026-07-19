@@ -53,7 +53,28 @@ class CustomerServiceTests {
     private InventoryService inventoryService;
     private com.complex.platform.bar.BarRepository barRepository;
     private com.complex.platform.bar.BarOrderService barOrderService;
+    private RecordingVoucherIssuePort voucherIssuePort;
     private CustomerService service;
+
+    /** 统一台账发券端口桩（V301）：记录调用并返回派生实例——redeemPoints 只发券不动库存的断言点。 */
+    private static final class RecordingVoucherIssuePort implements com.complex.platform.voucher.VoucherIssuePort {
+        final List<com.complex.platform.voucher.VoucherInstanceRecord> issued = new ArrayList<>();
+
+        @Override
+        public List<com.complex.platform.voucher.VoucherInstanceRecord> issueForPointsRedemption(
+                CustomerRedemptionCatalogItemRecord catalogItem, String customerId, String redemptionId,
+                int quantity, Instant now) {
+            List<com.complex.platform.voucher.VoucherInstanceRecord> batch = new ArrayList<>();
+            for (int i = 0; i < quantity; i++) {
+                batch.add(new com.complex.platform.voucher.VoucherInstanceRecord(
+                        "vi_" + redemptionId + "_" + i, "vdef_cat_" + catalogItem.id(), customerId,
+                        "VC" + redemptionId + i, "points_redemption", redemptionId, "issued", now,
+                        null, null, null, null, now, now));
+            }
+            issued.addAll(batch);
+            return batch;
+        }
+    }
 
     @BeforeEach
     void setUp() {
@@ -69,6 +90,7 @@ class CustomerServiceTests {
         LoyaltyService loyaltyService = new LoyaltyService(customerRepository, auditEventService);
         barRepository = Mockito.mock(com.complex.platform.bar.BarRepository.class);
         barOrderService = Mockito.mock(com.complex.platform.bar.BarOrderService.class);
+        voucherIssuePort = new RecordingVoucherIssuePort();
         service = new CustomerService(
                 customerRepository,
                 new FixedCustomerOtpVerifier("000000"),
@@ -79,6 +101,7 @@ class CustomerServiceTests {
                 loyaltyService,
                 barRepository,
                 barOrderService,
+                voucherIssuePort,
                 java.time.Clock.fixed(java.time.Instant.parse("2026-06-14T00:00:00Z"), java.time.ZoneOffset.UTC)
         );
     }
@@ -600,7 +623,7 @@ class CustomerServiceTests {
     }
 
     @Test
-    void redeemPointsDeductsBalanceCreatesLedgerAndInventoryAdjustment() {
+    void redeemPointsDeductsBalanceIssuesUnifiedVoucherWithoutInventoryCall() {
         CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
         customerRepository.savePoints(new CustomerPointsAccountRecord(
                 "points_" + login.customerId(),
@@ -646,11 +669,16 @@ class CustomerServiceTests {
                         CustomerPointsRedemptionRecord::totalPoints,
                         CustomerPointsRedemptionRecord::status
                 )
-                .containsExactly(login.customerId(), "gift_active", 120L, "pending_pickup");
+                .containsExactly(login.customerId(), "gift_active", 120L, "voucher_issued");
         assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(380L);
         assertThat(customerRepository.pointsLedger)
                 .extracting(CustomerPointsLedgerRecord::pointsDelta, CustomerPointsLedgerRecord::balanceAfter, CustomerPointsLedgerRecord::sourceType)
                 .contains(org.assertj.core.groups.Tuple.tuple(-120L, 380L, "points_redemption"));
+        // V301 统一台账：兑换只发券（每件一张、source_ref=兑换记录 id），绝不直接扣库存。
+        assertThat(voucherIssuePort.issued).hasSize(1);
+        assertThat(voucherIssuePort.issued.get(0).sourceRef()).isEqualTo(redemption.id());
+        assertThat(voucherIssuePort.issued.get(0).customerId()).isEqualTo(login.customerId());
+        verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("customer.points_redeemed");
@@ -700,6 +728,8 @@ class CustomerServiceTests {
 
         assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(50L);
         verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
+        // 余额不足被挡下时也不得发券。
+        assertThat(voucherIssuePort.issued).isEmpty();
     }
 
     @Test
@@ -753,6 +783,8 @@ class CustomerServiceTests {
         assertThat(customerRepository.listPointsRedemptionsByCustomerId(login.customerId())).isEmpty();
         assertThat(customerRepository.pointsLedger)
                 .noneMatch(entry -> "points_redemption".equals(entry.sourceType()));
+        // 冻结账户被挡下时也不得发券。
+        assertThat(voucherIssuePort.issued).isEmpty();
     }
 
 
