@@ -113,5 +113,6 @@
 | 商户级储值卡：发卡资格、资金模式（充值入账归属：商户预收/平台代收）、可退规则（§7） | 「储值规则配置」ADM-CUS-005 | `/api/v1/loyalty/stored-value/merchant-card-config`、`/api/v1/loyalty/stored-value/merchant-refund-rules` | customer.stored_value.refund |
 
 - 综合体通用卡（平台缺省储值账户）全场通用，无商户级配置项；商户级卡按发卡商户配置上表末行三项。
-- 会员等级/签到/生日配置列表仅显示生效中（active）项；改为停用/归档后从列表隐去（v1 口径）。
+- 会员等级/签到/生日配置列表仅显示生效中（active）项；改为停用/归档后从列表隐去，但仍可按 id 更新恢复为 active（更新路径状态无关，停用可逆，非单向门）。
+- 新增同键（同综合体下重复 level_code / streak_days / rule_name，含已停用/归档项）预检返回 409 冲突（对齐 V089 uq_cml/uq_ccit/uq_cbr），不落裸库约束违例 500。
 - 各配置均按综合体（project_id）隔离：项目级管理员只见/只写本项目（服务层按 token scope 覆盖请求体 project_id）。

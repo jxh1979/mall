@@ -117,6 +117,21 @@ public interface CustomerRepository {
         return List.of();
     }
 
+    /** 状态无关、按 project 严格过滤列出等级配置（含 inactive/archived）；供写路径 resolveId 与唯一性预检用，JDBC 实现走 project_id = :project_id。 */
+    default List<CustomerMemberLevelRecord> listMemberLevelsByProject(String projectId) {
+        return List.of();
+    }
+
+    /** 状态无关、按 project 严格过滤列出签到阶梯（含 inactive）；供写路径 resolveId 与唯一性预检用。 */
+    default List<CustomerCheckInTierRecord> listCheckInTiersByProject(String projectId) {
+        return List.of();
+    }
+
+    /** 状态无关、按 project 严格过滤列出生日规则（含 inactive）；供写路径 resolveId 与唯一性预检用。 */
+    default List<CustomerBirthdayRuleRecord> listBirthdayRulesByProject(String projectId) {
+        return List.of();
+    }
+
     default CustomerCheckInRecord saveCheckIn(CustomerCheckInRecord checkIn) {
         throw new UnsupportedOperationException("saveCheckIn not supported by this repository");
     }

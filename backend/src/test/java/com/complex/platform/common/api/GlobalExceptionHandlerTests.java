@@ -39,4 +39,18 @@ class GlobalExceptionHandlerTests {
         assertThat(output).contains("Unhandled API exception")
                 .contains("jdbc root cause");
     }
+
+    @Test
+    void duplicateKeyViolationBecomesConflictNotInternalError() {
+        // 重复创建同键配置等触发 uq_* 约束时,此前掉进兜底 500;修复后=409 STATE_CONFLICT,且不泄露内部约束名。
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+        var response = handler.handleDuplicateKey(
+                new org.springframework.dao.DuplicateKeyException("ERROR: duplicate key value violates unique constraint \"uq_cml_project_level\""));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo("STATE_CONFLICT");
+        assertThat(response.getBody().message()).doesNotContain("uq_cml_project_level");
+    }
 }
