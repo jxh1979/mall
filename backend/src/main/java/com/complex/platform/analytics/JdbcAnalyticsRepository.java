@@ -2609,4 +2609,173 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 ((Number) aggregate.get("total_rows")).longValue(),
                 summary == null ? BigDecimal.ZERO : new BigDecimal(String.valueOf(summary)));
     }
+
+    // ==== KPI 统一明细·第五批（人事域）：谓词逐字同各列表端点既有取数 ====
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset) {
+        // 与 listShifts 平台口径同谓词：work_date 落 [from,to] 闭区间（空 project_scope=平台全量）。
+        java.util.Objects.requireNonNull(from, "staff shift detail start must not be null");
+        java.util.Objects.requireNonNull(to, "staff shift detail end must not be null");
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("from", from).addValue("to", to);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, user_id, work_date, start_at, end_at, note
+                  FROM staff_shift_schedules
+                 WHERE work_date >= :from AND work_date <= :to
+                 ORDER BY work_date DESC, start_at, user_id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> staffShiftRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM staff_shift_schedules
+                 WHERE work_date >= :from AND work_date <= :to
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset) {
+        // 与 listAttendanceOn 同自然日窗：punched_at ∈ [from 00:00, to+1 00:00) UTC（刻意不走经营日切）。lateOnly 加 judgement='late'。
+        java.util.Objects.requireNonNull(from, "staff attendance detail start must not be null");
+        java.util.Objects.requireNonNull(to, "staff attendance detail end must not be null");
+        String lateClause = lateOnly ? "AND judgement = 'late'" : "";
+        MapSqlParameterSource params = pagedParams(limit, offset)
+                .addValue("day_start", timestampWithTimeZone(from.atStartOfDay(java.time.ZoneOffset.UTC).toInstant()))
+                .addValue("day_end", timestampWithTimeZone(to.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()));
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, user_id, punch_type, punched_at, method, judgement, space_id
+                  FROM staff_attendance_records
+                 WHERE punched_at >= :day_start AND punched_at < :day_end
+                 %s
+                 ORDER BY punched_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(lateClause), params, (rs, n) -> staffAttendanceRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM staff_attendance_records
+                 WHERE punched_at >= :day_start AND punched_at < :day_end
+                 %s
+                """.formatted(lateClause), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset) {
+        // 与 listPayrollStatements 平台口径同谓词：month ∈ [fromMonth,toMonth]（YYYY-MM 字典序即时序，空 project_scope=平台全量，不加状态过滤）。
+        java.util.Objects.requireNonNull(from, "staff payroll detail start must not be null");
+        java.util.Objects.requireNonNull(to, "staff payroll detail end must not be null");
+        java.time.format.DateTimeFormatter ym = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM");
+        MapSqlParameterSource params = pagedParams(limit, offset)
+                .addValue("from_month", from.format(ym))
+                .addValue("to_month", to.format(ym));
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent, total_cent
+                  FROM staff_payroll_statements
+                 WHERE month >= :from_month AND month <= :to_month
+                 ORDER BY month DESC, user_id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> staffPayrollRow(rs));
+        String summaryExpr = sumTotal ? "COALESCE(SUM(total_cent), 0)" : "COUNT(*)";
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, %s AS summary
+                  FROM staff_payroll_statements
+                 WHERE month >= :from_month AND month <= :to_month
+                """.formatted(summaryExpr), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset) {
+        // 与 listLeaves(status='pending') 平台口径同谓词；截至日仅限制提交时间早于该自然日窗末（状态按台账当前值）。
+        java.util.Objects.requireNonNull(asOf, "staff pending leave detail asOf must not be null");
+        MapSqlParameterSource params = pagedParams(limit, offset)
+                .addValue("as_of_end", timestampWithTimeZone(asOf.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()));
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, user_id, leave_type, start_date, end_date, reason, status
+                  FROM staff_leave_requests
+                 WHERE status = 'pending' AND created_at < :as_of_end
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> staffLeaveRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM staff_leave_requests
+                 WHERE status = 'pending' AND created_at < :as_of_end
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset) {
+        // 在职员工=account_type='staff' 且 status='active'（与员工账号页员工类启用账号一致）；截至日仅限制建号时间早于该自然日窗末。
+        java.util.Objects.requireNonNull(asOf, "staff headcount detail asOf must not be null");
+        MapSqlParameterSource params = pagedParams(limit, offset)
+                .addValue("as_of_end", timestampWithTimeZone(asOf.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()));
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, username, account_type, status, created_at
+                  FROM access_users
+                 WHERE account_type = 'staff' AND status = 'active' AND created_at < :as_of_end
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> staffHeadcountRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM access_users
+                 WHERE account_type = 'staff' AND status = 'active' AND created_at < :as_of_end
+                """, params));
+    }
+
+    private java.util.Map<String, Object> staffShiftRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("userId", rs.getString("user_id"));
+        row.put("workDate", rs.getObject("work_date", LocalDate.class));
+        row.put("startAt", instant(rs, "start_at"));
+        row.put("endAt", instant(rs, "end_at"));
+        row.put("note", rs.getString("note"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> staffAttendanceRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("userId", rs.getString("user_id"));
+        row.put("punchType", rs.getString("punch_type"));
+        row.put("punchedAt", instant(rs, "punched_at"));
+        row.put("method", rs.getString("method"));
+        row.put("judgement", rs.getString("judgement"));
+        row.put("spaceId", rs.getString("space_id"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> staffPayrollRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("userId", rs.getString("user_id"));
+        row.put("month", rs.getString("month"));
+        row.put("baseCent", rs.getLong("base_cent"));
+        row.put("commissionCent", rs.getLong("commission_cent"));
+        row.put("bonusCent", rs.getLong("bonus_cent"));
+        row.put("penaltyCent", rs.getLong("penalty_cent"));
+        row.put("totalCent", rs.getLong("total_cent"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> staffLeaveRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("userId", rs.getString("user_id"));
+        row.put("leaveType", rs.getString("leave_type"));
+        row.put("startDate", rs.getObject("start_date", LocalDate.class));
+        row.put("endDate", rs.getObject("end_date", LocalDate.class));
+        row.put("reason", rs.getString("reason"));
+        row.put("status", rs.getString("status"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> staffHeadcountRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("username", rs.getString("username"));
+        row.put("accountType", rs.getString("account_type"));
+        row.put("status", rs.getString("status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        return row;
+    }
 }

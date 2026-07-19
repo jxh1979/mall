@@ -8,6 +8,7 @@ import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { RowActions, type RowAction } from "../components/RowActions";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; leaveDeductionCent?: number; taxCent?: number; totalCent?: number };
 type LeaveRow = { id: string; userId?: string; leaveType?: string; startDate?: string; endDate?: string; reason?: string; status?: string; reviewNote?: string };
@@ -36,7 +37,7 @@ function cnMonth(value?: string) {
   return m ? `${m[1]}年${Number(m[2])}月` : value;
 }
 
-export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
+export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, effectivePermissions, navigateTo }: AdminPageProps) {
   const [month, setMonth] = React.useState(currentMonth);
   const [payroll, setPayroll] = React.useState<PayrollRow[]>([]);
   const [leaves, setLeaves] = React.useState<LeaveRow[]>([]);
@@ -167,6 +168,12 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
     });
   }
 
+  // 第五批（人事域）KPI 接线：实发合计/薪资单数按所选月（from=to=月首日）、待审请假为当前 pending 计数；平台口径同源。
+  const monthDay = `${month}-01`;
+  const payrollTotalKpi = useMetricKpiValue(api, "staff.payroll_net_total", { from: monthDay, to: monthDay });
+  const payrollCountKpi = useMetricKpiValue(api, "staff.payroll_statement_count", { from: monthDay, to: monthDay });
+  const pendingLeaveKpi = useMetricKpiValue(api, "staff.pending_leave_count", {});
+
   return (
     <section data-testid="staff-payroll-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -174,6 +181,11 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
       <div className="admin-toolbar">
         <label>月份:<CnDatePicker mode="month" data-testid="payroll-month" value={month} onChange={(v) => setMonth(v || currentMonth())} /></label>
         <button type="button" data-testid="payroll-close" onClick={() => void closeMonth()}>执行月结(重结=覆盖)</button>
+      </div>
+      <div className="admin-kpi-grid" data-testid="staff-payroll-summary">
+        <div className="admin-kpi-card"><span>实发合计（元）</span><strong className="admin-kpi-value--text" data-testid="staff-payroll-kpi-total">{payrollTotalKpi.status === "ready" && payrollTotalKpi.value !== null ? money(payrollTotalKpi.value) : "—"}</strong><small>平台口径·{cnMonth(month)}{payrollTotalKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.payroll_net_total" from={monthDay} to={monthDay} testid="staff-payroll-metric-detail-total" /> : null}</small></div>
+        <div className="admin-kpi-card"><span>薪资单数</span><strong className="admin-kpi-value--text" data-testid="staff-payroll-kpi-count">{payrollCountKpi.status === "ready" && payrollCountKpi.value !== null ? payrollCountKpi.value : "—"}</strong><small>平台口径·{cnMonth(month)}{payrollCountKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.payroll_statement_count" from={monthDay} to={monthDay} testid="staff-payroll-metric-detail-count" /> : null}</small></div>
+        <div className="admin-kpi-card"><span>待审请假数</span><strong className="admin-kpi-value--text" data-testid="staff-leave-kpi-pending">{pendingLeaveKpi.status === "ready" && pendingLeaveKpi.value !== null ? pendingLeaveKpi.value : "—"}</strong><small>平台口径·当前{pendingLeaveKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.pending_leave_count" testid="staff-leave-metric-detail-pending" /> : null}</small></div>
       </div>
       <h3>固定工资设定(员工档案)</h3>
       <div className="admin-form-row" data-testid="payroll-base-editor">

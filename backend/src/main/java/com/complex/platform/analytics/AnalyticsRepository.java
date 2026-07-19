@@ -498,4 +498,31 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows settlementTransactionDetail(java.time.Instant start, java.time.Instant end, String summaryMode, int limit, int offset) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
+
+    // ==== KPI 统一明细·第五批（人事域）：谓词逐字同各列表端点既有取数 ====
+
+    /** staff.shift_count 明细：排班按 work_date 落 [from,to] 闭区间（同 listShifts 平台口径谓词），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** staff.attendance_count / staff.attendance_late_count 明细：考勤按 punched_at 落自然日窗 [from 00:00, to+1 00:00)（同 listAttendanceOn，不走经营日切）；lateOnly=true 加 judgement='late'；合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** staff.payroll_net_total / staff.payroll_statement_count 明细：薪资单按 month 落 [fromMonth,toMonth] 闭区间（同 listPayrollStatements）；sumTotal=true 合计Σtotal_cent，false 合计份数。 */
+    default AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** staff.pending_leave_count 明细：待审请假（status='pending'、提交时间早于截至日窗末；状态按台账当前值），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** staff.active_headcount 明细：在职员工账号（account_type='staff'、status='active'、建号早于截至日窗末），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
 }

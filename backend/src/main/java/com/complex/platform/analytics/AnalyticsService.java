@@ -1392,6 +1392,9 @@ public class AnalyticsService {
                         businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
                 case "amusement.inspection_pending_rectification" -> repository.amusementInspectionPendingRectificationDetail(
                         businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                // 第五批（人事域）余额类：待审请假/在职员工数按台账当前值，截至日仅限制提交/建号时间早于该自然日窗末。
+                case "staff.pending_leave_count" -> repository.staffPendingLeaveDetail(asOf, safeSize, offset);
+                case "staff.active_headcount" -> repository.staffActiveHeadcountDetail(asOf, safeSize, offset);
                 default -> throw ApiException.badRequest("VALIDATION_FAILED",
                         "指标已登记但明细查询未接线：" + definition.metricKey());
             };
@@ -1446,6 +1449,13 @@ public class AnalyticsService {
             case "settlement.transaction_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "count", safeSize, offset);
             case "settlement.verified_amount" -> repository.settlementTransactionDetail(windowStart, windowEnd, "amount", safeSize, offset);
             case "settlement.verified_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "tickets", safeSize, offset);
+            // 第五批（人事域）可加类：谓词逐字同各列表端点。班次按 work_date 落日区间、考勤按 punched_at 自然日窗、薪资单按 month 字符串区间——
+            // 均用经营日区间的 LocalDate 端点（effectiveFrom/effectiveTo），由仓储自建各自的日期/自然日窗谓词（见 MetricRegistry 口径说明）。
+            case "staff.shift_count" -> repository.staffShiftDetail(effectiveFrom, effectiveTo, safeSize, offset);
+            case "staff.attendance_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, false, safeSize, offset);
+            case "staff.attendance_late_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, true, safeSize, offset);
+            case "staff.payroll_net_total" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, true, safeSize, offset);
+            case "staff.payroll_statement_count" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, false, safeSize, offset);
             default -> throw ApiException.badRequest("VALIDATION_FAILED",
                     "指标已登记但明细查询未接线：" + definition.metricKey());
         };
