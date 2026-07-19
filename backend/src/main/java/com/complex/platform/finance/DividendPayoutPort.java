@@ -15,6 +15,14 @@ public interface DividendPayoutPort {
 
     String createDividendPayoutPayable(String principalUserId, String merchantId, long netAmountCent, String statementId);
 
+    /**
+     * V303 发放保护线留存：审批时把留存额记为「欠主理人的待释放款」——挂应付
+     * (payable, counterparty=主理人, source_type='dividend_reserve_withheld', source_id=计算单 id)，非平台白拿。
+     * 释放（下期/年度末返还等规则 + 手动释放端点）为后续独立构建 R，本端口只落待释放负债。返回 ar_ap_item_id。
+     */
+    String createDividendReserveWithholdingPayable(
+            String principalUserId, String merchantId, long reserveCent, String statementId);
+
     /** 未清应收快照（direction=receivable，unpaid>0，按 created_at 升序=先欠先抵），供计算单冻结欠款抵扣额与逐项留痕。 */
     List<DividendArrearsItem> listOutstandingReceivables(String merchantId);
 

@@ -640,9 +640,9 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
             },
             content: (
               <>
-                <label><input data-testid="dividend-plan-loss-carryforward" type="checkbox" checked={planForm.lossCarryforwardEnabled} onChange={() => setPlanForm({ ...planForm, lossCarryforwardEnabled: !planForm.lossCarryforwardEnabled })} />亏损结转：本期可分配额先扣减该商户往期未弥补亏损累计（关=每期独立，亏损不结转）</label>
+                <label><input data-testid="dividend-plan-loss-carryforward" type="checkbox" checked={planForm.lossCarryforwardEnabled} onChange={() => setPlanForm({ ...planForm, lossCarryforwardEnabled: !planForm.lossCarryforwardEnabled })} />亏损结转：本期可分配额先扣减该商户往期未弥补亏损累计（关闭仅暂停本期抵扣，历史亏损累计保留、不清零，后续开启继续抵减）</label>
                 <label><input data-testid="dividend-plan-arrears-offset" type="checkbox" checked={planForm.arrearsOffsetEnabled} onChange={() => setPlanForm({ ...planForm, arrearsOffsetEnabled: !planForm.arrearsOffsetEnabled })} />欠款抵扣：主理人应得先抵扣该商户对平台未清应收，抵扣后余额才发放（审批时逐项结算应收）</label>
-                <label><input data-testid="dividend-plan-payout-floor" type="checkbox" checked={planForm.payoutFloorEnabled} onChange={() => setPlanForm({ ...planForm, payoutFloorEnabled: !planForm.payoutFloorEnabled })} />发放保护线：留存一定比例或固定额作为风险准备金不发放（实发=余额−留存）</label>
+                <label><input data-testid="dividend-plan-payout-floor" type="checkbox" checked={planForm.payoutFloorEnabled} onChange={() => setPlanForm({ ...planForm, payoutFloorEnabled: !planForm.payoutFloorEnabled })} />发放保护线：留存一定比例或固定额作为风险准备金不发放（留存记为欠主理人的待释放款、非平台白拿，释放机制后续开放）</label>
                 {planForm.payoutFloorEnabled ? (
                   <>
                     <label>留存比例（%）<input data-testid="dividend-plan-floor-percent" type="number" step="0.01" min="0" max="100" value={planForm.payoutFloorPercent} onChange={(event) => setPlanForm({ ...planForm, payoutFloorPercent: event.target.value })} /></label>

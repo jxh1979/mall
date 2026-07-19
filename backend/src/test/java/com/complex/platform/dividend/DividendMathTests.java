@@ -123,7 +123,7 @@ class DividendMathTests {
 
     // ── V303 扣除项三开关 ──────────────────────────────────────────
 
-    /** compute 全关（三 enabled=false）逐分等于 split（回归保证：默认口径不变）。 */
+    /** compute 全关且无往期累计（carryIn=0）逐分等于 split（回归保证：默认口径不变）。 */
     @Test
     void computeAllTogglesOffEqualsLegacySplit() {
         long[] samples = {-500_000L, 0L, 1L, 999L, 1_000_000L, 987_654_321L};
@@ -134,16 +134,15 @@ class DividendMathTests {
                 for (int tax : taxes) {
                     DividendMath.Split legacy = DividendMath.split(net, share, tax);
                     DividendMath.Distribution d = DividendMath.compute(net, share, tax,
-                            false, 999_999L, false, 999_999L, false, 5000, 999_999L);
+                            false, 0L, false, 999_999L, false, 5000, 999_999L);
                     assertThat(d.distributableCent()).as("dist net=%d", net).isEqualTo(legacy.distributableCent());
                     assertThat(d.platformShareCent()).isEqualTo(legacy.platformShareCent());
                     assertThat(d.principalGrossCent()).isEqualTo(legacy.principalGrossCent());
                     assertThat(d.taxCent()).isEqualTo(legacy.taxCent());
                     assertThat(d.principalNetCent()).isEqualTo(legacy.principalNetCent());
-                    // 三扣除全关：结转/抵扣/留存均 0，实发 = 税后应得。
+                    // 关闭亏损结转：不扣减（applied=0）；欠款抵扣/留存关=0；实发 = 税后应得。
                     assertThat(d.carryInCent()).isZero();
                     assertThat(d.carryAppliedCent()).isZero();
-                    assertThat(d.carryAfterCent()).isZero();
                     assertThat(d.arrearsOffsetCent()).isZero();
                     assertThat(d.reserveWithheldCent()).isZero();
                     assertThat(d.payoutCent()).isEqualTo(legacy.principalNetCent());
@@ -182,12 +181,19 @@ class DividendMathTests {
     }
 
     @Test
-    void lossCarryforwardDisabledIgnoresCarryIn() {
-        // 关闭：即便传入 carryIn=1000 也不减可分配额（回归：与现状一致）。
+    void lossCarryforwardDisabledCarriesButDoesNotDeduct() {
+        // 用户 2026-07-19 拍板：关闭期不扣减可分配额，但累计不清零、恒结转。
+        // 关闭 + 盈利 1500 + 期初累计 1000：不弥补（applied=0）、可分配 1500（不扣）、累计 1000 原样带下去。
         DividendMath.Distribution d = DividendMath.compute(1500L, 0, 0, false, 1000L, false, 0L, false, 0, 0L);
-        assertThat(d.carryInCent()).isZero();
+        assertThat(d.carryInCent()).isEqualTo(1000L);
+        assertThat(d.carryAppliedCent()).isZero();
         assertThat(d.distributableCent()).isEqualTo(1500L);
-        assertThat(d.carryAfterCent()).isZero();
+        assertThat(d.carryAfterCent()).isEqualTo(1000L);
+        // 关闭 + 亏损 500 + 期初累计 1000：累计继续叠加到 1500（关闭期照样累计新亏损）。
+        DividendMath.Distribution loss = DividendMath.compute(-500L, 8000, 2000, false, 1000L, false, 0L, false, 0, 0L);
+        assertThat(loss.carryAppliedCent()).isZero();
+        assertThat(loss.distributableCent()).isZero();
+        assertThat(loss.carryAfterCent()).isEqualTo(1500L);
     }
 
     @Test

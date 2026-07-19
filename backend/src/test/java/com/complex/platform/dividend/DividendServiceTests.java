@@ -302,6 +302,8 @@ class DividendServiceTests {
         when(payoutPort.listOutstandingReceivables(anyString())).thenReturn(List.of());
         when(payoutPort.applyDividendOffsetToReceivables(anyString(), anyLong(), anyString()))
                 .thenAnswer(inv -> (long) inv.getArgument(1));
+        when(payoutPort.createDividendReserveWithholdingPayable(anyString(), anyString(), anyLong(), anyString()))
+                .thenReturn("arap_reserve_1");
         AuditedOperationExecutor operations = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 mock(AuditEventService.class));
@@ -806,6 +808,58 @@ class DividendServiceTests {
         actorId[0] = "usr_approver";
         service.approve(s.id(), new DividendActionRequest("floor-a1", null));
         verify(payoutPort).createDividendPayoutPayable("usr_principal", MERCHANT, 144_000L, s.id());
+        // 留存不白扣：记为欠主理人的待释放应付（金额=留存额），释放为后续 R。
+        verify(payoutPort).createDividendReserveWithholdingPayable("usr_principal", MERCHANT, 16_000L, s.id());
+    }
+
+    /**
+     * 亏损结转累计恒结转（用户 2026-07-19 拍板反例）：开→亏→关一期→再开。
+     * 关闭期不扣减但累计不清零；再开时 carryIn=保留的累计（非 0），正常抵减可分配额。
+     */
+    @Test
+    void lossCarryforwardAccumulatesWhilePausedThenResumes() {
+        // 季度方案：只计酒吧收入、不扣成本、无费用；亏损结转开。
+        DividendPlanRecord plan = service.createPlan(new DividendPlanRequest("lcf-pause", MERCHANT,
+                "usr_principal", null, 8000, 2000, "quarterly", List.of("bar"), false, List.of("labor"),
+                null, null, null, true, null, null, null, null));
+        // Q1（开）亏损 100000：仅酒吧退款无收入 → 净利 −100000，结转累计 100000。
+        repository.barRefund.put(MERCHANT, 100_000L);
+        DividendStatementRecord q1 = service.compute(
+                new DividendComputeRequest("lcf-p-q1", "2026-Q1", "official", null)).computed().get(0);
+        assertThat(q1.netProfitCent()).isEqualTo(-100_000L);
+        assertThat(q1.lossCarryforwardAfterCent()).isEqualTo(100_000L);
+        service.submit(q1.id(), new DividendActionRequest("lcf-p-s1", null));
+        actorId[0] = "usr_approver";
+        service.approve(q1.id(), new DividendActionRequest("lcf-p-a1", null));
+
+        // 关闭亏损结转（暂停本期抵扣）。
+        actorId[0] = "usr_admin";
+        service.updatePlan(plan.id(), new DividendPlanRequest("lcf-p-off", null, null, null, null, null,
+                null, null, null, null, null, null, null, false, null, null, null, null));
+        // Q2（关）无收支：本期不扣、累计不清零 → carryIn=100000、applied=0、after=100000。
+        repository.barRefund.put(MERCHANT, 0L);
+        DividendStatementRecord q2 = service.compute(
+                new DividendComputeRequest("lcf-p-q2", "2026-Q2", "official", null)).computed().get(0);
+        assertThat(q2.lossCarryforwardInCent()).isEqualTo(100_000L);
+        assertThat(q2.lossCarryforwardAppliedCent()).isZero();
+        assertThat(q2.lossCarryforwardAfterCent()).isEqualTo(100_000L);
+        assertThat(q2.distributableCent()).isZero();
+        service.submit(q2.id(), new DividendActionRequest("lcf-p-s2", null));
+        actorId[0] = "usr_approver";
+        service.approve(q2.id(), new DividendActionRequest("lcf-p-a2", null));
+
+        // 再开亏损结转。
+        actorId[0] = "usr_admin";
+        service.updatePlan(plan.id(), new DividendPlanRequest("lcf-p-on", null, null, null, null, null,
+                null, null, null, null, null, null, null, true, null, null, null, null));
+        // Q3（再开）盈利 500000：carryIn=保留的 100000（非 0！）→ 弥补 100000、可分配 400000。
+        repository.barRevenue.put(MERCHANT, 500_000L);
+        DividendStatementRecord q3 = service.compute(
+                new DividendComputeRequest("lcf-p-q3", "2026-Q3", "official", null)).computed().get(0);
+        assertThat(q3.lossCarryforwardInCent()).isEqualTo(100_000L);
+        assertThat(q3.lossCarryforwardAppliedCent()).isEqualTo(100_000L);
+        assertThat(q3.lossCarryforwardAfterCent()).isZero();
+        assertThat(q3.distributableCent()).isEqualTo(400_000L);
     }
 
     /** 三扣除组合：亏损结转 + 欠款抵扣 + 保护线同单生效，快照与留痕逐项一致，实发按最终额发放。 */

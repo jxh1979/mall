@@ -575,4 +575,51 @@ class DividendJdbcIntegrationTests {
         assertThat(payables).isZero();
         assertThat(repository.findStatementById(s.id()).orElseThrow().status()).isEqualTo("pending_review");
     }
+
+    // ── V303 发放保护线留存 = 暂扣待释放（真调 FinanceService 挂待释放应付）──
+
+    private static DividendPlanRecord floorPlan(String id) {
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+                8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
+                null, "active", null, "usr_div_jdbc", now, now,
+                false, false, true, 1000, 0L);   // payout_floor_enabled=true, 留 10%
+    }
+
+    /**
+     * 发放保护线留存端到端：种子售票收入 100 万 + 留 10% 保护线 → 算单税后应得 16 万、留存 1.6 万、实发 14.4 万 →
+     * 审批时按实发 14.4 万挂 dividend_payout 应付 + 把留存 1.6 万记为 dividend_reserve_withheld 待释放应付（欠主理人、非白扣）。
+     */
+    @Test
+    void payoutFloorWithholdsReserveAsReleasablePayableAtApprove() {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("floor", 1_000_000L, ts);
+        repository.insertPlan(floorPlan("divp_jdbc_floor"));
+
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("floor-jdbc-c1", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.principalNetCent()).isEqualTo(160_000L);
+        assertThat(s.reserveWithheldCent()).isEqualTo(16_000L);
+        assertThat(s.payoutCent()).isEqualTo(144_000L);
+
+        service.submit(s.id(), new DividendActionRequest("floor-jdbc-s1", null));
+        DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
+        approver.approve(s.id(), new DividendActionRequest("floor-jdbc-a1", null));
+
+        // 实发 14.4 万挂正常应付（立即可付）。
+        Map<String, Object> payout = jdbcTemplate.queryForMap(
+                "SELECT amount_cent, counterparty_id FROM ar_ap_items WHERE source_type = 'dividend_payout' AND source_id = ?",
+                s.id());
+        assertThat(((Number) payout.get("amount_cent")).longValue()).isEqualTo(144_000L);
+        assertThat(payout.get("counterparty_id")).isEqualTo("usr_principal_jdbc");
+        // 留存 1.6 万记为欠主理人的待释放应付（非平台白拿；释放为后续 R）。
+        Map<String, Object> reserve = jdbcTemplate.queryForMap("""
+                SELECT amount_cent, counterparty_id, direction
+                  FROM ar_ap_items WHERE source_type = 'dividend_reserve_withheld' AND source_id = ?
+                """, s.id());
+        assertThat(((Number) reserve.get("amount_cent")).longValue()).isEqualTo(16_000L);
+        assertThat(reserve.get("counterparty_id")).isEqualTo("usr_principal_jdbc");
+        assertThat(reserve.get("direction")).isEqualTo("payable");
+    }
 }

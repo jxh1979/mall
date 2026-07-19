@@ -42,15 +42,18 @@ ALTER TABLE dividend_statements
 
 -- 存量单回填：三扣除均 0 时实发 = 税后应得（口径与 V299 现状一致）。
 UPDATE dividend_statements SET payout_cent = principal_net_cent WHERE payout_cent = 0;
+-- 亏损结转累计恒结转（用户 2026-07-19 拍板：亏损一直累到被盈利填平，开关只控本期扣不扣）：after 恒 = in − applied + max(−净利,0)。
+-- 存量单 in=applied=0 → 回填 after = GREATEST(−净利,0)（亏损期即本期亏损额，盈利期 0），以满足下方无条件 after CHECK。
+UPDATE dividend_statements SET loss_carryforward_after_cent = GREATEST(-net_profit_cent, 0);
 
--- 可分配额定义随亏损结转开关分支：未启用 in=0 → GREATEST(净利,0)（存量单/默认口径不变）。
+-- 可分配额只扣「本期结转弥补额 applied」（关闭期 applied=0 不扣；存量单 applied=0 → GREATEST(净利,0) 不变）。
 ALTER TABLE dividend_statements DROP CONSTRAINT IF EXISTS chk_ds_distributable;
 ALTER TABLE dividend_statements ADD CONSTRAINT chk_ds_distributable
-    CHECK (distributable_cent = GREATEST(net_profit_cent - loss_carryforward_in_cent, 0));
+    CHECK (distributable_cent = GREATEST(net_profit_cent - loss_carryforward_applied_cent, 0));
 
 -- 亏损结转链恒等（DB 层硬保证结转不丢/不造）：
---   applied = 启用? min(max(净利,0), 期初累计亏损) : 0
---   after   = 启用? 期初累计亏损 − applied + max(−净利,0) : 0
+--   applied = 启用? min(max(净利,0), 期初累计亏损) : 0（开关只控本期扣减，关闭期不扣）
+--   after   = 恒 期初累计亏损 − applied + max(−净利,0)（累计恒结转，关闭期不清零）
 ALTER TABLE dividend_statements DROP CONSTRAINT IF EXISTS chk_ds_lcf_nonneg;
 ALTER TABLE dividend_statements ADD CONSTRAINT chk_ds_lcf_nonneg
     CHECK (loss_carryforward_in_cent >= 0 AND loss_carryforward_applied_cent >= 0
@@ -61,9 +64,8 @@ ALTER TABLE dividend_statements ADD CONSTRAINT chk_ds_lcf_applied
         THEN LEAST(GREATEST(net_profit_cent, 0), loss_carryforward_in_cent) ELSE 0 END);
 ALTER TABLE dividend_statements DROP CONSTRAINT IF EXISTS chk_ds_lcf_after;
 ALTER TABLE dividend_statements ADD CONSTRAINT chk_ds_lcf_after
-    CHECK (loss_carryforward_after_cent = CASE WHEN loss_carryforward_enabled
-        THEN loss_carryforward_in_cent - loss_carryforward_applied_cent + GREATEST(-net_profit_cent, 0)
-        ELSE 0 END);
+    CHECK (loss_carryforward_after_cent
+        = loss_carryforward_in_cent - loss_carryforward_applied_cent + GREATEST(-net_profit_cent, 0));
 
 -- 发放额恒等（税后应得 − 欠款抵扣 − 留存 = 实发，均非负；抵扣不超税后应得）。
 ALTER TABLE dividend_statements DROP CONSTRAINT IF EXISTS chk_ds_arrears_range;

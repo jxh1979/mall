@@ -6,14 +6,14 @@ package com.complex.platform.dividend;
  *
  * <p>V299 恒等式（与 dividend_statements 的 DB CHECK 一一对应）：
  * <ul>
- *   <li>distributable = max(netProfit − carryIn, 0)（亏损结转关时 carryIn=0，退化为 max(netProfit,0)）</li>
+ *   <li>distributable = max(netProfit − applied, 0)（applied=本期结转弥补额；关闭期 applied=0，退化为 max(netProfit,0)）</li>
  *   <li>platformShare + principalGross = distributable（余数归主理人，劈分不丢分）</li>
  *   <li>principalNet = principalGross − tax（tax = principalGross * taxRateBps / 10000）</li>
  * </ul>
  *
  * <p>V303 扣除项三开关（默认全关时逐分等于 V299 现状）：
  * <ul>
- *   <li>亏损结转：可分配额先减往期未弥补亏损累计 carryIn；本期 applied/after 结转链见 {@link Distribution}</li>
+ *   <li>亏损结转：累计恒结转（after 恒累计，关闭期不清零）；开关只控本期是否扣减可分配额（applied）；结转链见 {@link Distribution}</li>
  *   <li>欠款抵扣：税后应得先抵扣未清应收 arrearsOutstanding（钳到 principalNet 上限）</li>
  *   <li>发放保护线：留存 = min(抵扣后余额, max(余额×bps/10000, 固定额))，实发 = 抵扣后余额 − 留存</li>
  * </ul>
@@ -85,11 +85,12 @@ public final class DividendMath {
         requireBps(taxRateBps, "taxRateBps");
         requireBps(reserveBps, "reserveBps");
 
-        long carryIn = lossCarryforward ? Math.max(carryInCent, 0L) : 0L;
-        long distributable = Math.max(netProfitCent - carryIn, 0L);
-        // applied = 本期盈利弥补的往期亏损；after = 结转链余额（供下期作 carryIn）。
-        long carryApplied = lossCarryforward ? Math.min(Math.max(netProfitCent, 0L), carryIn) : 0L;
-        long carryAfter = lossCarryforward ? carryIn - carryApplied + Math.max(-netProfitCent, 0L) : 0L;
+        // 亏损结转累计恒结转：开关只控「本期扣不扣可分配额」，关闭期不清零累计（用户 2026-07-19 拍板）。
+        // carryIn 恒取往期累计；applied 仅开启期扣减（=min(累计, 本期盈利)）；after 恒按累计式（关闭期把老累计+本期新亏损带下去）。
+        long carryIn = Math.max(carryInCent, 0L);
+        long carryApplied = lossCarryforward ? Math.min(carryIn, Math.max(netProfitCent, 0L)) : 0L;
+        long distributable = Math.max(netProfitCent - carryApplied, 0L);
+        long carryAfter = carryIn - carryApplied + Math.max(-netProfitCent, 0L);
 
         long platformShare = distributable * platformShareBps / BPS_DENOMINATOR;
         long principalGross = distributable - platformShare;

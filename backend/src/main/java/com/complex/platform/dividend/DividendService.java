@@ -386,8 +386,8 @@ public class DividendService {
         long netProfit = revenue - cost - expense;
 
         // V303 扣除项三开关（默认全关时逐分等于 V299 现状）。
-        long carryIn = plan.lossCarryforwardEnabled()
-                ? repository.priorLossCarryforwardCent(merchantId, period.start()) : 0L;
+        // 亏损结转累计恒结转：无论本期开关都读往期累计（关闭期不扣但不清零，用户 2026-07-19 拍板）。
+        long carryIn = repository.priorLossCarryforwardCent(merchantId, period.start());
         List<DividendPayoutPort.DividendArrearsItem> arrearsItems = plan.arrearsOffsetEnabled()
                 ? payoutPort.listOutstandingReceivables(merchantId) : List.of();
         long arrearsOutstanding = arrearsItems.stream()
@@ -401,10 +401,14 @@ public class DividendService {
 
         addLine(lines, statementId, merchantId, seq, "net_profit", netProfit,
                 "净利润 = 收入 − 销货成本 − 费用（亏损期可分配额为 0，不倒扣主理人）", now);
-        if (plan.lossCarryforwardEnabled()) {
+        if (dist.carryInCent() > 0 || dist.carryAfterCent() > 0) {
+            // 累计恒结转留痕：开启期弥补（扣减可分配额）、关闭期仅结转不扣（累计保留）。
+            String note = plan.lossCarryforwardEnabled()
+                    ? "本期弥补 " + dist.carryAppliedCent() + " 分（扣减可分配额）"
+                    : "本期未启用抵扣（累计保留、不扣减）";
             addLine(lines, statementId, merchantId, seq, "loss_carryforward", -dist.carryAppliedCent(),
-                    "亏损结转：期初未弥补亏损累计 " + carryIn + " 分，本期弥补 " + dist.carryAppliedCent()
-                            + " 分，结转至下期 " + dist.carryAfterCent() + " 分（可分配额 = 净利 − 期初累计，下限 0）", now);
+                    "亏损结转：期初未弥补亏损累计 " + carryIn + " 分，" + note
+                            + "，结转至下期 " + dist.carryAfterCent() + " 分", now);
         }
         addLine(lines, statementId, merchantId, seq, "platform_share", dist.platformShareCent(),
                 "平台分成（" + plan.platformShareBps() + " 万分比，整除链截断）", now);
@@ -548,12 +552,18 @@ public class DividendService {
                                             + statement.arrearsOffsetCent() + " 分）；请作废重算后再审批");
                         }
                     }
-                    // 实发额（税后应得 − 欠款抵扣 − 留存）> 0 才给主理人挂应付。
+                    // 实发额（税后应得 − 欠款抵扣 − 留存）> 0 才给主理人挂应付（立即可付）。
                     String arApItemId = null;
                     if (statement.payoutCent() > 0) {
                         arApItemId = payoutPort.createDividendPayoutPayable(
                                 statement.principalUserId(), statement.merchantId(),
                                 statement.payoutCent(), statement.id());
+                    }
+                    // V303 发放保护线留存 → 记为欠主理人的待释放款（非平台白拿；释放为后续 R）。
+                    if (statement.reserveWithheldCent() > 0) {
+                        payoutPort.createDividendReserveWithholdingPayable(
+                                statement.principalUserId(), statement.merchantId(),
+                                statement.reserveWithheldCent(), statement.id());
                     }
                     requireTransition(repository.markApproved(statement.id(), operator, arApItemId, now), "审批通过");
                 });

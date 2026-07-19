@@ -46,7 +46,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
             "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
             "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout",
-            "termination_penalty", "deposit_refund");
+            "dividend_reserve_withheld", "termination_penalty", "deposit_refund");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -79,8 +79,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             Map.entry("turnover_rent", "营业额抽成租金"), Map.entry("cam", "公共区域维护费"),
             Map.entry("deposit", "保证金"), Map.entry("property_fee", "物业费"),
             Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"),
-            Map.entry("dividend_payout", "持股分红发放"), Map.entry("termination_penalty", "退租违约金"),
-            Map.entry("deposit_refund", "退租押金退还"));
+            Map.entry("dividend_payout", "持股分红发放"), Map.entry("dividend_reserve_withheld", "分红留存待释放"),
+            Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"));
 
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
@@ -1508,6 +1508,20 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             String principalUserId, String merchantId, long netAmountCent, String statementId) {
         ArApItemRecord item = persistDerivedArApItem(
                 "payable", principalUserId, "dividend_payout", statementId, netAmountCent, statementId, merchantId);
+        return item.id();
+    }
+
+    /**
+     * V303 发放保护线留存 → 欠主理人的待释放负债（非平台白拿）：挂应付
+     * (payable, counterparty=主理人, source_type='dividend_reserve_withheld', source_id=计算单 id 一单一挂)。
+     * 状态沿用 pending_payment（source_type 即待释放标识）；释放规则/端点/UI 为后续独立构建 R。
+     */
+    @Override
+    public String createDividendReserveWithholdingPayable(
+            String principalUserId, String merchantId, long reserveCent, String statementId) {
+        ArApItemRecord item = persistDerivedArApItem(
+                "payable", principalUserId, "dividend_reserve_withheld", statementId, reserveCent, statementId,
+                merchantId);
         return item.id();
     }
 
