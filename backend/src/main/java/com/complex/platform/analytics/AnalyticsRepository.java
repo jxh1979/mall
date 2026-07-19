@@ -446,4 +446,41 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows savedBottleQuantityDetail(java.time.Instant asOfEnd, int limit, int offset) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
+
+    // ==== KPI 统一明细·第三批（票务域）：谓词逐字同各页面既有取数 ====
+
+    /** ticket.order_count / ticket.paid_order_count 明细：票务订单（start/end 可空=全历史，与 GET /ticketing/orders 平台口径同谓词）；paidOnly=true 加 pay_status='paid'；合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows ticketOrderDetail(java.time.Instant start, java.time.Instant end, boolean paidOnly, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** ticket.pending_issue_count 明细：当前待出票订单（issue_status<>'issued'、下单时间早于截至窗末；出票状态按台账当前值），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows ticketPendingIssueDetail(java.time.Instant asOfEnd, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** amusement.session_count / amusement.session_capacity 明细：游乐场次（start/end 可空=全历史，与 GET /amusement/sessions 平台口径同谓词）；sumCapacity=true 合计Σcapacity，false 合计场次数。 */
+    default AnalyticsRecords.MetricDetailRows amusementSessionDetail(java.time.Instant start, java.time.Instant end, boolean sumCapacity, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** amusement.group_booking_count / amusement.group_reserved_capacity 明细：团体/包场预约（start/end 可空=全历史，与 GET /amusement/group-bookings 平台口径同谓词）；sumReserved=true 合计Σreserved_capacity，false 合计笔数。 */
+    default AnalyticsRecords.MetricDetailRows amusementGroupBookingDetail(java.time.Instant start, java.time.Instant end, boolean sumReserved, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** amusement.entry_count / amusement.exit_count 明细：游乐核销按方向（entry=direction='entry'或空、含全部结果；exit=direction='exit'；start/end 可空=全历史，与 GET /amusement/verifications 默认无筛选全量同谓词），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows amusementVerificationDirectionDetail(java.time.Instant start, java.time.Instant end, boolean entry, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** amusement.inspection_count 明细：安全巡检全状态（start/end 可空=全历史，与 GET /amusement/safety-inspections 平台口径同谓词），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows amusementInspectionDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** amusement.inspection_pending_rectification 明细：当前待整改巡检（COALESCE(rectification_status,overall_result)∈待整改白名单、创建时间早于截至窗末；状态按台账当前值），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows amusementInspectionPendingRectificationDetail(java.time.Instant asOfEnd, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
 }

@@ -1384,6 +1384,11 @@ public class AnalyticsService {
                         businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
                 case "bar.saved_bottle_quantity" -> repository.savedBottleQuantityDetail(
                         businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                // 第三批（票务域）余额类：状态按台账当前值，截至日仅限制下单/创建时间早于该经营日窗末。
+                case "ticket.pending_issue_count" -> repository.ticketPendingIssueDetail(
+                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                case "amusement.inspection_pending_rectification" -> repository.amusementInspectionPendingRectificationDetail(
+                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
                 default -> throw ApiException.badRequest("VALIDATION_FAILED",
                         "指标已登记但明细查询未接线：" + definition.metricKey());
             };
@@ -1424,6 +1429,16 @@ public class AnalyticsService {
             case "bar.order_amount" -> repository.barOrderDetail(windowStart, windowEnd, true, safeSize, offset);
             case "bar.saved_bottle_count" -> repository.savedBottleDetail(windowStart, windowEnd, safeSize, offset);
             case "energy.total_electricity" -> repository.electricityReadingDetail(windowStart, windowEnd, safeSize, offset);
+            // 第三批（票务域）可加类：谓词逐字同各页面既有取数（见 MetricRegistry 口径说明）。
+            case "ticket.order_count" -> repository.ticketOrderDetail(windowStart, windowEnd, false, safeSize, offset);
+            case "ticket.paid_order_count" -> repository.ticketOrderDetail(windowStart, windowEnd, true, safeSize, offset);
+            case "amusement.session_count" -> repository.amusementSessionDetail(windowStart, windowEnd, false, safeSize, offset);
+            case "amusement.session_capacity" -> repository.amusementSessionDetail(windowStart, windowEnd, true, safeSize, offset);
+            case "amusement.group_booking_count" -> repository.amusementGroupBookingDetail(windowStart, windowEnd, false, safeSize, offset);
+            case "amusement.group_reserved_capacity" -> repository.amusementGroupBookingDetail(windowStart, windowEnd, true, safeSize, offset);
+            case "amusement.entry_count" -> repository.amusementVerificationDirectionDetail(windowStart, windowEnd, true, safeSize, offset);
+            case "amusement.exit_count" -> repository.amusementVerificationDirectionDetail(windowStart, windowEnd, false, safeSize, offset);
+            case "amusement.inspection_count" -> repository.amusementInspectionDetail(windowStart, windowEnd, safeSize, offset);
             default -> throw ApiException.badRequest("VALIDATION_FAILED",
                     "指标已登记但明细查询未接线：" + definition.metricKey());
         };

@@ -13,6 +13,7 @@ import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 const TEXT = {
   title: "安全巡检/事故",
@@ -164,6 +165,11 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
 
   const pendingRectification = rows.filter(isPendingRectification).length;
   const recheckPending = rows.filter(isRecheckPending).length;
+  // KPI 改走统一明细端点（数字=明细合计同源）；失败/无权限回退本地列表计数并隐藏「完整明细」入口，体验不降级。
+  const inspectionCountKpi = useMetricKpiValue(api, "amusement.inspection_count", {});
+  const pendingRectKpi = useMetricKpiValue(api, "amusement.inspection_pending_rectification", {});
+  const inspectionCountDisplay = inspectionCountKpi.status === "ready" && inspectionCountKpi.value !== null ? inspectionCountKpi.value : rows.length;
+  const pendingRectDisplay = pendingRectKpi.status === "ready" && pendingRectKpi.value !== null ? pendingRectKpi.value : pendingRectification;
 
   const visibleRows = kpiFocus
     ? kpiFocus.subset === "pending_rectification"
@@ -368,8 +374,8 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
         ) : (
           <>
             <div className="admin-kpi-grid" data-testid="amusement-safety-summary">
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.total}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-total" onClick={() => enterKpiFocus()}>{rows.length}</button><small>巡检数</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingRectification}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-pending-rectification" onClick={() => enterKpiFocus("pending_rectification")}>{pendingRectification}</button><small>待整改数</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.total}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-total" onClick={() => enterKpiFocus()}>{inspectionCountDisplay}</button><small>巡检数{inspectionCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.inspection_count" testid="amusement-safety-metric-detail-total" /></> : null}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingRectification}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-pending-rectification" onClick={() => enterKpiFocus("pending_rectification")}>{pendingRectDisplay}</button><small>待整改数{pendingRectKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.inspection_pending_rectification" testid="amusement-safety-metric-detail-pending-rectification" /></> : null}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.recheckPending}</span><button type="button" className="admin-kpi-value" data-testid="amusement-safety-kpi-recheck-pending" onClick={() => enterKpiFocus("recheck_pending")}>{recheckPending}</button><small>待复检审批数</small></div>
               <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected ? displayNo(selected) : "-"}>{selected ? displayNo(selected) : "-"}</strong><small>{selected?.rectificationStatus ? rectificationLabel(selected.rectificationStatus) : formatBusinessStatus(selected?.status)}</small></div>
             </div>

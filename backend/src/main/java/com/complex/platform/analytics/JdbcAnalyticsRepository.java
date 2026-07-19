@@ -2222,6 +2222,235 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 """, params));
     }
 
+    // ==== KPI 统一明细·第三批（票务域）：谓词逐字同各页面既有取数 ====
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows ticketOrderDetail(Instant start, Instant end, boolean paidOnly, int limit, int offset) {
+        // start/end 可空=全历史（与 GET /ticketing/orders 平台口径 listTicketOrders 同谓词：无窗全状态）。
+        // paidOnly=true 加 pay_status='paid'（与页面「已支付」卡 orders.filter(payStatus==='paid') 同谓词）。
+        String base = paidOnly ? "pay_status = 'paid'" : null;
+        String where = composeWhere(base, start != null);
+        MapSqlParameterSource params = start == null ? pagedParams(limit, offset) : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
+                       pay_status, issue_status, created_at
+                  FROM ticket_orders
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(where), params, (rs, n) -> ticketOrderRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM ticket_orders
+                 %s
+                """.formatted(where), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows ticketPendingIssueDetail(Instant asOfEnd, int limit, int offset) {
+        // 与出票/核销追踪页「待出票」同谓词：issue_status<>'issued'（状态按台账当前值；截至日仅限制下单时间）。
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of_end", timestampWithTimeZone(asOfEnd));
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
+                       pay_status, issue_status, created_at
+                  FROM ticket_orders
+                 WHERE issue_status <> 'issued'
+                   AND created_at < :as_of_end
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> ticketOrderRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM ticket_orders
+                 WHERE issue_status <> 'issued'
+                   AND created_at < :as_of_end
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows amusementSessionDetail(Instant start, Instant end, boolean sumCapacity, int limit, int offset) {
+        // start/end 可空=全历史（与 GET /amusement/sessions 平台口径 listSessions 同谓词：无窗全状态）。
+        String where = composeWhere(null, start != null);
+        MapSqlParameterSource params = start == null ? pagedParams(limit, offset) : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, project_id, start_time, end_time, capacity, used_capacity, status, created_at
+                  FROM amusement_sessions
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(where), params, (rs, n) -> amusementSessionRow(rs));
+        String summaryExpr = sumCapacity ? "COALESCE(SUM(capacity), 0)" : "COUNT(*)";
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, %s AS summary
+                  FROM amusement_sessions
+                 %s
+                """.formatted(summaryExpr, where), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows amusementGroupBookingDetail(Instant start, Instant end, boolean sumReserved, int limit, int offset) {
+        // start/end 可空=全历史（与 GET /amusement/group-bookings 平台口径 listGroupBookings 同谓词：无窗全状态）。
+        String where = composeWhere(null, start != null);
+        MapSqlParameterSource params = start == null ? pagedParams(limit, offset) : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, project_id, session_id, booking_type, customer_name, party_size,
+                       reserved_capacity, booking_status, created_at, paid_at
+                  FROM amusement_group_bookings
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(where), params, (rs, n) -> amusementGroupBookingRow(rs));
+        String summaryExpr = sumReserved ? "COALESCE(SUM(reserved_capacity), 0)" : "COUNT(*)";
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, %s AS summary
+                  FROM amusement_group_bookings
+                 %s
+                """.formatted(summaryExpr, where), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows amusementVerificationDirectionDetail(Instant start, Instant end, boolean entry, int limit, int offset) {
+        // 与游乐核销记录页「入场/出场」卡同谓词：entry=(direction='entry' 或空)、exit=direction='exit'（含全部结果，页面不过滤 result）。
+        // start/end 可空=全历史（与页面默认无筛选全量列表一致）。
+        String base = entry ? "(direction = 'entry' OR direction IS NULL)" : "direction = 'exit'";
+        String where = composeWhere(base, start != null);
+        MapSqlParameterSource params = start == null ? pagedParams(limit, offset) : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, project_id, session_id, direction, verification_result, verified_people, created_at
+                  FROM amusement_verifications
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(where), params, (rs, n) -> amusementVerificationRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM amusement_verifications
+                 %s
+                """.formatted(where), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows amusementInspectionDetail(Instant start, Instant end, int limit, int offset) {
+        // start/end 可空=全历史（与 GET /amusement/safety-inspections 平台口径 listSafetyInspections 同谓词：无窗全状态）。
+        String where = composeWhere(null, start != null);
+        MapSqlParameterSource params = start == null ? pagedParams(limit, offset) : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, project_id, device_id, overall_result, inspection_status,
+                       rectification_status, reopen_status, created_at
+                  FROM amusement_safety_inspections
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(where), params, (rs, n) -> amusementSafetyRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM amusement_safety_inspections
+                 %s
+                """.formatted(where), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows amusementInspectionPendingRectificationDetail(Instant asOfEnd, int limit, int offset) {
+        // 与安全巡检页「待整改」同谓词：COALESCE(rectification_status,overall_result)∈待整改白名单（状态按台账当前值；截至日仅限制创建时间）。
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of_end", timestampWithTimeZone(asOfEnd));
+        String predicate = """
+                WHERE COALESCE(rectification_status, overall_result) IN ('pending', 'rectification_pending', 'pending_rectification')
+                   AND created_at < :as_of_end
+                """;
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, project_id, device_id, overall_result, inspection_status,
+                       rectification_status, reopen_status, created_at
+                  FROM amusement_safety_inspections
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(predicate), params, (rs, n) -> amusementSafetyRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM amusement_safety_inspections
+                 %s
+                """.formatted(predicate), params));
+    }
+
+    /** 组装可选经营日窗谓词：base=附加基础条件（可空）；hasWindow=true 追加 created_at 区间。均空则返回空串（全表）。 */
+    private static String composeWhere(String base, boolean hasWindow) {
+        String window = hasWindow ? "created_at >= :start AND created_at < :end" : null;
+        if (base == null && window == null) {
+            return "";
+        }
+        if (base != null && window != null) {
+            return "WHERE " + base + " AND " + window;
+        }
+        return "WHERE " + (base != null ? base : window);
+    }
+
+    private java.util.Map<String, Object> ticketOrderRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("orderNo", rs.getString("order_no"));
+        row.put("ticketTypeId", rs.getString("ticket_type_id"));
+        row.put("quantity", rs.getInt("quantity"));
+        row.put("salesChannel", rs.getString("sales_channel"));
+        row.put("amountCent", rs.getLong("amount_cent"));
+        row.put("payStatus", rs.getString("pay_status"));
+        row.put("issueStatus", rs.getString("issue_status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> amusementSessionRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("projectId", rs.getString("project_id"));
+        row.put("startTime", instant(rs, "start_time"));
+        row.put("endTime", instant(rs, "end_time"));
+        row.put("capacity", rs.getInt("capacity"));
+        row.put("usedCapacity", rs.getInt("used_capacity"));
+        row.put("status", rs.getString("status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> amusementGroupBookingRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("projectId", rs.getString("project_id"));
+        row.put("sessionId", rs.getString("session_id"));
+        row.put("bookingType", rs.getString("booking_type"));
+        row.put("customerName", rs.getString("customer_name"));
+        row.put("partySize", rs.getInt("party_size"));
+        row.put("reservedCapacity", rs.getInt("reserved_capacity"));
+        row.put("bookingStatus", rs.getString("booking_status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        row.put("paidAt", instant(rs, "paid_at"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> amusementVerificationRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("projectId", rs.getString("project_id"));
+        row.put("sessionId", rs.getString("session_id"));
+        row.put("direction", rs.getString("direction"));
+        row.put("verificationResult", rs.getString("verification_result"));
+        row.put("verifiedPeople", rs.getInt("verified_people"));
+        row.put("createdAt", instant(rs, "created_at"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> amusementSafetyRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("projectId", rs.getString("project_id"));
+        row.put("deviceId", rs.getString("device_id"));
+        row.put("overallResult", rs.getString("overall_result"));
+        row.put("inspectionStatus", rs.getString("inspection_status"));
+        row.put("rectificationStatus", rs.getString("rectification_status"));
+        row.put("reopenStatus", rs.getString("reopen_status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        return row;
+    }
+
     private java.util.Map<String, Object> barOrderRow(java.sql.ResultSet rs) throws java.sql.SQLException {
         java.util.Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", rs.getString("id"));

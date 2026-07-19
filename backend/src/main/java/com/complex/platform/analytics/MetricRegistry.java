@@ -297,7 +297,263 @@ public final class MetricRegistry {
                 "id",
                 savedBottleColumns(),
                 null));
+
+        // ==== 第三批（票务域，2026-07-19）：谓词逐字抄各页面现数字的既有取数（不自造口径）====
+        // 售票域（ADM-TKT-003 出票与核销追踪）：数字来自 GET /ticketing/orders 平台口径全量列表。
+        register(registry, new MetricDefinition(
+                "ticket.order_count",
+                "售票订单数",
+                TYPE_ADDITIVE,
+                "笔",
+                "票务订单逐笔计数（含全部状态，与出票/核销追踪页「订单」卡一致）。可加口径=区间求和："
+                        + "按下单时间落票务经营日窗计数；不传日期=全部历史（与页面 GET /ticketing/orders 平台口径全量列表一致）。",
+                "票务订单台账（ticket_orders，实时查询）。",
+                "ticket.order.read",
+                "ticketing",
+                true,
+                false,
+                "ADM-TKT-003",
+                "ADM-TKT-003",
+                "id",
+                ticketOrderColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "ticket.paid_order_count",
+                "已支付订单数",
+                TYPE_ADDITIVE,
+                "笔",
+                "已支付票务订单逐笔计数（pay_status='paid'，与出票/核销追踪页「已支付」卡一致；支付态按台账当前值）。"
+                        + "可加口径=区间求和：按下单时间落票务经营日窗计数；不传日期=全部历史。",
+                "票务订单台账（ticket_orders，实时查询）。",
+                "ticket.order.read",
+                "ticketing",
+                true,
+                false,
+                "ADM-TKT-003",
+                "ADM-TKT-003",
+                "id",
+                ticketOrderColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "ticket.pending_issue_count",
+                "待出票订单数",
+                TYPE_BALANCE,
+                "笔",
+                "当前待出票订单数=出票状态非「已出票」（issue_status<>'issued'）的票务订单计数（与出票/核销追踪页「待出票」卡一致）。"
+                        + "余额口径=区间末值：取结束日期（缺省=当前票务经营日）为截至日，起始日期不参与；仅限制下单时间早于截至日窗末。"
+                        + "注意：出票状态按台账当前值计，历史截至日仅影响下单时间截止。",
+                "票务订单台账（ticket_orders，实时查询）。",
+                "ticket.order.read",
+                "ticketing",
+                false,
+                false,
+                "ADM-TKT-003",
+                "ADM-TKT-003",
+                "id",
+                ticketOrderColumns(),
+                null));
+
+        // 游乐场次域（ADM-AMU-001 项目与场次）：数字来自 GET /amusement/sessions 平台口径全量列表。
+        register(registry, new MetricDefinition(
+                "amusement.session_count",
+                "游乐场次数",
+                TYPE_ADDITIVE,
+                "场",
+                "游乐场次逐条计数（含全部状态，与项目与场次页「场次」卡一致）。可加口径=区间求和："
+                        + "按创建时间落游乐经营日窗计数；不传日期=全部历史（与页面 GET /amusement/sessions 平台口径全量列表一致）。",
+                "游乐场次台账（amusement_sessions，实时查询）。",
+                "amusement.session.view",
+                "amusement",
+                true,
+                false,
+                "ADM-AMU-001",
+                "ADM-AMU-001",
+                "id",
+                sessionColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "amusement.session_capacity",
+                "游乐场次总容量",
+                TYPE_ADDITIVE,
+                "人次",
+                "Σ场次容量=全部游乐场次 capacity 直加（与项目与场次页「总容量」卡一致）。可加口径=区间求和："
+                        + "按创建时间落游乐经营日窗；不传日期=全部历史。容量为建场即定，随场次集合直加。",
+                "游乐场次台账（amusement_sessions，实时查询）。",
+                "amusement.session.view",
+                "amusement",
+                true,
+                false,
+                "ADM-AMU-001",
+                "ADM-AMU-001",
+                "id",
+                sessionColumns(),
+                null));
+
+        // 团体/包场域（ADM-AMU-002 团体/包场）：数字来自 GET /amusement/group-bookings 平台口径列表。
+        register(registry, new MetricDefinition(
+                "amusement.group_booking_count",
+                "团体预约数",
+                TYPE_ADDITIVE,
+                "笔",
+                "团体/包场预约逐笔计数（含全部状态，与团体/包场页「团体预约」卡一致）。可加口径=区间求和："
+                        + "按下单时间落游乐经营日窗计数；不传日期=全部历史。注意：页面列表默认取首页（size=200），"
+                        + "本合计为全量真实计数，超首页时本合计更完整。",
+                "团体/包场预约台账（amusement_group_bookings，实时查询）。",
+                "amusement.group_booking.view",
+                "amusement",
+                true,
+                false,
+                "ADM-AMU-002",
+                "ADM-AMU-002",
+                "id",
+                groupBookingColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "amusement.group_reserved_capacity",
+                "团体占用容量",
+                TYPE_ADDITIVE,
+                "人次",
+                "Σ占用容量=全部团体/包场预约 reserved_capacity 直加（与团体/包场页「容量占用」卡一致）。"
+                        + "可加口径=区间求和：按下单时间落游乐经营日窗；不传日期=全部历史。",
+                "团体/包场预约台账（amusement_group_bookings，实时查询）。",
+                "amusement.group_booking.view",
+                "amusement",
+                true,
+                false,
+                "ADM-AMU-002",
+                "ADM-AMU-002",
+                "id",
+                groupBookingColumns(),
+                null));
+
+        // 游乐核销域（ADM-AMU-005 游乐核销记录）：数字来自 GET /amusement/verifications 平台口径列表（默认无筛选=全量）。
+        register(registry, new MetricDefinition(
+                "amusement.entry_count",
+                "游乐入场核销数",
+                TYPE_ADDITIVE,
+                "次",
+                "入场方向核销逐条计数（direction='entry' 或空，含成功/失败全部结果，与游乐核销记录页「入场」卡一致）。"
+                        + "可加口径=区间求和：按核销时间落游乐经营日窗计数；不传日期=全部历史（与页面默认无筛选全量列表一致）。",
+                "游乐核销台账（amusement_verifications，实时查询）。",
+                "amusement.verification.view",
+                "amusement",
+                true,
+                false,
+                "ADM-AMU-005",
+                "ADM-AMU-005",
+                "id",
+                verificationColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "amusement.exit_count",
+                "游乐出场核销数",
+                TYPE_ADDITIVE,
+                "次",
+                "出场方向核销逐条计数（direction='exit'，与游乐核销记录页「出场」卡一致）。"
+                        + "可加口径=区间求和：按核销时间落游乐经营日窗计数；不传日期=全部历史。",
+                "游乐核销台账（amusement_verifications，实时查询）。",
+                "amusement.verification.view",
+                "amusement",
+                true,
+                false,
+                "ADM-AMU-005",
+                "ADM-AMU-005",
+                "id",
+                verificationColumns(),
+                null));
+
+        // 安全巡检域（ADM-AMU-003 安全巡检/事故）：数字来自 GET /amusement/safety-inspections 平台口径全量列表。
+        register(registry, new MetricDefinition(
+                "amusement.inspection_count",
+                "安全巡检数",
+                TYPE_ADDITIVE,
+                "次",
+                "安全巡检逐条计数（含全部状态，与安全巡检/事故页「巡检数」卡一致）。可加口径=区间求和："
+                        + "按创建时间落游乐经营日窗计数；不传日期=全部历史。",
+                "安全巡检台账（amusement_safety_inspections，实时查询）。",
+                "amusement.safety_inspection.view",
+                "amusement",
+                true,
+                false,
+                "ADM-AMU-003",
+                "ADM-AMU-003",
+                "id",
+                safetyInspectionColumns(),
+                null));
+        register(registry, new MetricDefinition(
+                "amusement.inspection_pending_rectification",
+                "待整改巡检数",
+                TYPE_BALANCE,
+                "次",
+                "当前待整改巡检数=整改状态（缺省回落总体结果）∈{pending,rectification_pending,pending_rectification} 的巡检计数"
+                        + "（与安全巡检/事故页「待整改」卡一致）。余额口径=区间末值：取结束日期（缺省=当前游乐经营日）为截至日，"
+                        + "起始日期不参与；仅限制创建时间早于截至日窗末。注意：整改状态按台账当前值计。",
+                "安全巡检台账（amusement_safety_inspections，实时查询）。",
+                "amusement.safety_inspection.view",
+                "amusement",
+                false,
+                false,
+                "ADM-AMU-003",
+                "ADM-AMU-003",
+                "id",
+                safetyInspectionColumns(),
+                null));
         return registry;
+    }
+
+    private static List<MetricColumn> ticketOrderColumns() {
+        return List.of(
+                new MetricColumn("orderNo", "订单号"),
+                new MetricColumn("ticketTypeId", "票种"),
+                new MetricColumn("quantity", "数量"),
+                new MetricColumn("salesChannel", "销售渠道"),
+                new MetricColumn("amountCent", "金额（分）"),
+                new MetricColumn("payStatus", "支付状态"),
+                new MetricColumn("issueStatus", "出票状态"),
+                new MetricColumn("createdAt", "下单时间"));
+    }
+
+    private static List<MetricColumn> sessionColumns() {
+        return List.of(
+                new MetricColumn("projectId", "项目"),
+                new MetricColumn("startTime", "开始时间"),
+                new MetricColumn("endTime", "结束时间"),
+                new MetricColumn("capacity", "容量"),
+                new MetricColumn("usedCapacity", "已用"),
+                new MetricColumn("status", "状态"),
+                new MetricColumn("createdAt", "创建时间"));
+    }
+
+    private static List<MetricColumn> groupBookingColumns() {
+        return List.of(
+                new MetricColumn("bookingType", "类型"),
+                new MetricColumn("customerName", "客户"),
+                new MetricColumn("partySize", "人数"),
+                new MetricColumn("reservedCapacity", "占用容量"),
+                new MetricColumn("bookingStatus", "状态"),
+                new MetricColumn("createdAt", "下单时间"),
+                new MetricColumn("paidAt", "确认时间"));
+    }
+
+    private static List<MetricColumn> verificationColumns() {
+        return List.of(
+                new MetricColumn("projectId", "项目"),
+                new MetricColumn("sessionId", "场次"),
+                new MetricColumn("direction", "方向"),
+                new MetricColumn("verificationResult", "核销结果"),
+                new MetricColumn("verifiedPeople", "核销人数"),
+                new MetricColumn("createdAt", "核销时间"));
+    }
+
+    private static List<MetricColumn> safetyInspectionColumns() {
+        return List.of(
+                new MetricColumn("projectId", "项目"),
+                new MetricColumn("deviceId", "设备"),
+                new MetricColumn("overallResult", "总体结果"),
+                new MetricColumn("inspectionStatus", "巡检状态"),
+                new MetricColumn("rectificationStatus", "整改状态"),
+                new MetricColumn("reopenStatus", "复检/重开状态"),
+                new MetricColumn("createdAt", "创建时间"));
     }
 
     private static List<MetricColumn> barOrderColumns() {

@@ -257,6 +257,119 @@ class MetricDetailConsistencyJdbcIntegrationTests {
         assertThat(tableSum).isEqualByComparingTo(after.summaryValue());
     }
 
+    // ==== 第三批（票务域）一致性：summaryValue == 逐页明细合计，且与页面旧谓词交叉 ====
+
+    @Test
+    void ticketOrderCountSummaryEqualsPagedDetailCount() {
+        BigDecimal baseline = repository.ticketOrderDetail(null, null, false, 1, 0).summaryValue();
+        insertTicketOrderIssue("to_cnt_1", "paid", "issued");
+        insertTicketOrderIssue("to_cnt_2", "pending", "pending");
+
+        MetricDetailRows after = repository.ticketOrderDetail(null, null, false, 200, 0);
+        assertThat(after.summaryValue().subtract(baseline)).isEqualByComparingTo("2");
+        // 数字=明细合计：翻完所有页,行数 == summaryValue（计数类）。
+        assertThat(collectAllPages((limit, offset) -> repository.ticketOrderDetail(null, null, false, limit, offset)))
+                .hasSize((int) after.totalRows());
+        assertThat(BigDecimal.valueOf(after.totalRows())).isEqualByComparingTo(after.summaryValue());
+    }
+
+    @Test
+    void ticketPaidOrderCountCountsOnlyPaidAndCrossesPagePredicate() {
+        BigDecimal baseline = repository.ticketOrderDetail(null, null, true, 1, 0).summaryValue();
+        insertTicketOrderIssue("to_paid_1", "paid", "issued");
+        insertTicketOrderIssue("to_paid_2", "paid", "pending");
+        insertTicketOrderIssue("to_paid_unpaid", "pending", "pending"); // 未支付 → 不进口径
+
+        MetricDetailRows after = repository.ticketOrderDetail(null, null, true, 200, 0);
+        assertThat(after.summaryValue().subtract(baseline)).isEqualByComparingTo("2");
+        // 与出票追踪页「已支付」旧谓词交叉：ticket_orders WHERE pay_status='paid'。
+        BigDecimal tableCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ticket_orders WHERE pay_status = 'paid'", Map.of(), BigDecimal.class);
+        assertThat(tableCount).isEqualByComparingTo(after.summaryValue());
+    }
+
+    @Test
+    void ticketPendingIssueBalanceCountsNonIssuedAsOfEnd() {
+        Instant asOfEnd = businessDayResolver.endInstant("ticketing", businessDayResolver.businessDate("ticketing", Instant.now()));
+        BigDecimal baseline = repository.ticketPendingIssueDetail(asOfEnd, 1, 0).summaryValue();
+        insertTicketOrderIssue("to_pend_1", "paid", "pending");
+        insertTicketOrderIssue("to_pend_2", "pending", "pending");
+        insertTicketOrderIssue("to_pend_done", "paid", "issued"); // 已出票 → 不进口径
+
+        MetricDetailRows after = repository.ticketPendingIssueDetail(asOfEnd, 200, 0);
+        assertThat(after.summaryValue().subtract(baseline)).isEqualByComparingTo("2");
+        assertThat(collectAllPages((limit, offset) -> repository.ticketPendingIssueDetail(asOfEnd, limit, offset)))
+                .hasSize((int) after.totalRows());
+    }
+
+    @Test
+    void amusementSessionCountAndCapacitySummaryEqualsPagedDetail() {
+        insertAmusementProject("proj_sess");
+        BigDecimal baseCount = repository.amusementSessionDetail(null, null, false, 1, 0).summaryValue();
+        BigDecimal baseCap = repository.amusementSessionDetail(null, null, true, 1, 0).summaryValue();
+        insertAmusementSession("ses_1", "proj_sess", 100, "scheduled");
+        insertAmusementSession("ses_2", "proj_sess", 50, "open");
+
+        MetricDetailRows count = repository.amusementSessionDetail(null, null, false, 200, 0);
+        assertThat(count.summaryValue().subtract(baseCount)).isEqualByComparingTo("2");
+        MetricDetailRows cap = repository.amusementSessionDetail(null, null, true, 200, 0);
+        assertThat(cap.summaryValue().subtract(baseCap)).isEqualByComparingTo("150");
+        // 数字=明细合计：翻完所有页,Σcapacity == summaryValue。
+        assertThat(sumLong(collectAllPages((limit, offset) -> repository.amusementSessionDetail(null, null, true, limit, offset)), "capacity"))
+                .isEqualByComparingTo(cap.summaryValue());
+    }
+
+    @Test
+    void amusementGroupBookingCountAndReservedSummaryEqualsPagedDetail() {
+        insertAmusementProject("proj_grp");
+        insertAmusementSession("ses_grp", "proj_grp", 200, "scheduled");
+        BigDecimal baseCount = repository.amusementGroupBookingDetail(null, null, false, 1, 0).summaryValue();
+        BigDecimal baseReserved = repository.amusementGroupBookingDetail(null, null, true, 1, 0).summaryValue();
+        insertAmusementGroupBooking("gb_1", "proj_grp", "ses_grp", 20, "approved");
+        insertAmusementGroupBooking("gb_2", "proj_grp", "ses_grp", 30, "pending_approval");
+
+        MetricDetailRows count = repository.amusementGroupBookingDetail(null, null, false, 200, 0);
+        assertThat(count.summaryValue().subtract(baseCount)).isEqualByComparingTo("2");
+        MetricDetailRows reserved = repository.amusementGroupBookingDetail(null, null, true, 200, 0);
+        assertThat(reserved.summaryValue().subtract(baseReserved)).isEqualByComparingTo("50");
+        assertThat(sumLong(collectAllPages((limit, offset) -> repository.amusementGroupBookingDetail(null, null, true, limit, offset)), "reservedCapacity"))
+                .isEqualByComparingTo(reserved.summaryValue());
+    }
+
+    @Test
+    void amusementEntryExitCountsSplitByDirection() {
+        insertAmusementProject("proj_ver");
+        insertAmusementSession("ses_ver", "proj_ver", 300, "open");
+        BigDecimal baseEntry = repository.amusementVerificationDirectionDetail(null, null, true, 1, 0).summaryValue();
+        BigDecimal baseExit = repository.amusementVerificationDirectionDetail(null, null, false, 1, 0).summaryValue();
+        insertAmusementVerification("av_e1", "proj_ver", "ses_ver", "entry");
+        insertAmusementVerification("av_e2", "proj_ver", "ses_ver", "entry");
+        insertAmusementVerification("av_x1", "proj_ver", "ses_ver", "exit");
+
+        MetricDetailRows entry = repository.amusementVerificationDirectionDetail(null, null, true, 200, 0);
+        assertThat(entry.summaryValue().subtract(baseEntry)).isEqualByComparingTo("2");
+        MetricDetailRows exit = repository.amusementVerificationDirectionDetail(null, null, false, 200, 0);
+        assertThat(exit.summaryValue().subtract(baseExit)).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void amusementInspectionCountAndPendingRectificationSummaryEqualsPagedDetail() {
+        insertAmusementProject("proj_insp");
+        insertAmusementSafetyTemplate("tpl_insp");
+        Instant asOfEnd = businessDayResolver.endInstant("amusement", businessDayResolver.businessDate("amusement", Instant.now()));
+        BigDecimal baseCount = repository.amusementInspectionDetail(null, null, 1, 0).summaryValue();
+        BigDecimal basePending = repository.amusementInspectionPendingRectificationDetail(asOfEnd, 1, 0).summaryValue();
+        insertAmusementSafetyInspection("insp_1", "proj_insp", "tpl_insp", "pass", "pending_rectification");
+        insertAmusementSafetyInspection("insp_2", "proj_insp", "tpl_insp", "pass", "resolved"); // 已整改 → 不进待整改口径
+
+        MetricDetailRows count = repository.amusementInspectionDetail(null, null, 200, 0);
+        assertThat(count.summaryValue().subtract(baseCount)).isEqualByComparingTo("2");
+        MetricDetailRows pending = repository.amusementInspectionPendingRectificationDetail(asOfEnd, 200, 0);
+        assertThat(pending.summaryValue().subtract(basePending)).isEqualByComparingTo("1");
+        assertThat(collectAllPages((limit, offset) -> repository.amusementInspectionPendingRectificationDetail(asOfEnd, limit, offset)))
+                .hasSize((int) pending.totalRows());
+    }
+
     // ---- helpers ----
 
     private interface Pager {
@@ -414,5 +527,74 @@ class MetricDetailConsistencyJdbcIntegrationTests {
                 VALUES (:id, 'cus_mdc', 'bar-main', 'ii_mdc', 'MDC 威士忌', :initial, :remaining, '瓶', :status, :at, :at)
                 """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("initial", initialQuantity)
                 .addValue("remaining", remainingQuantity).addValue("status", status).addValue("at", dayTs()));
+    }
+
+    // ---- 第三批（票务域）种子：均落 DAY 10:00Z（票务/游乐经营日窗内，日切 04:00 覆盖） ----
+
+    private void insertTicketOrderIssue(String id, String payStatus, String issueStatus) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
+                VALUES ('tt_mdc', 'MDC Pass', 'weekday_weekend_holiday', FALSE, 'published', :at, :at)
+                ON CONFLICT (id) DO NOTHING
+                """, Map.of("at", dayTs()));
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
+                    pay_status, issue_status, status, created_at, updated_at)
+                VALUES (:id, :id, 'tt_mdc', 1, 'online', 1000, :pay_status, :issue_status, 'created', :at, :at)
+                """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("pay_status", payStatus)
+                .addValue("issue_status", issueStatus).addValue("at", dayTs()));
+    }
+
+    private void insertAmusementProject(String id) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_projects (id, project_name, capacity, open_status, eligibility_rule_json, created_at, updated_at)
+                VALUES (:id, :id, 500, 'open', '{}'::jsonb, :at, :at)
+                """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("at", dayTs()));
+    }
+
+    private void insertAmusementSession(String id, String projectId, int capacity, String status) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_sessions (id, project_id, start_time, end_time, capacity, used_capacity, status, created_at, updated_at)
+                VALUES (:id, :project_id, :start, :end, :capacity, 0, :status, :at, :at)
+                """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("project_id", sid(projectId))
+                .addValue("start", dayTs()).addValue("end", java.sql.Timestamp.from(DAY.atTime(12, 0).toInstant(java.time.ZoneOffset.UTC)))
+                .addValue("capacity", capacity).addValue("status", status).addValue("at", dayTs()));
+    }
+
+    private void insertAmusementGroupBooking(String id, String projectId, String sessionId, int reservedCapacity, String status) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_group_bookings (id, project_id, session_id, booking_type, customer_name,
+                        party_size, reserved_capacity, booking_status, created_at, updated_at)
+                VALUES (:id, :project_id, :session_id, 'group', 'MDC 团客', :party, :reserved, :status, :at, :at)
+                """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("project_id", sid(projectId))
+                .addValue("session_id", sid(sessionId)).addValue("party", reservedCapacity).addValue("reserved", reservedCapacity)
+                .addValue("status", status).addValue("at", dayTs()));
+    }
+
+    private void insertAmusementVerification(String id, String projectId, String sessionId, String direction) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_verifications (id, project_id, session_id, credential_payload,
+                        verification_result, verified_people, direction, created_at)
+                VALUES (:id, :project_id, :session_id, :id, 'success', 1, :direction, :at)
+                """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("project_id", sid(projectId))
+                .addValue("session_id", sid(sessionId)).addValue("direction", direction).addValue("at", dayTs()));
+    }
+
+    private void insertAmusementSafetyTemplate(String id) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_safety_templates (id, template_name, items_json, status, created_at, updated_at)
+                VALUES (:id, :id, '[{"item":"check"}]'::jsonb, 'active', :at, :at)
+                """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("at", dayTs()));
+    }
+
+    private void insertAmusementSafetyInspection(String id, String projectId, String templateId, String overallResult, String rectificationStatus) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_safety_inspections (id, project_id, template_id, items_json, overall_result,
+                        inspection_status, rectification_status, reopen_status, inspected_at, created_at, updated_at)
+                VALUES (:id, :project_id, :template_id, '[{"item":"check"}]'::jsonb, :overall,
+                        'submitted', :rectification, 'none', :at, :at, :at)
+                """, new MapSqlParameterSource().addValue("id", sid(id)).addValue("project_id", sid(projectId))
+                .addValue("template_id", sid(templateId)).addValue("overall", overallResult)
+                .addValue("rectification", rectificationStatus).addValue("at", dayTs()));
     }
 }

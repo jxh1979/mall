@@ -24,6 +24,18 @@ const CATALOG: Array<{ key: string; name: string; sourcePageId: string; sourceLa
   { key: "bar.saved_bottle_count", name: "存酒登记总数", sourcePageId: "ADM-BAR-003", sourceLabel: "存酒" },
   { key: "bar.saved_bottle_stored", name: "在存存酒", sourcePageId: "ADM-BAR-003", sourceLabel: "存酒" },
   { key: "bar.saved_bottle_quantity", name: "存酒剩余数量", sourcePageId: "ADM-BAR-003", sourceLabel: "存酒" },
+  // 第三批（票务域）
+  { key: "ticket.order_count", name: "售票订单数", sourcePageId: "ADM-TKT-003", sourceLabel: "出票与核销追踪" },
+  { key: "ticket.paid_order_count", name: "已支付订单数", sourcePageId: "ADM-TKT-003", sourceLabel: "出票与核销追踪" },
+  { key: "ticket.pending_issue_count", name: "待出票订单数", sourcePageId: "ADM-TKT-003", sourceLabel: "出票与核销追踪" },
+  { key: "amusement.session_count", name: "游乐场次数", sourcePageId: "ADM-AMU-001", sourceLabel: "项目与场次" },
+  { key: "amusement.session_capacity", name: "游乐场次总容量", sourcePageId: "ADM-AMU-001", sourceLabel: "项目与场次" },
+  { key: "amusement.group_booking_count", name: "团体预约数", sourcePageId: "ADM-AMU-002", sourceLabel: "团体/包场" },
+  { key: "amusement.group_reserved_capacity", name: "团体占用容量", sourcePageId: "ADM-AMU-002", sourceLabel: "团体/包场" },
+  { key: "amusement.entry_count", name: "游乐入场核销数", sourcePageId: "ADM-AMU-005", sourceLabel: "游乐核销记录" },
+  { key: "amusement.exit_count", name: "游乐出场核销数", sourcePageId: "ADM-AMU-005", sourceLabel: "游乐核销记录" },
+  { key: "amusement.inspection_count", name: "安全巡检数", sourcePageId: "ADM-AMU-003", sourceLabel: "安全巡检/事故" },
+  { key: "amusement.inspection_pending_rectification", name: "待整改巡检数", sourcePageId: "ADM-AMU-003", sourceLabel: "安全巡检/事故" },
 ];
 
 const VALUE_TYPE_LABELS: Record<string, string> = { additive: "可加（区间求和）", ratio: "比率（分子/分母）", balance: "余额（区间末值）" };

@@ -281,6 +281,98 @@ class MetricDetailServiceTests {
         verify(repository).savedBottleQuantityDetail(eq(Instant.parse("2026-07-18T04:00:00Z")), eq(20), eq(0));
     }
 
+    // ==== 第三批（票务域）分派 ====
+
+    @Test
+    void ticketOrderCountAndPaidWithoutRangeQueryFullHistory() {
+        when(repository.ticketOrderDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "to1", "amountCent", 10000L)), 5, new BigDecimal("5")));
+
+        MetricDetailResponse count = service.metricDetail("ticket.order_count", null, null, null, 1, 20);
+        assertThat(count.summaryValue()).isEqualByComparingTo("5");
+        assertThat(count.unit()).isEqualTo("笔");
+        assertThat(count.from()).isNull();
+        assertThat(count.to()).isNull();
+        assertThat(count.traceLinkPageId()).isEqualTo("ADM-TKT-003");
+        verify(repository).ticketOrderDetail(eq(null), eq(null), eq(false), eq(20), eq(0));
+
+        service.metricDetail("ticket.paid_order_count", null, null, null, 1, 20);
+        verify(repository).ticketOrderDetail(eq(null), eq(null), eq(true), eq(20), eq(0));
+    }
+
+    @Test
+    void ticketPendingIssueBalancePassesTicketingWindowEndAsOf() {
+        when(repository.ticketPendingIssueDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "to-pend")), 2, new BigDecimal("2")));
+
+        MetricDetailResponse response = service.metricDetail(
+                "ticket.pending_issue_count", null, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-10"), 1, 20);
+
+        // 余额类=区间末值：as-of=to 的票务经营日窗末（单测回落全局 04:00 → 07-11 04:00Z），from 不参与。
+        verify(repository).ticketPendingIssueDetail(eq(Instant.parse("2026-07-11T04:00:00Z")), eq(20), eq(0));
+        assertThat(response.from()).isNull();
+        assertThat(response.to()).isEqualTo(LocalDate.parse("2026-07-10"));
+        assertThat(response.valueType()).isEqualTo("balance");
+    }
+
+    @Test
+    void amusementSessionCountAndCapacityDispatchBySumFlag() {
+        when(repository.amusementSessionDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "s1", "capacity", 100)), 3, new BigDecimal("3")));
+
+        MetricDetailResponse count = service.metricDetail("amusement.session_count", null, null, null, 1, 20);
+        assertThat(count.summaryValue()).isEqualByComparingTo("3");
+        assertThat(count.unit()).isEqualTo("场");
+        verify(repository).amusementSessionDetail(eq(null), eq(null), eq(false), eq(20), eq(0));
+
+        service.metricDetail("amusement.session_capacity", null, null, null, 1, 20);
+        verify(repository).amusementSessionDetail(eq(null), eq(null), eq(true), eq(20), eq(0));
+    }
+
+    @Test
+    void amusementGroupBookingCountAndReservedDispatchBySumFlag() {
+        when(repository.amusementGroupBookingDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "g1", "reservedCapacity", 20)), 4, new BigDecimal("4")));
+
+        service.metricDetail("amusement.group_booking_count", null, null, null, 1, 20);
+        verify(repository).amusementGroupBookingDetail(eq(null), eq(null), eq(false), eq(20), eq(0));
+
+        service.metricDetail("amusement.group_reserved_capacity", null, null, null, 1, 20);
+        verify(repository).amusementGroupBookingDetail(eq(null), eq(null), eq(true), eq(20), eq(0));
+    }
+
+    @Test
+    void amusementEntryExitDispatchByDirectionFlag() {
+        when(repository.amusementVerificationDirectionDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "v1")), 7, new BigDecimal("7")));
+
+        MetricDetailResponse entry = service.metricDetail("amusement.entry_count", null, null, null, 1, 20);
+        assertThat(entry.unit()).isEqualTo("次");
+        verify(repository).amusementVerificationDirectionDetail(eq(null), eq(null), eq(true), eq(20), eq(0));
+
+        service.metricDetail("amusement.exit_count", null, null, null, 1, 20);
+        verify(repository).amusementVerificationDirectionDetail(eq(null), eq(null), eq(false), eq(20), eq(0));
+    }
+
+    @Test
+    void amusementInspectionCountAdditiveAndPendingRectificationBalance() {
+        when(repository.amusementInspectionDetail(any(), any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "i1")), 6, new BigDecimal("6")));
+        when(repository.amusementInspectionPendingRectificationDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "i2")), 2, new BigDecimal("2")));
+
+        MetricDetailResponse count = service.metricDetail("amusement.inspection_count", null, null, null, 1, 20);
+        assertThat(count.summaryValue()).isEqualByComparingTo("6");
+        verify(repository).amusementInspectionDetail(eq(null), eq(null), eq(20), eq(0));
+
+        // 余额类缺省 as-of=当前经营日 → 窗末 07-18 04:00Z（单测回落全局日切）。
+        MetricDetailResponse pending = service.metricDetail("amusement.inspection_pending_rectification", null, null, null, 1, 20);
+        assertThat(pending.summaryValue()).isEqualByComparingTo("2");
+        assertThat(pending.to()).isEqualTo(CURRENT_BUSINESS_DAY);
+        assertThat(pending.valueType()).isEqualTo("balance");
+        verify(repository).amusementInspectionPendingRectificationDetail(eq(Instant.parse("2026-07-18T04:00:00Z")), eq(20), eq(0));
+    }
+
     @Test
     void registryFirstBatchCoversThreeValueTypesWithPermissionsAndCalibers() {
         assertThat(MetricRegistry.all()).extracting(MetricRegistry.MetricDefinition::metricKey)
@@ -288,7 +380,13 @@ class MetricDetailServiceTests {
                         "energy.electricity_per_sqm", "finance.ar_balance",
                         // 第二批（酒吧域）
                         "revenue.bar", "bar.order_count", "bar.order_amount", "bar.open_order_count",
-                        "bar.saved_bottle_count", "bar.saved_bottle_stored", "bar.saved_bottle_quantity");
+                        "bar.saved_bottle_count", "bar.saved_bottle_stored", "bar.saved_bottle_quantity",
+                        // 第三批（票务域）
+                        "ticket.order_count", "ticket.paid_order_count", "ticket.pending_issue_count",
+                        "amusement.session_count", "amusement.session_capacity",
+                        "amusement.group_booking_count", "amusement.group_reserved_capacity",
+                        "amusement.entry_count", "amusement.exit_count",
+                        "amusement.inspection_count", "amusement.inspection_pending_rectification");
         assertThat(MetricRegistry.all()).extracting(MetricRegistry.MetricDefinition::valueType)
                 .contains(MetricRegistry.TYPE_ADDITIVE, MetricRegistry.TYPE_RATIO, MetricRegistry.TYPE_BALANCE);
         assertThat(MetricRegistry.require("finance.recon_diff_count").permission()).isEqualTo("finance.reconciliation.view");
@@ -300,6 +398,14 @@ class MetricDetailServiceTests {
         assertThat(MetricRegistry.require("bar.open_order_count").permission()).isEqualTo("bar.order.view");
         assertThat(MetricRegistry.require("bar.saved_bottle_count").permission()).isEqualTo("bar.saved_bottle.manage");
         assertThat(MetricRegistry.require("bar.saved_bottle_quantity").permission()).isEqualTo("bar.saved_bottle.manage");
+        // 第三批权限=各页既有域权限（宽权限+登记项二次校验范式）。
+        assertThat(MetricRegistry.require("ticket.order_count").permission()).isEqualTo("ticket.order.read");
+        assertThat(MetricRegistry.require("ticket.pending_issue_count").permission()).isEqualTo("ticket.order.read");
+        assertThat(MetricRegistry.require("amusement.session_count").permission()).isEqualTo("amusement.session.view");
+        assertThat(MetricRegistry.require("amusement.group_booking_count").permission()).isEqualTo("amusement.group_booking.view");
+        assertThat(MetricRegistry.require("amusement.entry_count").permission()).isEqualTo("amusement.verification.view");
+        assertThat(MetricRegistry.require("amusement.inspection_pending_rectification").permission())
+                .isEqualTo("amusement.safety_inspection.view");
         // 每条登记必须有中文名/口径说明/数据源说明/列定义（明细页顶部展示，业务中文）。
         for (MetricRegistry.MetricDefinition definition : MetricRegistry.all()) {
             assertThat(definition.name()).isNotBlank();
