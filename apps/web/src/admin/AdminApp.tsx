@@ -149,13 +149,14 @@ type LoginResponse = {
   user: AdminUser;
 };
 
-// 会话持久化（用户裁决：localStorage + refresh_token）。F5 不再掉登录；401 时自动续期。
+// 会话持久化（2026-07-19 用户拍板：令牌迁 HttpOnly Cookie）。令牌不再落 localStorage——JS 读不到，XSS 偷不走。
+// localStorage 仅存展示用身份（user）+ 登出用 sessionId（均非凭证；真正的鉴权靠浏览器自动携带的 HttpOnly Cookie）。
+// F5 不掉登录：Cookie 为会话 Cookie，刷新保留；令牌失效时请求层 401→Cookie 刷新兜底。
 const SESSION_STORAGE_KEY = "admin.session.v1";
 
 type StoredSession = {
-  accessToken: string;
-  refreshToken: string | null;
   user: AdminUser;
+  sessionId: string | null;
 };
 
 function loadStoredSession(): StoredSession | null {
@@ -163,8 +164,8 @@ function loadStoredSession(): StoredSession | null {
     const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredSession;
-    if (!parsed || typeof parsed.accessToken !== "string" || !parsed.accessToken || !parsed.user) return null;
-    return parsed;
+    if (!parsed || !parsed.user) return null;
+    return { user: parsed.user, sessionId: parsed.sessionId ?? null };
   } catch {
     return null;
   }
@@ -354,11 +355,10 @@ export default function AdminApp() {
   const [focusObjectId, setFocusObjectId] = React.useState<string | undefined>(
     () => new URLSearchParams(window.location.search).get("focus") ?? undefined,
   );
-  // 启动时从 localStorage 恢复会话（F5 不掉登录）；token 失效时请求层 401→refresh 兜底。
+  // 启动时从 localStorage 恢复展示身份（F5 不掉登录）；鉴权靠 HttpOnly Cookie，令牌失效时请求层 401→Cookie 刷新兜底。
   const storedSession = React.useRef(loadStoredSession()).current;
-  const [token, setToken] = React.useState(storedSession?.accessToken ?? "");
-  const [refreshToken, setRefreshToken] = React.useState<string | null>(storedSession?.refreshToken ?? null);
   const [user, setUser] = React.useState<AdminUser | null>(storedSession?.user ?? null);
+  const [sessionId, setSessionId] = React.useState<string | null>(storedSession?.sessionId ?? null);
   const [effectivePermissions, setEffectivePermissions] = React.useState<EffectivePermissionsState>({ status: "loading" });
   const [username, setUsername] = React.useState("admin");
   const [password, setPassword] = React.useState("");
@@ -377,26 +377,19 @@ export default function AdminApp() {
   }, [themeMode]);
 
   const api = React.useMemo(() => {
-    const instance = new AdminApi(token);
+    const instance = new AdminApi();
     // 商户专区(3.18 方案A):merchant 归属账号整个后台会话按 merchant_portal 终端上报(V197 总开关+V199 模块开关约束)。
     instance.terminalType = user?.merchantId ? "merchant_portal" : "web";
-    // 会话续期：401 → /auth/refresh → 重放原请求一次；刷新失败清凭证回登录视图。
-    instance.refreshToken = refreshToken;
-    instance.onTokensRefreshed = (tokens) => {
-      if (user) saveStoredSession({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user });
-      setToken(tokens.accessToken);
-      setRefreshToken(tokens.refreshToken);
-    };
+    // 会话续期：401 → /auth/refresh（Cookie 自动携带刷新令牌）→ 重放原请求一次；刷新失败清会话回登录视图。
     instance.onSessionExpired = () => {
       saveStoredSession(null);
-      setToken("");
-      setRefreshToken(null);
       setUser(null);
+      setSessionId(null);
       setEffectivePermissions({ status: "loading" });
       setGlobalError("登录已过期，请重新登录");
     };
     return instance;
-  }, [token, refreshToken, user]);
+  }, [user]);
 
   React.useEffect(() => {
     const onPopState = () => {
@@ -408,7 +401,7 @@ export default function AdminApp() {
   }, []);
 
   React.useEffect(() => {
-    if (!user || !token) {
+    if (!user) {
       setEffectivePermissions({ status: "loading" });
       return;
     }
@@ -427,13 +420,13 @@ export default function AdminApp() {
     return () => {
       cancelled = true;
     };
-  }, [api, token, user]);
+  }, [api, user]);
 
   // 3.19 二期：终端开关菜单 gating——[]=无关闭项/加载中(不闪隐藏)，null=拉取失败→兜底关(留自救组)。
   const [disabledSwitchRows, setDisabledSwitchRows] = React.useState<DisabledSwitchRow[] | null>([]);
 
   React.useEffect(() => {
-    if (!user || !token) return;
+    if (!user) return;
     let cancelled = false;
     api
       .get<DisabledSwitchRow[]>("/api/v1/terminals/capability-switches/effective")
@@ -446,7 +439,7 @@ export default function AdminApp() {
     return () => {
       cancelled = true;
     };
-  }, [api, token, user]);
+  }, [api, user]);
 
   // 3.19 二期：当前菜单模块随路由更新，请求头 X-Module-Code 让后端按模块闸。
   React.useEffect(() => {
@@ -534,12 +527,12 @@ export default function AdminApp() {
     setLoading(true);
     setGlobalError(null);
     try {
-      const loginApi = new AdminApi("");
+      const loginApi = new AdminApi();
+      // 令牌由服务端以 HttpOnly Cookie 下发（响应体令牌前端不再读取/落盘）；仅取展示身份 + 登出用 sessionId。
       const response = await loginApi.post<LoginResponse>("/api/v1/auth/login", { login_name: username, password });
-      setToken(response.accessToken);
-      setRefreshToken(response.refreshToken ?? null);
       setUser(response.user);
-      saveStoredSession({ accessToken: response.accessToken, refreshToken: response.refreshToken ?? null, user: response.user });
+      setSessionId(response.sessionId ?? null);
+      saveStoredSession({ user: response.user, sessionId: response.sessionId ?? null });
     } catch (loginError) {
       setGlobalError(loginError instanceof Error ? loginError.message : "登录失败");
     } finally {
@@ -548,10 +541,11 @@ export default function AdminApp() {
   }
 
   function logout() {
+    // 令牌在 HttpOnly Cookie 里，JS 清不掉——必须调后端登出以 Set-Cookie 过期 Cookie 并吊销会话（尽力而为，失败也清本地态）。
+    if (sessionId) void api.post("/api/v1/auth/logout", { session_id: sessionId }).catch(() => undefined);
     saveStoredSession(null);
-    setToken("");
-    setRefreshToken(null);
     setUser(null);
+    setSessionId(null);
     setEffectivePermissions({ status: "loading" });
     setActionResult(null);
     setGlobalError(null);

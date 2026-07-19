@@ -2,6 +2,7 @@ package com.complex.platform.config;
 
 import com.complex.platform.auth.BearerAuthenticationFilter;
 import com.complex.platform.auth.CustomerTokenAuthenticationFilter;
+import com.complex.platform.auth.DoubleSubmitCsrfFilter;
 import com.complex.platform.auth.ProductionBearerAuthenticationFilter;
 import com.complex.platform.common.api.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,23 +36,28 @@ public class SecurityConfig {
     private final ObjectProvider<BearerAuthenticationFilter> bearerAuthenticationFilter;
     private final ObjectProvider<ProductionBearerAuthenticationFilter> productionBearerAuthenticationFilter;
     private final ObjectProvider<CustomerTokenAuthenticationFilter> customerTokenAuthenticationFilter;
+    private final ObjectProvider<DoubleSubmitCsrfFilter> doubleSubmitCsrfFilter;
     private final Environment environment;
 
     public SecurityConfig(
             ObjectProvider<BearerAuthenticationFilter> bearerAuthenticationFilter,
             ObjectProvider<ProductionBearerAuthenticationFilter> productionBearerAuthenticationFilter,
             ObjectProvider<CustomerTokenAuthenticationFilter> customerTokenAuthenticationFilter,
+            ObjectProvider<DoubleSubmitCsrfFilter> doubleSubmitCsrfFilter,
             Environment environment
     ) {
         this.bearerAuthenticationFilter = bearerAuthenticationFilter;
         this.productionBearerAuthenticationFilter = productionBearerAuthenticationFilter;
         this.customerTokenAuthenticationFilter = customerTokenAuthenticationFilter;
+        this.doubleSubmitCsrfFilter = doubleSubmitCsrfFilter;
         this.environment = environment;
     }
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                // Spring 内置 CSRF 关闭：本系统鉴权是自建 Bearer/Cookie 令牌（非 Spring Session），
+                // 改由 DoubleSubmitCsrfFilter 精确按「是否后台 Web Cookie 会话」做双提交校验（设备端 Bearer 免疫、零影响）。
                 .csrf(csrf -> csrf.disable())
                 // 会话失效统一 401：无 token / token 伪造 / token 过期一律 UNAUTHORIZED（此前无入口点时
                 // Spring 默认回 403 空 body，前端误译为"当前账号无权进行此操作"且无法触发重新登录）。
@@ -83,6 +89,10 @@ public class SecurityConfig {
                                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                                         + "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
                                         + "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")));
+
+        // CSRF 双提交校验：置于鉴权过滤器之前，非法写请求早退（403），不进业务链。
+        doubleSubmitCsrfFilter.ifAvailable(filter ->
+                http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class));
 
         bearerAuthenticationFilter.ifAvailable(filter ->
                 http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class));
