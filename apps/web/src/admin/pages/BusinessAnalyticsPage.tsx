@@ -43,7 +43,44 @@ const TEXT = {
   observed: "观测值",
   expected: "预期值",
   summary: "摘要",
+  disposition: "处置",
+  disposeTitle: "处置异常",
+  dispositionStatus: "处置状态",
+  disposer: "处置人",
+  dispositionNote: "处置说明",
+  disposedAt: "处置时间",
+  escalatedAlert: "关联告警",
+  anomalyStatusFilter: "状态筛选",
 };
+
+// 异常处置状态中文标签(open 未处置 / acknowledged 已阅 / resolved 已处置 / false_positive 误报 / escalated 已转告警)。
+const ANOMALY_STATUS_LABELS: Record<string, string> = {
+  open: "待处置",
+  acknowledged: "已阅",
+  resolved: "已处置",
+  false_positive: "误报",
+  escalated: "已转告警",
+};
+
+function anomalyStatusLabel(status?: string) {
+  if (!status) return "—";
+  return ANOMALY_STATUS_LABELS[status] ?? formatBusinessStatus(status);
+}
+
+const ANOMALY_ACTION_LABELS: Record<string, string> = {
+  acknowledge: "标记已阅",
+  resolve: "标记已处置",
+  false_positive: "标记误报",
+  escalate: "转告警",
+};
+
+// 从当前状态可迁移的处置动作(与后端状态机一致;终态返回空=不可再处置)。
+function availableDispositionActions(status?: string): string[] {
+  if (status === "open") return ["acknowledge", "resolve", "false_positive", "escalate"];
+  if (status === "acknowledged") return ["resolve", "false_positive", "escalate"];
+  if (status === "escalated") return ["resolve", "false_positive"];
+  return [];
+}
 
 function numberValue(value: unknown) {
   const parsed = Number(value ?? 0);
@@ -107,6 +144,12 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 指标快照/定义/异常完整字段（域/趋势/风险/状态中文·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // BI 异常处置流转:状态筛选 + 逐条处置(已阅/已处置/误报/转告警)。
+  const [anomalyStatusFilter, setAnomalyStatusFilter] = React.useState("all");
+  const [disposeTarget, setDisposeTarget] = React.useState<MetricAnomalyRow | null>(null);
+  const [disposeAction, setDisposeAction] = React.useState("acknowledge");
+  const [disposeNote, setDisposeNote] = React.useState("");
+  const [disposing, setDisposing] = React.useState(false);
 
   function segmentLabel(row: BusinessMetricSnapshotRow) {
     return row.segmentType === "platform" || !row.segmentType ? "平台" : `${formatBusinessStatus(row.segmentType)}:${row.segmentId ?? "-"}`;
@@ -150,8 +193,12 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
         { label: TEXT.observed, value: formatNumber(row.observedValue) },
         { label: TEXT.expected, value: formatNumber(row.expectedValue) },
         { label: TEXT.summary, value: row.summary ?? "—" },
-        { label: "状态", value: row.status === "open" ? "待处置" : formatBusinessStatus(row.status) },
+        { label: TEXT.dispositionStatus, value: anomalyStatusLabel(row.status) },
         { label: "发现时间", value: row.detectedAt ? new Date(row.detectedAt).toLocaleString("zh-CN", { hour12: false }) : "—" },
+        { label: TEXT.disposer, value: row.disposedBy ?? "—" },
+        { label: TEXT.dispositionNote, value: row.dispositionNote ?? "—" },
+        { label: TEXT.disposedAt, value: row.disposedAt ? new Date(row.disposedAt).toLocaleString("zh-CN", { hour12: false }) : "—" },
+        { label: TEXT.escalatedAlert, value: row.escalatedAlertId ?? "—" },
       ],
     });
   }
@@ -293,6 +340,50 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
     }
   }
 
+  function openDispose(row: MetricAnomalyRow) {
+    setDisposeTarget(row);
+    setDisposeAction(availableDispositionActions(row.status)[0] ?? "acknowledge");
+    setDisposeNote("");
+    setFormError("");
+  }
+
+  async function submitDispose() {
+    if (!disposeTarget) return;
+    if (disposeAction !== "acknowledge" && !disposeNote.trim()) {
+      setFormError("处置说明不能为空。");
+      return;
+    }
+    setFormError("");
+    setGlobalError(null);
+    setDisposing(true);
+    try {
+      const saved = await api.post<MetricAnomalyRow>(
+        `/api/v1/analytics/metric-anomalies/${encodeURIComponent(disposeTarget.id)}/dispose`,
+        {
+          idempotencyKey: `anomaly-dispose-${disposeTarget.id}-${Date.now()}`,
+          action: disposeAction,
+          note: disposeNote.trim() || undefined,
+        },
+      );
+      setActionResult({
+        action: "metric_anomaly_disposed",
+        audit: "analytics.metric_anomaly.disposed",
+        anomalyId: disposeTarget.id,
+        disposition: disposeAction,
+        note: disposeNote.trim() || null,
+        result: saved,
+      });
+      setDisposeTarget(null);
+      await reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "处置异常失败";
+      setFormError(message);
+      setGlobalError(message);
+    } finally {
+      setDisposing(false);
+    }
+  }
+
   return (
     <section data-testid="business-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -419,10 +510,11 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
             {(!kpiFocus || kpiFocus === "anomalies") && (<>
             <h3>{TEXT.anomalies}</h3>
             {anomaliesNotice ? <div className="admin-state" data-testid="business-analytics-anomalies-table-degraded">{anomaliesNotice}</div> : null}
+            <label>{TEXT.anomalyStatusFilter}<select data-testid="business-analytics-anomaly-status-filter" value={anomalyStatusFilter} onChange={(event) => setAnomalyStatusFilter(event.target.value)}><option value="all">{TEXT.allDomains}</option><option value="open">待处置</option><option value="acknowledged">已阅</option><option value="resolved">已处置</option><option value="false_positive">误报</option><option value="escalated">已转告警</option></select></label>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-anomalies-table">
-                <thead><tr><th>指标</th><th>风险</th><th>观测值</th><th>基准值</th><th>说明</th><th>状态</th><th>发现时间</th><th>详情</th></tr></thead>
-                <tbody>{anomalies.map((row) => (
+                <thead><tr><th>指标</th><th>风险</th><th>观测值</th><th>基准值</th><th>说明</th><th>状态</th><th>发现时间</th><th>处置</th><th>详情</th></tr></thead>
+                <tbody>{anomalies.filter((row) => anomalyStatusFilter === "all" || row.status === anomalyStatusFilter).map((row) => (
                   <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`business-analytics-anomaly-row-${row.id}`}
                     onClick={() => openAnomalyDetail(row)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAnomalyDetail(row); } }}>
@@ -431,8 +523,11 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
                     <td>{formatNumber(row.observedValue)}</td>
                     <td>{formatNumber(row.expectedValue)}</td>
                     <td>{row.summary ?? "—"}</td>
-                    <td>{row.status === "open" ? "待处置" : formatBusinessStatus(row.status)}</td>
+                    <td>{anomalyStatusLabel(row.status)}</td>
                     <td>{row.detectedAt ? new Date(row.detectedAt).toLocaleString("zh-CN", { hour12: false }) : "—"}</td>
+                    <td className="admin-row-detail-cell">{availableDispositionActions(row.status).length > 0
+                      ? <button type="button" className="admin-row-detail-btn" data-testid={`business-analytics-anomaly-dispose-${row.id}`} aria-label="处置异常指标" onClick={(event) => { event.stopPropagation(); openDispose(row); }}>{TEXT.disposition}</button>
+                      : "—"}</td>
                   <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看异常指标详情" onClick={(event) => { event.stopPropagation(); openAnomalyDetail(row); }}>查看详情</button></td></tr>
                 ))}</tbody>
               </table>
@@ -466,6 +561,45 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
           { label: TEXT.domain, value: domainFilter === "all" ? TEXT.allDomains : formatMetricDomain(domainFilter) },
           { label: "指标数", value: `${filteredSnapshots.length} 项` },
           { label: TEXT.lockNote, value: lockNote.trim() || "未填写" },
+        ]}
+      />
+      <GuidedFlowModal
+        open={disposeTarget !== null}
+        title={TEXT.disposeTitle}
+        testId="business-analytics-dispose-guided"
+        submitTestId="business-analytics-dispose-submit"
+        submitLabel={disposing ? "处置中…" : TEXT.disposition}
+        submitting={disposing}
+        error={formError || undefined}
+        onClose={() => setDisposeTarget(null)}
+        onSubmit={submitDispose}
+        steps={[
+          {
+            title: TEXT.disposeTitle,
+            description: disposeTarget
+              ? `对异常「${formatMetricName(disposeTarget.metricKey)}」进行处置。选择「转告警」会在风险告警工作台生成一条可跟进的告警。`
+              : "",
+            validate: () => (disposeAction !== "acknowledge" && !disposeNote.trim() ? "处置说明不能为空。" : null),
+            content: (
+              <>
+                <label>{TEXT.disposition}
+                  <select data-testid="business-analytics-dispose-action" value={disposeAction} onChange={(event) => setDisposeAction(event.target.value)}>
+                    {availableDispositionActions(disposeTarget?.status).map((action) => (
+                      <option key={action} value={action}>{ANOMALY_ACTION_LABELS[action]}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>{TEXT.dispositionNote}
+                  <textarea data-testid="business-analytics-dispose-note" value={disposeNote} onChange={(event) => setDisposeNote(event.target.value)} placeholder={disposeAction === "acknowledge" ? "可选" : "必填"} />
+                </label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: TEXT.metricKey, value: disposeTarget ? formatMetricName(disposeTarget.metricKey) : "—" },
+          { label: TEXT.disposition, value: ANOMALY_ACTION_LABELS[disposeAction] ?? disposeAction },
+          { label: TEXT.dispositionNote, value: disposeNote.trim() || "未填写" },
         ]}
       />
     </section>

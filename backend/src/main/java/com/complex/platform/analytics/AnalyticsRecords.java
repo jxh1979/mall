@@ -227,7 +227,11 @@ public final class AnalyticsRecords {
             String summary,
             String status,
             Instant detectedAt,
-            Instant resolvedAt
+            Instant resolvedAt,
+            String dispositionNote,
+            String disposedBy,
+            Instant disposedAt,
+            String escalatedAlertId
     ) {
     }
 

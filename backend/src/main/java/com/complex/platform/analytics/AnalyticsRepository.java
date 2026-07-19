@@ -77,6 +77,15 @@ public interface AnalyticsRepository {
 
     List<MetricAnomalyRecord> listMetricAnomalies();
 
+    java.util.Optional<MetricAnomalyRecord> findMetricAnomalyById(String id);
+
+    /** 处置事务内加行锁读(SELECT ... FOR UPDATE),串行化同一异常的并发处置,避免升级重复建告警产生孤儿。 */
+    java.util.Optional<MetricAnomalyRecord> findMetricAnomalyByIdForUpdate(String id);
+
+    MetricAnomalyRecord updateMetricAnomalyDisposition(String id, String status, String note,
+            String disposedBy, java.time.Instant disposedAt, String escalatedAlertId,
+            java.time.Instant resolvedAt);
+
     List<MetricDefinitionRecord> listMetricDefinitions();
 
     List<RiskAlertRecord> listRiskAlerts();

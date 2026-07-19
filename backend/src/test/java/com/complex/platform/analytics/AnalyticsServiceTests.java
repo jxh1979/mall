@@ -725,6 +725,128 @@ class AnalyticsServiceTests {
         );
     }
 
+    // ===== BI 异常处置流转:状态机纯单测 =====
+
+    @Test
+    void anomalyDispositionTargetOpenToAcknowledged() {
+        assertThat(AnalyticsService.anomalyDispositionTarget("open", "acknowledge")).isEqualTo("acknowledged");
+    }
+
+    @Test
+    void anomalyDispositionTargetResolvesFromNonTerminalStates() {
+        assertThat(AnalyticsService.anomalyDispositionTarget("acknowledged", "resolve")).isEqualTo("resolved");
+        assertThat(AnalyticsService.anomalyDispositionTarget("open", "false_positive")).isEqualTo("false_positive");
+        assertThat(AnalyticsService.anomalyDispositionTarget("escalated", "resolve")).isEqualTo("resolved");
+    }
+
+    @Test
+    void anomalyDispositionTargetEscalateOnlyFromOpenOrAcknowledged() {
+        assertThat(AnalyticsService.anomalyDispositionTarget("open", "escalate")).isEqualTo("escalated");
+        assertThat(AnalyticsService.anomalyDispositionTarget("acknowledged", "escalate")).isEqualTo("escalated");
+        assertThatThrownBy(() -> AnalyticsService.anomalyDispositionTarget("escalated", "escalate"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("METRIC_ANOMALY_INVALID_TRANSITION"));
+    }
+
+    @Test
+    void anomalyDispositionTargetRejectsTerminalStates() {
+        assertThatThrownBy(() -> AnalyticsService.anomalyDispositionTarget("resolved", "resolve"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("METRIC_ANOMALY_ALREADY_DISPOSED"));
+        assertThatThrownBy(() -> AnalyticsService.anomalyDispositionTarget("false_positive", "acknowledge"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("METRIC_ANOMALY_ALREADY_DISPOSED"));
+    }
+
+    @Test
+    void anomalyDispositionTargetRejectsUnknownActionAndBackwardAck() {
+        assertThatThrownBy(() -> AnalyticsService.anomalyDispositionTarget("open", "bogus"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> AnalyticsService.anomalyDispositionTarget("acknowledged", "acknowledge"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("METRIC_ANOMALY_INVALID_TRANSITION"));
+    }
+
+    // ===== BI 异常处置流转:service 单测(处置/误报/转告警/幂等/异常键关联) =====
+
+    @Test
+    void disposeMetricAnomalyAcknowledgeMarksAcknowledgedWithDisposer() {
+        MetricAnomalyRecord result = service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("ack-1", "acknowledge", null));
+        assertThat(result.status()).isEqualTo("acknowledged");
+        assertThat(result.disposedBy()).isEqualTo("system");
+        assertThat(result.disposedAt()).isNotNull();
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("analytics.metric_anomaly.disposed");
+    }
+
+    @Test
+    void disposeMetricAnomalyResolveRequiresNoteAndSetsResolvedAt() {
+        assertThatThrownBy(() -> service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("res-missing", "resolve", " ")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        MetricAnomalyRecord result = service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("res-1", "resolve", "已核对为大促真实波动"));
+        assertThat(result.status()).isEqualTo("resolved");
+        assertThat(result.resolvedAt()).isNotNull();
+        assertThat(result.dispositionNote()).isEqualTo("已核对为大促真实波动");
+    }
+
+    @Test
+    void disposeMetricAnomalyFalsePositiveIsTerminal() {
+        service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("fp-1", "false_positive", "口径误报"));
+        assertThatThrownBy(() -> service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("fp-2", "resolve", "再处置")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("METRIC_ANOMALY_ALREADY_DISPOSED"));
+    }
+
+    @Test
+    void disposeMetricAnomalyEscalateCreatesLinkedRiskAlert() {
+        MetricAnomalyRecord result = service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("esc-1", "escalate", "需人工核查"));
+        assertThat(result.status()).isEqualTo("escalated");
+        assertThat(result.escalatedAlertId()).isNotBlank();
+        // 异常键(行主键 anomaly_1)回挂到新建风险告警,形成可跟进闭环。
+        assertThat(service.listRiskAlerts().items()).anySatisfy(alert -> {
+            assertThat(alert.objectType()).isEqualTo("metric_anomaly");
+            assertThat(alert.objectId()).isEqualTo("anomaly_1");
+        });
+    }
+
+    @Test
+    void disposeMetricAnomalyNotFound() {
+        assertThatThrownBy(() -> service.disposeMetricAnomaly("does_not_exist",
+                new AnomalyDispositionRequest("nf-1", "acknowledge", null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("METRIC_ANOMALY_NOT_FOUND"));
+    }
+
+    @Test
+    void disposeMetricAnomalyIsIdempotentByKey() {
+        // 异常键=稳定行主键;同一幂等键重放不产生二次处置(executeWrite 缓存原响应)。
+        MetricAnomalyRecord first = service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("idem-1", "acknowledge", null));
+        MetricAnomalyRecord second = service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("idem-1", "acknowledge", null));
+        assertThat(first.status()).isEqualTo("acknowledged");
+        assertThat(second).isEqualTo(first);
+    }
+
+    @Test
+    void disposeMetricAnomalyConcurrentEscalateDoesNotCreateOrphanAlert() {
+        // 并发守卫:行锁串行化后,第二个 escalate 读到 status=escalated(已升级),转移非法被拦,
+        // 不再建第二条风险告警(否则前者的 escalated_alert_id 成孤儿)。
+        service.disposeMetricAnomaly("anomaly_1", new AnomalyDispositionRequest("esc-a", "escalate", "首个升级"));
+        long alertsAfterFirst = service.listRiskAlerts().items().size();
+        assertThatThrownBy(() -> service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("esc-b", "escalate", "并发升级")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("METRIC_ANOMALY_INVALID_TRANSITION"));
+        assertThat(service.listRiskAlerts().items()).hasSize((int) alertsAfterFirst);
+    }
+
     private void seedReadModels() {
         Instant now = Instant.now(FIXED_CLOCK);
         analyticsRepository.metricDefinitions.add(new MetricDefinitionRecord(
@@ -800,6 +922,10 @@ class AnalyticsServiceTests {
                 "GMV below expected range",
                 "open",
                 now,
+                null,
+                null,
+                null,
+                null,
                 null
         ));
         analyticsRepository.riskRules.add(new RiskRuleRecord(
@@ -1203,6 +1329,34 @@ class AnalyticsServiceTests {
         @Override
         public List<MetricAnomalyRecord> listMetricAnomalies() {
             return metricAnomalies;
+        }
+
+        @Override
+        public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyById(String id) {
+            return metricAnomalies.stream().filter(a -> a.id().equals(id)).findFirst();
+        }
+
+        @Override
+        public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyByIdForUpdate(String id) {
+            return findMetricAnomalyById(id);
+        }
+
+        @Override
+        public MetricAnomalyRecord updateMetricAnomalyDisposition(String id, String status, String note,
+                String disposedBy, java.time.Instant disposedAt, String escalatedAlertId,
+                java.time.Instant resolvedAt) {
+            for (int i = 0; i < metricAnomalies.size(); i++) {
+                MetricAnomalyRecord a = metricAnomalies.get(i);
+                if (a.id().equals(id)) {
+                    MetricAnomalyRecord updated = new MetricAnomalyRecord(
+                            a.id(), a.metricKey(), a.domain(), a.riskLevel(), a.observedValue(),
+                            a.expectedValue(), a.summary(), status, a.detectedAt(), resolvedAt,
+                            note, disposedBy, disposedAt, escalatedAlertId);
+                    metricAnomalies.set(i, updated);
+                    return updated;
+                }
+            }
+            throw new IllegalStateException("anomaly not found: " + id);
         }
 
         @Override

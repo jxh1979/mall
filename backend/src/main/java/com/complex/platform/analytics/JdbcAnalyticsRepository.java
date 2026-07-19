@@ -235,10 +235,62 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     public List<MetricAnomalyRecord> listMetricAnomalies() {
         return jdbcTemplate.query("""
                 SELECT id, metric_key, domain, risk_level, observed_value, expected_value,
-                       summary, status, detected_at, resolved_at
+                       summary, status, detected_at, resolved_at,
+                       disposition_note, disposed_by, disposed_at, escalated_alert_id
                   FROM analytics_metric_anomalies
                  ORDER BY detected_at DESC, id
                 """, this::mapMetricAnomaly);
+    }
+
+    @Override
+    public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, metric_key, domain, risk_level, observed_value, expected_value,
+                       summary, status, detected_at, resolved_at,
+                       disposition_note, disposed_by, disposed_at, escalated_alert_id
+                  FROM analytics_metric_anomalies
+                 WHERE id = :id
+                """, new MapSqlParameterSource("id", id), this::mapMetricAnomaly)
+                .stream().findFirst();
+    }
+
+    @Override
+    public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, metric_key, domain, risk_level, observed_value, expected_value,
+                       summary, status, detected_at, resolved_at,
+                       disposition_note, disposed_by, disposed_at, escalated_alert_id
+                  FROM analytics_metric_anomalies
+                 WHERE id = :id
+                 FOR UPDATE
+                """, new MapSqlParameterSource("id", id), this::mapMetricAnomaly)
+                .stream().findFirst();
+    }
+
+    @Override
+    public MetricAnomalyRecord updateMetricAnomalyDisposition(String id, String status, String note,
+            String disposedBy, java.time.Instant disposedAt, String escalatedAlertId,
+            java.time.Instant resolvedAt) {
+        jdbcTemplate.update("""
+                UPDATE analytics_metric_anomalies
+                   SET status = :status,
+                       disposition_note = :note,
+                       disposed_by = :disposed_by,
+                       disposed_at = :disposed_at,
+                       escalated_alert_id = :escalated_alert_id,
+                       resolved_at = :resolved_at
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("status", status)
+                .addValue("note", note)
+                .addValue("disposed_by", disposedBy)
+                .addValue("disposed_at", timestampWithTimeZone(disposedAt))
+                .addValue("escalated_alert_id", escalatedAlertId)
+                .addValue("resolved_at", timestampWithTimeZone(resolvedAt)));
+        return findMetricAnomalyById(id)
+                .orElseThrow(() -> new IllegalStateException(
+                        "metric anomaly disappeared after disposition: " + id));
     }
 
     @Override
@@ -1747,7 +1799,11 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 resultSet.getString("summary"),
                 resultSet.getString("status"),
                 instant(resultSet, "detected_at"),
-                instant(resultSet, "resolved_at")
+                instant(resultSet, "resolved_at"),
+                resultSet.getString("disposition_note"),
+                resultSet.getString("disposed_by"),
+                instant(resultSet, "disposed_at"),
+                resultSet.getString("escalated_alert_id")
         );
     }
 

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 652 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 316 | 人工权限矩阵正文未覆盖 214 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1304 | 人工事件矩阵正文未覆盖 1262 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 652 | 人工任务映射正文未逐项覆盖 646 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 389 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 653 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 317 | 人工权限矩阵正文未覆盖 215 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1306 | 人工事件矩阵正文未覆盖 1264 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 653 | 人工任务映射正文未逐项覆盖 647 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 390 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -85,6 +85,7 @@
 | `amusement.waiver.acknowledge` | staff-token | project-amusement | 1 | acknowledgeAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
 | `analytics.dashboard.view` | staff-token | platform, project | 18 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getMetricDetail, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, getAiThresholds, listNotificationWindows ... | 已在权限矩阵正文出现 |
 | `analytics.group.view` | staff-token | group | 1 | getGroupOverview | OpenAPI 补充，以本附录为准 |
+| `analytics.metric_anomaly.manage` | staff-token | project | 1 | disposeMetricAnomaly | OpenAPI 补充，以本附录为准 |
 | `analytics.operating_params.manage` | staff-token | platform, project | 7 | upsertOperatingParams, updateAiThresholds, upsertRevenueAttributionRule, upsertBusinessDayCutoff, updateAnomalyConfig, upsertHolidayPeriod, fetchHolidayCalendar | OpenAPI 补充，以本附录为准 |
 | `analytics.report.export` | staff-token | platform | 1 | exportMonthlyReport | OpenAPI 补充，以本附录为准 |
 | `analytics.review.lock` | staff-token | project | 2 | listReviewLocks, createReviewLock | OpenAPI 补充，以本附录为准 |
@@ -545,6 +546,8 @@
 | `analytics.merchant_health.viewed_failed` | failure | `listMerchantHealthScores` | `GET` | `/api/v1/analytics/merchant-health` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.merchant_summary.viewed` | success | `listAnalyticsMerchants` | `GET` | `/api/v1/analytics/merchants` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.merchant_summary.viewed_failed` | failure | `listAnalyticsMerchants` | `GET` | `/api/v1/analytics/merchants` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.metric_anomaly.disposed` | success | `disposeMetricAnomaly` | `POST` | `/api/v1/analytics/metric-anomalies/{id}/dispose` | ANA-风控分析 | `analytics.metric_anomaly.manage` | 接口级事件，以本附录为准 |
+| `analytics.metric_anomaly.disposed_failed` | failure | `disposeMetricAnomaly` | `POST` | `/api/v1/analytics/metric-anomalies/{id}/dispose` | ANA-风控分析 | `analytics.metric_anomaly.manage` | 接口级事件，以本附录为准 |
 | `analytics.metric_anomaly.viewed` | success | `listMetricAnomalies` | `GET` | `/api/v1/analytics/metric-anomalies` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.metric_anomaly.viewed_failed` | failure | `listMetricAnomalies` | `GET` | `/api/v1/analytics/metric-anomalies` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.metric_definition.viewed` | success | `listMetricDefinitions` | `GET` | `/api/v1/analytics/metric-definitions` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -1720,6 +1723,7 @@
 | AMU-游乐安全 | `submitAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | 提交巡检结果 | `amusement.safety_inspection.submit` | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | staff_work_phone, web | operation 级补充 |
 | ANA-风控分析 | `createReviewLock` | `POST` | `/api/v1/analytics/review-locks` | 锁定经营复盘快照 | `analytics.review.lock` | `analytics.review.locked` / `analytics.review.lock_failed` | web | operation 级补充 |
 | ANA-风控分析 | `createRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts` | 创建风险alert | `analytics.risk_alert.manage` | `risk_alert.created` / `risk_alert.create_failed` | web | operation 级补充 |
+| ANA-风控分析 | `disposeMetricAnomaly` | `POST` | `/api/v1/analytics/metric-anomalies/{id}/dispose` | 处置指标异常 | `analytics.metric_anomaly.manage` | `analytics.metric_anomaly.disposed` / `analytics.metric_anomaly.disposed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `exportMonthlyReport` | `GET` | `/api/v1/analytics/reports/monthly-export` | 月度经营报表导出(分权) | `analytics.report.export` | `analytics.monthly_report.exported` / `analytics.monthly_report.export_failed` | web | operation 级补充 |
 | ANA-风控分析 | `fetchHolidayCalendar` | `POST` | `/api/v1/analytics/holiday-calendar/fetch` | 从 URL 抓取节假日日历 | `analytics.operating_params.manage` | `analytics.holiday_calendar.fetched` / `analytics.holiday_calendar.fetch_failed` | web | operation 级补充 |
 | ANA-风控分析 | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | Generate local LLM AI quality suggestion | `analytics.risk_alert.manage` | `analytics.ai_quality.local_llm_suggestion.created` / `analytics.ai_quality.local_llm_suggestion.failed` | web | operation 级补充 |

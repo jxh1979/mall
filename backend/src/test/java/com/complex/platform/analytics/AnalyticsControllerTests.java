@@ -331,7 +331,7 @@ class AnalyticsControllerTests {
     }
 
     private MetricAnomalyRecord metricAnomaly() {
-        return new MetricAnomalyRecord("anomaly_1", "gmv_amount_cents", "finance", "high", new BigDecimal("128800"), new BigDecimal("188800"), "GMV below expected range", "open", now(), null);
+        return new MetricAnomalyRecord("anomaly_1", "gmv_amount_cents", "finance", "high", new BigDecimal("128800"), new BigDecimal("188800"), "GMV below expected range", "open", now(), null, null, null, null, null);
     }
 
     private RiskRuleRecord riskRule() {
