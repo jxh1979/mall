@@ -11,6 +11,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { AdminPageProps, AmusementGroupBookingRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 // 后端写权限码（AmusementController：/group-bookings/{id}/release）
 const GROUP_BOOKING_MANAGE_PERMISSION = "amusement.group_booking.manage";
@@ -126,6 +127,11 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
   }
 
   const reservedCapacity = bookings.reduce((sum, row) => sum + Number(row.reservedCapacity ?? 0), 0);
+  // KPI 改走统一明细端点（数字=明细合计同源，且合计为全量真实计数，超首页时比列表更完整）；失败/无权限回退本地值并隐藏入口。
+  const bookingCountKpi = useMetricKpiValue(api, "amusement.group_booking_count", {});
+  const reservedKpi = useMetricKpiValue(api, "amusement.group_reserved_capacity", {});
+  const bookingCountDisplay = bookingCountKpi.status === "ready" && bookingCountKpi.value !== null ? bookingCountKpi.value : bookings.length;
+  const reservedDisplay = reservedKpi.status === "ready" && reservedKpi.value !== null ? reservedKpi.value : reservedCapacity;
 
   // 已审批 KPI 聚焦时对预约表做客户端筛选：仅过滤已加载内存数组，不发后端查询。
   const visibleBookings = kpiFocus?.status ? bookings.filter((row) => row.bookingStatus === kpiFocus.status) : bookings;
@@ -180,8 +186,8 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
         ) : (
           <>
             <div className="admin-kpi-grid" data-testid="amusement-group-bookings-summary">
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>团体预约</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-total" onClick={() => enterKpiFocus()}>{bookings.length}</button><small>预约数</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>容量占用</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-reserved" onClick={() => enterKpiFocus()}>{reservedCapacity}</button><small>占用容量</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>团体预约</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-total" onClick={() => enterKpiFocus()}>{bookingCountDisplay}</button><small>预约数{bookingCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.group_booking_count" testid="amusement-group-bookings-metric-detail-total" /></> : null}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>容量占用</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-reserved" onClick={() => enterKpiFocus()}>{reservedDisplay}</button><small>占用容量{reservedKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.group_reserved_capacity" testid="amusement-group-bookings-metric-detail-reserved" /></> : null}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已审批</span><button type="button" className="admin-kpi-value" data-testid="amusement-group-bookings-kpi-approved" onClick={() => enterKpiFocus("approved")}>{bookings.filter((row) => row.bookingStatus === "approved").length}</button><small>已审批数</small></div>
               <div className="admin-kpi-card"><span>选中预约</span><strong className="admin-kpi-value--text" title={selected?.customerName ?? selected?.id ?? "-"}>{selected?.customerName ?? selected?.id ?? "-"}</strong><small>{formatBusinessStatus(selected?.bookingStatus)}</small></div>
             </div>

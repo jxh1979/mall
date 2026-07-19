@@ -12,6 +12,7 @@ import type { AdminPageProps, AmusementProjectRow, AmusementSessionRow, Amusemen
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 const SESSION_MANAGE = ["amusement.session.manage"];
 
@@ -167,6 +168,11 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   }
 
   const totalCapacity = sessions.reduce((sum, row) => sum + Number(row.capacity ?? 0), 0);
+  // KPI 改走统一明细端点（数字=明细合计同源）；失败/无权限回退本地列表值并隐藏入口，体验不降级。
+  const sessionCountKpi = useMetricKpiValue(api, "amusement.session_count", {});
+  const capacityKpi = useMetricKpiValue(api, "amusement.session_capacity", {});
+  const sessionCountDisplay = sessionCountKpi.status === "ready" && sessionCountKpi.value !== null ? sessionCountKpi.value : sessions.length;
+  const capacityDisplay = capacityKpi.status === "ready" && capacityKpi.value !== null ? capacityKpi.value : totalCapacity;
 
   const pagedSessions = usePagedRows(sessions, 10);
 
@@ -251,8 +257,8 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
           <>
             <div className="admin-kpi-grid" data-testid="amusement-sessions-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>项目</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-projects" onClick={() => enterKpiFocus("projects")}>{projects.length}</button><small>项目数</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>场次</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-sessions" onClick={() => enterKpiFocus("sessions")}>{sessions.length}</button><small>场次数</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>总容量</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-capacity" onClick={() => enterKpiFocus("sessions")}>{totalCapacity}</button><small>容量合计</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>场次</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-sessions" onClick={() => enterKpiFocus("sessions")}>{sessionCountDisplay}</button><small>场次数{sessionCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.session_count" testid="amusement-sessions-metric-detail-sessions" /></> : null}</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>总容量</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-capacity" onClick={() => enterKpiFocus("sessions")}>{capacityDisplay}</button><small>容量合计{capacityKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.session_capacity" testid="amusement-sessions-metric-detail-capacity" /></> : null}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已锁定</span><button type="button" className="admin-kpi-value" data-testid="amusement-sessions-kpi-locked" onClick={() => enterKpiFocus("sessions")}>{sessions.reduce((sum, row) => sum + Number(row.lockedCapacity ?? 0), 0)}</button><small>已锁定容量</small></div>
             </div>
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-project-create-open" disabled={projectSubmitting} onClick={() => { setFormError(""); setProjectOpen(true); }}>＋ 新建项目</PermissionButton></div>

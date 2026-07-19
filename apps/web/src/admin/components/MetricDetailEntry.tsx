@@ -62,7 +62,12 @@ export function useMetricKpiValue(
   const { from, to } = opts;
   const enabled = opts.enabled !== false;
   React.useEffect(() => {
-    if (!enabled) return;
+    // 禁用时须重置为 loading（非 ready），否则 enabled 由 true→false（如核销页从无筛选转筛选态）
+    // 会残留上次的 {ready, 全量值}，令卡片继续显示全量并保留「完整明细」入口 → 回退本地筛选值失效。
+    if (!enabled) {
+      setState({ status: "loading", value: null });
+      return;
+    }
     let cancelled = false;
     const params = new URLSearchParams({ metric, page: "1", size: "1" });
     if (from) params.set("from", from);

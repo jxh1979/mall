@@ -15,6 +15,7 @@ import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, Ticket
 import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
@@ -140,6 +141,13 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
 
   const paidCount = orders.filter((order) => order.payStatus === "paid").length;
   const pendingIssueCount = orders.filter((order) => order.issueStatus !== "issued").length;
+  // KPI 改走统一明细端点（数字=明细合计同源）；失败/无权限回退本地列表计数并隐藏「完整明细」入口，体验不降级。
+  const orderCountKpi = useMetricKpiValue(api, "ticket.order_count", {});
+  const paidOrderKpi = useMetricKpiValue(api, "ticket.paid_order_count", {});
+  const pendingIssueKpi = useMetricKpiValue(api, "ticket.pending_issue_count", {});
+  const orderCountDisplay = orderCountKpi.status === "ready" && orderCountKpi.value !== null ? orderCountKpi.value : orders.length;
+  const paidCountDisplay = paidOrderKpi.status === "ready" && paidOrderKpi.value !== null ? paidOrderKpi.value : paidCount;
+  const pendingIssueDisplay = pendingIssueKpi.status === "ready" && pendingIssueKpi.value !== null ? pendingIssueKpi.value : pendingIssueCount;
   // KPI 聚焦子集：paid=已支付订单、not_issued=未出票订单、orders=全部。聚焦只客户端过滤已加载内存数组，不发后端查询。
   const kpiOrders = kpiFocus?.target === "paid"
     ? orders.filter((order) => order.payStatus === "paid")
@@ -242,9 +250,9 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
         ) : (
         <>
         <div className="admin-kpi-grid" data-testid="ticket-orders-summary">
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orders}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orders.length}</button><small>{TEXT.ordersHelp}</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.paid}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-paid" onClick={() => enterKpiFocus("paid")}>{paidCount}</button><small>{TEXT.paidHelp}</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingIssue}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-not-issued" onClick={() => enterKpiFocus("not_issued")}>{pendingIssueCount}</button><small>{TEXT.pendingIssueHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orders}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orderCountDisplay}</button><small>{TEXT.ordersHelp}{orderCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="ticket.order_count" testid="ticket-orders-metric-detail-orders" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.paid}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-paid" onClick={() => enterKpiFocus("paid")}>{paidCountDisplay}</button><small>{TEXT.paidHelp}{paidOrderKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="ticket.paid_order_count" testid="ticket-orders-metric-detail-paid" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.pendingIssue}</span><button type="button" className="admin-kpi-value" data-testid="ticket-orders-kpi-not-issued" onClick={() => enterKpiFocus("not_issued")}>{pendingIssueDisplay}</button><small>{TEXT.pendingIssueHelp}{pendingIssueKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="ticket.pending_issue_count" testid="ticket-orders-metric-detail-not-issued" /></> : null}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.entitlements}</span><strong>{entitlements.length}</strong><small>{TEXT.entitlementsHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.verifications}</span><strong>{verifications.length}</strong><small>{TEXT.verificationsHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedLabel(selectedOrder)}>{selectedLabel(selectedOrder)}</strong><small>{formatBusinessStatus(selectedOrder?.issueStatus)}</small></div>

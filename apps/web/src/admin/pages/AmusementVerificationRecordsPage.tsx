@@ -9,6 +9,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { TraceLink } from "../components/TraceLink";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type {
   AdminPageProps,
   AmusementProjectRow,
@@ -197,6 +198,13 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
   const exitCount = records.filter((r) => r.direction === "exit").length;
   const linkedCount = records.filter((r) => Boolean(r.linkedTicketNo)).length;
   const overCapacityCount = snapshots.filter((s) => num(s.occupiedCount) > num(s.capacityLimit)).length;
+  // KPI 改走统一明细端点（数字=明细合计同源）。统一明细为平台全量口径，仅在页面无筛选（query 为空）时口径对齐——
+  // 有筛选时禁用统一取数、回退本地筛选后计数并隐藏「完整明细」入口（不误把全量当筛选值）；失败/无权限同样回退。
+  const unfiltered = query === "";
+  const entryKpi = useMetricKpiValue(api, "amusement.entry_count", { enabled: unfiltered });
+  const exitKpi = useMetricKpiValue(api, "amusement.exit_count", { enabled: unfiltered });
+  const entryDisplay = entryKpi.status === "ready" && entryKpi.value !== null ? entryKpi.value : entryCount;
+  const exitDisplay = exitKpi.status === "ready" && exitKpi.value !== null ? exitKpi.value : exitCount;
 
   const filterBar = (
     <div className="admin-form-grid" data-testid="amu-verif-filters">
@@ -324,8 +332,8 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
 
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="amu-verif-summary">
-          <div className="admin-kpi-card"><span>入场</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-entry">{entryCount}</strong><small>入场核销数</small></div>
-          <div className="admin-kpi-card"><span>出场</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-exit">{exitCount}</strong><small>出场核销数</small></div>
+          <div className="admin-kpi-card"><span>入场</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-entry">{entryDisplay}</strong><small>入场核销数{entryKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.entry_count" testid="amu-verif-metric-detail-entry" /></> : null}</small></div>
+          <div className="admin-kpi-card"><span>出场</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-exit">{exitDisplay}</strong><small>出场核销数{exitKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="amusement.exit_count" testid="amu-verif-metric-detail-exit" /></> : null}</small></div>
           <div className="admin-kpi-card"><span>已关联通票</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-linked">{linkedCount}</strong><small>有通票交叉引用</small></div>
           <div className="admin-kpi-card"><span>超容点位</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-over">{overCapacityCount}</strong><small>在场超上限</small></div>
         </div>
