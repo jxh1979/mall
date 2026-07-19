@@ -3,6 +3,7 @@ package com.complex.platform.analytics;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -88,6 +89,8 @@ class AnalyticsControllerTests {
         when(service.listCustomerIntents()).thenReturn(new PageResponse<>(List.of(customerIntent()), 1, 50, 1));
         when(service.getP0OverviewDashboard()).thenReturn(dashboard());
         when(authorizationService.currentMerchantScope()).thenReturn(java.util.Optional.empty());
+        // 默认平台管理员：项目作用域空（metric-detail 端点由此派生 projectScope）。
+        when(authorizationService.currentProjectScopeQuietly()).thenReturn(java.util.Optional.empty());
         when(service.overview(any())).thenReturn(overviewResponse());
         when(service.dashboardDomain(anyString(), any())).thenReturn(overviewResponse());
         when(service.groupOverview(any())).thenReturn(groupOverviewResponse());
@@ -172,7 +175,7 @@ class AnalyticsControllerTests {
     @Test
     void metricDetailChecksContractPermissionThenRegistryPermission() throws Exception {
         // KPI 统一明细(指标登记簿): 契约宽权限(analytics.dashboard.view)+登记项权限二次校验, 双重 fail-closed。
-        when(service.metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt())).thenReturn(metricDetailResponse());
+        when(service.metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt(), any())).thenReturn(metricDetailResponse());
 
         mockMvc.perform(get("/api/v1/analytics/metric-detail")
                         .param("metric", "finance.recon_diff_count")
@@ -185,6 +188,22 @@ class AnalyticsControllerTests {
         verify(authorizationService).requirePermission("analytics.dashboard.view");
         verify(authorizationService).requirePermission("finance.reconciliation.view");
         verify(authorizationService).requirePlatformScope();
+        // 平台管理员=空项目作用域 → service 收到 null projectScope（看全量）。
+        verify(service).metricDetail(eq("finance.recon_diff_count"), any(), any(), any(), anyInt(), anyInt(), org.mockito.ArgumentMatchers.isNull());
+    }
+
+    @Test
+    void metricDetailDerivesProjectScopeFromTokenNotRequestBody() throws Exception {
+        // 项目作用域收紧(2026-07-19): 端点由 currentProjectScopeQuietly 派生调用方综合体, 透传 service(绝不取客户端)。
+        when(authorizationService.currentProjectScopeQuietly()).thenReturn(java.util.Optional.of("proj-A"));
+        when(service.metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt(), any())).thenReturn(metricDetailResponse());
+
+        mockMvc.perform(get("/api/v1/analytics/metric-detail")
+                        .param("metric", "finance.ar_balance")
+                        .with(user("analytics").roles("P0_SMOKE")))
+                .andExpect(status().isOk());
+
+        verify(service).metricDetail(eq("finance.ar_balance"), any(), any(), any(), anyInt(), anyInt(), eq("proj-A"));
     }
 
     @Test
@@ -195,12 +214,12 @@ class AnalyticsControllerTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
 
-        verify(service, never()).metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt());
+        verify(service, never()).metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt(), any());
     }
 
     @Test
     void metricDetailRejectsReservedDimensionParams() throws Exception {
-        // 首批登记指标均为平台口径: project_id/merchant_id 为预留维度, 传入即校验失败(不静默忽略)。
+        // project_id/merchant_id 为预留维度(作用域由 token 派生, 不接受客户端指定), 传入即校验失败(不静默忽略)。
         mockMvc.perform(get("/api/v1/analytics/metric-detail")
                         .param("metric", "revenue.ticket")
                         .param("merchant_id", "merchant-1")
@@ -208,7 +227,7 @@ class AnalyticsControllerTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
 
-        verify(service, never()).metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt());
+        verify(service, never()).metricDetail(anyString(), any(), any(), any(), anyInt(), anyInt(), any());
     }
 
     private AnalyticsRecords.MetricDetailResponse metricDetailResponse() {

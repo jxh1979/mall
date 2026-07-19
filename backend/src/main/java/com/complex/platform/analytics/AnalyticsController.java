@@ -357,18 +357,23 @@ public class AnalyticsController {
             @org.springframework.web.bind.annotation.RequestParam(value = "page", required = false, defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(value = "size", required = false, defaultValue = "20") int size) {
         // KPI 统一明细（指标登记簿，2026-07-18 方案A）：契约宽权限（analytics.dashboard.view）+
-        // 按登记项权限二次校验，双重 fail-closed；首批登记指标均为平台口径 → 拒绝 merchant-scoped 调用方。
+        // 按登记项权限二次校验，双重 fail-closed。
         authorizationService.requirePermission("analytics.dashboard.view");
         MetricRegistry.MetricDefinition definition = MetricRegistry.require(metric);
         authorizationService.requirePermission(definition.permission());
+        // requirePlatformScope 拦商户级/外包供应商（放行项目级）；项目级作用域收紧在下方由 currentProjectScopeQuietly 派生。
         authorizationService.requirePlatformScope();
         if (merchantId != null && !merchantId.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "首批登记指标为平台口径，暂不支持商户维度（merchant_id）过滤");
+            throw ApiException.badRequest("VALIDATION_FAILED", "登记指标不支持商户维度（merchant_id）过滤");
         }
         if (projectId != null && !projectId.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "当前为单综合体部署，暂不支持按项目维度（project_id）过滤");
+            // 作用域由 token 派生（防越权：不接受客户端指定项目），项目级只能看自己所属综合体。
+            throw ApiException.badRequest("VALIDATION_FAILED", "作用域由登录身份派生，不接受客户端指定项目维度（project_id）过滤");
         }
-        return ApiResponse.ok(service.metricDetail(metric, part, parseOverviewDate(from), parseOverviewDate(to), page, size));
+        // 项目作用域收紧（2026-07-19 用户拍板）：平台管理员/无组织归属→空=看平台全量（不变）；
+        // 项目级操作者→其所属综合体 organizationId=只看本项目；platform_only 指标遇项目级 → 服务层 fail-closed 403。
+        String projectScope = authorizationService.currentProjectScopeQuietly().orElse(null);
+        return ApiResponse.ok(service.metricDetail(metric, part, parseOverviewDate(from), parseOverviewDate(to), page, size, projectScope));
     }
 
     @GetMapping("/metric-anomalies")

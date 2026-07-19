@@ -419,8 +419,16 @@ public interface AnalyticsRepository {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
-    /** finance.ar_balance 明细：逾期未清应收（as-of=截至日），合计=Σunpaid_amount_cent（与 arOverdueAgingByMerchant 同谓词）。 */
+    // 项目作用域收紧（2026-07-19）：以下带 String projectScope 的明细方法在 scope 非空时加
+    //   (:project_scope::text IS NULL OR <scope_col> = :project_scope) 谓词（明细+合计同谓词），
+    //   空 scope=平台全量（行为不变）。scope 列见 MetricRegistry.PROJECT_SCOPE_COLUMNS。
+    //   各方法配「平台口径便捷重载」（无 projectScope=传 null），供既有平台级调用/一致性测试原样调用。
+    /** finance.ar_balance 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset) {
+        return arOpenReceivableDetail(asOf, limit, offset, null);
+    }
+    /** finance.ar_balance 明细：逾期未清应收（as-of=截至日），合计=Σunpaid_amount_cent（与 arOverdueAgingByMerchant 同谓词）。projectScope 非空按 project_id 过滤。 */
+    default AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
@@ -494,44 +502,76 @@ public interface AnalyticsRepository {
     }
 
     /** finance.ap_balance 明细：应付欠款余额（as-of），direction='payable'，同 arOpenReceivableDetail 结构。 */
+    /** finance.ap_balance 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset) {
+        return apOpenPayableDetail(asOf, limit, offset, null);
+    }
+    default AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
     /** finance.ar_balance_aging90p 明细：应收逾期90天以上余额（as-of），应收谓词 + 逾期天数>90。 */
+    /** finance.ar_balance_aging90p 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset) {
+        return arOverdueAging90pDetail(asOf, limit, offset, null);
+    }
+    default AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
     /** settlement.* 明细：通票核销结算流水（transaction_type='verification_settled'）；summaryMode∈{count,amount,tickets}。 */
+    /** settlement.* 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows settlementTransactionDetail(java.time.Instant start, java.time.Instant end, String summaryMode, int limit, int offset) {
+        return settlementTransactionDetail(start, end, summaryMode, limit, offset, null);
+    }
+    default AnalyticsRecords.MetricDetailRows settlementTransactionDetail(java.time.Instant start, java.time.Instant end, String summaryMode, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
     // ==== KPI 统一明细·第五批（人事域）：谓词逐字同各列表端点既有取数 ====
 
     /** staff.shift_count 明细：排班按 work_date 落 [from,to] 闭区间（同 listShifts 平台口径谓词），合计=COUNT(*)。 */
+    /** staff.shift_count 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset) {
+        return staffShiftDetail(from, to, limit, offset, null);
+    }
+    default AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
     /** staff.attendance_count / staff.attendance_late_count 明细：考勤按 punched_at 落自然日窗 [from 00:00, to+1 00:00)（同 listAttendanceOn，不走经营日切）；lateOnly=true 加 judgement='late'；合计=COUNT(*)。 */
+    /** staff.attendance_* 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset) {
+        return staffAttendanceDetail(from, to, lateOnly, limit, offset, null);
+    }
+    default AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
     /** staff.payroll_net_total / staff.payroll_statement_count 明细：薪资单按 month 落 [fromMonth,toMonth] 闭区间（同 listPayrollStatements）；sumTotal=true 合计Σtotal_cent，false 合计份数。 */
+    /** staff.payroll_* 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset) {
+        return staffPayrollDetail(from, to, sumTotal, limit, offset, null);
+    }
+    default AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
     /** staff.pending_leave_count 明细：待审请假（status='pending'、提交时间早于截至日窗末；状态按台账当前值），合计=COUNT(*)。 */
+    /** staff.pending_leave_count 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset) {
+        return staffPendingLeaveDetail(asOf, limit, offset, null);
+    }
+    default AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
     /** staff.active_headcount 明细：在职员工账号（account_type='staff'、status='active'、建号早于截至日窗末），合计=COUNT(*)。 */
+    /** staff.active_headcount 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset) {
+        return staffActiveHeadcountDetail(asOf, limit, offset, null);
+    }
+    default AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset, String projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 

@@ -2110,9 +2110,10 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
-    public AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset) {
+    public AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset, String projectScope) {
         // 与 ETL ar.balance（arOverdueAgingByMerchant）同谓词：应收、未关闭、未收>0、到期日早于截至日。
-        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf);
+        // 项目作用域（2026-07-19）：scope 非空按 project_id 过滤（同 FinanceService ar_ap 列表口径），空=平台全量。
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf).addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, COALESCE(merchant_id, counterparty_id) AS merchant_key, source_type,
                        due_date, unpaid_amount_cent, status
@@ -2121,6 +2122,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY due_date, id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> {
@@ -2140,6 +2142,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                 """, params));
     }
 
@@ -2433,9 +2436,9 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     // ==== KPI 统一明细·第四批（财务域）：谓词逐字同各页面既有取数 ====
 
     @Override
-    public AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset) {
-        // 应付镜像：与 arOpenReceivableDetail 同结构，方向取 payable（as-of=to，起始日不参与）。
-        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf);
+    public AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset, String projectScope) {
+        // 应付镜像：与 arOpenReceivableDetail 同结构，方向取 payable（as-of=to，起始日不参与）。scope 非空按 project_id 过滤。
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf).addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, COALESCE(merchant_id, counterparty_id) AS merchant_key, source_type,
                        due_date, unpaid_amount_cent, status
@@ -2444,6 +2447,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY due_date, id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> arApBalanceRow(rs));
@@ -2454,13 +2458,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                 """, params));
     }
 
     @Override
-    public AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset) {
-        // 与 ETL ar.aging_90p（arOverdueAgingByMerchant 最末桶：(:as_of - due_date) > 90）同谓词。
-        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf);
+    public AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset, String projectScope) {
+        // 与 ETL ar.aging_90p（arOverdueAgingByMerchant 最末桶：(:as_of - due_date) > 90）同谓词。scope 非空按 project_id 过滤。
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("as_of", asOf).addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, COALESCE(merchant_id, counterparty_id) AS merchant_key, source_type,
                        due_date, unpaid_amount_cent, status
@@ -2470,6 +2475,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
                    AND (:as_of - due_date) > 90
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY due_date, id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> arApBalanceRow(rs));
@@ -2481,26 +2487,30 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
                    AND (:as_of - due_date) > 90
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                 """, params));
     }
 
     @Override
-    public AnalyticsRecords.MetricDetailRows settlementTransactionDetail(Instant start, Instant end, String summaryMode, int limit, int offset) {
-        // 与通票结算审阅页 listVerificationSettled 同基础谓词：transaction_type='verification_settled'（默认无项目/商户筛选=平台全量）。
+    public AnalyticsRecords.MetricDetailRows settlementTransactionDetail(Instant start, Instant end, String summaryMode, int limit, int offset, String projectScope) {
+        // 与通票结算审阅页 listVerificationSettled 同基础谓词：transaction_type='verification_settled'（默认无商户筛选）。
         // start/end 可空=全历史（与页面默认「共 N 条」一致）；有窗则按 created_at 落窗。
+        // 项目作用域（2026-07-19）：scope 非空按 project_id 过滤（settlement_transactions.project_id=综合体，同结算审阅页项目筛选口径），空=平台全量。
         String window = start == null ? "" : "AND created_at >= :start AND created_at < :end";
-        MapSqlParameterSource params = start == null
+        String scopePredicate = "AND (:project_scope::text IS NULL OR project_id = :project_scope)";
+        MapSqlParameterSource params = (start == null
                 ? pagedParams(limit, offset)
-                : pagedRangeParams(start, end, limit, offset);
+                : pagedRangeParams(start, end, limit, offset)).addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, transaction_no, project_id, merchant_id, entitlement_type,
                        verified_count, num_people, verified_amount_cent, settlement_status, created_at
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
                  %s
+                 %s
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
-                """.formatted(window), params, (rs, n) -> settlementRow(rs));
+                """.formatted(window, scopePredicate), params, (rs, n) -> settlementRow(rs));
         String summaryExpr = switch (summaryMode) {
             case "amount" -> "COALESCE(SUM(verified_amount_cent), 0)";
             case "tickets" -> "COALESCE(SUM(verified_count), 0)";
@@ -2511,7 +2521,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
                  %s
-                """.formatted(summaryExpr, window), params));
+                 %s
+                """.formatted(summaryExpr, window, scopePredicate), params));
     }
 
     private java.util.Map<String, Object> arApBalanceRow(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -2671,15 +2682,17 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     // ==== KPI 统一明细·第五批（人事域）：谓词逐字同各列表端点既有取数 ====
 
     @Override
-    public AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset) {
-        // 与 listShifts 平台口径同谓词：work_date 落 [from,to] 闭区间（空 project_scope=平台全量）。
+    public AnalyticsRecords.MetricDetailRows staffShiftDetail(LocalDate from, LocalDate to, int limit, int offset, String projectScope) {
+        // 与 listShifts 同谓词：work_date 落 [from,to] 闭区间 + (空 project_scope=平台全量 / 非空=按 project_id 过滤，同 listShifts 项目隔离口径)。
         java.util.Objects.requireNonNull(from, "staff shift detail start must not be null");
         java.util.Objects.requireNonNull(to, "staff shift detail end must not be null");
-        MapSqlParameterSource params = pagedParams(limit, offset).addValue("from", from).addValue("to", to);
+        MapSqlParameterSource params = pagedParams(limit, offset).addValue("from", from).addValue("to", to)
+                .addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, user_id, work_date, start_at, end_at, note
                   FROM staff_shift_schedules
                  WHERE work_date >= :from AND work_date <= :to
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY work_date DESC, start_at, user_id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> staffShiftRow(rs));
@@ -2687,22 +2700,26 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
                   FROM staff_shift_schedules
                  WHERE work_date >= :from AND work_date <= :to
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                 """, params));
     }
 
     @Override
-    public AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset) {
+    public AnalyticsRecords.MetricDetailRows staffAttendanceDetail(LocalDate from, LocalDate to, boolean lateOnly, int limit, int offset, String projectScope) {
         // 与 listAttendanceOn 同自然日窗：punched_at ∈ [from 00:00, to+1 00:00) UTC（刻意不走经营日切）。lateOnly 加 judgement='late'。
+        // 项目作用域：scope 非空按 project_id 过滤（同 listAttendanceOn 项目隔离口径），空=平台全量。
         java.util.Objects.requireNonNull(from, "staff attendance detail start must not be null");
         java.util.Objects.requireNonNull(to, "staff attendance detail end must not be null");
         String lateClause = lateOnly ? "AND judgement = 'late'" : "";
         MapSqlParameterSource params = pagedParams(limit, offset)
                 .addValue("day_start", timestampWithTimeZone(from.atStartOfDay(java.time.ZoneOffset.UTC).toInstant()))
-                .addValue("day_end", timestampWithTimeZone(to.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()));
+                .addValue("day_end", timestampWithTimeZone(to.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()))
+                .addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, user_id, punch_type, punched_at, method, judgement, space_id
                   FROM staff_attendance_records
                  WHERE punched_at >= :day_start AND punched_at < :day_end
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  %s
                  ORDER BY punched_at DESC, id
                  LIMIT :limit OFFSET :offset
@@ -2711,23 +2728,27 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
                   FROM staff_attendance_records
                  WHERE punched_at >= :day_start AND punched_at < :day_end
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  %s
                 """.formatted(lateClause), params));
     }
 
     @Override
-    public AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset) {
-        // 与 listPayrollStatements 平台口径同谓词：month ∈ [fromMonth,toMonth]（YYYY-MM 字典序即时序，空 project_scope=平台全量，不加状态过滤）。
+    public AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset, String projectScope) {
+        // 与 listPayrollStatements 同谓词：month ∈ [fromMonth,toMonth]（YYYY-MM 字典序即时序，不加状态过滤）。
+        // 项目作用域：scope 非空按 project_id 过滤（同 listPayrollStatements 项目隔离口径），空=平台全量。
         java.util.Objects.requireNonNull(from, "staff payroll detail start must not be null");
         java.util.Objects.requireNonNull(to, "staff payroll detail end must not be null");
         java.time.format.DateTimeFormatter ym = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM");
         MapSqlParameterSource params = pagedParams(limit, offset)
                 .addValue("from_month", from.format(ym))
-                .addValue("to_month", to.format(ym));
+                .addValue("to_month", to.format(ym))
+                .addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent, total_cent
                   FROM staff_payroll_statements
                  WHERE month >= :from_month AND month <= :to_month
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY month DESC, user_id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> staffPayrollRow(rs));
@@ -2736,19 +2757,23 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 SELECT COUNT(*) AS total_rows, %s AS summary
                   FROM staff_payroll_statements
                  WHERE month >= :from_month AND month <= :to_month
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                 """.formatted(summaryExpr), params));
     }
 
     @Override
-    public AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset) {
-        // 与 listLeaves(status='pending') 平台口径同谓词；截至日仅限制提交时间早于该自然日窗末（状态按台账当前值）。
+    public AnalyticsRecords.MetricDetailRows staffPendingLeaveDetail(LocalDate asOf, int limit, int offset, String projectScope) {
+        // 与 listLeaves(status='pending') 同谓词；截至日仅限制提交时间早于该自然日窗末（状态按台账当前值）。
+        // 项目作用域：scope 非空按 project_id 过滤（同 listLeaves 项目隔离口径），空=平台全量。
         java.util.Objects.requireNonNull(asOf, "staff pending leave detail asOf must not be null");
         MapSqlParameterSource params = pagedParams(limit, offset)
-                .addValue("as_of_end", timestampWithTimeZone(asOf.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()));
+                .addValue("as_of_end", timestampWithTimeZone(asOf.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()))
+                .addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, user_id, leave_type, start_date, end_date, reason, status
                   FROM staff_leave_requests
                  WHERE status = 'pending' AND created_at < :as_of_end
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> staffLeaveRow(rs));
@@ -2756,19 +2781,23 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
                   FROM staff_leave_requests
                  WHERE status = 'pending' AND created_at < :as_of_end
+                   AND (:project_scope::text IS NULL OR project_id = :project_scope)
                 """, params));
     }
 
     @Override
-    public AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset) {
+    public AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset, String projectScope) {
         // 在职员工=account_type='staff' 且 status='active'（与员工账号页员工类启用账号一致）；截至日仅限制建号时间早于该自然日窗末。
+        // 项目作用域：access_users 用 organization_id 作综合体列（同 AccessService.listUsers(organizationId) 项目隔离口径）；空 scope=平台全量。
         java.util.Objects.requireNonNull(asOf, "staff headcount detail asOf must not be null");
         MapSqlParameterSource params = pagedParams(limit, offset)
-                .addValue("as_of_end", timestampWithTimeZone(asOf.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()));
+                .addValue("as_of_end", timestampWithTimeZone(asOf.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()))
+                .addValue("project_scope", projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, username, account_type, status, created_at
                   FROM access_users
                  WHERE account_type = 'staff' AND status = 'active' AND created_at < :as_of_end
+                   AND (:project_scope::text IS NULL OR organization_id = :project_scope)
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> staffHeadcountRow(rs));
@@ -2776,6 +2805,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
                   FROM access_users
                  WHERE account_type = 'staff' AND status = 'active' AND created_at < :as_of_end
+                   AND (:project_scope::text IS NULL OR organization_id = :project_scope)
                 """, params));
     }
 

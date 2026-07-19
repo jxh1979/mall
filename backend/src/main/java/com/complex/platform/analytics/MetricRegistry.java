@@ -1018,6 +1018,46 @@ public final class MetricRegistry {
         return REGISTRY.values();
     }
 
+    /**
+     * 指标项目作用域声明（2026-07-19 用户拍板：只有平台级管理者能看平台口径 KPI 聚合；项目级操作者只能看本项目内容）。
+     * key=指标编码 → value=该指标明细/合计 SQL 用于按综合体（项目）过滤的 scope 列名（project_id 或 organization_id）。
+     * 谓词形态严格复用业务列表既有口径：{@code (:project_scope::text IS NULL OR <col> = :project_scope)}
+     *   —— 空 scope（平台管理员）不过滤=看全量；非空 scope（项目员工=其 organizationId）只见本项目行
+     *   （NULL 项目行不匹配 → 项目 A 绝不见项目 B/无归属数据，隔离按构造成立）。
+     * 未登记于此表的指标 = 平台口径（platform_only）：其来源表无综合体维度 —— 票务/酒吧/能耗/客人/核销/对账/复核台账
+     *   均无 project_id（merchants 亦无 project_id，故酒吧/存酒无法按商户 join 到项目）；amusement_*.project_id 是
+     *   「游乐项目实体」FK（REFERENCES amusement_projects）非综合体，且游乐域按 merchant 隔离 → 对综合体作用域即 platform_only。
+     * fail-closed 安全默认：新增指标若漏登记 → 视为 platform_only → 项目级 403（功能收紧而非越权泄露，安全方向）。
+     */
+    private static final Map<String, String> PROJECT_SCOPE_COLUMNS = Map.ofEntries(
+            // 财务应收应付台账（ar_ap_items.project_id=综合体，FinanceService 按 currentProjectScopeQuietly 隔离）。
+            Map.entry("finance.ar_balance", "project_id"),
+            Map.entry("finance.ap_balance", "project_id"),
+            Map.entry("finance.ar_balance_aging90p", "project_id"),
+            // 通票核销结算流水（settlement_transactions.project_id=「项目维度(综合体)」，V*/迁移注释）。
+            Map.entry("settlement.transaction_count", "project_id"),
+            Map.entry("settlement.verified_amount", "project_id"),
+            Map.entry("settlement.verified_count", "project_id"),
+            // 人事台账（staff_*.project_id=综合体，StaffService 按 currentProjectScopeQuietly 隔离）。
+            Map.entry("staff.shift_count", "project_id"),
+            Map.entry("staff.attendance_count", "project_id"),
+            Map.entry("staff.attendance_late_count", "project_id"),
+            Map.entry("staff.payroll_net_total", "project_id"),
+            Map.entry("staff.payroll_statement_count", "project_id"),
+            Map.entry("staff.pending_leave_count", "project_id"),
+            // 员工账号（access_users.organization_id=综合体，AccessService.listUsers(organizationId) 同谓词）。
+            Map.entry("staff.active_headcount", "organization_id"));
+
+    /** 指标的项目作用域列名（project_id/organization_id）；空=平台口径（platform_only，项目级不可下钻）。 */
+    public static java.util.Optional<String> projectScopeColumn(String metricKey) {
+        return java.util.Optional.ofNullable(PROJECT_SCOPE_COLUMNS.get(metricKey == null ? null : metricKey.trim()));
+    }
+
+    /** 该指标是否支持按综合体（项目）作用域过滤；false=平台口径（仅平台管理者可见平台聚合，项目级 403）。 */
+    public static boolean isProjectScoped(MetricDefinition definition) {
+        return definition != null && PROJECT_SCOPE_COLUMNS.containsKey(definition.metricKey());
+    }
+
     private MetricRegistry() {
     }
 }

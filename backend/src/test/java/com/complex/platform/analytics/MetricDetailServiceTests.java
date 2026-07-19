@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -146,14 +147,15 @@ class MetricDetailServiceTests {
     @Test
     void balanceMetricUsesEndOfRangeAsOfAndIgnoresFrom() {
         ArgumentCaptor<LocalDate> asOf = ArgumentCaptor.forClass(LocalDate.class);
-        when(repository.arOpenReceivableDetail(any(), anyInt(), anyInt()))
+        when(repository.arOpenReceivableDetail(any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(
                         List.of(row("id", "ar1", "unpaidAmountCent", 70000L)), 1, new BigDecimal("70000")));
 
         MetricDetailResponse response = service.metricDetail(
                 "finance.ar_balance", null, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-10"), 1, 20);
 
-        verify(repository).arOpenReceivableDetail(asOf.capture(), eq(20), eq(0));
+        // 平台口径（6 参重载=projectScope null）：仓储收到 null scope（看全量）。
+        verify(repository).arOpenReceivableDetail(asOf.capture(), eq(20), eq(0), isNull());
         // 余额类=区间末值：as-of=to，from 不参与（summaryNote 说明）。
         assertThat(asOf.getValue()).isEqualTo(LocalDate.parse("2026-07-10"));
         assertThat(response.from()).isNull();
@@ -165,12 +167,12 @@ class MetricDetailServiceTests {
 
     @Test
     void balanceMetricDefaultsAsOfToCurrentBusinessDay() {
-        when(repository.arOpenReceivableDetail(any(), anyInt(), anyInt()))
+        when(repository.arOpenReceivableDetail(any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(), 0, BigDecimal.ZERO));
 
         MetricDetailResponse response = service.metricDetail("finance.ar_balance", null, null, null, 1, 20);
 
-        verify(repository).arOpenReceivableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+        verify(repository).arOpenReceivableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), isNull());
         assertThat(response.to()).isEqualTo(CURRENT_BUSINESS_DAY);
         assertThat(response.summaryNote()).isNull();
     }
@@ -444,41 +446,41 @@ class MetricDetailServiceTests {
     @Test
     void financeFourthBatchDispatchByMetricKey() {
         // 应付余额（as-of=当前财务经营日；财务缺省日切回落全局日切）
-        when(repository.apOpenPayableDetail(any(), anyInt(), anyInt()))
+        when(repository.apOpenPayableDetail(any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "ap1", "unpaidAmountCent", 30000L)), 1, new BigDecimal("30000")));
         MetricDetailResponse ap = service.metricDetail("finance.ap_balance", null, null, null, 1, 20);
         assertThat(ap.valueType()).isEqualTo("balance");
         assertThat(ap.unit()).isEqualTo("分");
         assertThat(ap.to()).isEqualTo(CURRENT_BUSINESS_DAY);
         assertThat(ap.summaryValue()).isEqualByComparingTo("30000");
-        verify(repository).apOpenPayableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+        verify(repository).apOpenPayableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), isNull());
 
         // 坏账预警区（应收逾期90+，as-of 口径）
-        when(repository.arOverdueAging90pDetail(any(), anyInt(), anyInt()))
+        when(repository.arOverdueAging90pDetail(any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "ag1", "unpaidAmountCent", 12000L)), 1, new BigDecimal("12000")));
         MetricDetailResponse aging = service.metricDetail("finance.ar_balance_aging90p", null, null, null, 1, 20);
         assertThat(aging.valueType()).isEqualTo("balance");
         assertThat(aging.summaryValue()).isEqualByComparingTo("12000");
-        verify(repository).arOverdueAging90pDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+        verify(repository).arOverdueAging90pDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), isNull());
 
         // 结算三指标：同一 settlementTransactionDetail 按 summaryMode 分派（count/amount/tickets），全历史（rangeFilterOptional）。
-        when(repository.settlementTransactionDetail(any(), any(), org.mockito.ArgumentMatchers.anyString(), anyInt(), anyInt()))
+        when(repository.settlementTransactionDetail(any(), any(), org.mockito.ArgumentMatchers.anyString(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "s1")), 4, new BigDecimal("4")));
         MetricDetailResponse cnt = service.metricDetail("settlement.transaction_count", null, null, null, 1, 20);
         assertThat(cnt.unit()).isEqualTo("笔");
         assertThat(cnt.from()).isNull();
         assertThat(cnt.to()).isNull();
-        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("count"), eq(20), eq(0));
+        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("count"), eq(20), eq(0), isNull());
         service.metricDetail("settlement.verified_amount", null, null, null, 1, 20);
-        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("amount"), eq(20), eq(0));
+        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("amount"), eq(20), eq(0), isNull());
         service.metricDetail("settlement.verified_count", null, null, null, 1, 20);
-        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("tickets"), eq(20), eq(0));
+        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("tickets"), eq(20), eq(0), isNull());
     }
 
     @Test
     void staffFifthBatchDispatchByMetricKey() {
         // 可加类（人事域）：班次/考勤/薪资单按 LocalDate 区间端点分派（effectiveFrom/effectiveTo），缺省=当前经营日。
-        when(repository.staffShiftDetail(any(), any(), anyInt(), anyInt()))
+        when(repository.staffShiftDetail(any(), any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "sh1")), 2, new BigDecimal("2")));
         MetricDetailResponse shift = service.metricDetail("staff.shift_count", null, null, null, 1, 20);
         assertThat(shift.valueType()).isEqualTo("additive");
@@ -486,42 +488,149 @@ class MetricDetailServiceTests {
         assertThat(shift.from()).isEqualTo(CURRENT_BUSINESS_DAY);
         assertThat(shift.to()).isEqualTo(CURRENT_BUSINESS_DAY);
         assertThat(shift.summaryValue()).isEqualByComparingTo("2");
-        verify(repository).staffShiftDetail(eq(CURRENT_BUSINESS_DAY), eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+        verify(repository).staffShiftDetail(eq(CURRENT_BUSINESS_DAY), eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), isNull());
 
         // 考勤打卡数 / 迟到打卡数：同一 staffAttendanceDetail 按 lateOnly 分派。
-        when(repository.staffAttendanceDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+        when(repository.staffAttendanceDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "at1")), 3, new BigDecimal("3")));
         service.metricDetail("staff.attendance_count", null, LocalDate.parse("2026-07-15"), LocalDate.parse("2026-07-15"), 1, 20);
-        verify(repository).staffAttendanceDetail(eq(LocalDate.parse("2026-07-15")), eq(LocalDate.parse("2026-07-15")), eq(false), eq(20), eq(0));
+        verify(repository).staffAttendanceDetail(eq(LocalDate.parse("2026-07-15")), eq(LocalDate.parse("2026-07-15")), eq(false), eq(20), eq(0), isNull());
         service.metricDetail("staff.attendance_late_count", null, LocalDate.parse("2026-07-15"), LocalDate.parse("2026-07-15"), 1, 20);
-        verify(repository).staffAttendanceDetail(eq(LocalDate.parse("2026-07-15")), eq(LocalDate.parse("2026-07-15")), eq(true), eq(20), eq(0));
+        verify(repository).staffAttendanceDetail(eq(LocalDate.parse("2026-07-15")), eq(LocalDate.parse("2026-07-15")), eq(true), eq(20), eq(0), isNull());
 
         // 实发合计 / 薪资单数：同一 staffPayrollDetail 按 sumTotal 分派。
-        when(repository.staffPayrollDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+        when(repository.staffPayrollDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "pay1", "totalCent", 120000L)), 1, new BigDecimal("120000")));
         MetricDetailResponse total = service.metricDetail("staff.payroll_net_total", null, LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-01"), 1, 20);
         assertThat(total.unit()).isEqualTo("分");
         assertThat(total.summaryValue()).isEqualByComparingTo("120000");
-        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(true), eq(20), eq(0));
+        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(true), eq(20), eq(0), isNull());
         service.metricDetail("staff.payroll_statement_count", null, LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-01"), 1, 20);
-        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(false), eq(20), eq(0));
+        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(false), eq(20), eq(0), isNull());
 
         // 余额类（人事域）：待审请假 / 在职员工数 as-of=to（缺省=当前经营日），from 不参与。
-        when(repository.staffPendingLeaveDetail(any(), anyInt(), anyInt()))
+        when(repository.staffPendingLeaveDetail(any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "lv1")), 1, new BigDecimal("1")));
         MetricDetailResponse leave = service.metricDetail("staff.pending_leave_count", null, null, null, 1, 20);
         assertThat(leave.valueType()).isEqualTo("balance");
         assertThat(leave.unit()).isEqualTo("笔");
         assertThat(leave.to()).isEqualTo(CURRENT_BUSINESS_DAY);
-        verify(repository).staffPendingLeaveDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+        verify(repository).staffPendingLeaveDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), isNull());
 
-        when(repository.staffActiveHeadcountDetail(any(), anyInt(), anyInt()))
+        when(repository.staffActiveHeadcountDetail(any(), anyInt(), anyInt(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "u1")), 5, new BigDecimal("5")));
         MetricDetailResponse headcount = service.metricDetail("staff.active_headcount", null, null, null, 1, 20);
         assertThat(headcount.valueType()).isEqualTo("balance");
         assertThat(headcount.unit()).isEqualTo("人");
         assertThat(headcount.summaryValue()).isEqualByComparingTo("5");
-        verify(repository).staffActiveHeadcountDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0));
+        verify(repository).staffActiveHeadcountDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), isNull());
+    }
+
+    // ==== 项目作用域收紧（2026-07-19 用户拍板：只有平台级管理者看平台口径聚合；项目级只看本项目）====
+
+    @Test
+    void platformOnlyMetricsRejectProjectScopedCallerFailClosed() {
+        // 平台口径指标（来源表无综合体维度）遇非空项目 scope → 403（服务层纵深防御，防绕过 controller 直调）。
+        for (String platformOnly : List.of("revenue.ticket", "revenue.bar", "bar.order_count",
+                "ticket.order_count", "amusement.session_count", "amusement.entry_count",
+                "energy.total_electricity", "verify.done", "member.new", "risk.pending_review",
+                "finance.recon_diff_count")) {
+            assertThatThrownBy(() -> service.metricDetail(platformOnly, null, null, null, 1, 20, "proj-A"))
+                    .as("platform_only 指标 %s 项目级应拒", platformOnly)
+                    .isInstanceOf(ApiException.class)
+                    .hasMessageContaining("平台口径");
+        }
+        // 平台管理员（null scope）访问平台口径指标不受影响。
+        when(repository.ticketRevenueDetail(any(), any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "t1", "amountCent", 100L)), 1, new BigDecimal("100")));
+        assertThat(service.metricDetail("revenue.ticket", null, null, null, 1, 20, null).summaryValue())
+                .isEqualByComparingTo("100");
+    }
+
+    @Test
+    void projectScopedFinanceMetricPassesScopeAndNumberEqualsDetail() {
+        when(repository.arOpenReceivableDetail(any(), anyInt(), anyInt(), any()))
+                .thenReturn(new MetricDetailRows(
+                        List.of(row("id", "arA", "unpaidAmountCent", 5000L)), 1, new BigDecimal("5000")));
+
+        MetricDetailResponse response = service.metricDetail("finance.ar_balance", null, null, null, 1, 20, "proj-A");
+
+        // 项目级：scope 透传仓储（按 project_id 过滤）；明细与合计同一仓储调用同谓词 → 数字=明细合计。
+        verify(repository).arOpenReceivableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq("proj-A"));
+        assertThat(response.summaryValue()).isEqualByComparingTo("5000");
+        assertThat(response.rows()).hasSize(1);
+        assertThat(response.summaryNote()).contains("综合体");
+    }
+
+    @Test
+    void projectScopedStaffAdditiveMetricPassesScopeToRepository() {
+        when(repository.staffShiftDetail(any(), any(), anyInt(), anyInt(), any()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "shA")), 1, new BigDecimal("1")));
+
+        MetricDetailResponse response = service.metricDetail("staff.shift_count", null, null, null, 1, 20, "proj-A");
+
+        verify(repository).staffShiftDetail(eq(CURRENT_BUSINESS_DAY), eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq("proj-A"));
+        assertThat(response.summaryNote()).contains("项目级作用域");
+    }
+
+    @Test
+    void projectScopedSettlementMetricPassesScopeToRepository() {
+        when(repository.settlementTransactionDetail(any(), any(), org.mockito.ArgumentMatchers.anyString(), anyInt(), anyInt(), any()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "s1")), 2, new BigDecimal("2")));
+
+        service.metricDetail("settlement.transaction_count", null, null, null, 1, 20, "proj-A");
+
+        verify(repository).settlementTransactionDetail(eq(null), eq(null), eq("count"), eq(20), eq(0), eq("proj-A"));
+    }
+
+    @Test
+    void projectScopedHeadcountMetricPassesScopeViaOrganizationColumn() {
+        when(repository.staffActiveHeadcountDetail(any(), anyInt(), anyInt(), any()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "u1")), 3, new BigDecimal("3")));
+
+        service.metricDetail("staff.active_headcount", null, null, null, 1, 20, "proj-A");
+
+        // access_users 用 organization_id 作综合体列；scope 透传仓储（仓储层用 organization_id 谓词）。
+        verify(repository).staffActiveHeadcountDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), eq("proj-A"));
+    }
+
+    @Test
+    void platformAdminNullScopeSeesFullPlatformForProjectScopedMetric() {
+        when(repository.staffPayrollDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt(), any()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "p1", "totalCent", 9L)), 1, new BigDecimal("9")));
+
+        MetricDetailResponse response = service.metricDetail(
+                "staff.payroll_net_total", null, LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-01"), 1, 20, null);
+
+        // 平台管理员=null scope → 仓储收到 null（看全量），不加项目口径说明。
+        verify(repository).staffPayrollDetail(any(), any(), eq(true), eq(20), eq(0), isNull());
+        assertThat(response.summaryNote()).isNull();
+    }
+
+    @Test
+    void registryClassifiesEveryMetricProjectScopeFailClosed() {
+        // 13 项目作用域指标（value=scope 列）；其余全部 platform_only（projectScopeColumn 为空）。fail-closed 分类守卫。
+        Map<String, String> expectedScoped = new LinkedHashMap<>();
+        for (String k : List.of("finance.ar_balance", "finance.ap_balance", "finance.ar_balance_aging90p",
+                "settlement.transaction_count", "settlement.verified_amount", "settlement.verified_count",
+                "staff.shift_count", "staff.attendance_count", "staff.attendance_late_count",
+                "staff.payroll_net_total", "staff.payroll_statement_count", "staff.pending_leave_count")) {
+            expectedScoped.put(k, "project_id");
+        }
+        expectedScoped.put("staff.active_headcount", "organization_id");
+
+        for (MetricRegistry.MetricDefinition def : MetricRegistry.all()) {
+            Optional<String> col = MetricRegistry.projectScopeColumn(def.metricKey());
+            if (expectedScoped.containsKey(def.metricKey())) {
+                assertThat(col).as("指标 %s 应为项目作用域", def.metricKey())
+                        .contains(expectedScoped.get(def.metricKey()));
+                assertThat(MetricRegistry.isProjectScoped(def)).isTrue();
+            } else {
+                assertThat(col).as("指标 %s 应为平台口径 platform_only", def.metricKey()).isEmpty();
+                assertThat(MetricRegistry.isProjectScoped(def)).isFalse();
+            }
+        }
+        assertThat(expectedScoped).hasSize(13);
     }
 
     private static Map<String, Object> row(Object... kv) {
