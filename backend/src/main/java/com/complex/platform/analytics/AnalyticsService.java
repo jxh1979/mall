@@ -1395,6 +1395,8 @@ public class AnalyticsService {
                 // 第五批（人事域）余额类：待审请假/在职员工数按台账当前值，截至日仅限制提交/建号时间早于该自然日窗末。
                 case "staff.pending_leave_count" -> repository.staffPendingLeaveDetail(asOf, safeSize, offset);
                 case "staff.active_headcount" -> repository.staffActiveHeadcountDetail(asOf, safeSize, offset);
+                // 第六批（总控驾驶舱）余额类：待复核=待复核主管审批+未处置风险预警合并；截至日仅限制产生时间早于该自然日窗末。
+                case "risk.pending_review" -> repository.pendingReviewDetail(asOf, safeSize, offset);
                 default -> throw ApiException.badRequest("VALIDATION_FAILED",
                         "指标已登记但明细查询未接线：" + definition.metricKey());
             };
@@ -1456,6 +1458,10 @@ public class AnalyticsService {
             case "staff.attendance_late_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, true, safeSize, offset);
             case "staff.payroll_net_total" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, true, safeSize, offset);
             case "staff.payroll_statement_count" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, false, safeSize, offset);
+            // 第六批（总控驾驶舱）可加类：谓词逐字抄总览 ETL 聚合（DashboardAggregationJob），单日 as-of 时窗口与 ETL dayRange 同。
+            case "traffic.amusement" -> repository.amusementVerificationSuccessDetail(windowStart, windowEnd, safeSize, offset);
+            case "verify.done" -> repository.ticketVerificationSuccessDetail(windowStart, windowEnd, safeSize, offset);
+            case "member.new" -> repository.newMemberDetail(windowStart, windowEnd, safeSize, offset);
             default -> throw ApiException.badRequest("VALIDATION_FAILED",
                     "指标已登记但明细查询未接线：" + definition.metricKey());
         };

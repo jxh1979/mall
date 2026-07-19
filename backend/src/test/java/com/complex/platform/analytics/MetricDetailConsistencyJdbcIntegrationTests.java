@@ -743,6 +743,102 @@ class MetricDetailConsistencyJdbcIntegrationTests {
                 });
     }
 
+    // ---- 第六批（总控驾驶舱剩余四卡）：谓词逐字抄总览 ETL 聚合（DashboardAggregationJob） ----
+
+    @Test
+    void amusementVerificationSuccessSummaryEqualsPagedDetailCountAndEtlAggregate() {
+        Instant start = businessDayResolver.startInstant("amusement", DAY);
+        Instant end = businessDayResolver.endInstant("amusement", DAY);
+        BigDecimal baseline = repository.amusementVerificationSuccessDetail(start, end, 1, 0).summaryValue();
+        insertAmusementProject("proj_tav");
+        insertAmusementSession("ses_tav", "proj_tav", 300, "open");
+        insertAmusementVerification("tav_e1", "proj_tav", "ses_tav", "entry");
+        insertAmusementVerification("tav_e2", "proj_tav", "ses_tav", "entry");
+        insertAmusementVerification("tav_x1", "proj_tav", "ses_tav", "exit"); // 出场也计入（两方向成功核销）
+
+        MetricDetailRows rows = repository.amusementVerificationSuccessDetail(start, end, 200, 0);
+        assertThat(rows.summaryValue().subtract(baseline)).isEqualByComparingTo("3");
+        // 数字=明细合计：翻完所有页，行数==summaryValue。
+        assertThat(collectAllPages((limit, offset) -> repository.amusementVerificationSuccessDetail(start, end, limit, offset)))
+                .hasSize((int) rows.totalRows());
+        // 与总览 ETL 聚合同源同口径。
+        assertThat(repository.countAmusementVerificationSuccess(DAY)).isEqualByComparingTo(rows.summaryValue());
+    }
+
+    @Test
+    void ticketVerificationSuccessSummaryEqualsPagedDetailCountAndEtlPlatformTotal() {
+        // 票务核销依赖 issued_entitlements/terminal_devices 多级外键——不新种子，用共享库存量数据的「同源一致」断言：
+        // 明细行数==summaryValue==ETL 平台合计（status='success' 同谓词），证登记项明细与总览 ETL 同口径。
+        Instant start = businessDayResolver.startInstant("ticketing", DAY);
+        Instant end = businessDayResolver.endInstant("ticketing", DAY);
+        MetricDetailRows rows = repository.ticketVerificationSuccessDetail(start, end, 200, 0);
+        assertThat(collectAllPages((limit, offset) -> repository.ticketVerificationSuccessDetail(start, end, limit, offset)))
+                .hasSize((int) rows.totalRows());
+        BigDecimal etlPlatformTotal = repository.countTicketVerificationSuccessByMerchant(DAY).values().stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(rows.summaryValue()).isEqualByComparingTo(etlPlatformTotal);
+    }
+
+    @Test
+    void newMemberSummaryEqualsPagedDetailCountAndEtlAggregate() {
+        Instant start = businessDayResolver.startInstant("customer", DAY);
+        Instant end = businessDayResolver.endInstant("customer", DAY);
+        BigDecimal baseline = repository.newMemberDetail(start, end, 1, 0).summaryValue();
+        insertMember(sid("cu_active"), "active");
+        insertMember(sid("cu_dereg"), "deregistered"); // 注销 → 不进口径
+        insertMember(sid("cu_black"), "blacklisted");   // 拉黑 → 不进口径
+
+        MetricDetailRows rows = repository.newMemberDetail(start, end, 200, 0);
+        assertThat(rows.summaryValue().subtract(baseline)).isEqualByComparingTo("1");
+        assertThat(collectAllPages((limit, offset) -> repository.newMemberDetail(start, end, limit, offset)))
+                .hasSize((int) rows.totalRows());
+        // 与总览 ETL 聚合同源同口径。
+        assertThat(repository.countNewMembers(DAY)).isEqualByComparingTo(rows.summaryValue());
+    }
+
+    @Test
+    void pendingReviewSummaryEqualsPagedDetailCountAndEtlAggregate() {
+        LocalDate asOf = LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1);
+        BigDecimal baseline = repository.pendingReviewDetail(asOf, 1, 0).summaryValue();
+        BigDecimal etlBaseline = repository.countPendingReview();
+        insertSupervisorReview(sid("srd_pending"), "pending_review");
+        insertSupervisorReview(sid("srd_allowed"), "allowed"); // 非待复核 → 不进口径
+        insertRiskAlert(sid("ra_open"), "open");
+        insertRiskAlert(sid("ra_resolved"), "resolved");        // 已处置 → 不进口径
+
+        MetricDetailRows rows = repository.pendingReviewDetail(asOf, 200, 0);
+        assertThat(rows.summaryValue().subtract(baseline)).isEqualByComparingTo("2"); // 1 待复核 + 1 未处置预警
+        // 明细与 ETL 同谓词同步增（ETL countPendingReview 无 as-of 过滤，delta 口径下与明细一致）。
+        assertThat(repository.countPendingReview().subtract(etlBaseline)).isEqualByComparingTo("2");
+        assertThat(collectAllPages((limit, offset) -> repository.pendingReviewDetail(asOf, limit, offset)))
+                .hasSize((int) rows.totalRows());
+    }
+
+    private void insertMember(String id, String status) {
+        // 与 AnalyticsJdbcIntegrationTests.insertCustomer 同范式：phone 走 enc 占位（V188 起为密文列），仅脱敏列可读。
+        jdbcTemplate.update("""
+                INSERT INTO customers (id, phone, masked_phone, status, created_at, updated_at)
+                VALUES (:id, 'enc:v1:'||:id, '138****0000', :status, :at, :at)
+                """, new MapSqlParameterSource().addValue("id", id).addValue("status", status).addValue("at", dayTs()));
+    }
+
+    private void insertSupervisorReview(String id, String reviewStatus) {
+        // 规范待复核状态=SupervisorReviewService 写入的 'pending_review'（与 countPendingReview 修正后同谓词）。
+        jdbcTemplate.update("""
+                INSERT INTO supervisor_review_decisions
+                    (review_id, policy_code, action_type, object_type, object_id, blocked, review_status, required_level, evaluated_at)
+                VALUES (:id, 'pol_mdc', 'high_risk', 'merchant', :id, TRUE, :status, 5, now())
+                """, new MapSqlParameterSource().addValue("id", id).addValue("status", reviewStatus));
+    }
+
+    private void insertRiskAlert(String id, String status) {
+        jdbcTemplate.update("""
+                INSERT INTO analytics_risk_alerts
+                    (id, alert_type, risk_level, object_type, object_id, summary, status, created_at, updated_at)
+                VALUES (:id, 'anomaly', 'high', 'order', :id, 'MDC 测试预警', :status, now(), now())
+                """, new MapSqlParameterSource().addValue("id", id).addValue("status", status));
+    }
+
     private void insertShift(String id, LocalDate workDate) {
         jdbcTemplate.update("""
                 INSERT INTO staff_shift_schedules (id, user_id, work_date, start_at, end_at, created_at, updated_at)

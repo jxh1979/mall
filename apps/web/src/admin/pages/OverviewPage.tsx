@@ -14,11 +14,6 @@ function metricValue(data: OverviewPayload | null, metricCode: string): number |
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function metricText(data: OverviewPayload | null, metricCode: string): string {
-  const value = metricValue(data, metricCode);
-  return value === null ? "—" : String(value);
-}
-
 // 同口径指标对比柱（revenue.* 同为「分」，traffic/verify/member 同为人次/数量），
 // 以内联 SVG 迷你柱状图替代纯文字趋势，不引入图表依赖。
 const REVENUE_BARS: Array<{ code: string; label: string }> = [
@@ -67,10 +62,27 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
   const ticketDisplay = ticketKpi.status === "ready" && ticketKpi.value !== null ? ticketKpi.value : metricValue(data, "revenue.ticket");
   const arDisplay = arKpi.status === "ready" && arKpi.value !== null ? arKpi.value : metricValue(data, "ar.balance");
   const barDisplay = barKpi.status === "ready" && barKpi.value !== null ? barKpi.value : metricValue(data, "revenue.bar");
+  // 第六批接线（总控驾驶舱剩余卡）：游乐核销/票务核销/新增会员/待复核四卡改走统一明细端点（与明细页同源，谓词逐字抄总览 ETL 聚合），
+  // 失败（含无权限）回退既有快照值并隐藏「完整明细」入口。可加类同经营日 as-of（from=to），待复核为余额类（仅 to）。
+  const amusementKpi = useMetricKpiValue(api, "traffic.amusement", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
+  const verifyKpi = useMetricKpiValue(api, "verify.done", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
+  const memberKpi = useMetricKpiValue(api, "member.new", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
+  const riskKpi = useMetricKpiValue(api, "risk.pending_review", { to: asOfDay, enabled: !!asOfDay });
+  const amusementDisplay = amusementKpi.status === "ready" && amusementKpi.value !== null ? amusementKpi.value : metricValue(data, "traffic.amusement");
+  const verifyDisplay = verifyKpi.status === "ready" && verifyKpi.value !== null ? verifyKpi.value : metricValue(data, "verify.done");
+  const memberDisplay = memberKpi.status === "ready" && memberKpi.value !== null ? memberKpi.value : metricValue(data, "member.new");
+  const riskDisplay = riskKpi.status === "ready" && riskKpi.value !== null ? riskKpi.value : metricValue(data, "risk.pending_review");
 
   const revenueValues = REVENUE_BARS.map((item) =>
     (item.code === "revenue.ticket" ? ticketDisplay : item.code === "revenue.bar" ? barDisplay : metricValue(data, item.code)) ?? 0);
-  const volumeValues = VOLUME_BARS.map((item) => metricValue(data, item.code) ?? 0);
+  // 量对比柱与卡片头数同源（走统一端点显示值，回退快照），避免柱=快照而头数=实时的漂移。
+  const volumeDisplayByCode: Record<string, number | null> = {
+    "traffic.amusement": amusementDisplay,
+    "verify.done": verifyDisplay,
+    "member.new": memberDisplay,
+    "risk.pending_review": riskDisplay,
+  };
+  const volumeValues = VOLUME_BARS.map((item) => (volumeDisplayByCode[item.code] ?? metricValue(data, item.code)) ?? 0);
   const hasRevenue = revenueValues.some((value) => value > 0);
   const hasVolume = volumeValues.some((value) => value > 0);
 
@@ -87,10 +99,10 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
         <div className="admin-kpi-grid">
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-ticket"><span>票务收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-ticket-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{ticketDisplay === null ? "—" : String(ticketDisplay)}</button><small>已支付订单实付（分），查看出票与核销追踪{ticketKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="revenue.ticket" from={asOfDay} to={asOfDay} testid="overview-metric-detail-ticket" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-bar"><span>酒吧收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-bar-value" onClick={() => navigateTo?.("ADM-BAR-002")}>{barDisplay === null ? "—" : String(barDisplay)}</button><small>已结算账单实收（分），查看酒吧账单{barKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="revenue.bar" from={asOfDay} to={asOfDay} testid="overview-metric-detail-bar" /></> : null}</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-amusement"><span>游乐核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-amusement-value" onClick={() => navigateTo?.("ADM-AMU-001")}>{metricText(data, "traffic.amusement")}</button><small>成功核销人次，查看游乐核销</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-verify"><span>票务核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-verify-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{metricText(data, "verify.done")}</button><small>成功核销数，查看出票与核销追踪</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-member"><span>新增会员</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-member-value" onClick={() => navigateTo?.("ADM-CUS-001")}>{metricText(data, "member.new")}</button><small>当日新建，查看客人账号管理</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-risk"><span>待复核</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-risk-value" onClick={() => navigateTo?.("ADM-GOV-006")}>{metricText(data, "risk.pending_review")}</button><small>复核 + 风险预警，查看主管复核</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-amusement"><span>游乐核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-amusement-value" onClick={() => navigateTo?.("ADM-AMU-001")}>{amusementDisplay === null ? "—" : String(amusementDisplay)}</button><small>成功核销记录数（入场+出场），查看游乐核销{amusementKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="traffic.amusement" from={asOfDay} to={asOfDay} testid="overview-metric-detail-amusement" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-verify"><span>票务核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-verify-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{verifyDisplay === null ? "—" : String(verifyDisplay)}</button><small>成功核销数，查看出票与核销追踪{verifyKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="verify.done" from={asOfDay} to={asOfDay} testid="overview-metric-detail-verify" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-member"><span>新增会员</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-member-value" onClick={() => navigateTo?.("ADM-CUS-001")}>{memberDisplay === null ? "—" : String(memberDisplay)}</button><small>当日新建，查看客人账号管理{memberKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="member.new" from={asOfDay} to={asOfDay} testid="overview-metric-detail-member" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-risk"><span>待复核</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-risk-value" onClick={() => navigateTo?.("ADM-GOV-006")}>{riskDisplay === null ? "—" : String(riskDisplay)}</button><small>复核 + 风险预警，查看主管复核{riskKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="risk.pending_review" to={asOfDay} testid="overview-metric-detail-risk" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-ar"><span>应收欠费余额</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-ar-value" onClick={() => navigateTo?.("ADM-ANA-004")}>{arDisplay === null ? "—" : String(arDisplay)}</button><small>逾期未清应收（分），查看欠费与回款{arKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="finance.ar_balance" to={asOfDay} testid="overview-metric-detail-ar" /></> : null}</small></div>
         </div>
         {hasRevenue || hasVolume ? (

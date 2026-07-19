@@ -14,6 +14,10 @@ const OVERVIEW = {
     "revenue.ticket": { value: 999 }, // 快照旧值：接线后数字应以统一端点为准
     "revenue.bar": { value: 100 },
     "ar.balance": { value: 111 },
+    "traffic.amusement": { value: 40 },
+    "verify.done": { value: 41 },
+    "member.new": { value: 42 },
+    "risk.pending_review": { value: 43 },
   },
 };
 
@@ -22,6 +26,14 @@ const TICKET_DETAIL = { metricKey: "revenue.ticket", valueType: "additive", summ
 const AR_DETAIL = { metricKey: "finance.ar_balance", valueType: "balance", summaryValue: 70000, rows: [{ id: "ar-1", unpaidAmountCent: 70000 }], totalRows: 1, columns: [] };
 const BAR_ROWS = [{ id: "bbs-1", billId: "bill-1", settlementAmountCent: 8800 }, { id: "bbs-2", billId: "bill-2", settlementAmountCent: 1200 }];
 const BAR_DETAIL = { metricKey: "revenue.bar", valueType: "additive", summaryValue: 10000, rows: BAR_ROWS, totalRows: 2, columns: [] };
+// 第六批：总控剩余四卡（可加类合计=明细行数；余额类待复核=区间末值）。
+const AMUSEMENT_ROWS = [{ id: "av-1" }, { id: "av-2" }, { id: "av-3" }];
+const AMUSEMENT_DETAIL = { metricKey: "traffic.amusement", valueType: "additive", summaryValue: 3, rows: AMUSEMENT_ROWS, totalRows: 3, columns: [] };
+const VERIFY_ROWS = [{ id: "tv-1" }, { id: "tv-2" }];
+const VERIFY_DETAIL = { metricKey: "verify.done", valueType: "additive", summaryValue: 2, rows: VERIFY_ROWS, totalRows: 2, columns: [] };
+const MEMBER_ROWS = [{ id: "cu-1" }, { id: "cu-2" }, { id: "cu-3" }, { id: "cu-4" }];
+const MEMBER_DETAIL = { metricKey: "member.new", valueType: "additive", summaryValue: 4, rows: MEMBER_ROWS, totalRows: 4, columns: [] };
+const RISK_DETAIL = { metricKey: "risk.pending_review", valueType: "balance", summaryValue: 7, rows: [{ id: "rv-1", source: "主管复核" }], totalRows: 1, columns: [] };
 
 function makeApi(metricDetailFails = false): AdminApiClient {
   return {
@@ -30,6 +42,10 @@ function makeApi(metricDetailFails = false): AdminApiClient {
         if (metricDetailFails) throw new Error("forbidden");
         if (url.includes("metric=finance.ar_balance")) return AR_DETAIL;
         if (url.includes("metric=revenue.bar")) return BAR_DETAIL;
+        if (url.includes("metric=traffic.amusement")) return AMUSEMENT_DETAIL;
+        if (url.includes("metric=verify.done")) return VERIFY_DETAIL;
+        if (url.includes("metric=member.new")) return MEMBER_DETAIL;
+        if (url.includes("metric=risk.pending_review")) return RISK_DETAIL;
         return TICKET_DETAIL;
       }
       return OVERVIEW;
@@ -99,6 +115,38 @@ describe("OverviewPage 首批接线：数字改走统一明细端点（数字=�
     expect(detailCall).toContain("to=2026-07-17");
   });
 
+  it.each([
+    ["overview-kpi-amusement-value", "overview-metric-detail-amusement", "traffic.amusement", AMUSEMENT_ROWS.length],
+    ["overview-kpi-verify-value", "overview-metric-detail-verify", "verify.done", VERIFY_ROWS.length],
+    ["overview-kpi-member-value", "overview-metric-detail-member", "member.new", MEMBER_ROWS.length],
+  ])("第六批可加卡 %s：数字=统一端点合计=明细行数，带完整明细入口且区间=经营日", async (valueId, linkId, metric, rowCount) => {
+    const api = makeApi();
+    renderPage(api);
+
+    await waitFor(() => expect(screen.getByTestId(valueId).textContent).toBe(String(rowCount)));
+    expect(screen.getByTestId(linkId)).toBeTruthy();
+
+    const detailCall = (api.get as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0] as string)
+      .find((url) => url.includes(`metric=${metric}`));
+    expect(detailCall).toContain("from=2026-07-17");
+    expect(detailCall).toContain("to=2026-07-17");
+  });
+
+  it("待复核卡（余额类）：数字=统一端点区间末值，带完整明细入口且仅带 to", async () => {
+    const api = makeApi();
+    renderPage(api);
+
+    await waitFor(() => expect(screen.getByTestId("overview-kpi-risk-value").textContent).toBe("7"));
+    expect(screen.getByTestId("overview-metric-detail-risk")).toBeTruthy();
+
+    const detailCall = (api.get as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0] as string)
+      .find((url) => url.includes("metric=risk.pending_review"));
+    expect(detailCall).toContain("to=2026-07-17");
+    expect(detailCall).not.toContain("from=");
+  });
+
   it("统一端点失败（含无权限）→ 回退快照值并隐藏完整明细入口，体验不降级", async () => {
     const api = makeApi(true);
     renderPage(api);
@@ -110,5 +158,14 @@ describe("OverviewPage 首批接线：数字改走统一明细端点（数字=�
     // 第二批：酒吧收入卡同样回退快照值并隐藏入口。
     expect(screen.getByTestId("overview-kpi-bar-value").textContent).toBe("100");
     expect(screen.queryByTestId("overview-metric-detail-bar")).toBeNull();
+    // 第六批：总控剩余四卡同样回退快照值并隐藏入口。
+    expect(screen.getByTestId("overview-kpi-amusement-value").textContent).toBe("40");
+    expect(screen.queryByTestId("overview-metric-detail-amusement")).toBeNull();
+    expect(screen.getByTestId("overview-kpi-verify-value").textContent).toBe("41");
+    expect(screen.queryByTestId("overview-metric-detail-verify")).toBeNull();
+    expect(screen.getByTestId("overview-kpi-member-value").textContent).toBe("42");
+    expect(screen.queryByTestId("overview-metric-detail-member")).toBeNull();
+    expect(screen.getByTestId("overview-kpi-risk-value").textContent).toBe("43");
+    expect(screen.queryByTestId("overview-metric-detail-risk")).toBeNull();
   });
 });

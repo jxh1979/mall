@@ -525,4 +525,24 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows staffActiveHeadcountDetail(LocalDate asOf, int limit, int offset) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
+
+    /** traffic.amusement 明细：成功游乐核销记录（verification_result='success'，两方向），合计=COUNT(*)。谓词同 ETL countAmusementVerificationSuccess。 */
+    default AnalyticsRecords.MetricDetailRows amusementVerificationSuccessDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** verify.done 明细：成功票务核销记录（status='success'），合计=COUNT(*)。谓词同 ETL countTicketVerificationSuccessByMerchant 平台合计。 */
+    default AnalyticsRecords.MetricDetailRows ticketVerificationSuccessDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** member.new 明细：新增客人账号（建号落窗、status NOT IN ('deregistered','blacklisted')；仅脱敏列），合计=COUNT(*)。谓词同 ETL countNewMembers。 */
+    default AnalyticsRecords.MetricDetailRows newMemberDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** risk.pending_review 明细：待复核主管审批（review_status='pending_review'）+ 未处置风险预警（status='open'），产生时间早于截至日窗末，合计=COUNT(*)。谓词同 ETL countPendingReview。 */
+    default AnalyticsRecords.MetricDetailRows pendingReviewDetail(LocalDate asOf, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
 }
