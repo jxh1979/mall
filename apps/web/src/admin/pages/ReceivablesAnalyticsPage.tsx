@@ -5,6 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
@@ -75,6 +76,14 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
   const rateRaw = metrics["ar.collection_rate_mtd"]?.value;
   const rate = rateRaw === null || rateRaw === undefined ? null : Number(rateRaw);
 
+  // 第四批接线（指标登记簿方案A）：欠费总额→finance.ar_balance、坏账预警区→finance.ar_balance_aging90p 改走统一明细端点
+  // （余额类 as-of=当前财务经营日，与看板 ETL 桶同谓词同源）；端点失败（含无 analytics.dashboard.view 的财务账号）→
+  // 回退本页 ETL 快照值并隐藏「完整明细」入口，体验不降级。
+  const balanceKpi = useMetricKpiValue(api, "finance.ar_balance", {});
+  const aging90pKpi = useMetricKpiValue(api, "finance.ar_balance_aging90p", {});
+  const balanceDisplay = balanceKpi.status === "ready" && balanceKpi.value !== null ? balanceKpi.value : balance;
+  const aging90pDisplay = aging90pKpi.status === "ready" && aging90pKpi.value !== null ? aging90pKpi.value : aging90p;
+
   const bucketValues = BUCKETS.map((bucket) => ({ ...bucket, amount: cents(metrics[bucket.metric]) ?? 0 }));
   const bucketTotal = bucketValues.reduce((sum, bucket) => sum + bucket.amount, 0);
 
@@ -106,8 +115,8 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-muted-action" data-testid="receivables-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(每日快照,约 5 分钟刷新)</div>
         <div className="admin-kpi-grid" data-testid="receivables-summary">
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>欠费总额</span><button type="button" className="admin-kpi-value" data-testid="receivables-balance" onClick={() => navigateTo?.("ADM-FIN-001")}>{money(balance)}</button><small>逾期未清(期末时点)，查看应收应付台账</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>坏账预警区</span><button type="button" className="admin-kpi-value" data-testid="receivables-aging90p" onClick={() => navigateTo?.("ADM-FIN-001")}>{money(aging90p)}</button><small>逾期 90 天以上，查看应收应付台账</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>欠费总额</span><button type="button" className="admin-kpi-value" data-testid="receivables-balance" onClick={() => navigateTo?.("ADM-FIN-001")}>{money(balanceDisplay)}</button><small>逾期未清(期末时点)，查看应收应付台账{balanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="finance.ar_balance" testid="receivables-metric-detail-balance" /> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>坏账预警区</span><button type="button" className="admin-kpi-value" data-testid="receivables-aging90p" onClick={() => navigateTo?.("ADM-FIN-001")}>{money(aging90pDisplay)}</button><small>逾期 90 天以上，查看应收应付台账{aging90pKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="finance.ar_balance_aging90p" testid="receivables-metric-detail-aging90p" /> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>本月回款率</span><button type="button" className="admin-kpi-value" data-testid="receivables-rate" onClick={() => navigateTo?.("ADM-FIN-001")}>{rate === null ? "—" : `${(rate * 100).toFixed(2)}%`}</button><small>实收 {money(collected)} / 应收 {money(receivableMtd)}，查看应收应付台账</small></div>
         </div>
         <h3>账龄分布</h3>

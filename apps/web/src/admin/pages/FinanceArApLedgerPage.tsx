@@ -10,6 +10,7 @@ import type { AdminPageProps, FinanceLedgerRow } from "../types";
 import type { PagedResult } from "../client/adminClient";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 // 后端写权限码（与 FinanceController.requirePermission 对齐）
 const PAYMENT_PERMISSION = "finance.payment.register";
@@ -39,7 +40,7 @@ function centToYuan(cent: number | undefined): string {
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
 }
 
-export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [amount, setAmount] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [formError, setFormError] = React.useState("");
@@ -64,6 +65,11 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
     fallbackMessage: "应收应付台账读取失败",
   });
   const { setSelectedId, selected } = useSelectedRow(ledger.rows);
+
+  // 第四批接线（指标登记簿方案A）：应收欠费余额/应付欠款余额 as-of 卡走统一明细端点（本页原无余额汇总，此为余额出口）。
+  // 端点失败（含无 analytics.dashboard.view 的财务账号）→ 显示「—」并隐藏「完整明细」入口（本页无本地全量余额可回退）。
+  const arBalanceKpi = useMetricKpiValue(api, "finance.ar_balance", {});
+  const apBalanceKpi = useMetricKpiValue(api, "finance.ap_balance", {});
 
   // ponytail: 排序仅作用于当前服务端页的 rows（后端 ar-ap-items 未预埋排序参数）。
   // 升级路径：后端加 sort/order 参数后，把 sort.key/direction 传入 fetchPage 即可改为全局排序。
@@ -164,6 +170,10 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
   return (
     <section data-testid="finance-ledger-page">
       <AdminPageHeader title="应收应付台账" description="P0 完整台账支持应收、应付、部分核销、余额和调整原因留痕。" />
+      <div className="admin-kpi-grid" data-testid="finance-ledger-summary">
+        <div className="admin-kpi-card"><span>应收欠费余额（元）</span><strong className="admin-kpi-value--text" data-testid="finance-ledger-kpi-ar">{arBalanceKpi.status === "ready" && arBalanceKpi.value !== null ? centToYuan(arBalanceKpi.value) : "—"}</strong><small>逾期未清·期末时点{arBalanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="finance.ar_balance" testid="finance-ledger-metric-detail-ar" /> : null}</small></div>
+        <div className="admin-kpi-card"><span>应付欠款余额（元）</span><strong className="admin-kpi-value--text" data-testid="finance-ledger-kpi-ap">{apBalanceKpi.status === "ready" && apBalanceKpi.value !== null ? centToYuan(apBalanceKpi.value) : "—"}</strong><small>逾期未清·期末时点{apBalanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="finance.ap_balance" testid="finance-ledger-metric-detail-ap" /> : null}</small></div>
+      </div>
       <AdminDataState loading={ledger.loading} error={ledger.error} empty={empty} onRetry={ledger.reload}>
         <div className="admin-form-row">
           <label>核销金额（元）<input data-testid="finance-payment-amount" type="number" min={0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="如 100.00" /></label>

@@ -36,6 +36,12 @@ const CATALOG: Array<{ key: string; name: string; sourcePageId: string; sourceLa
   { key: "amusement.exit_count", name: "游乐出场核销数", sourcePageId: "ADM-AMU-005", sourceLabel: "游乐核销记录" },
   { key: "amusement.inspection_count", name: "安全巡检数", sourcePageId: "ADM-AMU-003", sourceLabel: "安全巡检/事故" },
   { key: "amusement.inspection_pending_rectification", name: "待整改巡检数", sourcePageId: "ADM-AMU-003", sourceLabel: "安全巡检/事故" },
+  // 第四批（财务域）
+  { key: "finance.ap_balance", name: "应付欠款余额", sourcePageId: "ADM-FIN-001", sourceLabel: "应收应付台账" },
+  { key: "finance.ar_balance_aging90p", name: "坏账预警区余额", sourcePageId: "ADM-ANA-004", sourceLabel: "欠费与回款" },
+  { key: "settlement.transaction_count", name: "结算笔数", sourcePageId: "ADM-FIN-005", sourceLabel: "通票结算审阅" },
+  { key: "settlement.verified_amount", name: "核销金额合计", sourcePageId: "ADM-FIN-005", sourceLabel: "通票结算审阅" },
+  { key: "settlement.verified_count", name: "核销张数合计", sourcePageId: "ADM-FIN-005", sourceLabel: "通票结算审阅" },
 ];
 
 const VALUE_TYPE_LABELS: Record<string, string> = { additive: "可加（区间求和）", ratio: "比率（分子/分母）", balance: "余额（区间末值）" };
