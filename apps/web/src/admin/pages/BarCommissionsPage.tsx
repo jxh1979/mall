@@ -10,6 +10,7 @@ import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
+import { isSalesOrder } from "./barSalesRole";
 
 const CALC_PERM = ["bar.table_commission.calculate"];
 
@@ -64,13 +65,12 @@ function formatAmount(amountCent: number | undefined) {
 
 function commissionRate(order: BarOrderRow | undefined) {
   if (!order) return "-";
-  if (order.sellerRole === "sales" || order.commissionRate === "15%") return "15%";
-  return order.commissionRate ?? "10%";
+  return isSalesOrder(order) ? "15%" : "10%";
 }
 
 function sellerLabel(order: BarOrderRow | undefined) {
   if (!order) return "-";
-  return order.sellerRole === "sales" || order.commissionRate === "15%" ? TEXT.sales : TEXT.nonSales;
+  return isSalesOrder(order) ? TEXT.sales : TEXT.nonSales;
 }
 
 export function BarCommissionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {

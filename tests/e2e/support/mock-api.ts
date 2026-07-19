@@ -239,7 +239,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/bar/products": [{ id: "drink-1", barId: "bar-main", productName: "Mock Drink", productType: "spirit", priceCent: 3000, internalSettlementPriceCent: 1200, status: "active", soldOut: false }],
     "/api/v1/bar/production-tickets": empty,
     "/api/v1/bar/reservations": [{ id: "reservation-1", reservationNo: "RSV-1", customerName: "Guest A", partySize: 2, depositAmount: 2000, status: "reserved", reservedAt: now }],
-    "/api/v1/bar/orders": [{ id: "order-1", orderNo: "ORD-1", tableId: "table-1", billId: "bill-bar-1", sellerRole: "sales", commissionRate: "15%", status: "paid", totalAmount: 6000, createdAt: now, items: [], bills: [{ id: "bill-bar-1", status: "open" }] }],
+    "/api/v1/bar/orders": [{ id: "order-1", orderNo: "ORD-1", tableId: "table-1", billId: "bill-bar-1", salesStaffId: "staff_sales_1", status: "paid", totalAmount: 6000, createdAt: now, items: [], bills: [{ id: "bill-bar-1", status: "open" }] }],
     "/api/v1/bar/table-sessions": state.barTableSessions,
     "/api/v1/inventory/stock-movements": empty,
     "/api/v1/inventory/items": [{ id: "item-1", itemCode: "WINE", itemName: "Wine", category: "drink", unit: "bottle", status: "active", minQuantity: 2 }],
