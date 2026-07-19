@@ -72,6 +72,6 @@ class DividendPeriodLockTests {
                 List.of("bar"), true, List.of("labor"),
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, status,
                 null, null, null, null, null, null, null, null, null, now, now,
-                false, 0L, 0L, 0L, 0L, 0L, 0L);
+                false, 0L, 0L, 0L, 0L, 0L, 0L, "individual", 0L);
     }
 }

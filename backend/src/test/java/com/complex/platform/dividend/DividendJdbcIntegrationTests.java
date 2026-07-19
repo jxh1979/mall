@@ -119,7 +119,7 @@ class DividendJdbcIntegrationTests {
                 8000, 2000, List.of("bar", "ticket"), true, List.of("labor"),
                 revenue, cost, expense, netProfit, distributable, platformShare, gross, tax, net,
                 0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null, now, now,
-                false, 0L, 0L, 0L, 0L, 0L, net);
+                false, 0L, 0L, 0L, 0L, 0L, net, "individual", 0L);
     }
 
     /**
@@ -136,7 +136,8 @@ class DividendJdbcIntegrationTests {
                 8000, 2000, List.of("bar", "ticket"), true, List.of("labor"),
                 netProfit, 0L, 0L, netProfit, distributable, platformShare,
                 gross, tax, net, 0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null,
-                now, now, lcfEnabled, lcfIn, lcfApplied, lcfAfter, arrearsOffset, reserve, payout);
+                now, now, lcfEnabled, lcfIn, lcfApplied, lcfAfter, arrearsOffset, reserve, payout,
+                "individual", 0L);
     }
 
     /** 唯一索引/CHECK 冲突 INSERT 用事务绑定连接上的手动 savepoint 吸收，25P02 不外溢（V297 同款）。 */
@@ -417,6 +418,122 @@ class DividendJdbcIntegrationTests {
         assertInsertRejected(() -> repository.insertStatement(deductionStatement("divs_jdbc_ded_lcf",
                 "divp_jdbc_ded", -500L, 0L, 0L, 0L, 0L, 0L,
                 true, 0L, 0L, 0L, 0L, 0L, 0L)), "chk_ds_lcf_after");
+    }
+
+    // ── V308 主理人类型（个人/公司）代扣个税分支（#28）──────────────────────
+
+    /** #28 migration：dividend_plans/statements 增 principal_type 列（默认 individual）。 */
+    @Test
+    void migrationAddsPrincipalTypeColumns() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_name = 'dividend_plans' "
+                        + "AND column_name = 'principal_type'", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_name = 'dividend_statements' "
+                        + "AND column_name = 'principal_type'", Integer.class)).isEqualTo(1);
+    }
+
+    /** #28 公司股东单代扣额必须 0（chk_ds_company_no_tax DB 硬保证）。 */
+    @Test
+    void companyStatementWithNonZeroTaxRejected() {
+        repository.insertPlan(plan("divp_jdbc_co_chk", "monthly"));
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        // principal_type=company 但 tax_cent=40（>0）：其余恒等自洽，仅 chk_ds_company_no_tax 触发。
+        assertInsertRejected(() -> repository.insertStatement(new DividendStatementRecord(
+                "divs_jdbc_co_bad", MERCHANT, "divp_jdbc_co_chk", "official", "2026-07",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-31"), "usr_principal_jdbc",
+                8000, 2000, List.of("bar"), true, List.of("labor"),
+                1000L, 0L, 0L, 1000L, 1000L, 800L, 200L, 40L, 160L, 0L, "draft",
+                null, null, "usr_div_jdbc", null, null, null, null, null, null, now, now,
+                false, 0L, 0L, 0L, 0L, 0L, 160L, "company", 0L)), "chk_ds_company_no_tax");
+    }
+
+    /** #28 公司股东端到端：不代扣个税、全额发放；生效税率快照 0、类型快照 company。 */
+    @Test
+    void companyPrincipalPaysGrossNoTaxEndToEnd() {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("co", 1_000_000L, ts);
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        service.createPlan(new com.complex.platform.dividend.dto.DividendPlanRequest(
+                "co-jdbc", MERCHANT, "usr_principal_jdbc", "公司主理人",
+                null, null, "monthly", List.of("ticket"), false, List.of("labor"),
+                null, null, null, null, null, null, null, null, null, null, "company", null));
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("co-jdbc-c", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.principalType()).isEqualTo("company");
+        assertThat(s.taxRateBps()).isZero();
+        assertThat(s.principalGrossCent()).isEqualTo(200_000L);
+        assertThat(s.taxCent()).isZero();
+        assertThat(s.principalNetCent()).isEqualTo(200_000L);
+        assertThat(s.payoutCent()).isEqualTo(200_000L);
+        assertThat(repository.findStatementById(s.id()).orElseThrow().principalType()).isEqualTo("company");
+    }
+
+    // ── V309 自定义扣除项（#35）────────────────────────────────────────
+
+    /** #35 migration：dividend_deduction_items 表 + dividend_statements.custom_deduction_cent 列落地。 */
+    @Test
+    void migrationAddsCustomDeductionTableAndColumn() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT to_regclass('dividend_deduction_items')::text", String.class))
+                .isEqualTo("dividend_deduction_items");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_name = 'dividend_statements' "
+                        + "AND column_name = 'custom_deduction_cent'", Integer.class)).isEqualTo(1);
+    }
+
+    /** #35 自定义扣除破坏发放额恒等：payout ≠ net − arrears − custom − reserve → chk_ds_payout_identity。 */
+    @Test
+    void customDeductionBreaksPayoutIdentityRejected() {
+        repository.insertPlan(plan("divp_jdbc_cd_chk", "monthly"));
+        // 税后 1000、自定义扣 200 → 正确实发 800；写 1000 → 违反（其余恒等自洽，隔离触发 payout 恒等）。
+        assertInsertRejected(() -> repository.insertStatement(customDeductionStmt(
+                "divs_jdbc_cd_pi", "divp_jdbc_cd_chk", 1000L, 0L, 200L, 0L, 1000L)),
+                "chk_ds_payout_identity");
+    }
+
+    /** #35 自定义扣除端到端：固定额 + 营收比例逐项封顶扣减实发，合计快照 + 逐项算式行 + 配置往返。 */
+    @Test
+    void customDeductionsAppliedAtComputeEndToEnd() {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("cd", 1_000_000L, ts);
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        DividendPlanRecord p = new DividendRecords.DividendPlanRecord("divp_jdbc_cd", MERCHANT,
+                "usr_principal_jdbc", "主理人甲", 8000, 2000, "monthly", List.of("ticket"), false,
+                List.of("labor"), null, "active", null, "usr_div_jdbc", now, now,
+                false, false, false, 0, 0L, "manual", 1, "individual", List.of());
+        repository.insertPlan(p);
+        repository.replaceCustomDeductions("divp_jdbc_cd", List.of(
+                new DividendRecords.DividendCustomDeductionRecord("divd_jdbc_1", "divp_jdbc_cd",
+                        "固定管理费", "fixed", 30_000L, 0, "net_profit", true, 0),
+                new DividendRecords.DividendCustomDeductionRecord("divd_jdbc_2", "divp_jdbc_cd",
+                        "营收提成", "ratio", 0L, 1000, "revenue", true, 1)));
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest("cd-jdbc-c", "2026-07", "official", MERCHANT)).computed().get(0);
+        // 净利 100 万 → 毛 20 万、税 4 万 → 税后 16 万；固定 3 万 + 营收 10%(=10 万)=13 万；实发 3 万。
+        assertThat(s.principalNetCent()).isEqualTo(160_000L);
+        assertThat(s.customDeductionCent()).isEqualTo(130_000L);
+        assertThat(s.payoutCent()).isEqualTo(30_000L);
+        List<DividendStatementLineRecord> lines = repository.listLines(s.id(), null);
+        assertThat(lines).filteredOn(l -> l.lineType().equals("custom_deduction"))
+                .extracting(DividendStatementLineRecord::amountCent)
+                .containsExactlyInAnyOrder(-30_000L, -100_000L);
+        // 快照与配置往返。
+        assertThat(repository.findStatementById(s.id()).orElseThrow().customDeductionCent()).isEqualTo(130_000L);
+        assertThat(repository.listCustomDeductions("divp_jdbc_cd")).hasSize(2);
+    }
+
+    /** V309 自定义扣除留痕行构造（基口径：platform_share_bps=0 使 gross=distributable=principal_net，隔离 payout 恒等）。 */
+    private static DividendStatementRecord customDeductionStmt(String id, String planId,
+            long principalNet, long arrears, long custom, long reserve, long payout) {
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        return new DividendStatementRecord(id, MERCHANT, planId, "official", "2026-07",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-31"), "usr_principal_jdbc",
+                0, 0, List.of("bar"), true, List.of("labor"),
+                principalNet, 0L, 0L, principalNet, principalNet, 0L, principalNet, 0L, principalNet,
+                0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null, now, now,
+                false, 0L, 0L, 0L, arrears, reserve, payout, "individual", custom);
     }
 
     /**
