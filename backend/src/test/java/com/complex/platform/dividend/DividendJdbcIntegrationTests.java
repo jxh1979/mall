@@ -18,6 +18,7 @@ import com.complex.platform.dividend.dto.DividendComputeRequest;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.DividendPayoutPort;
 import com.complex.platform.inventory.InventoryRepository;
+import com.complex.platform.support.TestSecurityActors;
 import java.sql.Connection;
 import java.sql.Savepoint;
 import java.time.Instant;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.sql.DataSource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -73,6 +75,14 @@ class DividendJdbcIntegrationTests {
 
     @Autowired
     private DataSource dataSource;
+
+    // 欠款抵扣走真实 FinanceService.settleArApItem → checkMerchantOwnership → currentActor() 读 SecurityContextHolder；
+    // 用例内以 TestSecurityActors.asPlatformAdmin() 注入平台管理员上下文（生产 approve 必经 requirePlatformScope，恒有认证），
+    // @AfterEach 清理防跨用例污染（DividendService 自身鉴权走注入 mock，与此 ThreadLocal 互不干扰）。
+    @AfterEach
+    void clearSecurityContext() {
+        TestSecurityActors.clear();
+    }
 
     /** I-1 职责分离：提交与审批必须不同人，测试里按动作分配不同 actor 的服务实例。 */
     private DividendService serviceWithPlatformActor(String actorId) {
@@ -497,6 +507,7 @@ class DividendJdbcIntegrationTests {
      */
     @Test
     void arrearsOffsetSettlesReceivablesAndPaysNetAtApprove() {
+        TestSecurityActors.asPlatformAdmin();   // 审批真调 settleArApItem 需认证上下文（平台管理员，scope 空）。
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("arr", 1_000_000L, ts);
         seedReceivable("arap_r1_arr", "AR-ARR-001", 60_000L, ts);
@@ -542,6 +553,7 @@ class DividendJdbcIntegrationTests {
      */
     @Test
     void arrearsOffsetConflictAtApproveRollsBackNoHalfSettle() {
+        TestSecurityActors.asPlatformAdmin();   // 预检原子路径本不达 settleArApItem，仍一致注入上下文（保险）。
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("arr2", 1_000_000L, ts);
         seedReceivable("arap_r_arr2", "AR-ARR2-001", 100_000L, ts);
