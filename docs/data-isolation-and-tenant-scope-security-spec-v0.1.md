@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V314**，发现 **158** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V319**，发现 **159** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -172,6 +172,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `property_fee_rates` | `project_id` | direct | V150 | `V150__property_fee_fixed_billing.sql` |
 | `refund_authority_limits` | `project_id` | direct | V156 | `V156__refund_tiered_authorization.sql` |
 | `refund_auto_rules` | `project_id` | direct | V156 | `V156__refund_tiered_authorization.sql` |
+| `revenue_stream_attribution` | `project_id` | direct | V319 | `V319__revenue_stream_attribution.sql` |
 | `risk_alerts` | `merchant_id` + `project_id` | direct | V103 | `V103__unified_risk_alerts.sql` |
 | `roles` | `organization_id` | direct | V048 | `V048__access_role_organization_isolation.sql` |
 | `saved_bottles` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |

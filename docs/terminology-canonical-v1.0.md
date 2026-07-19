@@ -15,6 +15,7 @@
 ## 二、DB 落点铁律(勿臆造独立表)
 
 - **无 `organizations` / `org_type` 表**;四层主体统一用 **`business_entities` 一表多角色**(`entity_role` 文本,无 CHECK)承载。
+- **层级父链(V318)** = `business_entities.parent_entity_id`:L3 管理公司 → L2 项目公司,L2 → L1 平台,L1=NULL。「一个项目公司下多个管理公司主体」= 多行 `parent_entity_id` 指向同一项目公司。
 - **`projects` 表 ≠ 项目公司** —— 它是**业态经营单元 / 场馆**(`venue_type` = bar / amusement / ticketing);`project_id` = 综合体维度。两者是两回事,勿混。
 - **四主体绑定** = `business_entity_bindings`(binding_type=four_party;每商户至多一条 `active`,重复激活报 409 `ACTIVE_BINDING_EXISTS`);"后续可拆" = 换一条新 active 绑定,不是改 `merchants` 快照列。
 - `merchants` / `contracts` 的 `*_entity_id` / `*_subject_id` = 档案 / 签约时快照,与当前绑定可不一致。
@@ -32,6 +33,8 @@
 | **游乐公司** | 游乐票 | 游乐服务 |
 | **传媒公司** | 演出票 | 文化服务 |
 | **资产公司** | 商业租金 | 不动产租赁 |
+
+**收入归属落库(V319)**:六业态收入流 → L3 管理公司主体的映射落 `revenue_stream_attribution`(收入流枚举 `all_pass_ticket` / `table_dining` / `bar_service_fee` / `amusement_ticket` / `performance_ticket` / `venue_rent` → `management_entity_id`),后台可配,解析优先级 **项目特例 > 平台默认 > 未配置(null)**。通票分账已接:`settlement_bills.attributed_entity_id` 由 `settleMonth` 按 (项目, `all_pass_ticket`) 解析标注(仅记归属,不改金额);其余 5 流经同一 `RevenueStreamAttributionRepository.resolveManagementEntity` 解析,随各自结算路径上线时接入。
 
 ## 四、混用词纠正规则
 

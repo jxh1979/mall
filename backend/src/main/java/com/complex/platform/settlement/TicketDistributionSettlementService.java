@@ -35,10 +35,16 @@ public class TicketDistributionSettlementService {
     private static final String STATUS_CONFIRMED = "confirmed";
     private static final String ITEM_STATUS_DRAFT = "draft";
 
-    private final JdbcSettlementBillRepository repository;
+    // 六业态收入归属(terminology-canonical §三):通票收入流 → all_pass_ticket。
+    static final String REVENUE_STREAM_ALL_PASS_TICKET = "all_pass_ticket";
 
-    public TicketDistributionSettlementService(JdbcSettlementBillRepository repository) {
+    private final JdbcSettlementBillRepository repository;
+    private final RevenueStreamAttributionRepository attributionRepository;
+
+    public TicketDistributionSettlementService(JdbcSettlementBillRepository repository,
+                                               RevenueStreamAttributionRepository attributionRepository) {
         this.repository = repository;
+        this.attributionRepository = attributionRepository;
     }
 
     /**
@@ -130,12 +136,17 @@ public class TicketDistributionSettlementService {
         String status = overPool ? STATUS_DRAFT : STATUS_CONFIRMED;
         String specialApprovalRef = null; // 越池时留 null 待人工填;未越池时也 null(无需特批)
 
+        // 六业态收入归属:通票收入归属的 L3 管理公司(娱乐运营平台),按 (项目, all_pass_ticket) 可配置解析;
+        //   项目特例优先→全局默认→未配置返 null(仅记归属,不改任何金额)。
+        String attributedEntityId =
+                attributionRepository.resolveManagementEntity(projectId, REVENUE_STREAM_ALL_PASS_TICKET);
+
         String billId = idFor(projectId, month);
         repository.upsertBill(new SettlementBillRecord(
                 billId, projectId, periodStart, periodEnd,
                 ticketRevenue, channelFee, giveawayCost, availablePool,
                 retentionBps, retention, spvPool, distributed, compServiceFee,
-                method, specialApprovalRef, status));
+                method, specialApprovalRef, status, attributedEntityId));
 
         // 幂等重跑:先清旧明细再写(明细集合随当月核销变化,覆盖式最简)
         String actualBillId = repository.findBillId(projectId, periodStart, periodEnd);

@@ -64,6 +64,7 @@ class PlatformJdbcIntegrationTests {
                 "be_jdbc_formal",
                 "  P0 Platform Entity  ",
                 "operation",
+                null,
                 "91310000MA1P0",
                 "Jane Ops",
                 "vault://bank/entity",

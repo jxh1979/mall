@@ -8,6 +8,7 @@ public record BusinessEntityRequest(
         List<String> evidenceAttachmentIds,
         String entityName,
         String entityRole,
+        String parentEntityId,
         String unifiedSocialCreditCode,
         String legalRepresentative,
         String bankAccountRef,

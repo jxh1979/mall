@@ -40,16 +40,17 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public BusinessEntityRecord saveBusinessEntity(BusinessEntityRecord businessEntity) {
         jdbcTemplate.update("""
                 INSERT INTO business_entities (
-                    id, entity_name, entity_role, unified_social_credit_code, legal_representative,
+                    id, entity_name, entity_role, parent_entity_id, unified_social_credit_code, legal_representative,
                     bank_account_ref, status, created_at, updated_at
                 )
                 VALUES (
-                    :id, :entity_name, :entity_role, :unified_social_credit_code, :legal_representative,
+                    :id, :entity_name, :entity_role, :parent_entity_id, :unified_social_credit_code, :legal_representative,
                     :bank_account_ref, :status, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     entity_name = EXCLUDED.entity_name,
                     entity_role = EXCLUDED.entity_role,
+                    parent_entity_id = EXCLUDED.parent_entity_id,
                     unified_social_credit_code = EXCLUDED.unified_social_credit_code,
                     legal_representative = EXCLUDED.legal_representative,
                     bank_account_ref = EXCLUDED.bank_account_ref,
@@ -62,7 +63,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     @Override
     public List<BusinessEntityRecord> listBusinessEntities() {
         return jdbcTemplate.query("""
-                SELECT id, entity_name, entity_role, unified_social_credit_code, legal_representative,
+                SELECT id, entity_name, entity_role, parent_entity_id, unified_social_credit_code, legal_representative,
                        bank_account_ref, status, created_at, updated_at
                   FROM business_entities
                  ORDER BY created_at DESC, id
@@ -391,6 +392,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("id", businessEntity.id())
                 .addValue("entity_name", businessEntity.entityName())
                 .addValue("entity_role", businessEntity.entityRole())
+                .addValue("parent_entity_id", businessEntity.parentEntityId())
                 .addValue("unified_social_credit_code", businessEntity.unifiedSocialCreditCode())
                 .addValue("legal_representative", businessEntity.legalRepresentative())
                 .addValue("bank_account_ref", businessEntity.bankAccountRef())
@@ -479,6 +481,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("id"),
                 resultSet.getString("entity_name"),
                 resultSet.getString("entity_role"),
+                resultSet.getString("parent_entity_id"),
                 resultSet.getString("unified_social_credit_code"),
                 resultSet.getString("legal_representative"),
                 resultSet.getString("bank_account_ref"),
