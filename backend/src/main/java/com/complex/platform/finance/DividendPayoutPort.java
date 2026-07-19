@@ -23,6 +23,18 @@ public interface DividendPayoutPort {
     String createDividendReserveWithholdingPayable(
             String principalUserId, String merchantId, long reserveCent, String statementId);
 
+    /**
+     * V304 发放保护线留存·释放：把某计算单的待释放留存应付 re-tag 为已释放
+     * （source_type dividend_reserve_withheld → dividend_reserve_released，金额=原留存额不变，FOR UPDATE 行锁
+     * + 前态守卫幂等）。released 应付走既有付款流程真正发放给主理人；未释放 withheld 应付被支付守卫拦截。
+     * 返回释放引用（应付项 id / 留存额 / 主理人 / 商户）；已释放或该计算单无待释放留存返回 empty。
+     */
+    java.util.Optional<DividendReserveReleaseRef> releaseDividendReserveWithholding(String statementId);
+
+    /** 释放引用：被 re-tag 的应付项 id / 留存额（分）/ 主理人账户 / 归属商户。 */
+    record DividendReserveReleaseRef(String arApItemId, long reserveCent, String principalUserId, String merchantId) {
+    }
+
     /** 未清应收快照（direction=receivable，unpaid>0，按 created_at 升序=先欠先抵），供计算单冻结欠款抵扣额与逐项留痕。 */
     List<DividendArrearsItem> listOutstandingReceivables(String merchantId);
 

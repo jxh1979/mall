@@ -68,6 +68,20 @@ public interface DividendRepository {
     /** approved → paid。返回影响行数（0=当前非 approved）。 */
     int markPaid(String id, String actor, Instant now);
 
+    // ── V304 发放保护线留存·释放 ──────────────────────────────
+    /** 释放台账入库；uq(statement_id) 冲突（同一计算单重复释放）返回 false。 */
+    boolean insertReserveRelease(DividendRecords.DividendReserveReleaseRecord release);
+
+    /**
+     * 待释放/已释放留存台账分页：有留存的正式单（approved/paid + reserve_withheld_cent>0）LEFT JOIN 释放台账。
+     * releasedFilter：'pending'=仅待释放 / 'released'=仅已释放 / null=全部；merchantId 非空叠加商户谓词。
+     */
+    PageResponse<DividendRecords.DividendReserveLedgerRecord> pageReserveLedger(
+            String merchantId, String releasedFilter, int page, int pageSize);
+
+    /** 自动释放候选：待释放留存（approved/paid + reserve>0 + 未释放）+ 所属方案释放规则，供定时作业判到期。 */
+    List<DividendRecords.DividendReserveReleaseCandidateRecord> listReserveReleaseCandidates();
+
     // ── 三来源期间取数（成本侧走 InventoryRepository.sumOutboundCost，不在本仓储）──
     /** 酒吧实收：bar_bill_settlements 结账流水（reversed=false），settled_at 落窗口（revenue.net 商户行级同谓词区间版）。 */
     long sumBarRevenueCent(String merchantId, Instant from, Instant to);

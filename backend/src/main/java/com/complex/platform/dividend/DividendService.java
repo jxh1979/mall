@@ -7,6 +7,10 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
 import com.complex.platform.dividend.DividendRecords.DividendComputeSkipRecord;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveLedgerRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseCandidateRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseRunRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementDetailRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementLineRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
@@ -71,6 +75,11 @@ public class DividendService {
     private static final Set<String> RECOMPUTABLE_STATUSES = Set.of("preview", "draft", "rejected");
     /** 月度预览定时作业的系统操作人标识（无请求上下文，落 computed_by/voided_by 便于留痕追溯）。 */
     static final String SYSTEM_OPERATOR = "system_dividend_preview";
+    /** V304 留存自动释放定时作业的系统操作人标识（落 released_by 便于留痕追溯）。 */
+    static final String SYSTEM_RELEASE_OPERATOR = "system_dividend_reserve_release";
+    /** V304 留存释放规则可选值；默认手动=不自动释放（最安全，每笔人工决策）。 */
+    static final Set<String> RESERVE_RELEASE_MODES = Set.of("manual", "next_period", "fixed_delay", "annual");
+    private static final String DEFAULT_RESERVE_RELEASE_MODE = "manual";
 
     // 默认口径（仅新建方案时的默认值，全部可配）。
     private static final int DEFAULT_PLATFORM_SHARE_BPS = 8000;
@@ -158,7 +167,12 @@ public class DividendService {
                 Boolean.TRUE.equals(request.arrearsOffsetEnabled()),
                 Boolean.TRUE.equals(request.payoutFloorEnabled()),
                 requireBps(orDefault(request.payoutFloorBps(), 0), "payout_floor_bps"),
-                requireNonNegLong(orDefault(request.payoutFloorFixedCent(), 0L), "payout_floor_fixed_cent"));
+                requireNonNegLong(orDefault(request.payoutFloorFixedCent(), 0L), "payout_floor_fixed_cent"),
+                // V304 留存释放规则（默认手动=不自动释放）。
+                requireEnum(orDefault(request.reserveReleaseMode(), DEFAULT_RESERVE_RELEASE_MODE),
+                        RESERVE_RELEASE_MODES, "reserve_release_mode"),
+                requirePositiveInt(orDefault(request.reserveReleaseDelayPeriods(), 1),
+                        "reserve_release_delay_periods"));
         if (!repository.insertPlan(plan)) {
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
                     "该商户已有生效中的分红方案；请修改现有方案或先停用（status=ended）再新建");
@@ -223,7 +237,12 @@ public class DividendService {
                         ? existing.payoutFloorEnabled() : request.payoutFloorEnabled(),
                 requireBps(orDefault(request.payoutFloorBps(), existing.payoutFloorBps()), "payout_floor_bps"),
                 requireNonNegLong(orDefault(request.payoutFloorFixedCent(), existing.payoutFloorFixedCent()),
-                        "payout_floor_fixed_cent"));
+                        "payout_floor_fixed_cent"),
+                // V304 留存释放规则（可空=不改现值）。
+                requireEnum(orDefault(request.reserveReleaseMode(), existing.reserveReleaseMode()),
+                        RESERVE_RELEASE_MODES, "reserve_release_mode"),
+                request.reserveReleaseDelayPeriods() == null ? existing.reserveReleaseDelayPeriods()
+                        : requirePositiveInt(request.reserveReleaseDelayPeriods(), "reserve_release_delay_periods"));
         if (!repository.updatePlan(updated)) {
             // ended 改回 active 撞同商户唯一生效索引（uq_dividend_plans_active_merchant）→ 业务 409 非 500。
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
@@ -644,6 +663,119 @@ public class DividendService {
         }
     }
 
+    // ── V304 发放保护线留存·释放 ──────────────────────────────
+
+    /**
+     * 待释放/已释放留存台账分页（后台管理 + 商户专区共用）。商户 scope 账号强制只看自己。
+     * releasedFilter：'pending'=仅待释放 / 'released'=仅已释放 / 空=全部。
+     */
+    public PageResponse<DividendReserveLedgerRecord> listReserveLedger(
+            String merchantId, String releasedFilter, int page, int pageSize) {
+        authorizationService.requirePermission(VIEW_PERM);
+        return operations.readPageResult(
+                AuditedOperation.of("dividend.reserve_ledger_listed", "dividend.reserve_ledger_list_failed",
+                        VIEW_PERM, STMT_TYPE),
+                () -> {
+                    String filter = blankToNull(releasedFilter);
+                    if (filter != null && !"pending".equals(filter) && !"released".equals(filter)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "unknown released filter: " + filter);
+                    }
+                    int safePage = Math.max(page, 1);
+                    int safeSize = Math.min(Math.max(pageSize, 1), 200);
+                    PageResponse<DividendReserveLedgerRecord> result = repository.pageReserveLedger(
+                            blankToNull(scopeMerchant(merchantId)), filter, safePage, safeSize);
+                    if (authorizationService.currentMerchantScope().isEmpty()) {
+                        return result;
+                    }
+                    // 商户（主理人）视图脱敏：不外发内部操作员 id。
+                    return new PageResponse<>(
+                            result.items().stream().map(DividendReserveLedgerRecord::forMerchantView).toList(),
+                            result.page(), result.pageSize(), result.total());
+                });
+    }
+
+    /**
+     * 手动释放某计算单的发放保护线留存：把待释放留存应付 re-tag 为已释放（金额=原留存额，全额一次），
+     * 使主理人能真正拿到这笔钱。要求 finance.dividend.manage + 平台 scope；幂等（同一留存不重复释放）。
+     */
+    @Transactional
+    public DividendReserveReleaseRecord releaseReserve(String statementId, DividendActionRequest request) {
+        authorizationService.requirePermission(MANAGE_PERM);
+        authorizationService.requirePlatformScope();
+        requireRequest(request);
+        String id = requireText(statementId, "statement_id");
+        return operations.executeWrite(
+                "releaseDividendReserve:" + id,
+                request.idempotencyKey(),
+                request,
+                DividendReserveReleaseRecord.class,
+                AuditedOperation.of("dividend.reserve_released", "dividend.reserve_release_failed",
+                        MANAGE_PERM, STMT_TYPE),
+                () -> releaseInternal(id, "manual", currentOperator(), Instant.now(), blankToNull(request.note())),
+                DividendService::businessId,
+                java.util.Map.of());
+    }
+
+    /**
+     * 留存自动释放定时作业入口（{@link DividendReserveReleaseJob} 调用）：无请求上下文、系统操作人。
+     * 遍历所有待释放留存候选（approved/paid + 有留存 + 未释放），按方案释放规则判到期（{@link
+     * DividendReserveReleaseMath#isDue}）后释放。幂等：候选已排除已释放单 + re-tag/uq 双守卫，同期重跑不重复释放。
+     * 无鉴权闸：定时线程无 SecurityContext，本方法只对内部作业开放（无 Controller 绑定）。
+     */
+    @Transactional
+    public DividendReserveReleaseRunRecord runScheduledReserveRelease(LocalDate asOf) {
+        List<DividendReserveReleaseRecord> released = new ArrayList<>();
+        List<DividendComputeSkipRecord> skipped = new ArrayList<>();
+        Instant now = Instant.now();
+        for (DividendReserveReleaseCandidateRecord c : repository.listReserveReleaseCandidates()) {
+            if (!DividendReserveReleaseMath.isDue(c.reserveReleaseMode(), c.periodEnd(),
+                    c.reserveReleaseDelayPeriods(), c.periodType(), asOf)) {
+                continue;   // 未到期（含 manual 手动模式恒不自动释放）：不释放。
+            }
+            try {
+                released.add(releaseInternal(
+                        c.statementId(), "scheduled", SYSTEM_RELEASE_OPERATOR, now, "定时到期自动释放"));
+            } catch (ApiException e) {
+                // 幂等兜底：并发下被手动释放等 → 记跳过，不中断整批。
+                skipped.add(new DividendComputeSkipRecord(c.merchantId(), c.statementId() + "：" + e.getMessage()));
+            }
+        }
+        return new DividendReserveReleaseRunRecord(released, skipped);
+    }
+
+    /** 释放核心：状态/留存校验 → finance re-tag 待释放→已释放（全额）→ 落释放台账（幂等）。 */
+    private DividendReserveReleaseRecord releaseInternal(
+            String statementId, String trigger, String operator, Instant now, String note) {
+        DividendStatementRecord stmt = requireStatement(statementId);
+        if (!"approved".equals(stmt.status()) && !"paid".equals(stmt.status())) {
+            throw ApiException.conflict("DIVIDEND_STATE_INVALID",
+                    "只有已审批/已发放的计算单才有留存可释放（当前状态：" + stmt.status() + "）");
+        }
+        if (stmt.reserveWithheldCent() <= 0) {
+            throw ApiException.conflict("DIVIDEND_RESERVE_NONE", "该计算单没有发放保护线留存，无需释放");
+        }
+        // finance 侧 re-tag 待释放留存应付 → 已释放（金额不变，全额一次）；已释放/无待释放应付 → empty。
+        Optional<DividendPayoutPort.DividendReserveReleaseRef> ref =
+                payoutPort.releaseDividendReserveWithholding(statementId);
+        if (ref.isEmpty()) {
+            throw ApiException.conflict("DIVIDEND_RESERVE_ALREADY_RELEASED",
+                    "该计算单的留存已释放，不可重复释放");
+        }
+        // 释放额 = 留存额全额（不多不少，非平台白拿）；ratioBps=FULL 预留未来分期释放。
+        long releasedCent = DividendReserveReleaseMath.releasableCent(
+                ref.get().reserveCent(), DividendReserveReleaseMath.FULL_RATIO_BPS);
+        DividendReserveReleaseRecord release = new DividendReserveReleaseRecord(
+                "divrr_" + UUID.randomUUID().toString().replace("-", ""),
+                statementId, stmt.merchantId(), stmt.principalUserId(), releasedCent,
+                ref.get().arApItemId(), trigger, operator, now, note);
+        if (!repository.insertReserveRelease(release)) {
+            // uq(statement_id) 冲突（并发兜底）：与 re-tag 守卫双保险；@Transactional 回滚。
+            throw ApiException.conflict("DIVIDEND_RESERVE_ALREADY_RELEASED",
+                    "该计算单的留存已释放，不可重复释放");
+        }
+        return release;
+    }
+
     // ── 辅助 ──────────────────────────────────────────────────
 
     private String scopeMerchant(String requested) {
@@ -671,6 +803,9 @@ public class DividendService {
         }
         if (saved instanceof DividendComputeResultRecord result) {
             return result.kind() + ":" + result.periodLabel();
+        }
+        if (saved instanceof DividendReserveReleaseRecord release) {
+            return release.id();
         }
         return "all";
     }
@@ -710,6 +845,13 @@ public class DividendService {
     private static long requireNonNegLong(long value, String field) {
         if (value < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " must be >= 0");
+        }
+        return value;
+    }
+
+    private static int requirePositiveInt(int value, String field) {
+        if (value < 1) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be >= 1");
         }
         return value;
     }

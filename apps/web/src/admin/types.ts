@@ -855,6 +855,25 @@ export type DividendPlanRow = {
   payoutFloorEnabled?: boolean;
   payoutFloorBps?: number;
   payoutFloorFixedCent?: number;
+  // V304 发放保护线留存·释放规则。
+  reserveReleaseMode?: string;
+  reserveReleaseDelayPeriods?: number;
+};
+
+// V304 发放保护线留存·待释放/已释放台账行。
+export type DividendReserveLedgerRow = {
+  statementId?: string;
+  merchantId?: string;
+  principalUserId?: string;
+  periodLabel?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  statementStatus?: string;
+  reserveWithheldCent?: number;
+  released?: boolean;
+  triggerType?: string | null;
+  releasedBy?: string | null;
+  releasedAt?: string | null;
 };
 
 export type DividendStatementRow = {

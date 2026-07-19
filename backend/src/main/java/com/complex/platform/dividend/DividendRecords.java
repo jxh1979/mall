@@ -33,7 +33,24 @@ public final class DividendRecords {
             boolean arrearsOffsetEnabled,
             boolean payoutFloorEnabled,
             int payoutFloorBps,
-            long payoutFloorFixedCent) {
+            long payoutFloorFixedCent,
+            // V304 发放保护线留存·释放规则（默认手动=不自动释放）。
+            String reserveReleaseMode,
+            int reserveReleaseDelayPeriods) {
+
+        /** 向后兼容构造（V304 之前的 21 参形态）：释放规则默认手动、延后 1 期。 */
+        public DividendPlanRecord(
+                String id, String merchantId, String principalUserId, String principalName,
+                int platformShareBps, int taxRateBps, String periodType, List<String> revenueDomains,
+                boolean includeInventoryCost, List<String> expenseTypes, LocalDate effectiveFrom, String status,
+                String note, String updatedBy, Instant createdAt, Instant updatedAt,
+                boolean lossCarryforwardEnabled, boolean arrearsOffsetEnabled, boolean payoutFloorEnabled,
+                int payoutFloorBps, long payoutFloorFixedCent) {
+            this(id, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
+                    revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note, updatedBy,
+                    createdAt, updatedAt, lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled,
+                    payoutFloorBps, payoutFloorFixedCent, "manual", 1);
+        }
     }
 
     /** 期间分红计算单头（配置快照 + 算式结果 + 状态机）。 */
@@ -127,6 +144,74 @@ public final class DividendRecords {
             String periodLabel,
             String kind,
             List<DividendStatementRecord> computed,
+            List<DividendComputeSkipRecord> skipped) {
+    }
+
+    // ── V304 发放保护线留存·释放 ─────────────────────────────────
+
+    /** 留存释放留痕（一单一释放；追溯释放时间/触发方式/关联原计算单/金额/被释放应付项）。 */
+    public record DividendReserveReleaseRecord(
+            String id,
+            String statementId,
+            String merchantId,
+            String principalUserId,
+            long reserveCent,
+            String arApItemId,
+            String triggerType,
+            String releasedBy,
+            Instant releasedAt,
+            String note) {
+
+        /** 商户侧（主理人视图）脱敏：不外发操作员 id 与应付款项 id。 */
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public DividendReserveReleaseRecord forMerchantView() {
+            return new DividendReserveReleaseRecord(id, statementId, merchantId, principalUserId,
+                    reserveCent, null, triggerType, null, releasedAt, note);
+        }
+    }
+
+    /**
+     * 待释放留存台账行（后台/商户专区展示）：某张有留存的正式计算单 + 释放状态（待释放/已释放）。
+     * released=false 即待释放；released=true 时补释放留痕（时间/触发方式/操作人）。
+     */
+    public record DividendReserveLedgerRecord(
+            String statementId,
+            String merchantId,
+            String principalUserId,
+            String periodLabel,
+            LocalDate periodStart,
+            LocalDate periodEnd,
+            String statementStatus,
+            long reserveWithheldCent,
+            boolean released,
+            String triggerType,
+            String releasedBy,
+            Instant releasedAt) {
+
+        /** 商户侧脱敏：不外发主理人账户以外的操作员 id。 */
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public DividendReserveLedgerRecord forMerchantView() {
+            return new DividendReserveLedgerRecord(statementId, merchantId, principalUserId, periodLabel,
+                    periodStart, periodEnd, statementStatus, reserveWithheldCent, released, triggerType,
+                    null, releasedAt);
+        }
+    }
+
+    /** 自动释放候选（定时作业用）：待释放留存 + 方案释放规则，供 isDue 判定到期后释放。 */
+    public record DividendReserveReleaseCandidateRecord(
+            String statementId,
+            String merchantId,
+            String principalUserId,
+            long reserveWithheldCent,
+            LocalDate periodEnd,
+            String periodType,
+            String reserveReleaseMode,
+            int reserveReleaseDelayPeriods) {
+    }
+
+    /** 定时/手动批量释放结果：本次释放清单 + 跳过（未到期/已释放）清单。 */
+    public record DividendReserveReleaseRunRecord(
+            List<DividendReserveReleaseRecord> released,
             List<DividendComputeSkipRecord> skipped) {
     }
 }

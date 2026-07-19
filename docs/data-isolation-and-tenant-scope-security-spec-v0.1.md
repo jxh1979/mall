@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V303**，发现 **157** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V304**，发现 **158** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -124,6 +124,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `customer_stored_value_accounts` | `merchant_id` + `project_id` | direct | V090, V175 | `V090__member_stored_value_paid_membership_transfer.sql`<br>`V175__stored_value_merchant_scoped_cards.sql` |
 | `deposit_ledger` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
 | `dividend_plans` | `merchant_id` | direct | V299 | `V299__dividend_engine.sql` |
+| `dividend_reserve_releases` | `merchant_id` | direct | V304 | `V304__dividend_reserve_release.sql` |
 | `dividend_statement_lines` | `merchant_id` | direct | V299 | `V299__dividend_engine.sql` |
 | `dividend_statements` | `merchant_id` | direct | V299 | `V299__dividend_engine.sql` |
 | `energy_meters` | `merchant_id` + `project_id` + `space_id` | direct | V168 | `V168__energy_metering.sql` |

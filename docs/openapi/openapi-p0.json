@@ -31578,10 +31578,10 @@
           "403": {
             "$ref": "#/components/responses/Error"
           },
-          "500": {
+          "404": {
             "$ref": "#/components/responses/Error"
           },
-          "404": {
+          "500": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -31783,6 +31783,146 @@
           "DIVIDEND_STATEMENT_NOT_FOUND",
           "DIVIDEND_STATE_INVALID",
           "DIVIDEND_PREVIEW_NOT_APPROVABLE"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DividendActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "分红计算单 ID。"
+          }
+        ]
+      }
+    },
+    "/api/v1/finance/dividends/reserve-releases": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listDividendReserveReleases",
+        "summary": "发放保护线留存·待释放/已释放台账（商户 scope 账号只见本商户，主理人视图同入口）",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.view",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "web",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dividend.reserve_ledger_listed",
+        "x-audit-event-failure": "dividend.reserve_ledger_list_failed",
+        "parameters": [
+          {
+            "name": "merchant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "商户 ID 筛选；商户 scope 账号强制只看自己。"
+          },
+          {
+            "name": "released",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "released"
+              ]
+            },
+            "description": "释放状态筛选：pending 仅待释放 / released 仅已释放 / 不传=全部。"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "页码（1 起）。"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "每页行数（上限 200）。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/dividends/statements/{id}/release-reserve": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "releaseDividendReserve",
+        "summary": "手动释放该计算单的发放保护线留存（re-tag 待释放留存应付为已释放，使主理人可真正拿到该笔钱）",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dividend.reserve_released",
+        "x-audit-event-failure": "dividend.reserve_release_failed",
+        "x-failure-codes": [
+          "DIVIDEND_STATEMENT_NOT_FOUND",
+          "DIVIDEND_STATE_INVALID",
+          "DIVIDEND_RESERVE_NONE",
+          "DIVIDEND_RESERVE_ALREADY_RELEASED"
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/DividendActionRequest"
@@ -45950,6 +46090,21 @@
             "type": "integer",
             "minimum": 0,
             "description": "保护线留存固定额（分，默认 0；实取 max(比例额,固定额) 并钳到可发额上限）。"
+          },
+          "reserve_release_mode": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "next_period",
+              "fixed_delay",
+              "annual"
+            ],
+            "description": "发放保护线留存释放时点（默认 manual 手动=不自动释放）：next_period 期末进入下一期到期 / fixed_delay 期末延后 N 期 / annual 年度末清算。"
+          },
+          "reserve_release_delay_periods": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "固定延后释放的周期数（默认 1；仅 reserve_release_mode=fixed_delay 生效，季度方案 N×3 月 / 月度方案 N 月）。"
           }
         }
       },

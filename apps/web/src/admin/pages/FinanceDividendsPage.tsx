@@ -14,6 +14,7 @@ import type {
   AdminPageProps,
   DividendComputeResult,
   DividendPlanRow,
+  DividendReserveLedgerRow,
   DividendStatementDetail,
   DividendStatementRow,
   MerchantAdmissionRow,
@@ -43,6 +44,14 @@ export const DIVIDEND_STATUS_LABELS: Record<string, string> = {
 const PERIOD_TYPE_LABELS: Record<string, string> = {
   quarterly: "季度（正式单按季，月度出预览）",
   monthly: "月度（正式单按月）",
+};
+
+// V304 发放保护线留存·释放时点。
+export const RESERVE_RELEASE_MODE_LABELS: Record<string, string> = {
+  manual: "手动释放",
+  next_period: "下期返还",
+  fixed_delay: "固定延后 N 期",
+  annual: "年度末清算",
 };
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -139,6 +148,9 @@ type PlanForm = {
   payoutFloorEnabled: boolean;
   payoutFloorPercent: string;
   payoutFloorFixedYuan: string;
+  // V304 留存释放规则。
+  reserveReleaseMode: string;
+  reserveReleaseDelayPeriods: string;
 };
 
 const DEFAULT_PLAN_FORM: PlanForm = {
@@ -158,6 +170,8 @@ const DEFAULT_PLAN_FORM: PlanForm = {
   payoutFloorEnabled: false,
   payoutFloorPercent: "0",
   payoutFloorFixedYuan: "0",
+  reserveReleaseMode: "manual",
+  reserveReleaseDelayPeriods: "1",
 };
 
 export function FinanceDividendsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
@@ -222,6 +236,25 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantFilter, kindFilter, statusFilter, periodFilter]);
 
+  // V304 待释放留存台账（默认只看待释放）。
+  const [reserveFilter, setReserveFilter] = React.useState("pending");
+  const fetchReservePage = React.useCallback(
+    (page: number, size: number): Promise<PagedResult<DividendReserveLedgerRow>> => {
+      const params = new URLSearchParams({ page: String(page), page_size: String(size) });
+      if (reserveFilter) params.set("released", reserveFilter);
+      return api.getPaged<DividendReserveLedgerRow>(`/api/v1/finance/dividends/reserve-releases?${params.toString()}`);
+    },
+    [api, reserveFilter],
+  );
+  const reserveRows = useServerPagedRows<DividendReserveLedgerRow>(fetchReservePage, PAGE_SIZE, {
+    onError: setGlobalError,
+    fallbackMessage: TEXT.loadFailed,
+  });
+  React.useEffect(() => {
+    reserveRows.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reserveFilter]);
+
   const { busyAction, formError, setFormError, runAction } = useAdminAction({
     reload: async () => {
       rows.reload();
@@ -262,6 +295,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       payoutFloorEnabled: plan.payoutFloorEnabled === true,
       payoutFloorPercent: plan.payoutFloorBps === undefined ? "0" : String(plan.payoutFloorBps / 100),
       payoutFloorFixedYuan: plan.payoutFloorFixedCent === undefined ? "0" : String(plan.payoutFloorFixedCent / 100),
+      reserveReleaseMode: plan.reserveReleaseMode ?? "manual",
+      reserveReleaseDelayPeriods: plan.reserveReleaseDelayPeriods === undefined ? "1" : String(plan.reserveReleaseDelayPeriods),
     });
     setPlanModalOpen(true);
   }
@@ -312,6 +347,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       payoutFloorEnabled: planForm.payoutFloorEnabled,
       payoutFloorBps: floorBps,
       payoutFloorFixedCent: floorFixedCent,
+      reserveReleaseMode: planForm.reserveReleaseMode,
+      reserveReleaseDelayPeriods: Math.max(1, Math.round(Number(planForm.reserveReleaseDelayPeriods) || 1)),
     };
     const ok = await runAction(editingPlan ? "dividend_plan_updated" : "dividend_plan_created", request, () =>
       editingPlan
@@ -347,6 +384,17 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
     const request = { idempotencyKey: nextKey(`dividend-${action}`) };
     await runAction(action, request, () =>
       api.post(`/api/v1/finance/dividends/statements/${encodeURIComponent(row.id)}/${path}`, request));
+  }
+
+  // V304 手动释放该期留存（re-tag 待释放→已释放，全额返还主理人）。
+  async function releaseReserve(row: DividendReserveLedgerRow) {
+    if (!row.statementId) return;
+    // 资金动作二次确认（释放非放款、只转可付，但不可撤销，故补确认）。
+    if (!window.confirm(`确认释放「${row.periodLabel ?? row.statementId}」的发放保护线留存（¥${centToYuan(row.reserveWithheldCent)}）？释放后转为可发放、主理人经应付流程收款，不可撤销。`)) return;
+    const request = { idempotencyKey: nextKey("dividend-release") };
+    const ok = await runAction("dividend_reserve_released", request, () =>
+      api.post(`/api/v1/finance/dividends/statements/${encodeURIComponent(row.statementId!)}/release-reserve`, request));
+    if (ok) reserveRows.reload();
   }
 
   async function submitReject() {
@@ -544,6 +592,45 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
         </div>
       </AdminDataState>
 
+      {/* ── 发放保护线留存·待释放台账（V304）───────────────────── */}
+      <h3>发放保护线留存·待释放台账</h3>
+      <div className="admin-form-row" data-testid="dividend-reserve-filter">
+        <span className="admin-muted-action">发放保护线留存=暂扣待释放（欠主理人、非平台白拿）。到期由系统自动释放或此处手动释放后，留存转为可发放，主理人经应付流程收款。</span>
+        <label>释放状态<select data-testid="dividend-reserve-filter-status" value={reserveFilter} onChange={(event) => setReserveFilter(event.target.value)}>
+          <option value="pending">待释放</option>
+          <option value="released">已释放</option>
+          <option value="">全部</option>
+        </select></label>
+      </div>
+      <AdminDataState loading={reserveRows.loading} error={reserveRows.error} empty={!reserveRows.loading && reserveRows.total === 0} onRetry={reserveRows.reload}>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="dividend-reserve-table">
+            <thead><tr><th>期间</th><th>商户</th><th>留存额（元）</th><th>状态</th><th>释放方式 / 操作人 / 时间</th><th>操作</th></tr></thead>
+            <tbody>
+              {reserveRows.rows.length === 0 ? (
+                <tr data-testid="dividend-reserve-table-empty"><td colSpan={6} className="admin-muted-action">当前筛选下暂无留存记录。</td></tr>
+              ) : reserveRows.rows.map((row) => (
+                <tr key={row.statementId} data-testid={`dividend-reserve-row-${row.statementId}`}>
+                  <td>{row.periodLabel ?? "—"}</td>
+                  <td>{merchants.find((m) => m.id === row.merchantId) ? merchantLabel(merchants.find((m) => m.id === row.merchantId)!) : row.merchantId ?? "—"}</td>
+                  <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.reserveWithheldCent)}</td>
+                  <td>{row.released ? "已释放" : "待释放"}</td>
+                  <td>{row.released ? `${row.triggerType === "scheduled" ? "定时自动" : "手动"}${row.releasedBy ? ` / ${row.releasedBy}` : ""}${row.releasedAt ? ` / ${cnDate(row.releasedAt)}` : ""}` : "—"}</td>
+                  <td className="admin-row-detail-cell">
+                    {!row.released ? (
+                      <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE_PERMS}
+                        data-testid={`dividend-reserve-release-${row.statementId}`}
+                        onClick={() => void releaseReserve(row)}>释放留存</PermissionButton>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <TablePager testid="dividend-reserve-pager" page={reserveRows.page} pageCount={reserveRows.pageCount} total={reserveRows.total} onPrev={reserveRows.prev} onNext={reserveRows.next} />
+        </div>
+      </AdminDataState>
+
       {formError && !planModalOpen && !rejectTarget ? (
         <div className="admin-form-error" data-testid="dividend-form-error">{formError}</div>
       ) : null}
@@ -642,12 +729,19 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
               <>
                 <label><input data-testid="dividend-plan-loss-carryforward" type="checkbox" checked={planForm.lossCarryforwardEnabled} onChange={() => setPlanForm({ ...planForm, lossCarryforwardEnabled: !planForm.lossCarryforwardEnabled })} />亏损结转：本期可分配额先扣减该商户往期未弥补亏损累计（关闭仅暂停本期抵扣，历史亏损累计保留、不清零，后续开启继续抵减）</label>
                 <label><input data-testid="dividend-plan-arrears-offset" type="checkbox" checked={planForm.arrearsOffsetEnabled} onChange={() => setPlanForm({ ...planForm, arrearsOffsetEnabled: !planForm.arrearsOffsetEnabled })} />欠款抵扣：主理人应得先抵扣该商户对平台未清应收，抵扣后余额才发放（审批时逐项结算应收）</label>
-                <label><input data-testid="dividend-plan-payout-floor" type="checkbox" checked={planForm.payoutFloorEnabled} onChange={() => setPlanForm({ ...planForm, payoutFloorEnabled: !planForm.payoutFloorEnabled })} />发放保护线：留存一定比例或固定额作为风险准备金不发放（留存记为欠主理人的待释放款、非平台白拿，释放机制后续开放）</label>
+                <label><input data-testid="dividend-plan-payout-floor" type="checkbox" checked={planForm.payoutFloorEnabled} onChange={() => setPlanForm({ ...planForm, payoutFloorEnabled: !planForm.payoutFloorEnabled })} />发放保护线：留存一定比例或固定额作为风险准备金暂不发放（留存记为欠主理人的待释放款、非平台白拿，按下方释放规则全额返还主理人）</label>
                 {planForm.payoutFloorEnabled ? (
                   <>
                     <label>留存比例（%）<input data-testid="dividend-plan-floor-percent" type="number" step="0.01" min="0" max="100" value={planForm.payoutFloorPercent} onChange={(event) => setPlanForm({ ...planForm, payoutFloorPercent: event.target.value })} /></label>
                     <label>留存固定额（元）<input data-testid="dividend-plan-floor-fixed" type="number" step="0.01" min="0" value={planForm.payoutFloorFixedYuan} onChange={(event) => setPlanForm({ ...planForm, payoutFloorFixedYuan: event.target.value })} /></label>
                     <span className="admin-muted-action">留存 = 抵扣后余额 与 max(余额×比例, 固定额) 取小（钳到可发额上限，实发不为负）。</span>
+                    <label>留存释放时点<select data-testid="dividend-plan-release-mode" value={planForm.reserveReleaseMode} onChange={(event) => setPlanForm({ ...planForm, reserveReleaseMode: event.target.value })}>
+                      {Object.entries(RESERVE_RELEASE_MODE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select></label>
+                    {planForm.reserveReleaseMode === "fixed_delay" ? (
+                      <label>延后周期数（期）<input data-testid="dividend-plan-release-delay" type="number" step="1" min="1" value={planForm.reserveReleaseDelayPeriods} onChange={(event) => setPlanForm({ ...planForm, reserveReleaseDelayPeriods: event.target.value })} /></label>
+                    ) : null}
+                    <span className="admin-muted-action">手动释放=仅后台手动放款；下期返还/固定延后/年度末=到期由系统自动释放（全额返还主理人）。释放后留存即转为可发放，主理人经应付流程收款。</span>
                   </>
                 ) : null}
               </>
@@ -667,7 +761,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
               planForm.lossCarryforwardEnabled ? "亏损结转" : null,
               planForm.arrearsOffsetEnabled ? "欠款抵扣" : null,
               planForm.payoutFloorEnabled
-                ? `发放保护线（留 ${planForm.payoutFloorPercent || "0"}% 或 ${planForm.payoutFloorFixedYuan || "0"} 元取大）`
+                ? `发放保护线（留 ${planForm.payoutFloorPercent || "0"}% 或 ${planForm.payoutFloorFixedYuan || "0"} 元取大，${RESERVE_RELEASE_MODE_LABELS[planForm.reserveReleaseMode] ?? planForm.reserveReleaseMode}${planForm.reserveReleaseMode === "fixed_delay" ? ` ${planForm.reserveReleaseDelayPeriods} 期` : ""}释放）`
                 : null,
             ].filter(Boolean).join("、") || "全关（按税后应得全额发放）",
           },

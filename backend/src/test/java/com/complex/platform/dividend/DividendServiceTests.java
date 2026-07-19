@@ -21,6 +21,10 @@ import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveLedgerRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseCandidateRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseRunRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementDetailRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementLineRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
@@ -32,6 +36,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.DividendPayoutPort;
 import com.complex.platform.finance.DividendPayoutPort.DividendArrearsItem;
+import com.complex.platform.finance.DividendPayoutPort.DividendReserveReleaseRef;
 import com.complex.platform.inventory.InventoryCostSummaryRecord;
 import com.complex.platform.inventory.InventoryRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -248,6 +253,55 @@ class DividendServiceTests {
             return expenses.getOrDefault(merchantId, List.of()).stream()
                     .filter(e -> expenseTypes.contains(e.expenseType())).toList();
         }
+
+        // ── V304 发放保护线留存·释放 ──────────────────────────
+        final Map<String, DividendReserveReleaseRecord> reserveReleases = new LinkedHashMap<>();
+
+        @Override
+        public boolean insertReserveRelease(DividendReserveReleaseRecord release) {
+            // uq(statement_id) 内存版：同一计算单只允许一条释放行（重复释放 → false）。
+            return reserveReleases.putIfAbsent(release.statementId(), release) == null;
+        }
+
+        @Override
+        public PageResponse<DividendReserveLedgerRecord> pageReserveLedger(
+                String merchantId, String releasedFilter, int page, int pageSize) {
+            List<DividendReserveLedgerRecord> filtered = statements.values().stream()
+                    .filter(s -> "official".equals(s.kind()))
+                    .filter(s -> "approved".equals(s.status()) || "paid".equals(s.status()))
+                    .filter(s -> s.reserveWithheldCent() > 0)
+                    .filter(s -> merchantId == null || s.merchantId().equals(merchantId))
+                    .map(s -> {
+                        DividendReserveReleaseRecord r = reserveReleases.get(s.id());
+                        return new DividendReserveLedgerRecord(s.id(), s.merchantId(), s.principalUserId(),
+                                s.periodLabel(), s.periodStart(), s.periodEnd(), s.status(), s.reserveWithheldCent(),
+                                r != null, r == null ? null : r.triggerType(), r == null ? null : r.releasedBy(),
+                                r == null ? null : r.releasedAt());
+                    })
+                    .filter(l -> releasedFilter == null
+                            || ("released".equals(releasedFilter) && l.released())
+                            || ("pending".equals(releasedFilter) && !l.released()))
+                    .toList();
+            return new PageResponse<>(filtered, page, pageSize, filtered.size());
+        }
+
+        @Override
+        public List<DividendReserveReleaseCandidateRecord> listReserveReleaseCandidates() {
+            return statements.values().stream()
+                    .filter(s -> "official".equals(s.kind()))
+                    .filter(s -> "approved".equals(s.status()) || "paid".equals(s.status()))
+                    .filter(s -> s.reserveWithheldCent() > 0)
+                    .filter(s -> !reserveReleases.containsKey(s.id()))
+                    .map(s -> {
+                        DividendPlanRecord plan = plans.get(s.planId());
+                        return new DividendReserveReleaseCandidateRecord(s.id(), s.merchantId(),
+                                s.principalUserId(), s.reserveWithheldCent(), s.periodEnd(),
+                                plan == null ? "quarterly" : plan.periodType(),
+                                plan == null ? "manual" : plan.reserveReleaseMode(),
+                                plan == null ? 1 : plan.reserveReleaseDelayPeriods());
+                    })
+                    .toList();
+        }
     }
 
     /** 内存幂等仓储（MerchantExpenseServiceTests 同款）：载荷指纹与重放语义走真 IdempotencyService。 */
@@ -304,6 +358,16 @@ class DividendServiceTests {
                 .thenAnswer(inv -> (long) inv.getArgument(1));
         when(payoutPort.createDividendReserveWithholdingPayable(anyString(), anyString(), anyLong(), anyString()))
                 .thenReturn("arap_reserve_1");
+        // V304 释放：finance re-tag 待释放留存应付（幂等）——默认返回该计算单留存额的释放引用；
+        // 留存为 0 或计算单不存在 → empty（真 finance 侧无待释放应付时的 empty 语义）。
+        when(payoutPort.releaseDividendReserveWithholding(anyString())).thenAnswer(inv -> {
+            String sid = inv.getArgument(0);
+            return repository.findStatementById(sid)
+                    .filter(s -> s.reserveWithheldCent() > 0)
+                    .map(s -> Optional.of(new DividendReserveReleaseRef(
+                            "arap_reserve_" + sid, s.reserveWithheldCent(), s.principalUserId(), s.merchantId())))
+                    .orElse(Optional.empty());
+        });
         AuditedOperationExecutor operations = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 mock(AuditEventService.class));
@@ -891,5 +955,122 @@ class DividendServiceTests {
         assertThat(q2.payoutCent()).isEqualTo(90_000L);
         assertThat(q2.payoutCent())
                 .isEqualTo(q2.principalNetCent() - q2.arrearsOffsetCent() - q2.reserveWithheldCent());
+    }
+
+    // ── V304 发放保护线留存·释放 ──────────────────────────────
+
+    /** 造一张带留存（保护线留 10%）的已审批正式单；releaseMode 指定释放规则。 */
+    private DividendStatementRecord approvedReserveStatement(
+            String merchant, String planKey, String releaseMode, String period, String key) {
+        service.createPlan(new DividendPlanRequest(planKey, merchant, "usr_principal_" + merchant, null,
+                8000, 2000, "quarterly", List.of("bar"), false, List.of("labor"), null, null, null,
+                null, null, true, 1000, null, releaseMode, null));
+        repository.barRevenue.put(merchant, 1_000_000L); // 税后应得 160000，留 10% = 16000
+        DividendStatementRecord s = service.compute(
+                new DividendComputeRequest(key, period, "official", merchant)).computed().get(0);
+        service.submit(s.id(), new DividendActionRequest(key + "-s", null));
+        actorId[0] = "usr_approver";
+        service.approve(s.id(), new DividendActionRequest(key + "-a", null));
+        actorId[0] = "usr_admin";
+        return repository.findStatementById(s.id()).orElseThrow();
+    }
+
+    /** 手动释放：re-tag 待释放留存为已释放，金额=原留存额、留痕（触发方式/操作人）；不改原单快照（关账协同）。 */
+    @Test
+    void manualReleaseRecordsLedgerAndKeepsStatementSnapshot() {
+        DividendStatementRecord s = approvedReserveStatement(MERCHANT, "rel-plan", "manual", "2026-Q3", "rel-c1");
+        assertThat(s.reserveWithheldCent()).isEqualTo(16_000L);
+        DividendReserveReleaseRecord rel = service.releaseReserve(
+                s.id(), new DividendActionRequest("rel-k1", "季度到期返还"));
+        assertThat(rel.reserveCent()).isEqualTo(16_000L);        // 金额=原留存额（不多不少）
+        assertThat(rel.triggerType()).isEqualTo("manual");
+        assertThat(rel.releasedBy()).isEqualTo("usr_admin");     // 留痕操作人
+        assertThat(rel.statementId()).isEqualTo(s.id());
+        verify(payoutPort).releaseDividendReserveWithholding(s.id());
+        // 关账/快照协同：释放是新动作，原已审批计算单的留存快照不变（不改冻结单）。
+        assertThat(repository.findStatementById(s.id()).orElseThrow().reserveWithheldCent()).isEqualTo(16_000L);
+    }
+
+    /** 幂等：同一留存不重复释放（第二次不同键 → uq 拦下 ALREADY_RELEASED）。 */
+    @Test
+    void releaseIsIdempotentNoDoubleRelease() {
+        DividendStatementRecord s = approvedReserveStatement(MERCHANT, "rel-plan2", "manual", "2026-Q3", "rel2-c1");
+        service.releaseReserve(s.id(), new DividendActionRequest("rel2-k1", null));
+        assertThatThrownBy(() -> service.releaseReserve(s.id(), new DividendActionRequest("rel2-k2", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_RESERVE_ALREADY_RELEASED"));
+    }
+
+    /** finance 侧报告无待释放应付（已翻/被释放）→ ALREADY_RELEASED（释放守卫路径）。 */
+    @Test
+    void releaseConflictsWhenFinanceHasNoWithheldPayable() {
+        DividendStatementRecord s = approvedReserveStatement(MERCHANT, "rel-plan3", "manual", "2026-Q3", "rel3-c1");
+        when(payoutPort.releaseDividendReserveWithholding(s.id())).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.releaseReserve(s.id(), new DividendActionRequest("rel3-k1", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_RESERVE_ALREADY_RELEASED"));
+    }
+
+    /** 状态/留存校验：未审批单不可释放；无留存单无需释放。 */
+    @Test
+    void releaseRequiresApprovedOrPaidWithReserve() {
+        // draft 单不可释放。
+        service.createPlan(new DividendPlanRequest("rel-plan4", MERCHANT, "usr_principal", null,
+                8000, 2000, "quarterly", List.of("bar"), false, List.of("labor"), null, null, null,
+                null, null, true, 1000, null, "manual", null));
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+        DividendStatementRecord draft = service.compute(
+                new DividendComputeRequest("rel4-c1", "2026-Q3", "official", MERCHANT)).computed().get(0);
+        assertThatThrownBy(() -> service.releaseReserve(draft.id(), new DividendActionRequest("rel4-k1", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_STATE_INVALID"));
+        // 无留存（未开保护线）的已审批单 → DIVIDEND_RESERVE_NONE。
+        service.createPlan(new DividendPlanRequest("rel-plan5", "merchant_nr", "usr_p", null,
+                8000, 2000, "quarterly", List.of("bar"), false, List.of("labor"), null, null, null,
+                null, null, false, null, null, "manual", null));
+        repository.barRevenue.put("merchant_nr", 1_000_000L);
+        DividendStatementRecord noReserve = service.compute(
+                new DividendComputeRequest("rel5-c1", "2026-Q3", "official", "merchant_nr")).computed().get(0);
+        service.submit(noReserve.id(), new DividendActionRequest("rel5-s", null));
+        actorId[0] = "usr_approver";
+        service.approve(noReserve.id(), new DividendActionRequest("rel5-a", null));
+        actorId[0] = "usr_admin";
+        assertThat(noReserve.reserveWithheldCent()).isZero();
+        assertThatThrownBy(() -> service.releaseReserve(noReserve.id(), new DividendActionRequest("rel5-k1", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_RESERVE_NONE"));
+    }
+
+    /** 自动作业：到期候选（next_period）释放、手动模式不自动释放、系统操作人留痕；重跑不重复释放。 */
+    @Test
+    void scheduledReleaseReleasesDueSkipsManualAndIsIdempotent() {
+        DividendStatementRecord due = approvedReserveStatement("m_np", "p-np", "next_period", "2026-Q1", "np");
+        DividendStatementRecord manual = approvedReserveStatement("m_man", "p-man", "manual", "2026-Q1", "man");
+        // Q1 期末 2026-03-31；asOf 2026-04-15：next_period 到期、manual 恒不自动。
+        DividendReserveReleaseRunRecord run =
+                service.runScheduledReserveRelease(java.time.LocalDate.parse("2026-04-15"));
+        assertThat(run.released()).extracting(DividendReserveReleaseRecord::statementId)
+                .contains(due.id()).doesNotContain(manual.id());
+        assertThat(run.released()).allSatisfy(r -> {
+            assertThat(r.triggerType()).isEqualTo("scheduled");
+            assertThat(r.releasedBy()).isEqualTo("system_dividend_reserve_release"); // 系统操作人留痕
+        });
+        // 幂等重跑：已释放候选被排除，不再释放。
+        DividendReserveReleaseRunRecord rerun =
+                service.runScheduledReserveRelease(java.time.LocalDate.parse("2026-04-16"));
+        assertThat(rerun.released()).noneMatch(r -> r.statementId().equals(due.id()));
+    }
+
+    /** 待释放/已释放台账：释放前在 pending、释放后在 released（含触发方式）。 */
+    @Test
+    void reserveLedgerReflectsPendingThenReleased() {
+        DividendStatementRecord s = approvedReserveStatement(MERCHANT, "p-led", "manual", "2026-Q3", "led");
+        assertThat(service.listReserveLedger(null, "pending", 1, 50).items())
+                .anyMatch(l -> l.statementId().equals(s.id()) && !l.released());
+        service.releaseReserve(s.id(), new DividendActionRequest("led-rel", null));
+        assertThat(service.listReserveLedger(null, "released", 1, 50).items())
+                .anyMatch(l -> l.statementId().equals(s.id()) && l.released() && "manual".equals(l.triggerType()));
+        assertThat(service.listReserveLedger(null, "pending", 1, 50).items())
+                .noneMatch(l -> l.statementId().equals(s.id()));
     }
 }

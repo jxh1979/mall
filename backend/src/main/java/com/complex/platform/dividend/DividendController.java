@@ -4,6 +4,8 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveLedgerRecord;
+import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementDetailRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
@@ -91,5 +93,24 @@ public class DividendController {
     public ApiResponse<DividendStatementRecord> markPaid(
             @PathVariable("id") String statementId, @RequestBody DividendActionRequest request) {
         return ApiResponse.ok(service.markPaid(statementId, request));
+    }
+
+    // ── V304 发放保护线留存·释放 ──────────────────────────────
+
+    /** 待释放/已释放留存台账（商户 scope 强制）；released=pending 仅待释放 / released 仅已释放 / 空=全部。 */
+    @GetMapping("/reserve-releases")
+    public ApiResponse<PageResponse<DividendReserveLedgerRecord>> listReserveLedger(
+            @RequestParam(value = "merchant_id", required = false) String merchantId,
+            @RequestParam(value = "released", required = false) String released,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "page_size", defaultValue = "50") int pageSize) {
+        return ApiResponse.ok(service.listReserveLedger(merchantId, released, page, pageSize));
+    }
+
+    /** 手动释放某计算单的发放保护线留存（finance.dividend.manage）。 */
+    @PostMapping("/statements/{id}/release-reserve")
+    public ApiResponse<DividendReserveReleaseRecord> releaseReserve(
+            @PathVariable("id") String statementId, @RequestBody DividendActionRequest request) {
+        return ApiResponse.ok(service.releaseReserve(statementId, request));
     }
 }
