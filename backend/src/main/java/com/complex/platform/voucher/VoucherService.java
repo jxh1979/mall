@@ -123,6 +123,22 @@ public class VoucherService implements VoucherIssuePort {
                 () -> repository.overview(merchantScope(), blankToNull(customerId), safePage(page), safeSize(pageSize)));
     }
 
+    /**
+     * 客人端「我的券包」自助只读：控制器按客人 token 解析并强制 customer_id（不可查他人），
+     * 不校 staff 权限（客人无 VIEW_PERM），merchantScope=null（客人不受商户 scope 限制，看本人全部券）。
+     * 内部结算价客人天然不可见——VoucherOverviewRecord 不含 internal_price/settlement 字段。
+     * 只读展示，不做客人端发起核销（核销在 POS/工作手机侧）。
+     */
+    public PageResponse<VoucherOverviewRecord> customerOverview(String customerId, int page, int pageSize) {
+        String scoped = blankToNull(customerId);
+        if (scoped == null) {
+            throw ApiException.unauthorized("CUSTOMER_REQUIRED", "customer token required");
+        }
+        return operations.readPageResult(
+                AuditedOperation.of("voucher.customer_wallet_viewed", "voucher.customer_wallet_view_failed", VIEW_PERM, BUSINESS_TYPE),
+                () -> repository.overview(null, scoped, safePage(page), safeSize(pageSize)));
+    }
+
     // ── 券定义 ─────────────────────────────────────────────────────────────
 
     @Transactional

@@ -6,6 +6,8 @@ import com.complex.platform.customer.dto.StoredValueConsumeRequest;
 import com.complex.platform.customer.dto.StoredValueSettleRequest;
 import com.complex.platform.customer.dto.StoredValueTopupRequest;
 import com.complex.platform.finance.PaymentIntentRecord;
+import com.complex.platform.voucher.VoucherOverviewRecord;
+import com.complex.platform.voucher.VoucherService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,14 +30,17 @@ public class MemberWalletController {
     private final StoredValueService storedValueService;
     private final LoyaltyService loyaltyService;
     private final CustomerRepository repository;
+    private final VoucherService voucherService;
 
     public MemberWalletController(CustomerService customerService, StoredValueService storedValueService,
                                   LoyaltyService loyaltyService,
-                                  CustomerRepository repository) {
+                                  CustomerRepository repository,
+                                  VoucherService voucherService) {
         this.customerService = customerService;
         this.storedValueService = storedValueService;
         this.loyaltyService = loyaltyService;
         this.repository = repository;
+        this.voucherService = voucherService;
     }
 
     // ---- 储值 ----
@@ -93,6 +98,19 @@ public class MemberWalletController {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
         List<CustomerStoredValueAccountRecord> cards = repository.listStoredValueAccountsByCustomer(customerId);
         return ApiResponse.ok(new PageResponse<>(cards, 1, cards.size(), cards.size()));
+    }
+
+    // 我的券包（客人端只读）：积分兑换券/营销赠券/通票第三方券聚合，按 token 强制本人 customer_id（不可查他人）。
+    // 内部结算价客人天然不可见（VoucherOverviewRecord 不含成本字段）；核销在 POS/工作手机侧，本端不发起核销。
+    @GetMapping("/vouchers")
+    public ApiResponse<PageResponse<VoucherOverviewRecord>> listMyVouchers(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "page_size", defaultValue = "50") int pageSize
+    ) {
+        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        return ApiResponse.ok(voucherService.customerOverview(customerId, page, pageSize));
     }
 
     // 积分转赠（会员间转移）已下线：HTML 明确「积分不支持会员间转赠」，端点/表/记录类已随 V172 清理移除。

@@ -4,6 +4,7 @@
 import { CustomerApi } from "./customerClient";
 import type {
   CustomerTicket,
+  CustomerVoucher,
   TicketTransfer,
   TicketTransferPreview,
   BarInvitation,
@@ -171,6 +172,11 @@ export class CustomerService {
 
   listRedemptions(): Promise<PointsRedemption[]> {
     return this.api.get<PointsRedemption[]>("/api/v1/customer/points/redemptions");
+  }
+
+  // 我的券包（只读）：积分兑换券 / 营销赠券 / 通票第三方券聚合，按 token 强制本人 customer_id。
+  listMyVouchers(): Promise<CustomerVoucher[]> {
+    return this.api.get<CustomerVoucher[]>("/api/v1/customer/vouchers");
   }
 
   // AUD-077 门票转赠

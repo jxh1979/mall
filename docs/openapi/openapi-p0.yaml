@@ -9566,6 +9566,29 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+  /api/v1/customer/vouchers:
+    get:
+      tags:
+        - customer
+      operationId: customerVoucherWallet
+      summary: 我的券包（客人端只读：积分兑换券/营销赠券/通票第三方券聚合，按状态分组展示）
+      x-permission: customer.voucher.view
+      x-data-scope: customer
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
+      x-idempotency-required: false
+      x-audit-event-success: voucher.customer_wallet_viewed
+      x-audit-event-failure: voucher.customer_wallet_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: customer-token
   /api/v1/loyalty/stored-value/{customer_id}/freeze:
     post:
       tags:

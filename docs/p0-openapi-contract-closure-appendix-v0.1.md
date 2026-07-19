@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 649 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 650 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 316 | 人工权限矩阵正文未覆盖 214 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1298 | 人工事件矩阵正文未覆盖 1256 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 649 | 人工任务映射正文未逐项覆盖 643 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1300 | 人工事件矩阵正文未覆盖 1258 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 650 | 人工任务映射正文未逐项覆盖 644 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 388 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -155,7 +155,7 @@
 | `customer.stored_value.view` | customer-token | customer | 2 | customerStoredValueAccount, customerStoredValueAccounts | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.manage` | staff-token | merchant | 3 | createVoucherDefinition, issueVouchers, revokeVoucher | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.redeem` | staff-token | merchant | 1 | redeemVoucher | OpenAPI 补充，以本附录为准 |
-| `customer.voucher.view` | staff-token | merchant | 4 | listVoucherDefinitions, listVoucherInstances, listVoucherRedemptions, listVoucherOverview | OpenAPI 补充，以本附录为准 |
+| `customer.voucher.view` | customer-token, staff-token | customer, merchant | 5 | customerVoucherWallet, listVoucherDefinitions, listVoucherInstances, listVoucherRedemptions, listVoucherOverview | OpenAPI 补充，以本附录为准 |
 | `energy.meter.manage` | staff-token | platform | 3 | listEnergyMeters, createEnergyMeter, updateEnergyMeter | OpenAPI 补充，以本附录为准 |
 | `energy.reading.manage` | staff-token | platform | 7 | listEnergyReadings, recordEnergyReading, reviewEnergyReading, getEnergyMeterDifference, settleEnergyFee, settleEnergyFeeShortcut, listAbnormalReadings | OpenAPI 补充，以本附录为准 |
 | `entity.binding.manage` | staff-token | project-merchant | 3 | createBusinessEntity, createBusinessEntityBinding, changeBusinessEntityBinding | 已在权限矩阵正文出现 |
@@ -1619,6 +1619,8 @@
 | `verification.succeeded` | success | `createTicketVerification` | `POST` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.execute` | 已在事件矩阵正文出现 |
 | `verification.view_failed` | failure | `listTicketVerifications` | `GET` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.view` | 接口级事件，以本附录为准 |
 | `verification.viewed` | success | `listTicketVerifications` | `GET` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.view` | 接口级事件，以本附录为准 |
+| `voucher.customer_wallet_view_failed` | failure | `customerVoucherWallet` | `GET` | `/api/v1/customer/vouchers` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.customer_wallet_viewed` | success | `customerVoucherWallet` | `GET` | `/api/v1/customer/vouchers` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
 | `voucher.definition_create_failed` | failure | `createVoucherDefinition` | `POST` | `/api/v1/vouchers/definitions` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
 | `voucher.definition_created` | success | `createVoucherDefinition` | `POST` | `/api/v1/vouchers/definitions` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
 | `voucher.definitions_view_failed` | failure | `listVoucherDefinitions` | `GET` | `/api/v1/vouchers/definitions` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
@@ -1868,6 +1870,7 @@
 | CUS-客人端 | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | 客人储值消费（余额扣减） | `customer.stored_value.consume` | `customer.stored_value.consume` / `customer.stored_value.consume_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerStoredValueSettle` | `POST` | `/api/v1/customer/stored-value/settle` | 客人储值充值入账（支付成功后） | `customer.stored_value.topup` | `customer.stored_value.settle` / `customer.stored_value.settle_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerStoredValueTopup` | `POST` | `/api/v1/customer/stored-value/topup` | 客人储值充值（绑支付意图） | `customer.stored_value.topup` | `customer.stored_value.topup` / `customer.stored_value.topup_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerVoucherWallet` | `GET` | `/api/v1/customer/vouchers` | 我的券包（客人端只读：积分兑换券/营销赠券/通票第三方券聚合，按状态分组展示） | `customer.voucher.view` | `voucher.customer_wallet_viewed` / `voucher.customer_wallet_view_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `deregisterCustomerAccount` | `POST` | `/api/v1/customer/deregister` | 客人自助注销本人账号（注销后登录/动作被拒，历史数据物理保留但客人不可见） | `not_applicable` | `customer.account.deregistered` / `customer.account.deregister_failed` | miniapp, web | operation 级补充 |
 | CUS-客人端 | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | 手动触发会员等级评估 | `customer.loyalty.evaluate` | `member.level_changed` / `customer.level_evaluate_failed` | web | operation 级补充 |
 | CUS-客人端 | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | 冻结会员积分账户 | `customer.points.freeze` | `customer.points.frozen` / `customer.points.freeze_failed` | web | operation 级补充 |

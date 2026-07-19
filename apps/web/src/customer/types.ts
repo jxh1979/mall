@@ -236,3 +236,17 @@ export type PointsRedemption = {
   status: string;
   createdAt: string;
 };
+
+// 我的券包聚合行（对齐后端 VoucherOverviewRecord；刻意不含内部结算价/成本字段）。
+export type CustomerVoucher = {
+  id: string;
+  source: string; // unified | pass_partner
+  name: string;
+  voucherKind: string; // merchant_discount | in_store_goods | external_partner
+  customerId: string;
+  status: string;
+  remainingTimes: number | null;
+  expiresAt: string | null;
+  faceValueCent: number | null;
+  redeemMethod: string | null; // in_store_staff | onsite_code | external_reflow
+};
