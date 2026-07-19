@@ -183,7 +183,10 @@ class ContractServiceTests {
                 new ContractResolveDisputeRequest("k_rd", "押金按约抵扣"));
         assertThat(resumed.status()).isEqualTo("pending_settlement");
         assertThat(resumed.settlementItems()).hasSize(2);
-        assertThat(resumed.settlementItems().get(0)).containsEntry("order", 1);
+        // 裁决后重算走 TerminationSettlementMath：未清汇总 + 押金处置（deposit 500000、unpaid 0 → 净退 500000）。
+        Map<String, Object> depResumed = resumed.settlementItems().stream()
+                .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(depResumed).containsEntry("netRefundCent", 500000L);
         assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("effective");
 
         // 结清 → 已结清 + 合同终止。
@@ -294,12 +297,15 @@ class ContractServiceTests {
 
     @Test
     void settlementItemsCarryRealAmountsAndPhasesAdvanceToSettled() {
-        ContractRecord c = effectiveContract();   // deposit 500000；rules [deposit_offset, unpaid_fee]
+        ContractRecord c = effectiveContract();   // deposit 500000
         ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_s3", "move_out", null));
         assertThat(opened.status()).isEqualTo("pending_settlement");
-        // 缺口2 真实金额：保证金抵扣=500000；欠费=0(内存无未付AR)
-        assertThat(opened.settlementItems().get(0)).containsEntry("amountCent", 500000L);
-        // 缺口6 逐相推进：待结算→保证金抵扣中→欠费追缴中→已结清
+        // 开账即算真实金额（TerminationSettlementMath）：押金处置净退=500000（unpaid 0）；开账绝不落账。
+        Map<String, Object> depOpen = opened.settlementItems().stream()
+                .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(depOpen).containsEntry("netRefundCent", 500000L);
+        assertThat(terminationPort.depositCalls).isZero();
+        // 逐相推进：待结算→保证金抵扣中→欠费追缴中→已结清（末相=确认退押金落账）。
         assertThat(service.advanceSettlement(opened.id(), new ContractResolveDisputeRequest("k_a1", null)).status())
                 .isEqualTo("deposit_offsetting");
         assertThat(service.advanceSettlement(opened.id(), new ContractResolveDisputeRequest("k_a2", null)).status())
@@ -307,6 +313,8 @@ class ContractServiceTests {
         ContractSettlementRecord done = service.advanceSettlement(opened.id(),
                 new ContractResolveDisputeRequest("k_a3", null));
         assertThat(done.status()).isEqualTo("settled");
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        assertThat(terminationPort.depositRefundCent).isEqualTo(500000L);
         assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("terminated");
     }
 
@@ -603,6 +611,120 @@ class ContractServiceTests {
         assertThat(terminationPort.penaltyCalls).isZero();
         assertThat(repo.listSettlementsByContract(c.id())).isEmpty();
         assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("effective");
+    }
+
+    // ============ 建设U：手动结算入口也落账 + 退押金确认闸 + 跨路径去重 + 悬挂单作废 ============
+
+    @Test
+    void manualSettleDoesNotPostUntilConfirmed() {
+        ContractRecord c = effectiveContractRecord("ctr_u1", 500000L, Map.of());
+        ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_u1", "move_out", null));
+        assertThat(opened.status()).isEqualTo("pending_settlement");
+        assertThat(terminationPort.depositCalls).isZero();
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("effective");
+        ContractSettlementRecord settled = service.completeSettlement(opened.id(),
+                new ContractResolveDisputeRequest("k_u1c", null));
+        assertThat(settled.status()).isEqualTo("settled");
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        assertThat(terminationPort.depositRefundCent).isEqualTo(500000L);
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("terminated");
+    }
+
+    @Test
+    void manualExpirySettleConfirmPostsDepositRefundAndExpires() {
+        ContractRecord c = effectiveContractRecord("ctr_u2", 500000L, Map.of());
+        ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_u2", "expiry", null));
+        assertThat(opened.triggerType()).isEqualTo("expiry");
+        assertThat(terminationPort.depositCalls).isZero();
+        ContractSettlementRecord settled = service.completeSettlement(opened.id(),
+                new ContractResolveDisputeRequest("k_u2c", null));
+        assertThat(settled.status()).isEqualTo("settled");
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        assertThat(terminationPort.depositRefundCent).isEqualTo(500000L);
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("expired");
+    }
+
+    @Test
+    void manualEarlyTerminationUsesContractPenaltyOnConfirm() {
+        ContractRecord c = effectiveContractRecord("ctr_u3", 500000L, Map.of("amountCent", 200000));
+        ContractSettlementRecord opened = service.settle(c.id(),
+                new ContractSettleRequest("k_u3", "early_termination", null));
+        Map<String, Object> pen = opened.settlementItems().stream()
+                .filter(i -> "termination_penalty".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(pen).containsEntry("amountCent", 200000L).containsEntry("reason", "合同条款违约金");
+        assertThat(terminationPort.penaltyCalls).isZero();
+        service.completeSettlement(opened.id(), new ContractResolveDisputeRequest("k_u3c", null));
+        assertThat(terminationPort.penaltyCalls).isEqualTo(1);
+        assertThat(terminationPort.penaltyCent).isEqualTo(200000L);
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+    }
+
+    @Test
+    void manualUnpaidExceedsDepositConfirmPostsNoPayable() {
+        repo.unpaidAr = 800000L;
+        ContractRecord c = effectiveContractRecord("ctr_u4", 500000L, Map.of());
+        ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_u4", "move_out", null));
+        service.completeSettlement(opened.id(), new ContractResolveDisputeRequest("k_u4c", null));
+        assertThat(terminationPort.depositCalls).isZero();
+        ContractSettlementRecord st = repo.findSettlementById(opened.id()).orElseThrow();
+        Map<String, Object> dep = st.settlementItems().stream()
+                .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(dep).containsEntry("merchantStillOwesCent", 300000L).containsEntry("status", "listed_only");
+    }
+
+    @Test
+    void manualCompleteIsNotDoubleConfirmable() {
+        ContractRecord c = effectiveContractRecord("ctr_u5", 500000L, Map.of());
+        ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_u5", "move_out", null));
+        service.completeSettlement(opened.id(), new ContractResolveDisputeRequest("k_u5c", null));
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        assertThatThrownBy(() -> service.completeSettlement(opened.id(),
+                new ContractResolveDisputeRequest("k_u5c2", null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CONTRACT_SETTLEMENT_NOT_OPEN"));
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+    }
+
+    @Test
+    void manualSettlementVoidedWhenAutoTerminationPostedFirst() {
+        ContractRecord c = effectiveContractRecord("ctr_u6", 500000L, Map.of());
+        ContractSettlementRecord manual = service.settle(c.id(), new ContractSettleRequest("k_u6", "move_out", null));
+        assertThat(manual.status()).isEqualTo("pending_settlement");
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_u6ch", "move_out", Map.of()));
+        approveTerminationChain(ch.id());
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        ContractSettlementRecord voided = service.completeSettlement(manual.id(),
+                new ContractResolveDisputeRequest("k_u6c", null));
+        assertThat(voided.status()).isEqualTo("voided");
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+    }
+
+    @Test
+    void secondManualSettlementVoidedAfterFirstAlreadySettled() {
+        ContractRecord c = effectiveContractRecord("ctr_u7", 500000L, Map.of());
+        ContractSettlementRecord s1 = service.settle(c.id(), new ContractSettleRequest("k_u7a", "move_out", null));
+        ContractSettlementRecord s2 = service.settle(c.id(), new ContractSettleRequest("k_u7b", "move_out", null));
+        service.completeSettlement(s1.id(), new ContractResolveDisputeRequest("k_u7ac", null));
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        ContractSettlementRecord v = service.completeSettlement(s2.id(), new ContractResolveDisputeRequest("k_u7bc", null));
+        assertThat(v.status()).isEqualTo("voided");
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+    }
+
+    @Test
+    void autoTerminationStillPostsUnchangedAfterSharedLedgerExtraction() {
+        ContractRecord c = effectiveContractRecord("ctr_u8", 500000L, Map.of());
+        ContractChangeRecord ch = service.raiseChange(c.id(),
+                new ContractChangeRequest("k_u8", "move_out", Map.of()));
+        approveTerminationChain(ch.id());
+        assertThat(terminationPort.depositCalls).isEqualTo(1);
+        assertThat(terminationPort.depositRefundCent).isEqualTo(500000L);
+        ContractSettlementRecord st = repo.listSettlementsByContract(c.id()).get(0);
+        assertThat(st.status()).isEqualTo("settled");
+        Map<String, Object> dep = st.settlementItems().stream()
+                .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(dep).containsEntry("actualRefundCent", 500000L);
     }
 
     private static final class InMemoryContractRepository implements ContractRepository {
