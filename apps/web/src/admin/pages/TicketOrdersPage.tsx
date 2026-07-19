@@ -4,7 +4,8 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
 
@@ -125,13 +126,15 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
     (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
+  // 无权限副资源不请求（根因修）：核销记录端点需 verification.view，页面基础权限 ticket.verify.view 不含之。
+  const canVerificationView = hasPermissions(effectivePermissions, ["verification.view"]);
   const { loading, error, reload: reloadResource } = useAdminResource(
     async () => {
       const [orderRows, entitlementRows, verificationRows] = await Promise.all([
         api.get<TicketOrderRow[]>("/api/v1/ticketing/orders"),
         // 权益/核销为副资源：403 或失败时降级（KPI 显「—」不静默归零），出票主表照常。
         loadSecondary(() => api.get<TicketIssuedEntitlementRow[]>("/api/v1/ticketing/issued-entitlements"), [] as TicketIssuedEntitlementRow[]),
-        loadSecondary(() => api.get<TicketVerificationRow[]>("/api/v1/ticketing/verifications"), [] as TicketVerificationRow[]),
+        loadSecondaryIfPermitted(canVerificationView, () => api.get<TicketVerificationRow[]>("/api/v1/ticketing/verifications"), [] as TicketVerificationRow[]),
       ]);
       setOrders(orderRows);
       setEntitlements(entitlementRows.data);

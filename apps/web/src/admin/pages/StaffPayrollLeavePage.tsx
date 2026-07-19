@@ -5,7 +5,8 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps } from "../types";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
@@ -55,13 +56,15 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
   // 行明细抽屉：整行可点 → 展示该行完整字段（全部中文 label + ¥ 金额 + 中文日期/枚举）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
+  // 无权限副资源不请求（根因修）：待审请假端点需 staff.shift.manage，页面基础权限 staff.payroll.manage 不含之。
+  const canShiftManage = hasPermissions(effectivePermissions, ["staff.shift.manage"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // 副资源容错（外包页范式）：待审请假归排班主管审批，薪资账号可能无权（403）——降级为区块提示，
       // 不拖垮当月薪资明细主内容。
       const [payRows, leaveRes] = await Promise.all([
         api.get<PayrollRow[]>(`/api/v1/staff/payroll?month=${month}`),
-        loadSecondary(() => api.get<LeaveRow[]>("/api/v1/staff/leaves?status=pending"), [] as LeaveRow[]),
+        loadSecondaryIfPermitted(canShiftManage, () => api.get<LeaveRow[]>("/api/v1/staff/leaves?status=pending"), [] as LeaveRow[]),
       ]);
       setPayroll(payRows ?? []);
       setLeaves(leaveRes.data);

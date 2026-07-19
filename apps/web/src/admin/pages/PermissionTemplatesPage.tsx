@@ -5,6 +5,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { PermissionButton } from "../security/Can";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import type { AccessUserRow, AdminPageProps, PermissionDefinitionRow, PermissionTemplateRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
@@ -92,10 +93,14 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // 跨域副资源不请求（根因修）：权限清单需 access.permission.view、用户清单需 access.user.view，本页 gate 仅 access.permission_template.view——
+      // 缺权限角色 403 会 reject 整个 Promise.all 致整页白屏；缺权限则不请求、对应下拉降级为空（模板主表照常）。
+      const canPermissionView = hasPermissions(effectivePermissions, ["access.permission.view"]);
+      const canUserView = hasPermissions(effectivePermissions, ["access.user.view"]);
       const [templateRows, permissionRows, userRows] = await Promise.all([
         api.get<PermissionTemplateRow[]>("/api/v1/access/permission-templates"),
-        api.get<PermissionDefinitionRow[]>("/api/v1/access/permissions"),
-        api.get<AccessUserRow[]>("/api/v1/access/users"),
+        canPermissionView ? api.get<PermissionDefinitionRow[]>("/api/v1/access/permissions") : Promise.resolve([] as PermissionDefinitionRow[]),
+        canUserView ? api.get<AccessUserRow[]>("/api/v1/access/users") : Promise.resolve([] as AccessUserRow[]),
       ]);
       setRows(templateRows);
       setPermissions(permissionRows.filter((item) => permissionCode(item)));

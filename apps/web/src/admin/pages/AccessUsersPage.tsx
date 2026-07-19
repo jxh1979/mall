@@ -1,7 +1,8 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import type { AccessUserRow, AdminPageProps, PermissionTemplateRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -49,6 +50,8 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   // 行明细抽屉：整行可点 → 该员工账号完整字段（账号类型/状态中文·组织商户显名）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
+  // 无权限副资源不请求（根因修）：权限模板端点需 access.permission_template.view，页面基础权限 access.user.view 不含之。
+  const canPermissionTemplates = hasPermissions(effectivePermissions, ["access.permission_template.view"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // 副资源容错（外包页范式）：权限模板仅供创建账号时套用（下拉选项），可能因权限/500 单独失败——
@@ -56,7 +59,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
       // 原第三个 /access/permissions 拉取结果从未被使用却会拖垮整页（一失败即整页白屏），已删除。
       const [users, templatesRes] = await Promise.all([
         api.get<AccessUserRow[]>("/api/v1/access/users"),
-        loadSecondary(() => api.get<PermissionTemplateRow[]>("/api/v1/access/permission-templates"), [] as PermissionTemplateRow[]),
+        loadSecondaryIfPermitted(canPermissionTemplates, () => api.get<PermissionTemplateRow[]>("/api/v1/access/permission-templates"), [] as PermissionTemplateRow[]),
       ]);
       setRows(users);
       setTemplates(templatesRes.data);

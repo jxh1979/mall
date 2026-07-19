@@ -4,6 +4,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, ContractRow, MerchantAdmissionRow, SubjectBindingRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -95,10 +96,13 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // 跨域副资源不请求（根因修）：合同列表端点需 contract.draft.manage，本页基础权限仅 contract.view——
+      // 缺该权限角色命中 403 会 reject 整个 Promise.all 致整页白屏；缺权限则不请求、合同交叉引用降级为空。
+      const canContractDraft = hasPermissions(effectivePermissions, ["contract.draft.manage"]);
       const [nextMerchants, nextBindings, nextContracts] = await Promise.all([
         api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"),
         api.get<SubjectBindingRow[]>("/api/v1/platform/business-entity-bindings"),
-        api.get<{ items?: ContractRow[] } | ContractRow[]>("/api/v1/contracts").then((data) => (Array.isArray(data) ? data : data?.items ?? [])),
+        canContractDraft ? api.get<{ items?: ContractRow[] } | ContractRow[]>("/api/v1/contracts").then((data) => (Array.isArray(data) ? data : data?.items ?? [])) : Promise.resolve([] as ContractRow[]),
       ]);
       setMerchants(nextMerchants);
       setBindings(nextBindings);

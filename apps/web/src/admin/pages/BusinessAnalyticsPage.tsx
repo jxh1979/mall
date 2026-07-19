@@ -4,7 +4,8 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { Sparkline, MiniBars } from "../components/MiniChart";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
@@ -122,7 +123,7 @@ function kpiFocusTitle(target: KpiTarget): string {
   return "指标快照";
 }
 
-export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, navigateTo }: AdminPageProps) {
+export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, navigateTo, effectivePermissions }: AdminPageProps) {
   const [snapshots, setSnapshots] = React.useState<BusinessMetricSnapshotRow[]>([]);
   const [definitions, setDefinitions] = React.useState<MetricDefinitionRow[]>([]);
   const [anomalies, setAnomalies] = React.useState<MetricAnomalyRow[]>([]);
@@ -226,6 +227,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
     (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
   }
 
+  // 无权限副资源不请求（根因修）：异常端点需 analytics.risk_alert.view、审阅锁端点需 analytics.review.lock，页面基础权限 analytics.dashboard.view 不含之。
+  const canRiskAlert = hasPermissions(effectivePermissions, ["analytics.risk_alert.view"]);
+  const canReviewLock = hasPermissions(effectivePermissions, ["analytics.review.lock"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // M3(2026-07-02 拍板):定义/异常两块接真管道——定义=代码指标目录每日同步(单一事实源投影),
@@ -234,8 +238,8 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
         api.get<BusinessMetricSnapshotRow[]>("/api/v1/analytics/business-metric-snapshots"),
         loadSecondary(() => api.get<{ businessDate?: string; buckets?: Array<{ hour: number; count: number }> }>("/api/v1/analytics/traffic-hourly"), { buckets: [] as Array<{ hour: number; count: number }> }),
         loadSecondary(() => api.get<MetricDefinitionRow[]>("/api/v1/analytics/metric-definitions"), [] as MetricDefinitionRow[]),
-        loadSecondary(() => api.get<MetricAnomalyRow[]>("/api/v1/analytics/metric-anomalies"), [] as MetricAnomalyRow[]),
-        loadSecondary(() => api.get<BusinessReviewLockRow[]>("/api/v1/analytics/review-locks"), [] as BusinessReviewLockRow[]),
+        loadSecondaryIfPermitted(canRiskAlert, () => api.get<MetricAnomalyRow[]>("/api/v1/analytics/metric-anomalies"), [] as MetricAnomalyRow[]),
+        loadSecondaryIfPermitted(canReviewLock, () => api.get<BusinessReviewLockRow[]>("/api/v1/analytics/review-locks"), [] as BusinessReviewLockRow[]),
       ]);
       setSnapshots(snapshotRows);
       setHourly(hourlyResp.data?.buckets ?? []);
