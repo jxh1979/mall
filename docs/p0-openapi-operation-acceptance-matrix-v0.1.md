@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 660 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 662 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -491,6 +491,8 @@
 | contract | `POST` | `/api/v1/contracts/{contract_id}/activate` | `activateContract` | 生效(固化快照+绑铺位) | `ContractActivateRequest` | `contract.lifecycle.activate` | `staff-token` | `platform` | web | 是 | `contract.activated` | `contract.activate_failed` |
 | contract | `GET` | `/api/v1/contracts/{contract_id}/changes` | `listContractChanges` | 合同变更清单 | `-` | `contract.change.manage` | `staff-token` | `platform` | web | 否 | `contract.changes_viewed` | `contract.changes_view_failed` |
 | contract | `POST` | `/api/v1/contracts/{contract_id}/changes` | `raiseContractChange` | 发起合同变更(6 类) | `ContractChangeRequest` | `contract.change.manage` | `staff-token` | `platform` | web | 是 | `contract.change_raised` | `contract.change_raise_failed` |
+| contract | `POST` | `/api/v1/contracts/{contract_id}/scope-requests` | `requestContractScopeGrant` | 超范围下单经营申请(拦下后可申请,走既有审批链) | `object` | `contract.scope_request.raise` | `staff-token` | `platform` | web | 是 | `contract.scope_request_raised` | `contract.scope_request_raise_failed` |
+| contract | `GET` | `/api/v1/contracts/{contract_id}/amendments` | `listContractAmendments` | 变更子合同追溯清单 | `-` | `contract.change.manage` | `staff-token` | `platform` | web | 否 | `contract.amendments_viewed` | `contract.amendments_view_failed` |
 | contract | `POST` | `/api/v1/contracts/changes/{change_id}/approve` | `approveContractChange` | 变更审批(走同一并行链,全过即应用+新版本快照) | `ContractChangeApproveRequest` | `contract.approve.business` | `staff-token` | `platform` | web | 是 | `contract.change_approved` | `contract.change_approve_failed` |
 | contract | `POST` | `/api/v1/contracts/{contract_id}/settle` | `settleContract` | 退租/到期结算(逐例顺序) | `ContractSettleRequest` | `contract.settlement.manage` | `staff-token` | `platform` | web | 是 | `contract.settled` | `contract.settle_failed` |
 | contract | `GET` | `/api/v1/contracts/{contract_id}/settlements` | `listContractSettlements` | 退租结算清单 | `-` | `contract.settlement.manage` | `staff-token` | `platform` | web | 否 | `contract.settlements_viewed` | `contract.settlements_view_failed` |
@@ -748,5 +750,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 660 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 662 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

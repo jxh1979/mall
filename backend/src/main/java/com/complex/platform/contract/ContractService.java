@@ -824,7 +824,7 @@ public class ContractService {
         if (!"effective".equals(c.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract bills rent");
         }
-        if (repository.rentBillExists(contractId, period, "rent")) {
+        if (rentBillExistsInChain(c, period, "rent")) {
             throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "rent already billed for " + period);
         }
         long baseRent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
@@ -882,7 +882,7 @@ public class ContractService {
     /** 单费目挂账：金额≤0 或已挂账则跳过返 null；否则建 ar_ap_items 应收 + contract_rent_bills。 */
     private ContractRentBillRecord genFeeBill(ContractRecord c, String period, String feeType, long amountCent,
             LocalDate dueDate, String idemKey) {
-        if (amountCent <= 0 || repository.rentBillExists(c.id(), period, feeType)) {
+        if (amountCent <= 0 || rentBillExistsInChain(c, period, feeType)) {
             return null;
         }
         ContractRentBillRecord bill = repository.insertRentBill(new ContractRentBillRecord(
@@ -1165,6 +1165,10 @@ public class ContractService {
                 null, change.id(), Map.of("parent_contract_id", parent.id(),
                         "amendment_type", change.changeType(), "deposit_delta_cent", delta,
                         "space_count", childSpaces.size()));
+        if (delta < 0) {
+            log.info("变更子合同待退押金差额: child={} merchant={} refundDiffCent={} 待运营经押金台账确认退还",
+                    child.id(), parent.merchantId(), -delta);
+        }
         return child.snapshot();
     }
 
@@ -1186,7 +1190,43 @@ public class ContractService {
     /** #31 变更子合同追溯：列某合同派生的变更子合同（rent_terms.parentContractId 指向它）。 */
     public List<ContractRecord> listChildContracts(String parentContractId) {
         authorizationService.requirePermission("contract.change.manage");
-        return repository.listChildContracts(requireText(parentContractId, "parent_contract_id"));
+        String pid = requireText(parentContractId, "parent_contract_id");
+        requireContract(pid);   // 与其它端点对齐：先证合同存在再查子合同
+        return repository.listChildContracts(pid);
+    }
+
+    /** 变更子合同链 id 集：[自身, 父, 祖父...]（沿 rent_terms.parentContractId 上溯，带环守卫）。 */
+    // ponytail: 每次调用现走链(findContractById 逐代)——子合同罕见且链短(通常≤2)，root 合同 0 额外查询；
+    //   若链变深或计费成热点，缓存链 id 或改 recursive CTE。
+    private List<String> contractChainIds(ContractRecord c) {
+        List<String> ids = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        ContractRecord cur = c;
+        while (cur != null && seen.add(cur.id())) {
+            ids.add(cur.id());
+            Object parentId = cur.rentTerms() == null ? null : cur.rentTerms().get("parentContractId");
+            cur = parentId == null ? null : repository.findContractById(String.valueOf(parentId)).orElse(null);
+        }
+        return ids;
+    }
+
+    /** 未清应收沿变更子合同链汇总：子合同退租结算把变更前挂在父/祖合同的欠租也纳入押金抵扣安全网(P2-1)。 */
+    private long sumUnpaidArOverChain(ContractRecord c) {
+        long sum = 0L;
+        for (String id : contractChainIds(c)) {
+            sum += repository.sumUnpaidArForContract(id);
+        }
+        return sum;
+    }
+
+    /** 账单去重跨变更子合同链：父合同已出账的月份，子合同不重开(P2-1 防双开账单)。 */
+    private boolean rentBillExistsInChain(ContractRecord c, String period, String feeType) {
+        for (String id : contractChainIds(c)) {
+            if (repository.rentBillExists(id, period, feeType)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1202,7 +1242,7 @@ public class ContractService {
         long rawDeposit = contract.depositCent() == null ? 0L : contract.depositCent();
         long deposit = terminationSettlementPort == null ? rawDeposit
                 : terminationSettlementPort.effectiveRefundableDeposit(contract.merchantId(), rawDeposit);
-        long unpaid = repository.sumUnpaidArForContract(contract.id());
+        long unpaid = sumUnpaidArOverChain(contract);
         long penaltyCent = 0L;
         String penaltyReason = null;
         if ("early_termination".equals(trigger)) {
@@ -1309,7 +1349,7 @@ public class ContractService {
         long rawDeposit = contract.depositCent() == null ? 0L : contract.depositCent();
         long deposit = terminationSettlementPort == null ? 0L
                 : terminationSettlementPort.effectiveRefundableDeposit(contract.merchantId(), rawDeposit);
-        long unpaid = repository.sumUnpaidArForContract(contract.id());
+        long unpaid = sumUnpaidArOverChain(contract);
         // 违约金仅提前退租：合同条款 penaltyTerms.amountCent 优先；缺则取变更载荷人工录入 penaltyAmountCent+penaltyReason。
         Map<String, Object> payload = change.payload() == null ? Map.of() : change.payload();
         long penaltyCent = 0L;

@@ -880,12 +880,42 @@ class ContractServiceTests {
         return (List<String>) o;
     }
 
+    @Test
+    void childTerminationOffsetsParentUnpaidArAgainstDeposit() {
+        // P2-1: 子合同退租结算把变更前挂在父合同的欠租纳入押金抵扣安全网。
+        ContractRecord parent = effectiveContract();   // deposit 500000
+        ContractChangeRecord am = service.raiseChange(parent.id(), new ContractChangeRequest(
+                "k_p21", "area_change", Map.of("newDepositCent", 700000)));
+        approveFullChain(am.id());
+        ContractRecord child = service.listChildContracts(parent.id()).get(0);
+        repo.unpaidArById.put(parent.id(), 300000L);   // 变更前父合同欠租
+        ContractChangeRecord mo = service.raiseChange(child.id(), new ContractChangeRequest(
+                "k_p21_mo", "move_out", Map.of()));
+        approveFullChain(mo.id());
+        // 押金 700000 抵父欠租 300000 → 净退 400000（未修则错退 700000）。
+        assertThat(terminationPort.depositRefundCent).isEqualTo(400000L);
+    }
+
+    @Test
+    void childRentBillDedupCrossesParentChain() {
+        // P2-1: 父合同已出账月份，子合同 period-bills 被链去重，不双开。
+        ContractRecord parent = effectiveContract();   // 生效即排整租期租金账单(含 2026-08)
+        ContractChangeRecord am = service.raiseChange(parent.id(), new ContractChangeRequest(
+                "k_p21b", "area_change", Map.of("newDepositCent", 500000)));
+        approveFullChain(am.id());
+        ContractRecord child = service.listChildContracts(parent.id()).get(0);
+        List<ContractRentBillRecord> bills = service.generatePeriodBills(child.id(),
+                new ContractRentBillRequest("k_p21b_bill", "2026-08"));
+        assertThat(bills).isEmpty();
+    }
+
     private static final class InMemoryContractRepository implements ContractRepository {
         // 3.13 测试基建：草稿预绑定存储 + 可控"空间已被生效合同占用"集合。
         final java.util.Map<String, java.util.Set<String>> boundSpaces = new java.util.HashMap<>();
         final java.util.Set<String> occupiedSpaces = new java.util.HashSet<>();
-        // 退租结算测试：可控未清应收合计。
+        // 退租结算测试：可控未清应收合计（unpaidArById 有条目则按合同覆盖，否则回退 unpaidAr）。
         long unpaidAr = 0L;
+        final java.util.Map<String, Long> unpaidArById = new java.util.HashMap<>();
 
         private final Map<String, ContractRecord> contracts = new LinkedHashMap<>();
         private final Map<String, ContractApprovalRecord> approvals = new LinkedHashMap<>();
@@ -1069,7 +1099,7 @@ class ContractServiceTests {
 
         @Override
         public long sumUnpaidArForContract(String contractId) {
-            return unpaidAr;
+            return unpaidArById.getOrDefault(contractId, unpaidAr);
         }
     }
 }
