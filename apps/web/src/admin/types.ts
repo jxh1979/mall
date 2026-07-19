@@ -720,6 +720,24 @@ export type MetricAnomalyRow = {
   escalatedAlertId?: string | null;
 };
 
+// 异常处置历史时间线条目(append-only,来自 audit_events 的 disposition_recorded 事件)。
+// who=authContext/actorId、when=occurredAt、from->to/说明/生成的告警号在 metadata 内。
+export type AnomalyDispositionEventRow = {
+  id?: string;
+  occurredAt?: string;
+  actorId?: string | null;
+  authContext?: string | null;
+  eventName?: string;
+  // adminClient 深度 snake->camel:后端 metadata 键 from_status/to_status/escalated_alert_id 到前端已转驼峰。
+  metadata?: {
+    action?: string;
+    fromStatus?: string;
+    toStatus?: string;
+    note?: string;
+    escalatedAlertId?: string;
+  } | null;
+};
+
 export type MerchantScopeWorkOrderRow = {
   id: string;
   merchantId?: string;

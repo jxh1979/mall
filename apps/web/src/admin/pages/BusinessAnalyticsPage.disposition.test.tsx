@@ -96,4 +96,32 @@ describe("BusinessAnalyticsPage 异常处置流转(V306)", () => {
       expect.objectContaining({ action: "resolve", note: "已核对为大促真实波动" }),
     ));
   });
+
+  it("处置弹窗展示该异常的完整处置历史时间线(处置人/原状态→新状态/说明/生成的告警号)", async () => {
+    // 时间线来自 /timeline 端点(audit_events 的 disposition_recorded 事件);adminClient 已 snake->camel,故 metadata 键为驼峰。
+    const TIMELINE = [
+      { id: "ev1", occurredAt: "2026-07-02T01:00:00Z", authContext: "admin", metadata: { action: "acknowledge", fromStatus: "open", toStatus: "acknowledged", note: "先看看" } },
+      { id: "ev2", occurredAt: "2026-07-02T02:00:00Z", authContext: "admin", metadata: { action: "escalate", fromStatus: "acknowledged", toStatus: "escalated", note: "转专人", escalatedAlertId: "alert_9" } },
+    ];
+    const get = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/timeline")) return Promise.resolve(TIMELINE);
+      if (path.includes("/analytics/metric-anomalies")) return Promise.resolve(ANOMALIES);
+      if (path.includes("/analytics/business-metric-snapshots")) return Promise.resolve(SNAPSHOTS);
+      if (path.includes("/analytics/traffic-hourly")) return Promise.resolve({ buckets: [] });
+      return Promise.resolve([]);
+    });
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.getByTestId("business-analytics-anomaly-dispose-ano_open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("business-analytics-anomaly-dispose-ano_open"));
+    await waitFor(() => expect(screen.getAllByTestId("business-analytics-dispose-timeline-entry").length).toBe(2));
+    const entries = screen.getAllByTestId("business-analytics-dispose-timeline-entry");
+    expect(entries).toHaveLength(2);
+    expect(entries[0]!.textContent).toContain("admin");
+    expect(entries[0]!.textContent).toContain("待处置→已阅");
+    expect(entries[0]!.textContent).toContain("先看看");
+    expect(entries[1]!.textContent).toContain("已阅→已转告警");
+    expect(entries[1]!.textContent).toContain("alert_9");
+    // 时间线读取按异常 id 走 /timeline 端点。
+    expect(get).toHaveBeenCalledWith("/api/v1/analytics/metric-anomalies/ano_open/timeline");
+  });
 });

@@ -9,7 +9,7 @@ import { hasPermissions } from "../security/PermissionGate";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
-import type { AdminPageProps, BusinessMetricSnapshotRow, BusinessReviewLockRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
+import type { AdminPageProps, AnomalyDispositionEventRow, BusinessMetricSnapshotRow, BusinessReviewLockRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
 import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
@@ -52,6 +52,8 @@ const TEXT = {
   disposedAt: "处置时间",
   escalatedAlert: "关联告警",
   anomalyStatusFilter: "状态筛选",
+  timelineTitle: "处置历史时间线",
+  timelineEmpty: "暂无处置记录(该异常尚未处置)。",
 };
 
 // 异常处置状态中文标签(open 未处置 / acknowledged 已阅 / resolved 已处置 / false_positive 误报 / escalated 已转告警)。
@@ -81,6 +83,18 @@ function availableDispositionActions(status?: string): string[] {
   if (status === "acknowledged") return ["resolve", "false_positive", "escalate"];
   if (status === "escalated") return ["resolve", "false_positive"];
   return [];
+}
+
+// 处置历史时间线单条格式化:时间 · 处置人 · 动作(原状态→新状态) · 说明/生成的告警号。
+function formatTimelineEntry(entry: AnomalyDispositionEventRow): string {
+  const meta = entry.metadata ?? {};
+  const when = entry.occurredAt ? new Date(entry.occurredAt).toLocaleString("zh-CN", { hour12: false }) : "—";
+  const who = entry.authContext || entry.actorId || "系统";
+  const action = meta.action ? (ANOMALY_ACTION_LABELS[meta.action] ?? meta.action) : "处置";
+  const parts = [`${when} · ${who} · ${action}（${anomalyStatusLabel(meta.fromStatus)}→${anomalyStatusLabel(meta.toStatus)}）`];
+  if (meta.note) parts.push(`说明:${meta.note}`);
+  if (meta.escalatedAlertId) parts.push(`生成告警:${meta.escalatedAlertId}`);
+  return parts.join(" · ");
 }
 
 function numberValue(value: unknown) {
@@ -151,6 +165,9 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
   const [disposeAction, setDisposeAction] = React.useState("acknowledge");
   const [disposeNote, setDisposeNote] = React.useState("");
   const [disposing, setDisposing] = React.useState(false);
+  // 处置历史时间线(append-only,读 audit_events)：打开处置弹窗时按需拉取,展示该异常的完整处置轨迹。
+  const [timeline, setTimeline] = React.useState<AnomalyDispositionEventRow[]>([]);
+  const [timelineLoading, setTimelineLoading] = React.useState(false);
 
   function segmentLabel(row: BusinessMetricSnapshotRow) {
     return row.segmentType === "platform" || !row.segmentType ? "平台" : `${formatBusinessStatus(row.segmentType)}:${row.segmentId ?? "-"}`;
@@ -344,11 +361,28 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
     }
   }
 
+  async function loadTimeline(anomalyId: string) {
+    setTimeline([]);
+    setTimelineLoading(true);
+    try {
+      const rows = await api.get<AnomalyDispositionEventRow[]>(
+        `/api/v1/analytics/metric-anomalies/${encodeURIComponent(anomalyId)}/timeline`,
+      );
+      // 只认带发生时间的处置留痕条目(防御非时间线形状),接口已按发生时间升序返回。
+      setTimeline((Array.isArray(rows) ? rows : []).filter((entry) => entry && entry.occurredAt));
+    } catch {
+      setTimeline([]); // 时间线读取失败不阻断处置,静默降级为空。
+    } finally {
+      setTimelineLoading(false);
+    }
+  }
+
   function openDispose(row: MetricAnomalyRow) {
     setDisposeTarget(row);
     setDisposeAction(availableDispositionActions(row.status)[0] ?? "acknowledge");
     setDisposeNote("");
     setFormError("");
+    void loadTimeline(row.id);
   }
 
   async function submitDispose() {
@@ -596,6 +630,20 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
                 <label>{TEXT.dispositionNote}
                   <textarea data-testid="business-analytics-dispose-note" value={disposeNote} onChange={(event) => setDisposeNote(event.target.value)} placeholder={disposeAction === "acknowledge" ? "可选" : "必填"} />
                 </label>
+                <div className="admin-chart-block" data-testid="business-analytics-dispose-timeline">
+                  <strong>{TEXT.timelineTitle}</strong>
+                  {timelineLoading
+                    ? <small className="admin-muted-action">加载中…</small>
+                    : timeline.length === 0
+                      ? <small className="admin-muted-action" data-testid="business-analytics-dispose-timeline-empty">{TEXT.timelineEmpty}</small>
+                      : (
+                        <ul className="admin-plain-list">
+                          {timeline.map((entry, index) => (
+                            <li key={entry.id ?? index} data-testid="business-analytics-dispose-timeline-entry">{formatTimelineEntry(entry)}</li>
+                          ))}
+                        </ul>
+                      )}
+                </div>
               </>
             ),
           },

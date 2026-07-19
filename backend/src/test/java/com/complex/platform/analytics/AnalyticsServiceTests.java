@@ -816,6 +816,26 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void disposeMetricAnomalyRecordsAppendOnlyTimeline() {
+        // 详细留痕:每次处置动作追加一条不可改的时间线记录(from->to/说明/生成的告警号),按时间升序返回。
+        service.disposeMetricAnomaly("anomaly_1", new AnomalyDispositionRequest("tl-ack", "acknowledge", "先阅"));
+        MetricAnomalyRecord escalated = service.disposeMetricAnomaly("anomaly_1",
+                new AnomalyDispositionRequest("tl-esc", "escalate", "需人工核查"));
+        List<AuditEvent> timeline = service.listMetricAnomalyTimeline("anomaly_1");
+        assertThat(timeline).hasSize(2);
+        assertThat(timeline.get(0).metadata())
+                .containsEntry("action", "acknowledge")
+                .containsEntry("from_status", "open")
+                .containsEntry("to_status", "acknowledged")
+                .containsEntry("note", "先阅");
+        assertThat(timeline.get(1).metadata())
+                .containsEntry("action", "escalate")
+                .containsEntry("from_status", "acknowledged")
+                .containsEntry("to_status", "escalated")
+                .containsEntry("escalated_alert_id", escalated.escalatedAlertId());
+    }
+
+    @Test
     void disposeMetricAnomalyNotFound() {
         assertThatThrownBy(() -> service.disposeMetricAnomaly("does_not_exist",
                 new AnomalyDispositionRequest("nf-1", "acknowledge", null)))
@@ -1627,6 +1647,20 @@ class AnalyticsServiceTests {
         public AuditEvent save(AuditEvent event) {
             events.add(event);
             return event;
+        }
+
+        @Override
+        public List<AuditEvent> searchOperationEvents(String businessType, String businessId, String actorId,
+                String eventName, Instant from, Instant to, int limit, String merchantScope) {
+            List<AuditEvent> filtered = new ArrayList<>();
+            for (AuditEvent e : events) {
+                if (businessType != null && !businessType.equals(e.businessType())) { continue; }
+                if (businessId != null && !businessId.equals(e.businessId())) { continue; }
+                if (eventName != null && !eventName.equals(e.eventName())) { continue; }
+                filtered.add(e);
+            }
+            java.util.Collections.reverse(filtered); // 近似 occurred_at DESC:反转插入顺序,时间戳相同也稳定。
+            return filtered;
         }
     }
 }
