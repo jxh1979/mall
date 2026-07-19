@@ -3,7 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
@@ -50,7 +50,9 @@ function readKpiFocusFromUrl(): KpiTable | null {
 export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [dashboard, setDashboard] = React.useState<LeasingDashboard | null>(null);
   const [vacant, setVacant] = React.useState<VacantRow[]>([]);
+  const [vacantNotice, setVacantNotice] = React.useState<string | null>(null);
   const [expiring, setExpiring] = React.useState<ExpiringRow[]>([]);
+  const [expiringNotice, setExpiringNotice] = React.useState<string | null>(null);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTable | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该空置铺位/到期合同完整字段（类型/状态中文·面积·日期中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -80,14 +82,18 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // 副资源容错（外包页范式）：空置铺位/到期预警两张下钻表可能因权限/500 单独失败——
+      // 各自降级为区块提示，不拖垮出租率等仪表盘 KPI 主内容。
       const [dash, vacantRows, expiringRows] = await Promise.all([
         api.get<LeasingDashboard>("/api/v1/analytics/dashboards/leasing"),
-        api.get<VacantRow[]>("/api/v1/analytics/occupancy/vacant-spaces?limit=200"),
-        api.get<ExpiringRow[]>("/api/v1/analytics/occupancy/expiring-contracts?window_days=90&limit=200"),
+        loadSecondary(() => api.get<VacantRow[]>("/api/v1/analytics/occupancy/vacant-spaces?limit=200"), [] as VacantRow[]),
+        loadSecondary(() => api.get<ExpiringRow[]>("/api/v1/analytics/occupancy/expiring-contracts?window_days=90&limit=200"), [] as ExpiringRow[]),
       ]);
       setDashboard(dash);
-      setVacant(vacantRows ?? []);
-      setExpiring(expiringRows ?? []);
+      setVacant(vacantRows.data);
+      setVacantNotice(vacantRows.notice);
+      setExpiring(expiringRows.data);
+      setExpiringNotice(expiringRows.notice);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -137,6 +143,9 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
   const vacantSection = (
     <>
       <h3>空置铺位明细(实时,与出租率同口径)</h3>
+      {vacantNotice ? (
+        <div className="admin-state" data-testid="occupancy-vacant-degraded">{vacantNotice}</div>
+      ) : (
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="occupancy-vacant-table">
           <thead><tr><th>铺位</th><th>类型</th><th>楼层</th><th>面积</th><th>状态</th><th>详情</th></tr></thead>
@@ -156,12 +165,16 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
         </table>
         <TablePager testid="occupancy-vacant-pager" page={pagedVacant.page} pageCount={pagedVacant.pageCount} total={pagedVacant.total} onPrev={pagedVacant.prev} onNext={pagedVacant.next} />
       </div>
+      )}
     </>
   );
 
   const expiringSection = (
     <>
       <h3>到期预警(90 天内,按到期日升序)</h3>
+      {expiringNotice ? (
+        <div className="admin-state" data-testid="occupancy-expiring-degraded">{expiringNotice}</div>
+      ) : (
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="occupancy-expiring-table">
           <thead><tr><th>合同</th><th>商户</th><th>到期日</th><th>剩余天数</th><th>绑定面积</th><th>详情</th></tr></thead>
@@ -181,6 +194,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
         </table>
         <TablePager testid="occupancy-expiring-pager" page={pagedExpiring.page} pageCount={pagedExpiring.pageCount} total={pagedExpiring.total} onPrev={pagedExpiring.prev} onNext={pagedExpiring.next} />
       </div>
+      )}
     </>
   );
 

@@ -3,7 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
@@ -47,18 +47,22 @@ function money(cent: number | null | undefined) {
 export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [dashboard, setDashboard] = React.useState<FinanceDashboard | null>(null);
   const [debtors, setDebtors] = React.useState<DebtorRow[]>([]);
+  const [debtorNotice, setDebtorNotice] = React.useState<string | null>(null);
   const [bucketFilter, setBucketFilter] = React.useState<string>("all");
   // 行明细抽屉：整行可点 → 该欠费商户完整字段（账龄段中文·金额元·应收日中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // 副资源容错（外包页范式）：欠费商户下钻明细可能因权限/500 单独失败——降级为区块提示，
+      // 不拖垮仪表盘 KPI 与账龄分布主内容。
       const [dash, rows] = await Promise.all([
         api.get<FinanceDashboard>("/api/v1/analytics/dashboards/finance"),
-        api.get<DebtorRow[]>("/api/v1/analytics/finance-receivables/debtors?limit=200"),
+        loadSecondary(() => api.get<DebtorRow[]>("/api/v1/analytics/finance-receivables/debtors?limit=200"), [] as DebtorRow[]),
       ]);
       setDashboard(dash);
-      setDebtors(rows ?? []);
+      setDebtors(rows.data);
+      setDebtorNotice(rows.notice);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -128,6 +132,9 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
             {BUCKETS.map((bucket) => <option key={bucket.key} value={bucket.key}>{bucket.label}</option>)}
           </select></label>
         </div>
+        {debtorNotice ? (
+          <div className="admin-state" data-testid="receivables-debtors-degraded">{debtorNotice}</div>
+        ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="receivables-debtors-table">
             <thead>
@@ -151,6 +158,7 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
           </table>
           <TablePager testid="receivables-debtors-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
+        )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>

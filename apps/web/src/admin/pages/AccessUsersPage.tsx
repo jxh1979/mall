@@ -1,7 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import type { AccessUserRow, AdminPageProps, PermissionTemplateRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -21,6 +21,7 @@ function shortId(id: string | null | undefined): string {
 export function AccessUsersPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [rows, setRows] = React.useState<AccessUserRow[]>([]);
   const [templates, setTemplates] = React.useState<PermissionTemplateRow[]>([]);
+  const [templateNotice, setTemplateNotice] = React.useState<string | null>(null);
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [phone, setPhone] = React.useState("");
@@ -49,14 +50,17 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [users, permissionTemplates] = await Promise.all([
+      // 副资源容错（外包页范式）：权限模板仅供创建账号时套用（下拉选项），可能因权限/500 单独失败——
+      // 降级为空（下拉仅剩「暂不赋权」）+ 区块提示，不拖垮员工账号主列表。
+      // 原第三个 /access/permissions 拉取结果从未被使用却会拖垮整页（一失败即整页白屏），已删除。
+      const [users, templatesRes] = await Promise.all([
         api.get<AccessUserRow[]>("/api/v1/access/users"),
-        api.get<PermissionTemplateRow[]>("/api/v1/access/permission-templates"),
-        api.get("/api/v1/access/permissions"),
+        loadSecondary(() => api.get<PermissionTemplateRow[]>("/api/v1/access/permission-templates"), [] as PermissionTemplateRow[]),
       ]);
       setRows(users);
-      setTemplates(permissionTemplates);
-      setSelectedTemplateId((current) => current || permissionTemplates[0]?.id || "");
+      setTemplates(templatesRes.data);
+      setTemplateNotice(templatesRes.notice);
+      setSelectedTemplateId((current) => current || templatesRes.data[0]?.id || "");
       // 显名字典拉取失败不阻断主流程，直接降级显示 ID。
       try {
         const [entities, merchants] = await Promise.all([
@@ -227,6 +231,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
         <div className="admin-form-row">
           <PermissionButton permissionsState={effectivePermissions} permissions={["access.user.manage"]} data-testid="access-user-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ 新建员工账号</PermissionButton>
         </div>
+        {templateNotice ? <div className="admin-state" data-testid="access-user-template-degraded">权限模板{templateNotice}，创建账号时暂无法套用模板</div> : null}
         {formError ? <div data-testid="access-users-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-inline-form" data-testid="access-partner-org-bind">
           <h3>账号绑定外部协作机构</h3>

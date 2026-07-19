@@ -5,7 +5,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { RowActions, type RowAction } from "../components/RowActions";
 
@@ -40,6 +40,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
   const [month, setMonth] = React.useState(currentMonth);
   const [payroll, setPayroll] = React.useState<PayrollRow[]>([]);
   const [leaves, setLeaves] = React.useState<LeaveRow[]>([]);
+  const [leaveNotice, setLeaveNotice] = React.useState<string | null>(null);
   const [baseUser, setBaseUser] = React.useState("");
   const [baseSalary, setBaseSalary] = React.useState("");
   // 引导式流程 phase-5：薪资基数录入收起为主按钮 + 分步引导弹窗（奖惩/月结/请假审批不动）。
@@ -55,12 +56,15 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [payRows, leaveRows] = await Promise.all([
+      // 副资源容错（外包页范式）：待审请假归排班主管审批，薪资账号可能无权（403）——降级为区块提示，
+      // 不拖垮当月薪资明细主内容。
+      const [payRows, leaveRes] = await Promise.all([
         api.get<PayrollRow[]>(`/api/v1/staff/payroll?month=${month}`),
-        api.get<LeaveRow[]>("/api/v1/staff/leaves?status=pending"),
+        loadSecondary(() => api.get<LeaveRow[]>("/api/v1/staff/leaves?status=pending"), [] as LeaveRow[]),
       ]);
       setPayroll(payRows ?? []);
-      setLeaves(leaveRows ?? []);
+      setLeaves(leaveRes.data);
+      setLeaveNotice(leaveRes.notice);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -236,6 +240,9 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
           </table>
         </div>
         <h3>待审请假(排班主管审批)</h3>
+        {leaveNotice ? (
+          <div className="admin-state" data-testid="leave-degraded">{leaveNotice}</div>
+        ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="leave-table">
             <thead><tr><th>员工</th><th>类型</th><th>起止</th><th>事由</th><th>状态</th><th>操作</th><th>详情</th></tr></thead>
@@ -263,6 +270,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
             </tbody>
           </table>
         </div>
+        )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>

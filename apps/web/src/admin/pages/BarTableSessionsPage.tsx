@@ -4,7 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { BarVenueSelect } from "../components/BarVenueSelect";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
@@ -32,6 +32,7 @@ function nextRenewedUntil(minutes: number) {
 export function BarTableSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [tables, setTables] = React.useState<BarTableRow[]>([]);
   const [reservations, setReservations] = React.useState<BarReservationRow[]>([]);
+  const [reservationNotice, setReservationNotice] = React.useState<string | null>(null);
   const [sessions, setSessions] = React.useState<BarTableSessionRow[]>([]);
   const { setSelectedId, selected: selectedReservation } = useSelectedRow(reservations);
   const [selectedSessionId, setSelectedSessionId] = React.useState("");
@@ -106,14 +107,17 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [tableRows, reservationRows, sessionRows] = await Promise.all([
+      // 副资源容错（外包页范式）：订台预定是卡座/开台会话之外的独立面板，可能因权限/500 单独失败——
+      // 降级为区块提示，不拖垮卡座与开台会话主内容。
+      // 原第四个 /bar/orders 拉取结果从未被使用却会拖垮整页（一失败即整页白屏），已删除。
+      const [tableRows, reservationRes, sessionRows] = await Promise.all([
         api.get<BarTableRow[]>("/api/v1/bar/tables"),
-        api.get<BarReservationRow[]>("/api/v1/bar/reservations"),
+        loadSecondary(() => api.get<BarReservationRow[]>("/api/v1/bar/reservations"), [] as BarReservationRow[]),
         api.get<BarTableSessionRow[]>("/api/v1/bar/table-sessions"),
-        api.get("/api/v1/bar/orders"),
       ]);
       setTables(tableRows);
-      setReservations(reservationRows);
+      setReservations(reservationRes.data);
+      setReservationNotice(reservationRes.notice);
       setSessions(sessionRows);
       setSelectedSessionId((current) => current || sessionRows[0]?.id || "");
     },
@@ -514,6 +518,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         </div>
 
         <h3>订台预定</h3>
+        {reservationNotice ? (
+          <div className="admin-state" data-testid="bar-reservations-degraded">{reservationNotice}</div>
+        ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-reservations-table">
             <thead><tr><th>选择</th><th>预定号</th><th>卡座</th><th>人数</th><th>定金状态</th><th>状态</th><th>详情</th></tr></thead>
@@ -534,6 +541,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
           </table>
           <TablePager testid="bar-reservations-pager" page={pagedReservations.page} pageCount={pagedReservations.pageCount} total={pagedReservations.total} onPrev={pagedReservations.prev} onNext={pagedReservations.next} />
         </div>
+        )}
 
         <h3>卡座</h3>
         <div className="admin-table-scroll">

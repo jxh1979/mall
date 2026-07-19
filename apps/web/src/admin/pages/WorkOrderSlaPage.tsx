@@ -3,7 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 
 type MetricValue = { value?: number | string | null; unit?: string | null; note?: string | null };
@@ -68,18 +68,24 @@ function OverdueTable({ testid, rows, completedLabel }: { testid: string; rows: 
 export function WorkOrderSlaPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [dashboard, setDashboard] = React.useState<FacilityDashboard | null>(null);
   const [overdue, setOverdue] = React.useState<OverdueRow[]>([]);
+  const [overdueNotice, setOverdueNotice] = React.useState<string | null>(null);
   const [merchantOverdue, setMerchantOverdue] = React.useState<OverdueRow[]>([]);
+  const [merchantOverdueNotice, setMerchantOverdueNotice] = React.useState<string | null>(null);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // 副资源容错（外包页范式）：两张超时明细下钻表可能因权限/500 单独失败——各自降级为区块提示，
+      // 不拖垮响应/处理/超时率等仪表盘 KPI 主内容。
       const [dash, rows, merchantRows] = await Promise.all([
         api.get<FacilityDashboard>("/api/v1/analytics/dashboards/facility"),
-        api.get<OverdueRow[]>("/api/v1/analytics/work-order-sla/overdue-orders?limit=200"),
-        api.get<OverdueRow[]>("/api/v1/analytics/work-order-sla/overdue-orders?source=merchant&limit=200"),
+        loadSecondary(() => api.get<OverdueRow[]>("/api/v1/analytics/work-order-sla/overdue-orders?limit=200"), [] as OverdueRow[]),
+        loadSecondary(() => api.get<OverdueRow[]>("/api/v1/analytics/work-order-sla/overdue-orders?source=merchant&limit=200"), [] as OverdueRow[]),
       ]);
       setDashboard(dash);
-      setOverdue(rows ?? []);
-      setMerchantOverdue(merchantRows ?? []);
+      setOverdue(rows.data);
+      setOverdueNotice(rows.notice);
+      setMerchantOverdue(merchantRows.data);
+      setMerchantOverdueNotice(merchantRows.notice);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -114,9 +120,17 @@ export function WorkOrderSlaPage({ api, setGlobalError, navigateTo }: AdminPageP
         </div>
         <div className="admin-muted-action">商户服务工单流转没有「首次响应」节点,响应中位数不适用(不伪造)。</div>
         <h3>设施工单超时明细(实时,与超时率分子同口径)</h3>
-        <OverdueTable testid="wo-overdue-table" rows={overdue} completedLabel="完成时间" />
+        {overdueNotice ? (
+          <div className="admin-state" data-testid="wo-overdue-degraded">{overdueNotice}</div>
+        ) : (
+          <OverdueTable testid="wo-overdue-table" rows={overdue} completedLabel="完成时间" />
+        )}
         <h3>商户服务工单超时明细(实时,与商户单超时率分子同口径)</h3>
-        <OverdueTable testid="mwo-overdue-table" rows={merchantOverdue} completedLabel="关单时间" />
+        {merchantOverdueNotice ? (
+          <div className="admin-state" data-testid="mwo-overdue-degraded">{merchantOverdueNotice}</div>
+        ) : (
+          <OverdueTable testid="mwo-overdue-table" rows={merchantOverdue} completedLabel="关单时间" />
+        )}
       </AdminDataState>
     </section>
   );

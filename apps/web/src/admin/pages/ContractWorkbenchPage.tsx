@@ -3,7 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Tabs } from "antd";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessEntityRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
@@ -85,6 +85,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
   const [flow, setFlow] = React.useState<FlowStep[]>([]);
   const [colorRules, setColorRules] = React.useState<ColorRule[]>([]);
+  // 审批链/到期着色/铺位租赁状态为配置与辅助区块，任一失败不拖垮合同主列表。
+  const [configNotice, setConfigNotice] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState({
     merchantId: "", contractSubjectId: "", settlementSubjectId: "", effectiveDate: "", expiryDate: "",
     baseRentYuan: "", perSqmYuan: "", rentMode: "monthly_fixed", rentBillingMode: "fixed_only",
@@ -141,16 +143,19 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [rows, steps, rules, spaces] = await Promise.all([
+      // 副资源容错（外包页范式）：审批链/到期着色规则/铺位租赁状态为配置与辅助区块，可能因权限/500
+      // 单独失败——各自降级为空并合并一条区块提示，不拖垮合同主列表（合同为主资源，读失败才整页报错）。
+      const [rows, stepsRes, rulesRes, spacesRes] = await Promise.all([
         api.get<ContractRow[]>("/api/v1/contracts"),
-        api.get<FlowStep[]>("/api/v1/contracts/approval-flow"),
-        api.get<ColorRule[]>("/api/v1/contracts/expiry-color-rules"),
-        api.get<SpaceRental[]>("/api/v1/contracts/space-rental-status"),
+        loadSecondary(() => api.get<FlowStep[]>("/api/v1/contracts/approval-flow"), [] as FlowStep[]),
+        loadSecondary(() => api.get<ColorRule[]>("/api/v1/contracts/expiry-color-rules"), [] as ColorRule[]),
+        loadSecondary(() => api.get<SpaceRental[]>("/api/v1/contracts/space-rental-status"), [] as SpaceRental[]),
       ]);
       setContracts(rows ?? []);
-      setFlow(steps ?? []);
-      setColorRules(rules ?? []);
-      setSpaceRental(spaces ?? []);
+      setFlow(stepsRes.data);
+      setColorRules(rulesRes.data);
+      setSpaceRental(spacesRes.data);
+      setConfigNotice(stepsRes.notice ?? rulesRes.notice ?? spacesRes.notice);
       // 显名字典拉取失败不阻断主流程，表格降级显示 ID。
       try {
         const merchants = await api.get<Array<{ id: string; displayName?: string; companyName?: string }>>("/api/v1/platform/merchants");
@@ -417,6 +422,9 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         description="起草 → 分组并行审批（业务/财务/法务并行 → 总经理终审，按综合体可配）→ 生效固化收益快照 + 绑铺位 → 变更/退租逐例结算。转租不支持。"
       />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        {configNotice ? (
+          <div className="admin-state" data-testid="contract-config-degraded">审批链/到期着色/铺位租赁状态等配置{configNotice}</div>
+        ) : null}
         <div className="admin-preview" data-testid="contract-workbench-guide">
           <strong>这一页做什么：</strong>合同全生命周期——① 合同（起草 / 审批 / 生效 / 排租金 AR）② 审批与配置（审批链、铺位到期着色）③ 变更与结算（合同变更、退租结算，点合同「明细」联动）④ 铺位平面图。切换标签操作。
         </div>
