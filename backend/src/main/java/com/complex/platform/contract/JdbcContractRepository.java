@@ -115,6 +115,12 @@ class JdbcContractRepository implements ContractRepository {
                 Map.of("id", id), this::mapContract).stream().findFirst();
     }
 
+    @Override
+    public Optional<ContractRecord> findContractByIdForUpdate(String id) {
+        return jdbcTemplate.query("SELECT " + CONTRACT_COLS + " FROM contracts WHERE id = :id FOR UPDATE",
+                Map.of("id", id), this::mapContract).stream().findFirst();
+    }
+
     // ---------- approvals ----------
     private static final String APPROVAL_COLS =
             "id, contract_id, change_id, stage_seq, approver_permission_code, approver_user_id, decision, "

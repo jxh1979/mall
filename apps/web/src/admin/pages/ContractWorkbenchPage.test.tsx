@@ -245,3 +245,60 @@ describe("ContractWorkbenchPage 退租结算明细", () => {
     expect(screen.getByText("未清应收合计")).toBeTruthy();
   });
 });
+
+describe("ContractWorkbenchPage 建设U：结算落账口径 + 退押金确认闸", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function fetchCalls(): unknown[][] {
+    return (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+  }
+
+  it("结算类型可选到期 → 开账按所选 triggerType 提交（不再写死 move_out）", async () => {
+    render(<ContractWorkbenchPage {...baseProps()} />);
+    await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("contract-settle-trigger"), { target: { value: "expiry" } });
+    fireEvent.click(screen.getByTestId("contract-actions-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("contract-settle-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-settle-contract-aaaa1111"));
+    await waitFor(() => {
+      const call = fetchCalls().find((c) => String(c[0]).includes("/settle") && !String(c[0]).includes("/settlements"));
+      expect(call).toBeTruthy();
+      expect(String((call![1] as { body: string }).body)).toContain("expiry");
+    });
+  });
+
+  it("确认退押金：二次确认为真 → POST /complete 落账", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);   // 资金动作二次确认
+    render(<ContractWorkbenchPage {...baseProps()} />);
+    await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-actions-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("contract-detail-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-detail-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("settlement-complete-settle-dddd4444")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("settlement-complete-settle-dddd4444"));
+    await waitFor(() =>
+      expect(fetchCalls().some((c) => String(c[0]).includes("/settlements/settle-dddd4444/complete"))).toBe(true));
+  });
+
+  it("确认退押金：二次确认为否 → 不落账（不 POST /complete）", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<ContractWorkbenchPage {...baseProps()} />);
+    await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-actions-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("contract-detail-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-detail-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("settlement-complete-settle-dddd4444")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("settlement-complete-settle-dddd4444"));
+    expect(fetchCalls().some((c) => String(c[0]).includes("/complete"))).toBe(false);
+  });
+
+  it("「推进一相」空仪式已退役：结算行操作不再出现 advance 按钮", async () => {
+    render(<ContractWorkbenchPage {...baseProps()} />);
+    await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-actions-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("contract-detail-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-detail-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("settlement-complete-settle-dddd4444")).toBeTruthy());
+    expect(screen.queryByTestId("settlement-advance-settle-dddd4444")).toBeNull();
+  });
+});

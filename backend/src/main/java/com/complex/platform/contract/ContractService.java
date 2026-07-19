@@ -460,11 +460,17 @@ public class ContractService {
         if (!Set.of("effective", "expired").contains(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_SETTLEABLE", "contract is not effective/expired");
         }
+        // I-3 退租/提前终止须合同仍生效（终止活跃租约）；到期合同只可走 expiry——否则确认时会被误判「被别的退租终止」而作废、押金静默不退。
+        if (("move_out".equals(trigger) || "early_termination".equals(trigger))
+                && !"effective".equals(contract.lifecycleStatus())) {
+            throw ApiException.conflict("CONTRACT_NOT_SETTLEABLE",
+                    "退租/提前终止结算仅限生效合同；到期合同请走到期结算");
+        }
         String dispute = trimToNull(actual.disputeReason());
         Instant now = Instant.now();
-        // 开账：非争议→待结算（合同仍 effective，待 completeSettlement 结清才终止）；争议→挂起。
+        // 开账即算结算清单（押金退还净额/违约金/未清清算），但不落账——落账须运营在结清时「确认退押金」才发生。
         String status = dispute != null ? "disputed" : "pending_settlement";
-        List<Map<String, Object>> items = dispute != null ? List.of() : runSettlementRules(contract);
+        List<Map<String, Object>> items = dispute != null ? List.of() : computeTerminationItems(contract, trigger);
         ContractSettlementRecord settlement = repository.saveSettlement(new ContractSettlementRecord(
                 "cst_" + UUID.randomUUID(), contractId, trigger, status, items, dispute, null, null,
                 contract.projectId(), now, now));
@@ -486,7 +492,8 @@ public class ContractService {
         ContractRecord contract = requireContract(settlement.contractId());
         Instant now = Instant.now();
         ContractSettlementRecord resumed = repository.saveSettlement(new ContractSettlementRecord(settlement.id(),
-                settlement.contractId(), settlement.triggerType(), "pending_settlement", runSettlementRules(contract),
+                settlement.contractId(), settlement.triggerType(), "pending_settlement",
+                computeTerminationItems(contract, settlement.triggerType()),
                 settlement.disputeReason(), authorizationService.currentActor().id(), now, settlement.projectId(),
                 settlement.createdAt(), now));
         // 裁决后回到待结算，待 completeSettlement 结清并终止合同。
@@ -508,17 +515,8 @@ public class ContractService {
         if (!Set.of("pending_settlement", "deposit_offsetting", "arrears_collecting").contains(settlement.status())) {
             throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_OPEN", "settlement is not open for completion");
         }
-        ContractRecord contract = requireContract(settlement.contractId());
-        Instant now = Instant.now();
-        ContractSettlementRecord settled = repository.saveSettlement(new ContractSettlementRecord(settlement.id(),
-                settlement.contractId(), settlement.triggerType(), "settled", settlement.settlementItems(),
-                settlement.disputeReason(), settlement.resolvedBy(), settlement.resolvedAt(), settlement.projectId(),
-                settlement.createdAt(), now));
-        finalizeContractAfterSettlement(contract, settlement.triggerType(), now);
-        auditEventService.recordSuccess("contract.settlement_completed", "contract.settlement.manage",
-                "contract_settlement", settlement.id(), null, actual.idempotencyKey(),
-                Map.of("trigger", settlement.triggerType()));
-        return settled;
+        // 「确认退押金」落账闸：落 ar_ap+deposit_ledger + 跨路径去重 + 悬挂单作废（见 finalizeSettlementWithLedger）。
+        return finalizeSettlementWithLedger(settlement, actual.idempotencyKey());
     }
 
     /** 逐相推进退租结算：待结算→保证金抵扣中→欠费追缴中→已结清；到已结清即终止/到期合同（让 2 中间态成真实驻留态）。 */
@@ -535,13 +533,14 @@ public class ContractService {
             default -> throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_ADVANCEABLE",
                     "settlement at " + s.status() + " cannot advance");
         };
+        if ("settled".equals(next)) {
+            // 末相=确认退押金落账（与 completeSettlement 同口径：落 ar_ap+deposit_ledger + 跨路径去重）。
+            return finalizeSettlementWithLedger(s, actual.idempotencyKey());
+        }
         Instant now = Instant.now();
         ContractSettlementRecord moved = repository.saveSettlement(new ContractSettlementRecord(s.id(),
                 s.contractId(), s.triggerType(), next, s.settlementItems(), s.disputeReason(), s.resolvedBy(),
                 s.resolvedAt(), s.projectId(), s.createdAt(), now));
-        if ("settled".equals(next)) {
-            finalizeContractAfterSettlement(requireContract(s.contractId()), s.triggerType(), now);
-        }
         auditEventService.recordSuccess("contract.settlement_advanced", "contract.settlement.manage",
                 "contract_settlement", s.id(), null, actual.idempotencyKey(), Map.of("to", next));
         return moved;
@@ -1002,31 +1001,98 @@ public class ContractService {
         return updated.snapshot();
     }
 
-    private List<Map<String, Object>> runSettlementRules(ContractRecord contract) {
-        // 逐例按合同 settlement_rules 顺序产出结算项 + 真实金额：保证金抵扣(deposit)/违约金(penalty)/欠费追缴(未付AR)。
-        List<Map<String, Object>> rules = contract.settlementRules() == null ? List.of() : contract.settlementRules();
-        // I3 押金抵扣按台账实收余额封顶（用户裁决，与退租自动结算同口径）；端口未接（旧构造）退化固化额。
+    /**
+     * 手动结算开账/裁决后重算结算清单：与自动退租统一走 TerminationSettlementMath——
+     * 押金按台账实收余额封顶后抵未清应收、净额&gt;0 应退、提前退租违约金取合同条款。纯算不落账。
+     */
+    private List<Map<String, Object>> computeTerminationItems(ContractRecord contract, String trigger) {
+        return new ArrayList<>(computeTerminationResult(contract, trigger).items());
+    }
+
+    /** 现算退租结算（押金台账余额封顶 → 抵当前未清应收 → 净额；提前退租违约金取合同条款）。开账与确认均调此，同口径。 */
+    private TerminationSettlementMath.Result computeTerminationResult(ContractRecord contract, String trigger) {
         long rawDeposit = contract.depositCent() == null ? 0L : contract.depositCent();
         long deposit = terminationSettlementPort == null ? rawDeposit
                 : terminationSettlementPort.effectiveRefundableDeposit(contract.merchantId(), rawDeposit);
-        long penalty = numLong(contract.penaltyTerms() == null ? null : contract.penaltyTerms().get("amountCent"));
-        long arrears = repository.sumUnpaidArForContract(contract.id());
-        List<Map<String, Object>> items = new ArrayList<>();
-        int order = 1;
-        for (Map<String, Object> rule : rules) {
-            Map<String, Object> item = new HashMap<>(rule);
-            long amount = switch (String.valueOf(rule.get("item"))) {
-                case "deposit_offset" -> deposit;
-                case "penalty" -> penalty;
-                case "arrears", "unpaid_fee" -> arrears;
-                default -> numLong(rule.get("amountCent"));
-            };
-            item.put("order", order++);
-            item.put("amountCent", amount);
-            item.put("status", "applied");
-            items.add(item);
+        long unpaid = repository.sumUnpaidArForContract(contract.id());
+        long penaltyCent = 0L;
+        String penaltyReason = null;
+        if ("early_termination".equals(trigger)) {
+            penaltyCent = numLongLoose(contract.penaltyTerms() == null ? null : contract.penaltyTerms().get("amountCent"));
+            if (penaltyCent > 0) {
+                penaltyReason = "合同条款违约金";
+            }
         }
-        return items;
+        return TerminationSettlementMath.compute(trigger, deposit, unpaid, penaltyCent, penaltyReason);
+    }
+
+    /**
+     * 「确认退押金」落账闸（手动 completeSettlement / advanceSettlement 末相共用）。
+     * 跨路径去重（资金安全核心）：该合同已有已结清落账单（另一手动单或自动审批单），或（退租/提前终止）已被另一路径
+     * 终止 → 本单作废（voided）绝不重复退押金/违约金；否则从结算快照读押金退还净额/违约金 → 落 ar_ap+deposit_ledger
+     * （端口幂等键=本结算单 id）→ 终止/到期合同 → 已结清。
+     */
+    private ContractSettlementRecord finalizeSettlementWithLedger(
+            ContractSettlementRecord settlement, String idempotencyKey) {
+        // S-2 资金路径窄竞态：对合同行 FOR UPDATE，串行化同一合同的并发确认（违约金侧无封顶，窄窗口双挂根治）。
+        ContractRecord contract = repository.findContractByIdForUpdate(settlement.contractId())
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+        String trigger = settlement.triggerType();
+        Instant now = Instant.now();
+        boolean alreadyPosted = repository.listSettlementsByContract(contract.id()).stream()
+                .anyMatch(s -> !s.id().equals(settlement.id()) && "settled".equals(s.status()));
+        boolean terminatedElsewhere = ("move_out".equals(trigger) || "early_termination".equals(trigger))
+                && !"effective".equals(contract.lifecycleStatus());
+        if (alreadyPosted || terminatedElsewhere) {
+            ContractSettlementRecord voided = repository.saveSettlement(new ContractSettlementRecord(settlement.id(),
+                    settlement.contractId(), trigger, "voided", settlement.settlementItems(), settlement.disputeReason(),
+                    settlement.resolvedBy(), settlement.resolvedAt(), settlement.projectId(),
+                    settlement.createdAt(), now));
+            auditEventService.recordSuccess("contract.settlement_voided", "contract.settlement.manage",
+                    "contract_settlement", settlement.id(), null, idempotencyKey,
+                    Map.of("trigger", trigger, "reason", alreadyPosted ? "already_settled" : "terminated_elsewhere"));
+            return voided;
+        }
+        // I-4 口径统一：确认时按最新 unpaid 现算（与自动落账路径同口径），不用开账快照——
+        // 开账到确认间新增欠费也被押金优先抵扣；重算清单即为已落账留痕（二次示数）。
+        TerminationSettlementMath.Result result = computeTerminationResult(contract, trigger);
+        List<Map<String, Object>> items = new ArrayList<>(result.items());
+        long[] posted = postTerminationLedger(
+                contract.merchantId(), settlement.id(), items, result.depositRefundCent(), result.penaltyCent());
+        ContractSettlementRecord settled = repository.saveSettlement(new ContractSettlementRecord(settlement.id(),
+                settlement.contractId(), trigger, "settled", items, settlement.disputeReason(),
+                settlement.resolvedBy(), settlement.resolvedAt(), settlement.projectId(), settlement.createdAt(), now));
+        finalizeContractAfterSettlement(contract, trigger, now);
+        auditEventService.recordSuccess("contract.settlement_completed", "contract.settlement.manage",
+                "contract_settlement", settlement.id(), null, idempotencyKey,
+                Map.of("trigger", trigger, "deposit_refund_cent", posted[0], "penalty_cent", posted[1],
+                        "ledger_posted", terminationSettlementPort != null));
+        return settled;
+    }
+
+    /**
+     * 落退租结算财务台账（手动确认 / 自动审批共用）：押金退还净额&gt;0 挂应付+扣 deposit_ledger、违约金&gt;0 挂应收，
+     * 实退值/台账项 id 回写 items 留痕。返回 [实退押金, 违约金]。端口空（旧构造/未接 finance）=降级只留快照不落账。
+     */
+    private long[] postTerminationLedger(String merchantId, String settlementId,
+            List<Map<String, Object>> items, long depositRefundCent, long penaltyCent) {
+        long postedDepositRefund = 0L;
+        long postedPenalty = 0L;
+        if (terminationSettlementPort != null) {
+            if (depositRefundCent > 0) {
+                long actualRefund = terminationSettlementPort.createDepositRefundPayable(
+                        merchantId, depositRefundCent, settlementId);
+                recordActualDepositRefund(items, actualRefund, depositRefundCent);
+                postedDepositRefund = actualRefund;
+            }
+            if (penaltyCent > 0) {
+                String arId = terminationSettlementPort.createTerminationPenaltyReceivable(
+                        merchantId, penaltyCent, settlementId);
+                annotateSettlementItem(items, "termination_penalty", arId);
+                postedPenalty = penaltyCent;
+            }
+        }
+        return new long[]{postedDepositRefund, postedPenalty};
     }
 
     /**
@@ -1073,25 +1139,9 @@ public class ContractService {
         TerminationSettlementMath.Result result =
                 TerminationSettlementMath.compute(trigger, deposit, unpaid, penaltyCent, penaltyReason);
         List<Map<String, Object>> items = new ArrayList<>(result.items());
-        // 落财务台账（端口空=旧构造/未接 finance：降级只留结算快照不落账）：
-        //   押金净额>0→挂应付；违约金>0→挂应收；未清应收本在台账不重复挂。
-        long postedDepositRefund = 0L;
-        long postedPenalty = 0L;
-        if (terminationSettlementPort != null) {
-            if (result.depositRefundCent() > 0) {
-                // 实退值以 FOR UPDATE 落账为准（余额被其它合同退租消费则低于算法净额）；回写快照/审计如实。
-                long actualRefund = terminationSettlementPort.createDepositRefundPayable(
-                        contract.merchantId(), result.depositRefundCent(), settlementId);
-                recordActualDepositRefund(items, actualRefund, result.depositRefundCent());
-                postedDepositRefund = actualRefund;
-            }
-            if (result.penaltyCent() > 0) {
-                String arId = terminationSettlementPort.createTerminationPenaltyReceivable(
-                        contract.merchantId(), result.penaltyCent(), settlementId);
-                annotateSettlementItem(items, "termination_penalty", arId);
-                postedPenalty = result.penaltyCent();
-            }
-        }
+        // 落财务台账（端口空=旧构造/未接 finance：降级只留结算快照不落账）——与手动确认路径共用同一落账逻辑。
+        long[] posted = postTerminationLedger(
+                contract.merchantId(), settlementId, items, result.depositRefundCent(), result.penaltyCent());
         Instant now = Instant.now();
         repository.saveSettlement(new ContractSettlementRecord(settlementId, contract.id(), trigger, "settled",
                 items, null, null, null, contract.projectId(), now, now));
@@ -1099,8 +1149,8 @@ public class ContractService {
         // I1c 审计只记实际落账金额（端口未落账则为 0）+ 落账标志，杜绝"已结算 X 元"而台账无痕的误导。
         auditEventService.recordSuccess("contract.termination_settled", "contract.change.manage",
                 "contract_settlement", settlementId, null, change.id(),
-                Map.of("trigger", trigger, "deposit_refund_cent", postedDepositRefund,
-                        "penalty_cent", postedPenalty, "unpaid_cent", result.unpaidCent(),
+                Map.of("trigger", trigger, "deposit_refund_cent", posted[0],
+                        "penalty_cent", posted[1], "unpaid_cent", result.unpaidCent(),
                         "ledger_posted", terminationSettlementPort != null));
     }
 

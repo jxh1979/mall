@@ -154,6 +154,46 @@ class ContractJdbcIntegrationTests {
                 .containsEntry("netRefundCent", 200000).containsEntry("arApItemId", "arap_deposit_refund_x");
     }
 
+    @Test
+    void voidedSettlementStatusRoundTripsAfterV307() {
+        // V307：contract_settlements.status CHECK 接受新增「作废」态（悬挂单处置落点）。
+        Instant now = Instant.parse("2026-07-19T00:00:00Z");
+        String cid = "ctr_void_jdbc";
+        repository.saveContract(new ContractRecord(cid, "mch_void", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
+                "fixed_ratio", "by_area", 500000L, null, List.of(), null, null, List.of(),
+                "terminated", "proj_1", null, null, null, now, now));
+        repository.saveSettlement(new ContractSettlementRecord("cst_void_jdbc", cid, "move_out", "pending_settlement",
+                List.of(Map.of("item", "deposit_disposal", "netRefundCent", 500000L)),
+                null, null, null, "proj_1", now, now));
+        repository.saveSettlement(new ContractSettlementRecord("cst_void_jdbc", cid, "move_out", "voided",
+                List.of(Map.of("item", "deposit_disposal", "netRefundCent", 500000L)),
+                null, null, null, "proj_1", now, now));
+        assertThat(repository.findSettlementById("cst_void_jdbc")).isPresent().get()
+                .extracting(ContractSettlementRecord::status).isEqualTo("voided");
+    }
+
+    @Test
+    void manualSettlementDepositDisposalNetRefundRoundTripsForConfirmRead() {
+        // 开账快照 deposit_disposal.netRefundCent 供 UI 展示（确认落账按最新 unpaid 现算）——DB JSONB 往返须原样带回该字段。
+        Instant now = Instant.parse("2026-07-19T00:00:00Z");
+        String cid = "ctr_manual_snap_jdbc";
+        repository.saveContract(new ContractRecord(cid, "mch_manual", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
+                "fixed_ratio", "by_area", 500000L, null, List.of(), null, null, List.of(),
+                "effective", "proj_1", null, null, null, now, now));
+        repository.saveSettlement(new ContractSettlementRecord("cst_manual_snap_jdbc", cid, "expiry", "pending_settlement",
+                List.of(
+                        Map.of("item", "unpaid_receivable_summary", "amountCent", 0L, "status", "listed"),
+                        Map.of("item", "deposit_disposal", "depositCent", 500000L, "offsetCent", 0L,
+                                "netRefundCent", 500000L, "amountCent", 500000L, "status", "payable_posted")),
+                null, null, null, "proj_1", now, now));
+        ContractSettlementRecord back = repository.findSettlementById("cst_manual_snap_jdbc").orElseThrow();
+        Map<String, Object> dep = back.settlementItems().stream()
+                .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
+        assertThat(dep).containsEntry("netRefundCent", 500000);
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass(?)::text", String.class, tableName);
     }

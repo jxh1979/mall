@@ -131,6 +131,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [spaceRental, setSpaceRental] = React.useState<SpaceRental[]>([]);
   const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "", allowedCategories: [] as string[], clearScope: false });
   const [disputeReason, setDisputeReason] = React.useState("");
+  const [settleTrigger, setSettleTrigger] = React.useState("move_out");
   // 商户显名字典（页面级拉取，失败降级回 ID）。
   const [merchantNames, setMerchantNames] = React.useState<Record<string, string>>({});
   const [merchants, setMerchants] = React.useState<Array<{ id: string; displayName?: string; companyName?: string }>>([]);
@@ -251,10 +252,11 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     reload();
   }
 
-  async function settle(row: ContractRow) {
-    // 退租开账 → 待结算（填争议原因则挂起有争议）。
+  async function settle(row: ContractRow, forceTrigger?: string) {
+    // 退租/到期开账 → 待确认退押金（填争议原因则挂起有争议）。开账只算不落账，押金退还须在「确认退押金」时才落账。
+    // I-3 到期入口强制 expiry（按合同生命周期派生，不吃共享下拉默认 move_out，否则到期合同会被误作废、押金静默不退）。
     await api.post(`/api/v1/contracts/${row.id}/settle`, {
-      triggerType: "move_out", disputeReason: disputeReason.trim() || null,
+      triggerType: forceTrigger ?? settleTrigger, disputeReason: disputeReason.trim() || null,
     });
     setActionResult({ action: "contract_settle_opened", contractId: row.id });
     setDisputeReason("");
@@ -298,9 +300,20 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     void selectContract(selectedId);
   }
 
-  async function settlementAction(sid: string, action: "advance" | "complete" | "resolve-dispute") {
+  async function settlementAction(sid: string, action: "resolve-dispute") {
     await api.post(`/api/v1/contracts/settlements/${sid}/${action}`, {});
     setActionResult({ action: "contract_settlement_" + action, settlementId: sid });
+    await selectContract(selectedId);
+    reload();
+  }
+
+  // 确认退押金（资金动作二次确认）：结清 → 落 ar_ap+deposit_ledger、终止/到期合同；若合同已被别的退租落账终止则本单作废。
+  async function confirmSettlement(st: SettlementRow) {
+    const dep = (st.settlementItems ?? []).find((i) => i.item === "deposit_disposal");
+    const refundYuan = (Number(dep?.netRefundCent ?? 0) / 100).toFixed(2);
+    if (!window.confirm(`确认退押金（约 ¥${refundYuan}，最终以确认时最新欠费重算为准）并落账？将挂应付给商户并扣减押金台账，同时结清并终止/到期合同，不可撤销。`)) return;
+    await api.post(`/api/v1/contracts/settlements/${st.id}/complete`, {});
+    setActionResult({ action: "contract_settlement_complete", settlementId: st.id });
     await selectContract(selectedId);
     reload();
   }
@@ -461,6 +474,10 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                       if (row.lifecycleStatus === "effective") {
                         acts.push({ key: "period-bills", label: "排租金AR", permissions: RENT_AR, onClick: () => void generatePeriodBills(row), testId: `contract-period-bills-${row.id}` });
                         acts.push({ key: "settle", label: "退租开账", permissions: SETTLE, onClick: () => void settle(row), testId: `contract-settle-${row.id}` });
+                      }
+                      if (row.lifecycleStatus === "expired") {
+                        // 到期合同经带确认的结算入口落押金退还（选「到期」类型），堵住到期押金悬空。
+                        acts.push({ key: "settle", label: "结算开账", permissions: SETTLE, onClick: () => void settle(row, "expiry"), testId: `contract-settle-${row.id}` });
                       }
                       acts.push({ key: "detail", label: "明细", onClick: () => void selectContract(row.id), testId: `contract-detail-${row.id}` });
                       return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`contract-actions-${row.id}`} />;
@@ -742,8 +759,13 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             data-testid="contract-change-raise" onClick={() => void raiseChange()}>发起变更</PermissionButton>
         </div>
 
-        <h3>退租结算（5 态：待结算→保证金抵扣中→欠费追缴中→已结清 / 有争议）</h3>
+        <h3>退租/到期结算（开账待确认退押金 → 确认退押金落账已结清 / 有争议 / 悬挂作废）</h3>
         <div className="admin-inline-form" data-testid="contract-dispute-form">
+          <label>结算类型<select aria-label="结算类型" data-testid="contract-settle-trigger" value={settleTrigger} onChange={(e) => setSettleTrigger(e.target.value)}>
+            <option value="move_out">退租</option>
+            <option value="expiry">到期</option>
+            <option value="early_termination">提前终止</option>
+          </select></label>
           <input aria-label="争议原因" placeholder="争议原因（退租开账时填则挂起『有争议』）" value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} />
         </div>
         <div className="admin-table-scroll">
@@ -760,8 +782,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                       const acts: RowAction[] = [];
                       if (st.status === "disputed") acts.push({ key: "resolve", label: "裁决→待结算", permissions: DISPUTE_RESOLVE, onClick: () => void settlementAction(st.id, "resolve-dispute"), testId: `settlement-resolve-${st.id}` });
                       if (OPEN_SETTLEMENT.includes(st.status)) {
-                        acts.push({ key: "advance", label: "推进一相", permissions: SETTLE, onClick: () => void settlementAction(st.id, "advance"), testId: `settlement-advance-${st.id}` });
-                        acts.push({ key: "complete", label: "结清", permissions: SETTLE, onClick: () => void settlementAction(st.id, "complete"), testId: `settlement-complete-${st.id}` });
+                        acts.push({ key: "complete", label: "确认退押金并落账", permissions: SETTLE, onClick: () => void confirmSettlement(st), testId: `settlement-complete-${st.id}` });
                       }
                       return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`settlement-actions-${st.id}`} />;
                     })()}
