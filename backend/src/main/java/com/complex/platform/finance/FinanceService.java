@@ -35,7 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort, DividendPayoutPort {
+public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort, DividendPayoutPort, TerminationSettlementPort {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -45,7 +45,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     private static final Set<String> SOURCE_TYPES = Set.of(
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
             "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
-            "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout");
+            "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout",
+            "termination_penalty", "deposit_refund");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -77,7 +78,9 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             Map.entry("employee_commission", "员工提成"), Map.entry("inventory_difference", "库存差异"),
             Map.entry("turnover_rent", "营业额抽成租金"), Map.entry("cam", "公共区域维护费"),
             Map.entry("deposit", "保证金"), Map.entry("property_fee", "物业费"),
-            Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"));
+            Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"),
+            Map.entry("dividend_payout", "持股分红发放"), Map.entry("termination_penalty", "退租违约金"),
+            Map.entry("deposit_refund", "退租押金退还"));
 
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
@@ -1514,6 +1517,41 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         ArApItemRecord item = persistDerivedArApItem(
                 "payable", partnerId, "partner_voucher", idempotencyKey, internalPriceCent, idempotencyKey, null);
         return item.id();
+    }
+
+    /**
+     * 退租应退押金落台账（#3② 多合同超退根治）：FOR UPDATE 锁定权威余额（并发退租串行化）→ 按锁定余额封顶（race-safe）→
+     * 挂 ar_ap 应付（source_type='deposit_refund'）+ 写 deposit_ledger refund 行扣减余额，使同一商户后续合同读到已减余额、不叠加超退。
+     * 幂等键=结算单 id；返回实退值（≤ 请求净额）。
+     */
+    @Override
+    public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
+        long lockedBalance = repository.currentDepositBalanceForUpdate(merchantId);
+        long effectiveRefund = Math.min(Math.max(0L, netRefundCent), Math.max(0L, lockedBalance));
+        if (effectiveRefund <= 0) {
+            return 0L;   // 余额已被其它合同退租消费殆尽：不挂应付、不写台账
+        }
+        ArApItemRecord item = persistDerivedArApItem(
+                "payable", merchantId, "deposit_refund", settlementId, effectiveRefund, settlementId, merchantId);
+        repository.saveDepositLedger(new DepositLedgerRecord(
+                "deposit_refund_" + slug(settlementId), merchantId, "refund", effectiveRefund,
+                lockedBalance - effectiveRefund, item.id(), "退租应退押金结算", Instant.now()));
+        return effectiveRefund;
+    }
+
+    /** 提前退租违约金挂应收（source_type='termination_penalty'）。幂等键=结算单 id。 */
+    @Override
+    public String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId) {
+        ArApItemRecord item = persistDerivedArApItem(
+                "receivable", merchantId, "termination_penalty", settlementId, penaltyCent, settlementId, merchantId);
+        return item.id();
+    }
+
+    /** 应退押金封顶=min(合同固化额, 该商户押金台账实收余额)。只读余额（无锁），无台账=0。 */
+    @Override
+    public long effectiveRefundableDeposit(String merchantId, long contractDepositCent) {
+        long balance = repository.currentDepositBalance(merchantId);
+        return Math.min(contractDepositCent, balance);
     }
 
     private ArApItemRecord billTurnoverRentInternal(TurnoverRentBillRequest request) {

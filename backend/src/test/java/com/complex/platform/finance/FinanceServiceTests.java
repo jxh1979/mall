@@ -1482,6 +1482,20 @@ class FinanceServiceTests {
                 .isEqualTo("DEPOSIT_INSUFFICIENT");
     }
 
+    @Test
+    void createDepositRefundPayablePostsPayableAndWritesLedgerRefundDecrementingBalance() {
+        // #3② 根治：退押金写 deposit_ledger refund 行扣减余额 → 同商户第二笔退款按已减余额封顶，不超退。
+        service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-init2", "note", List.of(), "merchant_ref", "collect", 40000L, "init"));   // 余额 40000
+        long refund1 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_a");
+        long refund2 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_b");
+        assertThat(refund1).isEqualTo(30000L);                 // 余额 40000，全退请求 30000
+        assertThat(refund2).isEqualTo(10000L);                 // 余额只剩 10000 → 封顶 10000（非再退 30000）
+        assertThat(refund1 + refund2).isEqualTo(40000L);       // 共退=实交，不超退
+        // 第三笔余额已空 → 实退 0，不落账。
+        assertThat(service.createDepositRefundPayable("merchant_ref", 5000L, "cst_ref_c")).isZero();
+    }
+
     // ─── F-OPS-08 物业费固定计费（替代已废止 CAM 权重分摊 + 年度 true-up）──────────────
 
     @Test

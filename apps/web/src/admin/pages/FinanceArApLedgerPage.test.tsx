@@ -66,3 +66,17 @@ describe("FinanceArApLedgerPage 服务端分页", () => {
     await waitFor(() => expect(getPaged).toHaveBeenCalledWith(expect.stringContaining("page=2")));
   });
 });
+
+describe("FinanceArApLedgerPage 来源类型（退租相关可辨识）", () => {
+  it("台账详情展示来源类型中文标签（退租押金退还）", async () => {
+    const rows: FinanceLedgerRow[] = [
+      { id: "ar-dr", itemNo: "AR-DR-1", direction: "payable", status: "pending_payment", amountCent: 200000, unpaidAmountCent: 200000, dueDate: "2026-08-01", sourceType: "deposit_refund" },
+    ];
+    const getPaged = vi.fn().mockResolvedValue({ items: rows, total: 1, page: 1, size: 10 });
+    renderPage(makeApi(getPaged));
+    await waitFor(() => expect(getPaged).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("finance-ledger-row-ar-dr"));
+    await waitFor(() => expect(screen.getByText("来源类型")).toBeTruthy());
+    expect(screen.getByText("退租押金退还")).toBeTruthy();
+  });
+});

@@ -23,6 +23,16 @@ function voucherNo(row: FinanceLedgerRow): string {
   return row.itemNo ?? row.billNo ?? row.sourceDoc ?? row.id;
 }
 
+// ar_ap 来源类型中文标签（含退租相关）；未知值原样回显不吞值。
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  termination_penalty: "退租违约金", deposit_refund: "退租押金退还", deposit: "保证金",
+  contract_rent: "合同租金", contract_property_fee: "物业费", energy_fee: "能源费",
+  turnover_rent: "营业额抽成租金", dividend_payout: "持股分红发放", bar_bill: "酒吧账单",
+};
+function sourceTypeLabel(v?: string): string {
+  return v ? (SOURCE_TYPE_LABELS[v] ?? v) : "—";
+}
+
 // 金额列：分转元两位小数（等宽数字由 tabular-nums 保证），缺失不伪造。
 function centToYuan(cent: number | undefined): string {
   if (cent === undefined || cent === null || Number.isNaN(Number(cent))) return "—";
@@ -138,6 +148,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         { label: "方向", value: formatBusinessStatus(row.direction ?? "receivable") },
         { label: "往来单位", value: row.counterparty ?? "—" },
         { label: "来源单据", value: row.sourceDoc ?? "—" },
+        { label: "来源类型", value: sourceTypeLabel(row.sourceType) },
         { label: "总额", value: `¥${centToYuan(row.amountCent)}` },
         { label: "已收/已付", value: `¥${centToYuan(row.paidAmountCent)}` },
         { label: "未收/未付", value: `¥${centToYuan(row.unpaidAmountCent)}` },
@@ -176,8 +187,8 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => { if (event.key === "Enter") submitSearch(); }}
-            aria-label="搜索凭证 / 方向 / 状态（回车查询）"
-            placeholder="搜索凭证 / 方向 / 状态（回车查询）"
+            aria-label="搜索凭证 / 方向 / 状态 / 来源（回车查询）"
+            placeholder="搜索凭证 / 方向 / 状态 / 来源（回车查询）"
           />
           <button type="button" data-testid="finance-ledger-search-submit" onClick={submitSearch}>查询</button>
           <span className="admin-muted-action" data-testid="finance-ledger-filter-count">{ledger.keyword ? `"${ledger.keyword}" 命中 ${ledger.total} 条` : `共 ${ledger.total} 条`}</span>
