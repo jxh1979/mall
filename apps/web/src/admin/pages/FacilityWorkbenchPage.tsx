@@ -3,7 +3,8 @@ import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { shortId } from "../format/ids";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { TraceLink } from "../components/TraceLink";
@@ -125,13 +126,15 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [createOpen, setCreateOpen] = React.useState(false);
   const [equipmentError, setEquipmentError] = React.useState("");
 
+  // 无权限副资源不请求（根因修）：超期工单端点需 facility.work_order.manage，页面基础权限 facility.equipment.manage 不含之。
+  const canWorkOrderManage = hasPermissions(effectivePermissions, ["facility.work_order.manage"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       const [equipmentRows, dueRows, orderRows, overdueRows, templateRows, taskRows] = await Promise.all([
         api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment"),
         loadSecondary(() => api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment/maintenance-due"), [] as FacilityEquipmentRow[]),
         api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders"),
-        loadSecondary(() => api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders/overdue"), [] as FacilityWorkOrderRow[]),
+        loadSecondaryIfPermitted(canWorkOrderManage, () => api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders/overdue"), [] as FacilityWorkOrderRow[]),
         api.get<InspectionTemplateRow[]>("/api/v1/facility/inspections/templates"),
         api.get<InspectionTaskRow[]>("/api/v1/facility/inspections/tasks"),
       ]);

@@ -4,7 +4,8 @@ import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminAction } from "../hooks/useAdminAction";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -106,12 +107,14 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null;
   const visibleTemplates = templates.filter((row) => row.id === selected?.templateId);
 
+  // 无权限副资源不请求（根因修）：巡检模板端点需 facility.inspection.template.view，页面基础权限 facility.inspection.view_assigned 不含之。
+  const canInspectionTemplate = hasPermissions(effectivePermissions, ["facility.inspection.template.view"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // AUD-032：巡检模板是副资源，外包账号可能无权（403）——降级为区块提示，不拖垮任务主内容。
       const [tasks, templateRows] = await Promise.all([
         api.get<VendorInspectionTaskRow[]>("/api/v1/facility/inspections/tasks"),
-        loadSecondary(() => api.get<VendorInspectionTemplateRow[]>("/api/v1/facility/inspections/templates"), [] as VendorInspectionTemplateRow[]),
+        loadSecondaryIfPermitted(canInspectionTemplate, () => api.get<VendorInspectionTemplateRow[]>("/api/v1/facility/inspections/templates"), [] as VendorInspectionTemplateRow[]),
       ]);
       setRows(tasks ?? []);
       setTemplates(templateRows.data);

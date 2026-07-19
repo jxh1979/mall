@@ -4,7 +4,8 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { AuditTrailHint } from "../components/AuditTrailHint";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -61,7 +62,7 @@ function num(value: unknown): number {
 
 type TabKey = "records" | "capacity" | "reconcile";
 
-export function AmusementVerificationRecordsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
+export function AmusementVerificationRecordsPage({ api, setGlobalError, navigateTo, effectivePermissions }: AdminPageProps) {
   const [records, setRecords] = React.useState<AmusementVerificationRow[]>([]);
   const [snapshots, setSnapshots] = React.useState<AmusementCapacitySnapshotRow[]>([]);
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
@@ -92,6 +93,8 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
     return qs ? `?${qs}` : "";
   }, [projectId, sessionId, direction, dateFrom, dateTo]);
 
+  // 无权限副资源不请求（根因修）：项目/场次端点需 amusement.session.view，页面基础权限 amusement.verification.view 不含之。
+  const canAmusementSession = hasPermissions(effectivePermissions, ["amusement.session.view"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // 副资源容错（外包页范式）：容量快照/项目/场次为筛选与显名辅助数据，可能因权限/500 单独失败——
@@ -99,8 +102,8 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
       const [nextRecords, snapRes, projRes, sessRes] = await Promise.all([
         api.get<AmusementVerificationRow[]>(`/api/v1/amusement/verifications${query}`),
         loadSecondary(() => api.get<AmusementCapacitySnapshotRow[]>("/api/v1/amusement/capacity-snapshots"), [] as AmusementCapacitySnapshotRow[]),
-        loadSecondary(() => api.get<AmusementProjectRow[]>("/api/v1/amusement/projects"), [] as AmusementProjectRow[]),
-        loadSecondary(() => api.get<AmusementSessionRow[]>("/api/v1/amusement/sessions"), [] as AmusementSessionRow[]),
+        loadSecondaryIfPermitted(canAmusementSession, () => api.get<AmusementProjectRow[]>("/api/v1/amusement/projects"), [] as AmusementProjectRow[]),
+        loadSecondaryIfPermitted(canAmusementSession, () => api.get<AmusementSessionRow[]>("/api/v1/amusement/sessions"), [] as AmusementSessionRow[]),
       ]);
       setRecords(nextRecords);
       setSnapshots(snapRes.data);

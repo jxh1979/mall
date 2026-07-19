@@ -3,7 +3,8 @@ import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Tabs } from "antd";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps, BusinessEntityRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
@@ -142,14 +143,17 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [createOpen, setCreateOpen] = React.useState(false);
   const [draftError, setDraftError] = React.useState("");
 
+  // 无权限副资源不请求（根因修）：审批链配置需 contract.approval.flow.manage、着色规则需 contract.space.color.manage，页面基础权限 contract.draft.manage 不含之。
+  const canApprovalFlow = hasPermissions(effectivePermissions, ["contract.approval.flow.manage"]);
+  const canColorRules = hasPermissions(effectivePermissions, ["contract.space.color.manage"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // 副资源容错（外包页范式）：审批链/到期着色规则/铺位租赁状态为配置与辅助区块，可能因权限/500
       // 单独失败——各自降级为空并合并一条区块提示，不拖垮合同主列表（合同为主资源，读失败才整页报错）。
       const [rows, stepsRes, rulesRes, spacesRes] = await Promise.all([
         api.get<ContractRow[]>("/api/v1/contracts"),
-        loadSecondary(() => api.get<FlowStep[]>("/api/v1/contracts/approval-flow"), [] as FlowStep[]),
-        loadSecondary(() => api.get<ColorRule[]>("/api/v1/contracts/expiry-color-rules"), [] as ColorRule[]),
+        loadSecondaryIfPermitted(canApprovalFlow, () => api.get<FlowStep[]>("/api/v1/contracts/approval-flow"), [] as FlowStep[]),
+        loadSecondaryIfPermitted(canColorRules, () => api.get<ColorRule[]>("/api/v1/contracts/expiry-color-rules"), [] as ColorRule[]),
         loadSecondary(() => api.get<SpaceRental[]>("/api/v1/contracts/space-rental-status"), [] as SpaceRental[]),
       ]);
       setContracts(rows ?? []);

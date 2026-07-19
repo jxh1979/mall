@@ -5,7 +5,8 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminAction } from "../hooks/useAdminAction";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -103,12 +104,15 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
     || (selected?.projectId && row.projectId === selected.projectId)
   ));
 
+  // 无权限副资源不请求（根因修）：设备台账 GET 对外包账号需 facility.equipment.view——本页 accountForms:["vendor"]，
+  // 后端 FacilityController.requireReadPermission 外包分支要 .view（内部账号才要 .manage），外包模板授的也是 .view。
+  const canEquipmentView = hasPermissions(effectivePermissions, ["facility.equipment.view"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // AUD-032：设备台账是副资源，外包账号可能无权（403）——降级为区块提示，不拖垮工单主内容。
       const [workOrders, equipment] = await Promise.all([
         api.get<VendorWorkOrderRow[]>("/api/v1/facility/work-orders"),
-        loadSecondary(() => api.get<VendorEquipmentRow[]>("/api/v1/facility/equipment"), [] as VendorEquipmentRow[]),
+        loadSecondaryIfPermitted(canEquipmentView, () => api.get<VendorEquipmentRow[]>("/api/v1/facility/equipment"), [] as VendorEquipmentRow[]),
       ]);
       setRows(workOrders ?? []);
       setEquipmentRows(equipment.data);

@@ -4,6 +4,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint, auditTraceField } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
@@ -106,8 +107,11 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // 跨域副资源不请求（根因修）：主体端点需 entity.binding.view，本页 gate 仅 merchant.profile.view + governance.project.view——
+      // 缺该权限角色 403 会 reject 整个 Promise.all 致整页白屏；缺权限则不请求、主体下拉降级为空。
+      const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
       const [nextEntities, nextMerchants, nextProjects] = await Promise.all([
-        api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities"),
+        canEntityView ? api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities") : Promise.resolve([] as BusinessEntityRow[]),
         api.get<MerchantAdmissionRow[]>(`/api/v1/platform/merchants?includeArchived=${showArchived}`),
         api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
       ]);

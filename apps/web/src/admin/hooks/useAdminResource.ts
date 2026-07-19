@@ -84,3 +84,19 @@ export async function loadSecondary<T>(load: () => Promise<T>, fallback: T): Pro
     return { data: fallback, notice: denied ? "当前账号无权查看该数据" : "该数据加载失败，可稍后重试，不影响本页其他内容" };
   }
 }
+
+
+/**
+ * 权限感知副资源：当前账号缺该副资源所需权限码时**根本不发请求**，直接回退为 fallback + 无提示。
+ * 该账号本就不含此权限，副资源缺席是预期而非故障，不应弹"加载失败/无权查看"惊扰主流程——
+ * 这是根因修，替代"请求→403→吞成降级提示"。有权限才走 loadSecondary（此时失败=真故障，保留区块提示）。
+ * permitted 一般传 hasPermissions(effectivePermissions, [该副资源端点后端 requirePermission 的权限码])。
+ */
+export async function loadSecondaryIfPermitted<T>(
+  permitted: boolean,
+  load: () => Promise<T>,
+  fallback: T,
+): Promise<SecondaryResource<T>> {
+  if (!permitted) return { data: fallback, notice: null };
+  return loadSecondary(load, fallback);
+}

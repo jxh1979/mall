@@ -4,6 +4,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, GovernanceSpaceRow, MerchantAdmissionRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TraceLink } from "../components/TraceLink";
@@ -42,7 +43,7 @@ function kpiFocusTitle(focus: KpiFocus): string {
   return focus.table === "spaces" ? "空间点位" : "商户";
 }
 
-export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, navigateTo }: AdminPageProps) {
+export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, navigateTo, effectivePermissions }: AdminPageProps) {
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
@@ -76,8 +77,11 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // 跨域副资源不请求（根因修）：主体端点需 entity.binding.view，本页 gate 不含之——
+      // 缺该权限角色 403 会 reject 整个 Promise.all 致整页白屏；缺权限则不请求、主体层降级为空。
+      const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
       const [nextEntities, nextMerchants, nextProjects, nextSpaces] = await Promise.all([
-        api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities"),
+        canEntityView ? api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities") : Promise.resolve([] as BusinessEntityRow[]),
         api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"),
         api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
         api.get<GovernanceSpaceRow[]>("/api/v1/platform/spaces"),

@@ -145,3 +145,44 @@ describe("GovernanceTopologyPage 行明细抽屉（拓扑表 / 空间表整行�
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });
+
+describe("GovernanceTopologyPage 无 entity.binding.view 角色不请求主体（根因修 AUD-auxload·防白屏）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/topology");
+  });
+
+  it("缺主体查看权限：business-entities 端点根本不请求，整页不白屏，商户/项目/空间照常渲染", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      // business-entities 若被请求本会 403；这里给它也能成功，以证明"没请求"而非"请求了被吞"
+      if (url.includes("business-entities")) return Promise.resolve(envelope(ENTITIES));
+      if (url.includes("merchants")) return Promise.resolve(envelope(MERCHANTS));
+      if (url.includes("projects")) return Promise.resolve(envelope(PROJECTS));
+      if (url.includes("spaces")) return Promise.resolve(envelope(SPACES));
+      return Promise.resolve(envelope([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const SCOPED: EffectivePermissionsState = {
+      status: "ready",
+      value: { grants: ["governance.project.view", "governance.space.view", "merchant.profile.view"], denies: [], wildcard: false },
+    };
+    const setGlobalError = vi.fn();
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "viewer", accountType: "platform_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError,
+      effectivePermissions: SCOPED,
+    };
+    render(<GovernanceTopologyPage {...props} />);
+
+    await waitFor(() => expect(screen.getByTestId("governance-topology-kpi-merchants")).toBeTruthy());
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    // 缺权限副资源：根本不发请求（不再"请求→403→reject 整个 Promise.all→白屏"）
+    expect(urls.some((u) => u.includes("business-entities"))).toBe(false);
+    // 有权限的主内容仍请求、页面正常渲染
+    expect(urls.some((u) => u.includes("merchants"))).toBe(true);
+    expect(setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+});

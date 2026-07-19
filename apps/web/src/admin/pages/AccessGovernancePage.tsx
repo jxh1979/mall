@@ -2,7 +2,8 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Tabs } from "antd";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
@@ -108,15 +109,21 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
   const [grantError, setGrantError] = React.useState("");
   const [grantSaving, setGrantSaving] = React.useState(false);
 
+  // 无权限副资源不请求（根因修）：授权列表/概要卡需 access.grant_request.view、用户清单需 access.user.view、角色清单需 access.role.view，
+  // 本页 gate 仅 access.role.assign 不含这三码——缺权限裸 await 会 403 reject 整个 Promise.all 致整页报错，故一并门控
+  //（position-role-templates 与页面同码 access.role.assign，保持裸调用）。
+  const canGrantView = hasPermissions(effectivePermissions, ["access.grant_request.view"]);
+  const canUserView = hasPermissions(effectivePermissions, ["access.user.view"]);
+  const canRoleView = hasPermissions(effectivePermissions, ["access.role.view"]);
   const { loading, error, reload } = useAdminResource(
     async () => {
       const [userRows, roleRows, templateRows, requestRows, grantSummary] = await Promise.all([
-        api.get<AccessUserRow[]>("/api/v1/access/users"),
-        api.get<RoleRow[]>("/api/v1/access/roles"),
+        canUserView ? api.get<AccessUserRow[]>("/api/v1/access/users") : Promise.resolve([] as AccessUserRow[]),
+        canRoleView ? api.get<RoleRow[]>("/api/v1/access/roles") : Promise.resolve([] as RoleRow[]),
         api.get<PositionRoleTemplateRow[]>("/api/v1/access/position-role-templates"),
-        api.get<AccessGrantRequestRow[]>("/api/v1/access/grant-requests?window_days=30"),
+        canGrantView ? api.get<AccessGrantRequestRow[]>("/api/v1/access/grant-requests?window_days=30") : Promise.resolve([] as AccessGrantRequestRow[]),
         // 智能总结=纯统计副资源（GRANT_VIEW 权限，无权账号可能 403）：单独降级，不拖垮角色装配/审批主流程。
-        loadSecondary(() => api.get<AccessGrantSummary>("/api/v1/access/grant-requests/summary?window_days=30&position_threshold=2&user_threshold=2"), null as AccessGrantSummary | null),
+        loadSecondaryIfPermitted(canGrantView, () => api.get<AccessGrantSummary>("/api/v1/access/grant-requests/summary?window_days=30&position_threshold=2&user_threshold=2"), null as AccessGrantSummary | null),
       ]);
       setUsers(userRows ?? []);
       setRoles(roleRows ?? []);
