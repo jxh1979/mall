@@ -17,6 +17,7 @@ import com.complex.platform.contract.dto.ContractChangeRequest;
 import com.complex.platform.contract.dto.ContractDraftRequest;
 import com.complex.platform.contract.dto.ContractRentBillRequest;
 import com.complex.platform.contract.dto.ContractResolveDisputeRequest;
+import com.complex.platform.contract.dto.ContractScopeRequestRequest;
 import com.complex.platform.contract.dto.ContractSettleRequest;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
@@ -765,6 +766,120 @@ class ContractServiceTests {
         assertThat(repo.forUpdateCalls).isGreaterThan(before);
     }
 
+    // ============ #30 超范围下单经营申请（scope_grant，走既有分组并行会签链） ============
+    private ContractRecord effectiveScopedContract(String key, String merchant, List<String> allowed, String space) {
+        ContractRecord c = service.createDraft(new ContractDraftRequest(key, merchant, "subj_1", null, "subj_1",
+                LocalDate.now().minusDays(1), LocalDate.now().plusYears(1),
+                Map.of("baseRentCent", 100000), "fixed_ratio", "by_area", 500000L, null, null, List.of(), null,
+                "酒吧经营", null, allowed));
+        service.submit(c.id(), key + "_submit");
+        approve(c, "contract.approve.business");
+        approve(c, "contract.approve.finance");
+        approve(c, "contract.approve.legal");
+        approve(c, "contract.approve.gm");
+        return service.activate(c.id(), new ContractActivateRequest(key + "_act", List.of(space)));
+    }
+
+    @Test
+    void scopeRequestPermanentGrantPassesGuardAfterApproval() {
+        effectiveScopedContract("k_sr1", "mch_sr1", List.of("beer"), "sp_sr1");
+        ContractScopeGuard guard = new ContractScopeGuard(repo);
+        assertThatThrownBy(() -> guard.requireBarSaleAllowed("mch_sr1", List.of("spirit")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+        String cid = repo.listContractsByMerchant("mch_sr1").get(0).id();
+        assertThatThrownBy(() -> service.requestScopeGrant(cid,
+                new ContractScopeRequestRequest("k_sr1_bad", "metaverse", "扩营", "permanent", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        ContractChangeRecord req = service.requestScopeGrant(cid,
+                new ContractScopeRequestRequest("k_sr1", "spirit", "客人要烈酒，申请扩营", "permanent", null));
+        assertThat(req.changeType()).isEqualTo("scope_grant");
+        approveChange(req.id(), "contract.approve.business");
+        assertThatThrownBy(() -> guard.requireBarSaleAllowed("mch_sr1", List.of("spirit")))
+                .isInstanceOf(ApiException.class);
+        approveChange(req.id(), "contract.approve.finance");
+        approveChange(req.id(), "contract.approve.legal");
+        approveChange(req.id(), "contract.approve.gm");
+        assertThatCode(() -> guard.requireBarSaleAllowed("mch_sr1", List.of("spirit"))).doesNotThrowAnyException();
+        assertThat(castList(repo.findContractById(cid).orElseThrow().rentTerms().get("allowedCategories")))
+                .contains("spirit");
+    }
+
+    @Test
+    void scopeRequestTemporaryGrantHonoredAndRejectedStaysBlocked() {
+        effectiveScopedContract("k_sr2", "mch_sr2", List.of("beer"), "sp_sr2");
+        ContractScopeGuard guard = new ContractScopeGuard(repo);
+        String cid = repo.listContractsByMerchant("mch_sr2").get(0).id();
+        assertThatThrownBy(() -> service.requestScopeGrant(cid,
+                new ContractScopeRequestRequest("k_sr2_novu", "spirit", "临时活动", "temporary", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        ContractChangeRecord req = service.requestScopeGrant(cid, new ContractScopeRequestRequest(
+                "k_sr2", "spirit", "周末临时活动", "temporary", LocalDate.now().plusDays(30)));
+        approveFullChain(req.id());
+        assertThatCode(() -> guard.requireBarSaleAllowed("mch_sr2", List.of("spirit"))).doesNotThrowAnyException();
+        ContractChangeRecord req2 = service.requestScopeGrant(cid, new ContractScopeRequestRequest(
+                "k_sr2b", "cocktail", "再申请鸡尾酒", "permanent", null));
+        service.approveChange(req2.id(),
+                new ContractChangeApproveRequest("k_sr2b_r", "contract.approve.business", "reject", "不批"));
+        assertThatThrownBy(() -> guard.requireBarSaleAllowed("mch_sr2", List.of("cocktail")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+    }
+
+    // ============ #31 变更子合同（经营位置/面积变更：继承 + 押金同步 + 原合同 amended） ============
+    @Test
+    void areaChangeOpensChildSubContractInheritsAndCollectsDepositDiff() {
+        ContractRecord parent = effectiveContract();
+        ContractChangeRecord ch = service.raiseChange(parent.id(), new ContractChangeRequest(
+                "k_am1", "area_change", Map.of("areaSqm", 120, "newDepositCent", 700000)));
+        approveFullChain(ch.id());
+        assertThat(repo.findContractById(parent.id()).orElseThrow().lifecycleStatus()).isEqualTo("amended");
+        List<ContractRecord> children = service.listChildContracts(parent.id());
+        assertThat(children).hasSize(1);
+        ContractRecord child = children.get(0);
+        assertThat(child.lifecycleStatus()).isEqualTo("effective");
+        assertThat(child.merchantId()).isEqualTo(parent.merchantId());
+        assertThat(child.contractSubjectId()).isEqualTo(parent.contractSubjectId());
+        assertThat(child.depositCent()).isEqualTo(700000L);
+        assertThat(child.rentTerms()).containsEntry("parentContractId", parent.id())
+                .containsEntry("amendmentType", "area_change").containsEntry("areaSqm", 120);
+        Map<String, Object> adj = castMap(child.rentTerms().get("depositAdjustment"));
+        assertThat(adj).containsEntry("direction", "collect").containsEntry("status", "pending");
+        assertThat(((Number) adj.get("deltaCent")).longValue()).isEqualTo(200000L);
+        assertThat(repo.listContractSpaceIds(child.id())).containsExactly("sp_1");
+    }
+
+    @Test
+    void locationChangeShiftsSpacesAndRecordsDepositRefundDiff() {
+        ContractRecord parent = effectiveContract();
+        ContractChangeRecord ch = service.raiseChange(parent.id(), new ContractChangeRequest(
+                "k_am2", "location_change", Map.of("spaceIds", List.of("sp_2"), "newDepositCent", 400000)));
+        approveFullChain(ch.id());
+        ContractRecord child = service.listChildContracts(parent.id()).get(0);
+        assertThat(repo.listContractSpaceIds(child.id())).containsExactly("sp_2");
+        Map<String, Object> adj = castMap(child.rentTerms().get("depositAdjustment"));
+        assertThat(adj).containsEntry("direction", "refund").containsEntry("status", "pending");
+        assertThat(((Number) adj.get("deltaCent")).longValue()).isEqualTo(-100000L);
+    }
+
+    /** 四步会签链（阶段①业务/财务/法务并行 → 阶段②总经理），任意变更/申请通用。 */
+    private void approveFullChain(String changeId) {
+        approveChange(changeId, "contract.approve.business");
+        approveChange(changeId, "contract.approve.finance");
+        approveChange(changeId, "contract.approve.legal");
+        approveChange(changeId, "contract.approve.gm");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> castMap(Object o) {
+        return (Map<String, Object>) o;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> castList(Object o) {
+        return (List<String>) o;
+    }
+
     private static final class InMemoryContractRepository implements ContractRepository {
         // 3.13 测试基建：草稿预绑定存储 + 可控"空间已被生效合同占用"集合。
         final java.util.Map<String, java.util.Set<String>> boundSpaces = new java.util.HashMap<>();
@@ -793,6 +908,14 @@ class ContractServiceTests {
         @Override
         public List<ContractRecord> listContracts() {
             return List.copyOf(contracts.values());
+        }
+
+        @Override
+        public List<ContractRecord> listChildContracts(String parentContractId) {
+            return contracts.values().stream()
+                    .filter(c -> c.rentTerms() != null
+                            && parentContractId.equals(c.rentTerms().get("parentContractId")))
+                    .toList();
         }
 
         @Override

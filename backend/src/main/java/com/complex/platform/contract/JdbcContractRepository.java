@@ -121,6 +121,13 @@ class JdbcContractRepository implements ContractRepository {
                 Map.of("id", id), this::mapContract).stream().findFirst();
     }
 
+    @Override
+    public List<ContractRecord> listChildContracts(String parentContractId) {
+        return jdbcTemplate.query("SELECT " + CONTRACT_COLS
+                + " FROM contracts WHERE rent_terms->>'parentContractId' = :pid ORDER BY created_at DESC, id",
+                new MapSqlParameterSource().addValue("pid", parentContractId), this::mapContract);
+    }
+
     // ---------- approvals ----------
     private static final String APPROVAL_COLS =
             "id, contract_id, change_id, stage_seq, approver_permission_code, approver_user_id, decision, "

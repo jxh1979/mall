@@ -42,6 +42,7 @@ const CHANGE_MANAGE = ["contract.change.manage"];
 const DISPUTE_RESOLVE = ["contract.settlement.dispute.resolve"];
 const CHANGE_TYPES = [
   { v: "renewal", l: "续租" }, { v: "move_out", l: "退租" }, { v: "area_change", l: "面积变更" },
+  { v: "location_change", l: "经营位置变更" },
   { v: "rent_change", l: "租金变更" }, { v: "business_scope_change", l: "经营范围变更" }, { v: "early_termination", l: "提前终止" },
 ];
 // 经营范围词表（2026-07-18 拍板：复用既有业务类目，禁止发明新枚举）——
@@ -130,7 +131,9 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [changes, setChanges] = React.useState<ChangeRow[]>([]);
   const [settlements, setSettlements] = React.useState<SettlementRow[]>([]);
   const [spaceRental, setSpaceRental] = React.useState<SpaceRental[]>([]);
-  const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "", allowedCategories: [] as string[], clearScope: false });
+  const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "", allowedCategories: [] as string[], clearScope: false, newDepositYuan: "", spaceIds: "" });
+  // #30 超范围下单经营申请（拦下后可申请，走既有审批链）
+  const [scopeReqForm, setScopeReqForm] = React.useState({ category: "spirit", reason: "", grantType: "permanent", validUntil: "" });
   const [disputeReason, setDisputeReason] = React.useState("");
   const [settleTrigger, setSettleTrigger] = React.useState("move_out");
   // 商户显名字典（页面级拉取，失败降级回 ID）。
@@ -291,10 +294,29 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
       if (changeForm.clearScope) payload.allowedCategories = [];
       else if (changeForm.allowedCategories.length) payload.allowedCategories = changeForm.allowedCategories;
     }
+    if (changeForm.changeType === "area_change" || changeForm.changeType === "location_change") {
+      // #31 变更子合同：新保证金（元→分）+ 经营位置变更的新铺位（逗号分隔）。
+      if (changeForm.newDepositYuan.trim()) payload.newDepositCent = Math.round(Number(changeForm.newDepositYuan.trim()) * 100);
+      const spaces = changeForm.spaceIds.split(/[,，\s]+/).map((x) => x.trim()).filter(Boolean);
+      if (spaces.length) payload.spaceIds = spaces;
+    }
     await api.post(`/api/v1/contracts/${selectedId}/changes`, {
       changeType: changeForm.changeType, payload,
     });
     setActionResult({ action: "contract_change_raised", contractId: selectedId, type: changeForm.changeType });
+    void selectContract(selectedId);
+  }
+
+  async function requestScopeGrant() {
+    if (!selectedId) { setGlobalError("先点合同行『明细』选一份合同"); return; }
+    if (!scopeReqForm.reason.trim()) { setGlobalError("超范围经营申请须填原因"); return; }
+    const body: Record<string, unknown> = {
+      category: scopeReqForm.category, reason: scopeReqForm.reason.trim(), grantType: scopeReqForm.grantType,
+    };
+    if (scopeReqForm.grantType === "temporary" && scopeReqForm.validUntil) body.validUntil = scopeReqForm.validUntil;
+    await api.post(`/api/v1/contracts/${selectedId}/scope-requests`, body);
+    setActionResult({ action: "contract_scope_request_raised", contractId: selectedId, category: scopeReqForm.category });
+    setScopeReqForm({ ...scopeReqForm, reason: "" });
     void selectContract(selectedId);
   }
 
@@ -708,7 +730,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
 
           </>) },
           { key: "changes", label: "③ 变更与结算", forceRender: true, children: (<>
-        <h3>合同变更（6 类，走同一审批链）{selectedId ? <span className="admin-id-cell" title={selectedId}> · {shortId(selectedId)}</span> : "（点合同『明细』选）"}</h3>
+        <h3>合同变更（含变更子合同/超范围申请，走同一审批链）{selectedId ? <span className="admin-id-cell" title={selectedId}> · {shortId(selectedId)}</span> : "（点合同『明细』选）"}</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contract-changes-table">
             <thead><tr><th>变更号</th><th>类型</th><th>审批</th><th className="admin-op-col">操作</th><th>详情</th></tr></thead>
@@ -759,8 +781,38 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
               </label>
             </div>
           ) : null}
+          {(changeForm.changeType === "area_change" || changeForm.changeType === "location_change") ? (
+            <div data-testid="contract-amendment-fields" style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", width: "100%", alignItems: "center" }}>
+              <span style={{ fontWeight: 600 }}>变更子合同：基于原合同派生（继承主体/收费口径，原合同置已变更）</span>
+              <input aria-label="新保证金（元）" placeholder="新保证金（元，补/退差额走押金台账）" inputMode="decimal"
+                value={changeForm.newDepositYuan} onChange={(e) => setChangeForm({ ...changeForm, newDepositYuan: e.target.value })} />
+              {changeForm.changeType === "location_change" ? (
+                <input aria-label="新经营位置铺位" placeholder="新铺位ID（逗号分隔；不填=沿用原铺位）"
+                  value={changeForm.spaceIds} onChange={(e) => setChangeForm({ ...changeForm, spaceIds: e.target.value })} />
+              ) : null}
+            </div>
+          ) : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={CHANGE_MANAGE}
             data-testid="contract-change-raise" onClick={() => void raiseChange()}>发起变更</PermissionButton>
+        </div>
+
+        <h3>超范围下单经营申请（#30：下单被经营范围拦下后可申请，走同一审批链，通过则放行）</h3>
+        <div className="admin-inline-form" data-testid="contract-scope-request-form">
+          <select aria-label="申请经营品类" value={scopeReqForm.category} onChange={(e) => setScopeReqForm({ ...scopeReqForm, category: e.target.value })}>
+            {SCOPE_CATEGORIES.map((cc) => <option key={cc.v} value={cc.v}>{cc.l}</option>)}
+          </select>
+          <select aria-label="许可类型" value={scopeReqForm.grantType} onChange={(e) => setScopeReqForm({ ...scopeReqForm, grantType: e.target.value })}>
+            <option value="permanent">永久许可</option>
+            <option value="temporary">临时许可</option>
+          </select>
+          {scopeReqForm.grantType === "temporary" ? (
+            <input type="date" aria-label="临时许可有效期至" value={scopeReqForm.validUntil}
+              onChange={(e) => setScopeReqForm({ ...scopeReqForm, validUntil: e.target.value })} />
+          ) : null}
+          <input aria-label="申请原因" placeholder="申请原因（必填）" value={scopeReqForm.reason}
+            onChange={(e) => setScopeReqForm({ ...scopeReqForm, reason: e.target.value })} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={["contract.scope_request.raise"]}
+            data-testid="contract-scope-request-raise" onClick={() => void requestScopeGrant()}>提交超范围申请</PermissionButton>
         </div>
 
         <h3>退租/到期结算（开账待确认退押金 → 确认退押金落账已结清 / 有争议 / 悬挂作废）</h3>

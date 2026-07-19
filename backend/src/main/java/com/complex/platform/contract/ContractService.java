@@ -12,6 +12,7 @@ import com.complex.platform.contract.dto.ContractChangeRequest;
 import com.complex.platform.contract.dto.ContractDraftRequest;
 import com.complex.platform.contract.dto.ContractRentBillRequest;
 import com.complex.platform.contract.dto.ContractResolveDisputeRequest;
+import com.complex.platform.contract.dto.ContractScopeRequestRequest;
 import com.complex.platform.contract.dto.ContractSettleRequest;
 import com.complex.platform.contract.dto.SpaceExpiryColorRuleRequest;
 import com.complex.platform.evidence.AuditEventService;
@@ -26,6 +27,7 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.List;
@@ -56,7 +58,13 @@ public class ContractService {
             "guarantee_or_commission_higher", "fixed_ratio", "tiered_ratio", "guarantee_plus_commission");
     private static final Set<String> ENERGY_BASES = Set.of("none", "by_contract", "by_area", "by_usage");
     private static final Set<String> CHANGE_TYPES = Set.of(
-            "renewal", "move_out", "area_change", "rent_change", "business_scope_change", "early_termination");
+            "renewal", "move_out", "area_change", "rent_change", "business_scope_change", "early_termination",
+            "scope_grant", "location_change");
+    /** 变更子合同触发类型（#31）：仅经营位置/面积变更基于原合同开有继承关系的子合同。 */
+    private static final Set<String> AMENDMENT_TYPES = Set.of("area_change", "location_change");
+    private static final Set<String> GRANT_TYPES = Set.of("permanent", "temporary");
+    /** 变更子合同控制键（不当作子合同 rent_terms 条款回填）。 */
+    private static final Set<String> AMENDMENT_CONTROL_KEYS = Set.of("spaceIds", "newDepositCent", "reason");
     private static final Set<String> SETTLE_TRIGGERS = Set.of("move_out", "expiry", "early_termination");
     private static final Set<String> DECISIONS = Set.of("approve", "reject");
 
@@ -367,6 +375,10 @@ public class ContractService {
         authorizationService.requirePermission("contract.change.manage");
         ContractChangeRequest actual = requireRequest(request);
         String type = requireEnum(actual.changeType(), CHANGE_TYPES, "change_type");
+        if ("scope_grant".equals(type)) {
+            // scope_grant 只从专用申请入口(requestScopeGrant)发起，通用变更入口拒收(避免缺 requestedCategory 载荷)。
+            throw ApiException.badRequest("VALIDATION_FAILED", "超范围经营申请请走 scope-requests 入口");
+        }
         ContractRecord contract = requireContract(contractId);
         if (!"effective".equals(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract can be changed");
@@ -396,6 +408,58 @@ public class ContractService {
         materializeStage(contractId, saved.id(), steps, firstStage);
         auditEventService.recordSuccess("contract.change_raised", "contract.change.manage", "contract_change",
                 saved.id(), null, actual.idempotencyKey(), Map.of("change_type", type, "contract_id", contractId));
+        return saved;
+    }
+
+    // ============ 超范围下单经营申请（#30，2026-07-19 拍板） ============
+    /**
+     * 超范围下单被合同经营范围拦下后，就某品类提交经营申请：进 contract_changes(type=scope_grant) 走既有审批链。
+     * 终审通过 → applyChange 授予该商户该品类临时/永久经营许可（写 rent_terms，下单侧 guard 即读即放行）；驳回 → 不予下单。
+     */
+    @Transactional
+    public ContractChangeRecord requestScopeGrant(String contractId, ContractScopeRequestRequest request) {
+        authorizationService.requirePermission("contract.scope_request.raise");
+        ContractScopeRequestRequest actual = requireRequest(request);
+        String category = requireText(actual.category(), "category");
+        if (!ContractScopeGuard.ALLOWED_CATEGORY_VALUES.contains(category)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "category 含系统外取值「" + category + "」，超范围经营申请只能就既有业务类目提交");
+        }
+        String reason = requireText(actual.reason(), "reason");
+        String grantType = requireEnum(
+                trimToNull(actual.grantType()) == null ? "permanent" : actual.grantType().trim(),
+                GRANT_TYPES, "grant_type");
+        LocalDate validUntil = null;
+        if ("temporary".equals(grantType)) {
+            validUntil = requireDate(actual.validUntil(), "valid_until");
+            if (!validUntil.isAfter(LocalDate.now())) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "临时经营许可 valid_until 须为将来日期");
+            }
+        }
+        ContractRecord contract = requireContract(contractId);
+        if (!"effective".equals(contract.lifecycleStatus())) {
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract accepts scope requests");
+        }
+        List<ContractApprovalFlowStepRecord> steps = repository.listActiveFlowSteps(contract.projectId());
+        if (steps.isEmpty()) {
+            throw ApiException.conflict("CONTRACT_NO_APPROVAL_FLOW", "no active approval flow configured");
+        }
+        Instant now = Instant.now();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("requestedCategory", category);
+        payload.put("reason", reason);
+        payload.put("grantType", grantType);
+        if (validUntil != null) {
+            payload.put("validUntil", validUntil.toString());
+        }
+        ContractChangeRecord saved = repository.saveChange(new ContractChangeRecord(
+                "cch_" + UUID.randomUUID(), contractId, "scope_grant",
+                Map.copyOf(payload), "pending", null, contract.projectId(), now, now));
+        int firstStage = steps.stream().mapToInt(ContractApprovalFlowStepRecord::stageSeq).min().orElseThrow();
+        materializeStage(contractId, saved.id(), steps, firstStage);
+        auditEventService.recordSuccess("contract.scope_request_raised", "contract.scope_request.raise",
+                "contract_change", saved.id(), null, actual.idempotencyKey(),
+                Map.of("contract_id", contractId, "category", category, "grant_type", grantType));
         return saved;
     }
 
@@ -982,10 +1046,10 @@ public class ContractService {
         Map<String, Object> payload = change.payload() == null ? Map.of() : change.payload();
         ContractRecord updated = contract;
         switch (change.changeType()) {
-            case "rent_change", "area_change", "business_scope_change" -> {
+            case "rent_change", "business_scope_change" -> {
                 Map<String, Object> newTerms = new HashMap<>(contract.rentTerms() == null ? Map.of()
                         : contract.rentTerms());
-                newTerms.putAll(payload); // payload 覆盖对应条款（面积/租金/经营范围细节）
+                newTerms.putAll(payload); // payload 覆盖对应条款（租金/经营范围细节）
                 updated = repository.saveContract(new ContractRecord(contract.id(), contract.merchantId(),
                         contract.contractSubjectId(), contract.operationSubjectId(), contract.settlementSubjectId(),
                         contract.effectiveDate(), contract.expiryDate(), newTerms, contract.commissionMode(),
@@ -995,10 +1059,134 @@ public class ContractService {
                         contract.projectId(), null, null, contract.renewedFromContractId(), contract.createdAt(),
                         Instant.now()));
             }
+            case "area_change", "location_change" -> {
+                return applyAmendment(contract, change);   // #31：开变更子合同（继承+押金同步），原合同置 amended
+            }
+            case "scope_grant" -> {
+                return applyScopeGrant(contract, change);   // #30：授予该品类临时/永久经营许可
+            }
             case "renewal" -> updated = repository.saveContract(withStatus(contract, "renewing"));
             default -> { /* move_out / early_termination：实际终止走 settle */ }
         }
         return updated.snapshot();
+    }
+
+    /**
+     * #30 授予经营许可：permanent → 追加到 rent_terms.allowedCategories；temporary → 追加到 rent_terms.scopeGrants
+     * ({category, validUntil}，guard 读未过期者放行)。仅动经营范围键，不改租金/押金等条款。
+     */
+    private Map<String, Object> applyScopeGrant(ContractRecord contract, ContractChangeRecord change) {
+        Map<String, Object> payload = change.payload() == null ? Map.of() : change.payload();
+        String category = strVal(payload.get("requestedCategory"));
+        Map<String, Object> newTerms = new HashMap<>(contract.rentTerms() == null ? Map.of() : contract.rentTerms());
+        if ("temporary".equals(strVal(payload.get("grantType")))) {
+            List<Map<String, Object>> grants = new ArrayList<>();
+            if (newTerms.get("scopeGrants") instanceof Collection<?> values) {
+                for (Object v : values) {
+                    if (v instanceof Map<?, ?> m) {
+                        Map<String, Object> copy = new LinkedHashMap<>();
+                        m.forEach((k, val) -> copy.put(String.valueOf(k), val));
+                        grants.add(copy);
+                    }
+                }
+            }
+            Map<String, Object> grant = new LinkedHashMap<>();
+            grant.put("category", category);
+            grant.put("validUntil", strVal(payload.get("validUntil")));
+            grants.add(grant);
+            newTerms.put("scopeGrants", grants);
+        } else {
+            List<String> allowed = new ArrayList<>();
+            if (newTerms.get(ContractScopeGuard.RENT_TERMS_KEY) instanceof Collection<?> values) {
+                values.forEach(v -> allowed.add(String.valueOf(v)));
+            }
+            if (!allowed.contains(category)) {
+                allowed.add(category);
+            }
+            newTerms.put(ContractScopeGuard.RENT_TERMS_KEY, allowed);
+        }
+        return repository.saveContract(withRentTerms(contract, newTerms)).snapshot();
+    }
+
+    /**
+     * #31 变更子合同（仅经营位置/面积变更）：基于原合同派生子合同，继承承租主体/收费口径等关键条款、记录 parentContractId，
+     * 押金按变更同步调整（补/退差额/追加，走押金台账；退押金遵循“运营手动确认才落账”口径 → 只记待办不自动落账），
+     * 原合同置 amended（退出计费/到期作业，保持商户单一生效合同不变量）。子合同直接 effective（变更已过审批链）。
+     * 幂等：子合同 id 由变更 id 确定性派生，重放安全。租金账单不自动重排（与现有面积变更不重排行为一致）。
+     */
+    private Map<String, Object> applyAmendment(ContractRecord parent, ContractChangeRecord change) {
+        String childId = "ctr_" + deterministicSuffix(change.id());
+        ContractRecord existingChild = repository.findContractById(childId).orElse(null);
+        if (existingChild != null) {
+            return existingChild.snapshot();   // 已派生（重复审批/重放）：不重开子合同
+        }
+        Map<String, Object> payload = change.payload() == null ? Map.of() : change.payload();
+        Map<String, Object> childTerms = new HashMap<>(parent.rentTerms() == null ? Map.of() : parent.rentTerms());
+        for (Map.Entry<String, Object> e : payload.entrySet()) {
+            if (!AMENDMENT_CONTROL_KEYS.contains(e.getKey())) {
+                childTerms.put(e.getKey(), e.getValue());   // 变更条款（面积/每平米单价等）并入子合同
+            }
+        }
+        childTerms.put("parentContractId", parent.id());
+        childTerms.put("amendmentType", change.changeType());
+        childTerms.remove("depositAdjustment");   // 清掉从父合同继承来的上一轮押金调整待办，本轮按新差额重算
+        long oldDeposit = parent.depositCent() == null ? 0L : parent.depositCent();
+        long newDeposit = payload.get("newDepositCent") != null
+                ? numLongLoose(payload.get("newDepositCent")) : oldDeposit;
+        long delta = newDeposit - oldDeposit;
+        if (delta != 0) {
+            Map<String, Object> adj = new LinkedHashMap<>();
+            adj.put("deltaCent", delta);
+            adj.put("direction", delta > 0 ? "collect" : "refund");   // 补/追加 vs 退差额
+            adj.put("status", "pending");   // 走押金台账手动确认（退押金遵循运营手动确认才落账）
+            adj.put("reason", "location_change".equals(change.changeType())
+                    ? "经营位置变更保证金调整" : "经营面积变更保证金调整");
+            childTerms.put("depositAdjustment", adj);
+        }
+        Instant now = Instant.now();
+        ContractRecord draft = new ContractRecord(childId, parent.merchantId(), parent.contractSubjectId(),
+                parent.operationSubjectId(), parent.settlementSubjectId(), parent.effectiveDate(),
+                parent.expiryDate(), childTerms, parent.commissionMode(), parent.energyFeeBasis(), newDeposit,
+                parent.penaltyTerms(), parent.settlementRules(), null, parent.shareholderRatioForReport(),
+                parent.attachmentIds(), "effective", parent.projectId(), null, null,
+                parent.renewedFromContractId(), now, now);
+        ContractRecord child = repository.saveContract(withSnapshot(draft, buildSnapshot(draft)));
+        repository.saveContract(withStatus(parent, "amended"));   // 先于绑铺位，使铺位占用早检排除原合同
+        List<String> childSpaces = amendmentSpaces(parent, payload);
+        for (String spaceId : childSpaces) {
+            if (repository.hasOverlappingEffectiveContractForSpace(spaceId, child.effectiveDate(),
+                    child.expiryDate(), child.id())) {
+                throw ApiException.conflict("CONTRACT_SPACE_CONFLICT",
+                        "space already let by an overlapping effective contract: " + spaceId);
+            }
+        }
+        repository.bindContractSpaces(child.id(), childSpaces, child.projectId());
+        auditEventService.recordSuccess("contract.amended", "contract.change.manage", "contract", child.id(),
+                null, change.id(), Map.of("parent_contract_id", parent.id(),
+                        "amendment_type", change.changeType(), "deposit_delta_cent", delta,
+                        "space_count", childSpaces.size()));
+        return child.snapshot();
+    }
+
+    /** 子合同铺位集：优先变更载荷 spaceIds（新经营位置），否则继承原合同现有铺位（仅面积变更）。 */
+    private List<String> amendmentSpaces(ContractRecord parent, Map<String, Object> payload) {
+        if (payload.get("spaceIds") instanceof Collection<?> values && !values.isEmpty()) {
+            List<String> out = new ArrayList<>();
+            for (Object v : values) {
+                String space = trimToNull(String.valueOf(v));
+                if (space != null && !out.contains(space)) {
+                    out.add(space);
+                }
+            }
+            return out;
+        }
+        return repository.listContractSpaceIds(parent.id());
+    }
+
+    /** #31 变更子合同追溯：列某合同派生的变更子合同（rent_terms.parentContractId 指向它）。 */
+    public List<ContractRecord> listChildContracts(String parentContractId) {
+        authorizationService.requirePermission("contract.change.manage");
+        return repository.listChildContracts(requireText(parentContractId, "parent_contract_id"));
     }
 
     /**
@@ -1201,6 +1389,14 @@ public class ContractService {
                 c.energyFeeBasis(), c.depositCent(), c.penaltyTerms(), c.settlementRules(), c.snapshot(),
                 c.shareholderRatioForReport(), attachmentIds, c.lifecycleStatus(), c.projectId(), c.terminatedAt(),
                 c.terminationReason(), c.renewedFromContractId(), c.createdAt(), Instant.now());
+    }
+
+    private ContractRecord withSnapshot(ContractRecord c, Map<String, Object> snapshot) {
+        return new ContractRecord(c.id(), c.merchantId(), c.contractSubjectId(), c.operationSubjectId(),
+                c.settlementSubjectId(), c.effectiveDate(), c.expiryDate(), c.rentTerms(), c.commissionMode(),
+                c.energyFeeBasis(), c.depositCent(), c.penaltyTerms(), c.settlementRules(), snapshot,
+                c.shareholderRatioForReport(), c.attachmentIds(), c.lifecycleStatus(), c.projectId(),
+                c.terminatedAt(), c.terminationReason(), c.renewedFromContractId(), c.createdAt(), Instant.now());
     }
 
     private ContractRecord withRentTerms(ContractRecord c, Map<String, Object> rentTerms) {

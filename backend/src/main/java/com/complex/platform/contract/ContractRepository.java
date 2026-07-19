@@ -17,6 +17,9 @@ public interface ContractRepository {
     /** S-2 确认退押金落账时对合同行加锁，串行化同一合同的并发确认（防违约金侧无封顶双挂）。 */
     Optional<ContractRecord> findContractByIdForUpdate(String id);
 
+    /** #31 变更子合同：rent_terms.parentContractId 指向该父合同的子合同。 */
+    List<ContractRecord> listChildContracts(String parentContractId);
+
     // 审批（分组并行链实例）
     ContractApprovalRecord saveApproval(ContractApprovalRecord approval);
 

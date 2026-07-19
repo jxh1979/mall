@@ -175,4 +175,33 @@ class ContractScopeGuardTests {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
     }
+    @Test
+    void temporaryScopeGrantHonoredWhenNotExpired() {
+        java.util.Map<String, Object> terms = new java.util.HashMap<>();
+        terms.put("allowedCategories", List.of("beer"));
+        terms.put("scopeGrants", List.of(Map.of("category", "spirit",
+                "validUntil", LocalDate.now().plusDays(5).toString())));
+        when(repository.listContractsByMerchant("mch_1")).thenReturn(List.of(effectiveWith(terms)));
+        assertThatCode(() -> guard.requireBarSaleAllowed("mch_1", List.of("spirit"))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void expiredTemporaryScopeGrantNotHonored() {
+        java.util.Map<String, Object> terms = new java.util.HashMap<>();
+        terms.put("allowedCategories", List.of("beer"));
+        terms.put("scopeGrants", List.of(Map.of("category", "spirit",
+                "validUntil", LocalDate.now().minusDays(1).toString())));
+        when(repository.listContractsByMerchant("mch_1")).thenReturn(List.of(effectiveWith(terms)));
+        assertThatThrownBy(() -> guard.requireBarSaleAllowed("mch_1", List.of("spirit")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
+    }
+
+    @Test
+    void scopeViolationMessageHintsApplication() {
+        when(repository.listContractsByMerchant("mch_1"))
+                .thenReturn(List.of(effectiveWith(Map.of("allowedCategories", List.of("beer")))));
+        assertThatThrownBy(() -> guard.requireBarSaleAllowed("mch_1", List.of("spirit")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.getMessage()).contains("申请"));
+    }
 }

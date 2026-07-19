@@ -68,6 +68,8 @@ const STATUS_LABELS: Record<string, string> = {
   renewal: "续租",
   move_out: "退租",
   area_change: "面积变更",
+  location_change: "经营位置变更",
+  scope_grant: "超范围经营申请",
   rent_change: "租金变更",
   business_scope_change: "经营范围变更",
   early_termination: "提前终止",
