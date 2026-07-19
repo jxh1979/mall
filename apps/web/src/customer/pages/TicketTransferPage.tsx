@@ -16,6 +16,8 @@ export function TicketTransferPage({ service }: { service: CustomerService }): R
   const [incoming, setIncoming] = useState<TicketTransfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [outgoingNotice, setOutgoingNotice] = useState<string | null>(null);
+  const [incomingNotice, setIncomingNotice] = useState<string | null>(null);
 
   // 发起转赠表单
   const [channel, setChannel] = useState<"phone" | "link">("phone");
@@ -29,7 +31,14 @@ export function TicketTransferPage({ service }: { service: CustomerService }): R
     let active = true;
     setLoading(true);
     setError(null);
-    Promise.all([service.listMyTickets(), service.listOutgoingTicketTransfers(), service.listIncomingTicketTransfers()])
+    setOutgoingNotice(null);
+    setIncomingNotice(null);
+    // 主资源=我的票(listMyTickets)决定页面级错误；转出/转入为副资源，各自 .catch 降级为空+局部提示，不拖垮我的票。
+    Promise.all([
+      service.listMyTickets(),
+      service.listOutgoingTicketTransfers().catch(() => { if (active) setOutgoingNotice("我发起的转赠暂时加载失败，不影响其它内容"); return [] as TicketTransfer[]; }),
+      service.listIncomingTicketTransfers().catch(() => { if (active) setIncomingNotice("待我领取暂时加载失败，不影响其它内容"); return [] as TicketTransfer[]; }),
+    ])
       .then(([tickets, out, inc]) => {
         if (!active) return;
         setHeld(tickets ?? []);
@@ -208,6 +217,7 @@ export function TicketTransferPage({ service }: { service: CustomerService }): R
       </Card>
 
       <Card title="待我领取">
+        {incomingNotice ? <Alert type="warning" showIcon message={incomingNotice} data-testid="ticket-transfer-incoming-degraded" style={{ marginBottom: 12 }} /> : null}
         {incoming.length === 0 ? (
           <Empty description="没有待领取的转赠" />
         ) : (
@@ -244,6 +254,7 @@ export function TicketTransferPage({ service }: { service: CustomerService }): R
       </Card>
 
       <Card title="我发起的转赠">
+        {outgoingNotice ? <Alert type="warning" showIcon message={outgoingNotice} data-testid="ticket-transfer-outgoing-degraded" style={{ marginBottom: 12 }} /> : null}
         {outgoing.length === 0 ? (
           <Empty description="暂无转赠记录" />
         ) : (

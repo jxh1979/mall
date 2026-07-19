@@ -2,7 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Tabs } from "antd";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
@@ -88,6 +88,7 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
   const [positionTemplates, setPositionTemplates] = React.useState<PositionRoleTemplateRow[]>([]);
   const [grantRequests, setGrantRequests] = React.useState<AccessGrantRequestRow[]>([]);
   const [summary, setSummary] = React.useState<AccessGrantSummary | null>(null);
+  const [summaryNotice, setSummaryNotice] = React.useState<string | null>(null);
   const [templateForm, setTemplateForm] = React.useState({ id: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", roleId: "", templateId: "", status: "active" });
   const [positionForm, setPositionForm] = React.useState({ userId: "", positionCode: "ops_manager", staffLevelId: "lvl_m1_lower", baseSalaryYuan: "", salaryDetail: "", operatorNote: "" });
   const [roleForm, setRoleForm] = React.useState({ userId: "", roleId: "", operatorNote: "" });
@@ -114,13 +115,15 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
         api.get<RoleRow[]>("/api/v1/access/roles"),
         api.get<PositionRoleTemplateRow[]>("/api/v1/access/position-role-templates"),
         api.get<AccessGrantRequestRow[]>("/api/v1/access/grant-requests?window_days=30"),
-        api.get<AccessGrantSummary>("/api/v1/access/grant-requests/summary?window_days=30&position_threshold=2&user_threshold=2"),
+        // 智能总结=纯统计副资源（GRANT_VIEW 权限，无权账号可能 403）：单独降级，不拖垮角色装配/审批主流程。
+        loadSecondary(() => api.get<AccessGrantSummary>("/api/v1/access/grant-requests/summary?window_days=30&position_threshold=2&user_threshold=2"), null as AccessGrantSummary | null),
       ]);
       setUsers(userRows ?? []);
       setRoles(roleRows ?? []);
       setPositionTemplates(templateRows ?? []);
       setGrantRequests(requestRows ?? []);
-      setSummary(grantSummary ?? null);
+      setSummary(grantSummary.data);
+      setSummaryNotice(grantSummary.notice);
     },
     { onError: setGlobalError, fallbackMessage: "访问治理数据读取失败", onStart: () => setGlobalError(null) },
   );
@@ -436,6 +439,7 @@ export function AccessGovernancePage({ api, setActionResult, setGlobalError, eff
           { key: "summary", label: "③ 智能总结", forceRender: true, children: (<>
         <h3>智能总结</h3>
         <PermissionButton permissionsState={effectivePermissions} permissions={GRANT_VIEW} data-testid="access-grant-summary-refresh" onClick={() => void reload()}>刷新总结</PermissionButton>
+        {summaryNotice ? <div className="admin-state" data-testid="access-grant-summary-degraded">{summaryNotice}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-grant-summary-table">
             <thead><tr><th>类型</th><th>对象</th><th>权限</th><th>次数</th><th>建议</th><th>详情</th><th>详情</th></tr></thead>

@@ -3,7 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { shortId } from "../format/ids";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { TraceLink } from "../components/TraceLink";
@@ -103,6 +103,9 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [maintenanceDue, setMaintenanceDue] = React.useState<FacilityEquipmentRow[]>([]);
   const [workOrders, setWorkOrders] = React.useState<FacilityWorkOrderRow[]>([]);
   const [overdueWorkOrders, setOverdueWorkOrders] = React.useState<FacilityWorkOrderRow[]>([]);
+  // 批2 派生视图副资源容错：维保到期/逾期工单是 equipment/work-orders 的服务端派生视图，可单独降级。
+  const [maintenanceDueNotice, setMaintenanceDueNotice] = React.useState<string | null>(null);
+  const [overdueNotice, setOverdueNotice] = React.useState<string | null>(null);
   const [inspectionTemplates, setInspectionTemplates] = React.useState<InspectionTemplateRow[]>([]);
   const [inspectionTasks, setInspectionTasks] = React.useState<InspectionTaskRow[]>([]);
   const [inspectionRecords, setInspectionRecords] = React.useState<InspectionRecordRow[]>([]);
@@ -126,16 +129,18 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
     async () => {
       const [equipmentRows, dueRows, orderRows, overdueRows, templateRows, taskRows] = await Promise.all([
         api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment"),
-        api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment/maintenance-due"),
+        loadSecondary(() => api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment/maintenance-due"), [] as FacilityEquipmentRow[]),
         api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders"),
-        api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders/overdue"),
+        loadSecondary(() => api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders/overdue"), [] as FacilityWorkOrderRow[]),
         api.get<InspectionTemplateRow[]>("/api/v1/facility/inspections/templates"),
         api.get<InspectionTaskRow[]>("/api/v1/facility/inspections/tasks"),
       ]);
       setEquipment(equipmentRows ?? []);
-      setMaintenanceDue(dueRows ?? []);
+      setMaintenanceDue(dueRows.data);
+      setMaintenanceDueNotice(dueRows.notice);
       setWorkOrders(orderRows ?? []);
-      setOverdueWorkOrders(overdueRows ?? []);
+      setOverdueWorkOrders(overdueRows.data);
+      setOverdueNotice(overdueRows.notice);
       setInspectionTemplates(templateRows ?? []);
       setInspectionTasks(taskRows ?? []);
     },
@@ -533,6 +538,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-equipment-status-change" onClick={() => void changeEquipmentStatus()}>状态变更/告警上报</PermissionButton>
         </div>
         <h3>设备维保到期清单</h3>
+        {maintenanceDueNotice ? <div className="admin-state" data-testid="facility-maintenance-due-degraded">{maintenanceDueNotice}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-maintenance-due-table">
             <thead><tr><th>设备</th><th>分类</th><th>责任人</th><th>到期日</th><th>详情</th></tr></thead>
@@ -586,6 +592,7 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-inline-form" data-testid="facility-work-order-overdue-form">
           <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid="facility-work-order-mark-overdue" onClick={() => void markOverdue()}>标记逾期</PermissionButton>
         </div>
+        {overdueNotice ? <div className="admin-state" data-testid="facility-work-orders-overdue-degraded">{overdueNotice}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-orders-overdue-table">
             <thead><tr><th>编号</th><th>类型/优先级</th><th>标题</th><th>状态</th><th>处理人</th><th>详情</th></tr></thead>

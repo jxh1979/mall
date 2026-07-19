@@ -17,13 +17,21 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [checkInsNotice, setCheckInsNotice] = useState<string | null>(null);
+  const [itemsNotice, setItemsNotice] = useState<string | null>(null);
+  const [redemptionsNotice, setRedemptionsNotice] = useState<string | null>(null);
 
   const reload = () => {
+    // 主资源=积分摘要(getPoints)决定页面级错误；签到/兑换目录/兑换历史为副资源，各自 .catch 降级为空+局部提示，不拖垮积分余额。
+    setError(null);
+    setCheckInsNotice(null);
+    setItemsNotice(null);
+    setRedemptionsNotice(null);
     Promise.all([
       service.getPoints(),
-      service.listCheckIns(),
-      service.listRedemptionItems(),
-      service.listRedemptions(),
+      service.listCheckIns().catch(() => { setCheckInsNotice("签到记录暂时加载失败，不影响积分与兑换"); return [] as CheckInRecord[]; }),
+      service.listRedemptionItems().catch(() => { setItemsNotice("兑换目录暂时加载失败，可稍后重试"); return [] as RedemptionItem[]; }),
+      service.listRedemptions().catch(() => { setRedemptionsNotice("兑换记录暂时加载失败，可稍后重试"); return [] as PointsRedemption[]; }),
     ])
       .then(([points, records, catalog, history]) => {
         setSummary(points);
@@ -84,6 +92,7 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
 
       <Card title="连续签到" style={{ marginTop: 16 }}>
         <Paragraph type="secondary">每日签到累积连续天数，按阶梯发放积分。</Paragraph>
+        {checkInsNotice ? <Alert type="warning" showIcon message={checkInsNotice} data-testid="points-check-ins-degraded" style={{ marginBottom: 12 }} /> : null}
         <Button type="primary" onClick={onCheckIn} loading={checkingIn} data-testid="check-in-button">
           今日签到
         </Button>
@@ -103,6 +112,7 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
 
       <Card title="积分商城" style={{ marginTop: 16 }} data-testid="points-redemption-catalog">
         <Paragraph type="secondary">用积分兑换礼品；兑换即按目录扣减积分并扣库存。</Paragraph>
+        {itemsNotice ? <Alert type="warning" showIcon message={itemsNotice} data-testid="points-items-degraded" style={{ marginBottom: 12 }} /> : null}
         <List
           dataSource={items}
           locale={{ emptyText: "暂无可兑换礼品" }}
@@ -141,6 +151,7 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
       </Card>
 
       <Card title="兑换记录" style={{ marginTop: 16 }} data-testid="points-redemption-history">
+        {redemptionsNotice ? <Alert type="warning" showIcon message={redemptionsNotice} data-testid="points-redemptions-degraded" style={{ marginBottom: 12 }} /> : null}
         <List
           dataSource={redemptions}
           locale={{ emptyText: "暂无兑换记录" }}
