@@ -8,6 +8,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
 
 const CALC_PERM = ["bar.table_commission.calculate"];
@@ -72,7 +73,7 @@ function sellerLabel(order: BarOrderRow | undefined) {
   return order.sellerRole === "sales" || order.commissionRate === "15%" ? TEXT.sales : TEXT.nonSales;
 }
 
-export function BarCommissionsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function BarCommissionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [formError, setFormError] = React.useState("");
@@ -89,7 +90,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
         { label: "订单号", value: order.orderNo ?? order.id },
         { label: "卡座", value: order.tableId ?? "—" },
         { label: "账单", value: rowBill?.id ?? order.billId ?? "—" },
-        { label: "消费额", value: formatAmount(order.totalAmount) },
+        { label: "消费额", value: formatAmount(order.totalAmountCent ?? order.totalAmount) },
         { label: "销售角色", value: sellerLabel(order) },
         { label: "计提比例", value: commissionRate(order) },
         { label: "状态", value: formatBusinessStatus(rowBill?.status ?? order.status) },
@@ -133,7 +134,15 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   const billId = firstBillId(selectedOrder);
   const salesOrders = orders.filter((order) => commissionRate(order) === "15%").length;
   const nonSalesOrders = orders.length - salesOrders;
-  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0);
+  // 列表接口返回 totalAmountCent（旧 totalAmount 字段兼容保留）：此前读幽灵字段恒为 0。
+  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmountCent ?? order.totalAmount ?? 0), 0);
+
+  // 第二批接线（指标登记簿）：订单数卡（笔数+金额）改走统一明细端点（与订单/出品/账单页同一登记项同源，
+  // 全历史口径与本页全量列表一致）；失败回退本地计算并隐藏「完整明细」入口。销售/非销售为本页口径拆分，保持本地。
+  const orderCountKpi = useMetricKpiValue(api, "bar.order_count", {});
+  const orderAmountKpi = useMetricKpiValue(api, "bar.order_amount", {});
+  const orderCountDisplay = orderCountKpi.status === "ready" && orderCountKpi.value !== null ? orderCountKpi.value : orders.length;
+  const orderAmountDisplay = orderAmountKpi.status === "ready" && orderAmountKpi.value !== null ? orderAmountKpi.value : totalAmount;
   // 聚焦时对提成表做客户端筛选：sales=15%口径、non_sales=其余；仅过滤已加载内存数组，不发后端查询。
   const visibleOrders = kpiFocus === "sales"
     ? orders.filter((order) => commissionRate(order) === "15%")
@@ -183,7 +192,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
         ) : (
         <>
         <div className="admin-kpi-grid" data-testid="bar-commissions-summary">
-          <div className="admin-kpi-card"><span>{TEXT.orderCount}</span><strong>{orders.length}</strong><small>{formatAmount(totalAmount)}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.orderCount}</span><strong data-testid="bar-commissions-kpi-orders">{orderCountDisplay}</strong><small data-testid="bar-commissions-kpi-amount">{formatAmount(orderAmountDisplay)}{orderCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.order_count" testid="bar-commissions-metric-detail-orders" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.salesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-sales" onClick={() => enterKpiFocus("sales")}>{salesOrders}</button><small>15% · {salesOrders} 单</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.nonSalesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-non-sales" onClick={() => enterKpiFocus("non_sales")}>{nonSalesOrders}</button><small>10% · {nonSalesOrders} 单</small></div>
           <div className="admin-kpi-card"><span>{TEXT.excludeTickets}</span><strong>是</strong><small>{TEXT.excludeTicketsHelp}</small></div>
@@ -214,7 +223,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
                     <td>{order.orderNo ?? order.id}</td>
                     <td>{order.tableId ?? "-"}</td>
                     <td>{rowBill?.id ?? order.billId ?? "-"}</td>
-                    <td>{formatAmount(order.totalAmount)}</td>
+                    <td>{formatAmount(order.totalAmountCent ?? order.totalAmount)}</td>
                     <td>{sellerLabel(order)}</td>
                     <td>{commissionRate(order)}</td>
                     <td>{formatBusinessStatus(rowBill?.status ?? order.status)}</td>

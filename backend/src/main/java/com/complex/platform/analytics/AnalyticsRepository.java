@@ -414,4 +414,36 @@ public interface AnalyticsRepository {
     default AnalyticsRecords.MetricDetailRows arOpenReceivableDetail(LocalDate asOf, int limit, int offset) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
+
+    // ==== KPI 统一明细·第二批（酒吧域）====
+
+    /** revenue.bar 明细：已结算账单实收（经营日窗、剔除冲正），合计=Σsettlement_amount_cent（与 sumBarRevenueCentsByMerchant 同谓词）。 */
+    default AnalyticsRecords.MetricDetailRows barSettlementRevenueDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** bar.order_count / bar.order_amount 明细：酒吧订单全状态（start/end 可空=全历史，与列表页 listOrders 平台口径同谓词）；sumAmount=true 合计Σtotal_amount_cent，false 合计笔数。 */
+    default AnalyticsRecords.MetricDetailRows barOrderDetail(java.time.Instant start, java.time.Instant end, boolean sumAmount, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** bar.open_order_count 明细：当前未完结订单（状态非 paid/cancelled、下单时间早于截至窗末；状态按台账当前值），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows barOpenOrderDetail(java.time.Instant asOfEnd, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** bar.saved_bottle_count 明细：存酒登记全状态（start/end 可空=全历史，与存酒页 listSavedBottles 平台口径同谓词），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows savedBottleDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** bar.saved_bottle_stored 明细：当前在存（status='stored'、存入时间早于截至窗末），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows savedBottleStoredDetail(java.time.Instant asOfEnd, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** bar.saved_bottle_quantity 明细：全部登记行（存入时间早于截至窗末），合计=Σremaining_quantity（台账当前值）。 */
+    default AnalyticsRecords.MetricDetailRows savedBottleQuantityDetail(java.time.Instant asOfEnd, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
 }

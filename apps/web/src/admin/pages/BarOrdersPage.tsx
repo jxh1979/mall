@@ -11,6 +11,7 @@ import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 const TEXT = {
   ordered: "\u5df2\u70b9\u5355",
@@ -121,7 +122,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         { label: TEXT.table, value: order.tableId ?? "—" },
         { label: TEXT.orderStatus, value: displayStatus(order.status) },
         { label: TEXT.billStatus, value: bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill },
-        { label: TEXT.amount, value: formatAmount(order.totalAmount) },
+        { label: TEXT.amount, value: formatAmount(order.totalAmountCent ?? order.totalAmount) },
         { label: TEXT.commissionBasis, value: order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}` },
         { label: TEXT.createdAt, value: cnDate(order.createdAt) },
         { label: TEXT.paidAt, value: cnDate(bill?.paidAt ?? order.paidAt) },
@@ -163,8 +164,18 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
 
   const openOrders = orders.filter((order) => !["paid", "cancelled"].includes(order.status ?? "")).length;
   const billCount = orders.filter((order) => firstBill(order)).length;
-  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0);
+  // 列表接口返回 totalAmountCent（旧 totalAmount 字段兼容保留）：此前读幽灵字段恒为 0。
+  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmountCent ?? order.totalAmount ?? 0), 0);
   const salesCommissionOrders = orders.filter((order) => order.sellerRole === "sales" || order.commissionRate === "15%").length;
+
+  // 第二批接线（指标登记簿）：订单数/未完结/订单金额三个 KPI 数字改走统一明细端点（与明细页同源，全历史口径
+  // 与本页全量列表一致）；端点失败（含无权限）→ 回退本地列表计算并隐藏「完整明细」入口，体验不降级。
+  const orderCountKpi = useMetricKpiValue(api, "bar.order_count", {});
+  const openOrderKpi = useMetricKpiValue(api, "bar.open_order_count", {});
+  const orderAmountKpi = useMetricKpiValue(api, "bar.order_amount", {});
+  const orderCountDisplay = orderCountKpi.status === "ready" && orderCountKpi.value !== null ? orderCountKpi.value : orders.length;
+  const openOrdersDisplay = openOrderKpi.status === "ready" && openOrderKpi.value !== null ? openOrderKpi.value : openOrders;
+  const orderAmountDisplay = orderAmountKpi.status === "ready" && orderAmountKpi.value !== null ? orderAmountKpi.value : totalAmount;
 
   async function runOrderAction(action: string, request: () => Promise<unknown>) {
     if (!selectedOrder) {
@@ -227,7 +238,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
     }
     await runOrderAction("bar_bill_settled", () => api.post(`/api/v1/bar/bills/${billId}/settle`, {
       paymentId: "payment-admin-web",
-      settlementAmountCent: selectedOrder?.totalAmount ?? 0,
+      settlementAmountCent: selectedOrder?.totalAmountCent ?? selectedOrder?.totalAmount ?? 0,
       paymentChannel,
       cashierStaffId: paymentChannel === "cash" ? cashierStaffId.trim() || undefined : undefined,
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
@@ -249,11 +260,11 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         ) : (
         <>
         <div className="admin-kpi-grid" data-testid="bar-orders-summary">
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orderCount}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orders.length}</button><small>{TEXT.currentRows}</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.openOrders}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-open" onClick={() => enterKpiFocus("open")}>{openOrders}</button><small>{TEXT.openOrdersHelp}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.orderCount}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-orders" onClick={() => enterKpiFocus("orders")}>{orderCountDisplay}</button><small>{TEXT.currentRows}{orderCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.order_count" testid="bar-orders-metric-detail-orders" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.openOrders}</span><button type="button" className="admin-kpi-value" data-testid="bar-orders-kpi-open" onClick={() => enterKpiFocus("open")}>{openOrdersDisplay}</button><small>{TEXT.openOrdersHelp}{openOrderKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.open_order_count" testid="bar-orders-metric-detail-open" /></> : null}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.bill}</span><strong>{billCount}</strong><small>{TEXT.billHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.commission}</span><strong>{salesCommissionOrders}</strong><small>{TEXT.commissionHelp}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong>{formatAmount(totalAmount)}</strong><small>{TEXT.amountHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong data-testid="bar-orders-kpi-amount">{formatAmount(orderAmountDisplay)}</strong><small>{TEXT.amountHelp}{orderAmountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.order_amount" testid="bar-orders-metric-detail-amount" /></> : null}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedOrder?.orderNo ?? "-"}>{selectedOrder?.orderNo ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
         </div>
 
@@ -310,7 +321,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                     <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-BAR-001" objectId={order.tableId}>{order.tableId ?? "-"}</TraceLink></td>
                     <td>{displayStatus(order.status)}</td>
                     <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>
-                    <td>{formatAmount(order.totalAmount)}</td>
+                    <td>{formatAmount(order.totalAmountCent ?? order.totalAmount)}</td>
                     <td>{order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}`}</td>
                     <td>{cnDate(order.createdAt)}</td>
                     <td data-testid={`bar-order-paid-at-${order.id}`}>{cnDate(bill?.paidAt ?? order.paidAt)}</td>

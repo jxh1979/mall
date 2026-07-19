@@ -193,16 +193,113 @@ class MetricDetailServiceTests {
         assertThat(auditEvents.events).extracting(AuditEvent::eventName).contains("analytics.metric_detail.view_failed");
     }
 
+    // ==== 第二批（酒吧域）分派 ====
+
+    @Test
+    void barRevenueAdditiveDefaultsToCurrentBusinessDayWindow() {
+        when(repository.barSettlementRevenueDetail(any(), any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(
+                        List.of(row("id", "bbs1", "billId", "bill-1", "settlementAmountCent", 8800L)), 1, new BigDecimal("8800")));
+
+        MetricDetailResponse response = service.metricDetail("revenue.bar", null, null, null, 1, 20);
+
+        long rowSum = response.rows().stream().mapToLong(item -> ((Number) item.get("settlementAmountCent")).longValue()).sum();
+        assertThat(response.summaryValue()).isEqualByComparingTo(BigDecimal.valueOf(rowSum));
+        assertThat(response.unit()).isEqualTo("分");
+        assertThat(response.caliber()).contains("冲正");
+        assertThat(response.traceLinkPageId()).isEqualTo("ADM-BAR-002");
+        assertThat(response.traceLinkColumnKey()).isEqualTo("billId");
+        // 酒吧经营日窗（单测无域配置回落全局 04:00）：[07-17 04:00Z, 07-18 04:00Z)。
+        ArgumentCaptor<Instant> start = ArgumentCaptor.forClass(Instant.class);
+        ArgumentCaptor<Instant> end = ArgumentCaptor.forClass(Instant.class);
+        verify(repository).barSettlementRevenueDetail(start.capture(), end.capture(), eq(20), eq(0));
+        assertThat(start.getValue()).isEqualTo(Instant.parse("2026-07-17T04:00:00Z"));
+        assertThat(end.getValue()).isEqualTo(Instant.parse("2026-07-18T04:00:00Z"));
+    }
+
+    @Test
+    void barOrderCountAndAmountWithoutRangeQueryFullHistory() {
+        when(repository.barOrderDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(
+                        List.of(row("id", "bo1", "totalAmountCent", 12000L)), 3, new BigDecimal("3")));
+
+        MetricDetailResponse count = service.metricDetail("bar.order_count", null, null, null, 1, 20);
+        assertThat(count.summaryValue()).isEqualByComparingTo("3");
+        assertThat(count.unit()).isEqualTo("笔");
+        assertThat(count.from()).isNull();
+        assertThat(count.to()).isNull();
+        verify(repository).barOrderDetail(eq(null), eq(null), eq(false), eq(20), eq(0));
+
+        when(repository.barOrderDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(
+                        List.of(row("id", "bo1", "totalAmountCent", 12000L)), 1, new BigDecimal("12000")));
+        MetricDetailResponse amount = service.metricDetail("bar.order_amount", null, null, null, 1, 20);
+        assertThat(amount.summaryValue()).isEqualByComparingTo("12000");
+        assertThat(amount.unit()).isEqualTo("分");
+        verify(repository).barOrderDetail(eq(null), eq(null), eq(true), eq(20), eq(0));
+    }
+
+    @Test
+    void barOpenOrderBalancePassesBarWindowEndAsOfAndIgnoresFrom() {
+        when(repository.barOpenOrderDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "bo-open")), 1, new BigDecimal("1")));
+
+        MetricDetailResponse response = service.metricDetail(
+                "bar.open_order_count", null, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-10"), 1, 20);
+
+        // 余额类=区间末值：as-of=to 的酒吧经营日窗末（单测回落全局 04:00 → 07-11 04:00Z），from 不参与。
+        verify(repository).barOpenOrderDetail(eq(Instant.parse("2026-07-11T04:00:00Z")), eq(20), eq(0));
+        assertThat(response.from()).isNull();
+        assertThat(response.to()).isEqualTo(LocalDate.parse("2026-07-10"));
+        assertThat(response.summaryNote()).contains("区间末值");
+        assertThat(response.valueType()).isEqualTo("balance");
+    }
+
+    @Test
+    void savedBottleMetricsDispatchByLedgerCurrentState() {
+        when(repository.savedBottleDetail(any(), any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "sb1", "remainingQuantity", 2)), 4, new BigDecimal("4")));
+        when(repository.savedBottleStoredDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "sb1", "status", "stored")), 2, new BigDecimal("2")));
+        when(repository.savedBottleQuantityDetail(any(), anyInt(), anyInt()))
+                .thenReturn(new MetricDetailRows(List.of(row("id", "sb1", "remainingQuantity", 2)), 4, new BigDecimal("7")));
+
+        // 可加计数：不传日期=全部历史（与存酒页全量列表一致）。
+        MetricDetailResponse count = service.metricDetail("bar.saved_bottle_count", null, null, null, 1, 20);
+        assertThat(count.summaryValue()).isEqualByComparingTo("4");
+        verify(repository).savedBottleDetail(eq(null), eq(null), eq(20), eq(0));
+
+        // 余额类缺省 as-of=当前经营日 → 窗末 07-18 04:00Z（单测回落全局日切）。
+        MetricDetailResponse stored = service.metricDetail("bar.saved_bottle_stored", null, null, null, 1, 20);
+        assertThat(stored.summaryValue()).isEqualByComparingTo("2");
+        assertThat(stored.to()).isEqualTo(CURRENT_BUSINESS_DAY);
+        verify(repository).savedBottleStoredDetail(eq(Instant.parse("2026-07-18T04:00:00Z")), eq(20), eq(0));
+
+        MetricDetailResponse quantity = service.metricDetail("bar.saved_bottle_quantity", null, null, null, 1, 20);
+        assertThat(quantity.summaryValue()).isEqualByComparingTo("7");
+        assertThat(quantity.caliber()).contains("直加");
+        verify(repository).savedBottleQuantityDetail(eq(Instant.parse("2026-07-18T04:00:00Z")), eq(20), eq(0));
+    }
+
     @Test
     void registryFirstBatchCoversThreeValueTypesWithPermissionsAndCalibers() {
         assertThat(MetricRegistry.all()).extracting(MetricRegistry.MetricDefinition::metricKey)
                 .containsExactly("revenue.ticket", "finance.recon_diff_count", "energy.total_electricity",
-                        "energy.electricity_per_sqm", "finance.ar_balance");
+                        "energy.electricity_per_sqm", "finance.ar_balance",
+                        // 第二批（酒吧域）
+                        "revenue.bar", "bar.order_count", "bar.order_amount", "bar.open_order_count",
+                        "bar.saved_bottle_count", "bar.saved_bottle_stored", "bar.saved_bottle_quantity");
         assertThat(MetricRegistry.all()).extracting(MetricRegistry.MetricDefinition::valueType)
                 .contains(MetricRegistry.TYPE_ADDITIVE, MetricRegistry.TYPE_RATIO, MetricRegistry.TYPE_BALANCE);
         assertThat(MetricRegistry.require("finance.recon_diff_count").permission()).isEqualTo("finance.reconciliation.view");
         assertThat(MetricRegistry.require("energy.total_electricity").permission()).isEqualTo("energy.reading.manage");
         assertThat(MetricRegistry.require("finance.ar_balance").permission()).isEqualTo("finance.ar_ap.view");
+        // 第二批权限=各页既有域权限（宽权限+登记项二次校验范式）。
+        assertThat(MetricRegistry.require("revenue.bar").permission()).isEqualTo("analytics.dashboard.view");
+        assertThat(MetricRegistry.require("bar.order_count").permission()).isEqualTo("bar.order.view");
+        assertThat(MetricRegistry.require("bar.open_order_count").permission()).isEqualTo("bar.order.view");
+        assertThat(MetricRegistry.require("bar.saved_bottle_count").permission()).isEqualTo("bar.saved_bottle.manage");
+        assertThat(MetricRegistry.require("bar.saved_bottle_quantity").permission()).isEqualTo("bar.saved_bottle.manage");
         // 每条登记必须有中文名/口径说明/数据源说明/列定义（明细页顶部展示，业务中文）。
         for (MetricRegistry.MetricDefinition definition : MetricRegistry.all()) {
             assertThat(definition.name()).isNotBlank();

@@ -2085,6 +2085,168 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 """, params));
     }
 
+    // ==== KPI 统一明细·第二批（酒吧域）：谓词逐字同各页面既有取数 ====
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows barSettlementRevenueDetail(Instant start, Instant end, int limit, int offset) {
+        // 与看板 ETL revenue.bar（sumBarRevenueCentsByMerchant）同谓词：结算时间落窗、剔除已冲正。
+        MapSqlParameterSource params = pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, bill_id, merchant_id, settle_channel, settlement_amount_cent, settled_at
+                  FROM bar_bill_settlements
+                 WHERE reversed = FALSE
+                   AND settled_at >= :start
+                   AND settled_at < :end
+                 ORDER BY settled_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("billId", rs.getString("bill_id"));
+            row.put("merchantId", rs.getString("merchant_id"));
+            row.put("settleChannel", rs.getString("settle_channel"));
+            row.put("settlementAmountCent", rs.getLong("settlement_amount_cent"));
+            row.put("settledAt", instant(rs, "settled_at"));
+            return row;
+        });
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(settlement_amount_cent), 0) AS summary
+                  FROM bar_bill_settlements
+                 WHERE reversed = FALSE
+                   AND settled_at >= :start
+                   AND settled_at < :end
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows barOrderDetail(Instant start, Instant end, boolean sumAmount, int limit, int offset) {
+        // start/end 可空=全历史（与订单/出品/账单页、销售提成页的全量列表 listOrders 平台口径同谓词：无 WHERE 全状态）。
+        String window = start == null ? "" : "WHERE created_at >= :start AND created_at < :end";
+        MapSqlParameterSource params = start == null
+                ? pagedParams(limit, offset)
+                : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, table_id, merchant_id, status, total_amount_cent, created_at, paid_at
+                  FROM bar_orders
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(window), params, (rs, n) -> barOrderRow(rs));
+        String summaryExpr = sumAmount ? "COALESCE(SUM(total_amount_cent), 0)" : "COUNT(*)";
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, %s AS summary
+                  FROM bar_orders
+                 %s
+                """.formatted(summaryExpr, window), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows barOpenOrderDetail(Instant asOfEnd, int limit, int offset) {
+        // 与订单/出品/账单页「未完结」同谓词：status ∉ {paid, cancelled}（状态按台账当前值；截至日仅限制下单时间）。
+        MapSqlParameterSource params = pagedParams(limit, offset)
+                .addValue("as_of_end", timestampWithTimeZone(asOfEnd));
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, table_id, merchant_id, status, total_amount_cent, created_at, paid_at
+                  FROM bar_orders
+                 WHERE status NOT IN ('paid', 'cancelled')
+                   AND created_at < :as_of_end
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> barOrderRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM bar_orders
+                 WHERE status NOT IN ('paid', 'cancelled')
+                   AND created_at < :as_of_end
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows savedBottleDetail(Instant start, Instant end, int limit, int offset) {
+        // start/end 可空=全历史（与存酒页全量列表 listSavedBottles 平台口径同谓词：无 WHERE 全状态）。
+        String window = start == null ? "" : "WHERE created_at >= :start AND created_at < :end";
+        MapSqlParameterSource params = start == null
+                ? pagedParams(limit, offset)
+                : pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, bottle_name, initial_quantity, remaining_quantity, unit, status, created_at, expire_at
+                  FROM saved_bottles
+                 %s
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """.formatted(window), params, (rs, n) -> savedBottleRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM saved_bottles
+                 %s
+                """.formatted(window), params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows savedBottleStoredDetail(Instant asOfEnd, int limit, int offset) {
+        // 与存酒页「在存」同谓词：status='stored'（状态按台账当前值；截至日仅限制存入时间）。
+        MapSqlParameterSource params = pagedParams(limit, offset)
+                .addValue("as_of_end", timestampWithTimeZone(asOfEnd));
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, bottle_name, initial_quantity, remaining_quantity, unit, status, created_at, expire_at
+                  FROM saved_bottles
+                 WHERE status = 'stored'
+                   AND created_at < :as_of_end
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> savedBottleRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
+                  FROM saved_bottles
+                 WHERE status = 'stored'
+                   AND created_at < :as_of_end
+                """, params));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows savedBottleQuantityDetail(Instant asOfEnd, int limit, int offset) {
+        // 与存酒页「剩余数量」同口径：全部登记行当前 remaining_quantity 直加（含已领完=0行）。
+        MapSqlParameterSource params = pagedParams(limit, offset)
+                .addValue("as_of_end", timestampWithTimeZone(asOfEnd));
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT id, bottle_name, initial_quantity, remaining_quantity, unit, status, created_at, expire_at
+                  FROM saved_bottles
+                 WHERE created_at < :as_of_end
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> savedBottleRow(rs));
+        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total_rows, COALESCE(SUM(remaining_quantity), 0) AS summary
+                  FROM saved_bottles
+                 WHERE created_at < :as_of_end
+                """, params));
+    }
+
+    private java.util.Map<String, Object> barOrderRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("tableId", rs.getString("table_id"));
+        row.put("merchantId", rs.getString("merchant_id"));
+        row.put("status", rs.getString("status"));
+        row.put("totalAmountCent", rs.getLong("total_amount_cent"));
+        row.put("createdAt", instant(rs, "created_at"));
+        row.put("paidAt", instant(rs, "paid_at"));
+        return row;
+    }
+
+    private java.util.Map<String, Object> savedBottleRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.util.Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rs.getString("id"));
+        row.put("bottleName", rs.getString("bottle_name"));
+        row.put("initialQuantity", rs.getInt("initial_quantity"));
+        row.put("remainingQuantity", rs.getInt("remaining_quantity"));
+        row.put("unit", rs.getString("unit"));
+        row.put("status", rs.getString("status"));
+        row.put("createdAt", instant(rs, "created_at"));
+        row.put("expireAt", instant(rs, "expire_at"));
+        return row;
+    }
+
     private static MapSqlParameterSource pagedParams(int limit, int offset) {
         return new MapSqlParameterSource()
                 .addValue("limit", Math.min(Math.max(limit, 1), 200))

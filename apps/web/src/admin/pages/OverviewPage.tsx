@@ -62,11 +62,14 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
   const asOfDay = appliedDates.to || appliedDates.from || data?.businessDate || "";
   const ticketKpi = useMetricKpiValue(api, "revenue.ticket", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
   const arKpi = useMetricKpiValue(api, "finance.ar_balance", { to: asOfDay, enabled: !!asOfDay });
+  // 第二批接线（酒吧域）：酒吧收入卡改走统一明细端点（与明细页同源，已结算实收剔除冲正），失败回退快照值。
+  const barKpi = useMetricKpiValue(api, "revenue.bar", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
   const ticketDisplay = ticketKpi.status === "ready" && ticketKpi.value !== null ? ticketKpi.value : metricValue(data, "revenue.ticket");
   const arDisplay = arKpi.status === "ready" && arKpi.value !== null ? arKpi.value : metricValue(data, "ar.balance");
+  const barDisplay = barKpi.status === "ready" && barKpi.value !== null ? barKpi.value : metricValue(data, "revenue.bar");
 
   const revenueValues = REVENUE_BARS.map((item) =>
-    (item.code === "revenue.ticket" ? ticketDisplay : metricValue(data, item.code)) ?? 0);
+    (item.code === "revenue.ticket" ? ticketDisplay : item.code === "revenue.bar" ? barDisplay : metricValue(data, item.code)) ?? 0);
   const volumeValues = VOLUME_BARS.map((item) => metricValue(data, item.code) ?? 0);
   const hasRevenue = revenueValues.some((value) => value > 0);
   const hasVolume = volumeValues.some((value) => value > 0);
@@ -83,7 +86,7 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
       <AdminDataState loading={loading} error={error} empty={!data} onRetry={reload}>
         <div className="admin-kpi-grid">
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-ticket"><span>票务收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-ticket-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{ticketDisplay === null ? "—" : String(ticketDisplay)}</button><small>已支付订单实付（分），查看出票与核销追踪{ticketKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="revenue.ticket" from={asOfDay} to={asOfDay} testid="overview-metric-detail-ticket" /></> : null}</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-bar"><span>酒吧收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-bar-value" onClick={() => navigateTo?.("ADM-BAR-002")}>{metricText(data, "revenue.bar")}</button><small>已结算账单实收（分），查看酒吧账单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-bar"><span>酒吧收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-bar-value" onClick={() => navigateTo?.("ADM-BAR-002")}>{barDisplay === null ? "—" : String(barDisplay)}</button><small>已结算账单实收（分），查看酒吧账单{barKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="revenue.bar" from={asOfDay} to={asOfDay} testid="overview-metric-detail-bar" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-amusement"><span>游乐核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-amusement-value" onClick={() => navigateTo?.("ADM-AMU-001")}>{metricText(data, "traffic.amusement")}</button><small>成功核销人次，查看游乐核销</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-verify"><span>票务核销</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-verify-value" onClick={() => navigateTo?.("ADM-TKT-003")}>{metricText(data, "verify.done")}</button><small>成功核销数，查看出票与核销追踪</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-member"><span>新增会员</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-member-value" onClick={() => navigateTo?.("ADM-CUS-001")}>{metricText(data, "member.new")}</button><small>当日新建，查看客人账号管理</small></div>
