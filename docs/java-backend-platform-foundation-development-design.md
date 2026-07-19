@@ -165,6 +165,7 @@ backend
 - 员工档案。
 - 平台员工、商户员工、第三方运营员工身份区分。
 - 密码 Hash、登录失败、账号锁定。
+- 敏感端点应用层限速（登录/刷新/验证码登录、支付、退款超阈值返 429 + Retry-After），与账号锁定互补。
 - 企业微信身份绑定的基础映射。
 - 登录会话。
 
@@ -1524,3 +1525,4 @@ JWT_SECRET=<fill-at-least-32-random-characters>
 | 2026-06-18 D8 收口 | 改 | §14 事件字段补入 `event_category`【待技术确认，推荐落列，值域对齐 operation-traceability §4.1】 | 与 open-platform §16.2 统一裁定，消除"落/不落"不一致 |
 | 2026-06-18 D8 定稿 | 改 | §14 `event_category` 由【待技术确认/是否落列】定稿为"`audit_events` 落独立数据库列"，值域对齐 operation-traceability §4.1 事件域 | 技术已拍板，去除两可表述，与 open-platform §16.2 同一裁定 |
 | 2026-06-18 D11 补登 | 增 | §4.8.1 / §6.6 | 补员工设备凭证 `staff_device_credentials` 后端承接设计（现状→目标P0→候选验收）：新增 `StaffDeviceCredential` 实体、注册审批/换机/失效状态机、Service/Controller 与事件落点；明确与 kiosk `terminal_device_credentials`(V011) 互不串用 | DB 有字段、Java 设计无承接；R5 审计与 android §3.1/§13.1 |
+| 2026-07-19 项26 限速 | 增 | 敏感端点应用层限速落地：登录/刷新/手机验证码登录、支付、退款超阈值返 429 `RATE_LIMITED` + `Retry-After`；维度=按来源 IP（`RateLimitInterceptor`，经 nginx `X-Real-IP` 取真实客户端）+ 按手机号（`CustomerService` OTP 撞码，OTP 无账号锁定故此维度补位）；进程内固定窗口，阈值可配（`complex.rate-limit.*`，默认开启，测试关闭）；与既有账号锁定（连续失败封号，401 `ACCOUNT_LOCKED`）错误码/机制均不同，互补不冲突；`RATE_LIMITED`(429) 早已在契约失败码枚举内，无需新增 | 36 项审计项 26：敏感端点仅靠账号锁定，缺通用请求频率限速 |

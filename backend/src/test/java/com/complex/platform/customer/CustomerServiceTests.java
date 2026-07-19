@@ -102,7 +102,9 @@ class CustomerServiceTests {
                 barRepository,
                 barOrderService,
                 voucherIssuePort,
-                java.time.Clock.fixed(java.time.Instant.parse("2026-06-14T00:00:00Z"), java.time.ZoneOffset.UTC)
+                java.time.Clock.fixed(java.time.Instant.parse("2026-06-14T00:00:00Z"), java.time.ZoneOffset.UTC),
+                new com.complex.platform.common.ratelimit.RateLimiter(),
+                new com.complex.platform.common.ratelimit.RateLimitProperties()
         );
     }
 
