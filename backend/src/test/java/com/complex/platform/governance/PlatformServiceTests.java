@@ -158,6 +158,7 @@ class PlatformServiceTests {
                 List.of("att_1"),
                 " P0 Entity ",
                 "operation",
+                null,
                 "91310000MA1P0",
                 "Jane Ops",
                 "vault://entity/bank",
@@ -370,6 +371,7 @@ class PlatformServiceTests {
                 null,
                 null,
                 null,
+                null,
                 "active"
         ));
         BusinessEntityRecord e2 = service.createBusinessEntity(new BusinessEntityRequest(
@@ -378,6 +380,7 @@ class PlatformServiceTests {
                 List.of(),
                 "Corp B",
                 "operation",
+                null,
                 null,
                 null,
                 null,

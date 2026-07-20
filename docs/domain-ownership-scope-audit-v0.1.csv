@@ -219,6 +219,7 @@ property_fee_bills,direct,project_id,project_id column on property_fee_bills,rea
 property_fee_rates,direct,project_id,project_id column on property_fee_rates,ready for project/merchant scoped query enforcement,covered
 refund_authority_limits,direct,project_id,project_id column on refund_authority_limits,ready for project/merchant scoped query enforcement,covered
 refund_auto_rules,direct,project_id,project_id column on refund_auto_rules,ready for project/merchant scoped query enforcement,covered
+revenue_stream_attribution,direct,project_id,project_id column on revenue_stream_attribution,ready for project/merchant scoped query enforcement,covered
 risk_alert_actions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 risk_alerts,direct,project_id,project_id column on risk_alerts,ready for project/merchant scoped query enforcement,covered
 role_permissions,inherited,role_id/permission_id,role_id/permission_id -> roles/permissions,must join through scope path before multi-complex rollout,covered

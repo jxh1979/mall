@@ -99,6 +99,7 @@ public class PlatformService {
                             "be_" + UUID.randomUUID(),
                             entityName,
                             entityRole,
+                            trimToNull(request.parentEntityId()),
                             trimToNull(request.unifiedSocialCreditCode()),
                             trimToNull(request.legalRepresentative()),
                             trimToNull(request.bankAccountRef()),

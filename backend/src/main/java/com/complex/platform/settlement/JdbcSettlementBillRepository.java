@@ -250,17 +250,20 @@ public class JdbcSettlementBillRepository {
                 .addValue("comp_service_fee_cent", bill.compServiceFeeCent())
                 .addValue("distribution_method", bill.distributionMethod())
                 .addValue("special_approval_ref", bill.specialApprovalRef())
-                .addValue("status", bill.status());
+                .addValue("status", bill.status())
+                .addValue("attributed_entity_id", bill.attributedEntityId());
         jdbcTemplate.update("""
                 INSERT INTO settlement_bills (
                     id, project_id, period_start, period_end, ticket_revenue_cent, channel_fee_cent,
                     giveaway_cost_cent, available_pool_cent, retention_bps, retention_cent, spv_pool_cent,
-                    distributed_cent, comp_service_fee_cent, distribution_method, special_approval_ref, status, updated_at
+                    distributed_cent, comp_service_fee_cent, distribution_method, special_approval_ref, status,
+                    attributed_entity_id, updated_at
                 )
                 VALUES (
                     :id, :project_id, :period_start, :period_end, :ticket_revenue_cent, :channel_fee_cent,
                     :giveaway_cost_cent, :available_pool_cent, :retention_bps, :retention_cent, :spv_pool_cent,
-                    :distributed_cent, :comp_service_fee_cent, :distribution_method, :special_approval_ref, :status, now()
+                    :distributed_cent, :comp_service_fee_cent, :distribution_method, :special_approval_ref, :status,
+                    :attributed_entity_id, now()
                 )
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), period_start, period_end) DO UPDATE SET
                     ticket_revenue_cent = EXCLUDED.ticket_revenue_cent,
@@ -275,6 +278,7 @@ public class JdbcSettlementBillRepository {
                     distribution_method = EXCLUDED.distribution_method,
                     special_approval_ref = EXCLUDED.special_approval_ref,
                     status              = EXCLUDED.status,
+                    attributed_entity_id = EXCLUDED.attributed_entity_id,
                     updated_at          = now()
                 """, params);
     }

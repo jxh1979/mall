@@ -19,6 +19,9 @@ public record SettlementBillRecord(
         long compServiceFeeCent,
         String distributionMethod,
         String specialApprovalRef,
-        String status
+        String status,
+        // 六业态收入归属(terminology-canonical §三):通票收入归属的 L3 管理公司/业态主体(娱乐运营平台)。
+        // 由 revenue_stream_attribution 按 (项目, all_pass_ticket) 解析;未配置=null(零金额影响,仅归属留白)。
+        String attributedEntityId
 ) {
 }

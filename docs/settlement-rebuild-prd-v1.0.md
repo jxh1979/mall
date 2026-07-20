@@ -32,7 +32,7 @@
 |---|---|---|---|
 | L1 | **平台** | 最大管理实体,可辖多城市多项目 | ⚠️ 代码无干净独立实体,"平台"一词混用 |
 | L2 | **项目公司** | 某城市的项目(如长沙 NEXT PARK);平台下辖多个 | = 代码 `projects` 表;文档中"项目/综合体/集团"混用需统一 |
-| L3 | **管理公司**(业态主体/SPV) | 项目公司与商户间的分账主体,如娱乐运营平台、酒吧 SPV、中央餐饮、游乐、传媒、资产公司 | ❌ 完全缺失,本期新建(先建分账必需的) |
+| L3 | **管理公司**(业态主体/SPV) | 项目公司与商户间的分账主体,如娱乐运营平台、酒吧 SPV、中央餐饮、游乐、传媒、资产公司 | ✅ 层级已落库(V318):复用 `business_entities`(entity_role=management_company/spv…)+ 新增 `parent_entity_id` 挂 L3→L2 项目公司父链;实例数据后台录入 |
 | L4 | **商户** | 具体经营单位 | = `merchants` 表,叫法统一 |
 
 ### 2.2 术语统一规则(§12 展开)
@@ -243,7 +243,9 @@
 | `refund_fee_rules` | 退款手续费预扣 | ADM-STL-004 |
 | `ticket_discount_rules` | 套票折扣归属 | ADM-STL-005 |
 | `giveaway_cost_configs` | 赠酒单价/点位/上限 | ADM-STL-006 |
-| `revenue_attribution_rules`(扩 V221) | 6 主体收入归属 + 税务属性映射 | ADM-STL-007 |
+| `revenue_stream_attribution`(V319,已落库) | 6 业态收入流 → 对应 L3 管理公司主体(all_pass_ticket/table_dining/bar_service_fee/amusement_ticket/performance_ticket/venue_rent);项目特例 > 平台默认 > 未配置 null,后台可配 | ADM-STL-007 |
+| ↳ 通票结算标注 | `settlement_bills.attributed_entity_id`(V319):settleMonth 按 (项目, all_pass_ticket) 解析归属主体并标注,不改任何金额 | — |
+| ~~`revenue_attribution_rules`(扩 V221)~~ | ⚠️ V221 `merchant_revenue_attribution_rules` 是商户级 net 口径(ticket/bar/rent 计入方式),粒度不同,非 6 主体归属;后者由上表 `revenue_stream_attribution` 承载 | — |
 | `tax_config`(税务全可配,2026-07-04) | 每主体×收入类型的 增值税/文化事业建设费/附加税(**有无 + 费率**均后台填) | ADM-STL-010 |
 - 均带 `is_draft`(草案态,复核后转正)、`effective_from/to`、`updated_by`、审计;
 - 权限点 `settlement.config.view/manage`,限项目公司财务/运营角色。
@@ -254,6 +256,7 @@
 
 ### 10.1 新建表
 - **管理公司/业态主体层**(L3:娱乐平台/酒吧SPV/中央餐饮/游乐/传媒/资产;持股/分红配置)——⚠️ 2026-07-04 对齐代码:**DB 层复用 `business_entities` + `entity_role` 承载(现状无 organizations 表),不新建 management_companies 表**;四主体绑定见 `business_entity_bindings`(active 唯一);`projects` 表是业态经营单元/场馆(非"项目公司")。详见 `merchant-space-contract-model-v0.1.md`
+  - **2026-07-19 落库(V318/V319)**:①`business_entities.parent_entity_id`(V318)显式挂 L3→L2 项目公司父链(「一个项目公司下多个管理公司主体」= 多行 parent 指向同一项目公司);②`revenue_stream_attribution`(V319)承载 6 业态收入流→管理公司主体映射(可配,项目特例 > 平台默认);③`settlement_bills.attributed_entity_id`(V319)通票分账已接:settleMonth 解析并标注归属主体。其余 5 类收入流(餐饮/服务费/游乐/演出/租金)复用同一 `RevenueStreamAttributionRepository.resolveManagementEntity` 解析,随各自结算路径上线时接入。
 - `venue_sessions`(场次/开歇业周期)+ `entitlement_entry_records`(入场记录)
 - `settlement_transactions`(按核销的结算流水:票→权益→核销→主体→金额→税务属性)
 - `settlement_bills` / `settlement_items`(结算单 + 明细,对齐底稿口径)
