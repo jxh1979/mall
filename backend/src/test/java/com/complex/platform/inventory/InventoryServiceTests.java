@@ -1963,6 +1963,34 @@ class InventoryServiceTests {
             return 1;
         }
 
+        // V312 发券预占：available -> reserved（quantity 不变），available>=qty 守卫。
+        @Override
+        public int reserveStockBalance(String itemId, String locationId, int qty) {
+            String key = balanceKey(itemId, locationId);
+            StockBalanceRecord existing = balances.get(key);
+            if (existing == null || existing.availableQuantity() < qty) {
+                return 0;
+            }
+            balances.put(key, new StockBalanceRecord(existing.id(), itemId, locationId, existing.quantity(),
+                    existing.reservedQuantity() + qty, existing.availableQuantity() - qty,
+                    Instant.now(), existing.merchantId(), existing.warehouseId()));
+            return 1;
+        }
+
+        // V312 释放预占：reserved -> available（quantity 不变），reserved>=qty 守卫。
+        @Override
+        public int releaseStockReservation(String itemId, String locationId, int qty) {
+            String key = balanceKey(itemId, locationId);
+            StockBalanceRecord existing = balances.get(key);
+            if (existing == null || existing.reservedQuantity() < qty) {
+                return 0;
+            }
+            balances.put(key, new StockBalanceRecord(existing.id(), itemId, locationId, existing.quantity(),
+                    existing.reservedQuantity() - qty, existing.availableQuantity() + qty,
+                    Instant.now(), existing.merchantId(), existing.warehouseId()));
+            return 1;
+        }
+
         // P0-1: 原子增加库存余额（INSERT ON CONFLICT DO UPDATE 语义）
         // C2: projectId 参数（in-memory 语义不落 project 列，仅保持签名一致；项目隔离由 JDBC 层测试覆盖）。
         @Override

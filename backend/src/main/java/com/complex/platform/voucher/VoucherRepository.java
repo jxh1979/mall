@@ -2,6 +2,7 @@ package com.complex.platform.voucher;
 
 import com.complex.platform.common.api.PageResponse;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /** 统一券台账仓储。merchantScope 参数语义：非空＝商户 scope 账号，只见（自家商户∪平台通用）券。 */
@@ -30,6 +31,12 @@ public interface VoucherRepository {
      * revoked 落 revoked_at+reason），返回受影响行数（0＝并发已被别人迁走）。
      */
     int updateInstanceStatus(String id, String expectFrom, String toStatus, Instant at, String revokeReason);
+
+    /** V313 转赠领取：把券实例归属改为受赠人（守卫 status='issued'），返回受影响行数（0＝已非 issued）。 */
+    int updateInstanceCustomer(String id, String newCustomerId, Instant at);
+
+    /** V312 过期释放扫描：issued + 已预占（stock_reserved）+ 已过期（expires_at&lt;=now）的实例，最多 limit 条。 */
+    List<VoucherInstanceRecord> listExpiredReservedIssuedInstances(Instant now, int limit);
 
     PageResponse<VoucherInstanceRecord> listInstances(
             String merchantScope, String customerId, String definitionId, String status, String sourceType,

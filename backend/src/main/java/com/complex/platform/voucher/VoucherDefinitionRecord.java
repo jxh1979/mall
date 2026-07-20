@@ -23,6 +23,9 @@ public record VoucherDefinitionRecord(
         Integer validDays,
         Instant validUntil,
         String status,
+        // V313 券种级"是否可转让"开关（2026-07-19 用户拍板，默认 true）：该券种下发的所有券继承此设置；
+        // false＝该券种发出的券不可会员间转赠（VoucherTransferService.initiate 前置拒绝）。
+        boolean transferable,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -34,6 +37,6 @@ public record VoucherDefinitionRecord(
     public VoucherDefinitionRecord withoutInternalPrice() {
         return new VoucherDefinitionRecord(id, name, voucherKind, redeemMethod, settlementMode, merchantId,
                 faceValueCent, inventoryItemId, stockLocationId, stockQuantity,
-                null, validDays, validUntil, status, createdAt, updatedAt);
+                null, validDays, validUntil, status, transferable, createdAt, updatedAt);
     }
 }

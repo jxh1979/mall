@@ -981,6 +981,14 @@ public class CustomerService {
                 "not_applicable", "ticket_transfer", () -> ticketingService.listOutgoingTicketTransfers(customer.id()));
     }
 
+    /**
+     * V313：对客 token 解析出客人（过账号状态闸），供 {@link MemberWalletController} 券转赠端点取本人 id + 手机号
+     * （转赠"不能转给自己"盲索引比对 / 手机号渠道受赠人绑定需明文手机号）。复用同一账号状态闸。
+     */
+    public CustomerRecord requireCustomerRecord(String customerToken) {
+        return requireCustomer(customerToken);
+    }
+
     private CustomerRecord requireCustomer(String customerToken) {
         String token = trimToNull(customerToken);
         if (token == null) {

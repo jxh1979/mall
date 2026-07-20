@@ -249,4 +249,20 @@ export type CustomerVoucher = {
   expiresAt: string | null;
   faceValueCent: number | null;
   redeemMethod: string | null; // in_store_staff | onsite_code | external_reflow
+  // V312：统一台账券的核销码（出示给店员/核销点扫码核销）；通票第三方券为 null。可选以兼容旧 fixture。
+  code?: string | null;
+};
+
+// V313 券转赠记录（后端 VoucherTransferResponse 安全投影；claimCode 仅发起人视图携带）。
+export type VoucherTransfer = {
+  id: string;
+  voucherInstanceId: string;
+  voucherName: string | null;
+  channel: string; // phone | link
+  status: string; // pending | claimed | revoked | voided
+  claimCode?: string | null;
+  receiverPhoneMasked?: string | null;
+  voidReason?: string | null;
+  createdAt: string | null;
+  claimedAt?: string | null;
 };

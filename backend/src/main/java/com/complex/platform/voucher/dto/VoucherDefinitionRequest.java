@@ -16,6 +16,8 @@ public record VoucherDefinitionRequest(
         Integer stockQuantity,
         Long internalPriceCent,
         Integer validDays,
-        Instant validUntil
+        Instant validUntil,
+        // V313 券种级"是否可转让"开关（默认 true）：null＝按默认可转让；false＝该券种发出的券不可会员间转赠。
+        Boolean transferable
 ) {
 }

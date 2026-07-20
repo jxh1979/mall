@@ -61,6 +61,8 @@ public class VoucherService implements VoucherIssuePort {
     private final InventoryService inventoryService;
     // finance 结算端口（PartnerVoucherService 同款：@Lazy 防环；null＝兼容单测不结算）。
     private final PartnerVoucherSettlementPort settlementPort;
+    // V313 转赠冻结：核销/作废时判该券是否有在途转赠（防"转赠中又核销"），并在作废时作废在途转赠。
+    private final VoucherTransferRepository transferRepository;
 
     @Autowired
     public VoucherService(
@@ -68,12 +70,14 @@ public class VoucherService implements VoucherIssuePort {
             AuthorizationService authorizationService,
             AuditedOperationExecutor operations,
             InventoryService inventoryService,
-            @Lazy PartnerVoucherSettlementPort settlementPort) {
+            @Lazy PartnerVoucherSettlementPort settlementPort,
+            VoucherTransferRepository transferRepository) {
         this.repository = repository;
         this.authorizationService = authorizationService;
         this.operations = operations;
         this.inventoryService = inventoryService;
         this.settlementPort = settlementPort;
+        this.transferRepository = transferRepository;
     }
 
     // ── 读路径 ─────────────────────────────────────────────────────────────
@@ -205,12 +209,14 @@ public class VoucherService implements VoucherIssuePort {
         checkMerchantOwnership(merchantId);
         Instant now = Instant.now();
         String id = "vdef_" + stableToken(request.idempotencyKey());
+        // V313 券种级"可转让"开关：请求未给（null）＝默认可转让。
+        boolean transferable = request.transferable() == null || request.transferable();
         VoucherDefinitionRecord definition = new VoucherDefinitionRecord(
                 id, name, kind, method, mode, merchantId,
                 request.faceValueCent(),
                 blankToNull(request.inventoryItemId()), blankToNull(request.stockLocationId()), request.stockQuantity(),
                 request.internalPriceCent(), request.validDays(), request.validUntil(),
-                "active", now, now);
+                "active", transferable, now, now);
         repository.insertDefinition(definition);
         return repository.findDefinitionById(id)
                 .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "voucher definition insert lost race"));
@@ -288,7 +294,7 @@ public class VoucherService implements VoucherIssuePort {
         repository.insertDefinition(new VoucherDefinitionRecord(
                 id, item.itemName(), "in_store_goods", "in_store_staff", "none", null,
                 null, item.inventoryItemId(), item.stockLocationId(),
-                Math.max(item.stockQuantity(), 1), null, null, null, "active", now, now));
+                Math.max(item.stockQuantity(), 1), null, null, null, "active", true, now, now));
         return repository.findDefinitionById(id)
                 .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "derived definition insert lost race"));
     }
@@ -296,14 +302,39 @@ public class VoucherService implements VoucherIssuePort {
     private VoucherInstanceRecord issueOne(
             VoucherDefinitionRecord definition, String customerId, String sourceType, String sourceRef,
             String instanceId, Instant now) {
+        // 幂等重放（redeemPoints/issueVouchers 幂等键派生同一 instanceId）：实例已存在直接返回，不重复预占库存。
+        Optional<VoucherInstanceRecord> existing = repository.findInstanceById(instanceId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        // V312 发券预占库存（防超发，对齐 PRD §5「先扣礼品库存，不足则拒绝兑换、不扣积分」）：
+        // 店内实物券发券即从承接商户实物库存预占 stock_quantity 件（available->reserved，quantity 不变）；
+        // 可用不足则拒绝发券/兑换 → 抛错回滚整事务（redeemPoints 的积分扣减一并撤销，即"不扣积分"）。
+        boolean reserved = "in_store_goods".equals(definition.voucherKind());
+        int reserveQty = reserved ? goodsQuantity(definition) : 0;
+        if (reserved && !inventoryService.reserveStock(
+                definition.inventoryItemId(), definition.stockLocationId(), reserveQty)) {
+            throw ApiException.conflict("VOUCHER_STOCK_INSUFFICIENT",
+                    "库存不足，本次兑换/发券未完成（未扣积分）");
+        }
         VoucherInstanceRecord instance = new VoucherInstanceRecord(
                 instanceId, definition.id(), customerId,
                 "VC" + stableToken(instanceId),
                 sourceType, sourceRef, VoucherStateMachine.ISSUED, now,
                 VoucherStateMachine.computeExpiry(now, definition.validDays(), definition.validUntil()),
-                null, null, null, now, now);
-        repository.insertInstance(instance);
+                null, null, null, reserved, now, now);
+        boolean created = repository.insertInstance(instance);
+        if (!created && reserved) {
+            // 幂等竞态输家（并发同键已写入实例，ON CONFLICT DO NOTHING 返回 false）：回退我刚占的预占，避免双占。
+            inventoryService.releaseStockReservation(
+                    definition.inventoryItemId(), definition.stockLocationId(), reserveQty);
+        }
         return repository.findInstanceById(instanceId).orElse(instance);
+    }
+
+    /** 实物券每张核销/预占消耗的实物件数（定义 stock_quantity；缺省 1）。 */
+    private static int goodsQuantity(VoucherDefinitionRecord definition) {
+        return definition.stockQuantity() == null ? 1 : definition.stockQuantity();
     }
 
     // ── 作废 ───────────────────────────────────────────────────────────────
@@ -339,7 +370,38 @@ public class VoucherService implements VoucherIssuePort {
         if (repository.updateInstanceStatus(instanceId, VoucherStateMachine.ISSUED, VoucherStateMachine.REVOKED, now, reason) == 0) {
             throw ApiException.conflict("VOUCHER_NOT_REVOCABLE", "voucher state changed concurrently");
         }
+        // V312：作废店内实物券即释放其预占（reserved->available），把库存还给可用池。
+        if (instance.stockReserved() && "in_store_goods".equals(definition.voucherKind())) {
+            inventoryService.releaseStockReservation(
+                    definition.inventoryItemId(), definition.stockLocationId(), goodsQuantity(definition));
+        }
+        // V313：作废券即作废其在途转赠（解冻受赠人的待领取）。
+        transferRepository.voidPendingForInstance(instanceId, "voucher_revoked", now);
         return repository.findInstanceById(instanceId).orElseThrow();
+    }
+
+    // ── V312 过期预占释放（定时作业）───────────────────────────────────────
+
+    /**
+     * 过期释放扫描（{@link VoucherReservationExpiryJob} 调用）：把 issued+已预占+已过期的券逐条 CAS 过期并释放预占，
+     * 避免过期未核销的实物券把库存永久占死（惰性过期口径下这是预占的兜底回收）。返回本轮实际释放的券数。
+     */
+    @Transactional
+    public int expireReservedVouchers(Instant now, int limit) {
+        int released = 0;
+        for (VoucherInstanceRecord instance : repository.listExpiredReservedIssuedInstances(now, safeSize(limit))) {
+            if (repository.updateInstanceStatus(instance.id(), VoucherStateMachine.ISSUED,
+                    VoucherStateMachine.EXPIRED, now, null) == 0) {
+                continue; // 并发已被核销/撤回/别的扫描迁走
+            }
+            repository.findDefinitionById(instance.definitionId()).ifPresent(def ->
+                    inventoryService.releaseStockReservation(
+                            def.inventoryItemId(), def.stockLocationId(), goodsQuantity(def)));
+            // V313：过期券即作废其在途转赠。
+            transferRepository.voidPendingForInstance(instance.id(), "voucher_expired", now);
+            released++;
+        }
+        return released;
     }
 
     // ── 统一核销（三类核销在这层真正建成）─────────────────────────────────
@@ -369,22 +431,35 @@ public class VoucherService implements VoucherIssuePort {
         String block = VoucherStateMachine.redeemBlockReason(instance.status(), instance.expiresAt(), now);
         if (block != null) {
             if ("VOUCHER_EXPIRED".equals(block) && VoucherStateMachine.ISSUED.equals(instance.status())) {
-                // 惰性过期落库（核销路径顺手转正），失败不影响拒绝结论。
-                repository.updateInstanceStatus(instance.id(), VoucherStateMachine.ISSUED,
-                        VoucherStateMachine.EXPIRED, now, null);
+                // 惰性过期落库（核销路径顺手转正），失败不影响拒绝结论。V312：转正成功且该券持预占则一并释放预占。
+                if (repository.updateInstanceStatus(instance.id(), VoucherStateMachine.ISSUED,
+                        VoucherStateMachine.EXPIRED, now, null) > 0
+                        && instance.stockReserved() && "in_store_goods".equals(definition.voucherKind())) {
+                    inventoryService.releaseStockReservation(
+                            definition.inventoryItemId(), definition.stockLocationId(), goodsQuantity(definition));
+                }
             }
             throw ApiException.conflict(block, "voucher is not redeemable: " + block);
+        }
+        // V313 转赠冻结：券有在途转赠（pending）时不能核销，须持券人先撤回（与领取端 CAS 构成双花双闸）。
+        if (transferRepository.existsPendingForInstance(instance.id())) {
+            throw ApiException.conflict("VOUCHER_TRANSFERRING",
+                    "该券正在转赠中，不能核销（请让持券人先撤回转赠）");
         }
         // 店内实物券：先做库存前置校验（R3 P0-7 同款顺序纪律——所有前置校验完成前不动任何状态），
         // 缺货直接拒绝，券保持 issued 可换点再核；真实出库在 CAS 占位之后、同事务内执行。
         int goodsQuantity = 0;
         if ("in_store_goods".equals(definition.voucherKind())) {
-            goodsQuantity = definition.stockQuantity() == null ? 1 : definition.stockQuantity();
-            int available = inventoryService.availableStock(definition.inventoryItemId(), definition.stockLocationId());
-            if (available < goodsQuantity) {
-                throw ApiException.conflict("VOUCHER_STOCK_INSUFFICIENT",
-                        "库存不足，本次核销未完成（券未被消耗）");
+            goodsQuantity = goodsQuantity(definition);
+            if (!instance.stockReserved()) {
+                // 历史券（本轮 V312 前发放，未预占）：仍走旧 available 直扣前置校验；缺货直接拒绝，券保持 issued。
+                int available = inventoryService.availableStock(definition.inventoryItemId(), definition.stockLocationId());
+                if (available < goodsQuantity) {
+                    throw ApiException.conflict("VOUCHER_STOCK_INSUFFICIENT",
+                            "库存不足，本次核销未完成（券未被消耗）");
+                }
             }
+            // 已预占券：库存已在 reserved_quantity 中为本券留存，无需 available 前置校验（核销时转实扣）。
         }
         // CAS 占位：并发双核销第一道闸（第二道＝核销记录实例级唯一索引）。
         if (repository.updateInstanceStatus(instance.id(), VoucherStateMachine.ISSUED,
@@ -396,6 +471,12 @@ public class VoucherService implements VoucherIssuePort {
         if ("in_store_goods".equals(definition.voucherKind())) {
             // 店内实物券：核销时才出库（兑换只发券）。经 IdempotencyService 的 TransactionTemplate（REQUIRED）
             // 并入本事务，出库失败整体回滚、券状态一并回到 issued。
+            // V312：已预占券先把预占还回 available（reserved->available），再走 redeem_consume（available->出库+quantity-=n），
+            // 净效果 = 预占转实扣（reserved-=n, quantity-=n）。同事务同一余额行行锁串行，中途另一笔抢不走这份库存。
+            if (instance.stockReserved()) {
+                inventoryService.releaseStockReservation(
+                        definition.inventoryItemId(), definition.stockLocationId(), goodsQuantity);
+            }
             stockMovementRef = "voucher-redeem-" + instance.id();
             inventoryService.createTypedStockMovement("redeem_consume", new StockMovementRequest(
                     stockMovementRef,

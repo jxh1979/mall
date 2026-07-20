@@ -1453,6 +1453,29 @@ public class InventoryService {
                 .orElse(0);
     }
 
+    /**
+     * V312 发券预占库存：从 (item,location) 的可用量原子预占 qty 件（available->reserved，quantity 不变）。
+     * 返回 true=预占成功；false=可用不足（含无余额行）→ 上层拒绝发券/兑换、不扣积分。守卫式 UPDATE 行锁防并发超卖。
+     * 无 @GuardedAction/无商户 scope：这是发券（含客人积分兑换）触发的内部台账操作，随调用方事务提交。
+     */
+    public boolean reserveStock(String itemId, String locationId, int qty) {
+        if (qty <= 0) {
+            return true;
+        }
+        return repository.reserveStockBalance(itemId, locationId, qty) > 0;
+    }
+
+    /**
+     * V312 释放预占：把 qty 件从 reserved 还回 available（核销转实扣前置、或过期/作废释放）。返回受影响行数。
+     * best-effort：0 表示该行 reserved 不足以释放（历史券/漂移），由调用方按语义处理（不强抛，避免误挡核销）。
+     */
+    public int releaseStockReservation(String itemId, String locationId, int qty) {
+        if (qty <= 0) {
+            return 0;
+        }
+        return repository.releaseStockReservation(itemId, locationId, qty);
+    }
+
     public PageResponse<InventorySupplierRecord> listInventorySuppliers() {
         return readPage(
                 "inventory.supplier_viewed",

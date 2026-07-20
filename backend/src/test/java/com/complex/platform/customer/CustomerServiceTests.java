@@ -69,7 +69,7 @@ class CustomerServiceTests {
                 batch.add(new com.complex.platform.voucher.VoucherInstanceRecord(
                         "vi_" + redemptionId + "_" + i, "vdef_cat_" + catalogItem.id(), customerId,
                         "VC" + redemptionId + i, "points_redemption", redemptionId, "issued", now,
-                        null, null, null, null, now, now));
+                        null, null, null, null, false, now, now));
             }
             issued.addAll(batch);
             return batch;
