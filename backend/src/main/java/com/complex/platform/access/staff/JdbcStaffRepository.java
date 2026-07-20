@@ -831,6 +831,43 @@ class JdbcStaffRepository implements StaffRepository {
 
     // ---------------------------------------------------------------- row mappers
 
+    @Override
+    public java.util.Optional<StaffProfileRecord> findProfileByUserId(String userId) {
+        java.util.List<StaffProfileRecord> result = jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
+                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                  FROM staff_profiles
+                 WHERE user_id = :user_id
+                   AND delete_status <> 'approved'
+                 ORDER BY created_at DESC
+                 LIMIT 1
+                """, java.util.Map.of("user_id", userId), this::mapProfile);
+        return result.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(result.get(0));
+    }
+
+    @Override
+    public java.util.List<StaffCommissionLineRecord> listCommissionLines(String userId, String month) {
+        return jdbcTemplate.query("""
+                SELECT source_type, source_id, amount_cent, note, created_at
+                  FROM staff_commission_ledger
+                 WHERE user_id = :user_id AND month = :month
+                UNION ALL
+                SELECT 'bar_table' AS source_type, bill_id AS source_id,
+                       commission_amount_cent AS amount_cent, CAST(NULL AS VARCHAR) AS note, created_at
+                  FROM bar_commission_calculations
+                 WHERE sales_staff_id = :user_id
+                   AND to_char(created_at, 'YYYY-MM') = :month
+                   AND status NOT IN ('void', 'cancelled')
+                 ORDER BY created_at DESC
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("month", month),
+                (rs, n) -> new StaffCommissionLineRecord(
+                        rs.getString("source_type"), rs.getString("source_id"),
+                        rs.getLong("amount_cent"), rs.getString("note"),
+                        rs.getTimestamp("created_at").toInstant()));
+    }
+
     private StaffProfileRecord mapProfile(ResultSet rs, int rowNumber) throws SQLException {
         return new StaffProfileRecord(
                 rs.getString("id"),

@@ -452,6 +452,7 @@ data class StaffProfileRecord(
   val id: String? = null,
   val name: String? = null,
   val status: String? = null,
+  val registrationStatus: String? = null,
 )
 
 @Serializable
@@ -627,6 +628,8 @@ data class PayrollStatementRow(
   val commissionCent: Long? = null,
   val bonusCent: Long? = null,
   val penaltyCent: Long? = null,
+  val leaveDeductionCent: Long? = null,
+  val taxCent: Long? = null,
   val totalCent: Long? = null,
 )
 
@@ -656,6 +659,23 @@ data class AttendanceDayRow(
   val dayStatus: List<String>? = null,
   val shiftStartAt: String? = null,
   val shiftEndAt: String? = null,
+)
+
+// ── BYOD 二期 Wave1(2026-07-19 拍板):工资条提成明细 + 本人资料自助 ──
+
+@Serializable
+data class StaffCommissionLineRow(
+  val sourceType: String? = null,
+  val sourceId: String? = null,
+  val amountCent: Long? = null,
+  val note: String? = null,
+  val createdAt: String? = null,
+)
+
+@Serializable
+data class StaffProfileSelfUpdateRequest(
+  val idempotencyKey: String,
+  val name: String,
 )
 
 // ── G批(2026-07-02 六口径拍板):服务点单——目录/代客下单指定履约人/公司收款码/履约流转 ──

@@ -673,4 +673,57 @@ class StaffJdbcIntegrationTests {
                 "SELECT total_cent FROM staff_payroll_statements WHERE month = ? AND user_id = ?",
                 Long.class, month, userId);
     }
+
+    // ── BYOD 二期 Wave1(2026-07-19 拍板):本人提成明细 + 本人档案自助 ──
+
+    @org.junit.jupiter.api.Test
+    void wave1MyCommissionLinesReturnOwnLinesGroupableBySource() {
+        authenticateAsPlatformAdmin();  // currentActor().id() = usr_admin
+        String month = "2099-09";
+        jdbcTemplate.update("INSERT INTO staff_commission_ledger (id, user_id, month, source_type, source_id, amount_cent, note, created_at) "
+                + "VALUES (?, 'usr_admin', ?, 'service_order', 'svo_1', 60000, '服务点单份额', now())", "cml_" + key(), month);
+        jdbcTemplate.update("INSERT INTO staff_commission_ledger (id, user_id, month, source_type, source_id, amount_cent, note, created_at) "
+                + "VALUES (?, 'usr_admin', ?, 'manual', 'm_1', 40000, '订位', now())", "cml_" + key(), month);
+        jdbcTemplate.update("INSERT INTO staff_commission_ledger (id, user_id, month, source_type, source_id, amount_cent, created_at) "
+                + "VALUES (?, 'usr_other', ?, 'service_order', 'svo_x', 999999, now())", "cml_" + key(), month);
+
+        java.util.List<com.complex.platform.access.staff.StaffCommissionLineRecord> lines =
+                service.listMyCommissions(month).items();
+        // 只返本人(不含 usr_other 的 999999),两条合计 1000 元。
+        assertThat(lines).allMatch(l -> l.amountCent() != 999999L);
+        assertThat(lines.stream().mapToLong(
+                com.complex.platform.access.staff.StaffCommissionLineRecord::amountCent).sum())
+                .isEqualTo(100000L);
+        assertThat(lines.stream().map(
+                com.complex.platform.access.staff.StaffCommissionLineRecord::sourceType).toList())
+                .contains("service_order", "manual");
+        // 月份格式校验。
+        assertThatThrownBy(() -> service.listMyCommissions("2099/09")).isInstanceOf(ApiException.class);
+
+        jdbcTemplate.update("DELETE FROM staff_commission_ledger WHERE month = ?", month);
+    }
+
+    @org.junit.jupiter.api.Test
+    void wave1MyProfileSelfViewAndNameEditTokenDerivedOnly() {
+        authenticateAsPlatformAdmin();  // usr_admin
+        jdbcTemplate.update("DELETE FROM staff_profiles WHERE user_id = 'usr_admin'");
+        // 无档案 → not found。
+        assertThatThrownBy(() -> service.getMyProfile()).isInstanceOf(ApiException.class);
+
+        seedProfile("prj_self", "usr_admin");
+        assertThat(service.getMyProfile().name()).isEqualTo("scoped");
+
+        // 有限字段自助改名(身份按 token 派生,请求体无 userId → 无法越权改他人)。
+        com.complex.platform.access.staff.StaffProfileRecord updated = service.updateMyProfile(
+                new com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest(key(), "张三"));
+        assertThat(updated.name()).isEqualTo("张三");
+        assertThat(service.getMyProfile().name()).isEqualTo("张三");
+
+        // 空名拒绝。
+        assertThatThrownBy(() -> service.updateMyProfile(
+                new com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest(key(), "  ")))
+                .isInstanceOf(ApiException.class);
+
+        jdbcTemplate.update("DELETE FROM staff_profiles WHERE user_id = 'usr_admin'");
+    }
 }

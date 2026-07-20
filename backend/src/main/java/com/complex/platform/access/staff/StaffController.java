@@ -262,4 +262,23 @@ public class StaffController {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.acknowledge(id, request));
     }
+
+    // ── BYOD 二期 Wave1(2026-07-19 拍板):本人档案自助 + 工资条提成明细 ──
+    @GetMapping("/profiles/mine")
+    public ApiResponse<StaffProfileRecord> myProfile() {
+        return ApiResponse.ok(service.getMyProfile());
+    }
+
+    @PostMapping("/profiles/mine")
+    public ApiResponse<StaffProfileRecord> updateMyProfile(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.updateMyProfile(request));
+    }
+
+    @GetMapping("/payroll/mine/commissions")
+    public ApiResponse<PageResponse<StaffCommissionLineRecord>> myPayrollCommissions(
+            @org.springframework.web.bind.annotation.RequestParam("month") String month) {
+        return ApiResponse.ok(service.listMyCommissions(month));
+    }
 }
