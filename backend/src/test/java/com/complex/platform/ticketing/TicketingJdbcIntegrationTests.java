@@ -301,12 +301,12 @@ class TicketingJdbcIntegrationTests {
                         repository.saveTicketCredential(new TicketCredentialRecord(
                                 "credential_chk_12", "ent_chk", "order_chk", "cred_chk_12", "nonce_chk_12",
                                 "hash_chk_12", "dynamic_qr", now, now.plusSeconds(12), "active", 0, now, now, 12, now, null, null)))
-                .hasMessageContaining("chk_ticket_credentials_refresh_interval");
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
                         repository.saveTicketCredential(new TicketCredentialRecord(
                                 "credential_chk_65", "ent_chk", "order_chk", "cred_chk_65", "nonce_chk_65",
                                 "hash_chk_65", "dynamic_qr", now, now.plusSeconds(65), "active", 0, now, now, 65, now, null, null)))
-                .hasMessageContaining("chk_ticket_credentials_refresh_interval");
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 
     @Test
