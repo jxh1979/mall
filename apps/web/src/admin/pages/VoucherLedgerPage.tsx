@@ -118,6 +118,8 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
   const [defStockQty, setDefStockQty] = React.useState("1");
   const [defInternalYuan, setDefInternalYuan] = React.useState("");
   const [defValidDays, setDefValidDays] = React.useState("");
+  // V313 券种级"可转让"开关，默认开（可转让）；关闭则该券种发出的券不可会员间转赠。
+  const [defTransferable, setDefTransferable] = React.useState(true);
   // 发放表单
   const [issueDefinition, setIssueDefinition] = React.useState("");
   const [issueCustomer, setIssueCustomer] = React.useState("");
@@ -227,6 +229,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
       internalPriceCent: defMode === "internal_price" ? Math.round(Number(defInternalYuan) * 100) : null,
       validDays: defValidDays.trim() ? Number(defValidDays) : null,
       validUntil: null,
+      transferable: defTransferable,
     };
     const ok = await runAction("voucher_definition_created", request,
       () => api.post("/api/v1/vouchers/definitions", request));
@@ -551,6 +554,20 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
               <label>有效天数<input data-testid="voucher-create-def-days" type="number" step="1" value={defValidDays} onChange={(event) => setDefValidDays(event.target.value)} placeholder="如 30；留空＝不过期" /></label>
             ),
           },
+          {
+            title: "可转让",
+            description: "该券种下发的所有券是否可由持券客人转赠他人；默认允许，关闭后该券种发出的券不可转赠。",
+            content: (
+              <label className="admin-check-inline">
+                <input
+                  data-testid="voucher-create-def-transferable"
+                  type="checkbox"
+                  checked={defTransferable}
+                  onChange={(event) => setDefTransferable(event.target.checked)}
+                /> 允许持券客人转赠他人
+              </label>
+            ),
+          },
         ]}
         summary={[
           { label: "券名称", value: defName.trim() || "未填写" },
@@ -561,6 +578,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
           { label: defKind === "merchant_discount" ? "面额" : "货品/库位/件数", value: defKind === "merchant_discount" ? (defFaceYuan ? `¥${defFaceYuan}` : "未填写") : `${defItemId || "?"} / ${defLocationId || "?"} / ${defStockQty || "?"} 件` },
           { label: "内部结算价", value: defMode === "internal_price" ? (defInternalYuan ? `¥${defInternalYuan}` : "未填写") : "不适用" },
           { label: "有效期", value: defValidDays.trim() ? `发放起 ${defValidDays} 天` : "不过期" },
+          { label: "可转让", value: defTransferable ? "允许转赠" : "不可转赠" },
         ]}
       />
 

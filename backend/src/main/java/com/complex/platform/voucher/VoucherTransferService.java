@@ -97,6 +97,12 @@ public class VoucherTransferService {
                 VoucherStateMachine.effectiveStatus(instance.status(), instance.expiresAt(), now))) {
             throw ApiException.conflict("VOUCHER_NOT_TRANSFERABLE", "该券已核销/失效/过期，不能转赠");
         }
+        // V313 券种级"可转让"开关：券种设为不可转让 → 拒绝转赠（与已核销/过期等既有校验并列，2026-07-19 用户拍板）。
+        VoucherDefinitionRecord definition = vouchers.findDefinitionById(instance.definitionId())
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "voucher definition not found"));
+        if (!definition.transferable()) {
+            throw ApiException.conflict("VOUCHER_KIND_NOT_TRANSFERABLE", "该券不可转赠（券种设置为不可转让）");
+        }
 
         String id = "voucher_transfer_" + UUID.randomUUID().toString().replace("-", "");
         String receiverPhone = null;

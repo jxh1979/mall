@@ -32571,6 +32571,302 @@
           }
         }
       }
+    },
+    "/api/v1/customer/voucher-transfers": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "initiateCustomerVoucherTransfer",
+        "summary": "发起券转赠(手机号/微信链接/二维码)",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "voucher_transfer.created",
+        "x-audit-event-failure": "voucher_transfer.create_failed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "voucher_instance_id",
+                  "channel"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "voucher_instance_id": {
+                    "type": "string",
+                    "description": "要转赠的统一台账券实例 id"
+                  },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "phone",
+                      "link"
+                    ],
+                    "description": "phone=手机号定向;link=微信链接/二维码"
+                  },
+                  "receiver_phone": {
+                    "type": "string",
+                    "description": "channel=phone 时受赠人手机号"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/voucher-transfers/{transfer_id}/claim": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "claimCustomerVoucherTransfer",
+        "summary": "确认领取转赠(手机号只指定人可领;链接/二维码先确认者得)",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "voucher_transfer.claimed",
+        "x-audit-event-failure": "voucher_transfer.claim_failed",
+        "parameters": [
+          {
+            "name": "transfer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "claim_code": {
+                    "type": "string",
+                    "description": "link 渠道领取码"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/voucher-transfers/{transfer_id}/revoke": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "revokeCustomerVoucherTransfer",
+        "summary": "撤回转赠(领取前发起人可撤回)",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "voucher_transfer.revoked",
+        "x-audit-event-failure": "voucher_transfer.revoke_failed",
+        "parameters": [
+          {
+            "name": "transfer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/voucher-transfers/preview": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "previewCustomerVoucherTransfer",
+        "summary": "领取预览(打开链接/二维码,不算领取)",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.voucher_transfer_preview_viewed",
+        "x-audit-event-failure": "customer.voucher_transfer_preview_view_failed",
+        "parameters": [
+          {
+            "name": "claim_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/voucher-transfers/incoming": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listIncomingCustomerVoucherTransfers",
+        "summary": "待我领取的转赠(手机号渠道)",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.voucher_transfer_incoming_viewed",
+        "x-audit-event-failure": "customer.voucher_transfer_incoming_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/voucher-transfers/outgoing": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listOutgoingCustomerVoucherTransfers",
+        "summary": "我发起的转赠(撤回入口/状态查看)",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.voucher_transfer_outgoing_viewed",
+        "x-audit-event-failure": "customer.voucher_transfer_outgoing_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
     }
   },
   "components": {

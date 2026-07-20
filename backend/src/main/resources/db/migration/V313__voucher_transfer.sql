@@ -5,6 +5,13 @@
 --   本迁移针对的是「积分兑换出的券实例」（统一台账，此时积分已消耗），与「积分本身不可转」不直接冲突，
 --   但仍属业务口径变更，须经用户确认并同步业务 HTML 增补（子代理不改业务 HTML，仅出清单）。
 --   仅建表/授权，无存量回填（测试环境上线前无历史转赠）。
+
+-- 券种级"是否可转让"开关（2026-07-19 用户拍板，默认可转让）：该券种下发的所有券继承此设置；
+-- false ＝ 该券种发出的券不可会员间转赠（VoucherTransferService.initiate 前置拒绝）。列加在既有已授权表
+-- voucher_definitions（V301 已 GRANT complex_app），PostgreSQL 列继承表级授权，无需另行 GRANT。
+ALTER TABLE voucher_definitions
+    ADD COLUMN IF NOT EXISTS transferable boolean NOT NULL DEFAULT true;
+
 CREATE TABLE IF NOT EXISTS voucher_transfers (
     id                    varchar(64) PRIMARY KEY,
     voucher_instance_id   varchar(64) NOT NULL REFERENCES voucher_instances(id),

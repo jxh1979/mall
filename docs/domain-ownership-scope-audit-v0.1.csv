@@ -297,6 +297,7 @@ venue_sessions,direct,venue_id,venue_id column on venue_sessions,ready for proje
 voucher_definitions,direct,merchant_id,merchant_id column on voucher_definitions,ready for project/merchant scoped query enforcement,covered
 voucher_instances,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 voucher_redemption_records,direct,merchant_id,merchant_id column on voucher_redemption_records,ready for project/merchant scoped query enforcement,covered
+voucher_transfers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 warehouses,direct,project_id,project_id column on warehouses,ready for project/merchant scoped query enforcement,covered
 wecom_access_audits,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 wecom_conversations,direct,project_id,project_id column on wecom_conversations,ready for project/merchant scoped query enforcement,covered

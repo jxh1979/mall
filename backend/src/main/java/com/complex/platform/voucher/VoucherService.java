@@ -209,12 +209,14 @@ public class VoucherService implements VoucherIssuePort {
         checkMerchantOwnership(merchantId);
         Instant now = Instant.now();
         String id = "vdef_" + stableToken(request.idempotencyKey());
+        // V313 券种级"可转让"开关：请求未给（null）＝默认可转让。
+        boolean transferable = request.transferable() == null || request.transferable();
         VoucherDefinitionRecord definition = new VoucherDefinitionRecord(
                 id, name, kind, method, mode, merchantId,
                 request.faceValueCent(),
                 blankToNull(request.inventoryItemId()), blankToNull(request.stockLocationId()), request.stockQuantity(),
                 request.internalPriceCent(), request.validDays(), request.validUntil(),
-                "active", now, now);
+                "active", transferable, now, now);
         repository.insertDefinition(definition);
         return repository.findDefinitionById(id)
                 .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "voucher definition insert lost race"));
@@ -292,7 +294,7 @@ public class VoucherService implements VoucherIssuePort {
         repository.insertDefinition(new VoucherDefinitionRecord(
                 id, item.itemName(), "in_store_goods", "in_store_staff", "none", null,
                 null, item.inventoryItemId(), item.stockLocationId(),
-                Math.max(item.stockQuantity(), 1), null, null, null, "active", now, now));
+                Math.max(item.stockQuantity(), 1), null, null, null, "active", true, now, now));
         return repository.findDefinitionById(id)
                 .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "derived definition insert lost race"));
     }

@@ -259,7 +259,7 @@ class VoucherServiceTests {
     private VoucherDefinitionRecord discountDefinition(String id, String merchantId) {
         VoucherDefinitionRecord definition = new VoucherDefinitionRecord(
                 id, "满减券", "merchant_discount", "in_store_staff", "none", merchantId,
-                5000L, null, null, null, null, null, null, "active",
+                5000L, null, null, null, null, null, null, "active", true,
                 Instant.parse("2026-07-18T00:00:00Z"), Instant.parse("2026-07-18T00:00:00Z"));
         repository.insertDefinition(definition);
         return definition;
@@ -269,7 +269,7 @@ class VoucherServiceTests {
         VoucherDefinitionRecord definition = new VoucherDefinitionRecord(
                 id, "店内实物券", "in_store_goods", "in_store_staff",
                 internalPriceCent == null ? "none" : "internal_price", merchantId,
-                null, "item_1", "loc_1", 2, internalPriceCent, null, null, "active",
+                null, "item_1", "loc_1", 2, internalPriceCent, null, null, "active", true,
                 Instant.parse("2026-07-18T00:00:00Z"), Instant.parse("2026-07-18T00:00:00Z"));
         repository.insertDefinition(definition);
         return definition;
@@ -287,29 +287,36 @@ class VoucherServiceTests {
         // 折扣券缺面额/缺商户拒绝。
         assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
                 "k1", "满减券", "merchant_discount", "in_store_staff", "none", "merchant-1",
-                null, null, null, null, null, null, null)))
+                null, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class).hasMessageContaining("face_value_cent");
         assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
                 "k2", "满减券", "merchant_discount", "in_store_staff", "none", null,
-                5000L, null, null, null, null, null, null)))
+                5000L, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class).hasMessageContaining("merchant_id");
         // 实物券缺货品信息拒绝。
         assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
                 "k3", "实物券", "in_store_goods", "in_store_staff", "none", null,
-                null, null, null, null, null, null, null)))
+                null, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class).hasMessageContaining("inventory_item_id");
         // 内部结算缺内部价拒绝。
         assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
                 "k4", "实物券", "in_store_goods", "in_store_staff", "internal_price", "merchant-1",
-                null, "item_1", "loc_1", 1, null, null, null)))
+                null, "item_1", "loc_1", 1, null, null, null, null)))
                 .isInstanceOf(ApiException.class).hasMessageContaining("internal_price_cent");
         assertThat(repository.definitions).isEmpty();
         // 合法折扣券可建。
         VoucherDefinitionRecord created = service.createDefinition(new VoucherDefinitionRequest(
                 "k5", "满减券", "merchant_discount", "in_store_staff", "none", "merchant-1",
-                5000L, null, null, null, null, 30, null));
+                5000L, null, null, null, null, 30, null, null));
         assertThat(created.voucherKind()).isEqualTo("merchant_discount");
         assertThat(created.validDays()).isEqualTo(30);
+        // V313：请求未给 transferable → 券种默认可转让。
+        assertThat(created.transferable()).isTrue();
+        // 显式关闭"可转让"开关：券种落库 transferable=false（供 VoucherTransferService 前置拒绝转赠）。
+        VoucherDefinitionRecord noTransfer = service.createDefinition(new VoucherDefinitionRequest(
+                "k6", "不可转券", "merchant_discount", "in_store_staff", "none", "merchant-1",
+                5000L, null, null, null, null, null, null, false));
+        assertThat(noTransfer.transferable()).isFalse();
     }
 
     @Test
@@ -317,12 +324,12 @@ class VoucherServiceTests {
         // 边界拍板：外部伙伴券实例＝通票权益（V282），统一台账不建其定义；pass_settlement 属通票结算口径。
         assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
                 "k-ext", "第三方券", "external_partner", "external_reflow", "none", null,
-                null, null, null, null, null, null, null)))
+                null, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_KIND_NOT_SUPPORTED"));
         assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
                 "k-pass", "通票口径券", "merchant_discount", "in_store_staff", "pass_settlement", "merchant-1",
-                5000L, null, null, null, null, null, null)))
+                5000L, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class).hasMessageContaining("pass_settlement");
     }
 
@@ -330,10 +337,10 @@ class VoucherServiceTests {
     void createDefinitionSameKeyDifferentPayloadIsRejected() {
         service.createDefinition(new VoucherDefinitionRequest(
                 "dup-key", "满减券", "merchant_discount", "in_store_staff", "none", "merchant-1",
-                5000L, null, null, null, null, null, null));
+                5000L, null, null, null, null, null, null, null));
         assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
                 "dup-key", "满减券", "merchant_discount", "in_store_staff", "none", "merchant-1",
-                9900L, null, null, null, null, null, null)))
+                9900L, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
         assertThat(repository.definitions).hasSize(1);
@@ -345,7 +352,7 @@ class VoucherServiceTests {
     void issueVouchersCreatesMarketingInstancesWithExpiry() {
         VoucherDefinitionRecord definition = service.createDefinition(new VoucherDefinitionRequest(
                 "def-key", "拉新赠券", "merchant_discount", "in_store_staff", "none", "merchant-1",
-                5000L, null, null, null, null, 30, null));
+                5000L, null, null, null, null, 30, null, null));
         VoucherIssueResultRecord result = service.issueVouchers(
                 new VoucherIssueRequest("issue-key", definition.id(), "customer-1", 3));
         assertThat(result.instances()).hasSize(3);
@@ -371,7 +378,7 @@ class VoucherServiceTests {
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_DEFINITION_NOT_FOUND"));
         repository.insertDefinition(new VoucherDefinitionRecord(
                 "vdef_disabled", "停用券", "merchant_discount", "in_store_staff", "none", "merchant-1",
-                5000L, null, null, null, null, null, null, "disabled",
+                5000L, null, null, null, null, null, null, "disabled", true,
                 Instant.parse("2026-07-18T00:00:00Z"), Instant.parse("2026-07-18T00:00:00Z")));
         assertThatThrownBy(() -> service.issueVouchers(new VoucherIssueRequest("k2", "vdef_disabled", "customer-1", 1)))
                 .isInstanceOf(ApiException.class)
@@ -729,5 +736,65 @@ class VoucherServiceTests {
         PageResponse<VoucherInstanceRecord> page = service.listInstances(null, null, null, null, 1, 50);
         assertThat(page.items()).extracting(VoucherInstanceRecord::definitionId)
                 .containsExactly("vdef_scope_own");
+    }
+
+    // ── V313 核销转赠冻结 + V312 过期预占释放 ─────────────────────────────
+
+    @Test
+    void redeemBlockedWhileTransferPending() {
+        VoucherDefinitionRecord definition = discountDefinition("vdef_tf", "merchant-1");
+        VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-tf");
+        // 该券有在途转赠：核销冻结拒绝，券保持 issued，不产生核销记录。
+        when(transferRepository.existsPendingForInstance(instance.id())).thenReturn(true);
+        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-tf", instance.code(), null, null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_TRANSFERRING"));
+        assertThat(repository.instances.get(instance.id()).status()).isEqualTo("issued");
+        assertThat(repository.redemptions).isEmpty();
+    }
+
+    @Test
+    void expireReservedVouchersReleasesOnlyIssuedReservedExpiredAndVoidsTransfers() {
+        VoucherDefinitionRecord definition = goodsDefinition("vdef_exp", "merchant-1", null); // item_1/loc_1, stock_quantity=2
+        Instant now = Instant.parse("2026-07-20T00:00:00Z");
+        Instant past = now.minusSeconds(3600);
+        Instant future = now.plusSeconds(3600);
+        // ① issued + 已预占 + 已过期 → 命中：过期并释放预占。
+        repository.insertInstance(new VoucherInstanceRecord(
+                "vi_exp_hit", definition.id(), "customer-1", "VCEXPHIT", "marketing_grant", "g",
+                "issued", past, past.plusSeconds(1), null, null, null, true, past, past));
+        // ② issued + 已预占 + 未过期 → 不动。
+        repository.insertInstance(new VoucherInstanceRecord(
+                "vi_exp_future", definition.id(), "customer-1", "VCEXPFUT", "marketing_grant", "g",
+                "issued", past, future, null, null, null, true, past, past));
+        // ③ issued + 未预占（历史券）+ 已过期 → 不释放预占。
+        repository.insertInstance(new VoucherInstanceRecord(
+                "vi_exp_legacy", definition.id(), "customer-1", "VCEXPLEG", "marketing_grant", "g",
+                "issued", past, past.plusSeconds(1), null, null, null, false, past, past));
+
+        int released = service.expireReservedVouchers(now, 100);
+
+        assertThat(released).isEqualTo(1);
+        assertThat(repository.instances.get("vi_exp_hit").status()).isEqualTo("expired");
+        assertThat(repository.instances.get("vi_exp_future").status()).isEqualTo("issued");
+        assertThat(repository.instances.get("vi_exp_legacy").status()).isEqualTo("issued");
+        // 守恒：命中券释放预占（reserved->available，件数=定义 stock_quantity=2），并作废其在途转赠；未命中券零动作。
+        verify(inventoryService).releaseStockReservation("item_1", "loc_1", 2);
+        verify(transferRepository).voidPendingForInstance("vi_exp_hit", "voucher_expired", now);
+        verify(transferRepository, never()).voidPendingForInstance(eq("vi_exp_future"), anyString(), any());
+        verify(transferRepository, never()).voidPendingForInstance(eq("vi_exp_legacy"), anyString(), any());
+    }
+
+    @Test
+    void reservationExpiryJobRunOnceDelegatesToService() {
+        VoucherDefinitionRecord definition = goodsDefinition("vdef_job", "merchant-1", null);
+        Instant now = Instant.parse("2026-07-20T00:00:00Z");
+        Instant past = now.minusSeconds(3600);
+        repository.insertInstance(new VoucherInstanceRecord(
+                "vi_job_hit", definition.id(), "customer-1", "VCJOB", "marketing_grant", "g",
+                "issued", past, past.plusSeconds(1), null, null, null, true, past, past));
+        int released = new VoucherReservationExpiryJob(service, java.time.Clock.systemUTC()).runOnce(now);
+        assertThat(released).isEqualTo(1);
+        assertThat(repository.instances.get("vi_job_hit").status()).isEqualTo("expired");
     }
 }

@@ -24,7 +24,7 @@ class JdbcVoucherRepository implements VoucherRepository {
     private static final String DEFINITION_COLS =
             "id, name, voucher_kind, redeem_method, settlement_mode, merchant_id, face_value_cent, "
                     + "inventory_item_id, stock_location_id, stock_quantity, internal_price_cent, "
-                    + "valid_days, valid_until, status, created_at, updated_at";
+                    + "valid_days, valid_until, status, transferable, created_at, updated_at";
     private static final String INSTANCE_COLS =
             "id, definition_id, customer_id, code, source_type, source_ref, status, issued_at, "
                     + "expires_at, redeemed_at, revoked_at, revoke_reason, stock_reserved, created_at, updated_at";
@@ -67,12 +67,12 @@ class JdbcVoucherRepository implements VoucherRepository {
                 INSERT INTO voucher_definitions (
                     id, name, voucher_kind, redeem_method, settlement_mode, merchant_id, face_value_cent,
                     inventory_item_id, stock_location_id, stock_quantity, internal_price_cent,
-                    valid_days, valid_until, status, created_at, updated_at
+                    valid_days, valid_until, status, transferable, created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :voucher_kind, :redeem_method, :settlement_mode, :merchant_id, :face_value_cent,
                     :inventory_item_id, :stock_location_id, :stock_quantity, :internal_price_cent,
-                    :valid_days, :valid_until, :status, :created_at, :updated_at
+                    :valid_days, :valid_until, :status, :transferable, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
@@ -90,6 +90,7 @@ class JdbcVoucherRepository implements VoucherRepository {
                 .addValue("valid_days", definition.validDays(), Types.INTEGER)
                 .addValue("valid_until", timestampWithTimeZone(definition.validUntil()))
                 .addValue("status", definition.status())
+                .addValue("transferable", definition.transferable())
                 .addValue("created_at", timestampWithTimeZone(definition.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(definition.updatedAt())));
         return inserted > 0;
@@ -373,6 +374,7 @@ class JdbcVoucherRepository implements VoucherRepository {
                 rs.getObject("valid_days", Integer.class),
                 nullableInstant(rs, "valid_until"),
                 rs.getString("status"),
+                rs.getBoolean("transferable"),
                 nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "updated_at"));
     }

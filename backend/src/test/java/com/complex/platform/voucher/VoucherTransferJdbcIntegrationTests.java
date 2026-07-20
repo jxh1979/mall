@@ -40,7 +40,7 @@ class VoucherTransferJdbcIntegrationTests {
         String defId = "vdef_vt_" + suffix;
         vouchers.insertDefinition(new VoucherDefinitionRecord(
                 defId, "转赠折扣券", "merchant_discount", "in_store_staff", "none", "merchant_vt",
-                5000L, null, null, null, null, 30, null, "active", T0, T0));
+                5000L, null, null, null, null, 30, null, "active", true, T0, T0));
         String instanceId = "vi_vt_" + suffix;
         vouchers.insertInstance(new VoucherInstanceRecord(
                 instanceId, defId, "cust_from_" + suffix, "VCVT" + suffix, "marketing_grant", "vgrant_vt",

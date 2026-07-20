@@ -38,7 +38,7 @@ class VoucherJdbcIntegrationTests {
         return new VoucherDefinitionRecord(
                 id, "JDBC 实物券", "in_store_goods", "in_store_staff",
                 internalPriceCent == null ? "none" : "internal_price", merchantId,
-                null, "item_jdbc", "loc_jdbc", 1, internalPriceCent, 30, null, "active", T0, T0);
+                null, "item_jdbc", "loc_jdbc", 1, internalPriceCent, 30, null, "active", true, T0, T0);
     }
 
     private static VoucherInstanceRecord issuedInstance(String id, String definitionId, String sourceType, String sourceRef) {
@@ -189,7 +189,7 @@ class VoucherJdbcIntegrationTests {
         // 面额券（merchant_discount 带面额）+ 另一客人的券；客人端读法＝merchantScope=null + 强制本人 customer_id。
         repository.insertDefinition(new VoucherDefinitionRecord(
                 "vdef_jdbc_cw", "JDBC 折扣券", "merchant_discount", "in_store_staff", "none", "merchant_jdbc",
-                5000L, null, null, null, null, 30, null, "active", T0, T0));
+                5000L, null, null, null, null, 30, null, "active", true, T0, T0));
         repository.insertInstance(issuedInstance("vi_jdbc_cw", "vdef_jdbc_cw", "marketing_grant", "vgrant_cw"));
         repository.insertInstance(new VoucherInstanceRecord(
                 "vi_jdbc_cw_other", "vdef_jdbc_cw", "customer_other", "VCother", "marketing_grant", "vgrant_other",
