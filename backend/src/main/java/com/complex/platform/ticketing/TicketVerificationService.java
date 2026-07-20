@@ -30,8 +30,8 @@ public class TicketVerificationService {
     // entitlement_type 以 "amusement" 开头视为游乐类，分流进游乐正路）。
     private static final String AMUSEMENT_ENTITLEMENT_TYPE_PREFIX = "amusement";
 
-    // 2026-07-18 拍板：验证二维码默认 15 秒动态刷新（V300 起与 DB 默认对齐）；票种未配置 refresh_interval_seconds 时回退此值。
-    private static final int DEFAULT_REFRESH_INTERVAL_SECONDS = 15;
+    // #172(2026-07-19 拍板)：动态码刷新间隔改为全场统一配置（ticket_qr_refresh_config），发凭证时读它决定刷新窗口，
+    // 不再按票种各配（DEFAULT/票种级取值已下线）；缺行时仓库读回退 15。
 
     // 跨模块闭环②a：核销高风险动作类型（MDM 门控 actionType）。
     private static final String VERIFY_ACTION_TYPE = "ticket.verify";
@@ -163,10 +163,10 @@ public class TicketVerificationService {
         Instant now = Instant.now();
         String token = "cred_" + UUID.randomUUID().toString().replace("-", "");
         String nonce = UUID.randomUUID().toString().replace("-", "");
-        // P1 清单#19：刷新窗口接票种级 refresh_interval_seconds（{10,15,30,60}），替换硬编码；
-        // 票种未配置（为空）则回退默认 15 秒（2026-07-18 拍板）。window_started_at=now，
+        // #172(2026-07-19 拍板)：刷新窗口读全场统一配置（ticket_qr_refresh_config），不再按票种各配一套；
+        // 取值以 5 秒为单位、最长 60 秒、默认 15 秒。window_started_at=now，
         // 截图离线展示的旧 token 超过本窗口即过期被拒。
-        int refreshIntervalSeconds = resolveRefreshIntervalSeconds(entitlement);
+        int refreshIntervalSeconds = repository.findQrRefreshIntervalSeconds();
         Instant expiresAt = now.plusSeconds(refreshIntervalSeconds);
         // P0-3/X-01 二维码防伪签名：对凭证关键字段（token/权益/nonce/窗口锚点/有效期）计算 HMAC-SHA256，
         // 写入 signature_value/signature_version。signer 未注入的兼容测试路径下为 null（沿用占位 NULL 语义）。
@@ -1139,16 +1139,6 @@ public class TicketVerificationService {
                 credential.windowStartedAt(),
                 credential.expiresAt());
         return credentialSigner.matches(canonical, signature);
-    }
-
-    /**
-     * P1 清单#19：发凭证时按票种级 refresh_interval_seconds 取刷新窗口（{10,15,30,60}），票种未配置则回退默认 15 秒。
-     * 票种取自权益的 ticket_type_id。
-     */
-    private int resolveRefreshIntervalSeconds(IssuedEntitlementRecord entitlement) {
-        return repository.findTicketTypeById(entitlement.ticketTypeId())
-                .map(TicketTypeRecord::refreshIntervalSeconds)
-                .orElse(DEFAULT_REFRESH_INTERVAL_SECONDS);
     }
 
     private String verificationPayload(String credentialPayload, TicketCredentialRecord credential) {

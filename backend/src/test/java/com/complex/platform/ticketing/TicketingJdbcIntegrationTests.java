@@ -288,19 +288,24 @@ class TicketingJdbcIntegrationTests {
                 .hasMessageContaining("chk_ticket_verifications_status");
     }
 
-    // V300：验证二维码刷新窗口白名单放宽 {10,15,30,60}——CHECK 收 15、拒 20（默认 15 由 DDL DEFAULT 承载）。
+    // V320(#172)：刷新窗口白名单改「5 秒为单位、最长 60」——CHECK 收 20（原被拒）、拒 12（非 5 倍数）与 65（超 60）。
     @Test
-    void ticketCredentialRefreshIntervalCheckAcceptsFifteenRejectsTwenty() {
+    void ticketCredentialRefreshIntervalCheckAcceptsMultiplesOfFiveRejectsOthers() {
         Instant now = Instant.parse("2026-06-18T00:00:00Z");
         seedIssuedEntitlementForStatusCheck(now);
         repository.saveTicketCredential(new TicketCredentialRecord(
-                "credential_chk_15", "ent_chk", "order_chk", "cred_chk_15", "nonce_chk_15",
-                "hash_chk_15", "dynamic_qr", now, now.plusSeconds(15), "active", 0, now, now, 15, now, null, null));
-        assertThat(repository.findTicketCredentialByToken("cred_chk_15")).isPresent();
+                "credential_chk_20", "ent_chk", "order_chk", "cred_chk_20", "nonce_chk_20",
+                "hash_chk_20", "dynamic_qr", now, now.plusSeconds(20), "active", 0, now, now, 20, now, null, null));
+        assertThat(repository.findTicketCredentialByToken("cred_chk_20")).isPresent();
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
                         repository.saveTicketCredential(new TicketCredentialRecord(
-                                "credential_chk_20", "ent_chk", "order_chk", "cred_chk_20", "nonce_chk_20",
-                                "hash_chk_20", "dynamic_qr", now, now.plusSeconds(20), "active", 0, now, now, 20, now, null, null)))
+                                "credential_chk_12", "ent_chk", "order_chk", "cred_chk_12", "nonce_chk_12",
+                                "hash_chk_12", "dynamic_qr", now, now.plusSeconds(12), "active", 0, now, now, 12, now, null, null)))
+                .hasMessageContaining("chk_ticket_credentials_refresh_interval");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        repository.saveTicketCredential(new TicketCredentialRecord(
+                                "credential_chk_65", "ent_chk", "order_chk", "cred_chk_65", "nonce_chk_65",
+                                "hash_chk_65", "dynamic_qr", now, now.plusSeconds(65), "active", 0, now, now, 65, now, null, null)))
                 .hasMessageContaining("chk_ticket_credentials_refresh_interval");
     }
 

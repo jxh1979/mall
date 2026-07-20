@@ -57,6 +57,8 @@ type MerchantRow = { id: string; merchantName: string; merchantType: string | nu
 type AmusementProjectRow = { id: string; projectName: string };
 
 const MANAGE = ["ticket.product.manage"];
+// #172(2026-07-19 拍板)：全场统一动态码刷新间隔——5 秒为单位、最长 60 秒。
+const QR_REFRESH_OPTIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
 const VARIANT_TYPES = ["new_customer", "student", "group", "channel", "member"];
 const VARIANT_LABELS: Record<string, string> = {
   new_customer: "新人票",
@@ -107,7 +109,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [stock, setStock] = React.useState("");
   // AUD-004/022：有效期天数/动态码刷新/可退票/单店酒吧 建票直配。
   const [validityDays, setValidityDays] = React.useState("1");
-  const [refreshSeconds, setRefreshSeconds] = React.useState("15");
+  // #172：全场统一动态码刷新间隔（秒）——页级配置，不再按票种各配一套。
+  const [qrRefresh, setQrRefresh] = React.useState<number>(15);
   const [refundable, setRefundable] = React.useState(false);
   const [barId, setBarId] = React.useState("");
   // AUD-015：建票=草稿→绑权益→带理由发布，一个向导内完成；createKey 固定一次，失败重试幂等复用同一草稿。
@@ -214,19 +217,22 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
 
   const { loading, error: loadError, reload } = useAdminResource(
     async () => {
-      const [ticketRows, templateRows, ruleRows, merchantRows, projectRows] = await Promise.all([
+      const [ticketRows, templateRows, ruleRows, merchantRows, projectRows, qrConfig] = await Promise.all([
         api.get<unknown>(`/api/v1/ticketing/ticket-types?includeArchived=${showArchived}`),
         api.get<unknown>("/api/v1/ticketing/entitlement-templates"),
         api.get<unknown>(`/api/v1/ticketing/price-rules?includeArchived=${showArchived}`),
         // 数据源（组合式配置多选）：商户（酒吧）+ 游乐设施。读失败不阻断本页主体，降级为空列表。
         api.get<unknown>("/api/v1/platform/merchants").catch(() => ({ items: [] })),
         api.get<unknown>("/api/v1/amusement/projects").catch(() => ({ items: [] })),
+        // #172：全场统一动态码刷新间隔（读失败不阻断本页，回退默认 15）。
+        api.get<{ refreshIntervalSeconds?: number }>("/api/v1/ticketing/qr-refresh-config").catch(() => ({})),
       ]);
       setTickets(toRows<TicketTypeRow>(ticketRows));
       setTemplates(toRows<EntitlementTemplateRow>(templateRows));
       setRules(toRows<PriceRuleRow>(ruleRows));
       setMerchants(toRows<MerchantRow>(merchantRows));
       setProjects(toRows<AmusementProjectRow>(projectRows));
+      setQrRefresh(Number((qrConfig as { refreshIntervalSeconds?: number })?.refreshIntervalSeconds) || 15);
     },
     { onError: setGlobalError, fallbackMessage: "票务策略配置读取失败" },
   );
@@ -345,7 +351,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         holiday_price_cent: Math.round(prices.节假日价 * 100),
         stock_quantity: stock.trim() ? Number(stock) : null,
         validity_days: Number(validityDays) || 1,
-        refresh_interval_seconds: Number(refreshSeconds) || 15,
         refundable,
         bar_id: barId || null,
       });
@@ -553,6 +558,19 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     }
   }
 
+  // #172(2026-07-19 拍板)：保存全场统一动态码刷新间隔（出示验证类二维码全场一套设置）。
+  async function saveQrRefresh() {
+    setGlobalError(null);
+    try {
+      const saved = await api.put<{ refreshIntervalSeconds?: number }>(
+        "/api/v1/ticketing/qr-refresh-config", { refreshIntervalSeconds: qrRefresh });
+      setQrRefresh(Number(saved?.refreshIntervalSeconds) || qrRefresh);
+      setActionResult({ action: "qr_refresh_config_updated", refreshIntervalSeconds: qrRefresh });
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "动态码刷新间隔保存失败");
+    }
+  }
+
   return (
     <section data-testid="ticketing-policies-page">
       <AdminPageHeader
@@ -565,6 +583,23 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       )}
       <div className="admin-preview" data-testid="ticketing-workflow-guide">
         <strong>怎么用这一页（票务策略配置流程）：</strong>① 先在「票种 / 通票」建好票种并发布 → ② 建「权益模板」（入园 / 酒水兑换 / 游乐等可复用的权益）→ ③ 用「通票组装」把票种绑上权益，或用「组合式套票配置」一次性给一张通票配好跨酒吧 / 游乐 / 餐饮的套票权益 → ④ 最后配「派生价规则」（新人 / 学生 / 多人 / 渠道 / 会员的折扣或固定价）。切换下方标签逐步配置。
+      </div>
+      <div className="admin-preview" data-testid="ticketing-qr-refresh-config">
+        <strong>动态验证码刷新间隔（全场统一）：</strong>
+        凡「出示验证类」二维码（门票核销码 / 权益核销码 / 入场码 / 付款出示码）都按此间隔自动刷新——全场一套统一设置、以 5 秒为单位、最长 60 秒；截图 / 转发的旧码过间隔即作废。（纯「扫码打开链接」类二维码不受影响。）
+        <div style={{ marginTop: 8 }}>
+          <label>刷新间隔（秒）
+            <select data-testid="ticket-qr-refresh-config-select" aria-label="动态验证码刷新间隔（秒）"
+              value={String(qrRefresh)} onChange={(event) => setQrRefresh(Number(event.target.value))}>
+              {QR_REFRESH_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s} 秒{s === 15 ? "（默认）" : ""}</option>
+              ))}
+            </select>
+          </label>
+          <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-qr-refresh-config-save" onClick={() => void saveQrRefresh()}>
+            保存刷新间隔
+          </PermissionButton>
+        </div>
       </div>
       <Tabs
         type="card"
@@ -661,14 +696,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                     <option value="365">年票（365天）</option>
                   </select>
                 </label>
-                <label>动态码刷新（秒）
-                  <select data-testid="ticket-refresh-seconds" aria-label="动态码刷新（秒）" value={refreshSeconds} onChange={(event) => setRefreshSeconds(event.target.value)}>
-                    <option value="10">10 秒</option>
-                    <option value="15">15 秒（默认）</option>
-                    <option value="30">30 秒</option>
-                    <option value="60">60 秒</option>
-                  </select>
-                </label>
                 <label>
                   <input data-testid="ticket-refundable" type="checkbox" checked={refundable} onChange={(event) => setRefundable(event.target.checked)} aria-label="可退票" />
                   可退票（客人可申请整票退款、到期未用自动退；不勾=不可退）
@@ -717,7 +744,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           { label: "节假日价（元）", value: holiday || "未填写" },
           { label: "限量", value: stock.trim() || "不限" },
           { label: "有效期（天）", value: validityDays },
-          { label: "动态码刷新（秒）", value: refreshSeconds },
           { label: "可退票", value: refundable ? "可退" : "不可退" },
           { label: "单店酒吧", value: barId ? (merchants.find((m) => m.id === barId)?.merchantName ?? barId) : "通票" },
           { label: "权益模板", value: createTemplateId ? (templates.find((t) => t.id === createTemplateId)?.name ?? createTemplateId) : "未选择" },

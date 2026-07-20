@@ -37,7 +37,9 @@ enum TicketingWriteOperation implements AuditedOperation {
     SYNC_TERMINAL_TASKS("terminal.sync_task.accepted", "terminal.sync_task.accepted_failed", "terminal.device.bind", "terminal_sync_task"),
     // AUD-006 转赠发起/领取走 executeWrite 幂等+审计(事件名与 openapi x-audit-event 对齐;客人端权限=not_applicable)。
     INITIATE_TICKET_TRANSFER("ticket_transfer.created", "ticket_transfer.create_failed", "not_applicable", "ticket_transfer"),
-    CLAIM_TICKET_TRANSFER("ticket_transfer.claimed", "ticket_transfer.claim_failed", "not_applicable", "ticket_transfer");
+    CLAIM_TICKET_TRANSFER("ticket_transfer.claimed", "ticket_transfer.claim_failed", "not_applicable", "ticket_transfer"),
+    // #172(2026-07-19 拍板)：后台改全场统一动态码刷新间隔（走 executeWrite 幂等+审计）。
+    UPDATE_QR_REFRESH_CONFIG("ticket.qr_refresh_config.updated", "ticket.qr_refresh_config.update_failed", "ticket.product.manage", "ticket_qr_refresh_config");
 
     private final String successEvent;
     private final String failureEvent;
