@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  修法A(2026-07-19用户拍板):App 信任 .160 自签证书。
+  仅对 192.168.88.160 这一台把该自签证书加为信任锚,并保留系统锚——
+  将来换成正式 CA 证书也无需改 App。其余域名走系统默认信任,不放宽全局。
+-->
+<network-security-config>
+  <domain-config>
+    <domain includeSubdomains="false">192.168.88.160</domain>
+    <trust-anchors>
+      <certificates src="@raw/complex160"/>
+      <certificates src="system"/>
+    </trust-anchors>
+  </domain-config>
+</network-security-config>

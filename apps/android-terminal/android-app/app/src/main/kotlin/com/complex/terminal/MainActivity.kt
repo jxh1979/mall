@@ -634,8 +634,14 @@ class MainActivity : Activity() {
   }
 
   /** 错误信息转中文友好提示，区分离线/网络/接口错误。 */
-  private fun friendly(error: Throwable): String = when (error) {
+  private fun friendly(error: Throwable): String {
+    // 原始异常记入日志便于报障排查，不吞掉；用户面只给可读中文。
+    android.util.Log.w("ComplexTerminal", "operation failed", error)
+    return when (error) {
     is ApiException -> apiErrorText(error)
+    is javax.net.ssl.SSLException -> "无法安全连接到服务器，请检查网络或证书配置"
+    is java.net.SocketTimeoutException -> "连接超时，请稍后重试"
+    is java.io.IOException -> "无法连接到服务器，请检查网络后重试"
     is IllegalStateException -> error.message?.let {
       when {
         it.contains("offline") -> "网络离线，请检查连接后重试"
@@ -645,6 +651,7 @@ class MainActivity : Activity() {
       }
     } ?: "操作失败"
     else -> error.message ?: error.javaClass.simpleName
+    }
   }
 
   /** 接口错误转业务话术：解析响应体 {code, detail_code, message}；状态码+路径保留在末尾括号里供报障。 */
@@ -1583,9 +1590,20 @@ class MainActivity : Activity() {
         )
       }
     }
+    // 大屏(平板)响应式：限制内容最大宽度并居中；内容不足一屏时垂直居中，超出则正常滚动。
+    // 手机上 available 小于上限，宽度自动回退为满屏(MATCH_PARENT)，不写死单一尺寸。
+    val maxContentWidth = dp(600)
+    val available = resources.displayMetrics.widthPixels - dp(40)
+    val contentWidth = if (available > maxContentWidth) maxContentWidth else ViewGroup.LayoutParams.MATCH_PARENT
+    val centerWrapper = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      gravity = Gravity.CENTER
+      addView(container, LinearLayout.LayoutParams(contentWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
     return ScrollView(this).apply {
       setBackgroundColor(Color.WHITE)
-      addView(container)
+      isFillViewport = true
+      addView(centerWrapper, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
   }
 
