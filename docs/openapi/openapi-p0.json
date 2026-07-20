@@ -23013,6 +23013,142 @@
         }
       }
     },
+    "/api/v1/contracts/{contract_id}/scope-requests": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "requestContractScopeGrant",
+        "summary": "超范围下单经营申请(拦下后可申请,走既有审批链)",
+        "x-permission": "contract.scope_request.raise",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.scope_request_raised",
+        "x-audit-event-failure": "contract.scope_request_raise_failed",
+        "x-auth-context": "staff-token",
+        "description": "下单被合同经营范围拦下后,就某品类提交申请(须填原因),进 contract_changes(type=scope_grant) 走既有分组并行会签链;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "category",
+                  "reason",
+                  "grant_type"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "申请经营品类(既有业务类目规范值)。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "申请原因(必填,留痕)。"
+                  },
+                  "grant_type": {
+                    "type": "string",
+                    "enum": [
+                      "permanent",
+                      "temporary"
+                    ]
+                  },
+                  "valid_until": {
+                    "type": "string",
+                    "format": "date",
+                    "nullable": true,
+                    "description": "临时许可有效期至(grant_type=temporary 必填,须将来)。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/amendments": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "listContractAmendments",
+        "summary": "变更子合同追溯清单",
+        "x-permission": "contract.change.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "contract.amendments_viewed",
+        "x-audit-event-failure": "contract.amendments_view_failed",
+        "x-auth-context": "staff-token",
+        "description": "列某合同派生的变更子合同(rent_terms.parentContractId 指向它;经营位置/面积变更子合同链)。",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/contracts/changes/{change_id}/approve": {
       "post": {
         "tags": [

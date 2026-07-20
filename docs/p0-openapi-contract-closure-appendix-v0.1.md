@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 660 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 317 | 人工权限矩阵正文未覆盖 215 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1320 | 人工事件矩阵正文未覆盖 1278 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 660 | 人工任务映射正文未逐项覆盖 654 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 393 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 662 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 318 | 人工权限矩阵正文未覆盖 216 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1324 | 人工事件矩阵正文未覆盖 1282 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 662 | 人工任务映射正文未逐项覆盖 656 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 394 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -138,9 +138,10 @@
 | `compliance.reminder.view` | staff-token | - | 1 | listComplianceReminders | OpenAPI 补充，以本附录为准 |
 | `contract.approval.flow.manage` | staff-token | platform | 2 | listContractApprovalFlow, saveContractApprovalFlow | OpenAPI 补充，以本附录为准 |
 | `contract.approve.business` | staff-token | platform | 2 | approveContractStage, approveContractChange | OpenAPI 补充，以本附录为准 |
-| `contract.change.manage` | staff-token | platform | 2 | listContractChanges, raiseContractChange | OpenAPI 补充，以本附录为准 |
+| `contract.change.manage` | staff-token | platform | 3 | listContractChanges, raiseContractChange, listContractAmendments | OpenAPI 补充，以本附录为准 |
 | `contract.draft.manage` | staff-token | platform | 6 | listContracts, createContractDraft, submitContract, listContractApprovals, listSpaceRentalStatus, addContractAttachments | 已在权限矩阵正文出现 |
 | `contract.lifecycle.activate` | staff-token | platform | 1 | activateContract | OpenAPI 补充，以本附录为准 |
+| `contract.scope_request.raise` | staff-token | platform | 1 | requestContractScopeGrant | OpenAPI 补充，以本附录为准 |
 | `contract.settlement.dispute.resolve` | staff-token | platform | 1 | resolveContractDispute | OpenAPI 补充，以本附录为准 |
 | `contract.settlement.manage` | staff-token | platform | 4 | settleContract, listContractSettlements, completeContractSettlement, advanceContractSettlement | OpenAPI 补充，以本附录为准 |
 | `contract.space.color.manage` | staff-token | platform | 2 | listSpaceExpiryColorRules, saveSpaceExpiryColorRule | OpenAPI 补充，以本附录为准 |
@@ -744,6 +745,8 @@
 | `compliance.reminder.scan_failed` | failure | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | P0-待归类 | `compliance.reminder.scan` | 接口级事件，以本附录为准 |
 | `contract.activate_failed` | failure | `activateContract` | `POST` | `/api/v1/contracts/{contract_id}/activate` | P0-待归类 | `contract.lifecycle.activate` | 接口级事件，以本附录为准 |
 | `contract.activated` | success | `activateContract` | `POST` | `/api/v1/contracts/{contract_id}/activate` | P0-待归类 | `contract.lifecycle.activate` | 接口级事件，以本附录为准 |
+| `contract.amendments_view_failed` | failure | `listContractAmendments` | `GET` | `/api/v1/contracts/{contract_id}/amendments` | P0-待归类 | `contract.change.manage` | 接口级事件，以本附录为准 |
+| `contract.amendments_viewed` | success | `listContractAmendments` | `GET` | `/api/v1/contracts/{contract_id}/amendments` | P0-待归类 | `contract.change.manage` | 接口级事件，以本附录为准 |
 | `contract.approval_flow_save_failed` | failure | `saveContractApprovalFlow` | `POST` | `/api/v1/contracts/approval-flow` | P0-待归类 | `contract.approval.flow.manage` | 接口级事件，以本附录为准 |
 | `contract.approval_flow_saved` | success | `saveContractApprovalFlow` | `POST` | `/api/v1/contracts/approval-flow` | P0-待归类 | `contract.approval.flow.manage` | 接口级事件，以本附录为准 |
 | `contract.approval_flow_view_failed` | failure | `listContractApprovalFlow` | `GET` | `/api/v1/contracts/approval-flow` | P0-待归类 | `contract.approval.flow.manage` | 接口级事件，以本附录为准 |
@@ -772,6 +775,8 @@
 | `contract.period_bill_failed` | failure | `generateContractPeriodBills` | `POST` | `/api/v1/contracts/{contract_id}/period-bills` | P0-待归类 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
 | `contract.rent_bill_failed` | failure | `generateContractRentBill` | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | P0-待归类 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
 | `contract.rent_billed` | success | `generateContractRentBill` | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | P0-待归类 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
+| `contract.scope_request_raise_failed` | failure | `requestContractScopeGrant` | `POST` | `/api/v1/contracts/{contract_id}/scope-requests` | P0-待归类 | `contract.scope_request.raise` | 接口级事件，以本附录为准 |
+| `contract.scope_request_raised` | success | `requestContractScopeGrant` | `POST` | `/api/v1/contracts/{contract_id}/scope-requests` | P0-待归类 | `contract.scope_request.raise` | 接口级事件，以本附录为准 |
 | `contract.settle_failed` | failure | `settleContract` | `POST` | `/api/v1/contracts/{contract_id}/settle` | P0-待归类 | `contract.settlement.manage` | 接口级事件，以本附录为准 |
 | `contract.settled` | success | `settleContract` | `POST` | `/api/v1/contracts/{contract_id}/settle` | P0-待归类 | `contract.settlement.manage` | 接口级事件，以本附录为准 |
 | `contract.settlement_advance_failed` | failure | `advanceContractSettlement` | `POST` | `/api/v1/contracts/settlements/{settlement_id}/advance` | P0-待归类 | `contract.settlement.manage` | 接口级事件，以本附录为准 |
@@ -2175,6 +2180,7 @@
 | P0-待归类 | `getSiteEntryReport` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}` | 查看单个进场报备单 | `facility.site_entry.view_assigned` | `facility.site_entry.viewed` / `facility.site_entry.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | 查询合规到期项列表 | `compliance.expiry_item.view` | `compliance.expiry_item.list` / `compliance.expiry_item.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | 查询合规提醒列表 | `compliance.reminder.view` | `compliance.reminder.list` / `compliance.reminder.list_failed` | web | operation 级补充 |
+| P0-待归类 | `listContractAmendments` | `GET` | `/api/v1/contracts/{contract_id}/amendments` | 变更子合同追溯清单 | `contract.change.manage` | `contract.amendments_viewed` / `contract.amendments_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractApprovalFlow` | `GET` | `/api/v1/contracts/approval-flow` | 查审批链(生效链：项目覆盖优先) | `contract.approval.flow.manage` | `contract.approval_flow_viewed` / `contract.approval_flow_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractApprovals` | `GET` | `/api/v1/contracts/{contract_id}/approvals` | 合同审批留痕(按阶段) | `contract.draft.manage` | `contract.approvals_viewed` / `contract.approvals_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractChanges` | `GET` | `/api/v1/contracts/{contract_id}/changes` | 合同变更清单 | `contract.change.manage` | `contract.changes_viewed` / `contract.changes_view_failed` | web | operation 级补充 |
@@ -2239,6 +2245,7 @@
 | P0-待归类 | `recordFacilityEquipmentMaintenanceDone` | `POST` | `/api/v1/facility/equipment/{equipment_id}/maintenance-done` | 记录设备维保完成 | `facility.equipment.manage` | `facility.equipment_maintained` / `facility.equipment_maintain_failed` | web | operation 级补充 |
 | P0-待归类 | `recordMerchantBillDunning` | `POST` | `/api/v1/merchant-billing/bills/{id}/dunning-records` | 记录账单催收 | `merchant.billing.dunning.record` | `merchant.billing.dunning.record` / `merchant.billing.dunning.record_failed` | web | operation 级补充 |
 | P0-待归类 | `reportInspectionException` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/report-exception` | 外包对被指派巡检任务上报异常 | `facility.inspection.report_exception_assigned` | `facility.inspection_exception_reported` / `facility.inspection_exception_report_failed` | web | operation 级补充 |
+| P0-待归类 | `requestContractScopeGrant` | `POST` | `/api/v1/contracts/{contract_id}/scope-requests` | 超范围下单经营申请(拦下后可申请,走既有审批链) | `contract.scope_request.raise` | `contract.scope_request_raised` / `contract.scope_request_raise_failed` | web | operation 级补充 |
 | P0-待归类 | `resolveContractDispute` | `POST` | `/api/v1/contracts/settlements/{settlement_id}/resolve-dispute` | 裁决退租争议→回到待结算 | `contract.settlement.dispute.resolve` | `contract.dispute_resolved` / `contract.dispute_resolve_failed` | web | operation 级补充 |
 | P0-待归类 | `resumeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/resume` | 恢复工单 | `facility.work_order.manage` | `facility.work_order_resumed` / `facility.work_order_resume_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewEnergyReading` | `POST` | `/api/v1/energy/readings/{reading_id}/review` | 复核异常抄表读数 | `energy.reading.manage` | `energy.reading_reviewed` / `energy.reading_review_failed` | web | operation 级补充 |

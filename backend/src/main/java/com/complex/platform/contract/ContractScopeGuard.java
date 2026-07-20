@@ -126,7 +126,8 @@ public class ContractScopeGuard {
     }
 
     private static ApiException scopeViolation(String message) {
-        return ApiException.conflict("CONTRACT_SCOPE_VIOLATION", "超出合同经营范围：" + message);
+        return ApiException.conflict("CONTRACT_SCOPE_VIOLATION", "超出合同经营范围：" + message
+                + "。如需扩营，可就该品类提交超范围经营申请（须填原因）走合同审批，通过后放行。");
     }
 
     private static String label(String code) {
@@ -165,6 +166,41 @@ public class ContractScopeGuard {
         if (!(raw instanceof Collection<?> values) || values.isEmpty()) {
             return null;   // 存量合同未配置经营范围 → 不拦截（兼容口径）。
         }
-        return values.stream().map(String::valueOf).toList();
+        // 永久许可即在 allowedCategories；临时许可（scope_grant temporary）另存 rent_terms.scopeGrants，
+        // 未过期者并入生效经营范围（#30：审批通过授予该品类临时经营权）。
+        List<String> result = new ArrayList<>(values.stream().map(String::valueOf).toList());
+        for (String granted : activeTemporaryGrants(rentTerms)) {
+            if (!result.contains(granted)) {
+                result.add(granted);
+            }
+        }
+        return result;
+    }
+
+    /** rent_terms.scopeGrants 中未过期（validUntil >= 今日，或无 validUntil 视为长期）的临时经营许可品类。 */
+    private static List<String> activeTemporaryGrants(Map<String, Object> rentTerms) {
+        Object raw = rentTerms == null ? null : rentTerms.get("scopeGrants");
+        if (!(raw instanceof Collection<?> grants)) {
+            return List.of();
+        }
+        LocalDate today = LocalDate.now();
+        List<String> out = new ArrayList<>();
+        for (Object g : grants) {
+            if (!(g instanceof Map<?, ?> grant) || grant.get("category") == null) {
+                continue;
+            }
+            Object until = grant.get("validUntil");
+            if (until != null && !until.toString().isBlank()) {
+                try {
+                    if (LocalDate.parse(until.toString()).isBefore(today)) {
+                        continue;   // 已过期
+                    }
+                } catch (java.time.format.DateTimeParseException ignored) {
+                    continue;   // 非法日期视为无效
+                }
+            }
+            out.add(String.valueOf(grant.get("category")));
+        }
+        return out;
     }
 }

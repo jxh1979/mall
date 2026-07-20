@@ -14,6 +14,7 @@ import com.complex.platform.contract.dto.ContractChangeRequest;
 import com.complex.platform.contract.dto.ContractDraftRequest;
 import com.complex.platform.contract.dto.ContractRentBillRequest;
 import com.complex.platform.contract.dto.ContractResolveDisputeRequest;
+import com.complex.platform.contract.dto.ContractScopeRequestRequest;
 import com.complex.platform.contract.dto.ContractSettleRequest;
 import com.complex.platform.contract.dto.ContractSubmitRequest;
 import com.complex.platform.contract.dto.SpaceExpiryColorRuleRequest;
@@ -113,6 +114,22 @@ public class ContractController {
             @PathVariable("change_id") String changeId, @RequestBody @jakarta.validation.Valid ContractChangeApproveRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.approveChange(changeId, request));
+    }
+
+    // ---- 超范围下单经营申请（#30）：拦下后可申请，走既有合同审批链，通过则放行 ----
+    @PostMapping("/{contract_id}/scope-requests")
+    public ApiResponse<ContractChangeRecord> requestScopeGrant(
+            @PathVariable("contract_id") String contractId,
+            @RequestBody @jakarta.validation.Valid ContractScopeRequestRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestScopeGrant(contractId, request));
+    }
+
+    // ---- 变更子合同追溯（#31）：列某合同派生的变更子合同 ----
+    @GetMapping("/{contract_id}/amendments")
+    public ApiResponse<List<ContractRecord>> listAmendments(
+            @PathVariable("contract_id") String contractId) {
+        return ApiResponse.ok(service.listChildContracts(contractId));
     }
 
     // ---- 退租结算 ----
