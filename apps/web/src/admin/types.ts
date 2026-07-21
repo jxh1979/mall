@@ -27,6 +27,7 @@ export type AdminNavGroup =
   | "amusement"
   | "inventory"
   | "finance"
+  | "settlement"
   | "vendor"
   | "governance"
   | "integration"

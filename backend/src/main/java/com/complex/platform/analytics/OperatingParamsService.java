@@ -195,7 +195,9 @@ public class OperatingParamsService {
         if (bps < 0 || bps > 10000) {
             throw ApiException.badRequest("VALIDATION_FAILED", "share_bps must be in [0,10000]");
         }
-        boolean isDraft = actual.isDraft() == null || actual.isDraft();
+        // 结算配置中心批0:改动一律先落草案(is_draft=TRUE),不允许经维护端点自助直接生效;
+        // 转正须走 SettlementConfigController 复核端点(settlement.config.manage,与编辑权限分离)。
+        boolean isDraft = true;
         AnalyticsRecords.MerchantRevenueAttributionRule saved = repository.upsertRevenueAttributionRule(
                 new AnalyticsRecords.MerchantRevenueAttributionRule(
                         id, scope, "default".equals(scope) ? null : merchantId, source, mode, bps,
@@ -208,6 +210,22 @@ public class OperatingParamsService {
                         "attribution_mode", mode, "share_bps", String.valueOf(bps),
                         "refund_attribution", refund, "is_draft", String.valueOf(isDraft)));
         return saved;
+    }
+
+    /**
+     * 结算配置中心批0:把一条收入归因规则草案(is_draft=TRUE)复核转正为正式生效口径(FALSE)。
+     * 前态守卫:仅草案态可转正(仓储 WHERE is_draft=TRUE,行数0=不存在/已是正式)。
+     */
+    public void activateRevenueAttributionRuleDraft(String id, String actorId) {
+        String ruleId = requireText(id, "id");
+        int rows = repository.activateAttributionRuleDraft(ruleId, actorId, Instant.now(clock));
+        if (rows == 0) {
+            throw ApiException.badRequest("DRAFT_NOT_ACTIVATABLE", "规则不存在或非草案态,无法转正");
+        }
+        auditEventService.recordSuccess(
+                "settlement.config.draft.activated", "settlement.config.manage",
+                "merchant_revenue_attribution_rules", ruleId, null, null,
+                java.util.Map.of("config_group", "revenue_attribution"));
     }
 
     private String requireOneOf(String value, String field, String... allowed) {

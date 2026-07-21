@@ -1235,7 +1235,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     public AnalyticsRecords.MerchantRevenueAttributionRule findDefaultAttributionRule(String revenueSource) {
         return jdbcTemplate.query("SELECT " + MRAR_COLUMNS
                 + " FROM merchant_revenue_attribution_rules"
-                + " WHERE rule_scope = 'default' AND revenue_source = :source AND status = 'active'",
+                + " WHERE rule_scope = 'default' AND revenue_source = :source AND status = 'active' AND is_draft = FALSE",
                 new MapSqlParameterSource("source", revenueSource), this::mapAttributionRule)
                 .stream().findFirst().orElse(null);
     }
@@ -1278,6 +1278,18 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 + " FROM merchant_revenue_attribution_rules WHERE id = :id",
                 new MapSqlParameterSource("id", rule.id()), this::mapAttributionRule)
                 .stream().findFirst().orElse(null);
+    }
+
+    @Override
+    public int activateAttributionRuleDraft(String id, String updatedBy, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE merchant_revenue_attribution_rules
+                   SET is_draft = FALSE, updated_by = :updated_by, updated_at = :now
+                 WHERE id = :id AND is_draft = TRUE
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("updated_by", updatedBy)
+                .addValue("now", timestampWithTimeZone(now)));
     }
 
     @Override

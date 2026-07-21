@@ -201,6 +201,12 @@ public interface AnalyticsRepository {
     AnalyticsRecords.MerchantRevenueAttributionRule upsertRevenueAttributionRule(
             AnalyticsRecords.MerchantRevenueAttributionRule rule, String updatedBy, java.time.Instant now);
 
+    /** 结算配置中心批0:把归因规则草案(is_draft=TRUE)复核转正为正式(FALSE)。返回更新行数(0=非草案/不存在)。
+     *  默认无操作(供无需此能力的内存测试替身);真实实现见 JdbcAnalyticsRepository。 */
+    default int activateAttributionRuleDraft(String id, String updatedBy, java.time.Instant now) {
+        return 0;
+    }
+
     /** V220 招商漏斗:线索总数/已达意向/已签约(按 created_at 落经营日窗口)。 */
     AnalyticsRecords.LeasingFunnel leasingFunnel(java.time.LocalDate businessDate, String windowDomain);
 
