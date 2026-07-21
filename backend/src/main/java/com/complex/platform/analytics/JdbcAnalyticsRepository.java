@@ -1285,7 +1285,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return jdbcTemplate.update("""
                 UPDATE merchant_revenue_attribution_rules
                    SET is_draft = FALSE, updated_by = :updated_by, updated_at = :now
-                 WHERE id = :id AND is_draft = TRUE
+                 WHERE id = :id AND is_draft = TRUE AND status = 'active'
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_by", updatedBy)
