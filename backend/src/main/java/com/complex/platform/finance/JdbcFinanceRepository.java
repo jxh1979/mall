@@ -1010,13 +1010,32 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
-        // AUD-011：回流营业额需按「商户」聚合，但 integration_order_syncs 尚未落商户关联列，
-        // 原 provider_code = :merchant_id 仅为占位约定键（provider_code 实为第三方渠道码 != merchantId），
-        // 几乎恒取 0 或误命中他人数据。在关联口径补齐前，此取数不可作为计费依据——显式拦截，
-        // 避免按占位键静默算 0 后被当作真实「无提成」计入结算（提成/月租均是钱路）。补齐商户列后恢复真实聚合。
-        throw ApiException.badRequest("REFLOW_TURNOVER_UNAVAILABLE",
-                "reflow turnover is not yet keyed to merchant (integration_order_syncs lacks merchant column); "
-                        + "turnover rent cannot be settled until the provider_code->merchant mapping is wired");
+        // V334 起 integration_order_syncs.merchant_id 已落（源A渠道门店映射 / 源B对账文件直落）。
+        // 抽成基数口径（2026-07-21 用户拍板）：
+        //   ① 含税毛额 —— amount_cent 按第三方回传原样落库（无税额拆分、无优惠/赠送 per-order 明细，
+        //      诚实边界：现回传口径即为该渠道结算金额；无折扣明细可再扣，不臆造）；
+        //   ② 扣退款 —— 实收 = SUM(order.amount_cent) − SUM(refund.amount_cent)，同商户同窗口相抵；
+        //      退款超出订单时钳到 0（负营业额无业务意义，不作为抽成基数）；
+        //   仅计已归属该商户（merchant_id = :merchant_id）且 status='synced' 的 [from, to) 经营日窗口行；
+        //   merchant_id IS NULL（未归属）行不计入任何商户——只进平台级租售比，绝不静默塞给某商户。
+        Long netTurnover = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(
+                         CASE sync_type
+                             WHEN 'order'  THEN amount_cent
+                             WHEN 'refund' THEN -amount_cent
+                             ELSE 0
+                         END), 0)
+                  FROM integration_order_syncs
+                 WHERE merchant_id = :merchant_id
+                   AND status = 'synced'
+                   AND sync_type IN ('order', 'refund')
+                   AND created_at >= :from_inclusive
+                   AND created_at < :to_exclusive
+                """, new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId)
+                .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
+                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
+        return netTurnover == null ? 0L : Math.max(0L, netTurnover);
     }
 
     @Override

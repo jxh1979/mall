@@ -24,6 +24,8 @@ public class IntegrationController {
     private static final String TEST_PERMISSION = "integration.provider_adapter.test";
     private static final String ORDER_SYNC_VIEW_PERMISSION = "integration.order_sync.view";
     private static final String ORDER_SYNC_MANAGE_PERMISSION = "integration.order_sync.manage";
+    private static final String CHANNEL_STORE_MAP_VIEW_PERMISSION = "integration.channel_store_map.view";
+    private static final String CHANNEL_STORE_MAP_MANAGE_PERMISSION = "integration.channel_store_map.manage";
     private static final String RETRY_VIEW_PERMISSION = "integration.retry.view";
     private static final String RETRY_MANAGE_PERMISSION = "integration.retry.manage";
     private static final String POLLING_MANAGE_PERMISSION = "integration.retry.manage";
@@ -91,6 +93,35 @@ public class IntegrationController {
         authorizationService.requirePermission(ORDER_SYNC_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createOrderSync(request));
+    }
+
+    @GetMapping("/order-syncs/unattributed")
+    public ApiResponse<PageResponse<IntegrationOrderSyncRecord>> listUnattributedOrderSyncs() {
+        authorizationService.requirePermission(ORDER_SYNC_VIEW_PERMISSION);
+        return ApiResponse.ok(service.listUnattributedOrderSyncs());
+    }
+
+    @GetMapping("/channel-store-maps")
+    public ApiResponse<PageResponse<IntegrationChannelStoreMapRecord>> listChannelStoreMaps() {
+        authorizationService.requirePermission(CHANNEL_STORE_MAP_VIEW_PERMISSION);
+        return ApiResponse.ok(service.listChannelStoreMaps());
+    }
+
+    @PostMapping("/channel-store-maps")
+    public ApiResponse<IntegrationChannelStoreMapRecord> saveChannelStoreMap(@RequestBody @jakarta.validation.Valid IntegrationChannelStoreMapRequest request) {
+        authorizationService.requirePermission(CHANNEL_STORE_MAP_MANAGE_PERMISSION);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.saveChannelStoreMap(request));
+    }
+
+    @PostMapping("/channel-store-maps/{id}/archive")
+    public ApiResponse<IntegrationChannelStoreMapRecord> archiveChannelStoreMap(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission(CHANNEL_STORE_MAP_MANAGE_PERMISSION);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archiveChannelStoreMap(id, request));
     }
 
     @GetMapping("/provider-adapters")

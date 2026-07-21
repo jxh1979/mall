@@ -356,6 +356,22 @@ public class IntegrationService {
         return orderSyncService.createOrderSync(request);
     }
 
+    public PageResponse<IntegrationOrderSyncRecord> listUnattributedOrderSyncs() {
+        return orderSyncService.listUnattributedOrderSyncs();
+    }
+
+    public PageResponse<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
+        return orderSyncService.listChannelStoreMaps();
+    }
+
+    public IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRequest request) {
+        return orderSyncService.saveChannelStoreMap(request);
+    }
+
+    public IntegrationChannelStoreMapRecord archiveChannelStoreMap(String id, StatusChangeRequest request) {
+        return orderSyncService.archiveChannelStoreMap(id, request);
+    }
+
     /** 自动对账（P0#11）：从 order_syncs 标准模型自动比对生成对账差异（开关 off → dryRun，不伪造）。 */
     public ChannelReconciliationResult reconcileChannel(ChannelReconciliationRequest request) {
         return orderSyncService.reconcileChannel(request);

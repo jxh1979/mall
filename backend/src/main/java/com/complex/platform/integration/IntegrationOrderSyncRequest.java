@@ -16,6 +16,8 @@ public record IntegrationOrderSyncRequest(
         String currency,
         String channel,
         String externalChannelOrderId,
+        // 源B（对账文件回流）行本带商户 → 直落。为空则走源A：按渠道门店号查映射表反查（未命中留 NULL）。
+        String merchantId,
         Map<String, Object> providerPayload
 ) {
 }

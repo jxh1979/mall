@@ -44,6 +44,107 @@ final class IntegrationOrderSyncService {
         );
     }
 
+    // 未归属回流运营视图：列 merchant_id IS NULL 的 order 行，供人工补渠道门店映射后重跑落商户。
+    PageResponse<IntegrationOrderSyncRecord> listUnattributedOrderSyncs() {
+        return support.readPage("integration.order_sync.unattributed_viewed", "integration.order_sync.unattributed_view_failed",
+                "integration.order_sync.view", "integration_order_sync", repository::listUnattributedOrderSyncs);
+    }
+
+    PageResponse<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
+        return support.readPage("integration.channel_store_map.viewed", "integration.channel_store_map.view_failed",
+                "integration.channel_store_map.view", "integration_channel_store_map", repository::listChannelStoreMaps);
+    }
+
+    IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRequest request) {
+        return support.executeWrite(
+                "saveIntegrationChannelStoreMap",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                IntegrationChannelStoreMapRecord.class,
+                "integration.channel_store_map.saved",
+                "integration.channel_store_map.save_failed",
+                "integration.channel_store_map.manage",
+                "integration_channel_store_map",
+                () -> saveChannelStoreMapOnce(request)
+        );
+    }
+
+    IntegrationChannelStoreMapRecord archiveChannelStoreMap(String id, StatusChangeRequest request) {
+        String mapId = requireTextValue(id, "id");
+        return support.executeWrite(
+                "archiveIntegrationChannelStoreMap:" + mapId,
+                request == null ? null : request.idempotencyKey(),
+                new ChannelStoreMapArchiveFingerprint(mapId, request),
+                IntegrationChannelStoreMapRecord.class,
+                "integration.channel_store_map.archived",
+                "integration.channel_store_map.archive_failed",
+                "integration.channel_store_map.manage",
+                "integration_channel_store_map",
+                () -> archiveChannelStoreMapOnce(mapId, request)
+        );
+    }
+
+    // 落商户解析器（P1a·钱路①②上游钥匙）：
+    //   源B（对账文件回流）行本带商户 → request.merchantId 直落（对账文件行天然带商户身份）。
+    //   源A（渠道 API 回流）→ 按 (provider_code, channel, payload.external_store_id) 查映射表反查活跃绑定；
+    //   未命中 / 无门店号 → 留 NULL（未归属，不阻断入库，进「未归属回流」视图待人工补映射）。绝不静默塞给某商户。
+    private String resolveMerchantId(IntegrationOrderSyncRequest request, Map<String, Object> payload, String channel) {
+        if (request.merchantId() != null && !request.merchantId().isBlank()) {
+            return request.merchantId();
+        }
+        Object storeId = payload.get("external_store_id");
+        if (storeId == null) {
+            storeId = payload.get("store_id");
+        }
+        if (storeId == null || storeId.toString().isBlank()) {
+            return null;
+        }
+        return repository.findActiveChannelStoreMapMerchant(request.providerCode(), channel, storeId.toString())
+                .orElse(null);
+    }
+
+    private IntegrationChannelStoreMapRecord saveChannelStoreMapOnce(IntegrationChannelStoreMapRequest request) {
+        validateChannelStoreMapRequest(request);
+        Instant now = clock.instant();
+        String channel = channel(request.channel());
+        // 自然键 upsert：重录同一门店号复用既有 id（改绑商户 / 复活），返回值与 DB 一致。
+        String id = repository.findChannelStoreMapByNaturalKey(request.providerCode(), channel, request.externalStoreId())
+                .map(IntegrationChannelStoreMapRecord::id)
+                .orElse("channel_store_map_" + UUID.randomUUID());
+        IntegrationChannelStoreMapRecord record = new IntegrationChannelStoreMapRecord(
+                id,
+                request.providerCode(),
+                channel,
+                request.externalStoreId(),
+                request.merchantId(),
+                "active",
+                now,
+                now
+        );
+        return repository.saveChannelStoreMap(record);
+    }
+
+    private IntegrationChannelStoreMapRecord archiveChannelStoreMapOnce(String id, StatusChangeRequest request) {
+        validateStatusChange(request);
+        IntegrationChannelStoreMapRecord existing = repository.findChannelStoreMapById(id)
+                .orElseThrow(() -> ApiException.notFound(
+                        "INTEGRATION_CHANNEL_STORE_MAP_NOT_FOUND", "channel store map not found"));
+        IntegrationChannelStoreMapRecord updated = new IntegrationChannelStoreMapRecord(
+                existing.id(),
+                existing.providerCode(),
+                existing.channel(),
+                existing.externalStoreId(),
+                existing.merchantId(),
+                "inactive",
+                existing.createdAt(),
+                clock.instant()
+        );
+        return repository.saveChannelStoreMap(updated);
+    }
+
+    private record ChannelStoreMapArchiveFingerprint(String id, StatusChangeRequest request) {
+    }
+
     PageResponse<IntegrationTaskRecord> listRetryTasks() {
         return support.readPage("integration.retry_task.viewed", "integration.retry_task.view_failed",
                 "integration.retry.view", "integration_retry_task", repository::listRetryTasks);
@@ -321,6 +422,7 @@ final class IntegrationOrderSyncService {
                 currency(request.currency()),
                 channel,
                 request.externalChannelOrderId(),
+                resolveMerchantId(request, providerPayload, channel),
                 Map.copyOf(providerPayload),
                 now,
                 now

@@ -114,7 +114,21 @@ final class JdbcIntegrationRowMapper {
                 resultSet.getString("currency"),
                 resultSet.getString("channel"),
                 resultSet.getString("external_channel_order_id"),
+                resultSet.getString("merchant_id"),
                 readMap(resultSet.getString("provider_payload_json")),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
+    }
+
+    IntegrationChannelStoreMapRecord mapChannelStoreMap(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new IntegrationChannelStoreMapRecord(
+                resultSet.getString("id"),
+                resultSet.getString("provider_code"),
+                resultSet.getString("channel"),
+                resultSet.getString("external_store_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("status"),
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at")
         );

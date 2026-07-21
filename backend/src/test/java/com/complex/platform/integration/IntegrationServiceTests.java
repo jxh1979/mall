@@ -526,6 +526,7 @@ class IntegrationServiceTests {
                 "CNY",
                 "meituan",
                 "mt-channel-order-1",
+                null,
                 Map.of("provider_private_status", "PAID", "tableNo", "A1")
         ));
         IntegrationTaskRecord retry = service.createRetryTask(new IntegrationTaskRequest(
@@ -709,6 +710,45 @@ class IntegrationServiceTests {
         assertThat(repository.reconciliationDifferences).isEmpty();
     }
 
+    @Test
+    void orderSyncResolvesMerchantViaStoreMapDirectAndLeavesNullWhenUnmapped() {
+        // 源B：对账文件回流行本带商户 → 直落。
+        IntegrationOrderSyncRecord direct = service.createOrderSync(new IntegrationOrderSyncRequest(
+                "k-src-b", "对账文件回流", List.of(), "mock-provider", "catering", "order",
+                "ext-b-1", "synced", 50000L, "CNY", "meituan", "ch-b-1",
+                "merchant_direct", Map.of()));
+        assertThat(direct.merchantId()).isEqualTo("merchant_direct");
+
+        // 源A：登记渠道门店映射，回流带门店号 → 反查命中写商户。
+        service.saveChannelStoreMap(new IntegrationChannelStoreMapRequest(
+                "k-map-1", "mock-provider", "douyin", "store-777", "merchant_mapped"));
+        IntegrationOrderSyncRecord mapped = service.createOrderSync(new IntegrationOrderSyncRequest(
+                "k-src-a", "渠道回流", List.of(), "mock-provider", "catering", "order",
+                "ext-a-1", "synced", 60000L, "CNY", "douyin", "ch-a-1",
+                null, Map.of("external_store_id", "store-777")));
+        assertThat(mapped.merchantId()).isEqualTo("merchant_mapped");
+
+        // 未命中门店号 → 留 NULL，进未归属视图，不静默塞给某商户。
+        IntegrationOrderSyncRecord unmapped = service.createOrderSync(new IntegrationOrderSyncRequest(
+                "k-src-a2", "渠道回流", List.of(), "mock-provider", "catering", "order",
+                "ext-a-2", "synced", 70000L, "CNY", "douyin", "ch-a-2",
+                null, Map.of("external_store_id", "store-unknown")));
+        assertThat(unmapped.merchantId()).isNull();
+        assertThat(service.listUnattributedOrderSyncs().items())
+                .extracting(IntegrationOrderSyncRecord::externalBusinessId).contains("ext-a-2");
+
+        // 软删映射后同门店号回流不再命中（inactive 绑定不参与反查）。
+        IntegrationChannelStoreMapRecord map = service.listChannelStoreMaps().items().stream()
+                .filter(m -> "store-777".equals(m.externalStoreId())).findFirst().orElseThrow();
+        service.archiveChannelStoreMap(map.id(),
+                new StatusChangeRequest("k-arch-1", "archive", "门店解绑", List.of()));
+        IntegrationOrderSyncRecord afterArchive = service.createOrderSync(new IntegrationOrderSyncRequest(
+                "k-src-a3", "渠道回流", List.of(), "mock-provider", "catering", "order",
+                "ext-a-3", "synced", 80000L, "CNY", "douyin", "ch-a-3",
+                null, Map.of("external_store_id", "store-777")));
+        assertThat(afterArchive.merchantId()).isNull();
+    }
+
     private IntegrationOrderSyncRequest orderSyncRequest(
             String idempotencyKey,
             String externalBusinessId,
@@ -730,6 +770,7 @@ class IntegrationServiceTests {
                 "CNY",
                 channel,
                 externalChannelOrderId,
+                null,
                 Map.of());
     }
 
@@ -1007,6 +1048,7 @@ class IntegrationServiceTests {
         private final List<AdapterTestRecord> adapterTests = new ArrayList<>();
         private final List<IntegrationLedgerRecord> ledgers = new ArrayList<>();
         private final Map<String, IntegrationOrderSyncRecord> orderSyncs = new LinkedHashMap<>();
+        private final Map<String, IntegrationChannelStoreMapRecord> channelStoreMaps = new LinkedHashMap<>();
         private final Map<String, IntegrationTaskRecord> retryTasks = new LinkedHashMap<>();
         private final Map<String, IntegrationTaskRecord> compensationTasks = new LinkedHashMap<>();
         private final Map<String, ReconciliationBatchRecord> reconciliationBatches = new LinkedHashMap<>();
@@ -1108,6 +1150,52 @@ class IntegrationServiceTests {
                     .filter(record -> record.syncType().equals(syncType))
                     .filter(record -> record.externalBusinessId().equals(externalBusinessId))
                     .findFirst();
+        }
+
+        @Override
+        public IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRecord record) {
+            channelStoreMaps.put(record.id(), record);
+            return record;
+        }
+
+        @Override
+        public List<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
+            return new ArrayList<>(channelStoreMaps.values());
+        }
+
+        @Override
+        public Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapById(String id) {
+            return Optional.ofNullable(channelStoreMaps.get(id));
+        }
+
+        @Override
+        public Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapByNaturalKey(
+                String providerCode, String channel, String externalStoreId) {
+            return channelStoreMaps.values().stream()
+                    .filter(record -> record.providerCode().equals(providerCode))
+                    .filter(record -> record.channel().equals(channel))
+                    .filter(record -> record.externalStoreId().equals(externalStoreId))
+                    .findFirst();
+        }
+
+        @Override
+        public Optional<String> findActiveChannelStoreMapMerchant(
+                String providerCode, String channel, String externalStoreId) {
+            return channelStoreMaps.values().stream()
+                    .filter(record -> record.providerCode().equals(providerCode))
+                    .filter(record -> record.channel().equals(channel))
+                    .filter(record -> record.externalStoreId().equals(externalStoreId))
+                    .filter(record -> "active".equals(record.status()))
+                    .map(IntegrationChannelStoreMapRecord::merchantId)
+                    .findFirst();
+        }
+
+        @Override
+        public List<IntegrationOrderSyncRecord> listUnattributedOrderSyncs() {
+            return orderSyncs.values().stream()
+                    .filter(record -> record.merchantId() == null)
+                    .filter(record -> "order".equals(record.syncType()))
+                    .toList();
         }
 
         @Override

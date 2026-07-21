@@ -502,6 +502,7 @@ class IntegrationControllerTests {
                 "CNY",
                 "meituan",
                 "mt-channel-1",
+                null,
                 Map.of("provider_private_status", "PAID"),
                 now,
                 now

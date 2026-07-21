@@ -38,6 +38,20 @@ public interface IntegrationRepository {
             String externalBusinessId
     );
 
+    IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRecord record);
+
+    List<IntegrationChannelStoreMapRecord> listChannelStoreMaps();
+
+    Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapById(String id);
+
+    Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapByNaturalKey(
+            String providerCode, String channel, String externalStoreId);
+
+    Optional<String> findActiveChannelStoreMapMerchant(
+            String providerCode, String channel, String externalStoreId);
+
+    List<IntegrationOrderSyncRecord> listUnattributedOrderSyncs();
+
     IntegrationTaskRecord saveRetryTask(IntegrationTaskRecord record);
 
     Optional<IntegrationTaskRecord> findRetryTaskById(String id);

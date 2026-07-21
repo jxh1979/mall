@@ -113,6 +113,17 @@ final class IntegrationValidation {
         return resolved;
     }
 
+    static void validateChannelStoreMapRequest(IntegrationChannelStoreMapRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        requireText(request.idempotencyKey(), "idempotency_key");
+        requireText(request.providerCode(), "provider_code");
+        channel(request.channel());
+        requireText(request.externalStoreId(), "external_store_id");
+        requireText(request.merchantId(), "merchant_id");
+    }
+
     static void validateTaskRequest(IntegrationTaskRequest request) {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
