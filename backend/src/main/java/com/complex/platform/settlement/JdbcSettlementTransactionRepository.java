@@ -72,25 +72,60 @@ public class JdbcSettlementTransactionRepository {
     }
 
     /**
-     * AUD-013：读原核销结算行（ST-VS-&lt;verificationId&gt;）用于冲正取反。缺失（原结算事实丢失）返回 null →
-     * 冲正 no-op（无正向可冲，净额已正确）。
+     * AUD-013：读原核销结算「可冲正的单笔核销金额」用于冲正取反。两条路径：
+     * <ol>
+     *   <li><b>新模型</b>：verification-keyed 增量行 ST-VS-&lt;verificationId&gt; → 直接取其 verified 金额；</li>
+     *   <li><b>遗留兜底(Critical 复核)</b>：找不到新行时，落到该权益的遗留累计行(verification_id IS NULL)——
+     *       历史核销此前只写「每权益一行」累计值、无 per-verification 行，若不兜底则历史核销冲正 no-op、遗留正向永不冲销
+     *       (AUD-013 对历史失效、多付商户)。兜底按本次核销在该权益成功核销中的时序 k 反推<b>单笔增量</b>
+     *       f(k)−f(k−1)(用遗留行 allocated/total，对专属定价 allocated=price×total 亦精确=price)，仅红冲这一笔、不动遗留累计行。</li>
+     * </ol>
+     * 两路都找不到（原结算事实确实缺失）返回 null → 冲正 no-op（无正向可冲，净额已正确）。
      */
     public SettledFactRow findVerificationSettledByVerificationId(String verificationId) {
-        return jdbcTemplate.query("""
+        SettledFactRow modern = jdbcTemplate.query("""
                 SELECT entitlement_id, order_id, ticket_type_id, entitlement_type, num_people, total_times,
                        verified_amount_cent, beneficiary_type, merchant_id, project_id, exclusive_merchant_id,
                        entitlement_valid_to, COALESCE(business_at, created_at) AS business_at
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
                    AND transaction_no = :tno
-                """, new MapSqlParameterSource().addValue("tno", "ST-VS-" + verificationId),
-                rs -> rs.next() ? new SettledFactRow(
-                        rs.getString("entitlement_id"), rs.getString("order_id"), rs.getString("ticket_type_id"),
-                        rs.getString("entitlement_type"), rs.getInt("num_people"), rs.getInt("total_times"),
-                        rs.getLong("verified_amount_cent"), rs.getString("beneficiary_type"),
-                        rs.getString("merchant_id"), rs.getString("project_id"), rs.getString("exclusive_merchant_id"),
-                        rs.getTimestamp("entitlement_valid_to").toInstant(),
-                        rs.getTimestamp("business_at").toInstant()) : null);
+                """, new MapSqlParameterSource().addValue("tno", "ST-VS-" + verificationId), this::mapSettledFactRow);
+        if (modern != null) {
+            return modern;
+        }
+        // 遗留兜底：反推本次核销的单笔增量金额，红冲对遗留累计行。
+        return jdbcTemplate.query("""
+                SELECT leg.entitlement_id, leg.order_id, leg.ticket_type_id, leg.entitlement_type,
+                       v.verified_people AS num_people, leg.total_times,
+                       (round(leg.allocated_revenue_cent::numeric * k.k       / NULLIF(leg.total_times, 0))
+                      - round(leg.allocated_revenue_cent::numeric * (k.k - 1) / NULLIF(leg.total_times, 0)))::bigint
+                            AS verified_amount_cent,
+                       leg.beneficiary_type, leg.merchant_id, leg.project_id, leg.exclusive_merchant_id,
+                       leg.entitlement_valid_to, COALESCE(leg.business_at, leg.created_at) AS business_at
+                  FROM ticket_verifications v
+                  JOIN settlement_transactions leg
+                    ON leg.entitlement_id = v.entitlement_id
+                   AND leg.transaction_type = 'verification_settled'
+                   AND leg.verification_id IS NULL
+                  CROSS JOIN LATERAL (
+                      SELECT COUNT(*) AS k FROM ticket_verifications f
+                       WHERE f.entitlement_id = v.entitlement_id
+                         AND f.reverses_verification_id IS NULL
+                         AND (f.created_at, f.id) <= (v.created_at, v.id)
+                  ) k
+                 WHERE v.id = :verId
+                """, new MapSqlParameterSource().addValue("verId", verificationId), this::mapSettledFactRow);
+    }
+
+    private SettledFactRow mapSettledFactRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return rs.next() ? new SettledFactRow(
+                rs.getString("entitlement_id"), rs.getString("order_id"), rs.getString("ticket_type_id"),
+                rs.getString("entitlement_type"), rs.getInt("num_people"), rs.getInt("total_times"),
+                rs.getLong("verified_amount_cent"), rs.getString("beneficiary_type"),
+                rs.getString("merchant_id"), rs.getString("project_id"), rs.getString("exclusive_merchant_id"),
+                rs.getTimestamp("entitlement_valid_to").toInstant(),
+                rs.getTimestamp("business_at").toInstant()) : null;
     }
 
     /** AUD-013 冲正取反读投影：原核销结算行的金额与归属维度。 */
@@ -180,6 +215,10 @@ public class JdbcSettlementTransactionRepository {
                    AND e.total_times > e.used_times
                    AND e.allocated_revenue_cent IS NOT NULL
                    AND e.status = 'active'
+                   -- 已知边界(低危,复核提示)：V285 之前遗留权益 parent_ticket_id 可能为 NULL，此时下句 NOT EXISTS 恒真、
+                   --   父实例次级守卫失效；但「退款申请中(refund_pending)」是靠父实例冻结实现的，无父实例的遗留权益不会进入
+                   --   该窄窗；已成功退款仍由上句 e.status='active'(退款→refunded)主挡。故仅「遗留 NULL 父 + refund_pending」
+                   --   这一不会发生的组合未被次级守卫覆盖，无实际敞口。
                    AND NOT EXISTS (
                        SELECT 1 FROM ticket_instances ti
                         WHERE ti.id = e.parent_ticket_id
@@ -201,6 +240,12 @@ public class JdbcSettlementTransactionRepository {
      * 仅对<b>无冲正历史</b>的权益（used_times 单调等于成功核销数，k=时序序号可信）逐笔重建，
      * 每次核销一行 ST-VS-&lt;verificationId&gt;（与在线消费者同 key 同金额公式，幂等 ON CONFLICT DO NOTHING）。
      * 有冲正的权益跳过（净额已由在线正/负事实承载；交由对账观察，避免重建期序号错配）。
+     *
+     * <p><b>Critical(复核 AUD-017)：排除遗留 entitlement-keyed 累计行覆盖的权益。</b>
+     * 旧消费者按「每权益一行」写累计行(transaction_no=ST-VS-&lt;entitlementId&gt;、verification_id 为 NULL、值=f(used))。
+     * 若不排除，重建会给这些历史核销再建 per-verification 增量行 → 与遗留累计行叠加 → 账单聚合对历史核销≈翻倍多付。
+     * 故仅重建<b>无任何遗留累计行</b>(NOT EXISTS verification_id IS NULL 的 verification_settled 行)的权益；
+     * 遗留行承载的历史交由其自身，不重建、不双计。判别用 verification_id IS NULL(新行必带 verification_id)，无需 cutover 时间。
      */
     public java.util.List<MissingSettledFact> findMissingVerificationSettlementFacts(int limit) {
         return jdbcTemplate.query("""
@@ -214,6 +259,10 @@ public class JdbcSettlementTransactionRepository {
                  WHERE v.status = 'success'
                    AND NOT EXISTS (SELECT 1 FROM settlement_transactions s WHERE s.transaction_no = 'ST-VS-' || v.id)
                    AND NOT EXISTS (SELECT 1 FROM ticket_verifications r WHERE r.entitlement_id = v.entitlement_id AND r.status = 'reversed')
+                   AND NOT EXISTS (SELECT 1 FROM settlement_transactions leg
+                                    WHERE leg.entitlement_id = v.entitlement_id
+                                      AND leg.transaction_type = 'verification_settled'
+                                      AND leg.verification_id IS NULL)
                  ORDER BY v.entitlement_id, k
                  LIMIT :limit
                 """, new MapSqlParameterSource().addValue("limit", limit), (rs, i) -> new MissingSettledFact(

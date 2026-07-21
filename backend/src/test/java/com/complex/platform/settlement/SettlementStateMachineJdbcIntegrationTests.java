@@ -192,7 +192,67 @@ class SettlementStateMachineJdbcIntegrationTests {
         assertThat(sum).isEqualTo(500L); // f(1)-f(0) = round(1000×1/2) = 500
     }
 
+    // ─── Critical(复核):重建/冲正与遗留 entitlement-keyed 累计行共存,不双计、历史冲正生效 ─────
+
+    @Test
+    void rebuildDoesNotDoubleCountEntitlementWithLegacyCumulativeRow() {
+        Instant past = Instant.parse("2011-09-01T00:00:00Z");
+        // 遗留权益:已有「每权益一行」累计行 f(used)=1000(verification_id NULL),且有 success 核销但无 per-verification 行。
+        seedExpiredEntitlement("lg", 2, 1, 1000L, past, "active", "active");
+        seedLegacyCumulativeFact("ent_lg", "mch_sm", past, 1000L, 2, 1000L);
+        seedSuccessVerification("vlg", "ent_lg", past);
+
+        int rebuilt = reconciliationJob.rebuildMissingSettlements(100);
+
+        // 该权益被遗留行覆盖 → 重建跳过,不建 ST-VS-<verId>,聚合不翻倍(仍=1000)。
+        Integer newRow = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM settlement_transactions WHERE transaction_no = ?", Integer.class, "ST-VS-vlg");
+        Long sum = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(verified_amount_cent),0) FROM settlement_transactions WHERE entitlement_id = ?",
+                Long.class, "ent_lg");
+        assertThat(newRow).isZero();
+        assertThat(sum).isEqualTo(1000L); // 不翻倍
+    }
+
+    @Test
+    void legacyVerificationReversalRedReversesAgainstLegacyRowNettingToZero() {
+        Instant past = Instant.parse("2011-10-01T00:00:00Z");
+        // 单次遗留权益:累计行 f(1)=1000,一次 success 核销 V,无 per-verification 行。
+        seedExpiredEntitlement("lr", 1, 1, 1000L, past, "active", "active");
+        seedLegacyCumulativeFact("ent_lr", "mch_sm", past, 1000L, 1, 1000L);
+        seedSuccessVerification("vlr", "ent_lr", past);
+
+        reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
+                "vlr", "revlr", "ent_lr", "order_ent_lr", "mch_sm", 1));
+
+        // 遗留兜底:红冲单笔增量 f(1)-f(0)=1000 → ST-VR 行 -1000,该权益净额 0(遗留正向已被冲销)。
+        Long vr = jdbcTemplate.queryForObject(
+                "SELECT verified_amount_cent FROM settlement_transactions WHERE transaction_no = ?",
+                Long.class, "ST-VR-revlr");
+        Long net = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(verified_amount_cent),0) FROM settlement_transactions WHERE entitlement_id = ?",
+                Long.class, "ent_lr");
+        assertThat(vr).isEqualTo(-1000L);
+        assertThat(net).isZero();
+    }
+
     // ─── seed helpers ────────────────────────────────────────────────────────
+
+    /** 直插一条<b>遗留</b>「每权益一行」累计核销结算行(verification_id NULL,transaction_no=ST-VS-&lt;entId&gt;,值=f(used))。 */
+    private void seedLegacyCumulativeFact(String entId, String merchantId, Instant businessAt,
+                                          long allocated, int total, long verifiedCumulative) {
+        java.sql.Timestamp ts = java.sql.Timestamp.from(businessAt);
+        jdbcTemplate.update("""
+                INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
+                    verification_id, entitlement_type, verified_count, total_times, num_people,
+                    allocated_revenue_cent, verified_amount_cent, unverified_amount_cent, beneficiary_type,
+                    merchant_id, settlement_status, entitlement_valid_to, created_at, updated_at)
+                VALUES (?, ?, 'verification_settled', ?, NULL, 'entry', 1, ?, 1, ?, ?, 0, 'merchant',
+                    ?, 'draft', ?, ?, ?)
+                """, "st_vs_" + entId, "ST-VS-" + entId, entId, total, allocated, verifiedCumulative,
+                merchantId, ts, ts, ts);
+    }
+
 
     private String uniqueProject() {
         String p = "proj_sm_" + System.nanoTime();

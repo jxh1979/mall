@@ -19,6 +19,10 @@ UPDATE ticket_refunds
  WHERE status = 'approved';
 
 -- 权威枚举 CHECK(HTML 退款单状态八值);此前无 CHECK,自由字符串任意可写。
+-- ⚠️部署安全(复核提示):CHECK 加到有存量的 ticket_refunds 上,若存在越界 status 脏值会令本迁移整体失败、阻断部署。
+--   历史代码仅写 requested/approved/rejected(均在八值内),理论无脏值;但部署前务必先核对:
+--       SELECT DISTINCT status FROM ticket_refunds;
+--   若出现八值之外的历史值,先在本 ALTER 之前补一步显式归一(勿静默吞),再加 CHECK。
 ALTER TABLE ticket_refunds DROP CONSTRAINT IF EXISTS chk_ticket_refunds_status;
 ALTER TABLE ticket_refunds ADD CONSTRAINT chk_ticket_refunds_status
     CHECK (status IN ('requested','review','approved','rejected','processing','success','failed','cancelled'));
