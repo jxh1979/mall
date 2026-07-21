@@ -164,3 +164,4 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | 2026-06-18 | 新建 T1 员工三表可编码规格（V066 DDL+状态机+Service+API+事件+权限+验收+测试） | R5 backlog T1；裁决⑨；DDL 约定取自 V011/V055 |
 | 2026-07-19 | 补 T1 缺口：审批通过分配"员工自助"角色 `role_staff_self`（V322，授自助权限点），修复真实员工（userType=staff）无 user_roles→BYOD 自助端点一律 403 | 既有缺口（非 Wave1 引入）；feature 分支 fix/byod-staff-self-service-role |
 | 2026-07-19 | 修 authz 缺陷:`listNotices`（GET /notices，待办消息中心列表）实现漏 `@GuardedAction` 守卫（与 §4 API 表「staff.notice.view」承诺不符），且该注解被误扣在 `upsertShift` 上致排班多余要求 notice.view；已将 `staff.notice.view` 守卫归位到 listNotices，代码追平 §4 | 主计划会话审计发现；随 PR#180 一并修 |
+| 2026-07-19 | 修 authz/PII 缺陷:`GET /staff/profiles` 实际调用的 `listProfiles(boolean)` 重载漏 `@GuardedAction`（守卫只加在无参重载、控制器未调它）→ 任何认证主体可列全员档案（含 phoneHash/idDocHash）；已给 boolean 重载补 `staff.profile.view` 守卫，代码追平 §4 | 主计划会话复核发现；随 PR#180 一并修 |

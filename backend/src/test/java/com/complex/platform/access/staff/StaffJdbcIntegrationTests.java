@@ -818,4 +818,25 @@ class StaffJdbcIntegrationTests {
                         key(), mgr, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
         assertThat(saved.userId()).isEqualTo(mgr);
     }
+
+    @org.junit.jupiter.api.Test
+    void listProfilesRequiresProfileViewNotReachableBySelfServiceStaff() {
+        // 复核发现的同类 authz 漏洞:GET /staff/profiles 实际调 listProfiles(boolean) 重载,
+        // 该重载此前漏 @GuardedAction(守卫只加在无参重载、控制器未调它) → 任何认证主体
+        // (含仅 role_staff_self 的员工)可列全员档案(含 phoneHash/idDocHash)=PII 泄露。
+        authenticateAsPlatformAdmin();
+        StaffProfileRecord p = submitRegistration("mrc_self");
+        String staffUser = service.reviewRegistration(p.id(),
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-P-1")).userId();
+
+        // 真实员工(role_staff_self,不含 staff.profile.view)→ 列全员档案被拒。
+        authenticateAsStaff(staffUser, "mrc_self");
+        assertThatThrownBy(() -> service.listProfiles(false))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+
+        // 平台管理员(通配)→ 成功。
+        authenticateAsPlatformAdmin();
+        assertThat(service.listProfiles(false)).isNotNull();
+    }
 }

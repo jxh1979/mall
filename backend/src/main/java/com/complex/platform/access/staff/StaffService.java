@@ -231,6 +231,7 @@ public class StaffService {
     }
 
     /** V264：includeArchived=false（默认）排除已存档档案；true 供后台管理存档件。 */
+    @GuardedAction(permission = "staff.profile.view")
     public PageResponse<StaffProfileRecord> listProfiles(boolean includeArchived) {
         List<StaffProfileRecord> profiles = repository.listProfiles(merchantScopeOrNull(), includeArchived);
         auditEventService.recordSuccess("staff.profile.viewed", "staff.profile.view",
