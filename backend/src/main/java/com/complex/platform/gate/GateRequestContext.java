@@ -4,6 +4,7 @@ import com.complex.platform.access.AccessActor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -19,6 +20,12 @@ final class GateRequestContext {
     }
 
     static String terminalType() {
+        // AUD-010:优先用设备凭证验签派生的服务端可信终端类型(拦截器已存入 holder);无则回退自报头。
+        Optional<TerminalIdentityHolder.VerifiedTerminal> verified = TerminalIdentityHolder.current();
+        if (verified.isPresent() && verified.get().terminalType() != null
+                && !verified.get().terminalType().isBlank()) {
+            return verified.get().terminalType().trim();
+        }
         String header = header("X-Terminal-Type");
         return header == null || header.isBlank() ? "*" : header.trim();
     }
@@ -77,6 +84,11 @@ final class GateRequestContext {
 
     /** 当前请求的 device id（X-Device-Id 头），无=null。 */
     static String deviceId() {
+        Optional<TerminalIdentityHolder.VerifiedTerminal> verified = TerminalIdentityHolder.current();
+        if (verified.isPresent() && verified.get().deviceId() != null
+                && !verified.get().deviceId().isBlank()) {
+            return verified.get().deviceId().trim();
+        }
         return blankToNull(header("X-Device-Id"));
     }
 
