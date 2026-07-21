@@ -507,7 +507,6 @@ public class StaffService {
 
     // ============================================================ 员工通知
 
-    @GuardedAction(permission = "staff.notice.view")
     /** E1(2026-07-02 拍板):主管排班——双端(后台页+主管App);班次到分钟+指定点位;
      * 同员工同开始时刻幂等覆盖;审计留痕。 */
     public StaffShiftRecord upsertShift(com.complex.platform.access.staff.dto.StaffShiftRequest request) {
@@ -602,6 +601,7 @@ public class StaffService {
         return page(repository.listAttendanceOn(date, projectScope()));
     }
 
+    @GuardedAction(permission = "staff.notice.view")
     public PageResponse<EmployeeNoticeRecord> listNotices() {
         List<EmployeeNoticeRecord> notices = repository.listNotices(merchantScopeOrNull());
         auditEventService.recordSuccess("staff.notice.viewed", "staff.notice.view",

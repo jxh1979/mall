@@ -50,6 +50,9 @@ class StaffJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.access.AccessRepository accessRepository;
+
     @BeforeEach
     void setUp() {
         authenticateAsPlatformAdmin();
@@ -781,5 +784,38 @@ class StaffJdbcIntegrationTests {
                 Instant.parse("2026-07-19T00:00:00Z"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 user, "token", List.of(new SimpleGrantedAuthority("ROLE_STAFF"))));
+    }
+
+    @org.junit.jupiter.api.Test
+    void d2FixListNoticesNowRequiresNoticeViewPermission() {
+        // D② 修复回归:listNotices(待办消息中心列表)此前实现漏 @GuardedAction 守卫 → 任何认证主体可列员工通知;
+        // 现已把 staff.notice.view 守卫归位到 listNotices。无角色真实 staff → 被拒。
+        authenticateAsStaff("usr_norole_notice_" + key(), "mrc_self");
+        assertThatThrownBy(() -> service.listNotices())
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+    }
+
+    @org.junit.jupiter.api.Test
+    void d2FixUpsertShiftNoLongerRequiresNoticeViewOnlyShiftManage() {
+        // D② 修复回归:错扣在 upsertShift 上的 @GuardedAction(staff.notice.view) 已移走 →
+        // 排班只需 staff.shift.manage,不再连带要求 notice.view。构造仅持 shift.manage 的真实 staff。
+        String mgr = "usr_shiftmgr_" + key();
+        accessRepository.createUser(new com.complex.platform.access.AccessUser(
+                mgr, "sm_" + key(), "staff", null, null, "active", Instant.now()));
+        String roleId = "role_shiftmgr_test_" + key();
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at) "
+                + "VALUES (?, ?, 'shift mgr regression role', 'project', 'active', now())", roleId, "SHIFTMGR_" + key());
+        jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, 'staff.shift.manage')", roleId);
+        accessRepository.assignUserRole(mgr, roleId);
+
+        authenticateAsStaff(mgr, null);
+        Instant now = Instant.now();
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        // 有 shift.manage、无 notice.view → 不再被 notice.view 拦,排班成功。
+        com.complex.platform.access.staff.StaffShiftRecord saved = service.upsertShift(
+                new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                        key(), mgr, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
+        assertThat(saved.userId()).isEqualTo(mgr);
     }
 }
