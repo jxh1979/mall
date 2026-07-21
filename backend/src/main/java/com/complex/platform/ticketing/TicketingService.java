@@ -14,6 +14,7 @@ import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
+import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
@@ -293,6 +294,31 @@ public class TicketingService {
                 TicketingWriteOperation.CREATE_TICKET_TYPE,
                 () -> catalogService.createTicketType(request)
         );
+    }
+
+    /** #172(2026-07-19 拍板)：读全场统一动态码刷新间隔（秒）。 */
+    public QrRefreshConfigResponse getQrRefreshConfig() {
+        return new QrRefreshConfigResponse(repository.findQrRefreshIntervalSeconds());
+    }
+
+    /** #172：改全场统一动态码刷新间隔（秒），须能被 5 整除且 5≤x≤60；走 executeWrite 幂等+审计。 */
+    public QrRefreshConfigResponse updateQrRefreshConfig(QrRefreshConfigRequest request) {
+        return operations.executeWrite(
+                "updateQrRefreshConfig",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                QrRefreshConfigResponse.class,
+                TicketingWriteOperation.UPDATE_QR_REFRESH_CONFIG,
+                () -> {
+                    Integer value = request == null ? null : request.refreshIntervalSeconds();
+                    if (value == null || value % 5 != 0 || value < 5 || value > 60) {
+                        throw com.complex.platform.common.api.ApiException.badRequest(
+                                "VALIDATION_FAILED",
+                                "refresh_interval_seconds must be a multiple of 5 between 5 and 60");
+                    }
+                    repository.upsertQrRefreshIntervalSeconds(value, actorId(), java.time.Instant.now());
+                    return new QrRefreshConfigResponse(value);
+                });
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "ticket.price_variant.manage")

@@ -6,23 +6,27 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 
 // 引导式流程(AUD-015 起):新建票种=分步弹窗(基本信息→绑定权益并发布→确认)。
 // 服务端建票固定 draft,发布闸要求≥1个权益绑定+理由——向导内一次完成 create→bind→publish 三段。
-function makeApi(postSpy: ReturnType<typeof vi.fn>): AdminApiClient {
+function makeApi(postSpy: ReturnType<typeof vi.fn>, putSpy?: ReturnType<typeof vi.fn>): AdminApiClient {
   return {
     get: vi.fn(async (path: string) => {
       if (path.includes("/entitlement-templates")) {
         return { items: [{ id: "tpl-1", name: "门票权益", entitlementType: "entry", status: "active" }] } as unknown;
       }
+      if (path.includes("/qr-refresh-config")) {
+        return { refreshIntervalSeconds: 15 } as unknown;
+      }
       return { items: [] } as unknown;
     }),
     post: postSpy,
+    put: putSpy ?? vi.fn(async () => ({ refreshIntervalSeconds: 15 } as unknown)),
   } as unknown as AdminApiClient;
 }
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage(postSpy: ReturnType<typeof vi.fn>) {
+function renderPage(postSpy: ReturnType<typeof vi.fn>, putSpy?: ReturnType<typeof vi.fn>) {
   const props: AdminPageProps = {
-    api: makeApi(postSpy),
+    api: makeApi(postSpy, putSpy),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
@@ -77,7 +81,8 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     const createBody = (createCall?.[1] ?? {}) as Record<string, unknown>;
     expect(createBody.status).toBeUndefined();
     expect(createBody.validity_days).toBe(1);
-    expect(createBody.refresh_interval_seconds).toBe(15);
+    // #172：刷新间隔不再随建票按票种下发（改为全场统一配置端点）。
+    expect(createBody.refresh_interval_seconds).toBeUndefined();
     expect(createBody.refundable).toBe(false);
     // 发布载荷带必填理由。
     const publishCall = postSpy.mock.calls.find((c) => String(c[0]).includes("/publish"));
@@ -86,14 +91,27 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     await waitFor(() => expect(screen.queryByTestId("ticket-name")).toBeNull());
   });
 
-  // 2026-07-18 拍板:验证二维码默认 15 秒动态刷新,后台 10/15/30/60 四档可调。
-  it("动态码刷新下拉:默认15秒,提供10/15/30/60四档", async () => {
+  // #172(2026-07-19 拍板):全场统一动态码刷新间隔——页级配置,默认15秒,5秒为单位到60秒,改后 PUT 落后端。
+  it("全场统一刷新间隔:默认15秒,5秒步进到60,保存走 PUT /qr-refresh-config", async () => {
     const postSpy = vi.fn(async () => ({} as unknown));
-    renderPage(postSpy);
-    await waitFor(() => expect(screen.getByTestId("ticket-create-open")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("ticket-create-open"));
-    const select = screen.getByTestId("ticket-refresh-seconds") as HTMLSelectElement;
+    const putSpy = vi.fn(async (_path: string, _body?: unknown) => ({ refreshIntervalSeconds: 20 } as unknown));
+    renderPage(postSpy, putSpy);
+    await waitFor(() => expect(screen.getByTestId("ticket-qr-refresh-config-select")).toBeTruthy());
+    const select = screen.getByTestId("ticket-qr-refresh-config-select") as HTMLSelectElement;
     expect(select.value).toBe("15");
-    expect(Array.from(select.options).map((o) => o.value)).toEqual(["10", "15", "30", "60"]);
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(
+      ["5", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55", "60"]);
+    // 建票向导内不再有按票种的刷新下拉。
+    fireEvent.click(screen.getByTestId("ticket-create-open"));
+    expect(screen.queryByTestId("ticket-refresh-seconds")).toBeNull();
+    // 改到 20 并保存 → PUT 全场统一配置端点。
+    fireEvent.change(select, { target: { value: "20" } });
+    fireEvent.click(screen.getByTestId("ticket-qr-refresh-config-save"));
+    await waitFor(() => {
+      expect(putSpy).toHaveBeenCalled();
+      const putCall = putSpy.mock.calls.find((c) => String(c[0]).includes("/ticketing/qr-refresh-config"));
+      expect(putCall).toBeTruthy();
+      expect(((putCall?.[1] ?? {}) as { refreshIntervalSeconds?: number }).refreshIntervalSeconds).toBe(20);
+    });
   });
 });

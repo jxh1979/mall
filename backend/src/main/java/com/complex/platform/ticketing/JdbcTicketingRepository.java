@@ -24,6 +24,30 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public int findQrRefreshIntervalSeconds() {
+        // #172：全场统一刷新间隔单行 'default'；缺行（未迁移/异常）回退 15，永不让验票发凭证因配置缺失而崩。
+        return jdbcTemplate.query(
+                "SELECT refresh_interval_seconds FROM ticket_qr_refresh_config WHERE id = 'default'",
+                (rs, rowNum) -> rs.getInt("refresh_interval_seconds")).stream().findFirst().orElse(15);
+    }
+
+    @Override
+    public void upsertQrRefreshIntervalSeconds(int refreshIntervalSeconds, String updatedBy, java.time.Instant now) {
+        // updated_at 用 SQL now()（避免 Instant 绑定差异）；now 入参保留以对齐接口签名。
+        jdbcTemplate.update("""
+                INSERT INTO ticket_qr_refresh_config (id, refresh_interval_seconds, updated_by, updated_at)
+                VALUES ('default', :seconds, :updated_by, now())
+                ON CONFLICT (id) DO UPDATE SET
+                    refresh_interval_seconds = EXCLUDED.refresh_interval_seconds,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                """,
+                new MapSqlParameterSource()
+                        .addValue("seconds", refreshIntervalSeconds)
+                        .addValue("updated_by", updatedBy));
+    }
+
+    @Override
     public TicketTypeRecord saveTicketType(TicketTypeRecord ticketType) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_types (

@@ -15,6 +15,7 @@ import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
+import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
@@ -25,6 +26,7 @@ import com.complex.platform.ticketing.dto.VerificationReverseRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -90,6 +92,21 @@ public class TicketingController {
         authorizationService.requirePermission("ticket.product.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTicketType(request));
+    }
+
+    // #172(2026-07-19 拍板)：全场统一动态码刷新间隔（读/改），出示验证类二维码全场一套设置。
+    @GetMapping("/ticketing/qr-refresh-config")
+    public ApiResponse<QrRefreshConfigResponse> getQrRefreshConfig() {
+        authorizationService.requirePermission("ticket.product.view");
+        return ApiResponse.ok(service.getQrRefreshConfig());
+    }
+
+    @PutMapping("/ticketing/qr-refresh-config")
+    public ApiResponse<QrRefreshConfigResponse> updateQrRefreshConfig(
+            @RequestBody @jakarta.validation.Valid QrRefreshConfigRequest request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.updateQrRefreshConfig(request));
     }
 
     @PostMapping("/ticketing/ticket-types/{id}/publish")

@@ -19,6 +19,18 @@ public interface TicketingRepository {
     Optional<TicketTypeRecord> findTicketTypeById(String id);
 
     /**
+     * #172(2026-07-19 拍板)：全场统一动态码刷新间隔（秒）。凡出示验证类二维码发凭证时读它决定刷新窗口，
+     * 不再按票种各配。default 返回 15（兼容既有测试假实现；生产由 Jdbc 覆盖读 ticket_qr_refresh_config）。
+     */
+    default int findQrRefreshIntervalSeconds() {
+        return 15;
+    }
+
+    /** #172：后台改全场统一刷新间隔（秒）。default 空实现（测试假实现无持久层）；Jdbc 覆盖 upsert 单行 'default'。 */
+    default void upsertQrRefreshIntervalSeconds(int refreshIntervalSeconds, String updatedBy, java.time.Instant now) {
+    }
+
+    /**
      * P0 修复（V133）：原子扣减票种库存——sold_quantity += quantity，仅当不限量（stock_quantity 为 null）
      * 或扣减后不超上限时成功。返回 true=扣减成功；false=库存不足（超卖被拒）。
      * default 返回 true（不限量）兼容既有测试假实现。

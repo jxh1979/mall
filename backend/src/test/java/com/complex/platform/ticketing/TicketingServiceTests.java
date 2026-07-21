@@ -30,6 +30,7 @@ import com.complex.platform.ticketing.dto.TicketOrderRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
+import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -1275,10 +1276,11 @@ class TicketingServiceTests {
         assertThat(stored.signatureVersion()).isNull();
     }
 
-    // P1 清单#19：发凭证刷新窗口按票种级 refresh_interval_seconds 取值（此处票种配 30）。
+    // #172(2026-07-19 拍板)：刷新窗口读全场统一配置，不再按票种——票种配 30 也被忽略，凭证读全场配置(此处 20)。
     @Test
-    void credentialRefreshUsesTicketTypeConfiguredRefreshInterval() {
+    void credentialRefreshUsesUnifiedConfigNotTicketType() {
         Instant now = Instant.now();
+        ticketingRepository.qrRefreshIntervalSeconds = 20; // 全场统一配置=20（票种仍带 30，应被忽略）
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_ri30", "RI30 Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
                 false, "published", null, 30, now, now));
@@ -1294,9 +1296,9 @@ class TicketingServiceTests {
 
         TicketCredentialResponse credential = service.getTicketCredential(issued.id());
         long windowSeconds = java.time.Duration.between(credential.issuedAt(), credential.expiresAt()).getSeconds();
-        assertThat(windowSeconds).isEqualTo(30L);
+        assertThat(windowSeconds).isEqualTo(20L);
         assertThat(ticketingRepository.findTicketCredentialByToken(credential.credentialToken()).orElseThrow()
-                .refreshIntervalSeconds()).isEqualTo(30);
+                .refreshIntervalSeconds()).isEqualTo(20);
     }
 
     // P1 清单#19：动态二维码过刷新窗口（截图重放旧 token）→ window_valid=false、result_reason=window_expired、不消费权益。
@@ -3262,7 +3264,7 @@ class TicketingServiceTests {
                         e -> assertThat(e.getMessage()).contains("validity_days"));
         assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
                 "b2-badrefresh", "create", List.of(), "坏刷新", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 7, 45)))
+                9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 7, 12)))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
     }
@@ -3276,11 +3278,35 @@ class TicketingServiceTests {
         assertThat(tt.refreshIntervalSeconds()).isEqualTo(15);
     }
 
+    // #172(2026-07-19 拍板)：白名单改「5 秒为单位、最长 60」——5 秒现为合法（票种休眠列亦按同式校验）。
     @Test
-    void createTicketTypeRejectsFiveSecondRefresh() {
+    void createTicketTypeAcceptsFiveSecondRefresh() {
+        TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
+                "qr5-ok", "create", List.of(), "五秒票", "weekday_weekend_holiday",
+                9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 1, 5));
+        assertThat(tt.refreshIntervalSeconds()).isEqualTo(5);
+    }
+
+    // #172：非 5 倍数（如 12）仍被拒。
+    @Test
+    void createTicketTypeRejectsNonMultipleOfFiveRefresh() {
         assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
-                "qr15-bad", "create", List.of(), "五秒票", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 1, 5)))
+                "qr12-bad", "create", List.of(), "十二秒票", "weekday_weekend_holiday",
+                9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 1, 12)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
+    }
+
+    // #172(2026-07-19 拍板)：全场统一动态码刷新间隔端点——边界 5 通过 / 60 通过 / 65 拒 / 12 拒（非 5 倍数）；统一读一套。
+    @Test
+    void updateQrRefreshConfigAcceptsFiveAndSixtyRejectsOutOfRangeAndNonMultiple() {
+        assertThat(service.updateQrRefreshConfig(new QrRefreshConfigRequest("qrc-5", 5)).refreshIntervalSeconds()).isEqualTo(5);
+        assertThat(service.updateQrRefreshConfig(new QrRefreshConfigRequest("qrc-60", 60)).refreshIntervalSeconds()).isEqualTo(60);
+        assertThat(service.getQrRefreshConfig().refreshIntervalSeconds()).isEqualTo(60);
+        assertThatThrownBy(() -> service.updateQrRefreshConfig(new QrRefreshConfigRequest("qrc-65", 65)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
+        assertThatThrownBy(() -> service.updateQrRefreshConfig(new QrRefreshConfigRequest("qrc-12", 12)))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
     }
@@ -3526,6 +3552,10 @@ class TicketingServiceTests {
         @Override public void setEntitlementTemplateArchiveReason(String id, String reason) { }
         @Override public void setTicketTypeArchiveReason(String id, String reason) { }
         @Override public void setPriceRuleArchiveReason(String id, String reason) { }
+        // #172：全场统一动态码刷新间隔（可设，验票发凭证读它，替代票种级取值）。
+        int qrRefreshIntervalSeconds = 15;
+        @Override public int findQrRefreshIntervalSeconds() { return qrRefreshIntervalSeconds; }
+        @Override public void upsertQrRefreshIntervalSeconds(int seconds, String updatedBy, java.time.Instant now) { this.qrRefreshIntervalSeconds = seconds; }
         private final Map<String, TicketTypeRecord> ticketTypes = new LinkedHashMap<>();
         private final Map<String, EntitlementTemplateRecord> entitlementTemplates = new LinkedHashMap<>();
         private final Map<String, TicketTypeEntitlementRecord> ticketTypeEntitlements = new LinkedHashMap<>();

@@ -10043,6 +10043,95 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/ticketing/qr-refresh-config": {
+      "get": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "getTicketQrRefreshConfig",
+        "summary": "读全场统一动态码刷新间隔",
+        "description": "#172(2026-07-19 拍板):出示验证类二维码刷新间隔全场一套后台设置(5 秒为单位、最长 60 秒、默认 15),此处读当前值。",
+        "x-permission": "ticket.product.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "ticket.qr_refresh_config.viewed",
+        "x-audit-event-failure": "ticket.qr_refresh_config.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "updateTicketQrRefreshConfig",
+        "summary": "改全场统一动态码刷新间隔",
+        "description": "#172:刷新间隔全场统一,取值须能被 5 整除且 5≤x≤60;审计留痕,下一张凭证即用新窗口。",
+        "x-permission": "ticket.product.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket.qr_refresh_config.updated",
+        "x-audit-event-failure": "ticket.qr_refresh_config.update_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "refresh_interval_seconds"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "refresh_interval_seconds": {
+                    "type": "integer",
+                    "description": "动态码刷新间隔(秒),须能被 5 整除且 5≤x≤60(默认 15)。",
+                    "minimum": 5,
+                    "maximum": 60
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/ticketing/ticket-types": {
       "get": {
         "tags": [

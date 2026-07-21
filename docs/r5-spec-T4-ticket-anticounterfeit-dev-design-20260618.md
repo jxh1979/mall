@@ -69,3 +69,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ticket_verifications_nonce
 | 日期 | 内容 | 依据 |
 |---|---|---|
 | 2026-06-18 | 新建 T4 折中防伪规格（刷新窗口校验+nonce 防重放+核对维度+签名 P1 预留） | R5 backlog T4；裁决①；现状取自 V009/V064 与 TicketVerificationService |
+| 2026-07-19 | 演进说明：刷新窗口取值由「票种级 {30,60}」→「**全场统一** ticket_qr_refresh_config（5 秒为单位、最长 60、默认 15）」；`resolveRefreshIntervalSeconds` 改读全场配置，票种级 refresh_interval_seconds 转休眠列。本文 §现状/§刷新的 {30,60}/票种级表述为 2026-06-18 当时基线，最新口径以 V300→V320 与 HTML #172 为准 | 用户 2026-07-19 拍板；V320 + qr-refresh-config 端点 |
