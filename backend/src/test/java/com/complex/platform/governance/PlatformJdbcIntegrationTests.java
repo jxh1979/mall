@@ -58,6 +58,28 @@ class PlatformJdbcIntegrationTests {
     }
 
     @Test
+    void listMerchantsPagedReturnsRealTotalAndReachesNextPage() {
+        // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET(含 include_archived + delete_status 谓词), 第二页可达首页之后的商户。
+        Instant t = Instant.now();
+        repository.saveBusinessEntity(new BusinessEntityRecord(
+                "be_pg", "PG Entity", "operation", null, null, null, null, "active", t, t));
+        repository.saveMerchant(new MerchantRecord("mch_pg_1", "PG A", "other", "be_pg", "be_pg", "be_pg",
+                "C1", "18800000001", "Owner", "1F-A", new java.math.BigDecimal("10.00"), new java.math.BigDecimal("9.00"),
+                null, null, new java.math.BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
+        repository.saveMerchant(new MerchantRecord("mch_pg_2", "PG B", "other", "be_pg", "be_pg", "be_pg",
+                "C2", "18800000002", "Owner", "1F-B", new java.math.BigDecimal("10.00"), new java.math.BigDecimal("9.00"),
+                null, null, new java.math.BigDecimal("1.00"), "fixed_rent_plus_commission", "draft",
+                t.plusSeconds(1), t.plusSeconds(1)));
+        var page1 = repository.listMerchantsPaged(true, 1, 1);
+        var page2 = repository.listMerchantsPaged(true, 2, 1);
+        assertThat(page1.total()).isGreaterThanOrEqualTo(2L);
+        assertThat(page1.items()).hasSize(1);
+        assertThat(page2.items()).hasSize(1);
+        assertThat(page2.items()).extracting(MerchantRecord::id)
+                .doesNotContainAnyElementsOf(page1.items().stream().map(MerchantRecord::id).toList());
+    }
+
+    @Test
     void createAndListBusinessEntityPersistsFormalFields() {
         Instant createdAt = Instant.parse("2026-06-14T01:00:00Z");
         BusinessEntityRecord saved = repository.saveBusinessEntity(new BusinessEntityRecord(

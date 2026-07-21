@@ -38,15 +38,19 @@ public class LeasingController {
 
     // ---- 线索 ----
     @GetMapping("/leads")
-    public ApiResponse<PageResponse<LeasingLeadRecord>> listLeads() {
+    public ApiResponse<PageResponse<LeasingLeadRecord>> listLeads(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.lead.manage");
-        return ApiResponse.ok(service.listLeads());
+        return ApiResponse.ok(service.listLeads(page, size));
     }
 
     @GetMapping("/leads/follow-up-due")
-    public ApiResponse<PageResponse<LeasingLeadRecord>> listLeadsNeedingFollowUp() {
+    public ApiResponse<PageResponse<LeasingLeadRecord>> listLeadsNeedingFollowUp(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.lead.manage");
-        return ApiResponse.ok(service.listLeadsNeedingFollowUp());
+        return ApiResponse.ok(service.listLeadsNeedingFollowUp(page, size));
     }
 
     @PostMapping("/leads")
@@ -74,9 +78,11 @@ public class LeasingController {
 
     // ---- 意向 ----
     @GetMapping("/intents")
-    public ApiResponse<PageResponse<LeasingIntentRecord>> listIntents() {
+    public ApiResponse<PageResponse<LeasingIntentRecord>> listIntents(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.intent.manage");
-        return ApiResponse.ok(service.listIntents());
+        return ApiResponse.ok(service.listIntents(page, size));
     }
 
     @PostMapping("/intents")
@@ -104,9 +110,11 @@ public class LeasingController {
 
     // ---- 品牌库 ----
     @GetMapping("/brands")
-    public ApiResponse<PageResponse<LeasingBrandRecord>> listBrands() {
+    public ApiResponse<PageResponse<LeasingBrandRecord>> listBrands(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.brand.manage");
-        return ApiResponse.ok(service.listBrands());
+        return ApiResponse.ok(service.listBrands(page, size));
     }
 
     @PostMapping("/brands")
@@ -128,9 +136,11 @@ public class LeasingController {
     @GetMapping("/follow-ups")
     public ApiResponse<PageResponse<LeasingFollowUpRecord>> listFollowUps(
             @RequestParam(value = "ref_type", required = false) String refType,
-            @RequestParam(value = "ref_id", required = false) String refId) {
+            @RequestParam(value = "ref_id", required = false) String refId,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.lead.manage");
-        return ApiResponse.ok(service.listFollowUps(refType, refId));
+        return ApiResponse.ok(service.listFollowUps(refType, refId, page, size));
     }
 
     @PostMapping("/follow-ups")

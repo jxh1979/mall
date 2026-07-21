@@ -42,9 +42,11 @@ public class ContractController {
 
     // ---- 起草 ----
     @GetMapping
-    public ApiResponse<PageResponse<ContractRecord>> list() {
+    public ApiResponse<PageResponse<ContractRecord>> list(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("contract.draft.manage");
-        return ApiResponse.ok(service.listContracts());
+        return ApiResponse.ok(service.listContracts(page, size));
     }
 
     @PostMapping

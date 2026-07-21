@@ -121,8 +121,12 @@ public class ContractService {
 
     // ============ 起草 ============
     public PageResponse<ContractRecord> listContracts() {
-        List<ContractRecord> items = repository.listContracts();
-        return new PageResponse<>(items, 1, 500, items.size());
+        return listContracts(1, 500);
+    }
+
+    // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值; 500 默认保留既有前端一次拉取契约。
+    public PageResponse<ContractRecord> listContracts(int page, int size) {
+        return repository.listContractsPaged(page, size);
     }
 
     /** 起草合同（手工或招商签约带入），状态 drafting。也是招商 signIntent 接线入口。 */

@@ -79,6 +79,26 @@ class LeasingServiceTests {
     }
 
     @Test
+    void listLeadsPagedReturnsHonestTotalAndReachesNextPage() {
+        // AUD-005 真分页: service 透传 page/size; total 取全量真实值(非当前页条数), 第二页可达首页之后的数据。
+        Instant now = Instant.now();
+        repo.saveLead(new LeasingLeadRecord("lead_1", "一", null, "outbound", null, null, null, null, "u",
+                "following_up", null, null, null, now, now));
+        repo.saveLead(new LeasingLeadRecord("lead_2", "二", null, "outbound", null, null, null, null, "u",
+                "following_up", null, null, null, now, now));
+        repo.saveLead(new LeasingLeadRecord("lead_3", "三", null, "outbound", null, null, null, null, "u",
+                "following_up", null, null, null, now, now));
+        var page1 = service.listLeads(1, 2);
+        assertThat(page1.total()).isEqualTo(3L);
+        assertThat(page1.items()).hasSize(2);
+        var page2 = service.listLeads(2, 2);
+        assertThat(page2.total()).isEqualTo(3L);
+        assertThat(page2.items()).hasSize(1);
+        assertThat(page2.items()).extracting(LeasingLeadRecord::id)
+                .doesNotContainAnyElementsOf(page1.items().stream().map(LeasingLeadRecord::id).toList());
+    }
+
+    @Test
     void projectScopedStaffOnlySeesOwnProjectRows() {
         // 3.2 跨项目读隔离：项目员工（organizationId=prj_a）只见本项目行，他项目（prj_b）不可见；
         // 平台管理员（scope empty，见 setUp）全量。

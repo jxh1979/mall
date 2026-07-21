@@ -121,9 +121,11 @@ public class StaffController {
     @GetMapping("/shifts")
     public ApiResponse<PageResponse<StaffShiftRecord>> listShifts(
             @org.springframework.web.bind.annotation.RequestParam(value = "date", required = false) String date,
-            @org.springframework.web.bind.annotation.RequestParam(value = "user_id", required = false) String userId) {
+            @org.springframework.web.bind.annotation.RequestParam(value = "user_id", required = false) String userId,
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         java.time.LocalDate workDate = date == null || date.isBlank() ? null : java.time.LocalDate.parse(date);
-        return ApiResponse.ok(service.listShifts(workDate, userId));
+        return ApiResponse.ok(service.listShifts(workDate, userId, page, size));
     }
 
     @GetMapping("/shifts/mine")
@@ -145,8 +147,10 @@ public class StaffController {
 
     @GetMapping("/attendance")
     public ApiResponse<PageResponse<StaffAttendanceRecord>> listAttendance(
-            @org.springframework.web.bind.annotation.RequestParam("date") String date) {
-        return ApiResponse.ok(service.listAttendance(java.time.LocalDate.parse(date)));
+            @org.springframework.web.bind.annotation.RequestParam("date") String date,
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "1000") int size) {
+        return ApiResponse.ok(service.listAttendance(java.time.LocalDate.parse(date), page, size));
     }
 
     @PostMapping("/payroll/base")
@@ -190,8 +194,10 @@ public class StaffController {
 
     @GetMapping("/payroll")
     public ApiResponse<PageResponse<StaffPayrollStatementRecord>> listPayroll(
-            @org.springframework.web.bind.annotation.RequestParam("month") String month) {
-        return ApiResponse.ok(service.listPayroll(month));
+            @org.springframework.web.bind.annotation.RequestParam("month") String month,
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "1000") int size) {
+        return ApiResponse.ok(service.listPayroll(month, page, size));
     }
 
     @GetMapping("/payroll/mine")
@@ -239,8 +245,10 @@ public class StaffController {
 
     @GetMapping("/leaves")
     public ApiResponse<PageResponse<StaffLeaveRequestRecord>> listLeaves(
-            @org.springframework.web.bind.annotation.RequestParam(value = "status", required = false) String status) {
-        return ApiResponse.ok(service.listLeaves(status));
+            @org.springframework.web.bind.annotation.RequestParam(value = "status", required = false) String status,
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
+        return ApiResponse.ok(service.listLeaves(status, page, size));
     }
 
     @GetMapping("/attendance/month-view")

@@ -1,5 +1,6 @@
 package com.complex.platform.leasing;
 
+import com.complex.platform.common.api.PageResponse;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,4 +50,31 @@ public interface LeasingRepository {
 
     /** 招商工作台首屏全量跟进（无 ref 过滤，projectScope 语义同上）。 */
     List<LeasingFollowUpRecord> listAllFollowUps(String projectScope);
+
+    // AUD-005 真分页: 默认基于全量列表内存切片(供 InMemory 测试双子); Jdbc 覆写为 SQL COUNT + LIMIT/OFFSET。
+    default PageResponse<LeasingLeadRecord> listLeadsPaged(String projectScope, int page, int size) {
+        return PageResponse.of(listLeads(projectScope), page, size);
+    }
+
+    default PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUpPaged(
+            java.time.Instant cutoff, String projectScope, int page, int size) {
+        return PageResponse.of(listLeadsNeedingFollowUp(cutoff, projectScope), page, size);
+    }
+
+    default PageResponse<LeasingIntentRecord> listIntentsPaged(String projectScope, int page, int size) {
+        return PageResponse.of(listIntents(projectScope), page, size);
+    }
+
+    default PageResponse<LeasingBrandRecord> listBrandsPaged(String projectScope, int page, int size) {
+        return PageResponse.of(listBrands(projectScope), page, size);
+    }
+
+    default PageResponse<LeasingFollowUpRecord> listFollowUpsByRefPaged(
+            String refType, String refId, String projectScope, int page, int size) {
+        return PageResponse.of(listFollowUpsByRef(refType, refId, projectScope), page, size);
+    }
+
+    default PageResponse<LeasingFollowUpRecord> listAllFollowUpsPaged(String projectScope, int page, int size) {
+        return PageResponse.of(listAllFollowUps(projectScope), page, size);
+    }
 }

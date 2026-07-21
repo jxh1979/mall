@@ -110,6 +110,18 @@ class JdbcContractRepository implements ContractRepository {
     }
 
     @Override
+    public com.complex.platform.common.api.PageResponse<ContractRecord> listContractsPaged(int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM contracts", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<ContractRecord> items = jdbcTemplate.query("SELECT " + CONTRACT_COLS
+                + " FROM contracts ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapContract);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
     public Optional<ContractRecord> findContractById(String id) {
         return jdbcTemplate.query("SELECT " + CONTRACT_COLS + " FROM contracts WHERE id = :id",
                 Map.of("id", id), this::mapContract).stream().findFirst();

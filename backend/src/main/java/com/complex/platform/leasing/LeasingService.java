@@ -47,6 +47,7 @@ public class LeasingService {
     // V219:招商跟进提醒窗天数迁入 notification_windows(key=leasing.lead_follow_up),缺配置兜底 3(行为不变)。
     private static final int FOLLOW_UP_REMINDER_DAYS = 3;
     private static final String FOLLOW_UP_WINDOW_KEY = "leasing.lead_follow_up";
+    private static final int DEFAULT_PAGE_SIZE = 500;
 
     private final LeasingRepository repository;
     private final AuditEventService auditEventService;
@@ -77,22 +78,30 @@ public class LeasingService {
 
     // ============ 线索 ============
     public PageResponse<LeasingLeadRecord> listLeads() {
+        return listLeads(1, DEFAULT_PAGE_SIZE);
+    }
+
+    // AUD-005 真分页: controller 传 page/size, 仓储 SQL COUNT + LIMIT/OFFSET, total 取真值。
+    public PageResponse<LeasingLeadRecord> listLeads(int page, int size) {
         authorizationService.requirePlatformScope();
         // 3.2 跨项目读隔离：项目员工只见本项目，平台管理员/全局平台员工全量。
-        List<LeasingLeadRecord> items = repository.listLeads(currentProjectScope());
+        PageResponse<LeasingLeadRecord> result = repository.listLeadsPaged(currentProjectScope(), page, size);
         auditEventService.recordSuccess("leasing.lead.viewed", "leasing.lead.manage", "leasing_lead", "all",
-                null, null, Map.of("count", items.size()));
-        return new PageResponse<>(items, 1, 500, items.size());
+                null, null, Map.of("count", result.items().size(), "total", result.total()));
+        return result;
     }
 
     /** 3 天未跟进的活跃线索（负责人待办提醒）。 */
     public PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUp() {
+        return listLeadsNeedingFollowUp(1, DEFAULT_PAGE_SIZE);
+    }
+
+    public PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUp(int page, int size) {
         authorizationService.requirePlatformScope();
         Instant cutoff = Instant.now().minus(
                 windowConfig.days(FOLLOW_UP_WINDOW_KEY, FOLLOW_UP_REMINDER_DAYS), ChronoUnit.DAYS);
         // 3.6：下沉仓储层 WHERE due，不再拉全表内存过滤。
-        List<LeasingLeadRecord> items = repository.listLeadsNeedingFollowUp(cutoff, currentProjectScope());
-        return new PageResponse<>(items, 1, 500, items.size());
+        return repository.listLeadsNeedingFollowUpPaged(cutoff, currentProjectScope(), page, size);
     }
 
     private Instant reference(LeasingLeadRecord l) {
@@ -151,11 +160,15 @@ public class LeasingService {
 
     // ============ 意向 ============
     public PageResponse<LeasingIntentRecord> listIntents() {
+        return listIntents(1, DEFAULT_PAGE_SIZE);
+    }
+
+    public PageResponse<LeasingIntentRecord> listIntents(int page, int size) {
         authorizationService.requirePlatformScope();
-        List<LeasingIntentRecord> items = repository.listIntents(currentProjectScope());
+        PageResponse<LeasingIntentRecord> result = repository.listIntentsPaged(currentProjectScope(), page, size);
         auditEventService.recordSuccess("leasing.intent.viewed", "leasing.intent.manage", "leasing_intent", "all",
-                null, null, Map.of("count", items.size()));
-        return new PageResponse<>(items, 1, 500, items.size());
+                null, null, Map.of("count", result.items().size(), "total", result.total()));
+        return result;
     }
 
     /** 线索转意向：lead → converted_to_intent，生成意向（stage 起始 initial_contact）。 */
@@ -267,11 +280,15 @@ public class LeasingService {
 
     // ============ 品牌库 ============
     public PageResponse<LeasingBrandRecord> listBrands() {
+        return listBrands(1, DEFAULT_PAGE_SIZE);
+    }
+
+    public PageResponse<LeasingBrandRecord> listBrands(int page, int size) {
         authorizationService.requirePlatformScope();
-        List<LeasingBrandRecord> items = repository.listBrands(currentProjectScope());
+        PageResponse<LeasingBrandRecord> result = repository.listBrandsPaged(currentProjectScope(), page, size);
         auditEventService.recordSuccess("leasing.brand.viewed", "leasing.brand.manage", "leasing_brand", "all",
-                null, null, Map.of("count", items.size()));
-        return new PageResponse<>(items, 1, 500, items.size());
+                null, null, Map.of("count", result.items().size(), "total", result.total()));
+        return result;
     }
 
     public LeasingBrandRecord createBrand(LeasingBrandRequest request) {
@@ -311,17 +328,19 @@ public class LeasingService {
 
     // ============ 跟进 ============
     public PageResponse<LeasingFollowUpRecord> listFollowUps(String refType, String refId) {
+        return listFollowUps(refType, refId, 1, DEFAULT_PAGE_SIZE);
+    }
+
+    public PageResponse<LeasingFollowUpRecord> listFollowUps(String refType, String refId, int page, int size) {
         authorizationService.requirePlatformScope();
         // 招商工作台首屏无参加载=全量跟进；带 ref_type+ref_id=精确下钻（原语义保留）。
         boolean drillDown = trimToNull(refType) != null || trimToNull(refId) != null;
-        List<LeasingFollowUpRecord> items;
         if (drillDown) {
             String type = requireEnum(refType, FOLLOW_UP_REF_TYPES, "ref_type");
-            items = repository.listFollowUpsByRef(type, requireText(refId, "ref_id"), currentProjectScope());
-        } else {
-            items = repository.listAllFollowUps(currentProjectScope());
+            return repository.listFollowUpsByRefPaged(
+                    type, requireText(refId, "ref_id"), currentProjectScope(), page, size);
         }
-        return new PageResponse<>(items, 1, 500, items.size());
+        return repository.listAllFollowUpsPaged(currentProjectScope(), page, size);
     }
 
     public LeasingFollowUpRecord createFollowUp(LeasingFollowUpRequest request) {

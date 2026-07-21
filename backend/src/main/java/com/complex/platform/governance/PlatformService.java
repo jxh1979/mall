@@ -31,6 +31,8 @@ public class PlatformService {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
+    // AUD-005: 列表端点默认页大小(保留既有一次拉取上限, 供下拉/客户端分页); total 已取真值。
+    private static final int LIST_MAX_PAGE_SIZE = 500;
 
     private final PlatformRepository repository;
     private final AuditedOperationExecutor operations;
@@ -67,7 +69,12 @@ public class PlatformService {
     }
 
     public PageResponse<BusinessEntityRecord> listBusinessEntities() {
-        List<BusinessEntityRecord> records = repository.listBusinessEntities();
+        return listBusinessEntities(DEFAULT_PAGE, LIST_MAX_PAGE_SIZE);
+    }
+
+    // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值; 默认 500 保留既有前端一次拉取(下拉源)契约。
+    public PageResponse<BusinessEntityRecord> listBusinessEntities(int page, int size) {
+        PageResponse<BusinessEntityRecord> result = repository.listBusinessEntitiesPaged(page, size);
         auditEventService.recordSuccess(
                 "entity_binding.viewed",
                 "entity.binding.view",
@@ -75,9 +82,9 @@ public class PlatformService {
                 "all",
                 null,
                 null,
-                Map.of("count", records.size())
+                Map.of("count", result.items().size(), "total", result.total())
         );
-        return page(records);
+        return result;
     }
 
     public BusinessEntityRecord createBusinessEntity(BusinessEntityRequest request) {
@@ -112,7 +119,11 @@ public class PlatformService {
     }
 
     public PageResponse<MerchantRecord> listMerchants(boolean includeArchived) {
-        List<MerchantRecord> records = repository.listMerchants(includeArchived);
+        return listMerchants(includeArchived, DEFAULT_PAGE, LIST_MAX_PAGE_SIZE);
+    }
+
+    public PageResponse<MerchantRecord> listMerchants(boolean includeArchived, int page, int size) {
+        PageResponse<MerchantRecord> result = repository.listMerchantsPaged(includeArchived, page, size);
         auditEventService.recordSuccess(
                 "merchant.viewed",
                 "merchant.profile.view",
@@ -120,9 +131,9 @@ public class PlatformService {
                 "all",
                 null,
                 null,
-                Map.of("count", records.size())
+                Map.of("count", result.items().size(), "total", result.total())
         );
-        return page(records);
+        return result;
     }
 
     public MerchantRecord createMerchant(MerchantProfileRequest request) {
@@ -296,7 +307,11 @@ public class PlatformService {
     }
 
     public PageResponse<ProjectRecord> listProjects() {
-        List<ProjectRecord> records = repository.listProjects();
+        return listProjects(DEFAULT_PAGE, LIST_MAX_PAGE_SIZE);
+    }
+
+    public PageResponse<ProjectRecord> listProjects(int page, int size) {
+        PageResponse<ProjectRecord> result = repository.listProjectsPaged(page, size);
         auditEventService.recordSuccess(
                 "project.viewed",
                 "governance.project.view",
@@ -304,9 +319,9 @@ public class PlatformService {
                 "all",
                 null,
                 null,
-                Map.of("count", records.size())
+                Map.of("count", result.items().size(), "total", result.total())
         );
-        return page(records);
+        return result;
     }
 
     public ProjectRecord createProject(ProjectRequest request) {
@@ -346,7 +361,11 @@ public class PlatformService {
     }
 
     public PageResponse<SpaceRecord> listSpaces() {
-        List<SpaceRecord> records = repository.listSpaces();
+        return listSpaces(DEFAULT_PAGE, LIST_MAX_PAGE_SIZE);
+    }
+
+    public PageResponse<SpaceRecord> listSpaces(int page, int size) {
+        PageResponse<SpaceRecord> result = repository.listSpacesPaged(page, size);
         auditEventService.recordSuccess(
                 "space.viewed",
                 "governance.space.view",
@@ -354,9 +373,9 @@ public class PlatformService {
                 "all",
                 null,
                 null,
-                Map.of("count", records.size())
+                Map.of("count", result.items().size(), "total", result.total())
         );
-        return page(records);
+        return result;
     }
 
     public PageResponse<SpaceTypeRecord> listSpaceTypes() {
@@ -428,8 +447,13 @@ public class PlatformService {
     }
 
     public PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindings() {
+        return listBusinessEntityBindings(DEFAULT_PAGE, LIST_MAX_PAGE_SIZE);
+    }
+
+    public PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindings(int page, int size) {
         try {
-            List<BusinessEntityBindingRecord> records = repository.listBusinessEntityBindings();
+            PageResponse<BusinessEntityBindingRecord> result =
+                    repository.listBusinessEntityBindingsPaged(page, size);
             auditEventService.recordSuccess(
                     "entity_binding.viewed",
                     "entity.binding.view",
@@ -437,9 +461,9 @@ public class PlatformService {
                     "all",
                     null,
                     null,
-                    Map.of("count", records.size())
+                    Map.of("count", result.items().size(), "total", result.total())
             );
-            return page(records);
+            return result;
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     "entity_binding.view_failed",
