@@ -11,7 +11,7 @@
 - VISUAL_REGRESSION_BASELINES_TRACKED
 - NO_STALE_UI_ACCEPTANCE_COUNTS
 
-更新时间：2026-07-03T13:35:30.540Z
+更新时间：2026-07-21T14:29:18.863Z
 执行位置：192.168.88.160，`/home/james/complex-management`
 
 ## 1. 本轮闭环结论
@@ -23,9 +23,9 @@
 | 需求矩阵完整实现 | 88/97 | `docs/closed-loop-current-state-snapshot-latest.json` |
 | 完整后台 MVP | 9/9 | `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv` |
 | 完整后台非首批 | 22/22 | `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv` |
-| 后端测试 | 1757 | `backend/target/surefire-reports` |
-| Web 单元测试定义 | 57 | `apps/web/src/**/*.test.*` |
-| Playwright 常规 UI | 38 | `playwright-report/index.html` |
+| 后端测试 | 2523 | `backend/target/surefire-reports` |
+| Web 单元测试定义 | 736 | `apps/web/src/**/*.test.*` |
+| Playwright 常规 UI | 39 | `playwright-report/index.html` |
 | Playwright 真实后端 UI | 3 | `playwright-report-real-backend/index.html` |
 | 视觉回归截图基线 | 4 | `tests/e2e/**/*-snapshots/*.png` |
 | Semgrep | results=0, errors=0, paths_scanned=1984 | `semgrep-20260703-delivery-gates-clean` |
@@ -37,8 +37,8 @@
 
 | 项目 | 当前值 |
 |---|---:|
-| main JS | apps/web/dist/assets/main-B36tnK9z.js，3443 bytes |
-| largest asset | apps/web/dist/assets/vendor-antd-LpdhM_rm.js，472136 bytes |
+| main JS | apps/web/dist/assets/main-CC2bv-q6.js，3532 bytes |
+| largest asset | apps/web/dist/assets/vendor-antd-CBmYl4fp.js，538825 bytes |
 | main bundle warning | 不预期出现 |
 | dist index | 存在 |
 | route indexes | 3/3 |
@@ -85,6 +85,7 @@
 | 常规 UI | LEASE-CONTRACT 前端推进阶段 stage=${stage} 通过真实后端枚举校验 | tests/e2e/leasing-contract-live-evidence.spec.ts |
 | 常规 UI | LEASE-CONTRACT 已移除阶段 stage=${stage} 仍被真实后端 400 拒 | tests/e2e/leasing-contract-live-evidence.spec.ts |
 | 常规 UI | TICKETS-LIVE-01 本人订单可列票实例，他人 403，不存在 404，无 token 401 | tests/e2e/order-tickets-live-evidence.spec.ts |
+| 常规 UI | ADM-FIN-004 物业费管理：费率设置 + 账单生成走通 | tests/e2e/property-fee-evidence.spec.ts |
 | 真实后端 UI | REAL-UI-01 health, login, admin overview and logout use the real backend | tests/e2e/web-ui-real-backend.spec.ts |
 | 真实后端 UI | REAL-UI-02 admin core business pages load real backend data without global errors | tests/e2e/web-ui-real-backend.spec.ts |
 | 真实后端 UI | REAL-UI-03 protected business endpoints reject unauthenticated access (server-side denial, not just frontend hiding) | tests/e2e/web-ui-real-backend.spec.ts |
@@ -103,9 +104,9 @@
 | 文件 | 当前行数 |
 | --- | ---: |
 | apps/web/src/main.tsx | 43 |
-| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 879 |
-| backend/src/main/java/com/complex/platform/bar/BarService.java | 764 |
-| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1332 |
+| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 905 |
+| backend/src/main/java/com/complex/platform/bar/BarService.java | 784 |
+| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1347 |
 | backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 674 |
 | backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 465 |
 

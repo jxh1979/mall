@@ -77,7 +77,7 @@ IT 执行后，把 `/tmp/complex-nas-mount-evidence/*.json` 中的脱敏证据�
 | readiness | P0/P1 by item priority | PRD-CRED-001 | IT/安全/财务 | pending_info | 建立密钥引用、轮换周期、责任人和应急回滚 |
 | readiness | P0/P1 by item priority | PRD-160-001 | IT/运维 | pending_info | 迁移用户级覆盖到系统配置，接入 systemd 和告警 |
 | credential | P0 | PRD-CRED-OPS-001 | IT/运维/安全 | pending_info | 建立账号负责人、授权范围、到期日和停用步骤 |
-| credential | P0 | PRD-CRED-DB-001 | IT/运维/安全 | pending_info | 生成强密码、写入安全保管位置、补到期日和维护窗口 |
+| credential | P0 | PRD-CRED-DB-001 | IT/运维/安全 | pending_info | 既成事实（2026-07-06 prod 切换后）：运行时 app 角色 complex_app 已轮换 55 位强密码且被 REVOKE 最小权限；owner/Flyway 超级角色 complex 密码仍为 dev 默认 complex_dev_pwd，运行时以 COMPLEX_DATABASE_CREDENTIAL_SEPARATION_ENFORCED=false 关闭凭证守卫掩盖此状态。待 IT 为 owner ALTER ROLE 生成强密码、同步 owner env 并重启，随后移除 enforced=false 让守卫 fail-closed 生效；补到期日和维护窗口 |
 | credential | P0 | PRD-CRED-JWT-001 | IT/安全/技术负责人 | pending_info | 设计签名版本、双验窗口、旧 token 失效计划 |
 | credential | P0 | PRD-CRED-NAS-001 | IT/运维/安全 | pending_info | IT 将真实密码写入安全保管位置或 160 受控凭证文件，不得写入文档、聊天或仓库 |
 | security_finding | P0 | SEC-P0-OPS-RECOVERY-001 | IT/安全/运维 | open | P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据 |
