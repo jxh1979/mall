@@ -726,4 +726,60 @@ class StaffJdbcIntegrationTests {
 
         jdbcTemplate.update("DELETE FROM staff_profiles WHERE user_id = 'usr_admin'");
     }
+
+    @org.junit.jupiter.api.Test
+    void approvedStaffGetsSelfServiceRoleAndSeesOnlyOwnRecords() {
+        // 既有缺口修复(2026-07-19)回归:审批通过为员工分配 role_staff_self →
+        // 真实员工(userType=staff)token 可用 BYOD 自助端点(此前仅 platform_admin 桥可用),且只见本人。
+
+        // 前置:无角色的真实 staff token → 自助端点被拒(证明权限门真实、非默认放行,即修复前的缺口态)。
+        authenticateAsStaff("usr_norole_" + key(), "mrc_self");
+        assertThatThrownBy(() -> service.listMyShifts())
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+
+        // 审批两名员工 A/B(同商户)。
+        authenticateAsPlatformAdmin();
+        StaffProfileRecord a = submitRegistration("mrc_self");
+        StaffProfileRecord b = submitRegistration("mrc_self");
+        String userA = service.reviewRegistration(a.id(),
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-A-1")).userId();
+        String userB = service.reviewRegistration(b.id(),
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-B-1")).userId();
+
+        // 审批即写 user_roles → role_staff_self。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_roles WHERE user_id = ? AND role_id = 'role_staff_self'",
+                Integer.class, userA)).isEqualTo(1);
+
+        // 为 A/B 各定格一张薪资单 + 各排今天一个班次(走服务方法,避免硬钉表列)。
+        String month = "2099-11";
+        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(key(), userA, 111000L));
+        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(key(), userB, 222000L));
+        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        Instant now = Instant.now();
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                key(), userA, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
+        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                key(), userB, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
+
+        // 以真实员工 A 的 token:自助端点放行,且只见自己的记录(看不到 B)。
+        authenticateAsStaff(userA, "mrc_self");
+        assertThat(service.listMyPayroll(month).items())
+                .extracting(com.complex.platform.access.staff.StaffPayrollStatementRecord::userId)
+                .containsExactly(userA);
+        assertThat(service.listMyShifts().items())
+                .extracting(com.complex.platform.access.staff.StaffShiftRecord::userId)
+                .containsExactly(userA);
+    }
+
+    /** 以真实员工(account_type=staff)身份认证:走 role\u2192permission 解析,不再享 platform_admin 桥的通配放行。 */
+    private void authenticateAsStaff(String userId, String merchantId) {
+        AuthService.UserRecord user = new AuthService.UserRecord(
+                userId, "staff_" + userId, "hash", "staff", null, merchantId, "active",
+                Instant.parse("2026-07-19T00:00:00Z"));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                user, "token", List.of(new SimpleGrantedAuthority("ROLE_STAFF"))));
+    }
 }

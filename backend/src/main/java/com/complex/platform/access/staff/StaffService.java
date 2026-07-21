@@ -177,6 +177,10 @@ public class StaffService {
                                     now
                             ));
                             credentialProvisioner.provisionCredential(created.id(), initialPassword, "active", now);
+                            // 既有缺口修复(2026-07-19):审批通过即为新员工分配"员工自助"角色 role_staff_self,
+                            // 否则真实员工(userType=staff)无任何 user_roles 行 → 所有 BYOD 自助端点(我的薪资/
+                            // 班次/考勤/请假/通知/打卡)对其一律 403;此前仅 platform_admin 桥可用。幂等(ON CONFLICT DO NOTHING)。
+                            accessRepository.assignUserRole(created.id(), "role_staff_self");
                             StaffProfileRecord approved = new StaffProfileRecord(
                                     profile.id(), profile.projectId(), profile.merchantId(), created.id(),
                                     profile.name(), profile.phoneHash(), profile.idDocHash(), profile.staffLevelId(),

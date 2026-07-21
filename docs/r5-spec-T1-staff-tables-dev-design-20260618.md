@@ -98,7 +98,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 
 `StaffProfileService`
 - `submitRegistration(scope, req)` → 建 staff_profiles(submitted)；权限 `staff.profile.submit`。
-- `reviewRegistration(scope, id, decision, reason)` → approve 生成 user_id+角色 / reject 写 reason；权限 `staff.profile.review`（DENY 优先 + currentMerchantScope）。
+- `reviewRegistration(scope, id, decision, reason)` → approve 生成 user_id 并分配"员工自助"角色 `role_staff_self`(V322) / reject 写 reason；权限 `staff.profile.review`（DENY 优先 + currentMerchantScope）。
 - `suspend(scope, id)` / `listProfiles(scope)`（强制 currentMerchantScope 过滤）。
 
 `StaffDeviceCredentialService`
@@ -136,6 +136,8 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 ## 6. 权限点（D3，dot 风格，纳入 T13 全业务域最小颗粒度预置）
 `staff.profile.submit/review/view`、`staff.device.bind/review/revoke`、`staff.notice.view`。
 
+> **员工自助角色（V322，2026-07-19 补链）**：审批通过除建 `access_users` 外，为新员工分配角色 `role_staff_self`（data_scope=self），授予 `staff.payroll.view_mine / staff.shift.view / staff.attendance.punch / staff.leave.submit / staff.notice.view / staff.profile.self`。此前缺此分配 → 真实员工（userType=staff）无 `user_roles` 行 → BYOD 自助端点（我的薪资/班次/考勤/请假/通知/打卡）对真实员工一律 403，仅 platform_admin 可用。自助端点按 `actor.id()` 自锁本人，商户/项目隔离由 `access_users.merchant_id/organization_id` 驱动（AuthorizationService 不读 role.data_scope）。
+
 ---
 
 ## 7. 验收口径（GWT）
@@ -160,3 +162,4 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | 日期 | 内容 | 依据 |
 |---|---|---|
 | 2026-06-18 | 新建 T1 员工三表可编码规格（V066 DDL+状态机+Service+API+事件+权限+验收+测试） | R5 backlog T1；裁决⑨；DDL 约定取自 V011/V055 |
+| 2026-07-19 | 补 T1 缺口：审批通过分配"员工自助"角色 `role_staff_self`（V322，授自助权限点），修复真实员工（userType=staff）无 user_roles→BYOD 自助端点一律 403 | 既有缺口（非 Wave1 引入）；feature 分支 fix/byod-staff-self-service-role |
