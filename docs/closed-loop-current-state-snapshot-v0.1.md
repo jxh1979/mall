@@ -37,9 +37,9 @@
 | 文件 | 当前行数 |
 |---|---:|
 | `apps/web/src/main.tsx` | 43 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 879 |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 764 |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1332 |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 905 |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 784 |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1347 |
 | `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 674 |
 | `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 465 |
 
@@ -48,7 +48,7 @@
 | 闸口 | 当前态 |
 |---|---|
 | Semgrep | results=0，errors=0，paths_scanned=1984，scan_dir=`security-scans/semgrep-20260703-delivery-gates-clean` |
-| 运行时验收证据 | backend=1757 tests / failures=0 / errors=0，web_unit=57，ui=38，real_backend_ui=3，ready=true |
+| 运行时验收证据 | backend=2521 tests / failures=0 / errors=0，web_unit=736，ui=39，real_backend_ui=3，ready=true |
 | 生产证据提交 | expected=15，awaiting=15，valid=0，invalid=0 |
 | Production blocker register | readiness=6, credential=4, findings=2, blocking_total=12, complete=false |
 | P0 生产证据 | expected=13，awaiting=13，valid=0，invalid=0 |
