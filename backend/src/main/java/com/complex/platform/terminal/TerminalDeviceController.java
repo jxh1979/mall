@@ -39,6 +39,19 @@ public class TerminalDeviceController {
         return ApiResponse.ok(service.bindDevice(request));
     }
 
+    // AUD-010 ②：登记/轮换 kiosk/tablet 设备级签名公钥（ready-to-enforce；客户端实现签名后调用）。
+    @PostMapping("/devices/{id}/signing-key")
+    public ApiResponse<java.util.Map<String, String>> registerDeviceSigningKey(
+            @PathVariable String id,
+            @RequestBody java.util.Map<String, String> body) {
+        authorizationService.requirePermission("terminal.device.bind");
+        String publicKey = body == null ? null : body.get("public_key");
+        String idempotencyKey = body == null ? null : body.get("idempotency_key");
+        requireIdempotencyKey(idempotencyKey);
+        String status = service.registerSigningKey(id, publicKey == null ? null : publicKey.trim(), idempotencyKey);
+        return ApiResponse.ok(java.util.Map.of("status", status));
+    }
+
     @PostMapping("/devices/return")
     public ApiResponse<DeviceBindingResponse> returnDevice(@RequestBody @jakarta.validation.Valid DeviceReturnRequest request) {
         authorizationService.requirePermission("terminal.device.bind");

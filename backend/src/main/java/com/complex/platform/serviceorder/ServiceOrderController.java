@@ -109,7 +109,8 @@ public class ServiceOrderController {
     public ApiResponse<ServiceOrderRecord> createOrder(
             @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
-        requireCompanyTerminal(terminalType, CREATE_AND_CODE_TERMINALS);
+        // AUD-010:用设备凭证验签派生的服务端可信终端类型(拦截器已强制),再过公司设备白名单。
+        requireCompanyTerminal(com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(terminalType), CREATE_AND_CODE_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createOrder(request));
     }
@@ -123,7 +124,7 @@ public class ServiceOrderController {
     public ApiResponse<ServiceOrderRecord> markPaid(@PathVariable String id,
             @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
-        requireCompanyTerminal(terminalType, MARK_PAID_TERMINALS);
+        requireCompanyTerminal(com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(terminalType), MARK_PAID_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.markPaid(id, request));
     }
@@ -152,7 +153,7 @@ public class ServiceOrderController {
     public ApiResponse<ServiceOrderRecord> complete(@PathVariable String id,
             @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
-        requireCompanyTerminal(terminalType, COMPLETE_TERMINALS);
+        requireCompanyTerminal(com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(terminalType), COMPLETE_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.complete(id, request));
     }
@@ -167,7 +168,7 @@ public class ServiceOrderController {
     @GetMapping("/orders/{id}/payment-code")
     public ApiResponse<Map<String, String>> orderPaymentCode(@PathVariable String id,
             @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType) {
-        requireCompanyTerminal(terminalType, CREATE_AND_CODE_TERMINALS);
+        requireCompanyTerminal(com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(terminalType), CREATE_AND_CODE_TERMINALS);
         return ApiResponse.ok(service.orderPaymentCode(id));
     }
 

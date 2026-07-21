@@ -5,7 +5,6 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
-import com.complex.platform.gate.GuardedAction;
 import com.complex.platform.inventory.dto.HighValueReviewDecisionRequest;
 import java.time.Instant;
 import java.util.List;
@@ -130,7 +129,9 @@ public class InventoryHighValueReviewService {
      * <p>{@code onApprove} 由调用域注入：对 {@code saved_bottle_void} 即把存酒由中间态置 cancelled。
      * reject 不调 {@code onApprove}（保持原态、不扣减）。两路均写 reviewer/reason/reviewed_at + 事件。
      */
-    @GuardedAction(capability = "inventory.high_value.review")
+    // AUD-020: this service is hand-newed by InventoryService/PurchaseRequestService (not a Spring proxy),
+    // so the capability annotation here was dead (the aspect never matched). The gate now lives on the
+    // proxied outward entry InventoryService.reviewHighValue(); this method is only reached via it.
     @Transactional
     public InventoryHighValueReviewRecord review(String reviewId, HighValueReviewDecisionRequest request) {
         return reviewInternal(reviewId, request, this::applyDecisionEffect);

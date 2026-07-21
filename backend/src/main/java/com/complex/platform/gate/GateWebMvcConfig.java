@@ -13,13 +13,19 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class GateWebMvcConfig implements WebMvcConfigurer {
 
     private final ObjectProvider<TerminalMasterSwitchInterceptor> terminalMasterSwitchInterceptor;
+    private final ObjectProvider<DeviceCredentialInterceptor> deviceCredentialInterceptor;
 
-    public GateWebMvcConfig(ObjectProvider<TerminalMasterSwitchInterceptor> terminalMasterSwitchInterceptor) {
+    public GateWebMvcConfig(ObjectProvider<TerminalMasterSwitchInterceptor> terminalMasterSwitchInterceptor,
+            ObjectProvider<DeviceCredentialInterceptor> deviceCredentialInterceptor) {
         this.terminalMasterSwitchInterceptor = terminalMasterSwitchInterceptor;
+        this.deviceCredentialInterceptor = deviceCredentialInterceptor;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // AUD-010:设备凭证验签排在总开关之前,使总开关/入场闸按服务端派生的可信终端类型判定。
+        deviceCredentialInterceptor.ifAvailable(interceptor ->
+                registry.addInterceptor(interceptor).addPathPatterns("/api/**"));
         terminalMasterSwitchInterceptor.ifAvailable(interceptor ->
                 registry.addInterceptor(interceptor).addPathPatterns("/api/**"));
     }

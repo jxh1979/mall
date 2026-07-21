@@ -788,6 +788,13 @@ public class InventoryService {
         return highValueReviewService.listHighValueReviews();
     }
 
+    // AUD-020: capability gate is placed on this outward wrapper. InventoryService is a Spring proxy,
+    // so when the controller calls it ActionGateAspect matches this annotation and enforces the
+    // inventory.high_value.review terminal switch first (disabled -> TERMINAL_DISABLED, no stock change).
+    // The sub-service InventoryHighValueReviewService is hand-instantiated in-domain (not a proxy), so the
+    // aspect never matches its inner review(); the guard must live on this proxied entry point.
+    // GuardedActionProxyBypassArchTest prevents regressions.
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.high_value.review")
     @Transactional
     public InventoryHighValueReviewRecord reviewHighValue(
             String reviewId, com.complex.platform.inventory.dto.HighValueReviewDecisionRequest request) {

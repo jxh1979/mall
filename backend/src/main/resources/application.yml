@@ -109,3 +109,20 @@ keyvault:
     pii: ${COMPLEX_KEYVAULT_PII_KEY:complex-dev-pii-encryption-key-change-me}
     # PII 盲索引密钥（HMAC-SHA256，与 pii 加密密钥分离）。生产由 env 注入强随机（>=32 且不含 change-me）。
     pii-index: ${COMPLEX_KEYVAULT_PII_INDEX_KEY:complex-dev-pii-blind-index-key-change-me}
+
+access:
+  device_credential:
+    # AUD-010 设备凭证验签分级强制（按终端类型 off|grace|enforce）。默认 grace=生产安全态：签名无效必拒，
+    # 但缺签名/未登记设备的写请求记审计后放行，不瘫痪尚未登记签名密钥的现网终端。各终端类型完成设备签名密钥
+    # 登记后，由运维/用户逐类翻转为 enforce（设备绑定型写请求缺/坏凭证一律 403）。空=沿用 default。
+    enforcement:
+      default: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_DEFAULT:grace}
+      staff_work_phone: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_STAFF_WORK_PHONE:}
+      tablet: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_TABLET:}
+      kiosk: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_KIOSK:}
+      # web：enforce 下拒「Authorization: Bearer 自报 web」（合法后台走 Cookie 会话，无客户端依赖，可先翻）。
+      web: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_WEB:}
+      # app：enforce 下拒 app 写（客人端无公司设备凭证；app 资金是否要客人侧证明属业务口径）。
+      app: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_APP:}
+    # 签名时间窗（秒），配合 nonce 防重放；资金写动作叠加既有 idempotency_key 去重。
+    timestamp_tolerance_seconds: ${ACCESS_DEVICE_CREDENTIAL_TOLERANCE_SECONDS:300}
