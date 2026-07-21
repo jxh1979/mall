@@ -190,10 +190,10 @@ class MainActivity : Activity() {
   // 屏 ② 设备绑定 -> TerminalWorkflow.bindDevice
   // ---------------------------------------------------------------------------
   private fun showDeviceBinding() {
-    val deviceId = editText("设备编号 device_id").apply {
+    val deviceId = editText("设备编号").apply {
       setText("ANDROID-${System.currentTimeMillis()}")
     }
-    val spaceId = editText("绑定空间 bound_space_id（点位）")
+    val spaceId = editText("绑定空间（点位）")
     val status = statusText("登录账号：${store.session?.username ?: "-"}\n请绑定本机到现场点位")
 
     val bindButton = primaryButton("绑定设备") {
