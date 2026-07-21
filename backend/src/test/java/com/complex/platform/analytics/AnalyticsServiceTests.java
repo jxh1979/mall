@@ -1097,8 +1097,51 @@ class AnalyticsServiceTests {
         assertThat(balance.aggregation()).isEqualTo("period_end");
     }
 
+    @Test
+    void rentToSalesBuildsThreeTiersAndMarksNullDenominatorHonestly() {
+        // P1c:店级/业态级/平台级三档;店级无第三方营业额→比率 null 诚实标;
+        //   平台级分母=已归属 + 未归属营业额(口径③⑧)。
+        analyticsRepository.rentToSalesStub = new AnalyticsRecords.RentToSalesAggregate(java.util.List.of(
+                new AnalyticsRecords.RentToSalesMerchantRow("m_a", "餐饮A", "catering", 120000L, 500000L),
+                new AnalyticsRecords.RentToSalesMerchantRow("m_b", "餐饮B", "catering", 50000L, 200000L),
+                new AnalyticsRecords.RentToSalesMerchantRow("m_c", "零售C", "retail", 30000L, 0L)),
+                250000L);
+        AnalyticsRecords.RentToSalesResponse resp = service.rentToSales("2099-09");
+        assertThat(resp.period()).isEqualTo("2099-09");
+        java.util.Map<String, AnalyticsRecords.RentToSalesRow> m = resp.byMerchant().stream()
+                .collect(java.util.stream.Collectors.toMap(AnalyticsRecords.RentToSalesRow::key, r -> r));
+        // 店级:A 有营业额→120000*10000/500000=2400bps;C 无第三方营业额→比率 null + note(诚实不伪造)。
+        assertThat(m.get("m_a").ratioBps()).isEqualTo(2400L);
+        assertThat(m.get("m_c").ratioBps()).isNull();
+        assertThat(m.get("m_c").note()).isNotNull();
+        // 业态级(复用 merchant_type):catering 合并 A+B(170000/700000→2429bps);retail 仅 C(分母 0→null)。
+        java.util.Map<String, AnalyticsRecords.RentToSalesRow> t = resp.byMerchantType().stream()
+                .collect(java.util.stream.Collectors.toMap(AnalyticsRecords.RentToSalesRow::key, r -> r));
+        assertThat(t.get("catering").rentCent()).isEqualTo(170000L);
+        assertThat(t.get("catering").salesCent()).isEqualTo(700000L);
+        assertThat(t.get("catering").ratioBps()).isEqualTo(2429L);
+        assertThat(t.get("retail").ratioBps()).isNull();
+        // 平台级:分子=200000;分母=已归属 700000 + 未归属 250000 = 950000 → 2105bps。
+        assertThat(resp.platform().rentCent()).isEqualTo(200000L);
+        assertThat(resp.platform().salesCent()).isEqualTo(950000L);
+        assertThat(resp.platform().ratioBps()).isEqualTo(2105L);
+        assertThat(resp.unattributedSalesCent()).isEqualTo(250000L);
+        assertThat(resp.note()).contains("未归属");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("analytics.rent_to_sales.viewed");
+    }
+
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
         // V220 招商漏斗 fake:默认空漏斗 + 零营业额(比率分母 0 → ETL 不产出比率行)。
+
+        // P1c 租售比取数桩:测试注入固定聚合(null=默认空)。
+        AnalyticsRecords.RentToSalesAggregate rentToSalesStub;
+
+        @Override
+        public AnalyticsRecords.RentToSalesAggregate rentToSales(String period) {
+            return rentToSalesStub != null ? rentToSalesStub
+                    : new AnalyticsRecords.RentToSalesAggregate(java.util.List.of(), 0L);
+        }
         public AnalyticsRecords.LeasingFunnel leasingFunnel(LocalDate businessDate, String windowDomain) {
             return new AnalyticsRecords.LeasingFunnel(0, 0, 0);
         }

@@ -424,6 +424,57 @@ public class AnalyticsService {
                 () -> buildMonthlyComparison(yearMonth));
     }
 
+    /** P1c 店级/业态级租售比（2026-07-21 拍板）：租金(月租+营业额抽成)/第三方回流营业额；三档+未归属标注。
+     *  权限 contract.view（与出租看板同口径受众）；平台级跨商户汇总在控制器 requirePlatformScope。 */
+    public AnalyticsRecords.RentToSalesResponse rentToSales(String month) {
+        String period = parseMonth(month).toString();
+        return readSingle(
+                "analytics.rent_to_sales.viewed",
+                "analytics.rent_to_sales.view_failed",
+                "contract.view",
+                "ar_ap_items",
+                () -> buildRentToSales(period));
+    }
+
+    private AnalyticsRecords.RentToSalesResponse buildRentToSales(String period) {
+        AnalyticsRecords.RentToSalesAggregate agg = repository.rentToSales(period);
+        // 店级（口径⑦ 商户即店）：每商户一行；无第三方营业额归属→比率 null 诚实标（NULL 分母只进平台级）。
+        java.util.List<AnalyticsRecords.RentToSalesRow> byMerchant = agg.merchants().stream()
+                .map(m -> rentToSalesRow(m.merchantId(), m.merchantName(), m.rentCent(), m.salesCent()))
+                .toList();
+        // 业态级（口径⑥ 复用 merchant_type，不新增维度）：按 merchant_type 合并租金/营业额。
+        Map<String, long[]> byType = new LinkedHashMap<>();
+        for (AnalyticsRecords.RentToSalesMerchantRow m : agg.merchants()) {
+            long[] acc = byType.computeIfAbsent(m.merchantType() == null ? "" : m.merchantType(), k -> new long[2]);
+            acc[0] += m.rentCent();
+            acc[1] += m.salesCent();
+        }
+        java.util.List<AnalyticsRecords.RentToSalesRow> byMerchantType = byType.entrySet().stream()
+                .map(e -> rentToSalesRow(e.getKey(), e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .sorted((a, b) -> Long.compare(b.rentCent(), a.rentCent()))
+                .toList();
+        // 平台级（口径③⑧）：分子=全部已归属租金；分母=全部已归属营业额 + 未归属营业额。
+        long totalRent = agg.merchants().stream().mapToLong(AnalyticsRecords.RentToSalesMerchantRow::rentCent).sum();
+        long attributedSales = agg.merchants().stream().mapToLong(AnalyticsRecords.RentToSalesMerchantRow::salesCent).sum();
+        AnalyticsRecords.RentToSalesRow platform =
+                rentToSalesRow("__platform__", "平台合计", totalRent, attributedSales + agg.unattributedSalesCent());
+        String note = agg.unattributedSalesCent() > 0
+                ? "含未归属第三方营业额（无门店号 / 未维护渠道映射）：仅计入平台级分母，不参与任何店级或业态抽成"
+                : "本期第三方回流营业额均已归属到店";
+        return new AnalyticsRecords.RentToSalesResponse(
+                period, byMerchant, byMerchantType, platform, agg.unattributedSalesCent(), note);
+    }
+
+    /** 租售比 = 租金 / 营业额（基点，1 基点=0.01%）；营业额<=0 时比率不可计→null 并标注（诚实不伪造）。 */
+    private static AnalyticsRecords.RentToSalesRow rentToSalesRow(String key, String label, long rentCent, long salesCent) {
+        Long ratioBps = salesCent > 0
+                ? BigDecimal.valueOf(rentCent).multiply(BigDecimal.valueOf(10000L))
+                        .divide(BigDecimal.valueOf(salesCent), 0, java.math.RoundingMode.HALF_UP).longValueExact()
+                : null;
+        String note = salesCent > 0 ? null : "无第三方营业额归属，租售比不可计（仅计入平台级分母）";
+        return new AnalyticsRecords.RentToSalesRow(key, label, rentCent, salesCent, ratioBps, note);
+    }
+
     /** H1(2026-07-02 拍板):同名节假日今年 vs 去年——流量=区间累计+日均双列(天数不同看日均才公平,
      * 同比按日均比);存量=假期末时点(同比按值比);去年无同名区间→previous 侧 null(积累中,不伪造)。 */
     public AnalyticsRecords.HolidayComparisonResponse holidayComparison(String holidayName, int year) {
