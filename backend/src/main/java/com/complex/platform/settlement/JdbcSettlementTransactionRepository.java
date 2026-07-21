@@ -50,7 +50,8 @@ public class JdbcSettlementTransactionRepository {
                 .addValue("settlement_status", record.settlementStatus())
                 .addValue("entitlement_valid_to", Timestamp.from(record.entitlementValidTo()))
                 .addValue("exclusive_merchant_id", record.exclusiveMerchantId())
-                .addValue("business_at", record.businessAt() == null ? null : Timestamp.from(record.businessAt()));
+                .addValue("business_at", record.businessAt() == null ? null : Timestamp.from(record.businessAt()))
+                .addValue("discount_amount_cent", record.discountAmountCent());
 
         jdbcTemplate.update("""
                 INSERT INTO settlement_transactions (
@@ -58,14 +59,14 @@ public class JdbcSettlementTransactionRepository {
                     verification_id, entitlement_type, verified_count, total_times, num_people,
                     allocated_revenue_cent, verified_amount_cent, unverified_amount_cent,
                     beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to,
-                    exclusive_merchant_id, business_at
+                    exclusive_merchant_id, business_at, discount_amount_cent
                 )
                 VALUES (
                     :id, :transaction_no, :transaction_type, :entitlement_id, :order_id, :ticket_type_id,
                     :verification_id, :entitlement_type, :verified_count, :total_times, :num_people,
                     :allocated_revenue_cent, :verified_amount_cent, :unverified_amount_cent,
                     :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to,
-                    :exclusive_merchant_id, :business_at
+                    :exclusive_merchant_id, :business_at, :discount_amount_cent
                 )
                 ON CONFLICT (transaction_no) DO NOTHING
                 """, params);
@@ -85,7 +86,7 @@ public class JdbcSettlementTransactionRepository {
     public SettledFactRow findVerificationSettledByVerificationId(String verificationId) {
         SettledFactRow modern = jdbcTemplate.query("""
                 SELECT entitlement_id, order_id, ticket_type_id, entitlement_type, num_people, total_times,
-                       verified_amount_cent, beneficiary_type, merchant_id, project_id, exclusive_merchant_id,
+                       verified_amount_cent, discount_amount_cent, beneficiary_type, merchant_id, project_id, exclusive_merchant_id,
                        entitlement_valid_to, COALESCE(business_at, created_at) AS business_at
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
@@ -101,6 +102,7 @@ public class JdbcSettlementTransactionRepository {
                        (round(leg.allocated_revenue_cent::numeric * k.k       / NULLIF(leg.total_times, 0))
                       - round(leg.allocated_revenue_cent::numeric * (k.k - 1) / NULLIF(leg.total_times, 0)))::bigint
                             AS verified_amount_cent,
+                       0::bigint AS discount_amount_cent,  -- 遗留累计行无满额价快照 → 折扣 0（红冲不动折扣，与新行配对天然净掉）
                        leg.beneficiary_type, leg.merchant_id, leg.project_id, leg.exclusive_merchant_id,
                        leg.entitlement_valid_to, COALESCE(leg.business_at, leg.created_at) AS business_at
                   FROM ticket_verifications v
@@ -129,15 +131,16 @@ public class JdbcSettlementTransactionRepository {
                 rs.getLong("verified_amount_cent"), rs.getString("beneficiary_type"),
                 rs.getString("merchant_id"), rs.getString("project_id"), rs.getString("exclusive_merchant_id"),
                 rs.getTimestamp("entitlement_valid_to").toInstant(),
-                rs.getTimestamp("business_at").toInstant()) : null;
+                rs.getTimestamp("business_at").toInstant(),
+                rs.getLong("discount_amount_cent")) : null;
     }
 
-    /** AUD-013 冲正取反读投影：原核销结算行的金额与归属维度。 */
+    /** AUD-013 冲正取反读投影：原核销结算行的金额与归属维度。D6：加 discountAmountCent，冲正时取原行反。 */
     public record SettledFactRow(
             String entitlementId, String orderId, String ticketTypeId, String entitlementType,
             int numPeople, int totalTimes, long verifiedAmountCent, String beneficiaryType,
             String merchantId, String projectId, String exclusiveMerchantId,
-            Instant entitlementValidTo, Instant businessAt) {
+            Instant entitlementValidTo, Instant businessAt, long discountAmountCent) {
     }
 
     // ---- 结算重构批1 第3步:双写观察期对账(观察用途,不改现有 net 聚合口径) ----
@@ -256,7 +259,7 @@ public class JdbcSettlementTransactionRepository {
                 SELECT v.id AS verification_id, v.entitlement_id, v.created_at,
                        e.order_id, e.ticket_type_id, e.entitlement_type, e.merchant_id,
                        e.total_times, e.num_people, e.allocated_revenue_cent, e.valid_to, e.exclusive_merchant_id,
-                       v.settlement_price_cent,
+                       v.settlement_price_cent, e.component_full_price_cent,
                        ROW_NUMBER() OVER (PARTITION BY v.entitlement_id ORDER BY v.created_at, v.id) AS k
                   FROM ticket_verifications v
                   JOIN issued_entitlements e ON e.id = v.entitlement_id
@@ -277,14 +280,16 @@ public class JdbcSettlementTransactionRepository {
                         rs.getObject("allocated_revenue_cent") == null ? null : rs.getLong("allocated_revenue_cent"),
                         rs.getTimestamp("valid_to").toInstant(), rs.getString("exclusive_merchant_id"),
                         rs.getObject("settlement_price_cent") == null ? null : rs.getLong("settlement_price_cent"),
+                        rs.getObject("component_full_price_cent") == null ? null : rs.getLong("component_full_price_cent"),
                         rs.getInt("k")));
     }
 
-    /** AUD-017 重建源投影：一条缺失核销结算的权威核销事实 + 其时序序号 k（用于算增量 f(k)−f(k−1)）。 */
+    /** AUD-017 重建源投影：一条缺失核销结算的权威核销事实 + 其时序序号 k（用于算增量 f(k)−f(k−1)）。
+     *  D6：加 componentFullPriceCent，重建时用同一增量公式算 verifiedFull 还原折扣（与在线消费者一致）。 */
     public record MissingSettledFact(
             String verificationId, String entitlementId, Instant verifiedAt, String orderId, String ticketTypeId,
             String entitlementType, String merchantId, int totalTimes, int numPeople, Long allocatedRevenueCent,
-            Instant validTo, String exclusiveMerchantId, Long settlementPriceCent, int k) {
+            Instant validTo, String exclusiveMerchantId, Long settlementPriceCent, Long componentFullPriceCent, int k) {
     }
 
     /**

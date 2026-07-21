@@ -392,6 +392,9 @@ public class TicketOrderService {
             parentTotalTimes = Math.max(parentTotalTimes, binding.totalTimes());
         }
 
+        // D6 套票折扣落库：与 allocateRevenue(净额)并行算各权益「满额份额」(=各分项标准价 componentPriceCent)。
+        //   订单无关(每张票复制同一套 binding),故整单算一次,内层用同一 allocationIndex 取用。component_price 全空→null=无折扣。
+        long[] fullAllocations = componentFullPrices(bindings);
         List<IssuedEntitlementResponse> responses = new ArrayList<>();
         for (int t = 1; t <= quantity; t++) {
             // 每买 1 张 = 1 父票实例（seq_in_order=t）；买家/持有人=订单 customer（方案3 转赠起点）。
@@ -426,11 +429,17 @@ public class TicketOrderService {
             for (int i = 0; i < binding.quantity(); i++) {
                 // 待确认项#1：每张（多人）票分配收入（无订单则 null），再在其 N 张独立票间整数平分（不丢分）。
                 Long unitRevenue = allocations == null ? null : allocations[allocationIndex];
+                // D6：本张权益的「满额份额」镜像净额同一 allocationIndex 取用。无订单(净额 null)或无分项满额价
+                //   (fullAllocations null)→ null=无折扣，与 allocated 的 null 语义配对。
+                Long unitFull = (allocations == null || fullAllocations == null) ? null : fullAllocations[allocationIndex];
                 allocationIndex++;
                 long[] perPersonRevenue = unitRevenue == null ? null : allocateEvenly(unitRevenue, peopleCount);
+                // D6：满额份额按人拆用与净额同一 allocateEvenly（不丢分），逐人满额−净额即该人折扣。
+                long[] perPersonFull = unitFull == null ? null : allocateEvenly(unitFull, peopleCount);
                 for (int p = 0; p < peopleCount; p++) {
                     String entitlementCode = "P0-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
                     Long allocatedRevenue = perPersonRevenue == null ? null : perPersonRevenue[p];
+                    Long componentFull = perPersonFull == null ? null : perPersonFull[p];
                     IssuedEntitlementRecord entitlement = new IssuedEntitlementRecord(
                             "ent_" + UUID.randomUUID().toString().replace("-", ""),
                             entitlementCode,
@@ -463,7 +472,9 @@ public class TicketOrderService {
                             parentTicketId,
                             p + 1,
                             // AUD-076：快照酒吧归属（取自订单；通票为 null）。
-                            orderBarId
+                            orderBarId,
+                            // D6：本张权益满额份额（各分项标准价按人拆），供核销结算算折扣；无分项满额价=null=无折扣。
+                            componentFull
                     );
                     // 批3-6：require_face_photo=TRUE 的权益必须带一张人脸照(base64)，逐张按发放顺序取用；
                     //   缺照 → 拒 FACE_PHOTO_REQUIRED(在建权益行之前拒，不产生无照的孤儿权益)。=FALSE 的票零影响。
@@ -574,6 +585,36 @@ public class TicketOrderService {
             allocations[i] = base + (i < remainder ? 1 : 0);
         }
         return allocations;
+    }
+
+    /**
+     * D6 套票折扣落库：与 {@link #allocateRevenue}(净额)并行，算各权益「满额份额」数组（与发券顺序一致，
+     * 索引同 allocationIndex）。每张=其 binding 的 componentPriceCent（分项标准单价）；核销结算时满额−净额即折扣。
+     *
+     * <p><b>零行为变更保证</b>：分项单价全空（anyComponentPrice=false，allocateRevenue 回退均摊）→ 返回 null，
+     * 各权益 component_full_price_cent=null=无满额价=折扣恒 0，与 D6 前既有场景逐分一致。
+     *
+     * @return 每张权益满额份额（分）；无任何分项单价配置时返回 null（=无折扣）。
+     */
+    private long[] componentFullPrices(List<TicketTypeEntitlementRecord> bindings) {
+        boolean anyComponentPrice = bindings.stream().anyMatch(b -> b.componentPriceCent() != null);
+        if (!anyComponentPrice) {
+            return null; // 回退均摊场景：无满额价 → 无套票折扣（零行为变更）。
+        }
+        int totalUnits = 0;
+        for (TicketTypeEntitlementRecord binding : bindings) {
+            totalUnits += binding.quantity();
+        }
+        long[] full = new long[totalUnits];
+        int idx = 0;
+        for (TicketTypeEntitlementRecord binding : bindings) {
+            long unitFull = binding.componentPriceCent() == null ? 0L : binding.componentPriceCent();
+            for (int i = 0; i < binding.quantity(); i++) {
+                full[idx] = unitFull;
+                idx++;
+            }
+        }
+        return full;
     }
 
     /**

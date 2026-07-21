@@ -84,6 +84,13 @@ public class SettlementReconciliationJob {
             }
             long verified = SettlementAmounts.incrementalVerified(
                     f.allocatedRevenueCent(), f.totalTimes(), f.k(), exclusiveByPrice, f.settlementPriceCent());
+            // D6：直接把折扣总额(满额−净额)按与净额同一非专属增量斜坡分配（与在线消费者同公式，每笔>=0 且 Σ 精确，无舍入泄漏）。
+            //   componentFullPrice 为空 → 0；exclusiveByPrice → 0（专属按内部价直付，无套票折扣）。
+            long discountIncrement = 0L;
+            if (!exclusiveByPrice && f.componentFullPriceCent() != null) {
+                long discountTotal = Math.max(0L, f.componentFullPriceCent() - f.allocatedRevenueCent());
+                discountIncrement = SettlementAmounts.incrementalVerified(discountTotal, f.totalTimes(), f.k(), false, null);
+            }
             repository.insertImmutableFact(new SettlementTransactionRecord(
                     "st_vs_" + f.verificationId(),
                     "ST-VS-" + f.verificationId(),
@@ -105,7 +112,8 @@ public class SettlementReconciliationJob {
                     "draft",
                     f.validTo(),
                     f.exclusiveMerchantId(),
-                    f.verifiedAt()));
+                    f.verifiedAt(),
+                    discountIncrement));  // D6：重建行还原折扣（与在线一致）
             rebuilt++;
         }
         return rebuilt;

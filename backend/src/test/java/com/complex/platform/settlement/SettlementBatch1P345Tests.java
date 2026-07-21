@@ -26,7 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 真提交,@AfterEach 按 suffix 清理落地行,避免测试事务回滚遮蔽。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
+        "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })

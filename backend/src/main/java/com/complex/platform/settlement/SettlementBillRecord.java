@@ -22,6 +22,9 @@ public record SettlementBillRecord(
         String status,
         // 六业态收入归属(terminology-canonical §三):通票收入归属的 L3 管理公司/业态主体(娱乐运营平台)。
         // 由 revenue_stream_attribution 按 (项目, all_pass_ticket) 解析;未配置=null(零金额影响,仅归属留白)。
-        String attributedEntityId
+        String attributedEntityId,
+        // D6 套票折扣入账：本月项目公司实际承担的折扣额（platform_absorb 全额/split_by_ratio 平台份额；
+        //   merchant_absorb=0）。为覆盖折扣使商户拿满额，项目多支出的金额。默认 0=零行为变更。
+        long comboDiscountCent
 ) {
 }

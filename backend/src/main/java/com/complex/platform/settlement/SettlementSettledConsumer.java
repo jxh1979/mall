@@ -50,6 +50,16 @@ public class SettlementSettledConsumer {
         // 本次核销的不可变增量已核销金额（第 used 次核销的增量 = f(used)−f(used−1)，恒 >=0）。
         long verified = SettlementAmounts.incrementalVerified(
                 allocated, total, used, exclusiveByPrice, event.settlementPriceCent());
+        // D6 套票折扣增量：直接把折扣总额(满额−净额,恒>=0)按【与净额同一非专属增量斜坡】逐笔分配，
+        //   而非「满额斜坡−净额斜坡再 clamp」——后者两条独立取整斜坡非单调时负增量被 clamp 成 0，会向 Σ 多计舍入分。
+        //   本写法每笔增量恒>=0(满足 V331 核销行>=0 CHECK)且 Σ 恰=满额−净额(无泄漏)。
+        //   fullPriceCent 为空 → 折扣 0（零行为变更）；exclusiveByPrice(专属按内部价直付) → 折扣恒 0（无套票折扣概念，
+        //   不能走 incrementalVerified 的专属分支[会返回 price×1],故显式置 0）。绝不因缺数据 skip 核销。
+        long discountIncrement = 0L;
+        if (!exclusiveByPrice && event.fullPriceCent() != null) {
+            long discountTotal = Math.max(0L, event.fullPriceCent() - allocated);
+            discountIncrement = SettlementAmounts.incrementalVerified(discountTotal, total, used, false, null);
+        }
 
         repository.insertImmutableFact(new SettlementTransactionRecord(
                 "st_vs_" + event.verificationId(),
@@ -72,7 +82,8 @@ public class SettlementSettledConsumer {
                 STATUS_DRAFT,
                 event.validTo(),
                 event.exclusiveMerchantId(),
-                event.verifiedAt()       // business_at：核销业务时刻（account 月窗聚合基准）
+                event.verifiedAt(),      // business_at：核销业务时刻（account 月窗聚合基准）
+                discountIncrement        // D6 折扣额增量（>=0；下传账本供结算按归属应用）
         ));
     }
 }

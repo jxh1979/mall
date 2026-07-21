@@ -207,6 +207,11 @@ public interface AnalyticsRepository {
         return 0;
     }
 
+    /** 差人转正守卫(项5):读该归因规则草案的起草人 updated_by(不存在/非草案返 null);默认无操作,真实实现见 JdbcAnalyticsRepository。 */
+    default String attributionRuleDraftUpdatedBy(String id) {
+        return null;
+    }
+
     /** V220 招商漏斗:线索总数/已达意向/已签约(按 created_at 落经营日窗口)。 */
     AnalyticsRecords.LeasingFunnel leasingFunnel(java.time.LocalDate businessDate, String windowDomain);
 

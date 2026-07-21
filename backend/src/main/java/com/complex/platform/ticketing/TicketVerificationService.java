@@ -655,7 +655,9 @@ public class TicketVerificationService {
                 // 批3-4：把该权益专属商户带入结算事件，双写时定格进 settlement_transactions（空=非专属分池）。
                 updated.exclusiveMerchantId(),
                 // 餐饮结算(用户2026-07-06)：本次核销结算价随事件带下游；专属餐饮权益按此价×核销数直付餐厅(内部结算价)，非专属仍按 allocated。
-                settlementPriceCent
+                settlementPriceCent,
+                // D6：本权益满额份额随事件带下游，消费者算折扣增量；为空=无折扣。
+                updated.componentFullPriceCent()
         ));
         if (credential != null) {
             // AUD-012 凭证消费 CAS(仅 active→consumed):0 行=该凭证已被并发撤销(转赠领取撤销原持有人旧码)
@@ -788,7 +790,9 @@ public class TicketVerificationService {
                 consumed.validTo(),
                 consumed.exclusiveMerchantId(),
                 // 游乐核销结算价沿用 value_amount(D6)；随事件带下游（游乐当前非专属，消费者仍按 allocated 分摊）。
-                settlementPriceCent
+                settlementPriceCent,
+                // D6：游乐权益满额份额随事件带下游（游乐通常无分项满额价=null=无折扣）。
+                consumed.componentFullPriceCent()
         ));
         return new VerificationResponse(verification.id(), verification.verificationNo(),
                 verification.status(), verification.resultReason());

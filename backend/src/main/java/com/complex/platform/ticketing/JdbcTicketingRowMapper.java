@@ -127,7 +127,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("exclusive_merchant_id"),
                 resultSet.getString("parent_ticket_id"),
                 resultSet.getInt("slot_index"),
-                resultSet.getString("bar_id")
+                resultSet.getString("bar_id"),
+                nullableLong(resultSet, "component_full_price_cent")
         );
     }
 

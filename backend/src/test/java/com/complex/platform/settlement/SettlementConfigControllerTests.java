@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AuthorizationService;
-import com.complex.platform.analytics.OperatingParamsService;
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.GlobalExceptionHandler;
@@ -110,8 +109,8 @@ class SettlementConfigControllerTests {
         }
 
         @Bean
-        OperatingParamsService operatingParamsService() {
-            return Mockito.mock(OperatingParamsService.class);
+        SettlementConfigWriteService settlementConfigWriteService() {
+            return Mockito.mock(SettlementConfigWriteService.class);
         }
 
         @Bean

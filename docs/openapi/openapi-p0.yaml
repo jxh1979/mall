@@ -32,6 +32,466 @@ tags:
   - name: compliance
     description: 合规域（含 R5 T8 企微会话合规链）
 paths:
+  /api/v1/settlement/config/overview:
+    get:
+      tags:
+        - settlement
+      operationId: settlementConfigOverview
+      summary: 结算配置中心总览
+      description: 平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。
+      x-auth-context: staff-token
+      x-permission: settlement.config.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-audit-event-success: settlement.config.overview.viewed
+      x-audit-event-failure: settlement.config.overview.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/retention:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertRetention
+      summary: 维护项目公司留存比例(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.platform_retention_rules.updated
+      x-audit-event-failure: settlement.config.platform_retention_rules.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                retention_bps:
+                  type: integer
+              required:
+                - idempotency_key
+                - retention_bps
+      responses: &a1
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/distribution-method:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertDistributionMethod
+      summary: 维护通票分配方式(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.ticket_distribution_configs.updated
+      x-audit-event-failure: settlement.config.ticket_distribution_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                method_type:
+                  type: string
+              required:
+                - idempotency_key
+                - method_type
+      responses: *a1
+  /api/v1/settlement/config/merchant-rate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertMerchantRate
+      summary: 维护每客单价/固定额(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.ticket_distribution_merchant_rates.updated
+      x-audit-event-failure: settlement.config.ticket_distribution_merchant_rates.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                merchant_id:
+                  type: string
+                per_guest_cent:
+                  type: integer
+                  format: int64
+                fixed_amount_cent:
+                  type: integer
+                  format: int64
+              required:
+                - idempotency_key
+                - merchant_id
+      responses: *a1
+  /api/v1/settlement/config/comprehensive-service-fee:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertComprehensiveServiceFee
+      summary: 维护门票综合服务费(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.comprehensive_service_fee_configs.updated
+      x-audit-event-failure: settlement.config.comprehensive_service_fee_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                merchant_id:
+                  type: string
+                entitlement_type:
+                  type: string
+                fee_bps:
+                  type: integer
+                fixed_amount_cent:
+                  type: integer
+                  format: int64
+              required:
+                - idempotency_key
+                - fee_bps
+      responses: *a1
+  /api/v1/settlement/config/combo-discount:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertComboDiscount
+      summary: 维护套票折扣归属(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.ticket_combo_discount_configs.updated
+      x-audit-event-failure: settlement.config.ticket_combo_discount_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                discount_bearer:
+                  type: string
+                split_platform_bps:
+                  type: integer
+              required:
+                - idempotency_key
+                - discount_bearer
+                - split_platform_bps
+      responses: *a1
+  /api/v1/settlement/config/channel-fee:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertChannelFee
+      summary: 维护第三方渠道抽成率(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.channel_fee_configs.updated
+      x-audit-event-failure: settlement.config.channel_fee_configs.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                channel:
+                  type: string
+                fee_bps:
+                  type: integer
+              required:
+                - idempotency_key
+                - fee_bps
+      responses: *a1
+  /api/v1/settlement/config/rank-tiers:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertRankTiers
+      summary: 维护排名档位梯子(草案·整套替换)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.ticket_distribution_rank_tiers.updated
+      x-audit-event-failure: settlement.config.ticket_distribution_rank_tiers.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                tiers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      rank_from:
+                        type: integer
+                      rank_to:
+                        type: integer
+                      share_bps:
+                        type: integer
+              required:
+                - idempotency_key
+                - tiers
+      responses: *a1
+  /api/v1/settlement/config/revenue-stream-attribution:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigUpsertRevenueStreamAttribution
+      summary: 维护六业态收入归属(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.revenue_stream_attribution.updated
+      x-audit-event-failure: settlement.config.revenue_stream_attribution.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                revenue_stream:
+                  type: string
+                management_entity_id:
+                  type: string
+              required:
+                - idempotency_key
+                - revenue_stream
+                - management_entity_id
+      responses: *a1
+  /api/v1/settlement/config/rank-tiers/activate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigActivateRankTiers
+      summary: 复核转正:排名档位梯子整体换梯
+      description: 差人复核(执行人≠起草人否则403)+转正前区间覆盖复校。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.draft.activated
+      x-audit-event-failure: settlement.config.draft.activate_failed
+      responses: *a1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: string
+  /api/v1/settlement/config/{configType}/{id}/activate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigActivateDraft
+      summary: 复核转正:单行/归属/归因规则草案转正
+      description: 差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.draft.activated
+      x-audit-event-failure: settlement.config.draft.activate_failed
+      responses: *a1
+      parameters:
+        - name: configType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/config/{configType}/{id}/archive:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigArchive
+      summary: 软删结算配置(status→inactive)
+      description: 仅 merchant_rate / revenue_stream_attribution;差人复核(执行人≠起草人否则403);不物理删。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.archived
+      x-audit-event-failure: settlement.config.archive_failed
+      parameters:
+        - name: configType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                archive_reason:
+                  type: string
+              required:
+                - archive_reason
+      responses: *a1
+  /api/v1/settlement/config/attribution-rules/{id}/activate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigActivateAttributionRuleAlias
+      summary: 复核转正:归因规则草案(弃用薄别名)
+      description: 弃用别名,内部转调 {configType}/{id}/activate(configType=attribution_rule)。差人复核。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.draft.activated
+      x-audit-event-failure: settlement.config.draft.activate_failed
+      responses: *a1
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      deprecated: true
+
+  /api/v1/settlement/bills/{id}/post:
+    post:
+      tags:
+        - settlement
+      operationId: settlementPostBill
+      summary: 结算单过账(挂应付台账)
+      description: 把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);超池 draft 单特批 confirmed 后由此人工过账。返回本次过账明细笔数。
+      x-auth-context: staff-token
+      x-permission: settlement.bill.post
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.bill.posted
+      x-audit-event-failure: settlement.bill.post_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /api/open/d/{endpoint_key}/events/{event_id}:
     get:
       tags:

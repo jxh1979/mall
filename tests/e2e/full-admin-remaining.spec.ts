@@ -151,6 +151,10 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-STL-001") {
     await expect(page.getByTestId("settlement-config-page")).toBeVisible();
     await expect(page.getByTestId("settlement-config-defaults-table")).toBeVisible();
+    // 批1：切到「通票分账」栏目，8 配置块之一（留存比例）应可见、可「改」。
+    await page.getByRole("tab", { name: "通票分账" }).click();
+    await expect(page.getByTestId("settlement-config-block-retention")).toBeVisible();
+    await expect(page.getByTestId("settlement-config-edit-retention")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-002") {
     await expect(page.getByTestId("reconciliation-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-003") {

@@ -1,5 +1,6 @@
 package com.complex.platform.analytics;
 
+import com.complex.platform.common.Hashing;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
@@ -174,11 +175,12 @@ public class OperatingParamsService {
         return repository.listRevenueAttributionRules();
     }
 
-    /** V221:新增/更新一条收入归因口径规则(经营参数页维护);校验枚举/bps/scope,审计留痕。 */
+    /** V221:新增/更新一条收入归因口径规则(经营参数页维护);校验枚举/bps/scope,审计留痕。
+     *  待主会话协调 batch0:升 Path 2——落草案行 id 确定性生成(不复用请求 id,避免与生效行撞 PK);updated_by=起草人(差人守卫依据)。 */
     public AnalyticsRecords.MerchantRevenueAttributionRule upsertRevenueAttributionRule(
-            RevenueAttributionRuleRequest request) {
+            RevenueAttributionRuleRequest request, String actorId) {
         RevenueAttributionRuleRequest actual = requireRequest(request);
-        String id = requireText(actual.id(), "id");
+        requireText(actual.id(), "id"); // 保留 API 契约必填校验;Path 2 行 id 下方确定性生成,请求 id 不再作行标识
         String scope = requireOneOf(actual.ruleScope(), "rule_scope", "default", "merchant");
         String source = requireOneOf(actual.revenueSource(), "revenue_source",
                 "ticket", "bar", "contract_rent", "thirdparty");
@@ -198,14 +200,17 @@ public class OperatingParamsService {
         // 结算配置中心批0:改动一律先落草案(is_draft=TRUE),不允许经维护端点自助直接生效;
         // 转正须走 SettlementConfigController 复核端点(settlement.config.manage,与编辑权限分离)。
         boolean isDraft = true;
+        String merchant = "default".equals(scope) ? null : merchantId;
+        // Path 2 草案行 id 确定性 = scope|source|merchant|idempotencyKey(同请求幂等,跨编辑轮相异→不撞 PK;草案槽唯一由部分索引保证)。
+        String rowId = "mrar_d_" + Hashing.idempotencyCode(
+                scope + "|" + source + "|" + (merchant == null ? "" : merchant) + "|" + actual.idempotencyKey());
         AnalyticsRecords.MerchantRevenueAttributionRule saved = repository.upsertRevenueAttributionRule(
                 new AnalyticsRecords.MerchantRevenueAttributionRule(
-                        id, scope, "default".equals(scope) ? null : merchantId, source, mode, bps,
-                        refund, status, isDraft, null, null),
-                null, Instant.now(clock));
+                        rowId, scope, merchant, source, mode, bps, refund, status, isDraft, null, null),
+                actorId, Instant.now(clock));
         auditEventService.recordSuccess(
                 "analytics.revenue_attribution_rule.updated", "analytics.operating_params.manage",
-                "merchant_revenue_attribution_rules", id, null, actual.idempotencyKey(),
+                "merchant_revenue_attribution_rules", saved == null ? rowId : saved.id(), null, actual.idempotencyKey(),
                 java.util.Map.of("rule_scope", scope, "revenue_source", source,
                         "attribution_mode", mode, "share_bps", String.valueOf(bps),
                         "refund_attribution", refund, "is_draft", String.valueOf(isDraft)));
@@ -214,10 +219,15 @@ public class OperatingParamsService {
 
     /**
      * 结算配置中心批0:把一条收入归因规则草案(is_draft=TRUE)复核转正为正式生效口径(FALSE)。
-     * 前态守卫:仅草案态可转正(仓储 WHERE is_draft=TRUE,行数0=不存在/已是正式)。
+     * 差人守卫(项5):执行人 = 草案起草人 → 403;前态守卫:仅草案态可转正(行数0=不存在/已是正式)。
      */
     public void activateRevenueAttributionRuleDraft(String id, String actorId) {
         String ruleId = requireText(id, "id");
+        String drafter = repository.attributionRuleDraftUpdatedBy(ruleId);
+        if (drafter != null && drafter.equals(actorId)) {
+            throw ApiException.forbidden("SELF_ACTIVATION_FORBIDDEN",
+                    "不能自行转正自己起草的改动,须另一高权限人复核批准");
+        }
         int rows = repository.activateAttributionRuleDraft(ruleId, actorId, Instant.now(clock));
         if (rows == 0) {
             throw ApiException.badRequest("DRAFT_NOT_ACTIVATABLE", "规则不存在或非草案态,无法转正");

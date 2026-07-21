@@ -84,7 +84,8 @@ public class SettlementReversedConsumer {
                 STATUS_DRAFT,
                 original.entitlementValidTo(),
                 original.exclusiveMerchantId(),
-                businessAt));
+                businessAt,
+                -original.discountAmountCent()));  // D6：折扣额取原行反（CHECK 要求冲正行 <=0），配对天然净掉
     }
 
     /** 原核销所属月已过账 → 红冲落当月(now)；否则落原月(原核销时刻)由该月重算净掉。 */

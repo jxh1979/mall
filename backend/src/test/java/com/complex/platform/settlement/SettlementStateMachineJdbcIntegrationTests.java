@@ -23,7 +23,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 调消费者/作业可调方法,断言不可变账本 + 冲正净额 + 到期互斥 + 重建结果。非 @Transactional(真提交,@AfterEach 清理)。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
+        "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
@@ -85,13 +85,13 @@ class SettlementStateMachineJdbcIntegrationTests {
         // 第 1 次核销：allocated=1000,total=2 → 增量 f(1)-f(0)=500。
         SettlementSettledEvent e1 = new SettlementSettledEvent(
                 "vc_" + p + "_1", t, ent, "order_x", "tt_x", "entry", "mch_" + p, 2, 1, 1, 1000L,
-                t.plusSeconds(3600), null, null);
+                t.plusSeconds(3600), null, null, null);
         settledConsumer.onSettlementSettled(e1);
         settledConsumer.onSettlementSettled(e1); // 重放：ON CONFLICT DO NOTHING
         // 第 2 次核销(k=2)：增量 f(2)-f(1)=500，独立成行。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 "vc_" + p + "_2", t, ent, "order_x", "tt_x", "entry", "mch_" + p, 2, 2, 1, 1000L,
-                t.plusSeconds(3600), null, null));
+                t.plusSeconds(3600), null, null, null));
 
         Integer rows = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM settlement_transactions WHERE entitlement_id = ? AND transaction_type='verification_settled'",

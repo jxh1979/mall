@@ -24,7 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 每个用例用独立 projectId（含 nanoTime）隔离，避免并发会话/真实数据串扰。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
+        "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
@@ -59,26 +59,27 @@ class SettlementBatch2EngineTests {
         }
     }
 
-    // ---- ① 池/留存/总池 + 赠酒扣减 ----
+    // ---- ① 池/留存/总池:赠酒不从池扣(D5,2026-07-21 用户拍板) ----
 
     @Test
-    void poolRetentionAndGiveawayCostAreComputedCorrectly() {
+    void giveawayVerificationsDoNotReduceDistributionPool() {
         String pid = newProject();
-        // 两家酒吧核销收入合计 100000 分;另 gift_drink 10 杯(默认每杯 300)= 赠酒成本 3000。
+        // 两家酒吧核销收入合计 100000 分;另 gift_drink 10 杯。D5:赠酒补偿走 bar 域内部结算价应付,不从分账池扣;
+        // 故即便有 10 杯赠酒核销,也不缩小池、giveaway_cost_cent 恒 0(证伪:池 = 收入 − 渠道费,不含赠酒项)。
         seedVerified(pid, "m1", "entry", 5, 3, 60000L);
         seedVerified(pid, "m2", "entry", 4, 2, 40000L);
-        seedVerified(pid, "m1", "gift_drink", 10, 0, 0L); // 赠酒收入 0,仅核销 10 杯
+        seedVerified(pid, "m1", "gift_drink", 10, 0, 0L); // 赠酒 10 杯核销——不应影响池
 
         service.settleMonth(pid, MONTH);
 
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(100000L);
         assertThat(num(bill, "channel_fee_cent")).isEqualTo(0L);          // 渠道费先 0
-        assertThat(num(bill, "giveaway_cost_cent")).isEqualTo(3000L);     // 10 × 300
-        assertThat(num(bill, "available_pool_cent")).isEqualTo(97000L);   // 100000 − 0 − 3000
+        assertThat(num(bill, "giveaway_cost_cent")).isEqualTo(0L);        // D5:赠酒不占池,恒 0(即便 10 杯核销)
+        assertThat(num(bill, "available_pool_cent")).isEqualTo(100000L);  // 100000 − 0(渠道费),不再减赠酒
         assertThat(bill.get("retention_bps")).isEqualTo(2000);           // 默认 20%
-        assertThat(num(bill, "retention_cent")).isEqualTo(19400L);        // 97000 × 20%
-        assertThat(num(bill, "spv_pool_cent")).isEqualTo(77600L);         // 97000 − 19400
+        assertThat(num(bill, "retention_cent")).isEqualTo(20000L);        // 100000 × 20%
+        assertThat(num(bill, "spv_pool_cent")).isEqualTo(80000L);         // 100000 − 20000
     }
 
     // ---- ② by_rank_tier(默认档位 16/12/9/6)----

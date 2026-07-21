@@ -27,6 +27,7 @@ public class SettlementMonthlyJob {
 
     private final TicketDistributionSettlementService service;
     private final JdbcSettlementBillRepository repository;
+    private final SettlementPostingService postingService;
     private final Clock clock;
     private final boolean scheduledEnabled;
 
@@ -38,19 +39,21 @@ public class SettlementMonthlyJob {
     public SettlementMonthlyJob(
             TicketDistributionSettlementService service,
             JdbcSettlementBillRepository repository,
+            SettlementPostingService postingService,
             @Value("${settlement.monthly.scheduled.enabled:false}") boolean scheduledEnabled) {
-        this(service, repository, Clock.systemUTC(), scheduledEnabled);
+        this(service, repository, postingService, Clock.systemUTC(), scheduledEnabled);
     }
 
     SettlementMonthlyJob(TicketDistributionSettlementService service, JdbcSettlementBillRepository repository,
-            Clock clock) {
-        this(service, repository, clock, true);
+            SettlementPostingService postingService, Clock clock) {
+        this(service, repository, postingService, clock, true);
     }
 
     SettlementMonthlyJob(TicketDistributionSettlementService service, JdbcSettlementBillRepository repository,
-            Clock clock, boolean scheduledEnabled) {
+            SettlementPostingService postingService, Clock clock, boolean scheduledEnabled) {
         this.service = service;
         this.repository = repository;
+        this.postingService = postingService;
         this.clock = clock;
         this.scheduledEnabled = scheduledEnabled;
     }
@@ -69,7 +72,14 @@ public class SettlementMonthlyJob {
             // 平台口径 projectId=null;按期预判状态,只对缺月/未过账月补算,已过账(settled/reversed)跳过。
             String status = repository.findBillStatusByPeriod(null, month.atDay(1), month.atEndOfMonth());
             if (status == null || "draft".equals(status) || "confirmed".equals(status)) {
-                service.settleMonth(null, month);
+                String billId = service.settleMonth(null, month);
+                // ① 过账(补 postBill 生产触发缺口):对未越池、已 confirmed 的常规单自动挂应付台账;
+                //   超池 draft 单不 confirmed → 不过账,待人工特批 confirmed 后走网关端点 ②(POST /bills/{id}/post)。
+                //   postBill @Transactional 全或无 + 幂等,confirmed 单重跑不重复挂账。
+                //   🔴 落码≠上线:本步骤仅在 settlement.monthly.scheduled.enabled=true(默认关)时随作业运行,不自行激活生产账本。
+                if ("confirmed".equals(repository.findBillStatus(billId))) {
+                    postingService.postBill(billId);
+                }
             }
         }
     }

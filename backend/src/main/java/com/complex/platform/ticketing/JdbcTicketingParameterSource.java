@@ -116,7 +116,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("exclusive_merchant_id", entitlement.exclusiveMerchantId())
                 .addValue("parent_ticket_id", entitlement.parentTicketId())
                 .addValue("slot_index", entitlement.slotIndex())
-                .addValue("bar_id", entitlement.barId());
+                .addValue("bar_id", entitlement.barId())
+                .addValue("component_full_price_cent", entitlement.componentFullPriceCent());
     }
 
     MapSqlParameterSource ticketInstanceParameters(TicketInstanceRecord instance) {

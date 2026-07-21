@@ -75,6 +75,7 @@ business_entity_bindings,direct,merchant_id,merchant_id column on business_entit
 business_process_instances,direct,project_id,project_id column on business_process_instances,ready for project/merchant scoped query enforcement,covered
 business_process_step_records,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 business_review_locks,direct,project_id,project_id column on business_review_locks,ready for project/merchant scoped query enforcement,covered
+channel_fee_configs,direct,project_id,project_id column on channel_fee_configs,ready for project/merchant scoped query enforcement,covered
 complex_operating_params,direct,project_id,project_id column on complex_operating_params,ready for project/merchant scoped query enforcement,covered
 compliance_expiry_items,direct,merchant_id,merchant_id column on compliance_expiry_items,ready for project/merchant scoped query enforcement,covered
 compliance_reminders,direct,merchant_id,merchant_id column on compliance_reminders,ready for project/merchant scoped query enforcement,covered

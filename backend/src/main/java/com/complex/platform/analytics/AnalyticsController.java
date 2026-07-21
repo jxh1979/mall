@@ -309,7 +309,8 @@ public class AnalyticsController {
         authorizationService.requirePermission("analytics.operating_params.manage");
         authorizationService.requirePlatformScope();
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(operatingParamsService.upsertRevenueAttributionRule(request));
+        return ApiResponse.ok(operatingParamsService.upsertRevenueAttributionRule(
+                request, authorizationService.currentActor().id()));
     }
 
     @GetMapping("/operating-params")
