@@ -290,7 +290,37 @@ class SettlementConfigWriteJdbcIntegrationTests {
                         e -> assertThat(e.code()).isEqualTo("DRAFT_NOT_ACTIVATABLE"));
     }
 
+    /**
+     * 必修1(负路·资金级数据完整性):无待转正草案时调排名档转正 → 抛 DRAFT_NOT_ACTIVATABLE,
+     * 且生效梯<b>不被破坏性停用</b>(status=active 行数不变)。锁死空草案守卫 + @Transactional + 仓储 EXISTS 三重纵深:
+     * 修前该路径会第①步停用生效梯、第②步翻0行抛错但停用已提交 → by_rank_tier 给全体 0 分账。
+     */
+    @Test
+    void activateRankTiersWithoutDraftRejectsAndKeepsActiveTiers() {
+        // 先建一套生效梯(草案→转正):第1名6000 + 2~3名各2000 = 10000
+        writeService.saveRankTiers(new RankTiersRequest("r1", PROJECT,
+                List.of(new RankTierInput(1, 1, 6000), new RankTierInput(2, 3, 2000))), DRAFTER);
+        writeService.activateRankTiers(PROJECT, APPROVER);
+        int activeBefore = activeRankTierCount(PROJECT);
+        assertThat(activeBefore).isEqualTo(2);
+
+        // 无待转正草案时再调转正 → 抛 DRAFT_NOT_ACTIVATABLE(空草案守卫;差人守卫因起草人 null 放行)
+        assertThatThrownBy(() -> writeService.activateRankTiers(PROJECT, APPROVER))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("DRAFT_NOT_ACTIVATABLE"));
+        // 生效梯行数不变 = 未被破坏性停用(资金完整性)
+        assertThat(activeRankTierCount(PROJECT)).isEqualTo(activeBefore);
+    }
+
     // ---- helpers ----
+
+    private int activeRankTierCount(String projectId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM ticket_distribution_rank_tiers
+                 WHERE is_draft = FALSE AND status = 'active'
+                   AND COALESCE(project_id, '__DEFAULT__') = COALESCE(?, '__DEFAULT__')
+                """, Integer.class, projectId);
+    }
 
     private String rsDraftId() {
         return jdbcTemplate.queryForObject(

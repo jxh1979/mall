@@ -220,11 +220,16 @@ public class JdbcSettlementConfigWriteRepository {
      */
     @Transactional
     public int activateRankTierDrafts(String projectId, String updatedBy, Instant now) {
+        // ① 旧生效梯软替换 → inactive;EXISTS 守卫:仅当存在待转正草案梯才停用(对齐 activateSingleRowDraft 自连接,
+        //    根除"无草案却把生效梯停用致 by_rank_tier 0 分账"——服务层空草案守卫 + @Transactional 之外的第三重 DB 级纵深)。
         jdbcTemplate.update("""
                 UPDATE ticket_distribution_rank_tiers
                    SET status = 'inactive', updated_by = :updated_by, updated_at = :now
                  WHERE is_draft = FALSE AND status = 'active'
                    AND COALESCE(project_id, '__DEFAULT__') = COALESCE(:project_id, '__DEFAULT__')
+                   AND EXISTS (SELECT 1 FROM ticket_distribution_rank_tiers d
+                                WHERE d.is_draft = TRUE AND d.status = 'active'
+                                  AND COALESCE(d.project_id, '__DEFAULT__') = COALESCE(:project_id, '__DEFAULT__'))
                 """, new MapSqlParameterSource().addValue("project_id", projectId)
                 .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
         return jdbcTemplate.update("""

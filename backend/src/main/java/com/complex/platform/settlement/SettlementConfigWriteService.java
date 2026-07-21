@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 结算配置中心批1 写入面服务(§2/§3):校验 → 强制落草案(is_draft=TRUE) → 审计;以及草案复核转正/软删。
@@ -224,13 +225,21 @@ public class SettlementConfigWriteService {
         }
     }
 
-    /** 排名档位梯子整体转正(§3:换梯)。差人守卫 + 转正前区间覆盖复校(防并发双写两套草案梯被翻成重叠生效梯)。 */
+    /**
+     * 排名档位梯子整体转正(§3:换梯)。差人守卫 + 转正前区间覆盖复校(防并发双写两套草案梯被翻成重叠生效梯)。
+     *
+     * <p>🔴 资金级数据完整性:换梯 = "软替换旧生效梯 + 翻草案梯" 两步须<b>原子</b>。@Transactional 让仓储 REQUIRED 事务并入,
+     * 若第②步翻 0 行致 {@code requireActivated} 抛错,第①步的停用一并回滚——否则旧生效梯被持久化 inactive、无草案可恢复,
+     * 下月 by_rank_tier 会给全体商户 0 分账。<b>空草案</b>先守卫拒绝(DRAFT_NOT_ACTIVATABLE),根本不触发任何变更。
+     */
+    @Transactional
     public void activateRankTiers(String projectId, String actorId) {
         requireDifferentActor(writeRepository.rankTierDraftUpdatedBy(projectId), actorId);
         List<TierRow> draftTiers = writeRepository.listDraftRankTiers(projectId);
-        if (!draftTiers.isEmpty()) {
-            validateRankTierCoverage(draftTiers);
+        if (draftTiers.isEmpty()) {
+            throw ApiException.badRequest("DRAFT_NOT_ACTIVATABLE", "无待转正的排名档位草案");
         }
+        validateRankTierCoverage(draftTiers);
         requireActivated(writeRepository.activateRankTierDrafts(projectId, actorId, Instant.now()));
         auditActivated("ticket_distribution_rank_tiers", defaultScope(projectId));
     }

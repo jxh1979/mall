@@ -468,7 +468,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
                        allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                       parent_ticket_id, slot_index, bar_id
+                       parent_ticket_id, slot_index, bar_id, component_full_price_cent
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
@@ -493,7 +493,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
                        allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                       parent_ticket_id, slot_index, bar_id
+                       parent_ticket_id, slot_index, bar_id, component_full_price_cent
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)
