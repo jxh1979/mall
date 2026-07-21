@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}",
         "complex.database.credential-separation.enforced=false",
+        "refund.tiered_authorization.enabled=true",
         "complex.auth.production.seed-admin.username=p0_riskhit_admin",
         "complex.auth.production.seed-admin.password=p0_riskhit_password",
         "ticket.credential.signing.secret=prod-test-ticket-signing-secret-32-bytes-minimum",

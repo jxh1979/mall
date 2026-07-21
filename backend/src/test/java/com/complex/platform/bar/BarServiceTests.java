@@ -65,10 +65,15 @@ class BarServiceTests {
         barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
                 new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
                 receivableLedgerService);
+        BarBillingService billingService = new BarBillingService(
+                barRepository, receivableLedgerService, authorizationService, auditEventService);
+        // AUD-007 退款额度闸 fail-closed 常在：注入宽松引擎，令既有退款调账用例（平台管理员操作）仍额度内放行。
+        billingService.refundAuthorizationService =
+                new com.complex.platform.finance.RefundAuthorizationService(permissiveBarRefundRepo());
         service = new BarService(
                 barRepository,
                 new BarOperationExecutor(operations),
-                new BarBillingService(barRepository, receivableLedgerService, authorizationService, auditEventService),
+                billingService,
                 new BarShiftService(barRepository, authorizationService, auditEventService),
                 new BarTableSessionService(barRepository, authorizationService),
                 barOrderService,
@@ -80,6 +85,28 @@ class BarServiceTests {
     @AfterEach
     void tearDown() {
         TestSecurityActors.clear();
+    }
+
+    private static com.complex.platform.finance.RefundAuthorizationRepository permissiveBarRefundRepo() {
+        Instant ts = Instant.parse("2026-06-23T00:00:00Z");
+        return new com.complex.platform.finance.RefundAuthorizationRepository() {
+            @Override public Optional<com.complex.platform.finance.RefundAuthorityLimitRecord> findActiveLimit(
+                    String st, String sid, String dom, String pid) {
+                return Optional.of(new com.complex.platform.finance.RefundAuthorityLimitRecord(
+                        "perm", st, sid, dom, Long.MAX_VALUE, pid, "active", ts, ts));
+            }
+            @Override public boolean isAutoRuleEnabled(String dom, String type, String pid) { return false; }
+            @Override public com.complex.platform.finance.RefundAuthorityLimitRecord saveLimit(
+                    com.complex.platform.finance.RefundAuthorityLimitRecord l) { return l; }
+            @Override public List<com.complex.platform.finance.RefundAuthorityLimitRecord> listLimits(String projectId) {
+                return List.of();
+            }
+            @Override public com.complex.platform.finance.RefundAutoRuleRecord saveRule(
+                    com.complex.platform.finance.RefundAutoRuleRecord r) { return r; }
+            @Override public List<com.complex.platform.finance.RefundAutoRuleRecord> listRules(String projectId) {
+                return List.of();
+            }
+        };
     }
 
     @Test

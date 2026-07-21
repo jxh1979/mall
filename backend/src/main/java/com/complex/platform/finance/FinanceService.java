@@ -98,8 +98,6 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     // 可为 null（旧构造/单测未注入）；包私有便于单测置位。开标志后超额财务退款须复核（见 requireRefundTierAuthorized）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     RefundAuthorizationService refundAuthorizationService;
-    @org.springframework.beans.factory.annotation.Value("${refund.tiered_authorization.enabled:false}")
-    boolean tieredRefundEnabled;
 
     @org.springframework.beans.factory.annotation.Autowired
     public FinanceService(
@@ -1282,20 +1280,23 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     }
 
     /**
-     * Stage B 分级授权闸（适用所有退款，功能标志 refund.tiered_authorization.enabled 默认关）：
-     * 把退款额按 {@link RefundAuthorizationService#classify} 判档——额度内/规则既定放行，超额（REVIEW_REQUIRED）
-     * 因单步退款无独立审批环节而直接拒（REFUND_REVIEW_REQUIRED），须由额度内的授权人办理。
-     * 平台管理员旁路（与 {@code requirePermission} 一致）。关闭标志或引擎未注入 → 不拦（维持现状）。
+     * 分级授权闸（适用所有退款）：把退款额按 {@link RefundAuthorizationService#classify} 判档——额度内/规则既定放行，
+     * 超额（REVIEW_REQUIRED）因单步退款无独立复核状态机而直接拒（REFUND_REVIEW_REQUIRED），须由额度内的授权人办理。
+     *
+     * <p>AUD-007 fail-closed：不再受功能标志控制、不再对平台管理员隐式旁路——闸常在；引擎缺失
+     * （仅旧兼容/单测构造，生产恒注入）时拒绝而非放行。如需给管理员更高额度，走同一 (subject, domain, project) 显式额度配置 + 审计。
+     * <p>AUD-008：projectId 为权威综合体归属，由调用方从原支付/单据的项目归属传入，不信任请求体。
      */
-    private void requireRefundTierAuthorized(String domain, long amountCent) {
-        if (!tieredRefundEnabled || refundAuthorizationService == null) {
-            return; // 关闭标志/引擎未注入 → 不解析操作者、不拦（维持现状，避免对未配置环境产生副作用）。
+    private void requireRefundTierAuthorized(String domain, long amountCent, String projectId) {
+        // AUD-007 fail-closed：不再受功能标志控制、不再对平台管理员隐式旁路——闸常在；引擎缺失
+        //   （仅旧兼容/单测构造，生产恒注入）时拒绝而非放行。管理员更高额度走同一显式额度配置 + 审计。
+        if (refundAuthorizationService == null) {
+            throw ApiException.forbidden("REFUND_AUTHORIZATION_UNAVAILABLE",
+                    "refund tiered authorization engine is unavailable; over-limit refunds cannot be self-processed");
         }
         var actor = authorizationService.currentActor();
-        if (authorizationService.isPlatformAdmin(actor)) {
-            return;
-        }
-        if (refundAuthorizationService.classify(domain, amountCent, actor.id(), null)
+        // AUD-008：projectId 由调用方从原支付/单据的权威综合体归属传入，不信任请求体。
+        if (refundAuthorizationService.classify(domain, amountCent, actor.id(), null, projectId)
                 == RefundAuthorizationService.RefundTier.REVIEW_REQUIRED) {
             throw ApiException.forbidden("REFUND_REVIEW_REQUIRED",
                     "refund amount exceeds the self-service authorization limit; an authorized approver must process it");
@@ -1338,7 +1339,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
 
         // Stage B 分级授权（功能标志默认关）：超额度财务退款须复核。财务退款为单步台账动作、无独立审批环节，
         // 故超额（REVIEW_REQUIRED）直接拒（REFUND_REVIEW_REQUIRED），由额度内的授权人办理。
-        requireRefundTierAuthorized("finance", refundAmountCent);
+        // AUD-008 权威综合体：projectId 取自原支付对应 AR/AP 单据的归属（item.projectId()），而非请求体/页面筛选器。
+        requireRefundTierAuthorized("finance", refundAmountCent, item.projectId());
 
         // 支付渠道开关（payment.gateway.enabled，后台可配，默认关）决定退款打款路径：
         //   关 → 不调渠道，退款标 requested + 内部/手工打款渠道（reserved，人工确认，不阻塞）。
