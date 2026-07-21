@@ -44,12 +44,17 @@ public class MerchantPortalService {
     }
 
     public PageResponse<MerchantContractView> listMyContracts() {
+        return listMyContracts(1, 500);
+    }
+
+    public PageResponse<MerchantContractView> listMyContracts(int page, int size) {
         authorizationService.requirePermission("contract.view");
         Optional<String> scope = authorizationService.currentMerchantScope();
-        List<ContractRecord> contracts = scope
-                .map(contractRepository::listContractsByMerchant)
-                .orElseGet(contractRepository::listContracts);
-        List<MerchantContractView> views = contracts.stream()
+        // 商户自 scope: 本商户查询(无 LIMIT、天然有界)内存切片; 平台全量: 仓储 SQL COUNT + LIMIT/OFFSET 真分页(501+ 可达、total 取真值)。
+        PageResponse<ContractRecord> contracts = scope
+                .map(merchantId -> PageResponse.of(contractRepository.listContractsByMerchant(merchantId), page, size))
+                .orElseGet(() -> contractRepository.listContractsPaged(page, size));
+        List<MerchantContractView> views = contracts.items().stream()
                 .map(contract -> MerchantContractView.of(contract, contractRepository.listContractSpaceIds(contract.id())))
                 .toList();
         auditEventService.recordSuccess(
@@ -61,15 +66,20 @@ public class MerchantPortalService {
                 null,
                 Map.of("count", views.size())
         );
-        return new PageResponse<>(views, 1, 200, views.size());
+        return new PageResponse<>(views, contracts.page(), contracts.pageSize(), contracts.total());
     }
 
     public PageResponse<ContractSettlementRecord> listMySettlements() {
+        return listMySettlements(1, 500);
+    }
+
+    public PageResponse<ContractSettlementRecord> listMySettlements(int page, int size) {
         authorizationService.requirePermission("merchant.portal.settlement.view");
         Optional<String> scope = authorizationService.currentMerchantScope();
-        List<ContractSettlementRecord> items = scope
-                .map(contractRepository::listSettlementsByMerchant)
-                .orElseGet(contractRepository::listAllSettlements);
+        // 商户自 scope: listSettlementsByMerchant(谓词隔离、无 LIMIT)内存切片; 平台全量: SQL COUNT + LIMIT/OFFSET 真分页。
+        PageResponse<ContractSettlementRecord> items = scope
+                .map(merchantId -> PageResponse.of(contractRepository.listSettlementsByMerchant(merchantId), page, size))
+                .orElseGet(() -> contractRepository.listAllSettlementsPaged(page, size));
         auditEventService.recordSuccess(
                 "merchant_portal.settlement.viewed",
                 "merchant.portal.settlement.view",
@@ -77,9 +87,9 @@ public class MerchantPortalService {
                 scope.orElse("platform-all"),
                 null,
                 null,
-                Map.of("count", items.size())
+                Map.of("count", items.items().size())
         );
-        return new PageResponse<>(items, 1, 200, items.size());
+        return items;
     }
 
     /** 商户对未结清结算单提异议留言:挂起为「有争议」,平台按既有裁决流(resolve-dispute)闭环。 */

@@ -69,10 +69,13 @@ class MerchantPortalServiceTests {
     @Test
     void platformAdminSeesAllContracts() {
         when(authz.currentMerchantScope()).thenReturn(Optional.empty());
-        when(contractRepository.listContracts()).thenReturn(List.of(contract("c1", "mch_a"), contract("c2", "mch_b")));
+        when(contractRepository.listContractsPaged(1, 500)).thenReturn(
+                new PageResponse<>(List.of(contract("c1", "mch_a"), contract("c2", "mch_b")), 1, 200, 2L));
         when(contractRepository.listContractSpaceIds(any())).thenReturn(List.of());
 
-        assertThat(service.listMyContracts().items()).hasSize(2);
+        PageResponse<MerchantContractView> page = service.listMyContracts();
+        assertThat(page.items()).hasSize(2);
+        assertThat(page.total()).isEqualTo(2L);
     }
 
     @Test
