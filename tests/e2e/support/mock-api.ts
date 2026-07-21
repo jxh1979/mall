@@ -534,6 +534,18 @@ export async function installMockApi(page: Page, options: MockOptions = {}) {
       return json(route, effectivePermissionsFor(options));
     }
     if (isWrite) return handleWrite(route, url.pathname, state, options);
+    if (url.pathname === "/api/v1/analytics/metric-detail") {
+      // KPI 页 useMetricKpiValue 按 metric 拉明细取 summary_value；按指标返回对应值（与仪表盘同源），
+      // 未覆盖指标退回既有票务收入明细桩（metric-detail 抽屉用例断言 TK-1/TK-2 行）。
+      const metric = url.searchParams.get("metric") ?? "";
+      const summaryByMetric: Record<string, number> = {
+        "energy.total_electricity": 1200.5,
+        "energy.electricity_per_sqm": 2.4,
+      };
+      if (Object.prototype.hasOwnProperty.call(summaryByMetric, metric)) {
+        return json(route, { metric_key: metric, name: metric, value_type: "additive", unit: "", caliber: "", source: "mock", part: null, from: null, to: null, data_as_of: now, summary_value: summaryByMetric[metric], summary_note: null, columns: [], rows: [], page: 1, size: 1, total_rows: 0 });
+      }
+    }
     return json(route, fixedRows(url.pathname, state, options));
   });
 }
@@ -627,6 +639,10 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
     return json(route, { id: `adj-${action}-1`, sessionId, renewedUntil: bodyValue(body, "renewedUntil", "renewed_until"), adjustmentType: "renew", status: "renewed" });
   }
   if (pathname === "/api/v1/platform/business-entities") return json(route, { id: "org-created", name: "Created Org", orgType: "platform", status: "active", createdAt: now });
+  if (pathname === "/api/v1/customer-accounts/lookup") {
+    // 客人账号按手机号精确查（POST body 传参，PII 不进 URL）；返回数组，页面取 rows[0]。
+    return json(route, [{ id: "cust-1", maskedPhone: "139****1234", status: "active", suspendedUntil: null, createdAt: now }]);
+  }
   if (pathname === "/api/v1/platform/merchants") return json(route, { id: "merchant-created", organizationId: "org-created", displayName: "Created Merchant", companyName: "Created Company", mallBlockCode: "1F-A", areaSquareMeter: 128.5, leasedAreaSquareMeter: 120, secondaryContactName: "Jack", rentPerSquareMeter: 12.3, cooperationForm: "fixed_rent_plus_commission", status: "active", riskLevel: "normal" });
   if (pathname === "/api/v1/platform/projects") return json(route, { id: "venue-created", merchantId: "merchant-created", name: "Created Venue", venueType: "complex", status: "active" });
   if (pathname === "/api/v1/finance/merchant-expenses") return json(route, { id: "mex_m_created", merchantId: String(bodyValue(body, "merchantId", "merchant_id") ?? "merchant-1"), period: String(bodyValue(body, "period") ?? "2026-07"), expenseType: String(bodyValue(body, "expenseType", "expense_type") ?? "labor"), amountCent: Number(bodyValue(body, "amountCent", "amount_cent") ?? 0), source: "manual", sourceRef: null, note: String(bodyValue(body, "note") ?? ""), operatorUserId: "usr_admin", createdAt: now });
