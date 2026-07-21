@@ -59,7 +59,9 @@ class FiveDomainGuardedActionCoverageTests {
                 Arguments.of(AmusementSafetyService.class, "closeIncident", "amusement.incident.close"),
                 // inventory
                 Arguments.of(InventoryService.class, "createStockMovement", "inventory.stock.move"),
-                Arguments.of(InventoryService.class, "createStockAdjustment", "inventory.stock.adjust")
+                Arguments.of(InventoryService.class, "createStockAdjustment", "inventory.stock.adjust"),
+                // AUD-020: high-value review gate must ride the proxied wrapper, not the hand-newed sub-service.
+                Arguments.of(InventoryService.class, "reviewHighValue", "inventory.high_value.review")
         );
     }
 

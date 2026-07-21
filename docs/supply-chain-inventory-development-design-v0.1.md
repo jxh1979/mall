@@ -316,6 +316,7 @@ flowchart TD
 - **高价值判定（supply-4）：** 生效阈值 = 物品 `high_value_threshold`（非空时）否则平台默认 `high_value_threshold`（单位：分）。满足"批次成本金额 ≥ 生效阈值"或物品 `is_high_value=true` 即判高价值。
 - **双证据（supply-3）：** 高价值场景报损/作废/盘点差异**必须同时**上传照片与视频（`photo_refs` 与 `video_refs` 均非空），并建域内复核记录由主管复核；非高价值证据可选。
 - **域内复核（T6）：** 高价值触发后建 `inventory_high_value_reviews`（`subject_type ∈ {damage_report, stock_variance, saved_bottle_void}`，`review_status ∈ {pending, approved, rejected}`），由 `InventoryHighValueReviewService` 在库存域内闭环，替换原"仅校验附件数≥2"且不接入 governance `SupervisorReviewService`。
+- **（2026-07-20 安全修复 AUD-020）能力闸 must ride the proxy：** `InventoryHighValueReviewService` 由 `InventoryService`/`PurchaseRequestService` 域内手工 `new`（非 Spring 代理），故其 `review()` 上的 `@GuardedAction(inventory.high_value.review)` 曾是死注解、`ActionGateAspect` 永不命中，能力开关关闭时复核仍可扣减库存。修复：能力闸上移到被 Spring 代理的对外入口 `InventoryService.reviewHighValue()`，Controller 调用即命中切面（关→`TERMINAL_DISABLED`、无库存变化）；新增架构测试 `GuardedActionProxyBypassArchTest` 阻止「主源码 `new` 一个带 @GuardedAction 的类」再次绕过代理。
 - **报溢（supply-5）：** 盘盈/异常增加落 `movement_type=gain` 流水（增加方向），单独走审批 + 证据，与盘亏/报损（`loss`/`damage`/`waste`）及盘点差异纠账（`count_correction`）区分方向。（注：取值以代码白名单为准，见 §6.13 权威口径；旧文档所称 `surplus`/`count_adjust` 在代码中不存在。）
 
 > 已实现修复（finding F-OPS-05，裁决#7「库存守恒账本」，2026-06-22，已在 160 编译通过）：此前以下三条落账路径只改写 `stock_balances` 库存余额、却未补写 `stock_movements` 流水，导致余额变更无对应流水、账本不守恒、无法逐位重建：

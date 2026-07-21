@@ -118,6 +118,42 @@ class AccessServiceTests {
     }
 
     @Test
+    void applyPermissionTemplateRequiresApprovalWhenTemplateHasHighRiskPermission() {
+        // AUD-011：模板应用必须复用统一授权政策引擎——含高风险(requiresApproval)权限的模板经模板入口批量应用时
+        // fail-closed（与角色/岗位/临时授权同口径），不得绕过职责分离/主管复核。
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        service = newAccessService(true, null);
+        accessRepository.users.put("usr_hv_apply", new AccessUser(
+                "usr_hv_apply", "hv-apply-target", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_hv_apply", "tpl_hv_apply", "High risk apply", null, "base",
+                null, "platform", null, "merge", null, null, false,
+                "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(
+                        "tpl_hv_apply",
+                        "ops.production_readiness.check",
+                        AccessRepository.Effect.GRANT,
+                        "project",
+                        false)));
+
+        assertThatThrownBy(() -> service.applyPermissionTemplate("tpl_hv_apply",
+                new PermissionTemplateApplyRequest(
+                        "apply-hv", "apply", List.of(), "tpl_hv_apply",
+                        List.of("usr_hv_apply"), "merge")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL");
+                });
+        // 授权未落地：无 applied 事件（说明高风险模板未被批量直发）。
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .doesNotContain("permission_template.applied");
+    }
+
+    @Test
     void applyPermissionTemplateAppliesToManyUsersAndWritesAuditEvent() {
         service.createPermissionTemplate(new PermissionTemplateRequest(
                 "create-apply",

@@ -17,9 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ServiceOrderController {
 
     private final ServiceOrderService service;
+    private final com.complex.platform.gate.TerminalIdentityResolver terminalIdentityResolver;
 
-    public ServiceOrderController(ServiceOrderService service) {
+    public ServiceOrderController(ServiceOrderService service,
+            com.complex.platform.gate.TerminalIdentityResolver terminalIdentityResolver) {
         this.service = service;
+        this.terminalIdentityResolver = terminalIdentityResolver;
     }
 
     private void requireIdempotencyKey(String key) {
@@ -108,8 +111,10 @@ public class ServiceOrderController {
     @PostMapping("/orders")
     public ApiResponse<ServiceOrderRecord> createOrder(
             @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Device-Id", required = false) String deviceId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
-        requireCompanyTerminal(terminalType, CREATE_AND_CODE_TERMINALS);
+        // AUD-010:先按注册设备把自报终端类型派生为可信类型,再过公司设备白名单。
+        requireCompanyTerminal(terminalIdentityResolver.resolveTrustedTerminalType(terminalType, deviceId), CREATE_AND_CODE_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createOrder(request));
     }
@@ -122,8 +127,9 @@ public class ServiceOrderController {
     @PostMapping("/orders/{id}/mark-paid")
     public ApiResponse<ServiceOrderRecord> markPaid(@PathVariable String id,
             @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Device-Id", required = false) String deviceId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
-        requireCompanyTerminal(terminalType, MARK_PAID_TERMINALS);
+        requireCompanyTerminal(terminalIdentityResolver.resolveTrustedTerminalType(terminalType, deviceId), MARK_PAID_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.markPaid(id, request));
     }
@@ -151,8 +157,9 @@ public class ServiceOrderController {
     @PostMapping("/orders/{id}/complete")
     public ApiResponse<ServiceOrderRecord> complete(@PathVariable String id,
             @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Device-Id", required = false) String deviceId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
-        requireCompanyTerminal(terminalType, COMPLETE_TERMINALS);
+        requireCompanyTerminal(terminalIdentityResolver.resolveTrustedTerminalType(terminalType, deviceId), COMPLETE_TERMINALS);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.complete(id, request));
     }
@@ -166,8 +173,9 @@ public class ServiceOrderController {
 
     @GetMapping("/orders/{id}/payment-code")
     public ApiResponse<Map<String, String>> orderPaymentCode(@PathVariable String id,
-            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType) {
-        requireCompanyTerminal(terminalType, CREATE_AND_CODE_TERMINALS);
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Device-Id", required = false) String deviceId) {
+        requireCompanyTerminal(terminalIdentityResolver.resolveTrustedTerminalType(terminalType, deviceId), CREATE_AND_CODE_TERMINALS);
         return ApiResponse.ok(service.orderPaymentCode(id));
     }
 

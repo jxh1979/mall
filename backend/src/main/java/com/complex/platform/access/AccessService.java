@@ -237,9 +237,15 @@ public class AccessService {
                             }
                         }
                         // P0-1：套用模板授予的权限码不得超出授权人自身有效权限（堵 copy-then-apply 提权）。
-                        requireActorCanGrant(repository.findTemplateItems(id).stream()
+                        List<String> templatePermissionCodes = repository.findTemplateItems(id).stream()
                                 .map(PermissionTemplateItem::permissionCode)
-                                .toList());
+                                .toList();
+                        requireActorCanGrant(templatePermissionCodes);
+                        // AUD-011：模板应用复用唯一授权政策引擎——含高风险(requiresApproval)权限的模板不得经模板入口
+                        // 批量直发绕过职责分离/主管复核，与角色/岗位/临时授权同口径 fail-closed(GRANT_REQUIRES_APPROVAL)。
+                        // 高风险授权须改走 applyGrant/reviewGrant 主管复核流；模板入口对高风险直接拒绝、无待审窗口，
+                        // 故审批期间模板内容变化亦无从偷换。
+                        requireGrantApprovalIfNeeded(templatePermissionCodes);
                         boolean singleUse = template.singleUse() || "single_use".equalsIgnoreCase(trimToDefault(request.mode(), "append"));
                         PermissionTemplateApplyResult result = new PermissionTemplateApplyResult(repository.applyTemplate(
                                 id,
