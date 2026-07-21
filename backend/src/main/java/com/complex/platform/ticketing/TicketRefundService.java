@@ -165,8 +165,12 @@ public class TicketRefundService {
         String requestedBy = currentActorId();
         // Stage B 分级授权（功能标志 refund.tiered_authorization.enabled，默认关）：判定本笔退款能否当场自助完成。
         //   额度内/规则既定 → 发起人当场自助自动退；超额/无额度 → 留待二人复核。关闭/未注入 → 一律 requested 等人工审批。
+        // AUD-008：分级授权按综合体隔离——projectId 取操作者授权 scope（票单不自带 project；scope 由安全 token 得出，
+        //   非请求体），无 scope（平台管理员/无组织）→ null=仅命中全局配置，绝不跨综合体串额度。
+        String refundProjectId = authorizationService == null
+                ? null : authorizationService.currentProjectScopeQuietly().orElse(null);
         boolean selfComplete = tieredRefundEnabled && refundAuthorizationService != null
-                && refundAuthorizationService.classify("ticket", amountCent, requestedBy, null)
+                && refundAuthorizationService.classify("ticket", amountCent, requestedBy, null, refundProjectId)
                         != RefundAuthorizationService.RefundTier.REVIEW_REQUIRED;
         TicketRefundRecord refund = repository.saveTicketRefund(new TicketRefundRecord(
                 "ticket_refund_" + slug(actual.idempotencyKey()),
@@ -198,13 +202,14 @@ public class TicketRefundService {
         // 防商户A审批通过商户B的退款。原单缺失时不做归属判定（交由下方既有 null 容错路径）。
         repository.findTicketOrderById(current.targetId())
                 .ifPresent(order -> enforceMerchantScope(order.merchantId()));
-        // Stage B 职责分离（SoD，功能标志开时）：复核档退款的审批人不得为发起人（approver≠requestedBy，SELF_APPROVAL_FORBIDDEN）。
-        String approver = tieredRefundEnabled ? currentActorId() : null;
-        if (tieredRefundEnabled && approver != null && approver.equals(current.requestedBy())) {
+        // AUD-007 职责分离（SoD）+ 真实审批人留痕：不受功能标志控制——一律以真实操作者为审批人、且审批人不得为发起人
+        //   （approver≠requestedBy，SELF_APPROVAL_FORBIDDEN）；不再退化为字面量 "staff"（那样自审自批且不可归责）。
+        String approver = currentActorId();
+        if (approver != null && approver.equals(current.requestedBy())) {
             throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
                     "the requester of a refund cannot approve it; a different approver is required");
         }
-        String approvedBy = approver != null ? approver : "staff";
+        String approvedBy = approver;
         Instant now = Instant.now();
         // F-TXN-04 并发双拨付防护：退款状态翻转改用 CAS（WHERE status='requested'），并发只一路过闸。
         int approvedRows = repository.markTicketRefundApproved(current.id(), approvedBy, now);
@@ -231,12 +236,13 @@ public class TicketRefundService {
                 .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "ticket refund not found"));
         repository.findTicketOrderById(current.targetId())
                 .ifPresent(order -> enforceMerchantScope(order.merchantId()));
-        String reviewer = tieredRefundEnabled ? currentActorId() : null;
-        if (tieredRefundEnabled && reviewer != null && reviewer.equals(current.requestedBy())) {
+        // AUD-007 职责分离（SoD）+ 真实复核人留痕：不受功能标志控制——一律真实操作者、复核人不得为发起人；不退化为 "staff"。
+        String reviewer = currentActorId();
+        if (reviewer != null && reviewer.equals(current.requestedBy())) {
             throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
                     "the requester of a refund cannot reject it; a different reviewer is required");
         }
-        String decidedBy = reviewer != null ? reviewer : "staff";
+        String decidedBy = reviewer;
         Instant now = Instant.now();
         int rejectedRows = repository.markTicketRefundRejected(current.id(), decidedBy, now);
         if (rejectedRows == 0) {

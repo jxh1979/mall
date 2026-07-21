@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}",
         "complex.database.credential-separation.enforced=false",
+        "refund.tiered_authorization.enabled=true",
         "complex.auth.production.seed-admin.username=p0_prod_test_admin",
         "complex.auth.production.seed-admin.password=p0_prod_test_password",
         "complex.auth.failed-login.max-attempts=3",

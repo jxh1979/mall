@@ -1819,7 +1819,7 @@ class TicketingServiceTests {
         // 分级授权引擎：op_big 额度极大（一律额度内自助）、op_tiny 额度仅 1.00（任何票单都超额→复核）。
         RefundAuthorizationRepository refundRepo = new RefundAuthorizationRepository() {
             @Override
-            public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom) {
+            public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom, String pid) {
                 if ("staff".equals(st) && "ticket".equals(dom) && "op_big".equals(sid)) {
                     return Optional.of(new RefundAuthorityLimitRecord(
                             "l_big", "staff", "op_big", "ticket", 100_000_000L, null, "active", ts, ts));
@@ -1831,7 +1831,7 @@ class TicketingServiceTests {
                 return Optional.empty();
             }
             @Override
-            public boolean isAutoRuleEnabled(String dom, String type) {
+            public boolean isAutoRuleEnabled(String dom, String type, String pid) {
                 return false;
             }
             @Override
