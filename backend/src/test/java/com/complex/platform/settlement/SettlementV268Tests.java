@@ -154,7 +154,7 @@ class SettlementV268Tests {
         discountConfigIds.add(cid);
         jdbcTemplate.update(
                 "INSERT INTO ticket_combo_discount_configs (id, project_id, discount_bearer, split_platform_bps, is_draft)"
-                        + " VALUES (?, ?, 'merchant_absorb', 0, TRUE)", cid, pid);
+                        + " VALUES (?, ?, 'merchant_absorb', 0, FALSE)", cid, pid);
         var override = billRepository.findComboDiscountConfig(pid);
         assertThat(override.discountBearer()).isEqualTo("merchant_absorb");
     }
@@ -172,7 +172,7 @@ class SettlementV268Tests {
         feeConfigIds.add(id);
         jdbcTemplate.update(
                 "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
-                        + " fee_bps, is_draft) VALUES (?, ?, ?, ?, ?, TRUE)",
+                        + " fee_bps, is_draft) VALUES (?, ?, ?, ?, ?, FALSE)",
                 id, projectId, merchantId, entType, feeBps);
     }
 
