@@ -113,12 +113,13 @@ public class JdbcSettlementBillRepository {
      * confirmed_at 是结算确认时间、双写时本应 NULL 故不用）；仅 verification_settled。
      */
     public long sumVerifiedRevenueCent(String projectId, Instant monthStart, Instant nextMonthStart) {
+        // AUD-012/013：核销增量 + 冲正负向，按 business_at(核销/冲正业务时刻)落月窗，冲正对配天然净掉。
         Long sum = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(verified_amount_cent), 0)
                   FROM settlement_transactions
-                 WHERE transaction_type = 'verification_settled'
+                 WHERE transaction_type IN ('verification_settled','verification_reversed')
                    AND exclusive_merchant_id IS NULL
-                   AND created_at >= :start AND created_at < :end
+                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                 """, monthWindow(projectId, monthStart, nextMonthStart), Long.class);
         return sum == null ? 0L : sum;
@@ -129,9 +130,9 @@ public class JdbcSettlementBillRepository {
         Long sum = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(verified_count), 0)
                   FROM settlement_transactions
-                 WHERE transaction_type = 'verification_settled'
+                 WHERE transaction_type IN ('verification_settled','verification_reversed')
                    AND entitlement_type = 'gift_drink'
-                   AND created_at >= :start AND created_at < :end
+                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                 """, monthWindow(projectId, monthStart, nextMonthStart), Long.class);
         return sum == null ? 0L : sum;
@@ -144,11 +145,11 @@ public class JdbcSettlementBillRepository {
                        COALESCE(SUM(verified_count), 0) AS verified_count,
                        COALESCE(SUM(num_people), 0)     AS guest_count
                   FROM settlement_transactions
-                 WHERE transaction_type = 'verification_settled'
+                 WHERE transaction_type IN ('verification_settled','verification_reversed')
                    AND beneficiary_type = 'merchant'
                    AND merchant_id IS NOT NULL
                    AND exclusive_merchant_id IS NULL
-                   AND created_at >= :start AND created_at < :end
+                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                  GROUP BY merchant_id
                  ORDER BY verified_count DESC, merchant_id
@@ -170,9 +171,9 @@ public class JdbcSettlementBillRepository {
                        COALESCE(SUM(verified_count), 0)       AS verified_count,
                        COALESCE(SUM(num_people), 0)           AS guest_count
                   FROM settlement_transactions
-                 WHERE transaction_type = 'verification_settled'
+                 WHERE transaction_type IN ('verification_settled','verification_reversed')
                    AND exclusive_merchant_id IS NOT NULL
-                   AND created_at >= :start AND created_at < :end
+                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                  GROUP BY exclusive_merchant_id, entitlement_type
                  ORDER BY exclusive_merchant_id, entitlement_type

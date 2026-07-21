@@ -630,8 +630,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 SELECT COALESCE(SUM(o.amount_cent), 0) AS amount_cent,
                        (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
                           FROM ticket_refunds r
-                         WHERE r.created_at >= :from
-                           AND r.created_at < :to) AS refund_cent,
+                         WHERE r.status = 'success'
+                           AND r.succeeded_at >= :from
+                           AND r.succeeded_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
@@ -651,8 +652,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                           FROM ticket_refunds r
                           JOIN ticket_orders ro ON ro.id = r.target_id
                          WHERE ro.sales_channel = 'channel'
-                           AND r.created_at >= :from
-                           AND r.created_at < :to) AS refund_cent,
+                           AND r.status = 'success'
+                           AND r.succeeded_at >= :from
+                           AND r.succeeded_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
@@ -768,8 +770,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                        (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
                           FROM ticket_refunds r
                          WHERE r.merchant_id = :merchant_id
-                           AND r.created_at >= :from
-                           AND r.created_at < :to) AS refund_cent,
+                           AND r.status = 'success'
+                           AND r.succeeded_at >= :from
+                           AND r.succeeded_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
@@ -791,8 +794,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                           JOIN ticket_orders ro ON ro.id = r.target_id
                          WHERE ro.sales_channel = 'channel'
                            AND r.merchant_id = :merchant_id
-                           AND r.created_at >= :from
-                           AND r.created_at < :to) AS refund_cent,
+                           AND r.status = 'success'
+                           AND r.succeeded_at >= :from
+                           AND r.succeeded_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'

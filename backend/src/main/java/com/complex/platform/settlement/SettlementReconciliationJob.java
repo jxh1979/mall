@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 结算重构批1 第3步:双写观察期对账作业(同 DashboardAggregationJob/TicketOrderExpiryJob 模式)。
@@ -50,14 +51,64 @@ public class SettlementReconciliationJob {
         this.scheduledEnabled = scheduledEnabled;
     }
 
-    /** @Scheduled 薄包装:默认关闭,每日算前一日。 */
+    /** 单批重建上限（避免长事务）；缺失多时多轮扫补，幂等安全。 */
+    static final int REBUILD_BATCH_LIMIT = 500;
+
+    /** @Scheduled 薄包装:默认关闭,每日先按核销权威事实重建缺失结算(AUD-017),再算前一日对账。 */
     @ConditionalOnProperty(name = "settlement.reconciliation.scheduled.enabled", havingValue = "true")
     @Scheduled(cron = "${settlement.reconciliation.scheduled.cron:0 30 3 * * *}")
     public void scheduledReconcile() {
         if (!scheduledEnabled) {
             return;
         }
+        rebuildMissingSettlements(REBUILD_BATCH_LIMIT);
         reconcile(LocalDate.now(clock).minusDays(1));
+    }
+
+    /**
+     * AUD-017 可审计重建：按核销权威事实(ticket_verifications success)补建缺失的核销结算增量行——
+     * 消费者(AFTER_COMMIT)在提交后宕机/瞬时失败会永久缺行，本任务据权威核销事实按同一金额公式补建，
+     * transaction_no {@code ST-VS-<verificationId>} 幂等（已存在则 DO NOTHING）。返回本次补建笔数(observability)。
+     *
+     * <p>ponytail：以"按权威事实重建"覆盖"结算行永久缺失"的资金风险（比事件重放更可靠，不依赖事件曾入队）；
+     * 全量事务性 outbox + 退避/死信队列是更强的传输可靠性上限，若需要再加。
+     */
+    @Transactional
+    public int rebuildMissingSettlements(int limit) {
+        int rebuilt = 0;
+        for (var f : repository.findMissingVerificationSettlementFacts(limit)) {
+            boolean exclusiveByPrice = SettlementAmounts.exclusiveByPrice(
+                    f.exclusiveMerchantId(), f.settlementPriceCent());
+            if (!exclusiveByPrice && f.allocatedRevenueCent() == null) {
+                continue; // direct 出票无快照且非专属定价：与在线消费者一致，跳过不造 net。
+            }
+            long verified = SettlementAmounts.incrementalVerified(
+                    f.allocatedRevenueCent(), f.totalTimes(), f.k(), exclusiveByPrice, f.settlementPriceCent());
+            repository.insertImmutableFact(new SettlementTransactionRecord(
+                    "st_vs_" + f.verificationId(),
+                    "ST-VS-" + f.verificationId(),
+                    "verification_settled",
+                    f.entitlementId(),
+                    f.orderId(),
+                    f.ticketTypeId(),
+                    f.verificationId(),
+                    f.entitlementType(),
+                    1,
+                    f.totalTimes(),
+                    f.numPeople(),
+                    verified,
+                    verified,
+                    0L,
+                    "merchant",
+                    f.merchantId(),
+                    null,
+                    "draft",
+                    f.validTo(),
+                    f.exclusiveMerchantId(),
+                    f.verifiedAt()));
+            rebuilt++;
+        }
+        return rebuilt;
     }
 
     /**
