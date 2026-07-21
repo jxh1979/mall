@@ -275,11 +275,12 @@ class DividendJdbcIntegrationTests {
                 VALUES ('ie_div_jdbc', 'tt_div_jdbc', 'order_div_jdbc', 'et_div_jdbc', 'code_div_jdbc',
                         'admission', ?, 1, 0, 250000, 'active', ?, ?, ?, ?)
                 """, MERCHANT, ts, ts, ts, ts);
+        // V324：退款有效终态=success，收入仅按 status='success' 且 succeeded_at 落窗扣减（非 created_at/全状态）。
         jdbcTemplate.update("""
                 INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel,
-                        status, merchant_id, created_at, updated_at)
-                VALUES ('tr_div_jdbc', 'ie_div_jdbc', 50000, '分红JDBC测试退款', 'original', 'completed', ?, ?, ?)
-                """, MERCHANT, ts, ts);
+                        status, succeeded_at, merchant_id, created_at, updated_at)
+                VALUES ('tr_div_jdbc', 'ie_div_jdbc', 50000, '分红JDBC测试退款', 'original', 'success', ?, ?, ?, ?)
+                """, ts, MERCHANT, ts, ts);
         // 成本：V296 出库流水（仅源库位）带成本 600.00。
         jdbcTemplate.update("""
                 INSERT INTO inventory_items (id, item_name, item_type, unit, status, created_at, updated_at)

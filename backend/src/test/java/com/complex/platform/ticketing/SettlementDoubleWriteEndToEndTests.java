@@ -15,8 +15,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 
 /**
- * 结算重构批1 端到端验收：核销成功 → ticketing 发 settlement.settled → settlement 域 AFTER_COMMIT 双写
- * settlement_transactions（verification_settled）。金额三段(verified+unverified=allocated)、幂等累积、direct 跳过。
+ * 结算重构批1 端到端验收：核销成功 → ticketing 发 settlement.settled → settlement 域 AFTER_COMMIT append
+ * settlement_transactions（verification_settled）。#179 后为 append-only：每次核销写一条不可变增量行
+ * （key=ST-VS-&lt;verificationId&gt;、金额=f(k)−f(k−1)、unverified 恒 0），多次核销多行、重放 ON CONFLICT 幂等、direct 跳过。
  *
  * <p><b>非 @Transactional</b>：本消费者用 {@code @TransactionalEventListener(AFTER_COMMIT)}——仅当外层事务真正提交后才触发。
  * 若类上加 @Transactional（测试事务回滚），AFTER_COMMIT 永不触发。故本类真提交、@AfterEach 按 suffix 清理落地行。
@@ -62,7 +63,8 @@ class SettlementDoubleWriteEndToEndTests {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         String suffix = Long.toString(System.nanoTime());
         seedDevice(suffix);
-        // 2 次权益、总分配 10001 分：核销 1 次 → verified=round(10001*1/2)=5001，unverified=5000，和=10001。
+        // 2 次权益、总分配 10001 分：核销 1 次 → 增量行 f(1)-f(0)=round(10001*1/2)=5001；
+        // #179 append-only 增量行 allocated_revenue_cent=verified=5001、unverified 恒 0。
         String code = seedMerchantEntitlement(suffix, 2, 10001L, "merchant_a");
 
         var response = ticketingService.createVerification(new VerificationRequest(
@@ -76,19 +78,21 @@ class SettlementDoubleWriteEndToEndTests {
         assertThat(row.get("merchant_id")).isEqualTo("merchant_a");
         assertThat(row.get("settlement_status")).isEqualTo("draft");
         assertThat(row.get("project_id")).isNull();
-        assertThat(row.get("transaction_no")).isEqualTo("ST-VS-ent_" + code);
+        // #179：transaction_no 绑本次核销 id（ST-VS-<verificationId>），非 entitlement id。
+        assertThat(row.get("transaction_no")).isEqualTo("ST-VS-" + response.id());
         assertThat(((Number) row.get("verified_count")).intValue()).isEqualTo(1);
         long allocated = ((Number) row.get("allocated_revenue_cent")).longValue();
         long verified = ((Number) row.get("verified_amount_cent")).longValue();
         long unverified = ((Number) row.get("unverified_amount_cent")).longValue();
-        assertThat(allocated).isEqualTo(10001L);
+        // 增量行：allocated_revenue_cent 记本次增量已核销额=verified，unverified 恒 0。
+        assertThat(allocated).isEqualTo(5001L);
         assertThat(verified).isEqualTo(5001L);
-        assertThat(unverified).isEqualTo(5000L);
+        assertThat(unverified).isEqualTo(0L);
         assertThat(verified + unverified).isEqualTo(allocated);
     }
 
     @Test
-    void repeatedVerificationsUpsertSingleRowAccumulatingVerifiedCount() {
+    void repeatedVerificationsAppendOneImmutableIncrementRowPerVerification() {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         String suffix = Long.toString(System.nanoTime());
         seedDevice(suffix);
@@ -99,17 +103,26 @@ class SettlementDoubleWriteEndToEndTests {
         ticketingService.createVerification(new VerificationRequest(
                 "idem-b-" + suffix, "qr", code, deviceCode, "point_" + suffix, Map.of()));
 
+        // #179 append-only：2 次核销 → 2 条独立增量行（不再 upsert 单行累计）。
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ? AND transaction_type = 'verification_settled'",
                 Integer.class, "ent_" + code);
-        assertThat(count).isEqualTo(1);
+        assertThat(count).isEqualTo(2);
 
-        Map<String, Object> row = jdbcTemplate.queryForMap(
-                "SELECT * FROM settlement_transactions WHERE entitlement_id = ?", "ent_" + code);
-        // 2 次核销全用尽 → verified_count=2、verified=10000、unverified=0。
-        assertThat(((Number) row.get("verified_count")).intValue()).isEqualTo(2);
-        assertThat(((Number) row.get("verified_amount_cent")).longValue()).isEqualTo(10000L);
-        assertThat(((Number) row.get("unverified_amount_cent")).longValue()).isEqualTo(0L);
+        // 逐笔增量 f(1)-f(0)=5000、f(2)-f(1)=5000；相加 == f(2) == allocated=10000。
+        // 每行 verified_count=1（共 2）、unverified 恒 0。
+        Long sumVerified = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(verified_amount_cent),0) FROM settlement_transactions WHERE entitlement_id = ?",
+                Long.class, "ent_" + code);
+        Integer sumCount = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(verified_count),0) FROM settlement_transactions WHERE entitlement_id = ?",
+                Integer.class, "ent_" + code);
+        Long sumUnverified = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(unverified_amount_cent),0) FROM settlement_transactions WHERE entitlement_id = ?",
+                Long.class, "ent_" + code);
+        assertThat(sumVerified).isEqualTo(10000L);
+        assertThat(sumCount).isEqualTo(2);
+        assertThat(sumUnverified).isEqualTo(0L);
     }
 
     @Test
