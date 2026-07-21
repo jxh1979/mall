@@ -126,20 +126,12 @@ public class ContractService {
     }
 
     /** 起草合同（手工或招商签约带入），状态 drafting。也是招商 signIntent 接线入口。 */
+    // AUD-002①：公有入口开事务（原 @Transactional 误标在私有自调用方法上=Spring 代理不生效，事务从未开）。
+    @Transactional
     public ContractRecord createDraft(ContractDraftRequest request) {
         authorizationService.requirePlatformScope();
         ContractDraftRequest actual = requireRequest(request);
-        // 1.5 幂等：带 idempotencyKey 时合同 id 由其确定性派生；重复提交/招商重签命中既有草稿直接返回，不重复建。
-        String idempotencyKey = trimToNull(actual.idempotencyKey());
-        String contractId = idempotencyKey != null
-                ? "ctr_" + deterministicSuffix(idempotencyKey)
-                : "ctr_" + UUID.randomUUID();
-        if (idempotencyKey != null) {
-            ContractRecord existing = repository.findContractById(contractId).orElse(null);
-            if (existing != null) {
-                return existing;
-            }
-        }
+        // AUD-002③：字段级业务校验前置——先于任何写入、且先于幂等短路，确保幂等命中(重放)也必过校验、不被绕过。
         String commissionMode = trimToNull(actual.commissionMode());
         if (commissionMode != null && !COMMISSION_MODES.contains(commissionMode)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "commission_mode is invalid");
@@ -153,6 +145,18 @@ public class ContractService {
                 && !"by_contract".equals(energyBasis)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "energyFeeCent is only allowed when energy_fee_basis is by_contract");
+        }
+        // 1.5 幂等：带 idempotencyKey 时合同 id 由其确定性派生；重复提交/招商重签命中既有草稿直接返回，不重复建。
+        // 校验已前置于此，故重放亦已过校验；失败草稿在 @Transactional 下整体回滚，重试将重走完整校验，无半成品可复用。
+        String idempotencyKey = trimToNull(actual.idempotencyKey());
+        String contractId = idempotencyKey != null
+                ? "ctr_" + deterministicSuffix(idempotencyKey)
+                : "ctr_" + UUID.randomUUID();
+        if (idempotencyKey != null) {
+            ContractRecord existing = repository.findContractById(contractId).orElse(null);
+            if (existing != null) {
+                return existing;
+            }
         }
         Instant now = Instant.now();
         Map<String, Object> rentTerms = new HashMap<>(actual.rentTerms() == null ? Map.of() : actual.rentTerms());
@@ -175,6 +179,9 @@ public class ContractService {
         if (allowedCategories != null && !allowedCategories.isEmpty()) {
             rentTerms.put(ContractScopeGuard.RENT_TERMS_KEY, allowedCategories);
         }
+        // AUD-002②：空间存在性 + 与生效合同租期重叠 —— 落库前校验（早检不写库，校验失败零脏写）。
+        List<String> draftSpaces = validateDraftSpaces(
+                actual.effectiveDate(), actual.expiryDate(), contractId, actual.spaceIds());
         ContractRecord saved = repository.saveContract(new ContractRecord(
                 contractId,
                 requireText(actual.merchantId(), "merchant_id"),
@@ -192,8 +199,10 @@ public class ContractService {
                 "drafting", trimToNull(actual.projectId()), null, null, null, now, now));
         auditEventService.recordSuccess("contract.drafted", "contract.draft.manage", "contract", saved.id(),
                 null, actual.idempotencyKey(), Map.of("merchant_id", saved.merchantId()));
-        // 3.13 冲突早检：草稿带意向空间 → 空间必须真实存在 + 与生效合同租期重叠即拒（不必等生效终检），并预绑定。
-        bindDraftSpacesWithEarlyConflictCheck(saved, actual.spaceIds());
+        // 3.13 预绑定意向空间（存在性/冲突已在 validateDraftSpaces 落库前校验）。
+        if (!draftSpaces.isEmpty()) {
+            repository.bindContractSpaces(saved.id(), draftSpaces, saved.projectId());
+        }
         return saved;
     }
 
@@ -231,22 +240,27 @@ public class ContractService {
         return saved;
     }
 
-    // ============ 提交 + 分组并行审批 ============
-    /** 提交审批：按该综合体生效链物化第一阶段并行审批人，合同→待确认。 */
-    @Transactional
-    /** 3.13：空间存在性 + 与生效合同租期重叠早检 + 预绑定（草稿期，activate 仍保留终检）。 */
-    private void bindDraftSpacesWithEarlyConflictCheck(ContractRecord contract, List<String> spaceIds) {
+    /**
+     * 3.13 / AUD-002②：草稿意向空间存在性 + 与生效合同租期重叠早检——纯校验、不写库，供 createDraft 落库前调用。
+     * 返回去重后的 spaceId 列表（供落库后 bindContractSpaces）。空/缺省=不校验不绑定。
+     */
+    private List<String> validateDraftSpaces(
+            LocalDate effectiveDate, LocalDate expiryDate, String contractId, List<String> spaceIds) {
         if (spaceIds == null || spaceIds.isEmpty()) {
-            return;
+            return List.of();
         }
         List<String> resolved = spaceIds.stream().map(id -> requireText(id, "space_id")).distinct().toList();
         for (String spaceId : resolved) {
             if (platformRepository != null && platformRepository.findSpaceById(spaceId).isEmpty()) {
                 throw ApiException.badRequest("CONTRACT_SPACE_NOT_FOUND", "space does not exist: " + spaceId);
             }
-            requireNoOverlappingEffectiveContract(contract, spaceId);
+            if (effectiveDate != null && expiryDate != null
+                    && repository.hasOverlappingEffectiveContractForSpace(spaceId, effectiveDate, expiryDate, contractId)) {
+                throw ApiException.conflict("CONTRACT_SPACE_CONFLICT",
+                        "space already let by an overlapping effective contract: " + spaceId);
+            }
         }
-        repository.bindContractSpaces(contract.id(), resolved, contract.projectId());
+        return resolved;
     }
 
     private void requireNoOverlappingEffectiveContract(ContractRecord contract, String spaceId) {
@@ -260,6 +274,10 @@ public class ContractService {
         }
     }
 
+    // ============ 提交 + 分组并行审批 ============
+    /** 提交审批：按该综合体生效链物化第一阶段并行审批人，合同→待确认。 */
+    // AUD-002①：submit 多写（清审批+物化阶段+改状态）须原子；@Transactional 曾被私有方法挤走，此处补回。
+    @Transactional
     public ContractRecord submit(String contractId, String idempotencyKey) {
         authorizationService.requirePlatformScope();
         ContractRecord contract = requireContract(contractId);

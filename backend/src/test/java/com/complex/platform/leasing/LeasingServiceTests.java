@@ -185,6 +185,9 @@ class LeasingServiceTests {
                 "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "k5"));
         assertThat(contract.id()).isEqualTo("ctr_new");
         assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isEqualTo("signed");
+        // AUD-003 边界：带既有 merchant_id 签约不新建绑定（其绑定由治理域管理），只有自动建商户路径才建。
+        org.mockito.Mockito.verify(platformService, org.mockito.Mockito.never())
+                .createBusinessEntityBinding(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -216,6 +219,16 @@ class LeasingServiceTests {
         assertThat(req.contractEntityId()).isEqualTo("cs");
         assertThat(req.businessEntityId()).isEqualTo("cs");
         assertThat(req.settlementEntityId()).isEqualTo("cs");
+
+        // AUD-003：自动建商户后必建"四主体"权威绑定（经营/合同/结算主体默认同一公司=cs）。
+        org.mockito.ArgumentCaptor<com.complex.platform.governance.dto.BusinessEntityBindingRequest> bindingCaptor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.governance.dto.BusinessEntityBindingRequest.class);
+        verify(platformService).createBusinessEntityBinding(bindingCaptor.capture());
+        com.complex.platform.governance.dto.BusinessEntityBindingRequest binding = bindingCaptor.getValue();
+        assertThat(binding.merchantId()).isEqualTo("mch_auto");
+        assertThat(binding.operationEntityId()).isEqualTo("cs");
+        assertThat(binding.contractEntityId()).isEqualTo("cs");
+        assertThat(binding.settlementEntityId()).isEqualTo("cs");
     }
 
     @Test

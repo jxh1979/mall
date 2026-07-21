@@ -9,6 +9,7 @@ import com.complex.platform.contract.dto.ContractDraftRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.governance.PlatformService;
+import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
@@ -20,6 +21,7 @@ import com.complex.platform.leasing.dto.LeasingLeadRequest;
 import com.complex.platform.leasing.dto.LeasingLeadStatusRequest;
 import com.complex.platform.leasing.dto.LeasingSignRequest;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 import com.complex.platform.common.NotificationWindowConfig;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 招商获客（V161 重建，据 leasing-acquisition-prd-v1.0 + 业务 HTML §10 + M1 需求采集 §1）。
@@ -204,7 +207,9 @@ public class LeasingService {
      * 签约：pending_signing 意向 → 喂入合同 draft（V162 合同域 ContractService），lead → signed。
      * 四类主体默认同一公司：operation/settlement 缺省指向 contractSubjectId，后续可拆。
      * 合同后续在合同域走 提交→分组并行审批→生效固化；本入口只把意向条款喂入 draft（带 projectId 隔离）。
+     * AUD-002：整入口开事务——商户/四主体绑定/合同/线索/审计一次业务转换，任一步失败全回滚，无半成品。
      */
+    @Transactional
     public ContractRecord signIntent(String intentId, LeasingSignRequest request) {
         authorizationService.requirePlatformScope();
         LeasingSignRequest actual = requireRequest(request);
@@ -220,6 +225,10 @@ public class LeasingService {
         String merchantId = trimToNull(actual.merchantId());
         if (merchantId == null) {
             merchantId = autoCreateMerchantForSign(intent, contractSubjectId);
+            // AUD-003：签约建"四主体"权威绑定——与商户/合同/线索同一事务原子落库；缺此则权威表(business_entity_bindings)恒空、
+            // 主体绑定页/结算/权限按权威表读取时会把正式商户当未绑定。经营/结算主体缺省=合同主体（默认同一公司，后续走既有变更流拆分）。
+            createFourPartyBinding(intent, merchantId, contractSubjectId, operationSubjectId, settlementSubjectId,
+                    actual.effectiveDate());
         }
         // 3.13：签约草稿带意向空间 → 起草即校验存在性+与生效合同冲突（早反馈，不等生效）。
         List<String> intendedSpaces = intent.intendedSpaceId() != null
@@ -263,6 +272,24 @@ public class LeasingService {
                 spaceCode, area, area,
                 null, null, null, "leasing_auto", "active"));
         return merchant.id();
+    }
+
+    /**
+     * AUD-003：招商签约建立"四主体"权威绑定，复用治理域既有绑定能力（每商户唯一 active + 版本化变更）。
+     * 稳定 idempotency key（按意向）→ 重签命中同一 active 绑定、不重复建。经营/结算主体缺省=合同主体（默认同一公司，后续可拆）。
+     */
+    private void createFourPartyBinding(LeasingIntentRecord intent, String merchantId, String contractSubjectId,
+            String operationSubjectId, String settlementSubjectId, LocalDate effectiveFrom) {
+        platformService.createBusinessEntityBinding(new BusinessEntityBindingRequest(
+                "lease-sign-binding-" + intent.id(),
+                "auto-created on leasing sign",
+                List.of(),
+                merchantId,
+                operationSubjectId != null ? operationSubjectId : contractSubjectId,
+                contractSubjectId,
+                settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
+                effectiveFrom,
+                "招商签约自动建立四主体权威绑定"));
     }
 
     // ============ 品牌库 ============
