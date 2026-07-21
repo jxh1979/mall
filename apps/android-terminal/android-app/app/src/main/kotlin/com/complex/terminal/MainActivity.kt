@@ -986,8 +986,8 @@ class MainActivity : Activity() {
 
   private fun showLeave() {
     val typeLabel = linkedMapOf("personal" to "事假", "sick" to "病假", "comp" to "调休", "annual" to "年假")
-    val typeValues = typeLabel.keys.toList()
-    val type = enumSpinner(typeLabel.values.toList())
+    val typeValues = listOf("") + typeLabel.keys                 // [0]=占位首项(空 token),提交前拦截
+    val type = enumSpinner(listOf("请选择请假类型") + typeLabel.values)
     val start = editText("开始日期(2026-07-05)")
     val end = editText("结束日期(2026-07-06)")
     val reason = editText("事由")
@@ -1006,12 +1006,12 @@ class MainActivity : Activity() {
       )
     }
     val submitButton = primaryButton("提交请假") {
-      val t = typeValues.getOrElse(type.selectedItemPosition) { "personal" }
+      val t = typeValues.getOrElse(type.selectedItemPosition) { "" }
       val s1 = start.text.toString().trim()
       val e1 = end.text.toString().trim()
       val r1 = reason.text.toString().trim()
-      if (s1.isEmpty() || e1.isEmpty() || r1.isEmpty()) {
-        status.text = "请填全 起止日期/事由"
+      if (t.isEmpty() || s1.isEmpty() || e1.isEmpty() || r1.isEmpty()) {
+        status.text = "请选择请假类型并填全 起止日期/事由"
         return@primaryButton
       }
       runBackground(
@@ -1684,7 +1684,7 @@ class MainActivity : Activity() {
 
   /** 游乐检修记录状态->中文（此枚举 open/submitted 语义与其他域不同，故就地单独映射）。 */
   private fun maintStatusZh(raw: String?): String = when (raw) {
-    "submitted" -> "已提交"; "pending_confirm" -> "待主管确认"
+    "submitted" -> "已提交"; "pending_confirm" -> "待主管确认"; "confirmed" -> "已确认恢复"
     "open" -> "已恢复运营"; "maintenance" -> "维保中"; "closed" -> "已关闭"
     else -> raw ?: "-"
   }
