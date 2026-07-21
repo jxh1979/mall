@@ -640,6 +640,8 @@ public class TicketVerificationService {
         // 结算重构批１：核销成功 → 发 settlement.settled，settlement 域 AFTER_COMMIT 双写 settlement_transactions
         // （核销结算逐笔流水,观察期与旧 allocated 快照口径对账）。异步、不属核销主链——下游失败不回滚核销。
         eventPublisher.publishEvent(new SettlementSettledEvent(
+                verification.id(), // AUD-012：本次核销记录 id → 不可变增量结算幂等键
+                now,               // AUD-012：核销业务时刻 → account 月窗聚合基准
                 updated.id(),
                 updated.orderId(),
                 updated.ticketTypeId(),
@@ -772,6 +774,8 @@ public class TicketVerificationService {
             eventPublisher.publishEvent(new PointsConfirmRequestedEvent(consumed.orderId(), units[0], units[1]));
         }
         eventPublisher.publishEvent(new SettlementSettledEvent(
+                verification.id(), // AUD-012：本次游乐核销记录 id → 不可变增量结算幂等键
+                now,               // AUD-012：核销业务时刻
                 consumed.id(),
                 consumed.orderId(),
                 consumed.ticketTypeId(),

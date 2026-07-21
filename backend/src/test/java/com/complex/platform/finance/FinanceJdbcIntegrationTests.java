@@ -241,6 +241,20 @@ class FinanceJdbcIntegrationTests {
     }
 
     @Test
+    void onlySuccessRefundsCountByEffectiveTimeNotRequestedRejectedFailedCancelled() {
+        // AUD-018 门禁：八状态逐一插入，只有 success 且 succeeded_at 落窗冲减收入；其余一律不计。
+        LocalDate businessDate = LocalDate.parse("2026-06-20");
+        Instant from = Instant.parse("2026-06-20T04:00:00Z");
+        Instant to = Instant.parse("2026-06-21T04:00:00Z");
+        Instant inWindow = Instant.parse("2026-06-20T10:00:00Z");
+        insertTicketRefund("tr_ok", 5000L, inWindow, "success");
+        for (String st : java.util.List.of("requested", "review", "approved", "processing", "rejected", "failed", "cancelled")) {
+            insertTicketRefund("tr_" + st, 7000L, inWindow, st);
+        }
+        assertThat(repository.aggregateOfficialTicket(businessDate, from, to).refundCent()).isEqualTo(5000L);
+    }
+
+    @Test
     void thirdpartyReflowIsAggregatedSeparatelyAndNotFoldedIntoTicketOrBar() {
         // 财务确认：第三方回流单列，不进 revenue.net（净收入 = 售票 + 酒吧 − 退款，剔除第三方）。
         LocalDate businessDate = LocalDate.parse("2026-06-18");
@@ -362,13 +376,20 @@ class FinanceJdbcIntegrationTests {
                 """, id, "ORD-" + id, ticketTypeId, visitDate, channel, amountCent, merchantId);
     }
 
-    private void insertTicketRefund(String id, long amountCent, Instant createdAt) {
+    private void insertTicketRefund(String id, long amountCent, Instant effectiveAt) {
+        // AUD-018：有效退款=success + succeeded_at；默认插 success 复现"生效落窗即计入"。
+        insertTicketRefund(id, amountCent, effectiveAt, "success");
+    }
+
+    private void insertTicketRefund(String id, long amountCent, Instant effectiveAt, String status) {
+        java.sql.Timestamp ts = java.sql.Timestamp.from(effectiveAt);
+        java.sql.Timestamp succeeded = "success".equals(status) ? ts : null;
         jdbcTemplate.update("""
                 INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel,
-                                            status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, id, "order_" + id, amountCent, "test refund", "manual", "requested",
-                java.sql.Timestamp.from(createdAt), java.sql.Timestamp.from(createdAt));
+                                            status, created_at, updated_at, succeeded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, id, "order_" + id, amountCent, "test refund", "manual", status,
+                ts, ts, succeeded);
     }
 
     private void insertThirdpartySync(String id, long amountCent, Instant createdAt) {

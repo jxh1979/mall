@@ -78,7 +78,7 @@ public class SettlementExpiryJob {
             unverified = Math.max(0L, Math.min(allocated, unverified));
             long verified = allocated - unverified;
 
-            repository.insertUnverifiedExpiredIgnoreConflict(new SettlementTransactionRecord(
+            repository.insertImmutableFact(new SettlementTransactionRecord(
                     "st_ue_" + row.entitlementId(),
                     "ST-UE-" + row.entitlementId(),
                     TRANSACTION_TYPE_UNVERIFIED_EXPIRED,
@@ -98,7 +98,8 @@ public class SettlementExpiryJob {
                     null, // project_id:批1 从 entitlement 不可得,置 NULL
                     STATUS_CONFIRMED,
                     row.validTo(),
-                    null)); // exclusive_merchant_id：过期未核销归项目，非专属直付，置 NULL
+                    null, // exclusive_merchant_id：过期未核销归项目，非专属直付，置 NULL
+                    row.validTo())); // business_at：到期业务时刻=有效期截止（归项目落该月）
             count++;
         }
         return count;

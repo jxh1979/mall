@@ -685,7 +685,8 @@ class JdbcDividendRepository implements DividendRepository {
                 SELECT COALESCE(SUM(refund_amount_cent), 0)
                   FROM ticket_refunds
                  WHERE merchant_id = :merchant_id
-                   AND created_at >= :from AND created_at < :to
+                   AND status = 'success'
+                   AND succeeded_at >= :from AND succeeded_at < :to
                 """, windowParams(merchantId, from, to));
     }
 

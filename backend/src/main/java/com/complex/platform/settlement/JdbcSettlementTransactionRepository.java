@@ -24,13 +24,11 @@ public class JdbcSettlementTransactionRepository {
     }
 
     /**
-     * 核销结算双写：按 entitlement upsert 一条 verification_settled 流水。
-     *
-     * <p>命中部分唯一索引 {@code uq_st_entitlement_verified}（entitlement_id WHERE transaction_type='verification_settled'）
-     * 则 DO UPDATE 累积——同一权益再次核销（used_times 变）只更新已核销次数/金额三段与 updated_at，不重复插入。
-     * transaction_no/beneficiary/merchant/status 等首插即定，冲突时不覆盖（保持首次身份）。
+     * AUD-012/013/017：append 一条<b>不可变</b>结算事实（核销增量 / 冲正负向 / 未核销到期归项目共用）。
+     * 幂等锚点=全局唯一 {@code transaction_no}（uq_st_transaction_no）→ ON CONFLICT DO NOTHING：
+     * 同一业务事件重放不重复入账，且<b>永不 UPDATE</b>（账本 append-only，历史行不可变）。
      */
-    public void upsertVerificationSettled(SettlementTransactionRecord record) {
+    public void insertImmutableFact(SettlementTransactionRecord record) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("id", record.id())
                 .addValue("transaction_no", record.transactionNo())
@@ -51,7 +49,8 @@ public class JdbcSettlementTransactionRepository {
                 .addValue("project_id", record.projectId())
                 .addValue("settlement_status", record.settlementStatus())
                 .addValue("entitlement_valid_to", Timestamp.from(record.entitlementValidTo()))
-                .addValue("exclusive_merchant_id", record.exclusiveMerchantId());
+                .addValue("exclusive_merchant_id", record.exclusiveMerchantId())
+                .addValue("business_at", record.businessAt() == null ? null : Timestamp.from(record.businessAt()));
 
         jdbcTemplate.update("""
                 INSERT INTO settlement_transactions (
@@ -59,23 +58,47 @@ public class JdbcSettlementTransactionRepository {
                     verification_id, entitlement_type, verified_count, total_times, num_people,
                     allocated_revenue_cent, verified_amount_cent, unverified_amount_cent,
                     beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to,
-                    exclusive_merchant_id
+                    exclusive_merchant_id, business_at
                 )
                 VALUES (
                     :id, :transaction_no, :transaction_type, :entitlement_id, :order_id, :ticket_type_id,
                     :verification_id, :entitlement_type, :verified_count, :total_times, :num_people,
                     :allocated_revenue_cent, :verified_amount_cent, :unverified_amount_cent,
                     :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to,
-                    :exclusive_merchant_id
+                    :exclusive_merchant_id, :business_at
                 )
-                ON CONFLICT (entitlement_id) WHERE transaction_type = 'verification_settled'
-                DO UPDATE SET
-                    verified_count         = EXCLUDED.verified_count,
-                    verified_amount_cent   = EXCLUDED.verified_amount_cent,
-                    unverified_amount_cent = EXCLUDED.unverified_amount_cent,
-                    verification_id        = EXCLUDED.verification_id,
-                    updated_at             = now()
+                ON CONFLICT (transaction_no) DO NOTHING
                 """, params);
+    }
+
+    /**
+     * AUD-013：读原核销结算行（ST-VS-&lt;verificationId&gt;）用于冲正取反。缺失（原结算事实丢失）返回 null →
+     * 冲正 no-op（无正向可冲，净额已正确）。
+     */
+    public SettledFactRow findVerificationSettledByVerificationId(String verificationId) {
+        return jdbcTemplate.query("""
+                SELECT entitlement_id, order_id, ticket_type_id, entitlement_type, num_people, total_times,
+                       verified_amount_cent, beneficiary_type, merchant_id, project_id, exclusive_merchant_id,
+                       entitlement_valid_to, COALESCE(business_at, created_at) AS business_at
+                  FROM settlement_transactions
+                 WHERE transaction_type = 'verification_settled'
+                   AND transaction_no = :tno
+                """, new MapSqlParameterSource().addValue("tno", "ST-VS-" + verificationId),
+                rs -> rs.next() ? new SettledFactRow(
+                        rs.getString("entitlement_id"), rs.getString("order_id"), rs.getString("ticket_type_id"),
+                        rs.getString("entitlement_type"), rs.getInt("num_people"), rs.getInt("total_times"),
+                        rs.getLong("verified_amount_cent"), rs.getString("beneficiary_type"),
+                        rs.getString("merchant_id"), rs.getString("project_id"), rs.getString("exclusive_merchant_id"),
+                        rs.getTimestamp("entitlement_valid_to").toInstant(),
+                        rs.getTimestamp("business_at").toInstant()) : null);
+    }
+
+    /** AUD-013 冲正取反读投影：原核销结算行的金额与归属维度。 */
+    public record SettledFactRow(
+            String entitlementId, String orderId, String ticketTypeId, String entitlementType,
+            int numPeople, int totalTimes, long verifiedAmountCent, String beneficiaryType,
+            String merchantId, String projectId, String exclusiveMerchantId,
+            Instant entitlementValidTo, Instant businessAt) {
     }
 
     // ---- 结算重构批1 第3步:双写观察期对账(观察用途,不改现有 net 聚合口径) ----
@@ -108,8 +131,8 @@ public class JdbcSettlementTransactionRepository {
         Long sum = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(verified_amount_cent + unverified_amount_cent), 0)
                   FROM settlement_transactions
-                 WHERE transaction_type = 'verification_settled'
-                   AND created_at >= :day_start AND created_at < :day_end
+                 WHERE transaction_type IN ('verification_settled','verification_reversed')
+                   AND COALESCE(business_at, created_at) >= :day_start AND COALESCE(business_at, created_at) < :day_end
                 """, params, Long.class);
         return sum == null ? 0L : sum;
     }
@@ -137,19 +160,30 @@ public class JdbcSettlementTransactionRepository {
     // ---- 结算重构批1 第4步:未核销权益到期归项目 ----
 
     /**
-     * 扫已过期(valid_to < :now)且存在未核销部分(total_times > used_times)的权益:
-     * allocated 非空、状态非终止(active/expired 皆可,只看有无未核销与是否已过期)。
-     * 返回未核销归项目所需字段——金额切分/记账在 Job 内做,仓库只取数。
+     * AUD-019 到期归项目"可没收终态"白名单：扫已过期(valid_to &lt; :now)且存在未核销部分(total_times &gt; used_times)、
+     * allocated 非空的权益，<b>并排除退款/转赠链</b>：
+     * <ul>
+     *   <li>{@code status='active'}：已成功退款(status='refunded')/已没收(forfeited)的权益天然排除——
+     *       退款给客户的金额不能再以未使用到期名义归项目(AUD-019 根因)；</li>
+     *   <li>父票实例非 active(refund_pending/refunded/transferring/forfeited)一并排除——覆盖"退款申请中/已批准"
+     *       尚未冻结权益的时间窗（此时权益仍 active 但实例已冻结）。</li>
+     * </ul>
+     * 退款失败驳回→实例恢复 active、权益仍 active → 重新可没收（下轮扫描并入）。仓库只取数，金额切分在 Job 内做。
      */
     public java.util.List<ExpiredUnverifiedRow> findExpiredUnverifiedEntitlements(Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("now", Timestamp.from(now));
         return jdbcTemplate.query("""
-                SELECT id, order_id, ticket_type_id, entitlement_type, merchant_id,
-                       total_times, used_times, allocated_revenue_cent, valid_to
-                  FROM issued_entitlements
-                 WHERE valid_to < :now
-                   AND total_times > used_times
-                   AND allocated_revenue_cent IS NOT NULL
+                SELECT e.id, e.order_id, e.ticket_type_id, e.entitlement_type, e.merchant_id,
+                       e.total_times, e.used_times, e.allocated_revenue_cent, e.valid_to
+                  FROM issued_entitlements e
+                 WHERE e.valid_to < :now
+                   AND e.total_times > e.used_times
+                   AND e.allocated_revenue_cent IS NOT NULL
+                   AND e.status = 'active'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM ticket_instances ti
+                        WHERE ti.id = e.parent_ticket_id
+                          AND ti.status <> 'active')
                 """, params, (rs, i) -> new ExpiredUnverifiedRow(
                         rs.getString("id"),
                         rs.getString("order_id"),
@@ -163,48 +197,41 @@ public class JdbcSettlementTransactionRepository {
     }
 
     /**
-     * 未核销到期归项目:插一条 unverified_expired(beneficiary_type=project,settlement_status=confirmed)。
-     * transaction_no 唯一(uq_st_transaction_no)→ ON CONFLICT DO NOTHING 幂等:同权益重复扫不重复归。
+     * AUD-017 可审计重建：按核销权威事实(ticket_verifications success)补建缺失的核销结算增量行。
+     * 仅对<b>无冲正历史</b>的权益（used_times 单调等于成功核销数，k=时序序号可信）逐笔重建，
+     * 每次核销一行 ST-VS-&lt;verificationId&gt;（与在线消费者同 key 同金额公式，幂等 ON CONFLICT DO NOTHING）。
+     * 有冲正的权益跳过（净额已由在线正/负事实承载；交由对账观察，避免重建期序号错配）。
      */
-    public void insertUnverifiedExpiredIgnoreConflict(SettlementTransactionRecord record) {
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("id", record.id())
-                .addValue("transaction_no", record.transactionNo())
-                .addValue("transaction_type", record.transactionType())
-                .addValue("entitlement_id", record.entitlementId())
-                .addValue("order_id", record.orderId())
-                .addValue("ticket_type_id", record.ticketTypeId())
-                .addValue("verification_id", record.verificationId())
-                .addValue("entitlement_type", record.entitlementType())
-                .addValue("verified_count", record.verifiedCount())
-                .addValue("total_times", record.totalTimes())
-                .addValue("num_people", record.numPeople())
-                .addValue("allocated_revenue_cent", record.allocatedRevenueCent())
-                .addValue("verified_amount_cent", record.verifiedAmountCent())
-                .addValue("unverified_amount_cent", record.unverifiedAmountCent())
-                .addValue("beneficiary_type", record.beneficiaryType())
-                .addValue("merchant_id", record.merchantId())
-                .addValue("project_id", record.projectId())
-                .addValue("settlement_status", record.settlementStatus())
-                .addValue("entitlement_valid_to", Timestamp.from(record.entitlementValidTo()))
-                .addValue("exclusive_merchant_id", record.exclusiveMerchantId());
-        jdbcTemplate.update("""
-                INSERT INTO settlement_transactions (
-                    id, transaction_no, transaction_type, entitlement_id, order_id, ticket_type_id,
-                    verification_id, entitlement_type, verified_count, total_times, num_people,
-                    allocated_revenue_cent, verified_amount_cent, unverified_amount_cent,
-                    beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to,
-                    exclusive_merchant_id
-                )
-                VALUES (
-                    :id, :transaction_no, :transaction_type, :entitlement_id, :order_id, :ticket_type_id,
-                    :verification_id, :entitlement_type, :verified_count, :total_times, :num_people,
-                    :allocated_revenue_cent, :verified_amount_cent, :unverified_amount_cent,
-                    :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to,
-                    :exclusive_merchant_id
-                )
-                ON CONFLICT (transaction_no) DO NOTHING
-                """, params);
+    public java.util.List<MissingSettledFact> findMissingVerificationSettlementFacts(int limit) {
+        return jdbcTemplate.query("""
+                SELECT v.id AS verification_id, v.entitlement_id, v.created_at,
+                       e.order_id, e.ticket_type_id, e.entitlement_type, e.merchant_id,
+                       e.total_times, e.num_people, e.allocated_revenue_cent, e.valid_to, e.exclusive_merchant_id,
+                       v.settlement_price_cent,
+                       ROW_NUMBER() OVER (PARTITION BY v.entitlement_id ORDER BY v.created_at, v.id) AS k
+                  FROM ticket_verifications v
+                  JOIN issued_entitlements e ON e.id = v.entitlement_id
+                 WHERE v.status = 'success'
+                   AND NOT EXISTS (SELECT 1 FROM settlement_transactions s WHERE s.transaction_no = 'ST-VS-' || v.id)
+                   AND NOT EXISTS (SELECT 1 FROM ticket_verifications r WHERE r.entitlement_id = v.entitlement_id AND r.status = 'reversed')
+                 ORDER BY v.entitlement_id, k
+                 LIMIT :limit
+                """, new MapSqlParameterSource().addValue("limit", limit), (rs, i) -> new MissingSettledFact(
+                        rs.getString("verification_id"), rs.getString("entitlement_id"),
+                        rs.getTimestamp("created_at").toInstant(), rs.getString("order_id"),
+                        rs.getString("ticket_type_id"), rs.getString("entitlement_type"), rs.getString("merchant_id"),
+                        rs.getInt("total_times"), rs.getInt("num_people"),
+                        rs.getObject("allocated_revenue_cent") == null ? null : rs.getLong("allocated_revenue_cent"),
+                        rs.getTimestamp("valid_to").toInstant(), rs.getString("exclusive_merchant_id"),
+                        rs.getObject("settlement_price_cent") == null ? null : rs.getLong("settlement_price_cent"),
+                        rs.getInt("k")));
+    }
+
+    /** AUD-017 重建源投影：一条缺失核销结算的权威核销事实 + 其时序序号 k（用于算增量 f(k)−f(k−1)）。 */
+    public record MissingSettledFact(
+            String verificationId, String entitlementId, Instant verifiedAt, String orderId, String ticketTypeId,
+            String entitlementType, String merchantId, int totalTimes, int numPeople, Long allocatedRevenueCent,
+            Instant validTo, String exclusiveMerchantId, Long settlementPriceCent, int k) {
     }
 
     /**
