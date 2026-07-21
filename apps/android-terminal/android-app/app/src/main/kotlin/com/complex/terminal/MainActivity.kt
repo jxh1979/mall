@@ -452,7 +452,7 @@ class MainActivity : Activity() {
         runBackground(
           action = { workflow.settleBarBill(bill, cents, ch) },
           onSuccess = { b ->
-            status.text = "结算完成：账单 ${b.id}\n支付状态：${b.paymentStatus ?: "-"}，结算状态：${b.settlementStatus ?: "-"}"
+            status.text = "结算完成：账单 ${b.id}\n支付状态：${statusZh(b.paymentStatus)}，结算状态：${statusZh(b.settlementStatus)}"
           },
           onError = { status.text = "结算失败：${friendly(it)}" },
         )
@@ -474,7 +474,8 @@ class MainActivity : Activity() {
   private fun showMaintenance() {
     val projectId = editText("项目")
     val deviceId = editText("设备")
-    val result = editText("检修结论（如 pass / fail）").apply { setText("pass") }
+    val resultValues = listOf("pass", "fail")
+    val result = enumSpinner(listOf("通过", "失败"))
     val note = editText("异常说明（可选）")
     val recordId = editText("检修记录（确认恢复时填）")
     val status = statusText("先提交检修记录，主管再确认恢复运营")
@@ -489,13 +490,13 @@ class MainActivity : Activity() {
           workflow.submitAmusementMaintenance(
             projectId = pid,
             deviceId = did,
-            result = result.text.toString().trim().ifEmpty { "pass" },
+            result = resultValues.getOrElse(result.selectedItemPosition) { "pass" },
             exceptionNote = note.text.toString().trim().ifEmpty { null },
           )
         },
         onSuccess = { rec ->
           recordId.setText(rec.id)
-          status.text = "检修记录已提交：${rec.id}（状态 ${rec.status}）\n请主管确认恢复运营。"
+          status.text = "检修记录已提交：${rec.id}（状态 ${maintStatusZh(rec.status)}）\n请主管确认恢复运营。"
         },
         onError = { status.text = "提交失败：${friendly(it)}" },
       )
@@ -511,7 +512,7 @@ class MainActivity : Activity() {
         status.text = "正在确认…"
         runBackground(
           action = { workflow.confirmAmusementMaintenanceResume(rid) },
-          onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${rec.status}）" },
+          onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${maintStatusZh(rec.status)}）" },
           onError = { status.text = "确认失败：${friendly(it)}" },
         )
       }
@@ -520,7 +521,7 @@ class MainActivity : Activity() {
     setContentView(
       screen(
         title = "游乐检修 / 主管确认",
-        children = listOf(status, projectId, deviceId, result, note, submitButton, recordId, confirmButton, backButton()),
+        children = listOf(status, projectId, deviceId, fieldLabel("检修结论"), result, note, submitButton, recordId, confirmButton, backButton()),
       ),
     )
   }
@@ -547,7 +548,7 @@ class MainActivity : Activity() {
             deviceFingerprintHash = DeviceKeystore.deviceFingerprintHash(),
           )
         },
-        onSuccess = { rec -> status.text = "凭证绑定：${rec.id}（状态 ${rec.bindStatus}）" },
+        onSuccess = { rec -> status.text = "凭证绑定：${rec.id}（状态 ${statusZh(rec.bindStatus)}）" },
         onError = { status.text = "绑定失败：${friendly(it)}" },
       )
     }
@@ -696,7 +697,7 @@ class MainActivity : Activity() {
           fillSelectableRows(
             list,
             notices.map { n ->
-              "[${n.consentStatus ?: "-"}] ${n.title ?: n.id}\n${n.body ?: ""}" to {
+              "[${statusZh(n.consentStatus)}] ${n.title ?: n.id}\n${n.body ?: ""}" to {
                 ackId.setText(n.id ?: "")
                 status.text = "已选公告：${n.title ?: n.id}"
               }
@@ -785,7 +786,7 @@ class MainActivity : Activity() {
             salespersonUserId = store.session?.staffId,
           ))
         },
-        onSuccess = { r -> status.text = "订位成功：${r.id ?: "-"}(定金 ${r.depositStatus ?: "not_required"})" },
+        onSuccess = { r -> status.text = "订位成功：${r.id ?: "-"}(定金 ${statusZh(r.depositStatus ?: "not_required")})" },
         onError = { status.text = "订位失败：${friendly(it)}" },
       )
     }
@@ -984,7 +985,9 @@ class MainActivity : Activity() {
   }
 
   private fun showLeave() {
-    val type = editText("类型:personal(事假)/sick(病假)/comp(调休)/annual(年假)")
+    val typeLabel = linkedMapOf("personal" to "事假", "sick" to "病假", "comp" to "调休", "annual" to "年假")
+    val typeValues = typeLabel.keys.toList()
+    val type = enumSpinner(typeLabel.values.toList())
     val start = editText("开始日期(2026-07-05)")
     val end = editText("结束日期(2026-07-06)")
     val reason = editText("事由")
@@ -996,19 +999,19 @@ class MainActivity : Activity() {
         onSuccess = { rows ->
           list.text = if (rows.isEmpty()) "暂无请假记录" else rows.joinToString("\n") { r ->
             val st = when (r.status) { "pending" -> "待审"; "approved" -> "已通过"; "rejected" -> "已驳回"; else -> r.status ?: "-" }
-            "${r.startDate}~${r.endDate} ${r.leaveType} [$st]" + (r.reviewNote?.let { " 批注:$it" } ?: "")
+            "${r.startDate}~${r.endDate} ${r.leaveType?.let { typeLabel[it] ?: it } ?: "-"} [$st]" + (r.reviewNote?.let { " 批注:$it" } ?: "")
           }
         },
         onError = { list.text = "请假记录拉取失败：${friendly(it)}" },
       )
     }
     val submitButton = primaryButton("提交请假") {
-      val t = type.text.toString().trim()
+      val t = typeValues.getOrElse(type.selectedItemPosition) { "personal" }
       val s1 = start.text.toString().trim()
       val e1 = end.text.toString().trim()
       val r1 = reason.text.toString().trim()
-      if (t.isEmpty() || s1.isEmpty() || e1.isEmpty() || r1.isEmpty()) {
-        status.text = "请填全 类型/起止日期/事由"
+      if (s1.isEmpty() || e1.isEmpty() || r1.isEmpty()) {
+        status.text = "请填全 起止日期/事由"
         return@primaryButton
       }
       runBackground(
@@ -1024,7 +1027,7 @@ class MainActivity : Activity() {
     refresh()
     setContentView(screen(
       title = "请假",
-      children = listOf(status, type, start, end, reason, submitButton, list,
+      children = listOf(status, fieldLabel("请假类型"), type, start, end, reason, submitButton, list,
         secondaryButton("返回首页") { showHome() }),
     ))
   }
@@ -1549,7 +1552,7 @@ class MainActivity : Activity() {
         status.text = "正在结算…"
         runBackground(
           action = { workflow.settleBarBill(bill, cents, ch) },
-          onSuccess = { b -> status.text = "结算完成：账单 ${b.id}\n支付：${b.paymentStatus ?: "-"}，结算：${b.settlementStatus ?: "-"}" },
+          onSuccess = { b -> status.text = "结算完成：账单 ${b.id}\n支付：${statusZh(b.paymentStatus)}，结算：${statusZh(b.settlementStatus)}" },
           onError = { status.text = "结算失败：${friendly(it)}" },
         )
       }
@@ -1668,6 +1671,38 @@ class MainActivity : Activity() {
     inputType = InputType.TYPE_CLASS_TEXT
   }
 
+  /** 后端英文状态码->中文展示（仅改展示，不影响提交/存储的原值）；未知值兜底显示原文，不崩。
+   *  仅收录展示点用到、跨枚举语义稳定的状态词；含义随上下文而异的状态各自就地映射（见 maintStatusZh 等）。 */
+  private fun statusZh(raw: String?): String = when (raw) {
+    "pending" -> "处理中"
+    "paid" -> "已支付"; "partial_paid" -> "部分支付"; "unpaid" -> "未支付"
+    "settled" -> "已结算"; "unsettled" -> "未结算"; "not_required" -> "无需"
+    "pending_review" -> "待审核"; "active" -> "已生效"; "superseded" -> "已被替换"; "revoked" -> "已撤销"
+    "acknowledged" -> "已知悉"; "consented" -> "已同意"; "declined" -> "已拒绝"
+    else -> raw ?: "-"
+  }
+
+  /** 游乐检修记录状态->中文（此枚举 open/submitted 语义与其他域不同，故就地单独映射）。 */
+  private fun maintStatusZh(raw: String?): String = when (raw) {
+    "submitted" -> "已提交"; "pending_confirm" -> "待主管确认"
+    "open" -> "已恢复运营"; "maintenance" -> "维保中"; "closed" -> "已关闭"
+    else -> raw ?: "-"
+  }
+
+  /** 中文枚举下拉：显示中文 label，提交时由调用方按 selectedItemPosition 取对应英文 token（后端强校验英文枚举，中文仅用于展示，绝不提交给后端）。 */
+  private fun enumSpinner(labels: List<String>): android.widget.Spinner = android.widget.Spinner(this).apply {
+    adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, labels).apply {
+      setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+    }
+  }
+
+  private fun fieldLabel(text: String): TextView = TextView(this).apply {
+    this.text = text
+    textSize = 13f
+    setTextColor(Color.parseColor("#6b7280"))
+    setPadding(dp(12), dp(8), dp(12), 0)
+  }
+
   private fun primaryButton(text: String, onClick: () -> Unit): Button = Button(this).apply {
     this.text = text
     setOnClickListener { onClick() }
@@ -1690,7 +1725,7 @@ class MainActivity : Activity() {
     if (lines.isEmpty()) return "提成明细: 本月无提成台账"
     val label = mapOf(
       "bar_table" to "酒水/卡座提成", "service_order" to "服务点单份额",
-      "amusement" to "游乐提成", "ticket" to "票务提成",
+      "amusement" to "游乐提成", "ticket" to "票务提成", "other" to "其他",
     )
     return buildString {
       append("提成明细(按来源):\n")
