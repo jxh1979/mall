@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -28,13 +29,17 @@ public class MerchantPortalController {
     }
 
     @GetMapping("/contracts")
-    public ApiResponse<PageResponse<MerchantContractView>> listMyContracts() {
-        return ApiResponse.ok(service.listMyContracts());
+    public ApiResponse<PageResponse<MerchantContractView>> listMyContracts(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
+        return ApiResponse.ok(service.listMyContracts(page, size));
     }
 
     @GetMapping("/settlements")
-    public ApiResponse<PageResponse<ContractSettlementRecord>> listMySettlements() {
-        return ApiResponse.ok(service.listMySettlements());
+    public ApiResponse<PageResponse<ContractSettlementRecord>> listMySettlements(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
+        return ApiResponse.ok(service.listMySettlements(page, size));
     }
 
     @PostMapping("/settlements/{settlement_id}/dispute")

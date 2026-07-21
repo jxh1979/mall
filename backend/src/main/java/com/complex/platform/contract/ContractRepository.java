@@ -72,6 +72,11 @@ public interface ContractRepository {
                 .toList();
     }
 
+    // AUD-005 收尾: 平台全量结算真分页(默认内存切片供测试双子; Jdbc 覆写 SQL COUNT + LIMIT/OFFSET)。
+    default com.complex.platform.common.api.PageResponse<ContractSettlementRecord> listAllSettlementsPaged(int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listAllSettlements(), page, size);
+    }
+
     // 可配审批链：引擎读「该综合体生效链」（项目覆盖优先、否则平台默认）
     List<ContractApprovalFlowStepRecord> listActiveFlowSteps(String projectId);
 

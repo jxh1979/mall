@@ -56,6 +56,7 @@ P0 五能力全部上线(后台「商户专区」菜单组,ADM-MER-003..007):
 | 我的合同 | ADM-MER-006 | 商户自助层 /api/v1/merchant-portal/contracts(关键信息最小披露) |
 | 费用通知 | ADM-MER-007 | 复用接收人配置(商户自助口径:强制本商户+登录主体) |
 
+- 分页口径(AUD-005 收尾·#187):/settlements 与 /contracts 走真分页——`page`/`size`(默认 page=1、size=500),`total` 取同 scope 谓词的 `SELECT COUNT(*)` 真值、第 501+ 条经翻页可达(平台管理员全量口径下不再截断/撒谎 total);商户自 scope 仍无 LIMIT 谓词隔离、只见本商户。
 - 数据边界铁律已活证据实证:只见本商户 / 跨商户拒 / 员工无商户归属 fail-closed(ops/160/merchant-zone-live-evidence-slice{1,2,34,5}.sh);
 - 终端管控:merchant 归属账号整个后台会话按 merchant_portal 终端上报,受总开关(V197)+商户专区模块开关(V199)约束,总开关关闭即整端硬拒(AND 语义);
 - 权限点最小化清单:merchant.billing.view / merchant.service_work_order.view+create / merchant.portal.settlement.view+dispute / contract.view / merchant.portal.fee_recipient.manage(V200,商户自助动作不设审批)。

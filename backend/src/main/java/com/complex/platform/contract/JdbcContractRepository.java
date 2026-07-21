@@ -311,6 +311,22 @@ class JdbcContractRepository implements ContractRepository {
                 """, Map.of(), this::mapSettlement);
     }
 
+    @Override
+    public com.complex.platform.common.api.PageResponse<ContractSettlementRecord> listAllSettlementsPaged(int page, int size) {
+        // AUD-005 收尾: 平台全量结算真分页——SQL COUNT 取真 total + LIMIT/OFFSET 任意页可达 + 稳定排序追加 id。
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM contract_settlements", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<ContractSettlementRecord> items = jdbcTemplate.query("""
+                SELECT id, contract_id, trigger_type, status, settlement_items::text AS settlement_items,
+                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at
+                  FROM contract_settlements ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset
+                """, params, this::mapSettlement);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
     // ---------- approval flow config ----------
     @Override
     public List<ContractApprovalFlowStepRecord> listActiveFlowSteps(String projectId) {
