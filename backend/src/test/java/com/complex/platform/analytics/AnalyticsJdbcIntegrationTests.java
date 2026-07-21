@@ -466,6 +466,10 @@ class AnalyticsJdbcIntegrationTests {
     void metricAnomalyDispositionPersistsAndSurvivesRedetection() {
         // V306:处置状态直接叠加在检测行(稳定键 ano_*),重检测 ON CONFLICT DO NOTHING 不覆盖处置。
         java.time.Instant now = java.time.Instant.parse("2099-06-01T00:00:00Z");
+        // FK anomalies.metric_key → definitions:定义由 ETL 指标目录同步(非迁移种子),本类先落 revenue.net 定义,
+        // 使其不依赖别的测试的 ETL 提交先行(单独/乱序跑时定义表可能为空 → FK 违例)。
+        repository.syncMetricDefinitions(java.util.List.of(
+                new AnalyticsRecords.MetricDefinitionSyncRow("revenue.net", "finance", "cent", true, "anomaly FK 前置")), now);
         repository.insertMetricAnomaly("ano_dispose_test", "revenue.net", "finance", "high",
                 new java.math.BigDecimal("300"), new java.math.BigDecimal("100"), "disposition roundtrip", now);
 
@@ -608,7 +612,8 @@ class AnalyticsJdbcIntegrationTests {
 
     @Test
     void migrationSeedsOneDeterministicRowForEveryReadEndpoint() {
-        assertThat(rowCount("analytics_metric_definitions")).isGreaterThanOrEqualTo(1);
+        // analytics_metric_definitions:V017 演示种子(gmv)已被 V207 清除,定义改由 ETL 指标目录同步(非迁移种子),
+        // 故此处不再断言其迁移行(与下方 summaries/health/anomaly/service 已清演示种子同口径)。
         assertThat(rowCount("analytics_dashboard_snapshots")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_business_metric_snapshots")).isGreaterThanOrEqualTo(1);
         // M4(V208):商户汇总/健康分演示种子已清——汇总由 ETL 真管道回填,健康分按裁决未启用。
@@ -956,10 +961,11 @@ class AnalyticsJdbcIntegrationTests {
                 .addValue("amount", refundAmountCent)
                 .addValue("merchant_id", merchantId)
                 .addValue("at", java.sql.Timestamp.from(at));
+        // V324：售票退款仅按 status='success' 且 succeeded_at 落经营日窗口计入(非 approved/created_at)。
         jdbcTemplate.update("""
                 INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel, status,
-                    created_at, updated_at, merchant_id)
-                VALUES (:id, :target, :amount, 'test refund', 'original', 'approved', :at, :at, :merchant_id)
+                    succeeded_at, created_at, updated_at, merchant_id)
+                VALUES (:id, :target, :amount, 'test refund', 'original', 'success', :at, :at, :at, :merchant_id)
                 """, params);
     }
 
