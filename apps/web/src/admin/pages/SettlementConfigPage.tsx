@@ -83,6 +83,7 @@ type Form = {
   merchantId: string;
   perGuestCent: string;
   fixedAmountCent: string;
+  monthlyCapAmountCent: string;
   entitlementType: string;
   feeBps: string;
   discountBearer: string;
@@ -92,7 +93,7 @@ type Form = {
 };
 const EMPTY_FORM: Form = {
   projectId: "", retentionBps: "", methodType: "by_venue_per_guest", merchantId: "",
-  perGuestCent: "", fixedAmountCent: "", entitlementType: "", feeBps: "",
+  perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", entitlementType: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", revenueStream: "all_pass_ticket", managementEntityId: "",
 };
 
@@ -412,7 +413,8 @@ function editSteps(
         <label>商户 id（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
         <label>票种（留空 = 通用）<input data-testid="settlement-config-field-entitlementType" value={form.entitlementType} onChange={setField("entitlementType")} /></label>
         <label>费率万分比（0~10000，配固定额时须 0）<input data-testid="settlement-config-field-feeBps" type="number" min={0} max={10000} value={form.feeBps} onChange={setField("feeBps")} /></label>
-        <label>固定额（分，可留空；与费率二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label></>);
+        <label>固定额（分，可留空；与费率二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label>
+        <label>月度封顶（分，可留空 = 不封顶；比例/固定额都受此上限）<input data-testid="settlement-config-field-monthlyCapAmountCent" type="number" min={0} value={form.monthlyCapAmountCent} onChange={setField("monthlyCapAmountCent")} /></label></>);
       break;
     case "combo_discount":
       content = (<>{projectField}
@@ -469,7 +471,7 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[]): GuidedSummaryI
     case "retention": return [scope, { label: "留存万分比", value: form.retentionBps || "—" }];
     case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }];
     case "merchant_rate": return [scope, { label: "商户", value: form.merchantId || "—" }, { label: "每客单价（分）", value: form.perGuestCent || "—" }, { label: "固定额（分）", value: form.fixedAmountCent || "—" }];
-    case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: form.entitlementType.trim() || "通用" }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }];
+    case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: form.entitlementType.trim() || "通用" }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
     case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }];
     case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }];
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "归因主体", value: form.managementEntityId || "—" }];
@@ -496,6 +498,7 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
       const hasFixed = orUndef(form.fixedAmountCent) !== undefined;
       if (hasFixed && !isIntInRange(form.fixedAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "固定额需为不小于 0 的整数（分）。";
       if (hasFixed && Number(feeStr) !== 0) return "配固定额时费率万分比须为 0（两者二选一）。";
+      if (orUndef(form.monthlyCapAmountCent) !== undefined && !isIntInRange(form.monthlyCapAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "月度封顶需为不小于 0 的整数（分），留空 = 不封顶。";
       return null;
     }
     case "combo_discount":
@@ -531,6 +534,7 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
         idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), entitlementType: orUndef(form.entitlementType),
         feeBps: form.feeBps.trim() === "" ? 0 : Number(form.feeBps),
         fixedAmountCent: orUndef(form.fixedAmountCent) === undefined ? null : Number(form.fixedAmountCent),
+        monthlyCapAmountCent: orUndef(form.monthlyCapAmountCent) === undefined ? null : Number(form.monthlyCapAmountCent),
       };
     case "combo_discount":
       return { idempotencyKey, projectId: project, discountBearer: form.discountBearer, splitPlatformBps: Number(form.splitPlatformBps || "0") };

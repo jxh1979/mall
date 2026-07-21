@@ -120,14 +120,20 @@ public class SettlementConfigWriteService {
                         "fee_bps must be 0 when fixed_amount_cent is set (fee mode is either-or)");
             }
         }
+        // V336 月度封顶(可选·默认不封顶):非空则 ≥0(对齐 chk_csfc_monthly_cap);比例与固定额两模式共用。
+        Long cap = req.monthlyCapAmountCent();
+        if (cap != null) {
+            requireNonNegative(cap, "monthly_cap_amount_cent");
+        }
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId())
                 + "|" + anyScope(req.entitlementType());
         String landedId = writeRepository.upsertComprehensiveServiceFeeDraft(draftId("csfc_d_", scopeKey, idem),
-                req.projectId(), req.merchantId(), req.entitlementType(), feeBps, fixed, actorId);
+                req.projectId(), req.merchantId(), req.entitlementType(), feeBps, fixed, cap, actorId);
         audit("settlement.config.comprehensive_service_fee_configs.updated",
                 "comprehensive_service_fee_configs", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()), "fee_bps", String.valueOf(feeBps),
-                        "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed)));
+                        "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed),
+                        "monthly_cap_amount_cent", cap == null ? "-" : String.valueOf(cap)));
     }
 
     public void saveComboDiscount(ComboDiscountRequest request, String actorId) {

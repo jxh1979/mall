@@ -30,7 +30,8 @@ public final class SettlementConfigWriteRequests {
 
     /** comprehensive_service_fee_configs:综合服务费。二选一:配固定额则 feeBps 必 0(对齐 V328 chk_csfc_fee_mode)。 */
     public record ComprehensiveServiceFeeRequest(String idempotencyKey, String projectId, String merchantId,
-                                                 String entitlementType, Integer feeBps, Long fixedAmountCent) {
+                                                 String entitlementType, Integer feeBps, Long fixedAmountCent,
+                                                 Long monthlyCapAmountCent) {
     }
 
     /** ticket_combo_discount_configs:套票折扣归属 ∈{platform_absorb,merchant_absorb,split_by_ratio};splitPlatformBps∈[0,10000]。 */

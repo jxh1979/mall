@@ -138,6 +138,12 @@ public class TicketDistributionSettlementService {
             long fee = svcFee.fixedAmountCent() != null
                     ? Math.min(svcFee.fixedAmountCent() * ex.verifiedCount(), gross)
                     : gross * svcFee.feeBps() / 10000;
+            // V336 月度封顶(可配·默认不封顶):该费率规则(项目×商户×票种)当月服务费不超封顶值;
+            //   ex 即该 (商户×票种) 当月聚合行,故此处 fee 就是该规则当月服务费,clamp 即月度封顶。
+            //   比例与固定额两模式共用同一绝对上限;cap 为 null 则不封(零行为变更)。封顶只压不抬。
+            if (svcFee.monthlyCapAmountCent() != null) {
+                fee = Math.min(fee, svcFee.monthlyCapAmountCent());
+            }
             long net = gross - fee;
             compServiceFee += fee;
             long[] acc = byMerchant.computeIfAbsent(ex.merchantId(), k -> new long[3]);

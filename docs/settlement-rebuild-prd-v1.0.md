@@ -208,6 +208,7 @@
 - 客人购买某商户的单独门票(任意渠道):项目公司先抽**综合服务费/项目管理费**(= 平台留存规则 §5.1,费率项目↔商户可洽谈、可配),余额结给该商户;
 - **所有门票**(含通票)都过平台留存这一道——通票的"留存 20%"与单独门票的"综合服务费"是**同一条留存规则**的不同费率实例。
 > ✅ **已落地(V328)**:综合服务费现支持**比例或固定额二选一**——配固定额(`fixed_amount_cent`)则费率(`fee_bps`)须为 0(DB 约束 `chk_csfc_fee_mode` 保证二者不并存);默认仍费率 0 → 零行为变更。
+> ✅ **月度封顶(V336·批2·用户 2026-07-21 拍板 A「按费率规则各自封」)**:综合服务费加**可配月度封顶** `monthly_cap_amount_cent`(绝对分值·比例与固定额两模式**共用**同一上限)。封顶配在**每条费率规则上**(项目×商户×票种作用域),该规则当月产生的服务费 `fee` 算出后 clamp:`fee = min(fee, monthly_cap_amount_cent)`;引擎每月每 (商户×票种) 聚合行处理一次,故 clamp 天然=该作用域月度封顶。**默认 NULL = 不封顶 → 零行为变更**;`chk_csfc_monthly_cap` 保证 ≥0。**封顶只压不抬**(未触顶 fee 原样)。商户若只配一条商户级规则(票种留空)即等于「该商户当月封顶」。写侧(草案→差人转正)+ 引擎读侧 + 前端总控页输入框全链落地,`SettlementV268Tests`(比例封顶/固定额封顶/未触顶)+ 写侧往返测试绿。
 > **固定额口径(用户 2026-07-21 拍板 A)**:固定额=**每张票固定额 × 核销张数**(对齐「所有门票都过一道」=每张都过),**非**「每票种/每月整包一口价」;引擎实扣 `min(固定额 × 核销张数, 本笔毛额)`(上限本笔收入防净额为负)。比例口径不受影响(比例天然随每张收入缩放)。
 
 ### 7.3 单点消费(用户口径 9)
@@ -303,6 +304,7 @@
 - **V330** `settlement.bill.post` 权限点(过账·高敏 requires_approval)
 - **V331** `issued_entitlements.component_full_price_cent`(售卖快照满额价)+ `settlement_transactions.discount_amount_cent`(核销折扣增量·扩 `chk_st_amount` 允许 ± 守恒)+ `settlement_bills.combo_discount_cent`(平台吸收折扣归项目)
 - **V335** 放开 `settlement_bills.combo_discount_cent` 的 ≥0 约束(`chk_sb_combo_discount` drop·改带符号)——套票折扣<b>跨月冲正</b>时项目承担折扣可为负=追回,与收入侧 `verified_amount_cent` 带符号跨月净掉一致(修 `platformBorneDiscount` 的 `discountCent≤0` 钳0 致跨月不对称、项目多付;套票真上线前必修)
+- **V336**(批2) `comprehensive_service_fee_configs.monthly_cap_amount_cent`(综合服务费月度封顶·绝对分值·比例与固定额共用·`chk_csfc_monthly_cap` ≥0·默认 NULL 不封顶零变更)
 
 ---
 
