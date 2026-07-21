@@ -265,6 +265,8 @@ supply_entities,single_complex_default,P0_SINGLE_COMPLEX,single-complex default 
 temporary_permission_grants,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 terminal_capability_switches,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
 terminal_device_credentials,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
+terminal_device_nonces,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
+terminal_device_signing_keys,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
 terminal_device_status_events,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
 terminal_devices,direct,venue_id,venue_id column on terminal_devices,ready for project/merchant scoped query enforcement,covered
 terminal_kiosk_configs,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
