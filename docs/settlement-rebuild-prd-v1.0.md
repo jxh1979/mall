@@ -250,6 +250,13 @@
 - 均带 `is_draft`(草案态,复核后转正)、`effective_from/to`、`updated_by`、审计;
 - 权限点 `settlement.config.view/manage`,限项目公司财务/运营角色。
 
+> **2026-07-20 新立项批0 实现修订(配置中心骨架落地对齐)**:
+> - 配置中心落地为**统一总控页 ADM-STL-001**(「看全局」概览 + 草案复核队列);各配置的可视化维护作为其内栏目/标签随新立项批1-5 接入,不再是本节原设想的「每表一页」(ADM-STL-002~010 编号保留作栏目锚点)。
+> - 配置表族**实际建表名**与本节 proposed 名对应:分账方案=`ticket_distribution_configs`+`ticket_distribution_rank_tiers`+`ticket_distribution_merchant_rates`(非 `spv_distribution_configs`);门票综合服务费=`comprehensive_service_fee_configs`;套票折扣归属=`ticket_combo_discount_configs`(非 `ticket_discount_rules`);税费=`settlement_tax_configs`(非 `tax_config`,V223 已建、待批2 复活消费)。
+> - **ADM-STL-004 `refund_fee_rules`(退款手续费预扣)作废**——退款手续费预扣 2026-07-04 已裁定不建。
+> - 权限点已落 **V326**:`settlement.config.view/manage` + `settlement.distribution.manage`(维护/分账高敏 requires_approval);复核闸批0 为**轻量式**(高敏权限+前态守卫+审计),资金级配置(分红批4)再上 supervisor_review 重审批。
+> - 读取侧统一强制 `is_draft=FALSE`(草案不生效);现存种子经 V326 一次性转正(视同已批准的当前生效值,零行为变化)。
+
 ---
 
 ## 10. 数据模型变更清单
