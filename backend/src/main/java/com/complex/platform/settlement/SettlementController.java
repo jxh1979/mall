@@ -6,6 +6,7 @@ import com.complex.platform.common.api.PageResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,5 +54,23 @@ public class SettlementController {
         authorizationService.requirePermission("settlement.bill.post");
         authorizationService.requirePlatformScope();
         return ApiResponse.ok(postingService.postBill(billId));
+    }
+
+    /**
+     * D7 超池特批出口:把某<b>超池 draft</b> 结算单填特批引用并置 confirmed(可再走 postBill 过账)。
+     * 仅超池 draft 单可特批(非超池 draft/已 confirmed/settled 由服务层 409 BILL_NOT_OVERPOOL_DRAFT 拒);
+     * 复用 postBill 同权限 settlement.bill.post + 平台域(不新建权限、零迁移)。返回落库的特批引用。
+     */
+    @PostMapping("/bills/{id}/special-approval")
+    public ApiResponse<String> specialApprove(@PathVariable("id") String billId,
+                                              @RequestBody SpecialApprovalRequest request) {
+        authorizationService.requirePermission("settlement.bill.post");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(postingService.specialApprove(billId,
+                request == null ? null : request.specialApprovalRef()));
+    }
+
+    /** 特批请求体：平台负责人特批短期激励的凭据引用。 */
+    public record SpecialApprovalRequest(String specialApprovalRef) {
     }
 }
