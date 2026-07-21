@@ -53,34 +53,49 @@ test.describe("real backend UI acceptance", () => {
   test("REAL-UI-02 admin core business pages load real backend data without global errors", async ({ page, request }) => {
     await expectRealBackendReady(request);
 
+    // 会话加固后 admin 登录下发 HttpOnly 会话 Cookie（admin_access_token），整页跳转仍保持登录态。
+    // 因此登录一次后逐页导航校验即可；旧断言对每页重复触发登录表单（假设 token 仅在内存、跳转即登出）
+    // 已随会话 Cookie 加固失效。断言意图不变：每页加载真实后端数据且无全局错误。
+    await loginAgainstRealBackend(page);
+
     for (const path of [
       "/admin/ticketing/policies",
       "/admin/bar/table-sessions",
       "/admin/finance/ar-ap-ledger",
       "/admin/integrations/adapters",
     ]) {
-      await loginAgainstRealBackend(page, path);
+      await page.goto(path);
+      await expect(page.getByTestId("admin-shell")).toBeVisible();
       await expect(page.getByTestId("admin-page-title")).toBeVisible();
+      await expect(page.locator(".loading-state")).toHaveCount(0);
       await expect(page.getByTestId("global-error")).toHaveCount(0);
     }
   });
 
   // P1-12（A8-03 红线补强）：UI 验收矩阵 §5 红线要求"权限拦截必须有服务端拒绝证据，不能只靠前端隐藏"。
   // 此用例以 API 级（不依赖 UI 选择器/账号 seed，最稳）校验：无认证直接访问受保护业务端点，真实后端必须拒绝。
-  test("REAL-UI-03 protected business endpoints reject unauthenticated access (server-side denial, not just frontend hiding)", async ({ request }) => {
+  test("REAL-UI-03 protected business endpoints reject unauthenticated access (server-side denial, not just frontend hiding)", async ({ request, playwright }) => {
     await expectRealBackendReady(request);
+    // 会话加固后 /api/v1/auth/login 下发 HttpOnly 会话 Cookie；expectRealBackendReady 的登录会把该 Cookie
+    // 写入共享 request 上下文，若沿用同一上下文发起"未认证"探测会误带登录 Cookie 得到 200。改用全新、
+    // 从未登录的请求上下文发起探测，才真正校验服务端对未认证访问的拒绝。
+    const anon = await playwright.request.newContext();
+    try {
     for (const path of [
       "/api/v1/finance/ar-ap-items",
       "/api/v1/platform/merchants",
       "/api/v1/access/users",
     ]) {
-      const res = await request.get(`${backendBaseUrl}${path}`);
+      const res = await anon.get(`${backendBaseUrl}${path}`);
       // AUD-022: 精确断言 401/403。旧断言只要求"非 2xx"，404（端点不存在）/500（服务器错误）
       // 也会被误当成"拒绝证据"通过——那证明不了服务端真的做了鉴权拦截。
       expect(
         [401, 403],
         `${path} must be denied for unauthenticated access with 401/403 (server-side denial), but returned ${res.status()}`,
       ).toContain(res.status());
+    }
+    } finally {
+      await anon.dispose();
     }
   });
 });

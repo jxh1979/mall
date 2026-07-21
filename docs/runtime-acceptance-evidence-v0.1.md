@@ -9,7 +9,21 @@
 - RUNTIME_EVIDENCE_FROM_PLAYWRIGHT_REPORTS
 - RUNTIME_EVIDENCE_FROM_WEB_DIST
 - RUNTIME_EVIDENCE_FROM_SEMGREP_LATEST_SUMMARY
+- RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT
 - RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST
+
+## 0. 证据绑定（防陈旧）
+
+| 绑定项 | 当前值 |
+|---|---|
+| 生成时的 Git HEAD | `0e478882be0c92bef434b30f6d6d021cd2e90c2f`（docs/settlement-prd-sec9） |
+| 生成时工作树 | 有未提交改动 |
+| 源码指纹 sha256 | `5d02b37741710e335f582adbdf6ed891ce24620909a95bb2a6e0e9c6df96aedb` |
+| 指纹覆盖文件数 | 2033 |
+| 生成时间 | 2026-07-21T13:27:41.586Z |
+| 最大有效天数 | 30 |
+
+> 校验规则（`--check`）：若当前源码指纹与本文记录不一致（源码已变更），或本证据超过最大有效天数，则立即 FAIL；陈旧证据不再自欺 PASS。
 
 ## 1. 结论
 
@@ -36,23 +50,23 @@
 
 | 指标 | 当前值 |
 |---|---:|
-| Surefire suites | 147 |
-| tests | 1757 |
+| Surefire suites | 220 |
+| tests | 2521 |
 | failures | 0 |
 | errors | 0 |
 | skipped | 0 |
-| latest_mtime | 2026-07-03T12:15:51.306Z |
+| latest_mtime | 2026-07-21T13:25:26.477Z |
 
 ## 4. Web 与 UI 验收证据
 
 | 证据 | 当前值 |
 |---|---|
 | Web dist index | 存在 |
-| Web main JS | `apps/web/dist/assets/main-B36tnK9z.js` 3443 bytes |
-| 最大静态资源 | `apps/web/dist/assets/vendor-antd-LpdhM_rm.js` 472136 bytes |
+| Web main JS | `apps/web/dist/assets/main-CC2bv-q6.js` 3532 bytes |
+| 最大静态资源 | `apps/web/dist/assets/vendor-antd-CBmYl4fp.js` 538825 bytes |
 | 主包过大 warning 预期 | 无 |
-| 前端单元测试源文件 | 14 个文件，57 条测试定义 |
-| Playwright 常规 UI | 报告存在，38 条测试定义 |
+| 前端单元测试源文件 | 184 个文件，736 条测试定义 |
+| Playwright 常规 UI | 报告存在，39 条测试定义 |
 | Playwright 真实后端 UI | 报告存在，3 条测试定义 |
 | Playwright last-run | passed |
 
