@@ -43,7 +43,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 故 @BeforeEach 登录平台管理员。@AfterEach 按 project 清结算单/明细/核销；ar_ap_items 为不可变台账(source_id 唯一)不清。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
+        "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
@@ -103,13 +103,13 @@ class SettlementBatch2E2ETests {
         // ---- 断言 settlement_bills 逐项数字 ----
         Map<String, Object> bill = bill(pid);
         long ticketRevenue = 150000L;
-        long giveawayCost = 10L * 300L;                          // 3000
-        long availablePool = ticketRevenue - 0L - giveawayCost;  // 147000
-        long retention = availablePool * 2000 / 10000;           // 29400
-        long spvPool = availablePool - retention;                // 117600
+        // D5(2026-07-21):赠酒不从池扣(补偿走 bar 域内部结算价应付),故 10 杯 gift_drink 核销不缩小池、giveaway_cost_cent=0。
+        long availablePool = ticketRevenue - 0L;                 // 150000(仅减渠道费 0,不减赠酒)
+        long retention = availablePool * 2000 / 10000;           // 30000
+        long spvPool = availablePool - retention;                // 120000
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(ticketRevenue);
         assertThat(num(bill, "channel_fee_cent")).isEqualTo(0L);
-        assertThat(num(bill, "giveaway_cost_cent")).isEqualTo(giveawayCost);
+        assertThat(num(bill, "giveaway_cost_cent")).isEqualTo(0L);   // D5:赠酒不占池(即便有 10 杯核销)
         assertThat(num(bill, "available_pool_cent")).isEqualTo(availablePool);
         assertThat(bill.get("retention_bps")).isEqualTo(2000);
         assertThat(num(bill, "retention_cent")).isEqualTo(retention);
@@ -117,10 +117,10 @@ class SettlementBatch2E2ETests {
         assertThat(bill.get("distribution_method")).isEqualTo("by_rank_tier");
 
         // ---- 断言 settlement_items 各酒吧按排名命中档位 → spv_pool × share_bps/10000 ----
-        long a1 = spvPool * 1600 / 10000; // 18816
-        long a2 = spvPool * 1200 / 10000; // 14112
-        long a3 = spvPool * 1200 / 10000; // 14112
-        long a4 = spvPool * 1200 / 10000; // 14112
+        long a1 = spvPool * 1600 / 10000; // 19200
+        long a2 = spvPool * 1200 / 10000; // 14400
+        long a3 = spvPool * 1200 / 10000; // 14400
+        long a4 = spvPool * 1200 / 10000; // 14400
         assertThat(itemAmount(pid, "bar1")).isEqualTo(a1);
         assertThat(itemAmount(pid, "bar2")).isEqualTo(a2);
         assertThat(itemAmount(pid, "bar3")).isEqualTo(a3);
@@ -130,7 +130,7 @@ class SettlementBatch2E2ETests {
         assertThat(itemRank(pid, "bar3")).isEqualTo(3);
         assertThat(itemRank(pid, "bar4")).isEqualTo(4);
 
-        long distributed = a1 + a2 + a3 + a4; // 61152
+        long distributed = a1 + a2 + a3 + a4; // 62400
         assertThat(num(bill, "distributed_cent")).isEqualTo(distributed);
         assertThat(distributed).isLessThanOrEqualTo(spvPool);  // Σitems.final ≤ spv_pool
         assertThat(bill.get("status")).isEqualTo("confirmed");  // 未越池 → confirmed，可过账
@@ -166,8 +166,8 @@ class SettlementBatch2E2ETests {
         }
 
         // ---- ④ 全链对账断言(整数分无漂移) ----
-        // 收入 − 赠酒 = 池
-        assertThat(ticketRevenue - giveawayCost).isEqualTo(availablePool);
+        // 收入 − 渠道费 = 池(D5:赠酒不入此式,补偿走 bar 域内部结算价应付,不占分账池)
+        assertThat(ticketRevenue - 0L).isEqualTo(availablePool);
         // 池 = 留存 + 总池
         assertThat(retention + spvPool).isEqualTo(availablePool);
         // Σ各酒吧分账 + 余数 = 总池(余数=整除截断沉淀，天然 ≥0)

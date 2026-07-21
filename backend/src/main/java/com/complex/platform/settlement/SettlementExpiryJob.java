@@ -99,7 +99,8 @@ public class SettlementExpiryJob {
                     STATUS_CONFIRMED,
                     row.validTo(),
                     null, // exclusive_merchant_id：过期未核销归项目，非专属直付，置 NULL
-                    row.validTo())); // business_at：到期业务时刻=有效期截止（归项目落该月）
+                    row.validTo(), // business_at：到期业务时刻=有效期截止（归项目落该月）
+                    0L)); // D6 discount_amount_cent：到期归项目非核销销售，无套票折扣
             count++;
         }
         return count;

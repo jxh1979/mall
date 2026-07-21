@@ -71,19 +71,30 @@ public class TicketDistributionSettlementService {
         Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 
-        // ① 通票收入(已核销) = Σ verified_amount_cent(全部权益)
-        long ticketRevenue = repository.sumVerifiedRevenueCent(projectId, windowStart, windowEnd);
+        // D6 套票折扣归属(§7.4)：项目级配置（默认 platform_absorb）。折扣额已在核销时逐笔落 discount_amount_cent（append-only 账本），
+        //   本引擎按 discount_bearer 应用——项目承担部分让商户拿满额、并记入 bill.combo_discount_cent。无折扣(折扣额=0)时全程 +0=零行为变更。
+        var discountCfg = repository.findComboDiscountConfig(projectId);
+        // 非专属(进池)折扣合计；platform_absorb/split_by_ratio 时把项目承担部分加进池基数(池按满额分)，merchant_absorb 时=0(池按净额分,现状)。
+        long pooledDiscount = repository.sumComboDiscountCent(projectId, windowStart, windowEnd);
+        long pooledPlatformBorne = platformBorneDiscount(discountCfg, pooledDiscount);
 
-        // ② 赠酒成本 = Σ gift_drink 核销杯数 × 每杯成本
-        long giftCups = repository.sumGiftDrinkVerifiedCount(projectId, windowStart, windowEnd);
-        long giveawayCost = giftCups * repository.findGiveawayCostPerCupCent(projectId);
+        // ① 通票收入(已核销) = Σ verified_amount_cent(全部权益)。D6：项目承担的进池折扣加进基数，商户按满额分(无折扣时 +0=现状)。
+        long ticketRevenue = repository.sumVerifiedRevenueCent(projectId, windowStart, windowEnd) + pooledPlatformBorne;
+        // 本月项目公司实际承担的折扣入账（池承担部分 + 后续专属直付承担部分累加）。
+        long comboDiscountCent = pooledPlatformBorne;
 
-        // ③ 渠道费:现状无费率数据源 → 先取 0
-        // TODO 渠道费明细来源待第三方渠道费率接入补
-        long channelFee = 0L;
+        // ② 赠酒成本不在此扣(D5,2026-07-21 用户拍板删):通票免费酒水由 bar 域 BarGiftConsumer 每次核销按【内部结算价】
+        //    给出品酒吧挂应付(pass_drink_settlement,幂等键 verificationId,可冲正)=唯一补偿口径;原「每杯 3 元池扣」
+        //    是财务测算假设(PRD §3.7 假设不进系统)且与该内部结算价应付重复=对同一杯赠酒双重计,已删,不再从池扣减。
 
-        // ④ 可分配池 = 收入 − 渠道费 − 赠酒成本(下限 0)
-        long availablePool = Math.max(0L, ticketRevenue - channelFee - giveawayCost);
+        // ③ 渠道费:率可配(channel_fee_configs,默认 0),消灭写死常量(PRD §5.0 步骤②「先扣第三方渠道抽成」)。
+        //    实扣 = 率 × 第三方渠道实际交易额;渠道交易额数据源属批6(第三方对接),现无 → channelRevenue=0 → 实扣仍 0(保值,迁移前后生效值不变)。
+        int channelFeeBps = repository.findChannelFeeBps(projectId);
+        long channelRevenueCent = 0L; // TODO(批6): 第三方渠道流水接入后填该项目当月实际经第三方渠道成交额
+        long channelFee = channelRevenueCent * channelFeeBps / 10000L;
+
+        // ④ 可分配池 = 收入 − 渠道费(下限 0)。赠酒成本不在此扣(见 ②)。
+        long availablePool = Math.max(0L, ticketRevenue - channelFee);
 
         // ⑤ 项目留存 = 池 × retention_bps / 10000(整数分);各酒吧总池 = 池 − 留存
         int retentionBps = repository.findRetentionBps(projectId);
@@ -109,9 +120,18 @@ public class TicketDistributionSettlementService {
         // byMerchant[mid] = {netAmount, verifiedCount, guestCount}
         long compServiceFee = 0L;
         for (var ex : exclusives) {
-            int feeBps = repository.findComprehensiveServiceFeeBps(projectId, ex.merchantId(), ex.entitlementType());
-            long fee = ex.revenueCent() * feeBps / 10000; // 整数分,截断余数留给商户(不多扣)
-            long net = ex.revenueCent() - fee;
+            var svcFee = repository.findComprehensiveServiceFee(projectId, ex.merchantId(), ex.entitlementType());
+            // D6：项目按归属承担的折扣加回该商户毛额，使其拿满额(platform_absorb 全额/split_by_ratio 平台份额/merchant_absorb=0)。
+            //   综合服务费在此毛额上叠加(顺序不冲突)；折扣=0 时 gross=revenue → 与 D6 前逐分一致(零行为变更)。
+            long platformBorne = platformBorneDiscount(discountCfg, ex.discountCent());
+            long gross = ex.revenueCent() + platformBorne;
+            comboDiscountCent += platformBorne; // 项目承担的专属折扣入账
+            // 综合服务费:固定额=每张票固定额 × 核销张数(§7.2「所有门票都过一道」·用户 2026-07-21 拍板 A 口径,非整包价),
+            //   上限本笔毛额(防净额为负);否则比例(整数分截断余数留商户,不多扣)。默认 比例0 → fee=0(保值)。
+            long fee = svcFee.fixedAmountCent() != null
+                    ? Math.min(svcFee.fixedAmountCent() * ex.verifiedCount(), gross)
+                    : gross * svcFee.feeBps() / 10000;
+            long net = gross - fee;
             compServiceFee += fee;
             long[] acc = byMerchant.computeIfAbsent(ex.merchantId(), k -> new long[3]);
             acc[0] += net;
@@ -144,9 +164,9 @@ public class TicketDistributionSettlementService {
         String billId = idFor(projectId, month);
         repository.upsertBill(new SettlementBillRecord(
                 billId, projectId, periodStart, periodEnd,
-                ticketRevenue, channelFee, giveawayCost, availablePool,
+                ticketRevenue, channelFee, 0L, availablePool,   // giveaway_cost_cent 恒 0:赠酒补偿走 bar 域内部结算价应付、不占分账池(D5)
                 retentionBps, retention, spvPool, distributed, compServiceFee,
-                method, specialApprovalRef, status, attributedEntityId));
+                method, specialApprovalRef, status, attributedEntityId, comboDiscountCent));
 
         // 幂等重跑:先清旧明细再写(明细集合随当月核销变化,覆盖式最简)
         String actualBillId = repository.findBillId(projectId, periodStart, periodEnd);
@@ -215,6 +235,22 @@ public class TicketDistributionSettlementService {
 
     private String idFor(String projectId, YearMonth month) {
         return "sb_" + (projectId == null ? "default" : projectId) + "_" + month;
+    }
+
+    /**
+     * D6 套票折扣按归属拆出「项目公司承担」的部分(§7.4)：
+     * platform_absorb → 项目全额承担(商户拿满额)；split_by_ratio → 项目按 split_platform_bps 承担；
+     * merchant_absorb → 项目 0(商户自担，池/直付按净额=现状)。折扣 &lt;=0(无折扣/冲正净掉) → 0(零行为变更)。
+     */
+    private long platformBorneDiscount(JdbcSettlementBillRepository.ComboDiscountConfig cfg, long discountCent) {
+        if (discountCent <= 0) {
+            return 0L;
+        }
+        return switch (cfg.discountBearer()) {
+            case "platform_absorb" -> discountCent;
+            case "split_by_ratio" -> discountCent * cfg.splitPlatformBps() / 10000;
+            default -> 0L; // merchant_absorb（及未知值防御）：项目不承担
+        };
     }
 
     /** 分账中间结果（method：池分账=当月分配方式，专属直付=exclusive_full）。 */

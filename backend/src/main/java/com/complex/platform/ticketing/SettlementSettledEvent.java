@@ -27,6 +27,8 @@ import java.time.Instant;
  * @param exclusiveMerchantId  结算重构批3-4(PRD §6.4)：专属某商户「不分摊」，非空=该权益核销收入全额归该商户（不进池）；空=非专属分池
  * @param settlementPriceCent  本次核销结算价(分,可空)——resolveSettlementPrice 结果。餐饮等专属权益按此价×核销数直付商户(内部结算价口径)；
  *                             为空或非专属时消费者仍按 allocated 分摊(现状,与旧口径对账)。
+ * @param fullPriceCent        D6 该权益满额份额(分,可空)。消费者用与 allocated 同一增量公式算 verifiedFull,折扣增量=max(0,verifiedFull−verified)；
+ *                             为空(component_price 全空/direct 出票)→折扣恒 0(零行为变更)。
  */
 public record SettlementSettledEvent(
         String verificationId,
@@ -42,6 +44,7 @@ public record SettlementSettledEvent(
         Long allocatedRevenueCent,
         Instant validTo,
         String exclusiveMerchantId,
-        Long settlementPriceCent
+        Long settlementPriceCent,
+        Long fullPriceCent
 ) {
 }

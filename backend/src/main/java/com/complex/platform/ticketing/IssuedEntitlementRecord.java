@@ -41,7 +41,11 @@ public record IssuedEntitlementRecord(
         // AUD-066 人员权益组槽位（用户口径无 slot 0）：1..N=第几个人；0=无父票/存量未分组。
         int slotIndex,
         // AUD-076 单店票挂酒吧：出票时从订单快照的酒吧商户 id；null=通票/平台票。撤场提前到期按此列检索。
-        String barId
+        String barId,
+        // D6 套票折扣落库：出票定价时记录该权益「满额份额」(各分项标准价按人拆的份额,分)。可空:
+        //   component_price 全空(回退均摊)→ null=无分项满额价=无套票折扣。核销结算时与 allocated 走同一增量公式算
+        //   verifiedFull,折扣增量=max(0, verifiedFull−verified) 落 settlement_transactions.discount_amount_cent。
+        Long componentFullPriceCent
 ) {
     // ponytail: 向后兼容构造——批3-2 前的调用点(测试)不带 consumptionWindow，默认 null(=判定层走现状 per_use 逐次扣)。
     //           避免为 1 个可空字段改 18 处既有构造点；未改的既有用例即"consumption_window 缺省"的回归证。
@@ -53,7 +57,7 @@ public record IssuedEntitlementRecord(
             int numPeople, Long allocatedRevenueCent, String entitlementKind, Long agreementPriceCent) {
         this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
                 pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
-                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, null, null, null, 0, null);
+                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, null, null, null, 0, null, null);
     }
 
     // ponytail: 批3-4 前带 consumptionWindow 但不带 exclusiveMerchantId 的调用点默认 null(=非专属分池)。
@@ -65,7 +69,7 @@ public record IssuedEntitlementRecord(
             String consumptionWindow) {
         this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
                 pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
-                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, consumptionWindow, null, null, 0, null);
+                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, consumptionWindow, null, null, 0, null, null);
     }
 
     // ponytail: AUD-066 前带 exclusiveMerchantId 但不带 parent/slot 的调用点(测试)默认 parent=null、slot=0（无父票不分组）。
@@ -78,7 +82,7 @@ public record IssuedEntitlementRecord(
         this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
                 pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
                 numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, consumptionWindow,
-                exclusiveMerchantId, null, 0, null);
+                exclusiveMerchantId, null, 0, null, null);
     }
 
     // ponytail: AUD-076 前的 25 参全签名（含 parent/slot、无 barId）→ barId=null。供既有集成测试直造权益不改。
@@ -91,7 +95,7 @@ public record IssuedEntitlementRecord(
         this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
                 pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
                 numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, consumptionWindow,
-                exclusiveMerchantId, parentTicketId, slotIndex, null);
+                exclusiveMerchantId, parentTicketId, slotIndex, null, null);
     }
 
     public int remainingTimes() {
@@ -125,7 +129,8 @@ public record IssuedEntitlementRecord(
                 exclusiveMerchantId,
                 parentTicketId,
                 slotIndex,
-                barId
+                barId,
+                componentFullPriceCent
         );
     }
 
@@ -134,6 +139,7 @@ public record IssuedEntitlementRecord(
         return new IssuedEntitlementRecord(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId,
                 entitlementType, merchantId, venueId, pointId, totalTimes, usedTimes, valueAmountCent, status,
                 validFrom, validTo, createdAt, updatedAt, numPeople, allocatedRevenueCent, entitlementKind,
-                agreementPriceCent, consumptionWindow, exclusiveMerchantId, parentTicketId, slotIndex, barId);
+                agreementPriceCent, consumptionWindow, exclusiveMerchantId, parentTicketId, slotIndex, barId,
+                componentFullPriceCent);
     }
 }

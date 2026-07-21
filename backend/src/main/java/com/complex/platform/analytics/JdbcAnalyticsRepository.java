@@ -1243,7 +1243,12 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     @Override
     public AnalyticsRecords.MerchantRevenueAttributionRule upsertRevenueAttributionRule(
             AnalyticsRecords.MerchantRevenueAttributionRule rule, String updatedBy, java.time.Instant now) {
-        jdbcTemplate.update("""
+        // 待主会话协调 batch0:Path 2 落草案——ON CONFLICT 命中 V329 索引「同 scope 的草案槽」(is_draft 已入索引),
+        // 覆盖草案、不动生效行;转正在 activateAttributionRuleDraft(软替换旧生效 + 翻草案)。scope 两分支各对一部分索引。
+        String conflict = "default".equals(rule.ruleScope())
+                ? "ON CONFLICT (revenue_source, is_draft) WHERE rule_scope = 'default' AND status = 'active'"
+                : "ON CONFLICT (merchant_id, revenue_source, is_draft) WHERE rule_scope = 'merchant' AND status = 'active'";
+        String landedId = jdbcTemplate.queryForObject("""
                 INSERT INTO merchant_revenue_attribution_rules (
                     id, rule_scope, merchant_id, revenue_source, attribution_mode, share_bps,
                     refund_attribution, status, is_draft, updated_by, updated_at
@@ -1251,17 +1256,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                     :id, :scope, :merchant_id, :source, :mode, :bps,
                     :refund, :status, :is_draft, :updated_by, :now
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    rule_scope = EXCLUDED.rule_scope,
-                    merchant_id = EXCLUDED.merchant_id,
-                    revenue_source = EXCLUDED.revenue_source,
+                """ + conflict + """
+                 DO UPDATE SET
                     attribution_mode = EXCLUDED.attribution_mode,
                     share_bps = EXCLUDED.share_bps,
                     refund_attribution = EXCLUDED.refund_attribution,
-                    status = EXCLUDED.status,
-                    is_draft = EXCLUDED.is_draft,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = EXCLUDED.updated_at
+                RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", rule.id())
                 .addValue("scope", rule.ruleScope())
@@ -1273,23 +1275,40 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 .addValue("status", rule.status())
                 .addValue("is_draft", rule.isDraft())
                 .addValue("updated_by", updatedBy)
-                .addValue("now", timestampWithTimeZone(now)));
+                .addValue("now", timestampWithTimeZone(now)), String.class);
         return jdbcTemplate.query("SELECT " + MRAR_COLUMNS
                 + " FROM merchant_revenue_attribution_rules WHERE id = :id",
-                new MapSqlParameterSource("id", rule.id()), this::mapAttributionRule)
+                new MapSqlParameterSource("id", landedId), this::mapAttributionRule)
                 .stream().findFirst().orElse(null);
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public int activateAttributionRuleDraft(String id, String updatedBy, java.time.Instant now) {
+        // 待主会话协调 batch0:Path 2 换行——同 scope 旧生效行软替换 status→inactive(对齐项6,不物理删),再翻草案。
+        MapSqlParameterSource p = new MapSqlParameterSource()
+                .addValue("id", id).addValue("updated_by", updatedBy).addValue("now", timestampWithTimeZone(now));
+        jdbcTemplate.update("""
+                UPDATE merchant_revenue_attribution_rules l
+                   SET status = 'inactive', updated_by = :updated_by, updated_at = :now
+                  FROM merchant_revenue_attribution_rules d
+                 WHERE d.id = :id AND d.is_draft = TRUE AND d.status = 'active'
+                   AND l.is_draft = FALSE AND l.status = 'active' AND l.id <> d.id
+                   AND l.rule_scope = d.rule_scope AND l.revenue_source = d.revenue_source
+                   AND l.merchant_id IS NOT DISTINCT FROM d.merchant_id
+                """, p);
         return jdbcTemplate.update("""
                 UPDATE merchant_revenue_attribution_rules
                    SET is_draft = FALSE, updated_by = :updated_by, updated_at = :now
                  WHERE id = :id AND is_draft = TRUE AND status = 'active'
-                """, new MapSqlParameterSource()
-                .addValue("id", id)
-                .addValue("updated_by", updatedBy)
-                .addValue("now", timestampWithTimeZone(now)));
+                """, p);
+    }
+
+    @Override
+    public String attributionRuleDraftUpdatedBy(String id) {
+        return jdbcTemplate.query(
+                "SELECT updated_by FROM merchant_revenue_attribution_rules WHERE id = :id AND is_draft = TRUE AND status = 'active'",
+                new MapSqlParameterSource("id", id), rs -> rs.next() ? rs.getString(1) : null);
     }
 
     @Override

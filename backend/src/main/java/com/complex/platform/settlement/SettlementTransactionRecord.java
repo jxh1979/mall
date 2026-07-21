@@ -29,6 +29,9 @@ public record SettlementTransactionRecord(
         // 结算重构批3-4(PRD §6.4)：专属某商户「不分摊」，核销双写时从权益带上定格；非空=该笔核销全额归该商户不进池。
         String exclusiveMerchantId,
         // AUD-012 结算状态机重构：业务发生时刻（核销/冲正/到期），account 按此落月窗（取代首插 created_at）。
-        Instant businessAt
+        Instant businessAt,
+        // D6 套票折扣额增量（分）：本笔核销的 满额−净额（核销行 >=0；冲正行取原行反 <=0；到期归项目=0）。
+        //   下传 append-only 账本，结算引擎按 discount_bearer 归属应用。守 V331 资金守恒 CHECK（配对天然净 0）。
+        long discountAmountCent
 ) {
 }

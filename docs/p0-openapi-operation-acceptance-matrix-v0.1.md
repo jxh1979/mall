@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 664 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 678 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -685,6 +685,20 @@
 | customer | `GET` | `/api/v1/customer/voucher-transfers/preview` | `previewCustomerVoucherTransfer` | 领取预览(打开链接/二维码,不算领取) | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.voucher_transfer_preview_viewed` | `customer.voucher_transfer_preview_view_failed` |
 | customer | `GET` | `/api/v1/customer/voucher-transfers/incoming` | `listIncomingCustomerVoucherTransfers` | 待我领取的转赠(手机号渠道) | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.voucher_transfer_incoming_viewed` | `customer.voucher_transfer_incoming_view_failed` |
 | customer | `GET` | `/api/v1/customer/voucher-transfers/outgoing` | `listOutgoingCustomerVoucherTransfers` | 我发起的转赠(撤回入口/状态查看) | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.voucher_transfer_outgoing_viewed` | `customer.voucher_transfer_outgoing_view_failed` |
+| settlement | `GET` | `/api/v1/settlement/config/overview` | `settlementConfigOverview` | 结算配置中心总览 | `-` | `settlement.config.view` | `staff-token` | `platform` | web | 否 | `settlement.config.overview.viewed` | `settlement.config.overview.view_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/retention` | `settlementConfigUpsertRetention` | 维护项目公司留存比例(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.platform_retention_rules.updated` | `settlement.config.platform_retention_rules.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/distribution-method` | `settlementConfigUpsertDistributionMethod` | 维护通票分配方式(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_configs.updated` | `settlement.config.ticket_distribution_configs.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/merchant-rate` | `settlementConfigUpsertMerchantRate` | 维护每客单价/固定额(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_merchant_rates.updated` | `settlement.config.ticket_distribution_merchant_rates.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | `settlementConfigUpsertComprehensiveServiceFee` | 维护门票综合服务费(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.comprehensive_service_fee_configs.updated` | `settlement.config.comprehensive_service_fee_configs.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/combo-discount` | `settlementConfigUpsertComboDiscount` | 维护套票折扣归属(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_combo_discount_configs.updated` | `settlement.config.ticket_combo_discount_configs.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/channel-fee` | `settlementConfigUpsertChannelFee` | 维护第三方渠道抽成率(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.channel_fee_configs.updated` | `settlement.config.channel_fee_configs.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/rank-tiers` | `settlementConfigUpsertRankTiers` | 维护排名档位梯子(草案·整套替换) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_rank_tiers.updated` | `settlement.config.ticket_distribution_rank_tiers.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | `settlementConfigUpsertRevenueStreamAttribution` | 维护六业态收入归属(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.revenue_stream_attribution.updated` | `settlement.config.revenue_stream_attribution.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | `settlementConfigActivateRankTiers` | 复核转正:排名档位梯子整体换梯 | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/{configType}/{id}/activate` | `settlementConfigActivateDraft` | 复核转正:单行/归属/归因规则草案转正 | `-` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | `settlementConfigArchive` | 软删结算配置(status→inactive) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.archived` | `settlement.config.archive_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/attribution-rules/{id}/activate` | `settlementConfigActivateAttributionRuleAlias` | 复核转正:归因规则草案(弃用薄别名) | `-` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |
+| settlement | `POST` | `/api/v1/settlement/bills/{id}/post` | `settlementPostBill` | 结算单过账(挂应付台账) | `-` | `settlement.bill.post` | `staff-token` | `platform` | web | 否 | `settlement.bill.posted` | `settlement.bill.post_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -752,5 +766,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 664 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 678 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

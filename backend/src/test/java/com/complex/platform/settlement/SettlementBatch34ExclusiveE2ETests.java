@@ -31,7 +31,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * by_rank_tier 档位 1600/1200/900/600、赠酒 3 元/杯）。走「直造 settlement_transactions」。
  */
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
+        "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })

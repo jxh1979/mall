@@ -1,55 +1,148 @@
 package com.complex.platform.settlement;
 
 import com.complex.platform.access.AuthorizationService;
-import com.complex.platform.analytics.OperatingParamsService;
 import com.complex.platform.common.api.ApiResponse;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.ChannelFeeRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscountRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersActivateRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.RetentionRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 结算配置中心(新立项批0)统一总控入口 —— 依据 settlement-rebuild-prd-v1.0 §9(配置中心=配置表族+ADM-STL页+权限)。
+ * 结算配置中心统一总控入口 —— settlement-rebuild-prd-v1.0 §9(配置中心 = 配置表族 + ADM-STL 页 + 权限点)。
  *
- * <p>批0 骨架能力:<b>草案复核转正</b> —— 把结算配置草案(is_draft=TRUE)经复核转为正式生效(FALSE)。
- * 读取侧已统一强制「仅 is_draft=FALSE 生效」(JdbcSettlementBillRepository / 归因规则应用路径),
- * 故任何配置改动先落草案、不即时生效,须经此端点转正。
- *
- * <p>复核闸(批0 轻量式):转正须 {@code settlement.config.manage}(高敏,仅平台管理员)+ 前态守卫 + 审计留痕;
- * 与编辑权限 {@code analytics.operating_params.manage} 天然分离(运营编辑→草案,平台管理员复核→生效)。
- * 资金级配置(如分红,批4)将改用 supervisor_review 重审批闸。
+ * <p>批0:草案复核转正骨架 + overview。批1(本批):8 类配置写入面(落草案) + 转正泛化 + 软删。
+ * <p>复核闸(照 batch0 轻量式):编辑(落草案)与转正均 {@code settlement.config.manage}(高敏·requires_approval)+ 平台 scope,
+ * 与运营编辑权限 {@code analytics.operating_params.manage} 天然分离;写入侧强制 is_draft=TRUE,读侧只认 is_draft=FALSE。
+ * (batch0 activate 未加显式 blockForAdmission；本批一致——设计钉死的资金级审批闸留待后续以 supervisor_review 强化。)
  */
 @RestController
 @RequestMapping("/api/v1/settlement/config")
 public class SettlementConfigController {
 
     private final AuthorizationService authorizationService;
-    private final OperatingParamsService operatingParamsService;
     private final SettlementConfigService settlementConfigService;
+    private final SettlementConfigWriteService writeService;
 
     public SettlementConfigController(AuthorizationService authorizationService,
-                                      OperatingParamsService operatingParamsService,
-                                      SettlementConfigService settlementConfigService) {
+                                      SettlementConfigService settlementConfigService,
+                                      SettlementConfigWriteService writeService) {
         this.authorizationService = authorizationService;
-        this.operatingParamsService = operatingParamsService;
         this.settlementConfigService = settlementConfigService;
+        this.writeService = writeService;
     }
 
-    /** 结算配置中心「看全局」总览:当前平台默认生效配置 + 待复核草案队列(须 settlement.config.view + 平台域)。 */
-    @org.springframework.web.bind.annotation.GetMapping("/overview")
+    /** 「看全局」总览:平台默认生效配置 + 待复核草案队列(须 settlement.config.view + 平台域)。 */
+    @GetMapping("/overview")
     public ApiResponse<SettlementConfigService.SettlementConfigOverview> overview() {
         authorizationService.requirePermission("settlement.config.view");
         authorizationService.requirePlatformScope();
         return ApiResponse.ok(settlementConfigService.overview());
     }
 
-    /** 复核转正:把一条收入归因规则草案转为正式生效口径(高敏,须 settlement.config.manage + 平台域)。 */
+    // ================= §2 写入面(落草案;settlement.config.manage + 平台域)=================
+
+    @PostMapping("/retention")
+    public ApiResponse<Void> saveRetention(@RequestBody RetentionRequest request) {
+        writeService.saveRetention(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/distribution-method")
+    public ApiResponse<Void> saveDistributionMethod(@RequestBody DistributionMethodRequest request) {
+        writeService.saveDistributionMethod(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/merchant-rate")
+    public ApiResponse<Void> saveMerchantRate(@RequestBody MerchantRateRequest request) {
+        writeService.saveMerchantRate(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/comprehensive-service-fee")
+    public ApiResponse<Void> saveComprehensiveServiceFee(@RequestBody ComprehensiveServiceFeeRequest request) {
+        writeService.saveComprehensiveServiceFee(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/combo-discount")
+    public ApiResponse<Void> saveComboDiscount(@RequestBody ComboDiscountRequest request) {
+        writeService.saveComboDiscount(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/channel-fee")
+    public ApiResponse<Void> saveChannelFee(@RequestBody ChannelFeeRequest request) {
+        writeService.saveChannelFee(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/rank-tiers")
+    public ApiResponse<Void> saveRankTiers(@RequestBody RankTiersRequest request) {
+        writeService.saveRankTiers(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/revenue-stream-attribution")
+    public ApiResponse<Void> saveRevenueStreamAttribution(@RequestBody RevenueStreamAttributionRequest request) {
+        writeService.saveRevenueStreamAttribution(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    // ================= §3 复核转正 =================
+
+    /** 排名档位梯子整体转正(与 {configType}/{id}/activate 分开,梯子按 project 换梯)。放在通配前声明。 */
+    @PostMapping("/rank-tiers/activate")
+    public ApiResponse<Void> activateRankTiers(@RequestBody(required = false) RankTiersActivateRequest request) {
+        String projectId = request == null ? null : request.projectId();
+        writeService.activateRankTiers(projectId, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    /** 转正泛化:单行/归属/归因规则草案转正(configType 下划线白名单,不含 giveaway)。 */
+    @PostMapping("/{configType}/{id}/activate")
+    public ApiResponse<Void> activateDraft(@PathVariable("configType") String configType,
+                                           @PathVariable("id") String id) {
+        writeService.activateDraft(configType, id, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    /** 软删(仅 merchant_rate / revenue_stream_attribution):status→inactive + archive_reason。 */
+    @PostMapping("/{configType}/{id}/archive")
+    public ApiResponse<Void> archiveConfig(@PathVariable("configType") String configType,
+                                           @PathVariable("id") String id,
+                                           @RequestBody ArchiveRequest request) {
+        writeService.archive(configType, id, request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    /**
+     * 弃用薄别名:保留 batch0 前端在用的归因规则转正入口,内部转调转正泛化(attribution_rule)。
+     * @deprecated 用 {@code POST /{configType}/{id}/activate}(configType=attribution_rule)。
+     */
+    @Deprecated
     @PostMapping("/attribution-rules/{id}/activate")
     public ApiResponse<Void> activateAttributionRuleDraft(@PathVariable("id") String id) {
+        writeService.activateDraft("attribution_rule", id, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    /** 编辑/转正/软删统一闸:settlement.config.manage(高敏)+ 平台 scope;返回操作者 id 供 updated_by/审计。 */
+    private String requireManageActor() {
         authorizationService.requirePermission("settlement.config.manage");
         authorizationService.requirePlatformScope();
-        operatingParamsService.activateRevenueAttributionRuleDraft(
-                id, authorizationService.currentActor().id());
-        return ApiResponse.ok(null);
+        return authorizationService.currentActor().id();
     }
 }
