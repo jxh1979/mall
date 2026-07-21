@@ -30,8 +30,6 @@ public class BarBillingService {
     // 可为 null（旧构造/单测未注入）；包私有便于单测置位。开标志后超额酒吧退款须复核（见 requireRefundTierAuthorized）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     RefundAuthorizationService refundAuthorizationService;
-    @org.springframework.beans.factory.annotation.Value("${refund.tiered_authorization.enabled:false}")
-    boolean tieredRefundEnabled;
     // AUD-061 结账-储值支付：结账渠道选「储值支付」时扣发卡商户的储值卡余额（复用 StoredValueService.consumeInternal）。
     // 字段注入（required=false）以免改构造点/单测；bar 依赖 customer 无构造环（StoredValueService 不依赖 bar bean）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -50,20 +48,20 @@ public class BarBillingService {
     }
 
     /**
-     * Stage B 分级授权闸（适用所有退款，功能标志 refund.tiered_authorization.enabled 默认关）：
-     * 退款额按 {@link RefundAuthorizationService#classify} 判档——额度内/规则既定放行，超额（REVIEW_REQUIRED）
-     * 因单步退款无独立审批环节而直接拒（REFUND_REVIEW_REQUIRED），须由额度内的授权人办理。
-     * 平台管理员旁路（与 {@code requirePermission} 一致）。关闭标志或引擎未注入 → 不拦（维持现状）。
+     * 分级授权闸（适用所有退款）：退款额按 {@link RefundAuthorizationService#classify} 判档——额度内/规则既定放行，
+     * 超额（REVIEW_REQUIRED）因单步退款无独立复核状态机而直接拒（REFUND_REVIEW_REQUIRED），须由额度内的授权人办理。
+     *
+     * <p>AUD-007 fail-closed：不再受功能标志控制、不再对平台管理员隐式旁路——闸常在；引擎缺失
+     * （仅旧兼容/单测构造，生产恒注入）时拒绝而非放行。如需给管理员更高额度，走同一 (subject, domain, project) 显式额度配置 + 审计。
+     * <p>AUD-008：projectId 为权威综合体归属，由调用方从原账单/操作者 scope 推导传入，不信任请求体。
      */
-    private void requireRefundTierAuthorized(String domain, long amountCent) {
-        if (!tieredRefundEnabled || refundAuthorizationService == null) {
-            return; // 关闭标志/引擎未注入 → 不拦（维持现状）。
+    private void requireRefundTierAuthorized(String domain, long amountCent, String projectId) {
+        if (refundAuthorizationService == null) {
+            throw ApiException.forbidden("REFUND_AUTHORIZATION_UNAVAILABLE",
+                    "refund tiered authorization engine is unavailable; over-limit refunds cannot be self-processed");
         }
         var actor = authorizationService.currentActor();
-        if (authorizationService.isPlatformAdmin(actor)) {
-            return;
-        }
-        if (refundAuthorizationService.classify(domain, amountCent, actor.id(), null)
+        if (refundAuthorizationService.classify(domain, amountCent, actor.id(), null, projectId)
                 == RefundAuthorizationService.RefundTier.REVIEW_REQUIRED) {
             throw ApiException.forbidden("REFUND_REVIEW_REQUIRED",
                     "refund amount exceeds the self-service authorization limit; an authorized approver must process it");
@@ -318,8 +316,10 @@ public class BarBillingService {
             if (amount > beforePayable) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "refund amount cannot exceed payable amount");
             }
-            // Stage B 分级授权（功能标志默认关）：超额度退款须复核——单步退款无独立审批环节，超额直接拒，由额度内授权人办理。
-            requireRefundTierAuthorized("bar", amount);
+            // AUD-007 分级授权 fail-closed 常在：超额度退款须复核——单步退款无独立复核状态机，超额/无额度直接拒，由额度内授权人办理。
+            // AUD-008 权威综合体：酒吧账单不自带 project，取操作者授权 scope（非请求体）；平台/无组织 → null=仅全局配置。
+            requireRefundTierAuthorized("bar", amount,
+                    authorizationService.currentProjectScopeQuietly().orElse(null));
             afterPayable = beforePayable - amount;
             refundedAt = Instant.now();
             // RC1①：退款过账到 finance ar_ap 台账（direction=payable, source_type=refund），表示"应退/已退"。

@@ -18,23 +18,36 @@ class JdbcRefundAuthorizationRepository implements RefundAuthorizationRepository
     }
 
     @Override
-    public Optional<RefundAuthorityLimitRecord> findActiveLimit(String subjectType, String subjectId, String refundDomain) {
+    public Optional<RefundAuthorityLimitRecord> findActiveLimit(
+            String subjectType, String subjectId, String refundDomain, String projectId) {
+        // AUD-008 综合体隔离：只命中「本综合体行 OR 全局(NULL)行」，精确综合体优先（ORDER BY (project_id IS NULL)：
+        // 精确行 false=0 排前、全局行 true=1 排后），LIMIT 1 取最具体一条。projectId 为空时 `project_id = :pid`
+        // 为 unknown、仅 `project_id IS NULL` 命中 → 只回退全局，绝不跨到其它综合体。
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, refund_domain, limit_amount_cent,
                        project_id, status, created_at, updated_at
                   FROM refund_authority_limits
                  WHERE subject_type = :st AND subject_id = :sid AND refund_domain = :dom AND status = 'active'
+                   AND (project_id = :pid OR project_id IS NULL)
+                 ORDER BY (project_id IS NULL)
+                 LIMIT 1
                 """, new MapSqlParameterSource()
-                .addValue("st", subjectType).addValue("sid", subjectId).addValue("dom", refundDomain),
+                .addValue("st", subjectType).addValue("sid", subjectId).addValue("dom", refundDomain)
+                .addValue("pid", projectId),
                 this::mapLimit).stream().findFirst();
     }
 
     @Override
-    public boolean isAutoRuleEnabled(String refundDomain, String ruleType) {
+    public boolean isAutoRuleEnabled(String refundDomain, String ruleType, String projectId) {
+        // AUD-008 综合体隔离：同 findActiveLimit——精确综合体优先、全局(NULL)回退、不跨综合体，取最具体规则的 enabled。
         return jdbcTemplate.query("""
                 SELECT enabled FROM refund_auto_rules
                  WHERE refund_domain = :dom AND rule_type = :rt AND status = 'active'
-                """, new MapSqlParameterSource().addValue("dom", refundDomain).addValue("rt", ruleType),
+                   AND (project_id = :pid OR project_id IS NULL)
+                 ORDER BY (project_id IS NULL)
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("dom", refundDomain).addValue("rt", ruleType).addValue("pid", projectId),
                 (rs, n) -> rs.getBoolean("enabled")).stream().findFirst().orElse(false);
     }
 
@@ -54,7 +67,9 @@ class JdbcRefundAuthorizationRepository implements RefundAuthorizationRepository
                 .addValue("id", limit.id()).addValue("st", limit.subjectType()).addValue("sid", limit.subjectId())
                 .addValue("dom", limit.refundDomain()).addValue("lim", limit.limitAmountCent())
                 .addValue("pid", limit.projectId()).addValue("status", limit.status()));
-        return findActiveLimit(limit.subjectType(), limit.subjectId(), limit.refundDomain()).orElse(limit);
+        // AUD-008 写后读回按完整自然键（含 project 槽），不用带综合体优先/回退的运行时查询，避免读回到全局行。
+        return readLimitByNaturalKey(
+                limit.subjectType(), limit.subjectId(), limit.refundDomain(), limit.projectId()).orElse(limit);
     }
 
     @Override
@@ -84,9 +99,8 @@ class JdbcRefundAuthorizationRepository implements RefundAuthorizationRepository
                 """, new MapSqlParameterSource()
                 .addValue("id", rule.id()).addValue("dom", rule.refundDomain()).addValue("rt", rule.ruleType())
                 .addValue("enabled", rule.enabled()).addValue("pid", rule.projectId()).addValue("status", rule.status()));
-        return listRules(null).stream()
-                .filter(r -> r.refundDomain().equals(rule.refundDomain()) && r.ruleType().equals(rule.ruleType()))
-                .findFirst().orElse(rule);
+        // AUD-008 写后读回按完整自然键（domain, rule_type, project 槽），修此前 listRules(null).findFirst() 可能读回他综合体行。
+        return readRuleByNaturalKey(rule.refundDomain(), rule.ruleType(), rule.projectId()).orElse(rule);
     }
 
     @Override
@@ -98,6 +112,35 @@ class JdbcRefundAuthorizationRepository implements RefundAuthorizationRepository
                  WHERE CAST(:pid AS VARCHAR) IS NULL OR project_id = :pid OR project_id IS NULL
                  ORDER BY refund_domain, rule_type
                 """, new MapSqlParameterSource().addValue("pid", projectId), this::mapRule);
+    }
+
+    /** 按完整自然键（subject_type, subject_id, refund_domain, COALESCE(project_id)）精确取一行（写后读回用，不做综合体回退）。 */
+    private Optional<RefundAuthorityLimitRecord> readLimitByNaturalKey(
+            String subjectType, String subjectId, String refundDomain, String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, subject_type, subject_id, refund_domain, limit_amount_cent,
+                       project_id, status, created_at, updated_at
+                  FROM refund_authority_limits
+                 WHERE subject_type = :st AND subject_id = :sid AND refund_domain = :dom
+                   AND COALESCE(project_id, '__global__') = COALESCE(:pid, '__global__')
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("st", subjectType).addValue("sid", subjectId).addValue("dom", refundDomain)
+                .addValue("pid", projectId), this::mapLimit).stream().findFirst();
+    }
+
+    /** 按完整自然键（refund_domain, rule_type, COALESCE(project_id)）精确取一行（写后读回用，不做综合体回退）。 */
+    private Optional<RefundAutoRuleRecord> readRuleByNaturalKey(
+            String refundDomain, String ruleType, String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, refund_domain, rule_type, enabled, project_id, status, created_at, updated_at
+                  FROM refund_auto_rules
+                 WHERE refund_domain = :dom AND rule_type = :rt
+                   AND COALESCE(project_id, '__global__') = COALESCE(:pid, '__global__')
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("dom", refundDomain).addValue("rt", ruleType).addValue("pid", projectId),
+                this::mapRule).stream().findFirst();
     }
 
     private RefundAuthorityLimitRecord mapLimit(ResultSet rs, int rowNum) throws SQLException {

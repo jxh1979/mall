@@ -50,6 +50,9 @@ class StaffJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.access.AccessRepository accessRepository;
+
     @BeforeEach
     void setUp() {
         authenticateAsPlatformAdmin();
@@ -725,5 +728,115 @@ class StaffJdbcIntegrationTests {
                 .isInstanceOf(ApiException.class);
 
         jdbcTemplate.update("DELETE FROM staff_profiles WHERE user_id = 'usr_admin'");
+    }
+
+    @org.junit.jupiter.api.Test
+    void approvedStaffGetsSelfServiceRoleAndSeesOnlyOwnRecords() {
+        // 既有缺口修复(2026-07-19)回归:审批通过为员工分配 role_staff_self →
+        // 真实员工(userType=staff)token 可用 BYOD 自助端点(此前仅 platform_admin 桥可用),且只见本人。
+
+        // 前置:无角色的真实 staff token → 自助端点被拒(证明权限门真实、非默认放行,即修复前的缺口态)。
+        authenticateAsStaff("usr_norole_" + key(), "mrc_self");
+        assertThatThrownBy(() -> service.listMyShifts())
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+
+        // 审批两名员工 A/B(同商户)。
+        authenticateAsPlatformAdmin();
+        StaffProfileRecord a = submitRegistration("mrc_self");
+        StaffProfileRecord b = submitRegistration("mrc_self");
+        String userA = service.reviewRegistration(a.id(),
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-A-1")).userId();
+        String userB = service.reviewRegistration(b.id(),
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-B-1")).userId();
+
+        // 审批即写 user_roles → role_staff_self。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_roles WHERE user_id = ? AND role_id = 'role_staff_self'",
+                Integer.class, userA)).isEqualTo(1);
+
+        // 为 A/B 各定格一张薪资单 + 各排今天一个班次(走服务方法,避免硬钉表列)。
+        String month = "2099-11";
+        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(key(), userA, 111000L));
+        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(key(), userB, 222000L));
+        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        Instant now = Instant.now();
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                key(), userA, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
+        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                key(), userB, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
+
+        // 以真实员工 A 的 token:自助端点放行,且只见自己的记录(看不到 B)。
+        authenticateAsStaff(userA, "mrc_self");
+        assertThat(service.listMyPayroll(month).items())
+                .extracting(com.complex.platform.access.staff.StaffPayrollStatementRecord::userId)
+                .containsExactly(userA);
+        assertThat(service.listMyShifts().items())
+                .extracting(com.complex.platform.access.staff.StaffShiftRecord::userId)
+                .containsExactly(userA);
+    }
+
+    /** 以真实员工(account_type=staff)身份认证:走 role\u2192permission 解析,不再享 platform_admin 桥的通配放行。 */
+    private void authenticateAsStaff(String userId, String merchantId) {
+        AuthService.UserRecord user = new AuthService.UserRecord(
+                userId, "staff_" + userId, "hash", "staff", null, merchantId, "active",
+                Instant.parse("2026-07-19T00:00:00Z"));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                user, "token", List.of(new SimpleGrantedAuthority("ROLE_STAFF"))));
+    }
+
+    @org.junit.jupiter.api.Test
+    void d2FixListNoticesNowRequiresNoticeViewPermission() {
+        // D② 修复回归:listNotices(待办消息中心列表)此前实现漏 @GuardedAction 守卫 → 任何认证主体可列员工通知;
+        // 现已把 staff.notice.view 守卫归位到 listNotices。无角色真实 staff → 被拒。
+        authenticateAsStaff("usr_norole_notice_" + key(), "mrc_self");
+        assertThatThrownBy(() -> service.listNotices())
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+    }
+
+    @org.junit.jupiter.api.Test
+    void d2FixUpsertShiftNoLongerRequiresNoticeViewOnlyShiftManage() {
+        // D② 修复回归:错扣在 upsertShift 上的 @GuardedAction(staff.notice.view) 已移走 →
+        // 排班只需 staff.shift.manage,不再连带要求 notice.view。构造仅持 shift.manage 的真实 staff。
+        String mgr = "usr_shiftmgr_" + key();
+        accessRepository.createUser(new com.complex.platform.access.AccessUser(
+                mgr, "sm_" + key(), "staff", null, null, "active", Instant.now()));
+        String roleId = "role_shiftmgr_test_" + key();
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at) "
+                + "VALUES (?, ?, 'shift mgr regression role', 'project', 'active', now())", roleId, "SHIFTMGR_" + key());
+        jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, 'staff.shift.manage')", roleId);
+        accessRepository.assignUserRole(mgr, roleId);
+
+        authenticateAsStaff(mgr, null);
+        Instant now = Instant.now();
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        // 有 shift.manage、无 notice.view → 不再被 notice.view 拦,排班成功。
+        com.complex.platform.access.staff.StaffShiftRecord saved = service.upsertShift(
+                new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                        key(), mgr, today, now.minusSeconds(3600), now.plusSeconds(7 * 3600), List.of(), null));
+        assertThat(saved.userId()).isEqualTo(mgr);
+    }
+
+    @org.junit.jupiter.api.Test
+    void listProfilesRequiresProfileViewNotReachableBySelfServiceStaff() {
+        // 复核发现的同类 authz 漏洞:GET /staff/profiles 实际调 listProfiles(boolean) 重载,
+        // 该重载此前漏 @GuardedAction(守卫只加在无参重载、控制器未调它) → 任何认证主体
+        // (含仅 role_staff_self 的员工)可列全员档案(含 phoneHash/idDocHash)=PII 泄露。
+        authenticateAsPlatformAdmin();
+        StaffProfileRecord p = submitRegistration("mrc_self");
+        String staffUser = service.reviewRegistration(p.id(),
+                new StaffRegistrationReviewRequest(key(), null, "approve", null, "Init-Pass-P-1")).userId();
+
+        // 真实员工(role_staff_self,不含 staff.profile.view)→ 列全员档案被拒。
+        authenticateAsStaff(staffUser, "mrc_self");
+        assertThatThrownBy(() -> service.listProfiles(false))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+
+        // 平台管理员(通配)→ 成功。
+        authenticateAsPlatformAdmin();
+        assertThat(service.listProfiles(false)).isNotNull();
     }
 }

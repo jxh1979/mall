@@ -178,8 +178,10 @@ public class LoyaltyService {
     @Transactional
     public long confirmPoints(String sourceDocType, String sourceDocId, long verifiedUnits, long totalUnits) {
         requireSourceDoc(sourceDocType, sourceDocId);
+        // AUD-014：确认/冲正前先 FOR UPDATE 锁定 earn 行（锁序 earn→account），串行化同一订单的并发确认，
+        // 使后到事务读到已提交的 confirmed_amount → delta=0 幂等，杜绝基于同一旧值重复加余额。
         CustomerPointsLedgerRecord earn = repository
-                .findPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
+                .findPointsLedgerBySourceDocForUpdate(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
                 .orElse(null);
         if (earn == null) {
             return 0; // 无会员订单从未入账：幂等 noop。

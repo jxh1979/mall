@@ -172,6 +172,17 @@ public interface CustomerRepository {
         return Optional.empty();
     }
 
+    /**
+     * AUD-014：同 findPointsLedgerBySourceDoc，但对命中的流水行加 FOR UPDATE 行锁。
+     * confirmPoints 在算 delta 前锁定 earn 行 → 串行化同一 earn 行的并发确认/冲正，
+     * 杜绝两事务基于同一旧 confirmed_amount 各自给账户加钱（余额多于明细的账实分叉）。锁序固定 earn→account。
+     * 默认委派非锁版（内存仓储无行锁语义，行为不变）；仅 Jdbc 真仓储覆写加 FOR UPDATE。
+     */
+    default Optional<CustomerPointsLedgerRecord> findPointsLedgerBySourceDocForUpdate(
+            String sourceDocType, String sourceDocId, String changeType) {
+        return findPointsLedgerBySourceDoc(sourceDocType, sourceDocId, changeType);
+    }
+
     /** 列出某业务单据下指定变动类型的入账流水（履约转 confirmed / 退款按已 confirmed 比例 deduct 用）。 */
     default List<CustomerPointsLedgerRecord> listPointsLedgerBySourceDoc(
             String sourceDocType, String sourceDocId, String changeType) {

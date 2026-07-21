@@ -27,6 +27,8 @@ public record SettlementTransactionRecord(
         String settlementStatus,
         Instant entitlementValidTo,
         // 结算重构批3-4(PRD §6.4)：专属某商户「不分摊」，核销双写时从权益带上定格；非空=该笔核销全额归该商户不进池。
-        String exclusiveMerchantId
+        String exclusiveMerchantId,
+        // AUD-012 结算状态机重构：业务发生时刻（核销/冲正/到期），account 按此落月窗（取代首插 created_at）。
+        Instant businessAt
 ) {
 }

@@ -640,6 +640,8 @@ public class TicketVerificationService {
         // 结算重构批１：核销成功 → 发 settlement.settled，settlement 域 AFTER_COMMIT 双写 settlement_transactions
         // （核销结算逐笔流水,观察期与旧 allocated 快照口径对账）。异步、不属核销主链——下游失败不回滚核销。
         eventPublisher.publishEvent(new SettlementSettledEvent(
+                verification.id(), // AUD-012：本次核销记录 id → 不可变增量结算幂等键
+                now,               // AUD-012：核销业务时刻 → account 月窗聚合基准
                 updated.id(),
                 updated.orderId(),
                 updated.ticketTypeId(),
@@ -663,7 +665,8 @@ public class TicketVerificationService {
             }
         }
         // R5 T15：赠饮权益核销成功 → 发同步事件 ticket.gift_verified，bar 域据此生成 0 元单并扣库存。
-        // 同步发布以便测试与同事务；不与本核销主链耦合（主链已照常完成，下游异常不回滚核销由消费者自行兜底）。
+        // AUD-015：同步发布且与本核销同事务——赠饮履约缺配置/缺库存时消费者抛异常，会回滚整笔核销(fail-closed)、
+        // 票权益保留可用；严禁在消费者里 try/catch 吞异常放行（否则权益已消费却无出品/无扣库/无结算，重犯 AUD-015）。
         if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(updated.entitlementType())) {
             // R5 已落地#2：赠饮→吧台 SKU 映射来源——权益模板(entitlement_template).bar_item_ref。
             // 已配置则下游对该 item 走 redeem_consume 扣减；为空（未配置）则下游跳过扣减并标注（向后兼容）。
@@ -771,6 +774,8 @@ public class TicketVerificationService {
             eventPublisher.publishEvent(new PointsConfirmRequestedEvent(consumed.orderId(), units[0], units[1]));
         }
         eventPublisher.publishEvent(new SettlementSettledEvent(
+                verification.id(), // AUD-012：本次游乐核销记录 id → 不可变增量结算幂等键
+                now,               // AUD-012：核销业务时刻
                 consumed.id(),
                 consumed.orderId(),
                 consumed.ticketTypeId(),

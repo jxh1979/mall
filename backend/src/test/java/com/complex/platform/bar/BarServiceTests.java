@@ -45,6 +45,7 @@ class BarServiceTests {
     private CapturingBarReceivableLedgerService receivableLedgerService;
     private AuthorizationService authorizationService;
     private BarService service;
+    private BarBillingService billingService;
     private BarOrderService barOrderService;
 
     @BeforeEach
@@ -65,10 +66,16 @@ class BarServiceTests {
         barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
                 new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
                 receivableLedgerService);
+        billingService = new BarBillingService(
+                barRepository, receivableLedgerService, authorizationService, auditEventService);
+        // AUD-007 退款额度闸 fail-closed 常在：默认注入宽松引擎，令既有退款调账用例（平台管理员操作）仍额度内放行；
+        // 超额拒绝 / 引擎缺失场景各用例自行覆盖。
+        billingService.refundAuthorizationService =
+                new com.complex.platform.finance.RefundAuthorizationService(barRefundRepoWithLimit(Long.MAX_VALUE));
         service = new BarService(
                 barRepository,
                 new BarOperationExecutor(operations),
-                new BarBillingService(barRepository, receivableLedgerService, authorizationService, auditEventService),
+                billingService,
                 new BarShiftService(barRepository, authorizationService, auditEventService),
                 new BarTableSessionService(barRepository, authorizationService),
                 barOrderService,
@@ -80,6 +87,57 @@ class BarServiceTests {
     @AfterEach
     void tearDown() {
         TestSecurityActors.clear();
+    }
+
+    private static com.complex.platform.finance.RefundAuthorizationRepository barRefundRepoWithLimit(long cap) {
+        Instant ts = Instant.parse("2026-06-23T00:00:00Z");
+        return new com.complex.platform.finance.RefundAuthorizationRepository() {
+            @Override public Optional<com.complex.platform.finance.RefundAuthorityLimitRecord> findActiveLimit(
+                    String st, String sid, String dom, String pid) {
+                return Optional.of(new com.complex.platform.finance.RefundAuthorityLimitRecord(
+                        "perm", st, sid, dom, cap, pid, "active", ts, ts));
+            }
+            @Override public boolean isAutoRuleEnabled(String dom, String type, String pid) { return false; }
+            @Override public com.complex.platform.finance.RefundAuthorityLimitRecord saveLimit(
+                    com.complex.platform.finance.RefundAuthorityLimitRecord l) { return l; }
+            @Override public List<com.complex.platform.finance.RefundAuthorityLimitRecord> listLimits(String projectId) {
+                return List.of();
+            }
+            @Override public com.complex.platform.finance.RefundAutoRuleRecord saveRule(
+                    com.complex.platform.finance.RefundAutoRuleRecord r) { return r; }
+            @Override public List<com.complex.platform.finance.RefundAutoRuleRecord> listRules(String projectId) {
+                return List.of();
+            }
+        };
+    }
+
+    private BarBillRecord settledBillForRefund(String tag) {
+        BarBillRecord bill = billForOrder(tag, "staff_sales");
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-" + tag, "settle before refund", List.of(),
+                "pay-" + tag, null, "aggregate_pay", null, null));
+        return bill;
+    }
+
+    @Test
+    void refundOverSelfServiceLimitIsBlockedByTieredAuthorization() {
+        // AUD-007 bar 侧额度闸生效（无平台管理员旁路）：额度=100 分的引擎下，30000 分退款超额 → REFUND_REVIEW_REQUIRED。
+        billingService.refundAuthorizationService =
+                new com.complex.platform.finance.RefundAuthorizationService(barRefundRepoWithLimit(100L));
+        BarBillRecord bill = settledBillForRefund("refund-over-limit");
+        assertThatThrownBy(() -> service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
+                "bill-adjust-refund-over", "refund over limit", List.of(), "refund", 30000L, "over limit", "finance_1")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_REVIEW_REQUIRED");
+    }
+
+    @Test
+    void refundWithoutTieredEngineFailsClosed() {
+        // AUD-007 依赖缺失 fail-closed：分级授权引擎未注入 → 拒绝而非放行（生产恒注入，此处模拟异常）。
+        billingService.refundAuthorizationService = null;
+        BarBillRecord bill = settledBillForRefund("refund-failclosed");
+        assertThatThrownBy(() -> service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
+                "bill-adjust-refund-fc", "refund no engine", List.of(), "refund", 30000L, "no engine", "finance_1")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_AUTHORIZATION_UNAVAILABLE");
     }
 
     @Test

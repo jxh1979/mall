@@ -68,6 +68,25 @@ class FinanceServiceTests {
                 authorizationService,
                 new com.complex.platform.common.BusinessDayResolver(4)
         );
+        // AUD-007 退款额度闸已 fail-closed 常在：默认给宽松引擎 + 操作者，令既有「额度内退款成功」用例仍过；
+        // 具体拒绝/额度场景各用例自行覆盖 refundAuthorizationService/currentActor。
+        service.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
+        when(authorizationService.currentActor()).thenReturn(
+                new AccessActor("op_default", "op_default", "staff", "org_1", null, "active"));
+    }
+
+    private static RefundAuthorizationRepository permissiveRefundRepo() {
+        Instant ts = Instant.parse("2026-06-23T00:00:00Z");
+        return new RefundAuthorizationRepository() {
+            @Override public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom, String pid) {
+                return Optional.of(new RefundAuthorityLimitRecord("perm", st, sid, dom, Long.MAX_VALUE, pid, "active", ts, ts));
+            }
+            @Override public boolean isAutoRuleEnabled(String dom, String type, String pid) { return false; }
+            @Override public RefundAuthorityLimitRecord saveLimit(RefundAuthorityLimitRecord l) { return l; }
+            @Override public List<RefundAuthorityLimitRecord> listLimits(String projectId) { return List.of(); }
+            @Override public RefundAutoRuleRecord saveRule(RefundAutoRuleRecord r) { return r; }
+            @Override public List<RefundAutoRuleRecord> listRules(String projectId) { return List.of(); }
+        };
     }
 
     @AfterEach
@@ -755,26 +774,36 @@ class FinanceServiceTests {
     }
 
     @Test
+    void refundWithoutTieredEngineFailsClosed() {
+        // AUD-007 依赖缺失 fail-closed：分级授权引擎未注入（生产恒注入，此处模拟异常）→ 拒绝而非放行。
+        service.refundAuthorizationService = null;
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-failclosed", "receivable", 30000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-failclosed", 30000L));
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-failclosed", "refund", List.of(), payment.payment().id(), 10000L, "no engine", "manual", null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_AUTHORIZATION_UNAVAILABLE");
+    }
+
+    @Test
     void tieredAuthorizationBlocksOverLimitFinanceRefundButAllowsWithinLimit() {
         // Stage B（审计 A2，适用所有退款）：开启分级授权后，超额度财务退款被拒（REFUND_REVIEW_REQUIRED）、额度内放行。
         Instant ts = Instant.parse("2026-06-23T00:00:00Z");
         RefundAuthorizationRepository refundRepo = new RefundAuthorizationRepository() {
             @Override
-            public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom) {
+            public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom, String pid) {
                 if ("staff".equals(st) && "finance".equals(dom) && "op1".equals(sid)) {
                     return Optional.of(new RefundAuthorityLimitRecord(
                             "l_op1", "staff", "op1", "finance", 20000L, null, "active", ts, ts));
                 }
                 return Optional.empty();
             }
-            @Override public boolean isAutoRuleEnabled(String dom, String type) { return false; }
+            @Override public boolean isAutoRuleEnabled(String dom, String type, String pid) { return false; }
             @Override public RefundAuthorityLimitRecord saveLimit(RefundAuthorityLimitRecord l) { return l; }
             @Override public List<RefundAuthorityLimitRecord> listLimits(String projectId) { return List.of(); }
             @Override public RefundAutoRuleRecord saveRule(RefundAutoRuleRecord r) { return r; }
             @Override public List<RefundAutoRuleRecord> listRules(String projectId) { return List.of(); }
         };
         service.refundAuthorizationService = new RefundAuthorizationService(refundRepo);
-        service.tieredRefundEnabled = true;
         // 操作者 op1（非平台管理员→闸生效）；isPlatformAdmin 走 mock 默认 false。
         when(authorizationService.currentActor()).thenReturn(
                 new AccessActor("op1", "op1", "staff", "org_1", null, "active"));
@@ -828,11 +857,13 @@ class FinanceServiceTests {
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         AuditedOperationExecutor ops = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), auditEventService);
-        return new FinanceService(
+        FinanceService svc = new FinanceService(
                 financeRepository, ops, auditEventService, authorizationService,
                 new com.complex.platform.common.BusinessDayResolver(4),
                 com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(),
                 mdmService);
+        svc.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
+        return svc;
     }
 
     @Test
@@ -1656,9 +1687,11 @@ class FinanceServiceTests {
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         AuditedOperationExecutor ops = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), auditEventService);
-        return new FinanceService(financeRepository, ops, auditEventService, authorizationService,
+        FinanceService svc = new FinanceService(financeRepository, ops, auditEventService, authorizationService,
                 new com.complex.platform.common.BusinessDayResolver(4),
                 new com.complex.platform.finance.gateway.PaymentGatewayRouter(terminalRepo));
+        svc.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
+        return svc;
     }
 
     @Test

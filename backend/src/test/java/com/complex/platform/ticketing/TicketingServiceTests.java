@@ -1455,7 +1455,7 @@ class TicketingServiceTests {
         assertThat(processed).isEqualTo(1);
         // 全未核销可退到期票 → 整票原渠道自动退款（approved/全额）、权益冻结 refunded、父票 refunded、名额回补。
         assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
-                "o_auto".equals(r.targetId()) && "approved".equals(r.status())
+                "o_auto".equals(r.targetId()) && "success".equals(r.status())
                         && r.refundAmountCent() == 9900L && "original".equals(r.refundChannel()));
         assertThat(ticketingRepository.issuedEntitlements.get("e_auto").status()).isEqualTo("refunded");
         assertThat(ticketingRepository.findTicketInstanceById("inst_auto")).get()
@@ -1676,7 +1676,7 @@ class TicketingServiceTests {
                 List.of()
         ));
 
-        assertThat(approved.status()).isEqualTo("approved");
+        assertThat(approved.status()).isEqualTo("success");
         assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode())).isPresent();
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
@@ -1819,7 +1819,7 @@ class TicketingServiceTests {
         // 分级授权引擎：op_big 额度极大（一律额度内自助）、op_tiny 额度仅 1.00（任何票单都超额→复核）。
         RefundAuthorizationRepository refundRepo = new RefundAuthorizationRepository() {
             @Override
-            public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom) {
+            public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom, String pid) {
                 if ("staff".equals(st) && "ticket".equals(dom) && "op_big".equals(sid)) {
                     return Optional.of(new RefundAuthorityLimitRecord(
                             "l_big", "staff", "op_big", "ticket", 100_000_000L, null, "active", ts, ts));
@@ -1831,7 +1831,7 @@ class TicketingServiceTests {
                 return Optional.empty();
             }
             @Override
-            public boolean isAutoRuleEnabled(String dom, String type) {
+            public boolean isAutoRuleEnabled(String dom, String type, String pid) {
                 return false;
             }
             @Override
@@ -1871,7 +1871,7 @@ class TicketingServiceTests {
         actAsAdmin("op_big");
         TicketRefundRecord within = tiered.requestRefund(new TicketRefundRequest(
                 "tier-within-refund", "refund", List.of(), order1.id(), order1.amountCent(), "within limit", "original"));
-        assertThat(within.status()).isEqualTo("approved");
+        assertThat(within.status()).isEqualTo("success");
         assertThat(within.requestedBy()).isEqualTo("op_big");
         assertThat(within.approvedBy()).isEqualTo("op_big");
         assertThat(ticketingRepository.findIssuedEntitlementById(ent1.id()))
@@ -3396,7 +3396,7 @@ class TicketingServiceTests {
         // AUD-011:此前「订单已有退款」整单跳过——实例2永远既不退也不作废;现按实例处置,剩余整张未核销可退票自动退。
         assertThat(processed).isEqualTo(1);
         assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
-                "o_part".equals(r.targetId()) && "approved".equals(r.status())
+                "o_part".equals(r.targetId()) && "success".equals(r.status())
                         && r.refundAmountCent() == 9900L && r.id().startsWith("ticket_refund_auto_expiry_"));
         assertThat(ticketingRepository.issuedEntitlements.get("e_p2").status()).isEqualTo("refunded");
         assertThat(ticketingRepository.findTicketInstanceById("inst_p2")).get()
@@ -3990,6 +3990,18 @@ class TicketingServiceTests {
             refunds.put(refundId, new TicketRefundRecord(
                     r.id(), r.targetId(), r.refundAmountCent(), r.reason(), r.refundChannel(),
                     "approved", r.requestedBy(), approvedBy, approvedAt, r.createdAt(), approvedAt, r.merchantId()));
+            return 1;
+        }
+
+        @Override
+        public int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt) {
+            TicketRefundRecord r = refunds.get(refundId);
+            if (r == null || !"approved".equals(r.status())) {
+                return 0;
+            }
+            refunds.put(refundId, new TicketRefundRecord(
+                    r.id(), r.targetId(), r.refundAmountCent(), r.reason(), r.refundChannel(),
+                    "success", r.requestedBy(), r.approvedBy(), r.approvedAt(), r.createdAt(), succeededAt, r.merchantId()));
             return 1;
         }
 

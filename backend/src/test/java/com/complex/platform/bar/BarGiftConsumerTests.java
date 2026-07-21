@@ -1,7 +1,9 @@
 package com.complex.platform.bar;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.ticketing.GiftReversedEvent;
 import com.complex.platform.ticketing.GiftVerifiedEvent;
@@ -16,7 +18,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * R5 T15 赠饮兑换消费者单元测试：覆盖 核销事件→0元单→扣减→inventory_movement_id 回填 全链、
- * 幂等（重复事件只一单一次扣减）、冲正回补、以及"无 SKU 映射来源时跳过扣减仅留痕"的落地形态。
+ * 幂等（重复事件只一单一次扣减）、冲正回补、以及 AUD-015 fail-closed（缺 SKU 映射/缺台位/库存不足/
+ * 商户吧缺内部结算价一律抛错不标记 delivered，保票权益可用）的落地形态。
  */
 class BarGiftConsumerTests {
 
@@ -91,24 +94,34 @@ class BarGiftConsumerTests {
     }
 
     @Test
-    void giftSettlementSkippedWhenNoInternalPriceOrPlatformBar() {
+    void giftMerchantBarWithoutInternalPriceThrowsFailClosed() {
+        // AUD-015：商户吧赠饮但吧台商品无内部结算价 → 平台无从挂应付（商户白送/零补偿=资金漏），必须 fail-closed 抛错。
         CapturingLedger ledger = new CapturingLedger();
         BarGiftConsumer settlingConsumer = new BarGiftConsumer(repository, ledger);
-        // 无内部价（商品内部价 null）→ 不结算。
         repository.giftDrinkProduct = new BarProductRecord(
                 "prod_beer", BAR_ID, "merchant_1", "House Beer", "beer", 3800L, "CNY",
                 ITEM_REF, LOCATION, false, "active", Instant.now(), Instant.now(),
                 null, null, null, false, null, null, null);
-        settlingConsumer.onGiftVerified(new GiftVerifiedEvent("ent_n", "ver_n", ITEM_REF, BAR_ID, null, "merchant_1"));
+        assertThatThrownBy(() -> settlingConsumer.onGiftVerified(
+                new GiftVerifiedEvent("ent_n", "ver_n", ITEM_REF, BAR_ID, null, "merchant_1")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("内部结算价");
         assertThat(ledger.settledVerificationId).isNull();
+    }
 
-        // 平台自营吧（merchantId null）→ 即便有内部价也不结算。
+    @Test
+    void giftPlatformBarSkipsSettlementWithoutThrow() {
+        // 平台自营吧（merchantId null）→ 无商户结算，正常交付、跳过结算，不抛错。
+        CapturingLedger ledger = new CapturingLedger();
+        BarGiftConsumer settlingConsumer = new BarGiftConsumer(repository, ledger);
         repository.giftDrinkProduct = new BarProductRecord(
                 "prod_beer2", BAR_ID, null, "House Beer", "beer", 3800L, "CNY",
                 ITEM_REF, LOCATION, false, "active", Instant.now(), Instant.now(),
                 null, null, null, false, null, null, 4200L);
         settlingConsumer.onGiftVerified(new GiftVerifiedEvent("ent_p", "ver_p", ITEM_REF, BAR_ID, null, null));
         assertThat(ledger.settledVerificationId).isNull();
+        assertThat(repository.findGiftRedemptionByVerification("ver_p").orElseThrow().status())
+                .isEqualTo("delivered");
     }
 
     @Test
@@ -145,19 +158,51 @@ class BarGiftConsumerTests {
     }
 
     @Test
-    void giftVerifiedWithoutItemRefCreatesOrderButSkipsStockDecreaseAndNotes() {
-        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_1", null, BAR_ID, null, "merchant_1"));
-
-        assertThat(repository.listOrders(Optional.empty())).hasSize(1);
+    void giftVerifiedWithoutItemRefThrowsAndDoesNotDeliver() {
+        // AUD-015：无 SKU 映射(bar_item_ref) → fail-closed 抛错，绝不落单/标记 delivered（生产同事务回滚保权益可用）。
+        assertThatThrownBy(() -> consumer.onGiftVerified(
+                new GiftVerifiedEvent("ent_1", "ver_1", null, BAR_ID, null, "merchant_1")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("bar_item_ref");
+        assertThat(repository.listOrders(Optional.empty())).isEmpty();
         assertThat(repository.stockMovements).isEmpty();
-        BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification("ver_1").orElseThrow();
-        assertThat(redemption.inventoryMovementId()).isNull();
-        assertThat(redemption.note()).contains("no item mapping source");
+        assertThat(repository.findGiftRedemptionByVerification("ver_1")).isEmpty();
     }
 
     @Test
-    void giftVerifiedWithoutResolvableTableSkipsOrder() {
-        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, "bar_unknown", null, "merchant_1"));
+    void giftVerifiedWithInsufficientStockThrowsAndDoesNotDeliver() {
+        // AUD-015：库存不足（含并发抢到最后一件的失败方）→ fail-closed 抛错，绝不标记 delivered。
+        repository.saveStockBalance(new StockBalanceSnapshot(
+                "balance_1", ITEM_REF, LOCATION, 0, 0, 0, Instant.now()));
+        assertThatThrownBy(() -> consumer.onGiftVerified(
+                new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("库存不足");
+        assertThat(repository.findGiftRedemptionByVerification("ver_1")).isEmpty();
+    }
+
+    @Test
+    void giftVerifiedSucceedsAfterStockReplenished() {
+        // AUD-015 人工修复闭环：补足库存后，新的核销事件可正常交付（fail-closed 不留坏状态）。
+        repository.saveStockBalance(new StockBalanceSnapshot(
+                "balance_1", ITEM_REF, LOCATION, 0, 0, 0, Instant.now()));
+        assertThatThrownBy(() -> consumer.onGiftVerified(
+                new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1")))
+                .isInstanceOf(ApiException.class);
+        repository.saveStockBalance(new StockBalanceSnapshot(
+                "balance_1", ITEM_REF, LOCATION, 5, 0, 5, Instant.now()));
+        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_2", ITEM_REF, BAR_ID, null, "merchant_1"));
+        assertThat(repository.findGiftRedemptionByVerification("ver_2").orElseThrow().status())
+                .isEqualTo("delivered");
+    }
+
+    @Test
+    void giftVerifiedWithoutResolvableTableThrowsAndDoesNotDeliver() {
+        // AUD-015：吧台无可用台位 → fail-closed 抛错，不落单。
+        assertThatThrownBy(() -> consumer.onGiftVerified(
+                new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, "bar_unknown", null, "merchant_1")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("台位");
         assertThat(repository.listOrders(Optional.empty())).isEmpty();
         assertThat(repository.findGiftRedemptionByVerification("ver_1")).isEmpty();
     }

@@ -550,8 +550,9 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         BigDecimal value = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(refund_amount_cent), 0)
                   FROM ticket_refunds
-                 WHERE created_at >= :start
-                   AND created_at < :end
+                 WHERE status = 'success'
+                   AND succeeded_at >= :start
+                   AND succeeded_at < :end
                 """, dayRange(windowDomain, businessDate), BigDecimal.class);
         return value == null ? BigDecimal.ZERO : value;
     }
@@ -653,8 +654,9 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 SELECT merchant_id, COALESCE(SUM(refund_amount_cent), 0) AS total
                   FROM ticket_refunds
                  WHERE merchant_id IS NOT NULL
-                   AND created_at >= :start
-                   AND created_at < :end
+                   AND status = 'success'
+                   AND succeeded_at >= :start
+                   AND succeeded_at < :end
                  GROUP BY merchant_id
                 """, dayRange(windowDomain, businessDate),
                 (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
