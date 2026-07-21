@@ -177,6 +177,10 @@ public class StaffService {
                                     now
                             ));
                             credentialProvisioner.provisionCredential(created.id(), initialPassword, "active", now);
+                            // 既有缺口修复(2026-07-19):审批通过即为新员工分配"员工自助"角色 role_staff_self,
+                            // 否则真实员工(userType=staff)无任何 user_roles 行 → 所有 BYOD 自助端点(我的薪资/
+                            // 班次/考勤/请假/通知/打卡)对其一律 403;此前仅 platform_admin 桥可用。幂等(ON CONFLICT DO NOTHING)。
+                            accessRepository.assignUserRole(created.id(), "role_staff_self");
                             StaffProfileRecord approved = new StaffProfileRecord(
                                     profile.id(), profile.projectId(), profile.merchantId(), created.id(),
                                     profile.name(), profile.phoneHash(), profile.idDocHash(), profile.staffLevelId(),
@@ -227,6 +231,7 @@ public class StaffService {
     }
 
     /** V264：includeArchived=false（默认）排除已存档档案；true 供后台管理存档件。 */
+    @GuardedAction(permission = "staff.profile.view")
     public PageResponse<StaffProfileRecord> listProfiles(boolean includeArchived) {
         List<StaffProfileRecord> profiles = repository.listProfiles(merchantScopeOrNull(), includeArchived);
         auditEventService.recordSuccess("staff.profile.viewed", "staff.profile.view",
@@ -503,7 +508,6 @@ public class StaffService {
 
     // ============================================================ 员工通知
 
-    @GuardedAction(permission = "staff.notice.view")
     /** E1(2026-07-02 拍板):主管排班——双端(后台页+主管App);班次到分钟+指定点位;
      * 同员工同开始时刻幂等覆盖;审计留痕。 */
     public StaffShiftRecord upsertShift(com.complex.platform.access.staff.dto.StaffShiftRequest request) {
@@ -598,6 +602,7 @@ public class StaffService {
         return page(repository.listAttendanceOn(date, projectScope()));
     }
 
+    @GuardedAction(permission = "staff.notice.view")
     public PageResponse<EmployeeNoticeRecord> listNotices() {
         List<EmployeeNoticeRecord> notices = repository.listNotices(merchantScopeOrNull());
         auditEventService.recordSuccess("staff.notice.viewed", "staff.notice.view",
