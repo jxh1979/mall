@@ -35,3 +35,12 @@ ticket.face-photo.purge.scheduled.enabled: true
 analytics.dashboard-etl.scheduled.enabled: true
 amusement.inspection-task.scheduled.enabled: true
 merchant.service.sla-escalation.scheduled.enabled: true
+
+# 2026-07-21 补齐生产漏配的定时作业(兄弟作业已开·这3个漏配;存量backlog=0/内部,首跑无客人可见影响):
+facility.inspection.scheduled.enabled: true                  # 设施定期巡检自动生成(游乐巡检amusement.inspection-task已开·此为漏配→防漏检)
+voucher.reservation.expiry.scheduled.enabled: true           # 实物券过期预占库存自动释放(防冻结量单调累积挡合法发券)
+inventory.saved-bottle.notification.scheduled.enabled: true  # 存酒到期状态自动流转+临期提醒(真发短信另需供应商适配器)
+
+# AUD-010: web 通道翻 enforce——拒「Authorization: Bearer 自报 web」走资金端点旁路
+# (合法后台走 Cookie 会话·无客户端依赖·可独立翻;设备绑定型/app 仍 grace 待 BYOD二期客户端签名)
+access.device_credential.enforcement.web: enforce
