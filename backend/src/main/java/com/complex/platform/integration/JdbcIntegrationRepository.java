@@ -350,6 +350,17 @@ class JdbcIntegrationRepository implements IntegrationRepository {
     }
 
     @Override
+    public boolean merchantExists(String merchantId) {
+        if (merchantId == null || merchantId.isBlank()) {
+            return false;
+        }
+        Boolean exists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS(SELECT 1 FROM merchants WHERE id = :id)",
+                Map.of("id", merchantId), Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
     public List<IntegrationOrderSyncRecord> listUnattributedOrderSyncs() {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,

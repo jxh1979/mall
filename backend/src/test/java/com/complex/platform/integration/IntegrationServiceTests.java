@@ -712,7 +712,8 @@ class IntegrationServiceTests {
 
     @Test
     void orderSyncResolvesMerchantViaStoreMapDirectAndLeavesNullWhenUnmapped() {
-        // 源B：对账文件回流行本带商户 → 直落。
+        // 源B：对账文件回流行本带商户（真实存在）→ 直落。
+        repository.merchants.add("merchant_direct");
         IntegrationOrderSyncRecord direct = service.createOrderSync(new IntegrationOrderSyncRequest(
                 "k-src-b", "对账文件回流", List.of(), "mock-provider", "catering", "order",
                 "ext-b-1", "synced", 50000L, "CNY", "meituan", "ch-b-1",
@@ -747,6 +748,31 @@ class IntegrationServiceTests {
                 "ext-a-3", "synced", 80000L, "CNY", "douyin", "ch-a-3",
                 null, Map.of("external_store_id", "store-777")));
         assertThat(afterArchive.merchantId()).isNull();
+    }
+
+    @Test
+    void orderSyncSourceBWithUnknownMerchantFallsToUnattributedNotBogusAttribution() {
+        // P1 资金复核：源B 对账文件回流带商户号，但该号在 merchants 表查无此人（拼错 / 过期）→ 置 NULL
+        // 进未归属，绝不静默塞给不存在的商户（否则店级抽成 / 租售比 / 未归属桶三处同时隐形）。
+        repository.merchants.add("merchant_real");
+
+        // 存在的商户号 → 正常归属。
+        IntegrationOrderSyncRecord attributed = service.createOrderSync(new IntegrationOrderSyncRequest(
+                "k-b-real", "对账文件回流", List.of(), "mock-provider", "catering", "order",
+                "ext-b-real", "synced", 50000L, "CNY", "meituan", "ch-b-real",
+                "merchant_real", Map.of()));
+        assertThat(attributed.merchantId()).isEqualTo("merchant_real");
+
+        // 查无此人的商户号 → 落 NULL 未归属。
+        IntegrationOrderSyncRecord bogus = service.createOrderSync(new IntegrationOrderSyncRequest(
+                "k-b-bogus", "对账文件回流", List.of(), "mock-provider", "catering", "order",
+                "ext-b-bogus", "synced", 60000L, "CNY", "meituan", "ch-b-bogus",
+                "merchant_typo_999", Map.of()));
+        assertThat(bogus.merchantId()).isNull();
+        assertThat(service.listUnattributedOrderSyncs().items())
+                .extracting(IntegrationOrderSyncRecord::externalBusinessId)
+                .contains("ext-b-bogus")
+                .doesNotContain("ext-b-real");
     }
 
     private IntegrationOrderSyncRequest orderSyncRequest(
@@ -1049,6 +1075,7 @@ class IntegrationServiceTests {
         private final List<IntegrationLedgerRecord> ledgers = new ArrayList<>();
         private final Map<String, IntegrationOrderSyncRecord> orderSyncs = new LinkedHashMap<>();
         private final Map<String, IntegrationChannelStoreMapRecord> channelStoreMaps = new LinkedHashMap<>();
+        private final java.util.Set<String> merchants = new java.util.LinkedHashSet<>();
         private final Map<String, IntegrationTaskRecord> retryTasks = new LinkedHashMap<>();
         private final Map<String, IntegrationTaskRecord> compensationTasks = new LinkedHashMap<>();
         private final Map<String, ReconciliationBatchRecord> reconciliationBatches = new LinkedHashMap<>();
@@ -1188,6 +1215,11 @@ class IntegrationServiceTests {
                     .filter(record -> "active".equals(record.status()))
                     .map(IntegrationChannelStoreMapRecord::merchantId)
                     .findFirst();
+        }
+
+        @Override
+        public boolean merchantExists(String merchantId) {
+            return merchantId != null && merchants.contains(merchantId);
         }
 
         @Override

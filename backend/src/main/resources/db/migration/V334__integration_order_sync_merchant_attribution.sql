@@ -9,6 +9,20 @@
 ALTER TABLE integration_order_syncs
     ADD COLUMN IF NOT EXISTS merchant_id VARCHAR(64);
 
+-- 整型 backstop（P1 资金复核）：非空 merchant_id 必须指向真实商户。落商户解析器已保证只有
+-- 合法 id 或 NULL 到达 INSERT（查无此商户 → 置 NULL 落未归属桶），此 FK 仅作最后防线，
+-- 挡住绕开解析器的直插脏值；NULL（未归属）被 Postgres FK 豁免，未归属行照留。
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_integration_order_syncs_merchant'
+    ) THEN
+        ALTER TABLE integration_order_syncs
+            ADD CONSTRAINT fk_integration_order_syncs_merchant
+            FOREIGN KEY (merchant_id) REFERENCES merchants(id);
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_integration_order_syncs_merchant_created
     ON integration_order_syncs (merchant_id, created_at)
     WHERE merchant_id IS NOT NULL;

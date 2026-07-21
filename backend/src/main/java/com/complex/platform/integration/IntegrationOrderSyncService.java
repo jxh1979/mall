@@ -15,6 +15,9 @@ import java.util.UUID;
 
 final class IntegrationOrderSyncService {
 
+    private static final org.slf4j.Logger LOGGER =
+            org.slf4j.LoggerFactory.getLogger(IntegrationOrderSyncService.class);
+
     private final IntegrationRepository repository;
     private final Clock clock;
     private final IntegrationOperationSupport support;
@@ -85,12 +88,21 @@ final class IntegrationOrderSyncService {
     }
 
     // 落商户解析器（P1a·钱路①②上游钥匙）：
-    //   源B（对账文件回流）行本带商户 → request.merchantId 直落（对账文件行天然带商户身份）。
+    //   源B（对账文件回流）行本带商户 → 校验 request.merchantId 存在性：命中落商户；查无此商户（拼错/过期/已删）→ 置 NULL 未归属（不静默塑给 bogus 商户）。
     //   源A（渠道 API 回流）→ 按 (provider_code, channel, payload.external_store_id) 查映射表反查活跃绑定；
     //   未命中 / 无门店号 → 留 NULL（未归属，不阻断入库，进「未归属回流」视图待人工补映射）。绝不静默塞给某商户。
     private String resolveMerchantId(IntegrationOrderSyncRequest request, Map<String, Object> payload, String channel) {
         if (request.merchantId() != null && !request.merchantId().isBlank()) {
-            return request.merchantId();
+            String claimed = request.merchantId();
+            // 源B（对账文件回流）行自带商户号：先校验存在性。查无此商户（拼错 / 过期 / 已删）→ 置 NULL
+            // 落未归属桶，诚实不静默——绝不把 bogus 值落库（否则店级抽成 / 租售比 / 未归属桶三处同时
+            // 隐形，真实营业额报表消失），也不因商户号错就拒整条回流丢数据；留 NULL 进未归属视图待人工补映射。
+            if (repository.merchantExists(claimed)) {
+                return claimed;
+            }
+            LOGGER.warn("回流带商户号在 merchants 表查无此人，置未归属：provider={} channel={} externalBusinessId={} claimedMerchantId={}",
+                    request.providerCode(), channel, request.externalBusinessId(), claimed);
+            return null;
         }
         Object storeId = payload.get("external_store_id");
         if (storeId == null) {

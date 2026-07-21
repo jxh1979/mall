@@ -345,6 +345,8 @@ class IntegrationJdbcIntegrationTests {
         // 仅计已归属该商户且 status='synced' 的 [from,to) 窗口行；merchant_id IS NULL（未归属）
         // 与他商户与非 synced 行皆不计——未归属只进平台级 / 未归属视图，绝不静默塞给某商户。
         Instant base = Instant.parse("2026-05-10T00:00:00Z");
+        seedMerchant("mch_turn_a");
+        seedMerchant("mch_turn_b");
         saveOrder("os_a_o1", "mch_turn_a", "order", "synced", 100000L, base);
         saveOrder("os_a_o2", "mch_turn_a", "order", "synced", 50000L, base.plusSeconds(3600));
         saveOrder("os_a_r1", "mch_turn_a", "refund", "synced", 30000L, base.plusSeconds(7200));
@@ -384,6 +386,26 @@ class IntegrationJdbcIntegrationTests {
         assertThat(repository.findActiveChannelStoreMapMerchant("mock-provider", "douyin", "store-abc")).isEmpty();
         assertThat(repository.findChannelStoreMapByNaturalKey("mock-provider", "douyin", "store-abc"))
                 .get().extracting(IntegrationChannelStoreMapRecord::status).isEqualTo("inactive");
+    }
+
+    @Test
+    void orderSyncMerchantIdForeignKeyRejectsUnknownMerchant() {
+        // 整型 backstop（P1 资金复核）：非空 merchant_id 指向不存在商户 → FK 拒绝。落商户解析器已保证
+        // 到不了这（查无此商户 → 置 NULL），此 FK 仅挡绕开解析器的直插脏值，防真实营业额报表隐形。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type, "
+                + "external_business_id, status, amount_cent, currency, created_at, updated_at, merchant_id) "
+                + "VALUES ('ios_fk_bad', 'meituan', 'catering', 'order', 'ext_fk_bad', 'synced', 100, 'CNY', "
+                + "now(), now(), 'merchant_does_not_exist')"))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    private void seedMerchant(String id) {
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES (?, ?, 'bar', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """, id, id);
     }
 
     private void saveOrder(String id, String merchantId, String syncType, String status, long amountCent, Instant at) {
