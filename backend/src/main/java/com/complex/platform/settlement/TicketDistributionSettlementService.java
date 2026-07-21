@@ -240,12 +240,14 @@ public class TicketDistributionSettlementService {
     /**
      * D6 套票折扣按归属拆出「项目公司承担」的部分(§7.4)：
      * platform_absorb → 项目全额承担(商户拿满额)；split_by_ratio → 项目按 split_platform_bps 承担；
-     * merchant_absorb → 项目 0(商户自担，池/直付按净额=现状)。折扣 &lt;=0(无折扣/冲正净掉) → 0(零行为变更)。
+     * merchant_absorb → 项目 0(商户自担，池/直付按净额=现状)。
+     *
+     * <p>🔴 <b>带符号(不钳0)</b>:核销为正(平台吸收折扣、商户按满额分),该核销在<b>后续已过账月</b>被冲正时为负
+     * (平台<b>追回</b>先前吸收的折扣)——与收入侧 verified_amount_cent 带符号跨月净掉<b>一致</b>(V335 放开 combo_discount ≥0)。
+     * 旧「discountCent&lt;=0 钳0」会丢弃跨月负向追回 → 收入 -R 追回了、折扣 -D 没追回,项目多付(套票真上线前必修)。
+     * Java 整除截断向零使 {@code f(-x)=-f(x)},split_by_ratio 的正负份额精确对消;折扣=0 → 0(无折扣零行为变更)。
      */
     private long platformBorneDiscount(JdbcSettlementBillRepository.ComboDiscountConfig cfg, long discountCent) {
-        if (discountCent <= 0) {
-            return 0L;
-        }
         return switch (cfg.discountBearer()) {
             case "platform_absorb" -> discountCent;
             case "split_by_ratio" -> discountCent * cfg.splitPlatformBps() / 10000;
