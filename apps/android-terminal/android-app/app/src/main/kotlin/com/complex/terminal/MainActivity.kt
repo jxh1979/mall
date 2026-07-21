@@ -190,10 +190,10 @@ class MainActivity : Activity() {
   // 屏 ② 设备绑定 -> TerminalWorkflow.bindDevice
   // ---------------------------------------------------------------------------
   private fun showDeviceBinding() {
-    val deviceId = editText("设备编号 device_id").apply {
+    val deviceId = editText("设备编号").apply {
       setText("ANDROID-${System.currentTimeMillis()}")
     }
-    val spaceId = editText("绑定空间 bound_space_id（点位）")
+    val spaceId = editText("绑定空间（点位）")
     val status = statusText("登录账号：${store.session?.username ?: "-"}\n请绑定本机到现场点位")
 
     val bindButton = primaryButton("绑定设备") {
@@ -215,7 +215,7 @@ class MainActivity : Activity() {
           )
         },
         onSuccess = { binding ->
-          status.text = "绑定完成：${binding.deviceCode}（状态 ${binding.status}）"
+          status.text = "绑定完成：${binding.deviceCode}（状态 ${deviceStatusZh(binding.status)}）"
           showHome()
         },
         onError = { status.text = "绑定失败：${friendly(it)}" },
@@ -314,7 +314,7 @@ class MainActivity : Activity() {
         status.text = "正在核销…"
         runBackground(
           action = { workflow.verifyOnline(code) },
-          onSuccess = { r -> status.text = "核销结果：${r.status}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}" },
+          onSuccess = { r -> status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}" },
           onError = { status.text = "核销失败：${friendly(it)}" },
         )
       }
@@ -332,8 +332,8 @@ class MainActivity : Activity() {
   // 屏 ⑤ 游乐核销 -> amusementVerifyOnline
   // ---------------------------------------------------------------------------
   private fun showAmusementVerify() {
-    val credential = editText("游乐凭证（扫码或手动输入 credential）")
-    val sessionId = editText("场次 session_id（可选）")
+    val credential = editText("游乐凭证（扫码或手动输入）")
+    val sessionId = editText("场次（可选）")
     val status = statusText("游乐入口在线核销")
 
     val verifyButton = primaryButton("游乐核销") {
@@ -364,9 +364,9 @@ class MainActivity : Activity() {
   // createBarOrder -> 账单支付意图（pay-intent，引导扫码支付）-> 结算 settle
   // ---------------------------------------------------------------------------
   private fun showBarOrder() {
-    val barId = editText("酒吧 bar_id")
-    val tableId = editText("桌台 table_id（可选）")
-    val skuId = editText("酒水 SKU / 商品 id")
+    val barId = editText("酒吧")
+    val tableId = editText("桌台（可选）")
+    val skuId = editText("酒水编号 / 商品编号")
     val quantity = editText("数量").apply { inputType = InputType.TYPE_CLASS_NUMBER; setText("1") }
     val status = statusText("点酒下单 -> 生成账单后创建支付意图 -> 结算")
 
@@ -407,7 +407,7 @@ class MainActivity : Activity() {
 
   // 酒吧支付引导：创建支付意图（生成支付二维码由后端返回 channel/status，UI 展示引导）+ 结算。
   private fun showBarPayment(order: BarOrderRecord) {
-    val billId = editText("账单 bill_id（下单后生成）")
+    val billId = editText("账单（下单后生成）")
     // 金额防误：结算金额=订单金额，只读展示，杜绝手滑改小。
     val cents = order.totalAmountCent
     val amount = statusText("应收金额：¥${"%.2f".format(cents / 100.0)}（按订单金额结算，不可修改）")
@@ -425,7 +425,7 @@ class MainActivity : Activity() {
 
     val intentButton = secondaryButton("创建支付意图（引导扫码）") {
       val bill = billId.text.toString().trim()
-      if (bill.isEmpty()) { status.text = "请输入账单 bill_id"; return@secondaryButton }
+      if (bill.isEmpty()) { status.text = "请输入账单"; return@secondaryButton }
       status.text = "正在创建支付意图…"
       runBackground(
         action = { workflow.createBarPaymentIntent(bill, cents, selectedChannel()) },
@@ -442,7 +442,7 @@ class MainActivity : Activity() {
 
     val settleButton = primaryButton("结算账单") {
       val bill = billId.text.toString().trim()
-      if (bill.isEmpty()) { status.text = "请输入账单 bill_id"; return@primaryButton }
+      if (bill.isEmpty()) { status.text = "请输入账单"; return@primaryButton }
       val ch = selectedChannel()
       confirmThen(
         title = "结算账单",
@@ -452,7 +452,7 @@ class MainActivity : Activity() {
         runBackground(
           action = { workflow.settleBarBill(bill, cents, ch) },
           onSuccess = { b ->
-            status.text = "结算完成：账单 ${b.id}\n支付状态：${b.paymentStatus ?: "-"}，结算状态：${b.settlementStatus ?: "-"}"
+            status.text = "结算完成：账单 ${b.id}\n支付状态：${statusZh(b.paymentStatus)}，结算状态：${statusZh(b.settlementStatus)}"
           },
           onError = { status.text = "结算失败：${friendly(it)}" },
         )
@@ -472,11 +472,12 @@ class MainActivity : Activity() {
   // submitAmusementMaintenance -> confirmAmusementMaintenanceResume
   // ---------------------------------------------------------------------------
   private fun showMaintenance() {
-    val projectId = editText("项目 project_id")
-    val deviceId = editText("设备 device_id")
-    val result = editText("检修结论 result（如 pass / fail）").apply { setText("pass") }
-    val note = editText("异常说明 exception_note（可选）")
-    val recordId = editText("检修记录 record_id（确认恢复时填）")
+    val projectId = editText("项目")
+    val deviceId = editText("设备")
+    val resultValues = listOf("pass", "fail")
+    val result = enumSpinner(listOf("通过", "失败"))
+    val note = editText("异常说明（可选）")
+    val recordId = editText("检修记录（确认恢复时填）")
     val status = statusText("先提交检修记录，主管再确认恢复运营")
 
     val submitButton = primaryButton("提交检修记录") {
@@ -489,13 +490,13 @@ class MainActivity : Activity() {
           workflow.submitAmusementMaintenance(
             projectId = pid,
             deviceId = did,
-            result = result.text.toString().trim().ifEmpty { "pass" },
+            result = resultValues.getOrElse(result.selectedItemPosition) { "pass" },
             exceptionNote = note.text.toString().trim().ifEmpty { null },
           )
         },
         onSuccess = { rec ->
           recordId.setText(rec.id)
-          status.text = "检修记录已提交：${rec.id}（状态 ${rec.status}）\n请主管确认恢复运营。"
+          status.text = "检修记录已提交：${rec.id}（状态 ${maintStatusZh(rec.status)}）\n请主管确认恢复运营。"
         },
         onError = { status.text = "提交失败：${friendly(it)}" },
       )
@@ -503,7 +504,7 @@ class MainActivity : Activity() {
 
     val confirmButton = secondaryButton("主管确认恢复运营") {
       val rid = recordId.text.toString().trim()
-      if (rid.isEmpty()) { status.text = "请输入检修记录 record_id"; return@secondaryButton }
+      if (rid.isEmpty()) { status.text = "请输入检修记录"; return@secondaryButton }
       confirmThen(
         title = "主管确认恢复运营",
         message = "将对检修记录 $rid 确认恢复运营。\n确认后设备立即对客开放，责任落在确认主管，不可撤销。\n请确认检修已完成且设备安全。",
@@ -511,7 +512,7 @@ class MainActivity : Activity() {
         status.text = "正在确认…"
         runBackground(
           action = { workflow.confirmAmusementMaintenanceResume(rid) },
-          onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${rec.status}）" },
+          onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${maintStatusZh(rec.status)}）" },
           onError = { status.text = "确认失败：${friendly(it)}" },
         )
       }
@@ -520,7 +521,7 @@ class MainActivity : Activity() {
     setContentView(
       screen(
         title = "游乐检修 / 主管确认",
-        children = listOf(status, projectId, deviceId, result, note, submitButton, recordId, confirmButton, backButton()),
+        children = listOf(status, projectId, deviceId, fieldLabel("检修结论"), result, note, submitButton, recordId, confirmButton, backButton()),
       ),
     )
   }
@@ -530,14 +531,14 @@ class MainActivity : Activity() {
   // （EC P-256，私钥硬件保护不可导出），见 DeviceKeystore；后端拒 PLACEHOLDER_* 占位。
   // ---------------------------------------------------------------------------
   private fun showStaffDevice() {
-    val profileId = editText("员工档案 staff_profile_id")
+    val profileId = editText("员工档案")
     val status = statusText(
       "设备公钥/指纹哈希取自 Android Keystore（EC P-256，私钥不可导出），首次绑定自动生成。",
     )
 
     val bindButton = primaryButton("绑定设备凭证") {
       val pid = profileId.text.toString().trim()
-      if (pid.isEmpty()) { status.text = "请输入 staff_profile_id"; return@primaryButton }
+      if (pid.isEmpty()) { status.text = "请输入员工档案"; return@primaryButton }
       status.text = "正在绑定凭证…"
       runBackground(
         action = {
@@ -547,7 +548,7 @@ class MainActivity : Activity() {
             deviceFingerprintHash = DeviceKeystore.deviceFingerprintHash(),
           )
         },
-        onSuccess = { rec -> status.text = "凭证绑定：${rec.id}（状态 ${rec.bindStatus}）" },
+        onSuccess = { rec -> status.text = "凭证绑定：${rec.id}（状态 ${statusZh(rec.bindStatus)}）" },
         onError = { status.text = "绑定失败：${friendly(it)}" },
       )
     }
@@ -559,8 +560,8 @@ class MainActivity : Activity() {
 
   // 票务核销冲正
   private fun showReverse() {
-    val verificationId = editText("核销记录 verification_id")
-    val reason = editText("冲正原因 reason")
+    val verificationId = editText("核销记录")
+    val reason = editText("冲正原因")
     val status = statusText("对已核销记录冲正（撤销）")
 
     val reverseButton = primaryButton("提交冲正") {
@@ -574,7 +575,7 @@ class MainActivity : Activity() {
         status.text = "正在冲正…"
         runBackground(
           action = { workflow.reverseVerification(vid, r) },
-          onSuccess = { res -> status.text = "冲正完成：${res.id}（状态 ${res.status}）" },
+          onSuccess = { res -> status.text = "冲正完成：${res.id}（状态 ${verifyStatusZh(res.status)}）" },
           onError = { status.text = "冲正失败：${friendly(it)}" },
         )
       }
@@ -687,16 +688,16 @@ class MainActivity : Activity() {
   private fun showStaffNotices() {
     val status = statusText("正在拉取公司公告…")
     val list = rowsContainer()
-    val ackId = editText("要确认已读的公告 id（点上方公告自动回填）")
+    val ackId = editText("要确认已读的公告（点上方公告自动回填）")
     val refresh = {
       runBackground(
         action = { api.listStaffNotices() },
         onSuccess = { notices ->
-          status.text = "公告 ${notices.size} 条（点一条自动回填 id）"
+          status.text = "公告 ${notices.size} 条（点一条自动回填）"
           fillSelectableRows(
             list,
             notices.map { n ->
-              "[${n.consentStatus ?: "-"}] ${n.title ?: n.id}\n${n.body ?: ""}" to {
+              "[${statusZh(n.consentStatus)}] ${n.title ?: n.id}\n${n.body ?: ""}" to {
                 ackId.setText(n.id ?: "")
                 status.text = "已选公告：${n.title ?: n.id}"
               }
@@ -709,7 +710,7 @@ class MainActivity : Activity() {
     }
     val ackButton = secondaryButton("确认已读") {
       val id = ackId.text.toString().trim()
-      if (id.isEmpty()) { status.text = "请输入公告 id"; return@secondaryButton }
+      if (id.isEmpty()) { status.text = "请输入公告"; return@secondaryButton }
       runBackground(
         action = { api.acknowledgeStaffNotice(id, NoticeAcknowledgeRequest("byod_ack_${System.currentTimeMillis()}")) },
         onSuccess = { status.text = "已确认已读：${it.id ?: id}"; refresh() },
@@ -745,8 +746,8 @@ class MainActivity : Activity() {
   private fun showBarAvailability() {
     val status = statusText("正在拉取酒吧桌位…")
     val list = rowsContainer()
-    val barId = editText("酒吧 bar_id(点上方桌位自动回填)")
-    val tableId = editText("桌位 table_id(点上方空位自动回填)")
+    val barId = editText("酒吧(点上方桌位自动回填)")
+    val tableId = editText("桌位(点上方空位自动回填)")
     val time = editText("到店时间(如 2026-07-02T20:00:00Z)")
     val guests = editText("人数").apply { inputType = InputType.TYPE_CLASS_NUMBER }
     runBackground(
@@ -757,7 +758,7 @@ class MainActivity : Activity() {
           list,
           rows.map { r ->
             "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
-              "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
+              "${tableTypeZh(r.tableType)} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
               tableId.setText(r.id ?: "")
               r.barId?.let { barId.setText(it) }
               status.text = "已选桌位：${r.tableCode ?: r.id}"
@@ -785,7 +786,7 @@ class MainActivity : Activity() {
             salespersonUserId = store.session?.staffId,
           ))
         },
-        onSuccess = { r -> status.text = "订位成功：${r.id ?: "-"}(定金 ${r.depositStatus ?: "not_required"})" },
+        onSuccess = { r -> status.text = "订位成功：${r.id ?: "-"}(定金 ${statusZh(r.depositStatus ?: "not_required")})" },
         onError = { status.text = "订位失败：${friendly(it)}" },
       )
     }
@@ -868,13 +869,13 @@ class MainActivity : Activity() {
   }
 
   private fun showShiftManage() {
-    val userId = editText("员工 user_id")
+    val userId = editText("员工")
     val workDate = editText("日期(2026-07-03)")
     val startAt = editText("开始(2026-07-03T10:00:00Z)")
     val endAt = editText("结束(2026-07-03T18:30:00Z)")
-    val points = editText("点位 space_id,逗号分隔(可空)")
+    val points = editText("点位,逗号分隔(可空)")
     val note = editText("备注(可空)")
-    val status = statusText("主管排班:同员工同开始时刻重复提交=覆盖修改;需 staff.shift.manage 权限")
+    val status = statusText("主管排班:同员工同开始时刻重复提交=覆盖修改;需主管排班权限")
     val submitButton = primaryButton("保存排班") {
       val u = userId.text.toString().trim()
       val d = workDate.text.toString().trim()
@@ -984,7 +985,9 @@ class MainActivity : Activity() {
   }
 
   private fun showLeave() {
-    val type = editText("类型:personal(事假)/sick(病假)/comp(调休)/annual(年假)")
+    val typeLabel = linkedMapOf("personal" to "事假", "sick" to "病假", "comp" to "调休", "annual" to "年假")
+    val typeValues = listOf("") + typeLabel.keys                 // [0]=占位首项(空 token),提交前拦截
+    val type = enumSpinner(listOf("请选择请假类型") + typeLabel.values)
     val start = editText("开始日期(2026-07-05)")
     val end = editText("结束日期(2026-07-06)")
     val reason = editText("事由")
@@ -996,19 +999,19 @@ class MainActivity : Activity() {
         onSuccess = { rows ->
           list.text = if (rows.isEmpty()) "暂无请假记录" else rows.joinToString("\n") { r ->
             val st = when (r.status) { "pending" -> "待审"; "approved" -> "已通过"; "rejected" -> "已驳回"; else -> r.status ?: "-" }
-            "${r.startDate}~${r.endDate} ${r.leaveType} [$st]" + (r.reviewNote?.let { " 批注:$it" } ?: "")
+            "${r.startDate}~${r.endDate} ${r.leaveType?.let { typeLabel[it] ?: it } ?: "-"} [$st]" + (r.reviewNote?.let { " 批注:$it" } ?: "")
           }
         },
         onError = { list.text = "请假记录拉取失败：${friendly(it)}" },
       )
     }
     val submitButton = primaryButton("提交请假") {
-      val t = type.text.toString().trim()
+      val t = typeValues.getOrElse(type.selectedItemPosition) { "" }
       val s1 = start.text.toString().trim()
       val e1 = end.text.toString().trim()
       val r1 = reason.text.toString().trim()
       if (t.isEmpty() || s1.isEmpty() || e1.isEmpty() || r1.isEmpty()) {
-        status.text = "请填全 类型/起止日期/事由"
+        status.text = "请选择请假类型并填全 起止日期/事由"
         return@primaryButton
       }
       runBackground(
@@ -1024,7 +1027,7 @@ class MainActivity : Activity() {
     refresh()
     setContentView(screen(
       title = "请假",
-      children = listOf(status, type, start, end, reason, submitButton, list,
+      children = listOf(status, fieldLabel("请假类型"), type, start, end, reason, submitButton, list,
         secondaryButton("返回首页") { showHome() }),
     ))
   }
@@ -1033,9 +1036,9 @@ class MainActivity : Activity() {
   private fun showServiceOrderCreate() {
     val catalog = statusText("正在拉取服务目录…")
     val catalogList = rowsContainer()
-    val itemId = editText("服务项 id(点上方目录自动回填)")
-    val performer = editText("履约员工 user_id(客人指定谁填谁)")
-    val tableId = editText("桌台 table_id(可空)")
+    val itemId = editText("服务项(点上方目录自动回填)")
+    val performer = editText("履约员工(客人指定谁填谁)")
+    val tableId = editText("桌台(可空)")
     val note = editText("备注(可空)")
     val status = statusText("下单后出示公司统一收款码,客人扫码支付、钱进公司账户;完成履约后管理费归公司,履约人应得份额月结进薪资并代扣个税。")
     val qrImage = android.widget.ImageView(this)
@@ -1057,7 +1060,7 @@ class MainActivity : Activity() {
       },
       onError = { catalog.text = "目录拉取失败：${friendly(it)}" },
     )
-    val lastOrderId = editText("服务单 id(下单后自动填)")
+    val lastOrderId = editText("服务单(下单后自动填)")
     val paidButton = primaryButton("已收款到公司账户(目视支付成功)") {
       val id = lastOrderId.text.toString().trim()
       if (id.isEmpty()) { status.text = "请先下单"; return@primaryButton }
@@ -1125,7 +1128,7 @@ class MainActivity : Activity() {
   private fun showMyServiceOrders() {
     val status = statusText("正在拉取我的服务任务…")
     val list = rowsContainer()
-    val orderId = editText("要操作的服务单 id(点上方任务自动回填)")
+    val orderId = editText("要操作的服务单(点上方任务自动回填)")
     val labels = mapOf("pending_accept" to "待接单", "accepted" to "已接单", "completed" to "已完成", "cancelled" to "已取消")
     val refresh = {
       runBackground(
@@ -1156,7 +1159,7 @@ class MainActivity : Activity() {
     }
     val acceptButton = primaryButton("接单") {
       val id = orderId.text.toString().trim()
-      if (id.isEmpty()) { status.text = "请填服务单 id"; return@primaryButton }
+      if (id.isEmpty()) { status.text = "请填服务单"; return@primaryButton }
       runBackground(
         action = { api.acceptServiceOrder(id, ServiceActionReq("acc_${System.currentTimeMillis()}")) },
         onSuccess = { status.text = "已接单：${it.id}"; refresh() },
@@ -1165,7 +1168,7 @@ class MainActivity : Activity() {
     }
     val completeButton = primaryButton("完成履约") {
       val id = orderId.text.toString().trim()
-      if (id.isEmpty()) { status.text = "请填服务单 id"; return@primaryButton }
+      if (id.isEmpty()) { status.text = "请填服务单"; return@primaryButton }
       runBackground(
         action = { api.completeServiceOrder(id, ServiceActionReq("cmp_${System.currentTimeMillis()}")) },
         onSuccess = { status.text = "已完成：${it.id}(已分账:管理费归公司,应得月结进薪资)"; refresh() },
@@ -1225,7 +1228,7 @@ class MainActivity : Activity() {
 
   private fun showStaffRegistration() {
     val name = editText("新员工姓名")
-    val projectId = editText("综合体 project_id")
+    val projectId = editText("综合体")
     val status = statusText("店长/HR 在自己手机上代新员工提交注册申请;后台审批通过后账号生效。")
     val submitButton = primaryButton("提交注册申请") {
       val n = name.text.toString().trim()
@@ -1237,7 +1240,7 @@ class MainActivity : Activity() {
             idempotencyKey = "byod_reg_${System.currentTimeMillis()}",
             projectId = pj, name = n, operatorNote = "BYOD 手机代提交"))
         },
-        onSuccess = { p -> status.text = "已提交：${p.name ?: n}(状态 ${p.status ?: "待审批"})" },
+        onSuccess = { p -> status.text = "已提交：${p.name ?: n}(状态 ${p.status?.let { staffStatusZh(it) } ?: "待审批"})" },
         onError = { status.text = "提交失败：${friendly(it)}" },
       )
     }
@@ -1274,15 +1277,15 @@ class MainActivity : Activity() {
 
   /** ① 首次配置本机所属酒吧并绑定设备（terminal_type=bar_pos）。绑定成功后本地持久化 bar_id。 */
   private fun showPosSetup() {
-    val barId = editText("本机所属酒吧 bar_id").apply {
+    val barId = editText("本机所属酒吧").apply {
       posPrefs.getString("bar_id", null)?.let { setText(it) }
     }
-    val deviceId = editText("设备编号 device_id").apply { setText("BARPOS-${System.currentTimeMillis()}") }
+    val deviceId = editText("设备编号").apply { setText("BARPOS-${System.currentTimeMillis()}") }
     val status = statusText("首次使用：把这台平板绑定到某个酒吧。绑定后进入图形点单，之后不再询问。")
     val bindButton = primaryButton("绑定并进入点单") {
       val bar = barId.text.toString().trim()
       val dev = deviceId.text.toString().trim()
-      if (bar.isEmpty()) { status.text = "请填写酒吧 bar_id"; return@primaryButton }
+      if (bar.isEmpty()) { status.text = "请填写酒吧"; return@primaryButton }
       if (dev.isEmpty()) { status.text = "请填写设备编号"; return@primaryButton }
       status.text = "正在绑定…"
       runBackground(
@@ -1299,7 +1302,7 @@ class MainActivity : Activity() {
         onSuccess = { binding ->
           posPrefs.edit().putString("bar_id", bar).apply()
           posBarId = bar
-          status.text = "绑定完成：${binding.deviceCode}（${binding.status}）"
+          status.text = "绑定完成：${binding.deviceCode}（${deviceStatusZh(binding.status)}）"
           showPosTables()
         },
         onError = { status.text = "绑定失败：${friendly(it)}" },
@@ -1549,7 +1552,7 @@ class MainActivity : Activity() {
         status.text = "正在结算…"
         runBackground(
           action = { workflow.settleBarBill(bill, cents, ch) },
-          onSuccess = { b -> status.text = "结算完成：账单 ${b.id}\n支付：${b.paymentStatus ?: "-"}，结算：${b.settlementStatus ?: "-"}" },
+          onSuccess = { b -> status.text = "结算完成：账单 ${b.id}\n支付：${statusZh(b.paymentStatus)}，结算：${statusZh(b.settlementStatus)}" },
           onError = { status.text = "结算失败：${friendly(it)}" },
         )
       }
@@ -1668,6 +1671,64 @@ class MainActivity : Activity() {
     inputType = InputType.TYPE_CLASS_TEXT
   }
 
+  /** 后端英文状态码->中文展示（仅改展示，不影响提交/存储的原值）；未知值兜底显示原文，不崩。
+   *  仅收录展示点用到、跨枚举语义稳定的状态词；含义随上下文而异的状态各自就地映射（见 maintStatusZh 等）。 */
+  private fun statusZh(raw: String?): String = when (raw) {
+    "pending" -> "处理中"
+    "paid" -> "已支付"; "partial_paid" -> "部分支付"; "unpaid" -> "未支付"
+    "settled" -> "已结算"; "unsettled" -> "未结算"; "not_required" -> "无需"
+    "pending_review" -> "待审核"; "active" -> "已生效"; "superseded" -> "已被替换"; "revoked" -> "已撤销"
+    "acknowledged" -> "已知悉"; "consented" -> "已同意"; "declined" -> "已拒绝"
+    else -> raw ?: "-"
+  }
+
+  /** 游乐检修记录状态->中文（此枚举 open/submitted 语义与其他域不同，故就地单独映射）。 */
+  private fun maintStatusZh(raw: String?): String = when (raw) {
+    "submitted" -> "已提交"; "pending_confirm" -> "待主管确认"; "confirmed" -> "已确认恢复"
+    "open" -> "已恢复运营"; "maintenance" -> "维保中"; "closed" -> "已关闭"
+    else -> raw ?: "-"
+  }
+
+  /** 中文枚举下拉：显示中文 label，提交时由调用方按 selectedItemPosition 取对应英文 token（后端强校验英文枚举，中文仅用于展示，绝不提交给后端）。 */
+  private fun enumSpinner(labels: List<String>): android.widget.Spinner = android.widget.Spinner(this).apply {
+    adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, labels).apply {
+      setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+    }
+  }
+
+  private fun fieldLabel(text: String): TextView = TextView(this).apply {
+    this.text = text
+    textSize = 13f
+    setTextColor(Color.parseColor("#6b7280"))
+    setPadding(dp(12), dp(8), dp(12), 0)
+  }
+
+  /** 终端设备绑定状态->中文（terminal_devices.status，见迁移 chk_terminal_devices_status CHECK 注释）。 */
+  private fun deviceStatusZh(raw: String?): String = when (raw) {
+    "bound" -> "已绑定"; "returned" -> "已归还"; "unbound" -> "已解绑"; "disabled" -> "已停用"
+    "repair" -> "送修中"; "lost" -> "挂失"; "found" -> "已找回"; "scrapped" -> "已报废"; "blocked" -> "已封禁"
+    else -> raw ?: "-"
+  }
+
+  /** 票务/游乐核销结果状态->中文（VerificationResponse.status，后端 ticketing 域）。 */
+  private fun verifyStatusZh(raw: String?): String = when (raw) {
+    "success" -> "核销成功"; "failed" -> "核销失败"; "rejected" -> "已拒绝"
+    "reversed" -> "已冲正"; "revoked" -> "已作废"
+    else -> raw ?: "-"
+  }
+
+  /** 酒吧桌型->中文（bar table_type 字典：bar/standard/card_seat）。 */
+  private fun tableTypeZh(raw: String?): String = when (raw) {
+    "bar" -> "吧台"; "standard" -> "普通桌"; "card_seat" -> "卡座"
+    else -> raw ?: ""
+  }
+
+  /** 员工账号状态->中文（StaffProfileRecord.status = active/inactive；与 registration_status 不同域，不共用 statusZh）。 */
+  private fun staffStatusZh(raw: String?): String = when (raw) {
+    "active" -> "正常"; "inactive" -> "停用"
+    else -> raw ?: "-"
+  }
+
   private fun primaryButton(text: String, onClick: () -> Unit): Button = Button(this).apply {
     this.text = text
     setOnClickListener { onClick() }
@@ -1690,7 +1751,7 @@ class MainActivity : Activity() {
     if (lines.isEmpty()) return "提成明细: 本月无提成台账"
     val label = mapOf(
       "bar_table" to "酒水/卡座提成", "service_order" to "服务点单份额",
-      "amusement" to "游乐提成", "ticket" to "票务提成",
+      "amusement" to "游乐提成", "ticket" to "票务提成", "other" to "其他",
     )
     return buildString {
       append("提成明细(按来源):\n")
@@ -1731,7 +1792,7 @@ class MainActivity : Activity() {
           "rejected" -> "已驳回"; "suspended" -> "已停用"
           else -> p.registrationStatus ?: "-"
         }
-        status.text = "档案状态: $reg / ${p.status ?: "-"}(手机、证件仅存不可逆加密，不可回显)"
+        status.text = "档案状态: $reg / ${staffStatusZh(p.status)}(手机、证件仅存不可逆加密，不可回显)"
       },
       onError = { status.text = "拉取失败：${friendly(it)}(本账号可能无员工档案)" },
     )
