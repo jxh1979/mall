@@ -163,6 +163,16 @@ public class AnalyticsController {
         return ApiResponse.ok(service.exportMonthlyReport(month));
     }
 
+    @GetMapping("/rent-to-sales")
+    public ApiResponse<AnalyticsRecords.RentToSalesResponse> rentToSales(
+            @org.springframework.web.bind.annotation.RequestParam(value = "month", required = false) String month) {
+        // P1c 店级/业态级租售比：租金(月租+营业额抽成) / 第三方回流营业额；店级/业态级/平台级三档，
+        // 平台级分母含未归属营业额（诚实标注）。跨商户平台级聚合→ fail-closed 拒绝商户级调用方。
+        authorizationService.requirePermission("contract.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(service.rentToSales(month));
+    }
+
     @GetMapping("/work-order-sla/overdue-orders")
     public ApiResponse<PageResponse<AnalyticsRecords.OverdueWorkOrderRow>> listOverdueWorkOrders(
             @org.springframework.web.bind.annotation.RequestParam(value = "source", required = false, defaultValue = "facility") String source,

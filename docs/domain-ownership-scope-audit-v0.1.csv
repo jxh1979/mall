@@ -142,8 +142,9 @@ floor_plan_shapes,inherited,floor_plan_id/task_id,floor_plan_id/task_id -> mall_
 giveaway_cost_configs,direct,project_id,project_id column on giveaway_cost_configs,ready for project/merchant scoped query enforcement,covered
 holiday_calendar,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 idempotency_records,inherited,operation_key,operation_key -> request route + actor + business operation,must join through scope path before multi-complex rollout,covered
+integration_channel_store_map,direct,merchant_id,merchant_id column on integration_channel_store_map,ready for project/merchant scoped query enforcement,covered
 integration_compensation_tasks,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
-integration_order_syncs,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
+integration_order_syncs,direct,merchant_id,merchant_id column on integration_order_syncs,ready for project/merchant scoped query enforcement,covered
 integration_provider_adapter_tests,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 integration_provider_adapters,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 integration_read_ledger,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered

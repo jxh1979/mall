@@ -211,12 +211,12 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 INSERT INTO integration_order_syncs (
                     id, provider_code, business_type, sync_type, external_business_id,
                     status, amount_cent, currency, channel, external_channel_order_id,
-                    provider_payload_json, created_at, updated_at
+                    merchant_id, provider_payload_json, created_at, updated_at
                 )
                 VALUES (
                     :id, :provider_code, :business_type, :sync_type, :external_business_id,
                     :status, :amount_cent, :currency, :channel, :external_channel_order_id,
-                    CAST(:provider_payload_json AS jsonb), :created_at, :updated_at
+                    :merchant_id, CAST(:provider_payload_json AS jsonb), :created_at, :updated_at
                 )
                 ON CONFLICT (provider_code, business_type, sync_type, external_business_id) DO UPDATE SET
                     status = EXCLUDED.status,
@@ -224,6 +224,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                     currency = EXCLUDED.currency,
                     channel = EXCLUDED.channel,
                     external_channel_order_id = EXCLUDED.external_channel_order_id,
+                    merchant_id = EXCLUDED.merchant_id,
                     provider_payload_json = EXCLUDED.provider_payload_json,
                     updated_at = EXCLUDED.updated_at
                 """, orderSyncParameters(record));
@@ -235,7 +236,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,
                        status, amount_cent, currency, channel, external_channel_order_id,
-                       provider_payload_json, created_at, updated_at
+                       merchant_id, provider_payload_json, created_at, updated_at
                   FROM integration_order_syncs
                  ORDER BY created_at DESC, id
                  LIMIT 200
@@ -252,7 +253,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,
                        status, amount_cent, currency, channel, external_channel_order_id,
-                       provider_payload_json, created_at, updated_at
+                       merchant_id, provider_payload_json, created_at, updated_at
                   FROM integration_order_syncs
                  WHERE provider_code = :provider_code
                    AND business_type = :business_type
@@ -264,6 +265,113 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 "sync_type", syncType,
                 "external_business_id", externalBusinessId
         ), rowMapper::mapOrderSync).stream().findFirst();
+    }
+
+    @Override
+    public IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_channel_store_map (
+                    id, provider_code, channel, external_store_id, merchant_id,
+                    status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :provider_code, :channel, :external_store_id, :merchant_id,
+                    :status, :created_at, :updated_at
+                )
+                ON CONFLICT (provider_code, channel, external_store_id) DO UPDATE SET
+                    merchant_id = EXCLUDED.merchant_id,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", record.id())
+                .addValue("provider_code", record.providerCode())
+                .addValue("channel", record.channel())
+                .addValue("external_store_id", record.externalStoreId())
+                .addValue("merchant_id", record.merchantId())
+                .addValue("status", record.status())
+                .addValue("created_at", timestampWithTimeZone(record.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(record.updatedAt())));
+        return record;
+    }
+
+    @Override
+    public List<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, channel, external_store_id, merchant_id,
+                       status, created_at, updated_at
+                  FROM integration_channel_store_map
+                 ORDER BY updated_at DESC, id
+                 LIMIT 200
+                """, rowMapper::mapChannelStoreMap);
+    }
+
+    @Override
+    public Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, channel, external_store_id, merchant_id,
+                       status, created_at, updated_at
+                  FROM integration_channel_store_map
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapChannelStoreMap).stream().findFirst();
+    }
+
+    @Override
+    public Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapByNaturalKey(
+            String providerCode, String channel, String externalStoreId) {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, channel, external_store_id, merchant_id,
+                       status, created_at, updated_at
+                  FROM integration_channel_store_map
+                 WHERE provider_code = :provider_code
+                   AND channel = :channel
+                   AND external_store_id = :external_store_id
+                """, Map.of(
+                "provider_code", providerCode,
+                "channel", channel,
+                "external_store_id", externalStoreId
+        ), rowMapper::mapChannelStoreMap).stream().findFirst();
+    }
+
+    @Override
+    public Optional<String> findActiveChannelStoreMapMerchant(
+            String providerCode, String channel, String externalStoreId) {
+        return jdbcTemplate.query("""
+                SELECT merchant_id
+                  FROM integration_channel_store_map
+                 WHERE provider_code = :provider_code
+                   AND channel = :channel
+                   AND external_store_id = :external_store_id
+                   AND status = 'active'
+                """, Map.of(
+                "provider_code", providerCode,
+                "channel", channel,
+                "external_store_id", externalStoreId
+        ), (rs, n) -> rs.getString("merchant_id")).stream().findFirst();
+    }
+
+    @Override
+    public boolean merchantExists(String merchantId) {
+        if (merchantId == null || merchantId.isBlank()) {
+            return false;
+        }
+        Boolean exists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS(SELECT 1 FROM merchants WHERE id = :id)",
+                Map.of("id", merchantId), Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
+    public List<IntegrationOrderSyncRecord> listUnattributedOrderSyncs() {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, business_type, sync_type, external_business_id,
+                       status, amount_cent, currency, channel, external_channel_order_id,
+                       merchant_id, provider_payload_json, created_at, updated_at
+                  FROM integration_order_syncs
+                 WHERE merchant_id IS NULL
+                   AND sync_type = 'order'
+                 ORDER BY created_at DESC, id
+                 LIMIT 200
+                """, rowMapper::mapOrderSync);
     }
 
     @Override
@@ -624,6 +732,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 .addValue("currency", record.currency())
                 .addValue("channel", record.channel())
                 .addValue("external_channel_order_id", record.externalChannelOrderId())
+                .addValue("merchant_id", record.merchantId())
                 .addValue("provider_payload_json", writeJson(record.providerPayload()))
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));

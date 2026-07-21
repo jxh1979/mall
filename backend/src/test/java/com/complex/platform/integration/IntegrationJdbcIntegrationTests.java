@@ -10,6 +10,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import com.complex.platform.finance.FinanceRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,9 @@ class IntegrationJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private FinanceRepository financeRepository;
 
     @Test
     void migrationCreatesIntegrationTablesAndSeedsPermissions() {
@@ -232,6 +236,7 @@ class IntegrationJdbcIntegrationTests {
                 "CNY",
                 "meituan",
                 "mt-jdbc-1",
+                null,
                 Map.of("provider_private_status", "PAID"),
                 now,
                 now
@@ -332,6 +337,81 @@ class IntegrationJdbcIntegrationTests {
                 .get()
                 .extracting(ReconciliationDifferenceRecord::differenceAmountCent, ReconciliationDifferenceRecord::status)
                 .containsExactly(100L, "open");
+    }
+
+    @Test
+    void turnoverAttributionNetsRefundsAndExcludesUnattributedRows() {
+        // P1b 抽成取数真查询：实收 = SUM(order) − SUM(refund)（口径①含税毛额 ②扣退款），
+        // 仅计已归属该商户且 status='synced' 的 [from,to) 窗口行；merchant_id IS NULL（未归属）
+        // 与他商户与非 synced 行皆不计——未归属只进平台级 / 未归属视图，绝不静默塞给某商户。
+        Instant base = Instant.parse("2026-05-10T00:00:00Z");
+        seedMerchant("mch_turn_a");
+        seedMerchant("mch_turn_b");
+        saveOrder("os_a_o1", "mch_turn_a", "order", "synced", 100000L, base);
+        saveOrder("os_a_o2", "mch_turn_a", "order", "synced", 50000L, base.plusSeconds(3600));
+        saveOrder("os_a_r1", "mch_turn_a", "refund", "synced", 30000L, base.plusSeconds(7200));
+        saveOrder("os_a_pending", "mch_turn_a", "order", "received", 99999L, base);
+        saveOrder("os_b_o1", "mch_turn_b", "order", "synced", 88888L, base);
+        saveOrder("os_null_o1", null, "order", "synced", 77777L, base);
+
+        Instant from = Instant.parse("2026-05-01T00:00:00Z");
+        Instant to = Instant.parse("2026-06-01T00:00:00Z");
+        assertThat(financeRepository.aggregateMerchantReflowTurnover("mch_turn_a", from, to)).isEqualTo(120000L);
+        assertThat(financeRepository.aggregateMerchantReflowTurnover("mch_turn_a",
+                Instant.parse("2026-06-01T00:00:00Z"), Instant.parse("2026-07-01T00:00:00Z"))).isEqualTo(0L);
+        assertThat(repository.listUnattributedOrderSyncs())
+                .extracting(IntegrationOrderSyncRecord::id).contains("os_null_o1")
+                .doesNotContain("os_a_o1");
+    }
+
+    @Test
+    void channelStoreMapPersistsAndResolvesActiveBindingOnly() {
+        // P1a 渠道门店映射：登记 → 活跃反查命中；软删（inactive）后活跃反查落空（同 id upsert）。
+        assertThat(regclass("integration_channel_store_map")).isEqualTo("integration_channel_store_map");
+        assertThat(permissionCodes()).contains(
+                "integration.channel_store_map.view", "integration.channel_store_map.manage");
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES ('mch_map_a', '映射商户', 'bar', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        Instant now = Instant.parse("2026-05-10T00:00:00Z");
+        repository.saveChannelStoreMap(new IntegrationChannelStoreMapRecord(
+                "csm_1", "mock-provider", "douyin", "store-abc", "mch_map_a", "active", now, now));
+        assertThat(repository.findActiveChannelStoreMapMerchant("mock-provider", "douyin", "store-abc"))
+                .contains("mch_map_a");
+        assertThat(repository.findActiveChannelStoreMapMerchant("mock-provider", "douyin", "store-none")).isEmpty();
+        repository.saveChannelStoreMap(new IntegrationChannelStoreMapRecord(
+                "csm_1", "mock-provider", "douyin", "store-abc", "mch_map_a", "inactive", now, now));
+        assertThat(repository.findActiveChannelStoreMapMerchant("mock-provider", "douyin", "store-abc")).isEmpty();
+        assertThat(repository.findChannelStoreMapByNaturalKey("mock-provider", "douyin", "store-abc"))
+                .get().extracting(IntegrationChannelStoreMapRecord::status).isEqualTo("inactive");
+    }
+
+    @Test
+    void orderSyncMerchantIdForeignKeyRejectsUnknownMerchant() {
+        // 整型 backstop（P1 资金复核）：非空 merchant_id 指向不存在商户 → FK 拒绝。落商户解析器已保证
+        // 到不了这（查无此商户 → 置 NULL），此 FK 仅挡绕开解析器的直插脏值，防真实营业额报表隐形。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type, "
+                + "external_business_id, status, amount_cent, currency, created_at, updated_at, merchant_id) "
+                + "VALUES ('ios_fk_bad', 'meituan', 'catering', 'order', 'ext_fk_bad', 'synced', 100, 'CNY', "
+                + "now(), now(), 'merchant_does_not_exist')"))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    private void seedMerchant(String id) {
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES (?, ?, 'bar', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """, id, id);
+    }
+
+    private void saveOrder(String id, String merchantId, String syncType, String status, long amountCent, Instant at) {
+        repository.saveOrderSync(new IntegrationOrderSyncRecord(
+                id, "mock-provider", "catering", syncType, "ext-" + id, status, amountCent, "CNY",
+                "meituan", null, merchantId, Map.of(), at, at));
     }
 
     private String regclass(String tableName) {

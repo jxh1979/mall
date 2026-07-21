@@ -1340,6 +1340,70 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public AnalyticsRecords.RentToSalesAggregate rentToSales(String period) {
+        // P1c 店级/业态级租售比取数（2026-07-21 用户拍板 8 口径）。
+        // 分子=租金：ar_ap_items 应收 source_type∈(contract_rent 月租, turnover_rent 营业额抽成)，
+        //   按 accounting_period=:period（YYYY-MM，两类租金同期键，与分红挂接同口径）归期，仅已归属商户（merchant_id NOT NULL）。
+        // 分母=营业额：integration_order_syncs 第三方回流，status='synced'、sync_type∈(order,refund) 实收净额
+        //   （口径①含税毛额 ②扣退款；voucher_verification 通票核销不进抽成基数，排除），
+        //   经营日窗口 [期首, 次月首) 按业务日切派生（与营业额抽成计费引擎 aggregateMerchantReflowTurnover 同窗）。
+        //   商户级净额 GREATEST(…,0) 钳 0（负营业额无业务意义，同抽成口径）。
+        // NULL merchant_id 的回流营业额=未归属：不进任何商户/业态，只汇入平台级分母（口径③⑧，诚实标注，绝不塞给某商户）。
+        java.time.YearMonth ym = java.time.YearMonth.parse(period);
+        java.time.Instant windowStart = businessDayResolver.startInstant(ym.atDay(1));
+        java.time.Instant windowEnd = businessDayResolver.startInstant(ym.plusMonths(1).atDay(1));
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("period", period)
+                .addValue("window_start", timestampWithTimeZone(windowStart))
+                .addValue("window_end", timestampWithTimeZone(windowEnd));
+
+        java.util.List<AnalyticsRecords.RentToSalesMerchantRow> merchants = jdbcTemplate.query("""
+                WITH rent AS (
+                    SELECT merchant_id, SUM(amount_cent) AS rent_cent
+                      FROM ar_ap_items
+                     WHERE direction = 'receivable'
+                       AND source_type IN ('contract_rent', 'turnover_rent')
+                       AND merchant_id IS NOT NULL
+                       AND accounting_period = :period
+                     GROUP BY merchant_id
+                ),
+                sales AS (
+                    SELECT merchant_id,
+                           SUM(CASE sync_type WHEN 'order' THEN amount_cent
+                                              WHEN 'refund' THEN -amount_cent ELSE 0 END) AS sales_cent
+                      FROM integration_order_syncs
+                     WHERE merchant_id IS NOT NULL
+                       AND status = 'synced'
+                       AND sync_type IN ('order', 'refund')
+                       AND created_at >= :window_start AND created_at < :window_end
+                     GROUP BY merchant_id
+                )
+                SELECT m.id AS merchant_id, m.merchant_name, m.merchant_type,
+                       COALESCE(r.rent_cent, 0) AS rent_cent,
+                       GREATEST(COALESCE(s.sales_cent, 0), 0) AS sales_cent
+                  FROM merchants m
+                  JOIN (SELECT merchant_id FROM rent UNION SELECT merchant_id FROM sales) ids ON ids.merchant_id = m.id
+                  LEFT JOIN rent r ON r.merchant_id = m.id
+                  LEFT JOIN sales s ON s.merchant_id = m.id
+                 ORDER BY rent_cent DESC, sales_cent DESC, m.id
+                """, params, (rs, n) -> new AnalyticsRecords.RentToSalesMerchantRow(
+                        rs.getString("merchant_id"), rs.getString("merchant_name"), rs.getString("merchant_type"),
+                        rs.getLong("rent_cent"), rs.getLong("sales_cent")));
+
+        Long unattributed = jdbcTemplate.queryForObject("""
+                SELECT GREATEST(COALESCE(SUM(CASE sync_type WHEN 'order' THEN amount_cent
+                                                            WHEN 'refund' THEN -amount_cent ELSE 0 END), 0), 0)
+                  FROM integration_order_syncs
+                 WHERE merchant_id IS NULL
+                   AND status = 'synced'
+                   AND sync_type IN ('order', 'refund')
+                   AND created_at >= :window_start AND created_at < :window_end
+                """, params, Long.class);
+
+        return new AnalyticsRecords.RentToSalesAggregate(merchants, unattributed == null ? 0L : unattributed);
+    }
+
+    @Override
     public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now) {
         jdbcTemplate.update("""

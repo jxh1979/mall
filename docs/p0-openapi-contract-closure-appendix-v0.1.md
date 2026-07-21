@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 678 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 679 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 321 | 人工权限矩阵正文未覆盖 219 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1356 | 人工事件矩阵正文未覆盖 1314 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 678 | 人工任务映射正文未逐项覆盖 672 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1358 | 人工事件矩阵正文未覆盖 1316 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 679 | 人工任务映射正文未逐项覆盖 673 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 408 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -145,7 +145,7 @@
 | `contract.settlement.dispute.resolve` | staff-token | platform | 1 | resolveContractDispute | OpenAPI 补充，以本附录为准 |
 | `contract.settlement.manage` | staff-token | platform | 4 | settleContract, listContractSettlements, completeContractSettlement, advanceContractSettlement | OpenAPI 补充，以本附录为准 |
 | `contract.space.color.manage` | staff-token | platform | 2 | listSpaceExpiryColorRules, saveSpaceExpiryColorRule | OpenAPI 补充，以本附录为准 |
-| `contract.view` | staff-token | merchant, platform | 3 | listMerchantPortalContracts, listVacantSpaces, listExpiringContracts | 已在权限矩阵正文出现 |
+| `contract.view` | staff-token | merchant, platform | 4 | listMerchantPortalContracts, listVacantSpaces, listExpiringContracts, getRentToSales | 已在权限矩阵正文出现 |
 | `customer.account.manage` | staff-token | platform | 4 | lookupCustomerAccountByPhone, suspendCustomerAccount, blacklistCustomerAccount, reinstateCustomerAccount | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.evaluate` | staff-token | project | 1 | evaluateMemberLevel | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.view` | staff-token | project | 1 | listMemberLevels | OpenAPI 补充，以本附录为准 |
@@ -572,6 +572,8 @@
 | `analytics.operating_params.viewed` | success | `listOperatingParams` | `GET` | `/api/v1/analytics/operating-params` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.overdue_work_orders.view_failed` | failure | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | ANA-风控分析 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `analytics.overdue_work_orders.viewed` | success | `listOverdueWorkOrders` | `GET` | `/api/v1/analytics/work-order-sla/overdue-orders` | ANA-风控分析 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `analytics.rent_to_sales.view_failed` | failure | `getRentToSales` | `GET` | `/api/v1/analytics/rent-to-sales` | ANA-风控分析 | `contract.view` | 接口级事件，以本附录为准 |
+| `analytics.rent_to_sales.viewed` | success | `getRentToSales` | `GET` | `/api/v1/analytics/rent-to-sales` | ANA-风控分析 | `contract.view` | 接口级事件，以本附录为准 |
 | `analytics.revenue_attribution_rule.update_failed` | failure | `upsertRevenueAttributionRule` | `POST` | `/api/v1/analytics/revenue-attribution-rules` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
 | `analytics.revenue_attribution_rule.updated` | success | `upsertRevenueAttributionRule` | `POST` | `/api/v1/analytics/revenue-attribution-rules` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
 | `analytics.revenue_attribution_rule.view_failed` | failure | `listRevenueAttributionRules` | `GET` | `/api/v1/analytics/revenue-attribution-rules` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -1790,6 +1792,7 @@
 | ANA-风控分析 | `getMetricDetail` | `GET` | `/api/v1/analytics/metric-detail` | KPI统一指标明细(指标登记簿) | `analytics.dashboard.view` | `analytics.metric_detail.viewed` / `analytics.metric_detail.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getMonthlyComparison` | `GET` | `/api/v1/analytics/monthly-comparison` | 月度对比(环比/同比) | `analytics.dashboard.view` | `analytics.monthly_comparison.viewed` / `analytics.monthly_comparison.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | P0 经营总览 | `analytics.dashboard.view` | `analytics.dashboard_viewed` / `analytics.dashboard_view_failed` | web | operation 级补充 |
+| ANA-风控分析 | `getRentToSales` | `GET` | `/api/v1/analytics/rent-to-sales` | 店级/业态级/平台级租售比 | `contract.view` | `analytics.rent_to_sales.viewed` / `analytics.rent_to_sales.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getRobotAnalytics` | `GET` | `/api/v1/analytics/robot` | 获取机器人经营分析 | `analytics.dashboard.view` | `analytics.robot.viewed` / `analytics.robot.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAbnormalReadings` | `GET` | `/api/v1/analytics/energy/abnormal-readings` | 异常读数明细(能耗钻取) | `energy.reading.manage` | `analytics.abnormal_readings.viewed` / `analytics.abnormal_readings.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | 查询ai质检结果 | `analytics.risk_alert.view` | `analytics.ai_quality_result.viewed` / `analytics.ai_quality_result.viewed_failed` | web | operation 级补充 |

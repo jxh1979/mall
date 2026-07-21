@@ -189,6 +189,90 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void rentToSalesAggregatesByMerchantExcludesVoucherAndNetsRefundsAndKeepsUnattributed() {
+        // P1c(2026-07-21 拍板):分子=contract_rent+turnover_rent 按 accounting_period;分母=第三方回流净额
+        //   (order−refund,排除 voucher_verification 通票核销 / 非 synced);未归属(merchant_id NULL)只进平台级桶。
+        //   2099-09 远期窗口隔离共享库。
+        String period = "2099-09";
+        p1cMerchant("mch_p1c_a", "catering");
+        p1cMerchant("mch_p1c_b", "catering");
+        p1cMerchant("mch_p1c_c", "retail");
+        p1cMerchant("mch_p1c_d", "retail");
+        java.time.LocalDate due = java.time.LocalDate.parse("2099-09-01");
+        // 租金:A=合同租金 100000 + 营业额抽成 20000;B=50000;C=30000;另 A 一笔物业费(非租金)必须排除。
+        p1cRent("ar_p1c_a1", "mch_p1c_a", "contract_rent", 100000, due, period);
+        p1cRent("ar_p1c_a2", "mch_p1c_a", "turnover_rent", 20000, due, period);
+        p1cRent("ar_p1c_b1", "mch_p1c_b", "contract_rent", 50000, due, period);
+        p1cRent("ar_p1c_c1", "mch_p1c_c", "contract_rent", 30000, due, period);
+        p1cRent("ar_p1c_a_pf", "mch_p1c_a", "contract_property_fee", 99999, due, period);
+        // 营业额:A order 600000 − refund 100000 = 500000;voucher 999999 与非 synced order 888888 均排除。
+        p1cSync("ios_p1c_a_o", "mch_p1c_a", "order", "synced", 600000);
+        p1cSync("ios_p1c_a_r", "mch_p1c_a", "refund", "synced", 100000);
+        p1cSync("ios_p1c_a_v", "mch_p1c_a", "voucher_verification", "synced", 999999);
+        p1cSync("ios_p1c_a_x", "mch_p1c_a", "order", "received", 888888);
+        p1cSync("ios_p1c_b_o", "mch_p1c_b", "order", "synced", 200000);
+        p1cSync("ios_p1c_d_o", "mch_p1c_d", "order", "synced", 400000);
+        // 未归属(merchant_id NULL):order 300000 − refund 50000 = 250000;voucher 700000 不计。
+        p1cSync("ios_p1c_u_o", null, "order", "synced", 300000);
+        p1cSync("ios_p1c_u_r", null, "refund", "synced", 50000);
+        p1cSync("ios_p1c_u_v", null, "voucher_verification", "synced", 700000);
+
+        AnalyticsRecords.RentToSalesAggregate agg = repository.rentToSales(period);
+        java.util.Map<String, AnalyticsRecords.RentToSalesMerchantRow> byId = agg.merchants().stream()
+                .filter(r -> r.merchantId().startsWith("mch_p1c_"))
+                .collect(java.util.stream.Collectors.toMap(
+                        AnalyticsRecords.RentToSalesMerchantRow::merchantId, r -> r));
+        assertThat(byId).hasSize(4);
+        // 商户级:租金只算两类租金(排除物业费)、营业额净额(减退款、排除通票/非 synced);merchant_type 供业态级分组。
+        assertThat(byId.get("mch_p1c_a").rentCent()).isEqualTo(120000L);
+        assertThat(byId.get("mch_p1c_a").salesCent()).isEqualTo(500000L);
+        assertThat(byId.get("mch_p1c_a").merchantType()).isEqualTo("catering");
+        assertThat(byId.get("mch_p1c_b").rentCent()).isEqualTo(50000L);
+        assertThat(byId.get("mch_p1c_b").salesCent()).isEqualTo(200000L);
+        // C 有租金无营业额(分母 0,店级比率 null 的来源);D 有营业额无租金(UNION 另一侧)。
+        assertThat(byId.get("mch_p1c_c").rentCent()).isEqualTo(30000L);
+        assertThat(byId.get("mch_p1c_c").salesCent()).isEqualTo(0L);
+        assertThat(byId.get("mch_p1c_c").merchantType()).isEqualTo("retail");
+        assertThat(byId.get("mch_p1c_d").rentCent()).isEqualTo(0L);
+        assertThat(byId.get("mch_p1c_d").salesCent()).isEqualTo(400000L);
+        // 未归属营业额只进平台级桶:order 300000 − refund 50000 = 250000(通票 700000 不计)。
+        assertThat(agg.unattributedSalesCent()).isEqualTo(250000L);
+    }
+
+    private void p1cMerchant(String id, String type) {
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES (:id, :id, :type, 'active', now(), now()) ON CONFLICT (id) DO NOTHING
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("type", type));
+    }
+
+    private void p1cRent(String id, String merchantId, String sourceType, long amountCent,
+            java.time.LocalDate due, String period) {
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, source_type, counterparty_id, amount_cent,
+                        paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period, status,
+                        created_at, updated_at, merchant_id)
+                VALUES (:id, :id, 'receivable', :st, :mid, :amt, 0, :amt, 'CNY', :due, :period,
+                        'pending_collection', now(), now(), :mid)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("st", sourceType).addValue("mid", merchantId)
+                .addValue("amt", amountCent).addValue("due", due).addValue("period", period));
+    }
+
+    private void p1cSync(String id, String merchantId, String syncType, String status, long amountCent) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type,
+                        external_business_id, status, amount_cent, currency, created_at, updated_at, merchant_id)
+                VALUES (:id, 'meituan', 'catering', :stype, :id, :status, :amt, 'CNY', :at, :at, :mid)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("stype", syncType).addValue("status", status)
+                .addValue("amt", amountCent)
+                .addValue("mid", merchantId, java.sql.Types.VARCHAR)
+                .addValue("at", java.sql.Timestamp.from(java.time.Instant.parse("2099-09-15T08:00:00Z"))));
+    }
+
+    @Test
     void workOrderSlaHonorsWindowAndOverdueDrilldownMatches() {
         // S4(真库):P50 只算落窗、超时含"完成晚于时限"与"未完成且时限已过"、明细与分子同过滤。2099 窗隔离共享库。
         java.time.Instant start = java.time.Instant.parse("2099-01-01T04:00:00Z");

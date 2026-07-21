@@ -7,11 +7,14 @@ import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 type MetricValue = { value?: number | string | null; unit?: string | null; note?: string | null };
 type LeasingDashboard = { businessDate?: string; metrics?: Record<string, MetricValue> };
 type VacantRow = { spaceId: string; spaceName?: string; spaceType?: string; floorNo?: string; areaSqm?: number | string; rentalStatus?: string };
 type ExpiringRow = { contractId: string; merchantId?: string; merchantName?: string; expiryDate?: string; daysLeft?: number; boundArea?: number | string };
+type RentToSalesRow = { key: string; label: string; rentCent?: number; salesCent?: number; ratioBps?: number | null; note?: string | null };
+type RentToSales = { period?: string; byMerchant?: RentToSalesRow[]; byMerchantType?: RentToSalesRow[]; platform?: RentToSalesRow | null; unattributedSalesCent?: number; note?: string | null };
 
 const TEXT = {
   title: "出租与到期",
@@ -37,6 +40,16 @@ function pct(value: number | null) {
   return value === null ? "—" : `${(value * 100).toFixed(2)}%`;
 }
 
+function money(cent?: number | null) {
+  if (cent === null || cent === undefined || !Number.isFinite(cent)) return "—";
+  return `${new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cent / 100)} 元`;
+}
+
+// 租售比:基点→百分比;无第三方营业额归属(ratioBps=null)诚实标,不伪造为 0(口径③)。
+function ratioLabel(bps?: number | null) {
+  return bps === null || bps === undefined ? "—（无营业额归属）" : `${(bps / 100).toFixed(2)}%`;
+}
+
 // KPI 聚焦（照样板）：本页多为比率/面积指标（无承载表，不可点）；仅「空置面积」承载空置铺位明细表、
 // 「90 天内到期」承载到期预警表两卡可点。?kpi=<vacant|expiring>。
 type KpiTable = "vacant" | "expiring";
@@ -53,6 +66,8 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
   const [vacantNotice, setVacantNotice] = React.useState<string | null>(null);
   const [expiring, setExpiring] = React.useState<ExpiringRow[]>([]);
   const [expiringNotice, setExpiringNotice] = React.useState<string | null>(null);
+  const [rentToSales, setRentToSales] = React.useState<RentToSales | null>(null);
+  const [rentToSalesNotice, setRentToSalesNotice] = React.useState<string | null>(null);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTable | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该空置铺位/到期合同完整字段（类型/状态中文·面积·日期中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -84,16 +99,19 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
     async () => {
       // 副资源容错（外包页范式）：空置铺位/到期预警两张下钻表可能因权限/500 单独失败——
       // 各自降级为区块提示，不拖垮出租率等仪表盘 KPI 主内容。
-      const [dash, vacantRows, expiringRows] = await Promise.all([
+      const [dash, vacantRows, expiringRows, r2sRes] = await Promise.all([
         api.get<LeasingDashboard>("/api/v1/analytics/dashboards/leasing"),
         loadSecondary(() => api.get<VacantRow[]>("/api/v1/analytics/occupancy/vacant-spaces?limit=200"), [] as VacantRow[]),
         loadSecondary(() => api.get<ExpiringRow[]>("/api/v1/analytics/occupancy/expiring-contracts?window_days=90&limit=200"), [] as ExpiringRow[]),
+        loadSecondary<RentToSales | null>(() => api.get<RentToSales>("/api/v1/analytics/rent-to-sales"), null),
       ]);
       setDashboard(dash);
       setVacant(vacantRows.data);
       setVacantNotice(vacantRows.notice);
       setExpiring(expiringRows.data);
       setExpiringNotice(expiringRows.notice);
+      setRentToSales(r2sRes.data);
+      setRentToSalesNotice(r2sRes.notice);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -198,10 +216,64 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
     </>
   );
 
+  const rentToSalesSection = (
+    <>
+      <h3>租售比(店级 / 业态级 / 平台级)</h3>
+      {rentToSalesNotice ? (
+        <div className="admin-state" data-testid="occupancy-r2s-degraded">{rentToSalesNotice}</div>
+      ) : !rentToSales ? (
+        <div className="admin-state" data-testid="occupancy-r2s-empty">暂无租售比数据</div>
+      ) : (
+        <>
+          <div className="admin-muted-action" data-testid="occupancy-r2s-note">
+            口径:租售比 = 当期租金(月租应收 + 营业额抽成) ÷ 第三方回流营业额(含税毛额、扣退款)。
+            {rentToSales.period ? `统计期 ${rentToSales.period}。` : ""}{rentToSales.note ?? ""}
+          </div>
+          <div className="admin-kpi-grid" data-testid="occupancy-r2s-platform">
+            <div className="admin-kpi-card"><span>平台级租售比</span><span className="admin-kpi-value" data-testid="occupancy-r2s-platform-ratio">{ratioLabel(rentToSales.platform?.ratioBps)}</span><small>租金 {money(rentToSales.platform?.rentCent)} / 营业额 {money(rentToSales.platform?.salesCent)}(分母含未归属)</small></div>
+            <div className="admin-kpi-card"><span>未归属营业额</span><span className="admin-kpi-value" data-testid="occupancy-r2s-unattributed">{money(rentToSales.unattributedSalesCent)}</span><small>无门店号 / 未维护渠道映射,仅计入平台级分母,不摊入任何店</small></div>
+          </div>
+          <h4>按业态(复用商户业态)</h4>
+          <div className="admin-table-scroll">
+            <table className="admin-table" data-testid="occupancy-r2s-type-table">
+              <thead><tr><th>业态</th><th>租金</th><th>第三方营业额</th><th>租售比</th></tr></thead>
+              <tbody>
+                {(rentToSales.byMerchantType ?? []).map((row) => (
+                  <tr key={row.key} data-testid={`occupancy-r2s-type-${row.key || "unknown"}`}>
+                    <td>{formatBusinessStatus(row.key)}</td>
+                    <td>{money(row.rentCent)}</td>
+                    <td>{money(row.salesCent)}</td>
+                    <td>{ratioLabel(row.ratioBps)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <h4>按门店(商户即店)</h4>
+          <div className="admin-table-scroll">
+            <table className="admin-table" data-testid="occupancy-r2s-merchant-table">
+              <thead><tr><th>商户</th><th>租金</th><th>第三方营业额</th><th>租售比</th></tr></thead>
+              <tbody>
+                {(rentToSales.byMerchant ?? []).map((row) => (
+                  <tr key={row.key} data-testid={`occupancy-r2s-merchant-${row.key}`}>
+                    <td>{row.label}</td>
+                    <td>{money(row.rentCent)}</td>
+                    <td>{money(row.salesCent)}</td>
+                    <td>{ratioLabel(row.ratioBps)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+
   return (
     <section data-testid="occupancy-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="analytics.dashboard_domain.viewed / analytics.vacant_spaces.viewed / analytics.expiring_contracts.viewed" />
+      <AuditTrailHint event="analytics.dashboard_domain.viewed / analytics.vacant_spaces.viewed / analytics.expiring_contracts.viewed / analytics.rent_to_sales.viewed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {kpiFocus ? (
           <>
@@ -223,6 +295,7 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
             </div>
             {vacantSection}
             {expiringSection}
+            {rentToSalesSection}
           </>
         )}
       </AdminDataState>

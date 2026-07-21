@@ -218,6 +218,12 @@ public interface AnalyticsRepository {
     /** V220 第三方回流营业额(integration_order_syncs 无 merchant_id → 仅平台级;租售比分母)。 */
     java.math.BigDecimal sumThirdpartyTurnoverCents(java.time.LocalDate businessDate, String windowDomain);
 
+    /** P1c 店级/业态级租售比取数：按 accounting_period=YYYY-MM 汇租金、按经营日窗口汇第三方回流营业额，
+     *  已归属商户行 + 未归属营业额桶。默认空聚合（供无需此能力的内存测试替身）；真实实现见 JdbcAnalyticsRepository。 */
+    default AnalyticsRecords.RentToSalesAggregate rentToSales(String period) {
+        return new AnalyticsRecords.RentToSalesAggregate(java.util.List.of(), 0L);
+    }
+
     /** M3:更新异常检测阈值配置(经营参数页后台可调)。 */
     AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now);

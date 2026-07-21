@@ -28345,6 +28345,51 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/analytics/rent-to-sales": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "getRentToSales",
+        "summary": "店级/业态级/平台级租售比",
+        "description": "P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以 第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用 merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。",
+        "x-permission": "contract.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics.rent_to_sales.viewed",
+        "x-audit-event-failure": "analytics.rent_to_sales.view_failed",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$",
+              "maxLength": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/analytics/anomaly-config": {
       "get": {
         "tags": [

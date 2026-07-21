@@ -135,6 +135,9 @@ final class IntegrationOperationSupport {
         if (saved instanceof IntegrationOrderSyncRecord record) {
             return record.id();
         }
+        if (saved instanceof IntegrationChannelStoreMapRecord record) {
+            return record.id();
+        }
         if (saved instanceof IntegrationTaskRecord record) {
             return record.id();
         }

@@ -13,6 +13,10 @@
     {
       "key": "F1:UNSCOPED_DIRECT_READ:revenue_stream_attribution",
       "text": "[F1 UNSCOPED_DIRECT_READ·平台级有意读] revenue_stream_attribution 的无 project scope 读在 JdbcSettlementConfigWriteRepository.listPendingConfigDrafts（草案复核队列 UNION，行 345-348）。该读仅被 SettlementConfigService.overview → GET /api/v1/settlement/config/overview 调用，端点强制 settlement.config.view + requirePlatformScope（平台管理员专属）。平台管理员跨项目审所有配置草案=有意平台级读，项目操作者先 403 到不了；端点级 scope 闸静态扫描器不识别（同 access_grant_requests 范式）。batch1 引入。证据见 findings-register SEC-P2-TENANT-ISOLATION-BATCH1-PLATFORM-READ-001。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:integration_channel_store_map",
+      "text": "[F1 UNSCOPED_DIRECT_READ·平台级有意读] integration_channel_store_map 是平台运营维护的「外部渠道门店→商户」归属映射表（招商/运营人工录入，配合 listUnattributedOrderSyncs 未归属回流运营视图）。5 处读（listChannelStoreMaps/findChannelStoreMapById/findChannelStoreMapByNaturalKey/findActiveChannelStoreMapMerchant + upsert）均在平台集成域 JdbcIntegrationRepository.java，经 IntegrationController 的 integration.channel_store_map.view/.manage 权限闸（平台管理员专属，与 order_sync 同属 platform 数据范围）。回流归属任务按外部门店反查 merchant_id——读时尚未知 merchant_id，无法也不应按 token merchant scope 过滤；平台管理员需列全表管理映射；商户 token 不持该权限、到不了端点。加 merchant_id = : 过滤会破坏平台列表与回流归属，语义错误。端点级平台权限闸静态扫描器不识别（同 revenue_stream_attribution / access_grant_requests 范式）。V334（P1 营业额抽成回流落商户）引入。证据键 SEC-P2-TENANT-ISOLATION-REFLOW-CHANNEL-MAP-001。"
     }
   ]
 }

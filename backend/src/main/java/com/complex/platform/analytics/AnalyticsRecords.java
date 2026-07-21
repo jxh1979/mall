@@ -414,6 +414,45 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** P1c 租售比店级取数原始行（repo→service）：某商户当期租金分子 + 第三方回流营业额分母（均分）。 */
+    public record RentToSalesMerchantRow(
+            String merchantId,
+            String merchantName,
+            String merchantType,
+            long rentCent,
+            long salesCent
+    ) {
+    }
+
+    /** P1c 租售比取数聚合包：已归属商户行 + 未归属第三方营业额（merchant_id IS NULL，只进平台级分母）。 */
+    public record RentToSalesAggregate(
+            java.util.List<RentToSalesMerchantRow> merchants,
+            long unattributedSalesCent
+    ) {
+    }
+
+    /** P1c 租售比一档一行（店级/业态级/平台级通用）：ratioBps=租金*10000/营业额；营业额<=0→null（诚实标注 note）。 */
+    public record RentToSalesRow(
+            String key,
+            String label,
+            long rentCent,
+            long salesCent,
+            Long ratioBps,
+            String note
+    ) {
+    }
+
+    /** P1c 租售比响应：店级 / 业态级 / 平台级三档 + 未归属营业额（诚实标注，绝不塞给某商户）。 */
+    public record RentToSalesResponse(
+            String period,
+            java.util.List<RentToSalesRow> byMerchant,
+            java.util.List<RentToSalesRow> byMerchantType,
+            RentToSalesRow platform,
+            long unattributedSalesCent,
+            String note
+    ) {
+    }
+
     /** S4 工单时效聚合(P50 小时/超时分子分母/时点积压)。 */
     public record WorkOrderSla(
             BigDecimal responseP50Hours,

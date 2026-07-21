@@ -38,6 +38,23 @@ public interface IntegrationRepository {
             String externalBusinessId
     );
 
+    IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRecord record);
+
+    List<IntegrationChannelStoreMapRecord> listChannelStoreMaps();
+
+    Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapById(String id);
+
+    Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapByNaturalKey(
+            String providerCode, String channel, String externalStoreId);
+
+    Optional<String> findActiveChannelStoreMapMerchant(
+            String providerCode, String channel, String externalStoreId);
+
+    /** 落商户解析器存在性校验（P1 资金复核）：非空商户号须指向真实 merchants 行，否则解析器置未归属。 */
+    boolean merchantExists(String merchantId);
+
+    List<IntegrationOrderSyncRecord> listUnattributedOrderSyncs();
+
     IntegrationTaskRecord saveRetryTask(IntegrationTaskRecord record);
 
     Optional<IntegrationTaskRecord> findRetryTaskById(String id);
