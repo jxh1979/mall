@@ -535,8 +535,13 @@ public class StaffService {
 
     /** E1:后台/主管按日(可选按人)查排班。 */
     public PageResponse<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId) {
+        return listShifts(workDate, userId, 1, 500);
+    }
+
+    // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值; 默认 500 保留既有一次拉取。
+    public PageResponse<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId, int page, int size) {
         authorizationService.requirePermission("staff.shift.manage");
-        return page(repository.listShifts(workDate, userId, projectScope()));
+        return repository.listShiftsPaged(workDate, userId, projectScope(), page, size);
     }
 
     /** E1:员工自有手机看自己的班次与点位(今天起 7 天)。 */
@@ -598,8 +603,12 @@ public class StaffService {
 
     /** E2:后台/主管按日查考勤(判定列:正常/迟到/早退/无班次)。 */
     public PageResponse<StaffAttendanceRecord> listAttendance(java.time.LocalDate date) {
+        return listAttendance(date, 1, 1000);
+    }
+
+    public PageResponse<StaffAttendanceRecord> listAttendance(java.time.LocalDate date, int page, int size) {
         authorizationService.requirePermission("staff.attendance.view");
-        return page(repository.listAttendanceOn(date, projectScope()));
+        return repository.listAttendanceOnPaged(date, projectScope(), page, size);
     }
 
     @GuardedAction(permission = "staff.notice.view")
@@ -982,8 +991,12 @@ public class StaffService {
 
     /** F批:后台按月查全员薪资单。 */
     public PageResponse<StaffPayrollStatementRecord> listPayroll(String month) {
+        return listPayroll(month, 1, 1000);
+    }
+
+    public PageResponse<StaffPayrollStatementRecord> listPayroll(String month, int page, int size) {
         authorizationService.requirePermission("staff.payroll.manage");
-        return page(repository.listPayrollStatements(month, null, projectScope()));
+        return repository.listPayrollStatementsPaged(month, null, projectScope(), page, size);
     }
 
     /** F批(拍板:月结后才可见):员工查自己薪资——只返回已定格薪资单,未结月自然为空。 */
@@ -1076,8 +1089,12 @@ public class StaffService {
 
     /** F批:主管/后台查请假(按状态)。 */
     public PageResponse<StaffLeaveRequestRecord> listLeaves(String status) {
+        return listLeaves(status, 1, 500);
+    }
+
+    public PageResponse<StaffLeaveRequestRecord> listLeaves(String status, int page, int size) {
         authorizationService.requirePermission("staff.shift.manage");
-        return page(repository.listLeaves(status, null, projectScope()));
+        return repository.listLeavesPaged(status, null, projectScope(), page, size);
     }
 
     /** F批(2026-07-02 拍板六态口径):考勤月视图——出勤/缺勤(有排班无上班卡)/迟到/早退/

@@ -215,11 +215,100 @@ class JdbcStaffRepository implements StaffRepository {
                  LIMIT 1000
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("month", month).addValue("user_id", userId).addValue("project_scope", projectScope),
-                (rs, n) -> new StaffPayrollStatementRecord(
-                        rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
-                        rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
-                        rs.getLong("penalty_cent"), rs.getLong("leave_deduction_cent"), rs.getLong("tax_cent"), rs.getLong("total_cent"),
-                        rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant()));
+                this::mapPayrollStatement);
+    }
+
+    private StaffPayrollStatementRecord mapPayrollStatement(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new StaffPayrollStatementRecord(
+                rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
+                rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
+                rs.getLong("penalty_cent"), rs.getLong("leave_deduction_cent"), rs.getLong("tax_cent"), rs.getLong("total_cent"),
+                rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant());
+    }
+
+    // ---------- AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, 真实 total, 稳定排序(id 收敛), 同 scope 谓词 ----------
+    @Override
+    public com.complex.platform.common.api.PageResponse<StaffShiftRecord> listShiftsPaged(
+            java.time.LocalDate workDate, String userId, String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String where = "WHERE (:work_date::date IS NULL OR work_date = :work_date)"
+                + "   AND (:user_id::text IS NULL OR user_id = :user_id)"
+                + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)";
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("work_date", workDate).addValue("user_id", userId).addValue("project_scope", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_shift_schedules " + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        java.util.List<StaffShiftRecord> items = jdbcTemplate.query(
+                "SELECT id, user_id, work_date, start_at, end_at, point_space_ids, note, created_by, created_at, updated_at"
+                        + " FROM staff_shift_schedules " + where
+                        + " ORDER BY work_date DESC, start_at, user_id, id LIMIT :limit OFFSET :offset",
+                params, this::mapShift);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<StaffAttendanceRecord> listAttendanceOnPaged(
+            java.time.LocalDate date, String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 1000 : Math.min(size, 1000);
+        String where = "WHERE punched_at >= :day_start AND punched_at < :day_end"
+                + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)";
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
+                        .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
+                        .addValue("project_scope", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_attendance_records " + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        java.util.List<StaffAttendanceRecord> items = jdbcTemplate.query(
+                "SELECT id, user_id, punch_type, punched_at, method, tag_ref, space_id, device_fingerprint, shift_id, "
+                        + "judgement, created_at FROM staff_attendance_records " + where
+                        + " ORDER BY punched_at DESC, id LIMIT :limit OFFSET :offset",
+                params, this::mapAttendance);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<StaffPayrollStatementRecord> listPayrollStatementsPaged(
+            String month, String userId, String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 1000 : Math.min(size, 1000);
+        String where = "WHERE month = :month AND (:user_id::text IS NULL OR user_id = :user_id)"
+                + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)";
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("month", month).addValue("user_id", userId).addValue("project_scope", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_payroll_statements " + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        java.util.List<StaffPayrollStatementRecord> items = jdbcTemplate.query(
+                "SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent, leave_deduction_cent, "
+                        + "tax_cent, total_cent, closed_by, closed_at FROM staff_payroll_statements " + where
+                        + " ORDER BY user_id, id LIMIT :limit OFFSET :offset",
+                params, this::mapPayrollStatement);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<StaffLeaveRequestRecord> listLeavesPaged(
+            String status, String userId, String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String where = "WHERE (:status::text IS NULL OR status = :status)"
+                + "   AND (:user_id::text IS NULL OR user_id = :user_id)"
+                + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)";
+        org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("status", status).addValue("user_id", userId).addValue("project_scope", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_leave_requests " + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        java.util.List<StaffLeaveRequestRecord> items = jdbcTemplate.query(
+                "SELECT id, user_id, leave_type, start_date, end_date, reason, status, reviewed_by, review_note, "
+                        + "created_at, updated_at FROM staff_leave_requests " + where
+                        + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
+                params, this::mapLeave);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
     @Override

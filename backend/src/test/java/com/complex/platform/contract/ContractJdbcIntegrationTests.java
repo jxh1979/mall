@@ -32,6 +32,27 @@ class ContractJdbcIntegrationTests {
     private JdbcTemplate jdbcTemplate;
 
     @Test
+    void listContractsPagedReturnsRealTotalAndReachesNextPage() {
+        // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET——total 取真值, 第二页可达首页之后的合同。
+        java.time.Instant now = java.time.Instant.now();
+        repository.saveContract(new ContractRecord("ctr_pg_1", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2026-08-15"), Map.of("propertyFeeCent", 88800),
+                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                null, null, null, now, now));
+        repository.saveContract(new ContractRecord("ctr_pg_2", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-02"), LocalDate.parse("2026-08-16"), Map.of("propertyFeeCent", 88800),
+                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                null, null, null, now.plusSeconds(1), now.plusSeconds(1)));
+        var page1 = repository.listContractsPaged(1, 1);
+        var page2 = repository.listContractsPaged(2, 1);
+        assertThat(page1.total()).isGreaterThanOrEqualTo(2L);
+        assertThat(page1.items()).hasSize(1);
+        assertThat(page2.items()).hasSize(1);
+        assertThat(page2.items()).extracting(ContractRecord::id)
+                .doesNotContainAnyElementsOf(page1.items().stream().map(ContractRecord::id).toList());
+    }
+
+    @Test
     void insertRentBillAcceptsDeterministicContractIdItemNo() {
         // S3 活证据抓真缺口:幂等键派生合同 id 长 52,item_no="PROPERTY_FEE-"+id+"-2026-07" 达 73 字符,
         // 超原 varchar(64) → 真库激活挂账 500(内存仓测试测不到)。V205 扩 ar_ap_items.item_no 至 128。

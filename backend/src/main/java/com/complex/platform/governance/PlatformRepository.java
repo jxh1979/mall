@@ -89,4 +89,28 @@ public interface PlatformRepository {
 
     /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
     void setMerchantArchiveReason(String id, String reason);
+
+    // AUD-005 真分页: 默认内存切片(测试双子); Jdbc 覆写 SQL COUNT + LIMIT/OFFSET。
+    default com.complex.platform.common.api.PageResponse<BusinessEntityRecord> listBusinessEntitiesPaged(
+            int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listBusinessEntities(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<MerchantRecord> listMerchantsPaged(
+            boolean includeArchived, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listMerchants(includeArchived), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<ProjectRecord> listProjectsPaged(int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listProjects(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<SpaceRecord> listSpacesPaged(int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listSpaces(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindingsPaged(
+            int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listBusinessEntityBindings(), page, size);
+    }
 }

@@ -114,4 +114,26 @@ public interface StaffRepository {
 
     /** BYOD 二期 Wave1:本人某月提成明细(ledger 服务点单等 + bar 酒水/卡座提成,按时间倒序)。 */
     java.util.List<StaffCommissionLineRecord> listCommissionLines(String userId, String month);
+
+    // AUD-005 真分页: 默认内存切片(测试双子); Jdbc 覆写 SQL COUNT + LIMIT/OFFSET。
+    default com.complex.platform.common.api.PageResponse<StaffShiftRecord> listShiftsPaged(
+            java.time.LocalDate workDate, String userId, String projectScope, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listShifts(workDate, userId, projectScope), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<StaffAttendanceRecord> listAttendanceOnPaged(
+            java.time.LocalDate date, String projectScope, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listAttendanceOn(date, projectScope), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<StaffPayrollStatementRecord> listPayrollStatementsPaged(
+            String month, String userId, String projectScope, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(
+                listPayrollStatements(month, userId, projectScope), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<StaffLeaveRequestRecord> listLeavesPaged(
+            String status, String userId, String projectScope, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listLeaves(status, userId, projectScope), page, size);
+    }
 }

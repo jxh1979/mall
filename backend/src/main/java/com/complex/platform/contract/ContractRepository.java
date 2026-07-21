@@ -12,6 +12,11 @@ public interface ContractRepository {
 
     List<ContractRecord> listContracts();
 
+    // AUD-005 真分页: 默认内存切片(测试双子); Jdbc 覆写 SQL COUNT + LIMIT/OFFSET。
+    default com.complex.platform.common.api.PageResponse<ContractRecord> listContractsPaged(int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listContracts(), page, size);
+    }
+
     Optional<ContractRecord> findContractById(String id);
 
     /** S-2 确认退押金落账时对合同行加锁，串行化同一合同的并发确认（防违约金侧无封顶双挂）。 */

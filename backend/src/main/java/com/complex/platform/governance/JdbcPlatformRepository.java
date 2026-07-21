@@ -349,6 +349,96 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         return binding;
     }
 
+    // ---------- AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, 真实 total, 稳定排序, 同 scope 谓词 ----------
+    @Override
+    public com.complex.platform.common.api.PageResponse<BusinessEntityRecord> listBusinessEntitiesPaged(
+            int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM business_entities", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<BusinessEntityRecord> items = jdbcTemplate.query("""
+                SELECT id, entity_name, entity_role, parent_entity_id, unified_social_credit_code, legal_representative,
+                       bank_account_ref, status, created_at, updated_at
+                  FROM business_entities
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapBusinessEntity);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<MerchantRecord> listMerchantsPaged(
+            boolean includeArchived, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("include_archived", includeArchived);
+        String where = " WHERE (:include_archived OR archived_at IS NULL) AND delete_status <> 'approved'";
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM merchants" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<MerchantRecord> items = jdbcTemplate.query("SELECT id, merchant_name, merchant_type, business_entity_id, "
+                + "contract_entity_id, settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, "
+                + "area_square_meter, leased_area_square_meter, secondary_contact_name, secondary_contact_phone, "
+                + "rent_per_square_meter, cooperation_form, status, created_at, updated_at, archived_at, archived_by, "
+                + "delete_status, delete_requested_by, delete_requested_at, delete_reason FROM merchants" + where
+                + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapMerchant);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<ProjectRecord> listProjectsPaged(int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM projects", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<ProjectRecord> items = jdbcTemplate.query("""
+                SELECT id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at
+                  FROM projects
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapProject);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<SpaceRecord> listSpacesPaged(int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM spaces", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<SpaceRecord> items = jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
+                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
+                  FROM spaces
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapSpace);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindingsPaged(
+            int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM business_entity_bindings WHERE merchant_id IS NOT NULL", params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<BusinessEntityBindingRecord> items = jdbcTemplate.query("""
+                SELECT id::text AS id, merchant_id, operation_entity_id, contract_entity_id, settlement_entity_id,
+                       status, effective_from, effective_to, change_reason, created_at, updated_at
+                  FROM business_entity_bindings
+                 WHERE merchant_id IS NOT NULL
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapBusinessEntityBinding);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
     @Override
     public List<BusinessEntityBindingRecord> listBusinessEntityBindings() {
         return jdbcTemplate.query("""

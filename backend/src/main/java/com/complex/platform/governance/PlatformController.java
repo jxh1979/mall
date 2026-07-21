@@ -32,9 +32,11 @@ public class PlatformController {
     }
 
     @GetMapping("/business-entities")
-    public ApiResponse<PageResponse<BusinessEntityRecord>> listBusinessEntities() {
+    public ApiResponse<PageResponse<BusinessEntityRecord>> listBusinessEntities(
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("entity.binding.view");
-        return ApiResponse.ok(service.listBusinessEntities());
+        return ApiResponse.ok(service.listBusinessEntities(page, size));
     }
 
     @PostMapping("/business-entities")
@@ -46,9 +48,11 @@ public class PlatformController {
 
     @GetMapping("/merchants")
     public ApiResponse<PageResponse<MerchantRecord>> listMerchants(
-            @org.springframework.web.bind.annotation.RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
+            @org.springframework.web.bind.annotation.RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived,
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("merchant.profile.view");
-        return ApiResponse.ok(service.listMerchants(includeArchived));
+        return ApiResponse.ok(service.listMerchants(includeArchived, page, size));
     }
 
     @PostMapping("/merchants")
@@ -107,9 +111,11 @@ public class PlatformController {
     }
 
     @GetMapping("/projects")
-    public ApiResponse<PageResponse<ProjectRecord>> listProjects() {
+    public ApiResponse<PageResponse<ProjectRecord>> listProjects(
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("governance.project.view");
-        return ApiResponse.ok(service.listProjects());
+        return ApiResponse.ok(service.listProjects(page, size));
     }
 
     @PostMapping("/projects")
@@ -120,9 +126,11 @@ public class PlatformController {
     }
 
     @GetMapping("/spaces")
-    public ApiResponse<PageResponse<SpaceRecord>> listSpaces() {
+    public ApiResponse<PageResponse<SpaceRecord>> listSpaces(
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("governance.space.view");
-        return ApiResponse.ok(service.listSpaces());
+        return ApiResponse.ok(service.listSpaces(page, size));
     }
 
     @GetMapping("/space-types")
@@ -146,9 +154,11 @@ public class PlatformController {
     }
 
     @GetMapping("/business-entity-bindings")
-    public ApiResponse<PageResponse<BusinessEntityBindingRecord>> listBusinessEntityBindings() {
+    public ApiResponse<PageResponse<BusinessEntityBindingRecord>> listBusinessEntityBindings(
+            @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
+            @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("entity.binding.view");
-        return ApiResponse.ok(service.listBusinessEntityBindings());
+        return ApiResponse.ok(service.listBusinessEntityBindings(page, size));
     }
 
     @PostMapping("/business-entity-bindings")

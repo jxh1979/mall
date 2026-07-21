@@ -228,6 +228,109 @@ class JdbcLeasingRepository implements LeasingRepository {
                 new MapSqlParameterSource().addValue("project_id", projectScope), this::mapFollowUp);
     }
 
+    // ---------- AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, 真实 total, 稳定排序(id 收敛), 同 scope 谓词 ----------
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingLeadRecord> listLeadsPaged(
+            String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String where = projectScope != null ? " WHERE project_id = :project_id" : "";
+        MapSqlParameterSource params = new MapSqlParameterSource("project_id", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM leasing_leads" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<LeasingLeadRecord> items = jdbcTemplate.query(
+                "SELECT * FROM leasing_leads" + where + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
+                params, this::mapLead);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUpPaged(
+            java.time.Instant cutoff, String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String scope = projectScope != null ? "   AND project_id = :project_id\n" : "";
+        String where = "WHERE status NOT IN ('signed', 'lost')\n"
+                + "   AND COALESCE(last_follow_up_at, created_at) < :cutoff\n" + scope;
+        MapSqlParameterSource params = new MapSqlParameterSource("cutoff", timestampWithTimeZone(cutoff))
+                .addValue("project_id", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM leasing_leads " + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<LeasingLeadRecord> items = jdbcTemplate.query(
+                "SELECT * FROM leasing_leads " + where
+                        + " ORDER BY COALESCE(last_follow_up_at, created_at), id LIMIT :limit OFFSET :offset",
+                params, this::mapLead);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingIntentRecord> listIntentsPaged(
+            String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String cols = "id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms::text AS rent_terms, "
+                + "last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at";
+        String where = projectScope != null ? " WHERE project_id = :project_id" : "";
+        MapSqlParameterSource params = new MapSqlParameterSource("project_id", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM leasing_intents" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<LeasingIntentRecord> items = jdbcTemplate.query(
+                "SELECT " + cols + " FROM leasing_intents" + where
+                        + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
+                params, this::mapIntent);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingBrandRecord> listBrandsPaged(
+            String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String where = projectScope != null ? " WHERE project_id = :project_id" : "";
+        MapSqlParameterSource params = new MapSqlParameterSource("project_id", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM leasing_brands" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<LeasingBrandRecord> items = jdbcTemplate.query(
+                "SELECT * FROM leasing_brands" + where + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
+                params, this::mapBrand);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingFollowUpRecord> listFollowUpsByRefPaged(
+            String refType, String refId, String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String scope = projectScope != null ? "AND project_id = :project_id " : "";
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("ref_type", refType).addValue("ref_id", refId).addValue("project_id", projectScope);
+        Long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM leasing_follow_ups WHERE ref_type = :ref_type AND ref_id = :ref_id " + scope,
+                params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<LeasingFollowUpRecord> items = jdbcTemplate.query(
+                "SELECT * FROM leasing_follow_ups WHERE ref_type = :ref_type AND ref_id = :ref_id " + scope
+                        + "ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
+                params, this::mapFollowUp);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingFollowUpRecord> listAllFollowUpsPaged(
+            String projectScope, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String scope = projectScope != null ? "WHERE project_id = :project_id " : "";
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_id", projectScope);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM leasing_follow_ups " + scope, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<LeasingFollowUpRecord> items = jdbcTemplate.query(
+                "SELECT * FROM leasing_follow_ups " + scope
+                        + "ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
+                params, this::mapFollowUp);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
     // ---------- row mappers ----------
     private LeasingLeadRecord mapLead(ResultSet rs, int n) throws SQLException {
         return new LeasingLeadRecord(

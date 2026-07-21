@@ -31,6 +31,25 @@ class LeasingJdbcIntegrationTests {
     private JdbcTemplate jdbcTemplate;
 
     @Test
+    void listLeadsPagedReturnsRealTotalAndReachesNextPage() {
+        // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET——total 取真值, 第二页可达首页之后的数据, 两页无重叠。
+        String scope = "proj_aud005";
+        Instant t = Instant.parse("2026-06-01T00:00:00Z");
+        for (int i = 0; i < 3; i++) {
+            repository.saveLead(new LeasingLeadRecord("lead_pg_" + i, "线索" + i, null, "referral", null, null, null,
+                    null, "u", "following_up", null, null, scope, t.plusSeconds(i), t.plusSeconds(i)));
+        }
+        var page1 = repository.listLeadsPaged(scope, 1, 2);
+        assertThat(page1.total()).isEqualTo(3L);
+        assertThat(page1.items()).hasSize(2);
+        var page2 = repository.listLeadsPaged(scope, 2, 2);
+        assertThat(page2.total()).isEqualTo(3L);
+        assertThat(page2.items()).hasSize(1);
+        assertThat(page2.items()).extracting(LeasingLeadRecord::id)
+                .doesNotContainAnyElementsOf(page1.items().stream().map(LeasingLeadRecord::id).toList());
+    }
+
+    @Test
     void migrationCreatesLeasingTablesAndSeedsPermissions() {
         assertThat(regclass("leasing_leads")).isEqualTo("leasing_leads");
         assertThat(regclass("leasing_intents")).isEqualTo("leasing_intents");

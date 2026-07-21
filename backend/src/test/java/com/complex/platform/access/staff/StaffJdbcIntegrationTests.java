@@ -64,6 +64,25 @@ class StaffJdbcIntegrationTests {
     }
 
     @Test
+    void listLeavesPagedReturnsRealTotalAndReachesNextPage() {
+        // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值, 第二页可达首页之后的请假单(按唯一 user 隔离)。
+        java.time.Instant now = java.time.Instant.now();
+        repository.saveLeaveRequest(new StaffLeaveRequestRecord("leave_pg_1", "u_aud005", "annual",
+                java.time.LocalDate.parse("2026-07-01"), java.time.LocalDate.parse("2026-07-02"), "r", "pending",
+                null, null, now, now));
+        repository.saveLeaveRequest(new StaffLeaveRequestRecord("leave_pg_2", "u_aud005", "annual",
+                java.time.LocalDate.parse("2026-07-03"), java.time.LocalDate.parse("2026-07-04"), "r", "pending",
+                null, null, now.plusSeconds(1), now.plusSeconds(1)));
+        var page1 = repository.listLeavesPaged(null, "u_aud005", null, 1, 1);
+        var page2 = repository.listLeavesPaged(null, "u_aud005", null, 2, 1);
+        assertThat(page1.total()).isEqualTo(2L);
+        assertThat(page1.items()).hasSize(1);
+        assertThat(page2.items()).hasSize(1);
+        assertThat(page2.items()).extracting(StaffLeaveRequestRecord::id)
+                .doesNotContainAnyElementsOf(page1.items().stream().map(StaffLeaveRequestRecord::id).toList());
+    }
+
+    @Test
     void migrationCreatesStaffThreeTablesAtLatestVersionAndSeedsPermissions() {
         assertThat(regclass("staff_profiles")).isEqualTo("staff_profiles");
         assertThat(regclass("staff_device_credentials")).isEqualTo("staff_device_credentials");

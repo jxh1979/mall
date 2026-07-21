@@ -2,6 +2,7 @@ package com.complex.platform.governance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -111,7 +112,7 @@ class PlatformControllerTests {
 
     @Test
     void listingMerchantsReturnsApiResponsePageShape() throws Exception {
-        when(service.listMerchants(false)).thenReturn(new PageResponse<>(
+        when(service.listMerchants(eq(false), anyInt(), anyInt())).thenReturn(new PageResponse<>(
                 List.of(new MerchantRecord(
                         "mch_1",
                         "P0 Merchant",
@@ -189,7 +190,7 @@ class PlatformControllerTests {
 
     @Test
     void listBusinessEntityBindingsUsesEntityBindingViewPermission() throws Exception {
-        when(service.listBusinessEntityBindings()).thenReturn(new PageResponse<>(
+        when(service.listBusinessEntityBindings(anyInt(), anyInt())).thenReturn(new PageResponse<>(
                 List.of(new BusinessEntityBindingRecord(
                         "beb_1",
                         "mch_1",
