@@ -271,6 +271,8 @@
 - `ticket_types`:加 `sales_subject_restriction`(仅项目公司可售通票)、`is_standalone` 标记
 - `refund_orders`:加手续费预扣字段
 - `integration_order_syncs`:加 `merchant_id`/`management_company_id` 映射(§13)
+- `settlement_transactions`(审计 AUD-012/013/017):转不可变账务事件账本——加 `business_at`(业务时间,account 按此落月窗)、`chk_st_type` 增 `verification_reversed`、`chk_st_amount` 令冲正行恒 ≤0(资金守恒 DB 守卫)、删「每权益一行」`uq_st_entitlement_verified`(改按 `verification_id`/全局 `transaction_no` 幂等 append)
+- `ticket_refunds`(审计 AUD-018):加 `succeeded_at`(有效退款生效时刻)+ 权威枚举 `chk_ticket_refunds_status`(已申请/审批中/已通过/已驳回/处理中/成功/失败/已取消);财务/分析/分红仅统计 `status='success'` 按 `succeeded_at` 落窗
 
 ---
 
@@ -328,8 +330,12 @@
 | 批 3(权益细则 §6.1-6.4+人脸照) | ✅ 完成 | **3-1** 结算价判定(V225·实物内部价/虚拟签约价/回退)、**3-2** 场次入场(V226·consumption_window+营业时间表+场次+入场记录·惰性开场·过场作废)、**3-3** 当天无限(V227·按自然日激活·单人跨日作废/多次跨日保留靠 total_times)、**3-4** 专属不分摊(V228·exclusive_merchant_id 全额直付不进池)、**3-6** 游乐票人脸拍照存档(V229·PiiCipher 加密·授权+审计取照·30 天自清);每片自带证伪测试+回归全绿;main=a545261。**票种细分(单人/多人/多次/新人/学生)→ 批 4** |
 | 批 4(票种分类·收缩后小尾巴) | ✅ 完成 | **V230**(`ticket_types` 加 `ticket_category` 资格/定价档标签:standard/new_person/student,仅供后台分类/报表,不碰定价/消耗/作废逻辑;新人票/学生票=完全同酒吧通票靠独立 ticket_type+定价;结构型单人/多人/多次由 num_people+total_times 派生不入本字段);仅加列+回填可独立回滚;4f6eb96。**批 4 原计划的综合服务费/单独门票/套票折扣/退款手续费预扣仍未做,归入批 5 配置中心 + 各票种规则后续实现** |
 | 前端配套(可点击/行明细/中文化/时间戳) | ✅ 完成 | 全链可点击下钻(引用字段 merchant/contract/order/project/space/处理人/审计对象全站可点·统一 `<TraceLink>`)、KPI 数字可点、全站 ~60 表页整行→右侧明细抽屉(`RowDetailDrawer`)、全站零英文(枚举/状态/时间 cnDate/CSV 导出)、原生日期控件→自研 `CnDatePicker`;**下单业务记支付时间 `paid_at`(V231)**、**物流配送到位时间 `bar_order_items.delivered_at`+游乐核销场次展示(V232)**;全部已 push origin/main(tip=7502a08) |
-| 迁移号 | — | V222–V232(结算重构)已用;**V268**(本次:综合服务费 + 套票折扣归属配置);全仓下一空闲号见 migration 目录 |
+| 迁移号 | — | V222–V232(结算重构)已用;**V268**(综合服务费 + 套票折扣归属配置);**V323/V324**(状态机加固:结算账本不可变 + 退款终态);全仓下一空闲号见 migration 目录 |
 | 收尾(§7.2 综合服务费 + §7.4 套票折扣归属) | ✅ 完成 | **V268**:`comprehensive_service_fee_configs`(所有门票综合服务费,专属直付线抽,默认 0 零变更) + `ticket_combo_discount_configs`(套票折扣归属,默认 platform_absorb) + `settlement_bills.comp_service_fee_cent`;引擎按票种拆专属聚合命中费率、商户拿净额、费归项目;5 测试(默认 0/配置费率/多商户独立/按票种命中/折扣配置)+ 证伪(破扣费 3 红)全绿;退款手续费预扣按用户 2026-07-04 取消**不建** |
+
+| 状态机加固(审计 AUD-012/013/017/018/019·资金正确性核心) | ✅ 代码落地·PR 待并 | **V323**(`settlement_transactions` 转不可变账务事件账本)+**V324**(`ticket_refunds` 终态)。①核销按 `verification_id` 写不可变**增量**结算行(增量=f(k)−f(k−1),`business_at` 落月→跨月各归其月,取代累计值覆盖首插行)②核销冲正追加**负向**结算 `ST-VR`(严格取原行反;原月未过账则该月净重算、已过账则落当月红冲不改历史)③退款仅 `success` 且按 `succeeded_at` 聚合(finance/analytics/dividend 四处),修 `FinanceJdbcIntegrationTests`「`requested` 计入退款」错误绿灯④到期归项目「可没收终态」白名单=`status='active'`+父实例非冻结(排除已成功退款/退款申请中)⑤消费者幂等 append-only(重放 DO NOTHING)+ `SettlementReconciliationJob.rebuildMissingSettlements` 按核销权威事实重建缺失结算(AUD-017 outbox 之替代;全量事务性 outbox+死信为后续上限)。资金恒等自检 `SettlementAmountsTests`(非DB) + 门禁 `SettlementStateMachineJdbcIntegrationTests`/`FinanceJdbcIntegrationTests`(DB,主会话串行跑) |
+
+> 🔒部署前核对(状态机加固·复核提示):①`ticket_refunds` 加 status CHECK 前先 `SELECT DISTINCT status FROM ticket_refunds` 确认无八值外脏值;②重建 `rebuildMissingSettlements` 为本 PR 全新、生产从未跑过(基线 d577fc4b 无此方法),库内不应有「同权益既有遗留累计行 verification_id IS NULL、又有 per-verification 行」的双计残留——部署前核对下句应返回 0 行(非 0 先排查、勿开 `settlement.reconciliation.scheduled` 重建):`SELECT s.entitlement_id FROM settlement_transactions s WHERE s.transaction_type='verification_settled' AND s.verification_id IS NOT NULL AND EXISTS(SELECT 1 FROM settlement_transactions leg WHERE leg.entitlement_id=s.entitlement_id AND leg.transaction_type='verification_settled' AND leg.verification_id IS NULL) GROUP BY s.entitlement_id;`。注:`settlement.reconciliation.scheduled.enabled` 生产=true(application-prod.yml:31),重建首夜即跑,故上述前置校验为部署闸。
 
 > 渠道费明细来源(§5.0 步骤②)现无数据源,引擎暂置 0,待第三方渠道费率接入补(批 6)。
 

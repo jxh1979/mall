@@ -188,7 +188,7 @@ public class TicketRefundService {
         ));
         createRefundLines(refund, order, targets, entByInstance, shareByInstance, now);
         if (selfComplete) {
-            finalizeApprovedRefund(refund, now, true);
+            return finalizeApprovedRefund(refund, now, true); // 额度内自助：approved→success 收口
         }
         return refund;
     }
@@ -221,8 +221,7 @@ public class TicketRefundService {
                 current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
                 "approved", current.requestedBy(), approvedBy, now, current.createdAt(), now, current.merchantId()
         );
-        finalizeApprovedRefund(approved, now, true);
-        return approved;
+        return finalizeApprovedRefund(approved, now, true); // AUD-018：审批通过兑付 → success 终态
     }
 
     /**
@@ -277,7 +276,7 @@ public class TicketRefundService {
      * 退款行置 approved + 强 CAS 冻结对应权益（active∧used=0→refunded，失配整笔回滚）+ 父票 refund_pending→refunded
      * + 限量票按本笔退成功实例数回补名额（退一张放一个）+ 发打款事件；deductPoints=true 时按比例发积分冲减。
      */
-    private void finalizeApprovedRefund(TicketRefundRecord approved, Instant now, boolean deductPoints) {
+    private TicketRefundRecord finalizeApprovedRefund(TicketRefundRecord approved, Instant now, boolean deductPoints) {
         TicketOrderRecord order = repository.findTicketOrderById(approved.targetId()).orElse(null);
         Map<String, String> entToParent = entToParentMap(approved.targetId());
         LinkedHashSet<String> refundedInstances = new LinkedHashSet<>();
@@ -316,6 +315,14 @@ public class TicketRefundService {
             eventPublisher.publishEvent(new TicketRefundApprovedEvent(
                     order.id(), approved.id(), approved.refundAmountCent(), approved.refundChannel()));
         }
+        // AUD-018：兑付副作用已提交 → 退款迁终态 success + succeeded_at（有效退款生效时刻）。本存根系统打款同步完成，
+        //   故 approved→success 内联收口；财务/分析仅统计 status='success' 且按 succeeded_at 落窗（不再把 requested/rejected 当退款）。
+        //   CAS 仅当仍 approved 生效（幂等）。返回 success 记录供上游返回。
+        repository.markTicketRefundSucceeded(approved.id(), now);
+        return new TicketRefundRecord(
+                approved.id(), approved.targetId(), approved.refundAmountCent(), approved.reason(),
+                approved.refundChannel(), "success", approved.requestedBy(), approved.approvedBy(),
+                approved.approvedAt(), approved.createdAt(), now, approved.merchantId());
     }
 
     /**
@@ -377,8 +384,7 @@ public class TicketRefundService {
                 now,
                 order.merchantId()));   // V220：自动退款受理商户=原订单 merchant_id
         createRefundLines(refund, order, targets, entByInstance, shareByInstance, now);
-        finalizeApprovedRefund(refund, now, false);
-        return refund;
+        return finalizeApprovedRefund(refund, now, false); // 到期自动退：approved→success 收口
     }
 
     /** 每票出票时定格的实付分摊额：复现方案1 出票均分（allocateEvenly 按实例数分订单实付，seq 定序，分到分不丢分）。 */

@@ -12,7 +12,9 @@ import java.time.Instant;
  * <p>跨模块解耦：settlement 域依赖 ticketing，ticketing 不反向注入 settlement，故事件 record 置于 ticketing，
  * 由 settlement 域 {@code SettlementSettledConsumer} 监听（与 customer/bar 消费 ticketing 事件同范式）。
  *
- * @param entitlementId        被核销的 issued_entitlement id（溯源 + 幂等键）
+ * @param verificationId       本次核销记录 id（AUD-012 不可变增量结算的幂等键=transaction_no ST-VS-&lt;verificationId&gt;）
+ * @param verifiedAt           本次核销业务发生时刻（AUD-012 结算按此落月窗，取代首插 created_at 的月份漂移）
+ * @param entitlementId        被核销的 issued_entitlement id（溯源）
  * @param orderId              出票订单 id（可空：direct 出票无订单）
  * @param ticketTypeId         票种 id
  * @param entitlementType      权益类型（bar/amusement/ticket/gift_drink...）
@@ -27,6 +29,8 @@ import java.time.Instant;
  *                             为空或非专属时消费者仍按 allocated 分摊(现状,与旧口径对账)。
  */
 public record SettlementSettledEvent(
+        String verificationId,
+        java.time.Instant verifiedAt,
         String entitlementId,
         String orderId,
         String ticketTypeId,

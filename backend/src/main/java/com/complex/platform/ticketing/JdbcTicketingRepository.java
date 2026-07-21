@@ -635,6 +635,22 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt) {
+        // AUD-018：退款兑付完成 → success 终态 + succeeded_at（有效退款生效时刻，财务/分析按此聚合）。
+        // CAS 仅当仍 approved 生效（幂等：重复调用/已 success 命中 0 行）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_refunds
+                   SET status = 'success',
+                       succeeded_at = :succeeded_at,
+                       updated_at = :succeeded_at
+                 WHERE id = :id
+                   AND status = 'approved'
+                """, new MapSqlParameterSource()
+                .addValue("id", refundId)
+                .addValue("succeeded_at", succeededAt.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
     public int markTicketRefundApproved(String refundId, String approvedBy, java.time.Instant approvedAt) {
         // F-TXN-04 并发双拨付修复：退款审批状态 CAS——仅当仍为 requested 才翻转 approved。
         // 此前 approveRefund 读检 status=='requested' 与 saveTicketRefund 间 TOCTOU：并发两路可同时过读检、
