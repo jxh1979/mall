@@ -34,6 +34,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-CUS-003", label: "积分规则配置", route: "/admin/customers/points-rules" },
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", route: "/admin/customers/loyalty-config" },
   { pageId: "ADM-CUS-005", label: "储值规则配置", route: "/admin/customers/stored-value-rules" },
+  { pageId: "ADM-STL-001", label: "结算配置中心", route: "/admin/settlement/config" },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", route: "/admin/terminals/switch-matrix" },
   { pageId: "ADM-TKT-002", label: "动态定价", route: "/admin/ticketing/dynamic-pricing" },
   { pageId: "ADM-TKT-003", label: "出票与核销追踪", route: "/admin/ticketing/orders" },
@@ -147,6 +148,9 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-CUS-005") {
     await expect(page.getByTestId("stored-value-rules-page")).toBeVisible();
     await expect(page.getByTestId("stored-value-empty-hint")).toBeVisible();
+  } else if (spec.pageId === "ADM-STL-001") {
+    await expect(page.getByTestId("settlement-config-page")).toBeVisible();
+    await expect(page.getByTestId("settlement-config-defaults-table")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-002") {
     await expect(page.getByTestId("reconciliation-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-003") {
