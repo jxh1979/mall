@@ -626,7 +626,7 @@
           "blocking_scope": "阻塞生产数据库接入",
           "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
           "source_table": "credential_rotation",
-          "next_action": "生成强密码、写入安全保管位置、补到期日和维护窗口",
+          "next_action": "既成事实（2026-07-06 prod 切换后）：运行时 app 角色 complex_app 已轮换 55 位强密码且被 REVOKE 最小权限；owner/Flyway 超级角色 complex 密码仍为 dev 默认 complex_dev_pwd，运行时以 COMPLEX_DATABASE_CREDENTIAL_SEPARATION_ENFORCED=false 关闭凭证守卫掩盖此状态。待 IT 为 owner ALTER ROLE 生成强密码、同步 owner env 并重启，随后移除 enforced=false 让守卫 fail-closed 生效；补到期日和维护窗口",
           "required_evidence": [
             "credential_ref、owner_person、owner_department",
             "到期日、提醒策略和轮换窗口",

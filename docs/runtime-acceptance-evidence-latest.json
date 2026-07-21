@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-07-21T13:27:41.586Z",
+  "generated_at": "2026-07-21T14:29:18.863Z",
   "git": {
-    "head": "0e478882be0c92bef434b30f6d6d021cd2e90c2f",
-    "head_short": "0e478882",
-    "branch": "docs/settlement-prd-sec9",
-    "worktree_dirty": true,
-    "source_fingerprint": "5d02b37741710e335f582adbdf6ed891ce24620909a95bb2a6e0e9c6df96aedb",
-    "source_fingerprint_file_count": 2033,
+    "head": "fa472e80d45b5978e7d62159a38a4e45b205f8a1",
+    "head_short": "fa472e80",
+    "branch": "docs/refresh-runtime-acceptance-evidence",
+    "worktree_dirty": false,
+    "source_fingerprint": "0c7d52e63e7b1dd96885a78b66d2afb51581f4b062f11099eec67777b9524372",
+    "source_fingerprint_file_count": 2034,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 220,
-    "tests": 2521,
+    "suites": 221,
+    "tests": 2523,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-07-21T13:25:26.477Z",
+    "latest_mtime": "2026-07-21T14:26:17.714Z",
     "passed": true
   },
   "web_unit_source": {
@@ -269,13 +269,13 @@
       {
         "path": "apps/web/dist/assets/main-CC2bv-q6.js",
         "size_bytes": 3532,
-        "mtime": "2026-07-21T13:25:37.121Z"
+        "mtime": "2026-07-21T14:26:28.139Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CBmYl4fp.js",
       "size_bytes": 538825,
-      "mtime": "2026-07-21T13:25:37.123Z"
+      "mtime": "2026-07-21T14:26:28.141Z"
     },
     "no_main_bundle_warning_expected": true
   },
