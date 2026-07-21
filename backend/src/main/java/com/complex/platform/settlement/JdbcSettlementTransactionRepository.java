@@ -112,6 +112,10 @@ public class JdbcSettlementTransactionRepository {
                       SELECT COUNT(*) AS k FROM ticket_verifications f
                        WHERE f.entitlement_id = v.entitlement_id
                          AND f.reverses_verification_id IS NULL
+                         -- k=本次核销在「计入 used_times 的成功核销」中的时序序号：只数 success/reversed
+                         -- (原核销在冲正主链已先翻转成 reversed 再发事件,故本次被冲的核销自身也须计入),
+                         -- 排除 failed/rejected/manual_overridden(不进 used_times、不构成遗留 f(used)),否则 k 被抬高、增量错配、净额差分。
+                         AND f.status IN ('success', 'reversed')
                          AND (f.created_at, f.id) <= (v.created_at, v.id)
                   ) k
                  WHERE v.id = :verId

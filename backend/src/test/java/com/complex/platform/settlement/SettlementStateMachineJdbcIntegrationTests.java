@@ -221,6 +221,7 @@ class SettlementStateMachineJdbcIntegrationTests {
         seedExpiredEntitlement("lr", 1, 1, 1000L, past, "active", "active");
         seedLegacyCumulativeFact("ent_lr", "mch_sm", past, 1000L, 1, 1000L);
         seedSuccessVerification("vlr", "ent_lr", past);
+        markVerificationReversed("vlr"); // 复现生产:发冲正事件时原核销已翻转 reversed(k 须把它算进 => status IN(success,reversed))
 
         reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
                 "vlr", "revlr", "ent_lr", "order_ent_lr", "mch_sm", 1));
@@ -234,6 +235,40 @@ class SettlementStateMachineJdbcIntegrationTests {
                 Long.class, "ent_lr");
         assertThat(vr).isEqualTo(-1000L);
         assertThat(net).isZero();
+    }
+
+    @Test
+    void legacyReversalExcludesFailedFromKAndCountsReversedOriginalSoIncrementsAreExact() {
+        // 复核缺口:k 反推必须只数计入 used_times 的成功核销(success/reversed),排除 failed/manual_overridden。
+        // 场景 alloc=100,total=3:f(1)=33,f(2)=67。前置一笔 failed(t0),两笔成功 success1(t1)/success2(t2),遗留累计 f(2)=67。
+        // 生产态:逐笔冲正前原核销已翻转 reversed。修前(k 含 failed 或漏 reversed)增量错配:
+        //   含 failed → success1 得 f(2)-f(1)=34(应 33);漏 reversed → success2 得 f(0)-f(-1)=33(应 34)。
+        Instant t0 = Instant.parse("2011-11-01T00:00:00Z");
+        Instant t1 = Instant.parse("2011-11-01T00:10:00Z");
+        Instant t2 = Instant.parse("2011-11-01T00:20:00Z");
+        seedExpiredEntitlement("kf", 3, 2, 100L, t0, "active", "active");
+        seedLegacyCumulativeFact("ent_kf", "mch_sm", t0, 100L, 3, 67L);
+        seedVerification("vkf_fail", "ent_kf", t0, "failed");     // 前置失败核销:不进 used_times,不该抬高 k
+        seedSuccessVerification("vkf_s1", "ent_kf", t1);
+        seedSuccessVerification("vkf_s2", "ent_kf", t2);
+
+        markVerificationReversed("vkf_s1");
+        reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
+                "vkf_s1", "rev_kf1", "ent_kf", "order_ent_kf", "mch_sm", 1));
+        markVerificationReversed("vkf_s2");
+        reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
+                "vkf_s2", "rev_kf2", "ent_kf", "order_ent_kf", "mch_sm", 1));
+
+        // 逐笔增量精确(k1=33,k2=34),failed 不参与、reversed 原核销被计入;全量冲销后该权益净额 0。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT verified_amount_cent FROM settlement_transactions WHERE transaction_no = ?",
+                Long.class, "ST-VR-rev_kf1")).isEqualTo(-33L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT verified_amount_cent FROM settlement_transactions WHERE transaction_no = ?",
+                Long.class, "ST-VR-rev_kf2")).isEqualTo(-34L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(verified_amount_cent),0) FROM settlement_transactions WHERE entitlement_id = ?",
+                Long.class, "ent_kf")).isZero();
     }
 
     // ─── seed helpers ────────────────────────────────────────────────────────
@@ -325,6 +360,11 @@ class SettlementStateMachineJdbcIntegrationTests {
     }
 
     private void seedSuccessVerification(String verId, String entId, Instant at) {
+        seedVerification(verId, entId, at, "success");
+    }
+
+    /** 直插一条前向核销记录(reverses_verification_id NULL),status 可控(success/failed/manual_overridden…)。 */
+    private void seedVerification(String verId, String entId, Instant at, String status) {
         verIds.add(verId);
         java.sql.Timestamp ts = java.sql.Timestamp.from(at);
         // ticket_verifications.device_id 有 FK → terminal_devices(id)(V159);先种一台合法已登记设备(照既有测试范式:kiosk/venue/bound)。
@@ -337,8 +377,13 @@ class SettlementStateMachineJdbcIntegrationTests {
                 INSERT INTO ticket_verifications (id, verification_no, entitlement_id, entitlement_code,
                     credential_type, credential_payload, device_id, point_id, status, source_type, created_at,
                     verified_people)
-                VALUES (?, ?, ?, ?, 'qr', 'x', 'dev_sm', 'pt', 'success', 'admin', ?, 1)""",
-                verId, "VN-" + verId, entId, "code_" + entId, ts);
+                VALUES (?, ?, ?, ?, 'qr', 'x', 'dev_sm', 'pt', ?, 'admin', ?, 1)""",
+                verId, "VN-" + verId, entId, "code_" + entId, status, ts);
+    }
+
+    /** 复现生产:冲正主链在发事件前已把原核销翻转成 reversed(TicketVerificationService markVerificationReversed)。 */
+    private void markVerificationReversed(String verId) {
+        jdbcTemplate.update("UPDATE ticket_verifications SET status = 'reversed' WHERE id = ?", verId);
     }
 
     private long forfeited(String entId) {

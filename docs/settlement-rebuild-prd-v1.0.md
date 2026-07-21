@@ -335,6 +335,8 @@
 
 | 状态机加固(审计 AUD-012/013/017/018/019·资金正确性核心) | ✅ 代码落地·PR 待并 | **V323**(`settlement_transactions` 转不可变账务事件账本)+**V324**(`ticket_refunds` 终态)。①核销按 `verification_id` 写不可变**增量**结算行(增量=f(k)−f(k−1),`business_at` 落月→跨月各归其月,取代累计值覆盖首插行)②核销冲正追加**负向**结算 `ST-VR`(严格取原行反;原月未过账则该月净重算、已过账则落当月红冲不改历史)③退款仅 `success` 且按 `succeeded_at` 聚合(finance/analytics/dividend 四处),修 `FinanceJdbcIntegrationTests`「`requested` 计入退款」错误绿灯④到期归项目「可没收终态」白名单=`status='active'`+父实例非冻结(排除已成功退款/退款申请中)⑤消费者幂等 append-only(重放 DO NOTHING)+ `SettlementReconciliationJob.rebuildMissingSettlements` 按核销权威事实重建缺失结算(AUD-017 outbox 之替代;全量事务性 outbox+死信为后续上限)。资金恒等自检 `SettlementAmountsTests`(非DB) + 门禁 `SettlementStateMachineJdbcIntegrationTests`/`FinanceJdbcIntegrationTests`(DB,主会话串行跑) |
 
+> 🔒部署前核对(状态机加固·复核提示):①`ticket_refunds` 加 status CHECK 前先 `SELECT DISTINCT status FROM ticket_refunds` 确认无八值外脏值;②重建 `rebuildMissingSettlements` 为本 PR 全新、生产从未跑过(基线 d577fc4b 无此方法),库内不应有「同权益既有遗留累计行 verification_id IS NULL、又有 per-verification 行」的双计残留——部署前核对下句应返回 0 行(非 0 先排查、勿开 `settlement.reconciliation.scheduled` 重建):`SELECT s.entitlement_id FROM settlement_transactions s WHERE s.transaction_type='verification_settled' AND s.verification_id IS NOT NULL AND EXISTS(SELECT 1 FROM settlement_transactions leg WHERE leg.entitlement_id=s.entitlement_id AND leg.transaction_type='verification_settled' AND leg.verification_id IS NULL) GROUP BY s.entitlement_id;`。注:`settlement.reconciliation.scheduled.enabled` 生产=true(application-prod.yml:31),重建首夜即跑,故上述前置校验为部署闸。
+
 > 渠道费明细来源(§5.0 步骤②)现无数据源,引擎暂置 0,待第三方渠道费率接入补(批 6)。
 
 ---
