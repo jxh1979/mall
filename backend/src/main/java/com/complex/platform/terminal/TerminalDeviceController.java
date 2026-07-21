@@ -25,11 +25,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class TerminalDeviceController {
 
     private final TerminalDeviceService service;
+    private final DeviceSigningKeyStore deviceSigningKeyStore;
     private final AuthorizationService authorizationService;
 
-    public TerminalDeviceController(TerminalDeviceService service, AuthorizationService authorizationService) {
+    public TerminalDeviceController(TerminalDeviceService service, AuthorizationService authorizationService,
+            DeviceSigningKeyStore deviceSigningKeyStore) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.deviceSigningKeyStore = deviceSigningKeyStore;
     }
 
     @PostMapping("/devices/bind")
@@ -37,6 +40,20 @@ public class TerminalDeviceController {
         authorizationService.requirePermission("terminal.device.bind");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.bindDevice(request));
+    }
+
+    // AUD-010 ②：登记/轮换 kiosk/tablet 设备级签名公钥（ready-to-enforce；客户端实现签名后调用）。
+    @PostMapping("/devices/{id}/signing-key")
+    public ApiResponse<java.util.Map<String, String>> registerDeviceSigningKey(
+            @PathVariable String id,
+            @RequestBody java.util.Map<String, String> body) {
+        authorizationService.requirePermission("terminal.device.bind");
+        String publicKey = body == null ? null : body.get("public_key");
+        if (publicKey == null || publicKey.isBlank()) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "public_key is required");
+        }
+        deviceSigningKeyStore.upsert(id, publicKey.trim());
+        return ApiResponse.ok(java.util.Map.of("status", "registered"));
     }
 
     @PostMapping("/devices/return")

@@ -8,38 +8,37 @@
 
 | ID | 级别 | 结论 | 状态 | 修复位置 |
 |---|---|---|---|---|
-| AUD-010 | P1 | 终端/设备身份由请求头自报、可伪造或缺省绕过 | **FIXED-partial**（设备绑定型名义向量闭合 + RBAC 兜底外部越权；**web/app 资金白名单旁路 STILL-OPEN**；enforce 分级生产滚动中） | `gate/DeviceCredentialVerifier`+`DeviceCredentialInterceptor`+`TerminalIdentityHolder`+`GateRequestContext`+`ServiceOrderController`+`application.yml` |
+| AUD-010 | P1 | 终端/设备身份由请求头自报、可伪造或缺省绕过 | **FIXED（服务端完整；enforce 待客户端签名就绪；app enforce 属业务口径）** | `gate/DeviceCredentialVerifier`+`DeviceCredentialInterceptor`+`DeviceCredentialBodyCachingFilter`+`NonceStore`+`terminal/DeviceSigningKeyStore`+`TerminalIdentityHolder`+`GateRequestContext`+`ServiceOrderController`+V325 |
 | AUD-011 | P1 | 权限模板应用绕过高风险授权审批 | **CLOSED** | `access/AccessService.applyPermissionTemplate` |
 | AUD-020 | P1 | 高值库存复核子服务手工 new，绕过 AOP 守卫 | **CLOSED** | `inventory/InventoryService.reviewHighValue`（守卫上移被代理入口）+ `GuardedActionProxyBypassArchTest` |
 
-## AUD-010 详情（FIXED-partial，勿读成已闭）
+## AUD-010 详情（FIXED · 服务端完整，enforce 待客户端就绪）
 
-**机制（已落地）**：设备绑定型终端类型（staff_work_phone/tablet/kiosk）的写请求，要求对 `deviceId|timestamp|nonce|METHOD|path`
-的密码学签名（复用员工 Android Keystore 设备凭证公钥）+ 核对 `terminal_devices` 登记；通过则以设备登记类型为服务端可信终端身份，
-注入 `TerminalIdentityHolder`，终端开关/入场闸（`GateRequestContext`）与资金四路统一改读派生身份。分级强制
-（`off|grace|enforce`，默认 `grace`=生产安全态：签名无效必拒、缺签名/未登记设备的写请求记审计后放行）。
+**服务端前置全套已落地（2026-07-20 用户拍板本批做完）**：
+- **设备绑定型验签**（staff_work_phone/tablet/kiosk 写请求）：签名量 = `deviceId|ts|nonce|METHOD|path|sha256(body)`；
+  staff_work_phone→员工 Keystore 公钥且 header deviceId 归属该员工（⑤）；kiosk/tablet→设备级签名公钥
+  `terminal_device_signing_keys`（②，登记端点 `POST /api/v1/terminals/devices/{id}/signing-key`）。
+- **① web/app 资金旁路已闭（服务端）**：`web` enforce 下拒「`Authorization: Bearer` 自报 web」（合法后台走 Cookie 会话，
+  **无客户端依赖、可即刻翻 enforce**）；`app` enforce 下拒 app 写。
+- **③ 重放**：nonce 落库 `terminal_device_nonces`（V325），验签通过后消费，重复即 `DEVICE_CREDENTIAL_REPLAY`。
+- **④ 防改体**：body SHA-256 纳入签名量（`DeviceCredentialBodyCachingFilter` 仅包裹「设备绑定型+写+带签名」请求）。
+- **⑤ deviceId 归属**：员工只能用自己密钥配自己设备的 deviceId，否则 `device_owner_mismatch` 拒。
+- kiosk 自助端点（config/heartbeat，有 X-Device-Token 认证）豁免本闸，不被 enforce 误伤。
 
-**为何是 FIXED-partial（不是完整闭合）**：
-- **名义向量闭合**：把某设备绑定型终端类型翻 `enforce` 后，冒充「该类型公司硬件」需有效签名——自报该类型的伪造被挡；
-  外部人另被 RBAC 兜死（动钱需 `service.order.create` 权限，客人拿不到），故**非外部盗款通道**。
-- **STILL-OPEN 残留（见「R1」）**：验签只对设备绑定型强制，但资金四路白名单**也接受 `web`/`app`**，自报 `web`/`app` 时**完全跳过验签**。
-  故即便 `staff_work_phone` 翻 `enforce`，攻击者切自报 `web`/`app` 仍能动钱，绕过「资金动作仅限公司登记硬件」这一设备绑定意图。
-  残留=**内部持权者可从任意私人设备经 web/app 动钱**；且**本 PR 前即存在**（非本次引入）。
+**为何标 FIXED 而非 CLOSED**：分级强制默认 `grace`（生产安全态，不瘫痪现网）。**实际翻 enforce 依赖客户端 App
+（安卓/kiosk/平板）实现请求签名 + 登记签名密钥——客户端侧工作，本 PR 不含**。故服务端 ready-to-enforce，真正 flip
+是客户端就绪后的部署决策（web 例外：无客户端依赖，可先翻）。
 
-### R1 web/app 资金白名单旁路（STILL-OPEN，独立挂号）
-`ServiceOrderController` 资金四路（下单/确认收款/完成/出示收款码）的公司终端白名单含 `web`/`app`，这两类**非设备绑定型**、
-不进设备凭证验签、也未与认证通道耦合，故「仅限公司登记硬件」保证对 web/app **不成立**。**翻任何终端类型 `enforce` 前必须同批处置**，三选一：
-1. **web 与 Cookie 会话真相耦合**：`web` 只认后台 HttpOnly Cookie 会话来源，拒绝 `Authorization: Bearer` 自报 `web`（堵个人设备用 Bearer 冒充 web 后台）；
-2. **app 资金动作要客人侧证明**：`app`（客人自点）走客人身份/订单归属证明，不等同「公司终端」放行；
-3. **把 `web`/`app` 移出资金白名单**，或一并纳入验签（需各自登记/证明基建）。
+### ⚠️ 需用户定：app 资金动作业务口径
+`app`（客人 App 自点，`CREATE_AND_CODE_TERMINALS` 保留项）的 createOrder 现被 RBAC（`service.order.create`）挡住客人，
+故无活跃客人自点流程；残留=内部持权者可自报 app 从私人设备动钱。本 PR 处理：**app enforce 下拒写**（把决定推到 enforce
+翻转时）。翻 app enforce 会阻断「客人 App 自点」——若业务要保留客人自点，须先建**客人侧证明**（客人身份/订单归属），
+属业务口径，**请用户拍板**：①翻 app enforce（客人自点作废，走别的客人认证流）② 建客人侧证明后再翻 ③ app 移出资金白名单。
 
-### enforce 翻转前的加固项（复核提，翻 enforce 同批处置）
-- **重放窗**：nonce 不落库，有 ±300s 时间窗；资金写由既有 idempotency_key 覆盖，但**非资金写**在窗口内可重放（未被幂等键覆盖）。
-- **签名量未含 body 摘要**：签名绑定 `method+path`，未绑定请求体——截获有效签名后可改体（enforce 前用 `ContentCachingRequestWrapper` 追加 body 摘要）。
-- **resolveSigningKey 未交叉校验归属**：签名公钥由「认证员工→档案→active 凭证」解析，**未**显式交叉校验 header `X-Device-Id` 与该登记密钥/员工归属一致（当前靠 `terminal_devices` 类型+bound 核对，宜再显式绑 deviceId↔凭证归属）。
-- **kiosk/tablet 无每设备密钥基建**：翻 `enforce` 前须先落每设备签名密钥登记（否则该类型恒 403 自伤）；`kiosk` 可复用设备令牌走 HMAC 通道，本期未纳入。
-
-**验证**：`DeviceCredentialVerifierTests`（真实 EC 签/验，11 例）；`DeviceCredentialEnforcementJdbcIntegrationTests`（真实 bean 装配 + 配置驱动分级强制端到端，4 例，随全量 22 JDBC 绿）。
+**验证**：`DeviceCredentialVerifierTests`（真实 EC 签/验，18 例，含 web-Bearer/app/deviceId-mismatch/kiosk-device-key/
+body-tamper·valid）；`NonceAndSigningKeyJdbcIntegrationTests`（nonce 重放 + 设备密钥库，真实 JDBC）；
+`DeviceCredentialEnforcementJdbcIntegrationTests`（配置驱动分级强制）。全套连同 AccessJdbc/ServiceOrderJdbc
+在隔离库 complex_test_aud010 上 24 JDBC 全绿（上下文 boot + 无回归）。
 
 ## AUD-011 详情（CLOSED）
 

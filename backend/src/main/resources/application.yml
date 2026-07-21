@@ -120,5 +120,9 @@ access:
       staff_work_phone: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_STAFF_WORK_PHONE:}
       tablet: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_TABLET:}
       kiosk: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_KIOSK:}
+      # web：enforce 下拒「Authorization: Bearer 自报 web」（合法后台走 Cookie 会话，无客户端依赖，可先翻）。
+      web: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_WEB:}
+      # app：enforce 下拒 app 写（客人端无公司设备凭证；app 资金是否要客人侧证明属业务口径）。
+      app: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_APP:}
     # 签名时间窗（秒），配合 nonce 防重放；资金写动作叠加既有 idempotency_key 去重。
     timestamp_tolerance_seconds: ${ACCESS_DEVICE_CREDENTIAL_TOLERANCE_SECONDS:300}

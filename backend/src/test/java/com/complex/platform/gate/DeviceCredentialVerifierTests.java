@@ -13,6 +13,7 @@ import com.complex.platform.access.staff.StaffProfileRecord;
 import com.complex.platform.access.staff.StaffRepository;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.terminal.DeviceSigningKeyStore;
 import com.complex.platform.terminal.TerminalDeviceRecord;
 import com.complex.platform.terminal.TerminalDeviceRepository;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +40,7 @@ class DeviceCredentialVerifierTests {
     private StaffRepository staffRepo;
     private AuthorizationService authz;
     private AuditEventService audit;
+    private DeviceSigningKeyStore signingKeyStore;
     private KeyPair keyPair;
     private String pubB64;
 
@@ -48,6 +50,7 @@ class DeviceCredentialVerifierTests {
         staffRepo = mock(StaffRepository.class);
         authz = mock(AuthorizationService.class);
         audit = mock(AuditEventService.class);
+        signingKeyStore = mock(DeviceSigningKeyStore.class);
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
         kpg.initialize(256);
         keyPair = kpg.generateKeyPair();
@@ -61,9 +64,9 @@ class DeviceCredentialVerifierTests {
     }
 
     private DeviceCredentialVerifier verifier(String defaultMode) {
-        return new DeviceCredentialVerifier(deviceRepo, staffRepo, authz, audit,
+        return new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit,
                 Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC),
-                defaultMode, "", "", "", 300);
+                defaultMode, "", "", "", "", "", 300);
     }
 
     private MockHttpServletRequest signedRequest(String method, long ts, String nonce, String sigB64) {
@@ -78,7 +81,8 @@ class DeviceCredentialVerifierTests {
     }
 
     private String sign(String method, long ts, String nonce) throws Exception {
-        String canonical = DEVICE + "\n" + ts + "\n" + nonce + "\n" + method + "\n" + URI;
+        String canonical = DEVICE + "\n" + ts + "\n" + nonce + "\n" + method + "\n" + URI
+                + "\n" + emptyBodyDigest();
         Signature s = Signature.getInstance("SHA256withECDSA");
         s.initSign(keyPair.getPrivate());
         s.update(canonical.getBytes(StandardCharsets.UTF_8));
@@ -196,6 +200,111 @@ class DeviceCredentialVerifierTests {
         r.addHeader("X-Device-Nonce", "n1");
         r.addHeader("X-Device-Signature", "AAAA");
         return r;
+    }
+
+    private String sign(String method, long ts, String nonce, String bodyDigest) throws Exception {
+        String canonical = DEVICE + "\n" + ts + "\n" + nonce + "\n" + method + "\n" + URI + "\n" + bodyDigest;
+        Signature s = Signature.getInstance("SHA256withECDSA");
+        s.initSign(keyPair.getPrivate());
+        s.update(canonical.getBytes(StandardCharsets.UTF_8));
+        return Base64.getEncoder().encodeToString(s.sign());
+    }
+
+    private static String digest(byte[] body) throws Exception {
+        return java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(body));
+    }
+
+    private DeviceCredentialVerifier verifierWith(String defaultMode, String webMode, String appMode) {
+        return new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit,
+                Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC),
+                defaultMode, "", "", "", webMode, appMode, 300);
+    }
+
+    @Test
+    void webWithBearerRejectedUnderEnforceButAllowedUnderGrace() {
+        org.springframework.mock.web.MockHttpServletRequest r =
+                new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/v1/services/orders/o1/mark-paid");
+        r.addHeader("X-Terminal-Type", "web");
+        r.addHeader("Authorization", "Bearer abc.def.ghi");
+        assertThatThrownBy(() -> verifierWith("grace", "enforce", "").verify(r))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+        TerminalIdentityHolder.VerifiedTerminal vt = verifier("grace").verify(r);
+        assertThat(vt.terminalType()).isEqualTo("web");
+        assertThat(vt.verified()).isFalse();
+    }
+
+    @Test
+    void webWithCookieAllowedUnderEnforce() {
+        org.springframework.mock.web.MockHttpServletRequest r =
+                new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/v1/services/orders/o1/mark-paid");
+        r.addHeader("X-Terminal-Type", "web");
+        TerminalIdentityHolder.VerifiedTerminal vt = verifierWith("grace", "enforce", "").verify(r);
+        assertThat(vt.terminalType()).isEqualTo("web");
+        assertThat(vt.verified()).isFalse();
+    }
+
+    @Test
+    void appWriteRejectedUnderEnforce() {
+        org.springframework.mock.web.MockHttpServletRequest r =
+                new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/v1/services/orders");
+        r.addHeader("X-Terminal-Type", "app");
+        assertThatThrownBy(() -> verifierWith("grace", "", "enforce").verify(r))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+    }
+
+    @Test
+    void deviceOwnerMismatchRejected() throws Exception {
+        when(staffRepo.findProfileByUserId("u1")).thenReturn(Optional.of(otherProfile()));
+        String sig = sign("POST", NOW, "n1");
+        assertThatThrownBy(() -> verifier("enforce").verify(signedRequest("POST", NOW, "n1", sig)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+    }
+
+    @Test
+    void kioskUsesDeviceLevelKey() throws Exception {
+        when(deviceRepo.findByDeviceId(DEVICE)).thenReturn(Optional.of(device("kiosk", "bound")));
+        when(signingKeyStore.findActivePublicKey(DEVICE)).thenReturn(Optional.of(pubB64));
+        org.springframework.mock.web.MockHttpServletRequest r = signedRequest("POST", NOW, "n1", sign("POST", NOW, "n1"));
+        r.removeHeader("X-Terminal-Type");
+        r.addHeader("X-Terminal-Type", "kiosk");
+        TerminalIdentityHolder.VerifiedTerminal vt = verifier("enforce").verify(r);
+        assertThat(vt.verified()).isTrue();
+        assertThat(vt.terminalType()).isEqualTo("kiosk");
+    }
+
+    @Test
+    void bodyTamperFailsSignature() throws Exception {
+        byte[] signedBody = "{\"amount\":100}".getBytes(StandardCharsets.UTF_8);
+        byte[] tamperedBody = "{\"amount\":999}".getBytes(StandardCharsets.UTF_8);
+        String sig = sign("POST", NOW, "n1", digest(signedBody));
+        org.springframework.mock.web.MockHttpServletRequest mock = signedRequest("POST", NOW, "n1", sig);
+        mock.setContent(tamperedBody);
+        CachedBodyHttpServletRequest wrapped = new CachedBodyHttpServletRequest(mock);
+        assertThatThrownBy(() -> verifier("enforce").verify(wrapped))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+    }
+
+    @Test
+    void bodySignedMatchesVerifies() throws Exception {
+        byte[] body = "{\"amount\":100}".getBytes(StandardCharsets.UTF_8);
+        String sig = sign("POST", NOW, "n1", digest(body));
+        org.springframework.mock.web.MockHttpServletRequest mock = signedRequest("POST", NOW, "n1", sig);
+        mock.setContent(body);
+        CachedBodyHttpServletRequest wrapped = new CachedBodyHttpServletRequest(mock);
+        TerminalIdentityHolder.VerifiedTerminal vt = verifier("enforce").verify(wrapped);
+        assertThat(vt.verified()).isTrue();
+    }
+
+    private static StaffProfileRecord otherProfile() {
+        Instant now = Instant.ofEpochMilli(NOW);
+        return new StaffProfileRecord("spOther", "proj1", null, "u1", "Other", "ph", "id", "lvl1",
+                "approved", "admin", now, null, "active", now, now);
+    }
+
+    private static String emptyBodyDigest() throws Exception {
+        return java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(new byte[0]));
     }
 
     private static TerminalDeviceRecord device(String terminalType, String status) {
