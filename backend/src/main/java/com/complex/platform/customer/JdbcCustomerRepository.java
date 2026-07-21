@@ -319,6 +319,28 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public java.util.Optional<CustomerPointsLedgerRecord> findPointsLedgerBySourceDocForUpdate(
+            String sourceDocType, String sourceDocId, String changeType) {
+        // AUD-014：earn 行 FOR UPDATE 行锁 → 串行化并发确认/冲正（锁序 earn→account）；
+        // FOR UPDATE 置于 ORDER BY/LIMIT 之后（PostgreSQL 语法）。
+        return jdbcTemplate.query("""
+                SELECT id, customer_id, points_delta, balance_after, source_type,
+                       source_id, description, expire_at, remaining_points, expired, created_at,
+                       change_type, status, source_doc_type, source_doc_id, confirmed_amount
+                  FROM customer_points_ledger
+                 WHERE source_doc_type = :source_doc_type
+                   AND source_doc_id = :source_doc_id
+                   AND change_type = :change_type
+                 ORDER BY created_at ASC, id ASC
+                 LIMIT 1
+                 FOR UPDATE
+                """, Map.of(
+                "source_doc_type", sourceDocType,
+                "source_doc_id", sourceDocId,
+                "change_type", changeType), this::mapPointsLedger).stream().findFirst();
+    }
+
+    @Override
     public List<CustomerPointsLedgerRecord> listPointsLedgerBySourceDoc(
             String sourceDocType, String sourceDocId, String changeType) {
         return jdbcTemplate.query("""

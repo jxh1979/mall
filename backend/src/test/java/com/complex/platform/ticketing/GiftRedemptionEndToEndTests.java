@@ -3,7 +3,6 @@ package com.complex.platform.ticketing;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.bar.BarGiftRedemptionRecord;
-import com.complex.platform.bar.BarOrderRecord;
 import com.complex.platform.bar.BarRepository;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.time.Instant;
@@ -16,15 +15,18 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * R5 T15 端到端验收（事件驱动，真 DB 全 Spring 上下文）：核销赠饮权益(gift_drink) → ApplicationEventPublisher
  * 发 ticket.gift_verified → BarGiftConsumer 同步监听 → 0 元 bar_order(order_type='gift') + 出品 deliver 事件 +
  * bar_gift_redemptions 桥表落地。修 R5「无端到端验收」缺口。
  *
- * <p>生产落地形态：当前赠饮→吧台 SKU 无映射来源(itemRef=null)，故实际库存扣减跳过、inventory_movement_id 留空、
- * redemption.note 标注未配置 SKU；链路（核销→0元单→出品事件→桥表）全打通且可追溯。
+ * <p>AUD-015：赠饮缺配置(无 bar_item_ref)/缺库存时核销 fail-closed（抛错回滚，票权益不被消费），绝不静默标记 delivered；
+ * 配置齐全时链路（核销→0元单→出品 deliver 事件→扣库 redeem_consume→桥表）全打通且可追溯。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
@@ -46,6 +48,9 @@ class GiftRedemptionEndToEndTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     @BeforeEach
     void authenticate() {
         // 生产中核销/冲正必有已认证主体；P0-2 后在线核销主链会按调用者商户范围校验归属。
@@ -58,6 +63,7 @@ class GiftRedemptionEndToEndTests {
                 INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
                     status, created_at, updated_at)
                 VALUES ('device_t15', 'dev-device_t15', 'DC-device_t15', 'kiosk', 'venue', 'bound', ?, ?)
+                ON CONFLICT (id) DO NOTHING
                 """, ts, ts);
     }
 
@@ -66,37 +72,30 @@ class GiftRedemptionEndToEndTests {
         com.complex.platform.support.TestSecurityActors.clear();
     }
 
+    // 权益保留证明：生产入口 TicketingService.createVerification 是 @Transactional；这里用 TransactionTemplate
+    // 复刻同一事务边界（本测试 NOT_SUPPORTED 无环境事务 → 模板真开新事务、抛错时真回滚），从而可观察到权益未被消费。
+    // 种子直插自动提交、唯一 suffix 隔离残留（种子行 append-only/FK 不可删，无需清理）。
     @Test
-    void giftDrinkVerificationCreatesZeroAmountGiftOrderAndRedemptionThroughEvent() {
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void giftDrinkVerificationWithoutBarItemRefIsRejectedFailClosed() {
+        // AUD-015：赠饮模板未配 bar_item_ref → 无法扣库/结算 → 核销 fail-closed 抛错回滚整笔核销，票权益不被消费，绝不静默 delivered。
         String suffix = Long.toString(System.nanoTime());
         String barId = "bar_t15_" + suffix;
         seedBarTable(barId);
         String code = "gift-code-" + suffix;
-        seedGiftEntitlement(code, barId);
+        seedGiftEntitlement(code, barId); // 无 bar_item_ref
 
-        var response = verificationService.createVerification(new VerificationRequest(
-                "req-" + suffix, "qr", code, "device_t15", barId, Map.of("source", "test")));
-        assertThat(response.status()).isEqualTo("success");
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                tx.executeWithoutResult(status -> verificationService.createVerification(new VerificationRequest(
+                        "req-" + suffix, "qr", code, "device_t15", barId, Map.of("source", "test")))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("GIFT_ITEM_UNMAPPED"));
 
-        // 桥表：一次核销一单（delivered），verification_id 关联本次核销。
-        BarGiftRedemptionRecord redemption =
-                barRepository.findGiftRedemptionByVerification(response.id()).orElseThrow();
-        assertThat(redemption.status()).isEqualTo("delivered");
-        assertThat(redemption.barId()).isEqualTo(barId);
-        // 无 SKU 映射来源：扣减跳过、movement 留空、note 标注未配置 SKU。
-        assertThat(redemption.inventoryMovementId()).isNull();
-        assertThat(redemption.note()).contains("no item mapping source");
-
-        // 0 元赠饮单（order_type=gift, amount=0）。
-        BarOrderRecord order = barRepository.findOrderById(redemption.barOrderId()).orElseThrow();
-        assertThat(order.orderType()).isEqualTo("gift");
-        assertThat(order.totalAmountCent()).isZero();
-
-        // 出品 deliver 事件已落（inventory_movement_id 列存在、本期为 null）。
-        Integer deliverEvents = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM bar_production_ticket_events WHERE order_id = ? AND action_type = 'deliver'",
-                Integer.class, order.id());
-        assertThat(deliverEvents).isEqualTo(1);
+        // 核销事务已回滚 → issued entitlement 的 used_times 仍为 0（权益未被消费，可再次核销）。
+        Integer usedTimes = jdbcTemplate.queryForObject(
+                "SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, "ent_" + code);
+        assertThat(usedTimes).isZero();
     }
 
     // R5 已落地#2：gift_drink 模板配 bar_item_ref=item_X → 核销 → 事件 itemRef=item_X →
@@ -140,8 +139,10 @@ class GiftRedemptionEndToEndTests {
         String suffix = Long.toString(System.nanoTime());
         String barId = "bar_t15_" + suffix;
         seedBarTable(barId);
+        String itemId = "item_" + suffix;
+        seedStockItem(itemId, 5);
         String code = "gift-code-" + suffix;
-        seedGiftEntitlement(code, barId, 2);
+        seedGiftEntitlement(code, barId, 2, itemId);
 
         var first = verificationService.createVerification(new VerificationRequest(
                 "req-a-" + suffix, "qr", code, "device_t15", barId, Map.of()));
@@ -159,8 +160,10 @@ class GiftRedemptionEndToEndTests {
         String suffix = Long.toString(System.nanoTime());
         String barId = "bar_t15_" + suffix;
         seedBarTable(barId);
+        String itemId = "item_" + suffix;
+        seedStockItem(itemId, 5);
         String code = "gift-code-" + suffix;
-        seedGiftEntitlement(code, barId);
+        seedGiftEntitlement(code, barId, 1, itemId);
 
         var response = verificationService.createVerification(new VerificationRequest(
                 "req-" + suffix, "qr", code, "device_t15", barId, Map.of()));
