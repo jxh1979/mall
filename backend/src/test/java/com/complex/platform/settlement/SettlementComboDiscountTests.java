@@ -204,6 +204,44 @@ class SettlementComboDiscountTests {
         assertThat(num(bill, "combo_discount_cent")).isZero();
     }
 
+    /**
+     * 折扣跨月冲正（套票真上线前必修）：冲正落在与原销售<b>不同</b>的月（该月折扣 SUM 为负）时，
+     * 项目承担折扣须带符号<b>追回</b>（-D），不能被钳成 0——否则收入侧 -R 追回了、折扣 -D 没追回 → 项目多付该笔折扣。
+     * 当月另有一笔普通非折扣销售托住池基数为正（ticket_revenue ≥0，避开 chk_sb_amount），隔离出折扣钳0缺陷。
+     */
+    @Test
+    void crossMonthReversalClawsBackPlatformBorneDiscount() {
+        String pid = newProject();
+        // 本月一笔红冲（原销售在已过账的上月）：净额 −1000、折扣 −200（platform_absorb 默认承担）。
+        seedReversal(pid, "m1", "entry", 1, 1, 1000L, 200L);
+        // 本月另有一笔普通非折扣销售：净额 +50000、折扣 0（托住 ticket_revenue>0，隔离折扣钳0）。
+        seedPooled(pid, "m2", "entry", 3, 2, 50000L, 0L);
+
+        service.settleMonth(pid, MONTH);
+
+        Map<String, Object> bill = bill(pid);
+        // 项目承担折扣带符号追回：combo_discount_cent = −200（不是 0）。
+        assertThat(num(bill, "combo_discount_cent")).isEqualTo(-200L);
+        // 池基数 = 净额(50000−1000) + 折扣(−200) = 48800（收入侧与折扣侧对称跨月净掉）。
+        assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(48800L);
+    }
+
+    /**
+     * split_by_ratio 跨月冲正:平台份额同样带符号追回（锁 {@code f(-x)=-f(x)} 整除舍入对称，master 点名 split_by_ratio）。
+     * 折扣 −200 × 平台 50% = −100（不是 0）。
+     */
+    @Test
+    void crossMonthReversalClawsBackSplitByRatioShare() {
+        String pid = newProject();
+        setComboDiscount(pid, "split_by_ratio", 5000); // 平台承担 50%
+        seedReversal(pid, "m1", "entry", 1, 1, 1000L, 200L); // 折扣 −200
+        seedPooled(pid, "m2", "entry", 3, 2, 50000L, 0L);    // 托住池基数为正
+
+        service.settleMonth(pid, MONTH);
+
+        assertThat(num(bill(pid), "combo_discount_cent")).isEqualTo(-100L); // −200 × 50%
+    }
+
     // ─── ④ 零行为变更：无折扣场景与 D6 前一致 ──────────────────────────────────
 
     @Test

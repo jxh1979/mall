@@ -221,6 +221,7 @@
   - 按比例:可配比例拆分。
 > ✅ **已落地(V268 配置 → D6/V331 折扣额落库应用)**:建 `ticket_combo_discount_configs`(项目级可配 `discount_bearer ∈ {platform_absorb, merchant_absorb, split_by_ratio}` + `split_platform_bps`)。默认 `platform_absorb`(项目承担折扣)=商户结算不受折扣影响,与现状一致,**零行为变更**。
 > **D6(V331)套票折扣额已走真实售卖/核销路径落库**:售卖时快照满额价 `issued_entitlements.component_full_price_cent` → 核销时算折扣增量 `settlement_transactions.discount_amount_cent` 下传 #179 append-only 账本;结算按 `discount_bearer` 应用——`platform_absorb`(商户拿满额、折扣记 `settlement_bills.combo_discount_cent` 归项目)/ `merchant_absorb`(商户拿净额)/ `split_by_ratio`(按 `split_platform_bps` 拆)。**满额价空 → 折扣 0 → 零行为变更。**
+> **跨月冲正(V335·套票真上线前必修)**:项目承担折扣<b>带符号</b>——核销为正(平台吸收),该核销在<b>后续已过账月</b>被冲正时为负(平台<b>追回</b>先前吸收),与收入侧 `verified_amount_cent` 带符号跨月净掉一致。原 `platformBorneDiscount` 的 `discountCent≤0` 钳0 会丢弃跨月负向追回 → 收入 -R 追回了、折扣 -D 没追回,项目多付;V335 放开 `combo_discount_cent` 的 ≥0 约束、去钳。⚠️ 已知天花板:冲正当月须有抵充收入(否则 `ticket_revenue<0` 撞 `chk_sb_amount`,与收入侧同限,非本修引入)。
 
 ### 7.5 第三方通票(用户口径 7)
 - 美团/抖音等第三方售出的通票**适用整套规则**(权益拆分、按核销结算、未用归项目、手续费预扣);
@@ -301,6 +302,7 @@
 - **V329** 六配置表复合唯一 `(scope, is_draft) WHERE status='active'`(草案与生效值并存)+ `revenue_stream_attribution` 加 `is_draft` + `merchant_revenue_attribution_rules` 升 Path 2(草案不影响进行中结算)
 - **V330** `settlement.bill.post` 权限点(过账·高敏 requires_approval)
 - **V331** `issued_entitlements.component_full_price_cent`(售卖快照满额价)+ `settlement_transactions.discount_amount_cent`(核销折扣增量·扩 `chk_st_amount` 允许 ± 守恒)+ `settlement_bills.combo_discount_cent`(平台吸收折扣归项目)
+- **V335** 放开 `settlement_bills.combo_discount_cent` 的 ≥0 约束(`chk_sb_combo_discount` drop·改带符号)——套票折扣<b>跨月冲正</b>时项目承担折扣可为负=追回,与收入侧 `verified_amount_cent` 带符号跨月净掉一致(修 `platformBorneDiscount` 的 `discountCent≤0` 钳0 致跨月不对称、项目多付;套票真上线前必修)
 
 ---
 
