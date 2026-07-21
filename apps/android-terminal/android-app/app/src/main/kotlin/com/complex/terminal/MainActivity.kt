@@ -215,7 +215,7 @@ class MainActivity : Activity() {
           )
         },
         onSuccess = { binding ->
-          status.text = "绑定完成：${binding.deviceCode}（状态 ${binding.status}）"
+          status.text = "绑定完成：${binding.deviceCode}（状态 ${deviceStatusZh(binding.status)}）"
           showHome()
         },
         onError = { status.text = "绑定失败：${friendly(it)}" },
@@ -314,7 +314,7 @@ class MainActivity : Activity() {
         status.text = "正在核销…"
         runBackground(
           action = { workflow.verifyOnline(code) },
-          onSuccess = { r -> status.text = "核销结果：${r.status}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}" },
+          onSuccess = { r -> status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}" },
           onError = { status.text = "核销失败：${friendly(it)}" },
         )
       }
@@ -575,7 +575,7 @@ class MainActivity : Activity() {
         status.text = "正在冲正…"
         runBackground(
           action = { workflow.reverseVerification(vid, r) },
-          onSuccess = { res -> status.text = "冲正完成：${res.id}（状态 ${res.status}）" },
+          onSuccess = { res -> status.text = "冲正完成：${res.id}（状态 ${verifyStatusZh(res.status)}）" },
           onError = { status.text = "冲正失败：${friendly(it)}" },
         )
       }
@@ -758,7 +758,7 @@ class MainActivity : Activity() {
           list,
           rows.map { r ->
             "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
-              "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
+              "${tableTypeZh(r.tableType)} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
               tableId.setText(r.id ?: "")
               r.barId?.let { barId.setText(it) }
               status.text = "已选桌位：${r.tableCode ?: r.id}"
@@ -1240,7 +1240,7 @@ class MainActivity : Activity() {
             idempotencyKey = "byod_reg_${System.currentTimeMillis()}",
             projectId = pj, name = n, operatorNote = "BYOD 手机代提交"))
         },
-        onSuccess = { p -> status.text = "已提交：${p.name ?: n}(状态 ${p.status ?: "待审批"})" },
+        onSuccess = { p -> status.text = "已提交：${p.name ?: n}(状态 ${p.status?.let { staffStatusZh(it) } ?: "待审批"})" },
         onError = { status.text = "提交失败：${friendly(it)}" },
       )
     }
@@ -1302,7 +1302,7 @@ class MainActivity : Activity() {
         onSuccess = { binding ->
           posPrefs.edit().putString("bar_id", bar).apply()
           posBarId = bar
-          status.text = "绑定完成：${binding.deviceCode}（${binding.status}）"
+          status.text = "绑定完成：${binding.deviceCode}（${deviceStatusZh(binding.status)}）"
           showPosTables()
         },
         onError = { status.text = "绑定失败：${friendly(it)}" },
@@ -1703,6 +1703,32 @@ class MainActivity : Activity() {
     setPadding(dp(12), dp(8), dp(12), 0)
   }
 
+  /** 终端设备绑定状态->中文（terminal_devices.status，见迁移 chk_terminal_devices_status CHECK 注释）。 */
+  private fun deviceStatusZh(raw: String?): String = when (raw) {
+    "bound" -> "已绑定"; "returned" -> "已归还"; "unbound" -> "已解绑"; "disabled" -> "已停用"
+    "repair" -> "送修中"; "lost" -> "挂失"; "found" -> "已找回"; "scrapped" -> "已报废"; "blocked" -> "已封禁"
+    else -> raw ?: "-"
+  }
+
+  /** 票务/游乐核销结果状态->中文（VerificationResponse.status，后端 ticketing 域）。 */
+  private fun verifyStatusZh(raw: String?): String = when (raw) {
+    "success" -> "核销成功"; "failed" -> "核销失败"; "rejected" -> "已拒绝"
+    "reversed" -> "已冲正"; "revoked" -> "已作废"
+    else -> raw ?: "-"
+  }
+
+  /** 酒吧桌型->中文（bar table_type 字典：bar/standard/card_seat）。 */
+  private fun tableTypeZh(raw: String?): String = when (raw) {
+    "bar" -> "吧台"; "standard" -> "普通桌"; "card_seat" -> "卡座"
+    else -> raw ?: ""
+  }
+
+  /** 员工账号状态->中文（StaffProfileRecord.status = active/inactive；与 registration_status 不同域，不共用 statusZh）。 */
+  private fun staffStatusZh(raw: String?): String = when (raw) {
+    "active" -> "正常"; "inactive" -> "停用"
+    else -> raw ?: "-"
+  }
+
   private fun primaryButton(text: String, onClick: () -> Unit): Button = Button(this).apply {
     this.text = text
     setOnClickListener { onClick() }
@@ -1766,7 +1792,7 @@ class MainActivity : Activity() {
           "rejected" -> "已驳回"; "suspended" -> "已停用"
           else -> p.registrationStatus ?: "-"
         }
-        status.text = "档案状态: $reg / ${p.status ?: "-"}(手机、证件仅存不可逆加密，不可回显)"
+        status.text = "档案状态: $reg / ${staffStatusZh(p.status)}(手机、证件仅存不可逆加密，不可回显)"
       },
       onError = { status.text = "拉取失败：${friendly(it)}(本账号可能无员工档案)" },
     )
