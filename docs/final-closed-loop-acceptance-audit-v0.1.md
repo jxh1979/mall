@@ -77,7 +77,7 @@
 | 文件 | 当前行数 | 口径 |
 |---|---:|---|
 | `apps/web/src/main.tsx` | 43 行 | Web 入口薄层 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 879 行 | 票务 facade |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 905 行 | 票务 facade |
 | `backend/src/main/java/com/complex/platform/bar/BarService.java` | 784 行 | 酒吧 facade |
 | `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1347 行 | 酒吧订单/出品子服务 |
 | `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 674 行 | 酒吧账单编排子服务 |
@@ -89,9 +89,9 @@
 | 验证项 | 结果 |
 |---|---|
 | Web typecheck | 通过：`npm run typecheck --workspace apps/web`，2026-06-17 03:52 UTC 复跑通过 |
-| Web 单元测试 | 通过：57 个前端单元测试(源码定义计数)，2026-07-03 复跑 `verify:delivery-gates` 通过 |
+| Web 单元测试 | 通过：736 个前端单元测试(源码定义计数)，2026-07-03 复跑 `verify:delivery-gates` 通过 |
 | Web build | 通过，主包约 108.02 kB，无主包过大 warning，2026-06-17 03:52 UTC 复跑通过 |
-| UI 自动化 | 通过：`npm run verify:ui -- --reporter=line`，38 条 Playwright 验收；ADM-TKT-002 专用页规则草稿/仿真/发布路径、ADM-TKT-003 专用页订单/出票/核销预览路径、ADM-BAR-002 专用页账单/出品/结算路径与 ADM-BAR-003 专用页存酒领取核销路径与 ADM-BAR-004 专用页销售提成计算路径与 ADM-INV-001 专用页库存移动登记路径与 ADM-FIN-002 专用页对账人工复核路径、ADM-MER-001 专用页商户工单创建/派单/处理/关闭路径与 ADM-AMU-003 专用页安全巡检创建/提交/整改/复检/重开审批路径与 ADM-GOV-006 专用页主管复核评估/审批放行路径与 ADM-GOV-004 专用页合同草稿归档/审批通过路径与 ADM-RISK-001 专用页风控预警创建/处理路径与 ADM-INT-002 专用页四类事件展示、立即重试、补偿处理和轮询校验路径、ADM-EVD-001 专用页搜索筛选、详情、错误态和导出自身留痕路径、ADM-ANA-001 专用页三接口聚合、业务域筛选、空/错状态和复盘锁定路径、ADM-MER-002 专用页授权工单/账单、商户范围过滤、确认留痕和越权拦截路径、ADM-GOV-003 专用页主体绑定查看、原因校验和变更提交路径已纳入 `tests/e2e/full-admin-remaining.spec.ts`；完整后台桌面/移动端视觉回归已纳入 `tests/e2e/full-admin-visual.spec.ts`，覆盖 4 张截图基线 |
+| UI 自动化 | 通过：`npm run verify:ui -- --reporter=line`，39 条 Playwright 验收；ADM-TKT-002 专用页规则草稿/仿真/发布路径、ADM-TKT-003 专用页订单/出票/核销预览路径、ADM-BAR-002 专用页账单/出品/结算路径与 ADM-BAR-003 专用页存酒领取核销路径与 ADM-BAR-004 专用页销售提成计算路径与 ADM-INV-001 专用页库存移动登记路径与 ADM-FIN-002 专用页对账人工复核路径、ADM-MER-001 专用页商户工单创建/派单/处理/关闭路径与 ADM-AMU-003 专用页安全巡检创建/提交/整改/复检/重开审批路径与 ADM-GOV-006 专用页主管复核评估/审批放行路径与 ADM-GOV-004 专用页合同草稿归档/审批通过路径与 ADM-RISK-001 专用页风控预警创建/处理路径与 ADM-INT-002 专用页四类事件展示、立即重试、补偿处理和轮询校验路径、ADM-EVD-001 专用页搜索筛选、详情、错误态和导出自身留痕路径、ADM-ANA-001 专用页三接口聚合、业务域筛选、空/错状态和复盘锁定路径、ADM-MER-002 专用页授权工单/账单、商户范围过滤、确认留痕和越权拦截路径、ADM-GOV-003 专用页主体绑定查看、原因校验和变更提交路径已纳入 `tests/e2e/full-admin-remaining.spec.ts`；完整后台桌面/移动端视觉回归已纳入 `tests/e2e/full-admin-visual.spec.ts`，覆盖 4 张截图基线 |
 | 商户服务后端专项 | 通过：`mvn -q -Dtest=MerchantServiceControllerTests,MerchantServiceServiceTests,MerchantServiceJdbcIntegrationTests test` |
 | 酒吧后端专项 | 通过：`mvn -q -Dtest=BarServiceTests test` 与 `mvn -q -Dtest=BarJdbcIntegrationTests test`；覆盖重复出品拒绝、跨订单订单项拒绝、部分数量出品拒绝、出品照片证据保留和库存不二次扣减 |
 | 后端完整测试 | 通过：`npm run test:backend`，579 个测试通过；最新运行态证据由 `docs/runtime-acceptance-evidence-latest.json` 记录 |
