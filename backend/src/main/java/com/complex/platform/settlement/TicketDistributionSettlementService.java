@@ -68,6 +68,13 @@ public class TicketDistributionSettlementService {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_ALREADY_POSTED",
                     "该月份结算单已过账/结算/冲正(状态=" + existingStatus + "),不可重结;如需重算请先对已过账明细做冲正");
         }
+        // D7(对抗复核 risk2):已超池特批的 confirmed 单视同冻结——special_approval_ref 是对「该次超池特定金额」的批准,
+        //   重跑会改分配/超额额、使批准额与实际过账额脱钩且无二次审批门。故命中已特批单直接返回现有 id、不重算(保住批准快照);
+        //   如需重算须先撤批(清 ref)。月度作业据此天然跳过(不抛异常、不 crash 批次),迟到核销并入须走人工撤批重算。
+        if ("confirmed".equals(existingStatus)
+                && repository.findBillSpecialApprovalRefByPeriod(projectId, periodStart, periodEnd) != null) {
+            return repository.findBillId(projectId, periodStart, periodEnd);
+        }
         Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 

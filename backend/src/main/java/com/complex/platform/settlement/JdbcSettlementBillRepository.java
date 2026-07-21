@@ -303,8 +303,11 @@ public class JdbcSettlementBillRepository {
                     distributed_cent    = EXCLUDED.distributed_cent,
                     comp_service_fee_cent = EXCLUDED.comp_service_fee_cent,
                     distribution_method = EXCLUDED.distribution_method,
-                    special_approval_ref = EXCLUDED.special_approval_ref,
-                    status              = EXCLUDED.status,
+                    -- D7 防覆盖：已填的特批引用不被 settleMonth 重跑清 null（引擎恒写 null）；status 一旦特批过
+                    --   （special_approval_ref 非空）就锁死不被重跑打回 draft，其余（未特批）单照常按引擎新算态覆盖。
+                    special_approval_ref = COALESCE(settlement_bills.special_approval_ref, EXCLUDED.special_approval_ref),
+                    status              = CASE WHEN settlement_bills.special_approval_ref IS NOT NULL
+                                               THEN settlement_bills.status ELSE EXCLUDED.status END,
                     attributed_entity_id = EXCLUDED.attributed_entity_id,
                     combo_discount_cent = EXCLUDED.combo_discount_cent,
                     updated_at          = now()
@@ -387,16 +390,31 @@ public class JdbcSettlementBillRepository {
                 rs -> rs.next() ? rs.getString("status") : null);
     }
 
-    /** 该单待过账明细：status='draft' 且 final_amount_cent>0（final=0 由调用方天然跳过，此处直接不取）。 */
+    /** D7(对抗复核 risk2):该月份结算单的 special_approval_ref(未特批/无单返 null);供 settleMonth 冻结已特批单防重算漂移。 */
+    public String findBillSpecialApprovalRefByPeriod(String projectId, java.time.LocalDate periodStart,
+            java.time.LocalDate periodEnd) {
+        return jdbcTemplate.query("""
+                SELECT special_approval_ref FROM settlement_bills
+                 WHERE COALESCE(project_id, '__DEFAULT__') = COALESCE(:project_id, '__DEFAULT__')
+                   AND period_start = :period_start AND period_end = :period_end
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("period_start", java.sql.Date.valueOf(periodStart))
+                .addValue("period_end", java.sql.Date.valueOf(periodEnd)),
+                rs -> rs.next() ? rs.getString("special_approval_ref") : null);
+    }
+
+    /** 该单待过账明细：status='draft' 且 final_amount_cent>0（final=0 由调用方天然跳过，此处直接不取）。
+     *  D7：带 distribution_method，供过账区分池明细(exclusive_full 除外)是否走超额 C 口径两段拆。 */
     public List<PostableItem> findPostableItems(String billId) {
         return jdbcTemplate.query("""
-                SELECT id, merchant_id, final_amount_cent
+                SELECT id, merchant_id, final_amount_cent, distribution_method
                   FROM settlement_items
                  WHERE bill_id = :bill_id AND status = 'draft' AND final_amount_cent > 0
                  ORDER BY id
                 """, new MapSqlParameterSource().addValue("bill_id", billId),
                 (rs, i) -> new PostableItem(rs.getString("id"), rs.getString("merchant_id"),
-                        rs.getLong("final_amount_cent")));
+                        rs.getLong("final_amount_cent"), rs.getString("distribution_method")));
     }
 
     /** 回写明细 ar_ap_item_id + status='posted'（仅当仍为 draft，防并发重复过账）。返回更新行数。 */
@@ -427,7 +445,49 @@ public class JdbcSettlementBillRepository {
                 """, new MapSqlParameterSource().addValue("id", billId));
     }
 
-    public record PostableItem(String itemId, String merchantId, long finalAmountCent) {
+    public record PostableItem(String itemId, String merchantId, long finalAmountCent, String distributionMethod) {
+    }
+
+    // ---- D7 超池特批出口 + 超额 C 口径 ----
+
+    /**
+     * D7 过账/特批用超池上下文：结算单状态 + 各酒吧总池 spvPool + <b>池分账</b>合计 pooledDistributed
+     * （仅 distribution_method != exclusive_full 的明细，专属直付不占池、不参与越池判定）。
+     * overPool = pooledDistributed > spvPool；单不存在返回 null。
+     */
+    public OverPoolContext findOverPoolContext(String billId) {
+        return jdbcTemplate.query("""
+                SELECT b.status, b.spv_pool_cent,
+                       COALESCE((SELECT SUM(i.final_amount_cent) FROM settlement_items i
+                                  WHERE i.bill_id = b.id
+                                    AND i.distribution_method <> 'exclusive_full'), 0) AS pooled_distributed_cent
+                  FROM settlement_bills b
+                 WHERE b.id = :id
+                """, new MapSqlParameterSource().addValue("id", billId),
+                rs -> rs.next()
+                        ? new OverPoolContext(rs.getString("status"), rs.getLong("spv_pool_cent"),
+                                rs.getLong("pooled_distributed_cent"))
+                        : null);
+    }
+
+    /**
+     * D7 特批出口：填 special_approval_ref 并把 status draft→confirmed（仅当仍 draft，防重复特批/并发覆盖）。
+     * 返回更新行数（0=非 draft，调用方据此判 409）。特批后可走既有 postBill 过账。
+     */
+    public int markBillSpecialApproved(String billId, String specialApprovalRef) {
+        return jdbcTemplate.update("""
+                UPDATE settlement_bills
+                   SET special_approval_ref = :ref, status = 'confirmed', updated_at = now()
+                 WHERE id = :id AND status = 'draft'
+                """, new MapSqlParameterSource()
+                .addValue("id", billId).addValue("ref", specialApprovalRef));
+    }
+
+    /** D7 超池上下文读投影：overPool = pooledDistributedCent > spvPoolCent。 */
+    public record OverPoolContext(String status, long spvPoolCent, long pooledDistributedCent) {
+        public boolean overPool() {
+            return pooledDistributedCent > spvPoolCent;
+        }
     }
 
     // ---- 读投影 ----
