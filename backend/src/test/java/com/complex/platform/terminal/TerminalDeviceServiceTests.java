@@ -55,7 +55,8 @@ class TerminalDeviceServiceTests {
                 deviceRepository,
                 new IdempotencyService(idempotencyRepository, new ObjectMapper()),
                 auditEventService,
-                mdmService
+                mdmService,
+                org.mockito.Mockito.mock(DeviceSigningKeyStore.class)
         );
     }
 
@@ -969,5 +970,13 @@ class TerminalDeviceServiceTests {
             events.add(event);
             return event;
         }
+    }
+
+    @Test
+    void registerSigningKeyRejectsUnknownDevice() {
+        // 存在性校验：对不存在的 deviceId 登记签名密钥被拒（不建孤儿密钥行）。
+        assertThatThrownBy(() -> service.registerSigningKey("no-such-device", "PUBKEY", "idem-1"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TERMINAL_DEVICE_NOT_FOUND"));
     }
 }

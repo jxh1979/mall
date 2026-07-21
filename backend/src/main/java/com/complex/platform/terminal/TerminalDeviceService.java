@@ -52,17 +52,71 @@ public class TerminalDeviceService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final MdmService mdmService;
+    private final DeviceSigningKeyStore deviceSigningKeyStore;
 
     public TerminalDeviceService(
             TerminalDeviceRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            MdmService mdmService
+            MdmService mdmService,
+            DeviceSigningKeyStore deviceSigningKeyStore
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.mdmService = mdmService;
+        this.deviceSigningKeyStore = deviceSigningKeyStore;
+    }
+
+    /**
+     * AUD-010 ②：登记/轮换 kiosk/tablet 设备级签名公钥。校验设备存在且已 bound（不建孤儿密钥行）；
+     * 幂等；写审计（谁/哪台/登记 or 轮换）——静默换钥即可冒充设备，故必留痕。返回 "registered"/"rotated"。
+     */
+    @Transactional
+    public String registerSigningKey(String deviceId, String publicKey, String idempotencyKey) {
+        String id = requireText(deviceId, "device_id");
+        String key = requireText(publicKey, "public_key");
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
+        }
+        try {
+            return idempotencyService.execute(
+                    "registerDeviceSigningKey:" + id,
+                    idempotencyKey,
+                    java.util.Map.of("device_id", id),
+                    () -> {
+                        TerminalDeviceRecord device = repository.findByDeviceId(id)
+                                .orElseThrow(() -> ApiException.notFound(
+                                        "TERMINAL_DEVICE_NOT_FOUND", "terminal device not found: " + id));
+                        if (!"bound".equals(device.status())) {
+                            throw ApiException.conflict(
+                                    "TERMINAL_DEVICE_NOT_BOUND", "terminal device is not bound: " + id);
+                        }
+                        boolean rotating = deviceSigningKeyStore.findActivePublicKey(id).isPresent();
+                        deviceSigningKeyStore.upsert(id, key);
+                        String status = rotating ? "rotated" : "registered";
+                        auditEventService.recordSuccess(
+                                "terminal.device.signing_key_registered",
+                                BIND_PERMISSION,
+                                "terminal_device",
+                                id,
+                                null,
+                                idempotencyKey,
+                                java.util.Map.of("action", status, "device_id", id));
+                        return status;
+                    },
+                    String.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "terminal.device.signing_key_register_failed",
+                    BIND_PERMISSION,
+                    "terminal_device",
+                    deviceId,
+                    null,
+                    idempotencyKey,
+                    codeOf(exception));
+            throw exception;
+        }
     }
 
     @Transactional

@@ -25,14 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class TerminalDeviceController {
 
     private final TerminalDeviceService service;
-    private final DeviceSigningKeyStore deviceSigningKeyStore;
     private final AuthorizationService authorizationService;
 
-    public TerminalDeviceController(TerminalDeviceService service, AuthorizationService authorizationService,
-            DeviceSigningKeyStore deviceSigningKeyStore) {
+    public TerminalDeviceController(TerminalDeviceService service, AuthorizationService authorizationService) {
         this.service = service;
         this.authorizationService = authorizationService;
-        this.deviceSigningKeyStore = deviceSigningKeyStore;
     }
 
     @PostMapping("/devices/bind")
@@ -49,11 +46,10 @@ public class TerminalDeviceController {
             @RequestBody java.util.Map<String, String> body) {
         authorizationService.requirePermission("terminal.device.bind");
         String publicKey = body == null ? null : body.get("public_key");
-        if (publicKey == null || publicKey.isBlank()) {
-            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "public_key is required");
-        }
-        deviceSigningKeyStore.upsert(id, publicKey.trim());
-        return ApiResponse.ok(java.util.Map.of("status", "registered"));
+        String idempotencyKey = body == null ? null : body.get("idempotency_key");
+        requireIdempotencyKey(idempotencyKey);
+        String status = service.registerSigningKey(id, publicKey == null ? null : publicKey.trim(), idempotencyKey);
+        return ApiResponse.ok(java.util.Map.of("status", status));
     }
 
     @PostMapping("/devices/return")

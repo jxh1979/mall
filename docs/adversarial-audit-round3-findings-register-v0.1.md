@@ -18,8 +18,9 @@
 - **设备绑定型验签**（staff_work_phone/tablet/kiosk 写请求）：签名量 = `deviceId|ts|nonce|METHOD|path|sha256(body)`；
   staff_work_phone→员工 Keystore 公钥且 header deviceId 归属该员工（⑤）；kiosk/tablet→设备级签名公钥
   `terminal_device_signing_keys`（②，登记端点 `POST /api/v1/terminals/devices/{id}/signing-key`）。
-- **① web/app 资金旁路已闭（服务端）**：`web` enforce 下拒「`Authorization: Bearer` 自报 web」（合法后台走 Cookie 会话，
+- **① web/app 资金旁路（服务端已具备，默认 grace，须显式配 `web=enforce`/`app=enforce` 方生效）**：`web` enforce 下拒「`Authorization: Bearer` 自报 web」（合法后台走 Cookie 会话，
   **无客户端依赖、可即刻翻 enforce**）；`app` enforce 下拒 app 写。
+  （注：Cookie 会话的 web 后台动钱通道**按设计保留**——本控制堵的是 Bearer/移动端**自报 web**，不是授权员工的浏览器动钱。）
 - **③ 重放**：nonce 落库 `terminal_device_nonces`（V325），验签通过后消费，重复即 `DEVICE_CREDENTIAL_REPLAY`。
 - **④ 防改体**：body SHA-256 纳入签名量（`DeviceCredentialBodyCachingFilter` 仅包裹「设备绑定型+写+带签名」请求）。
 - **⑤ deviceId 归属**：员工只能用自己密钥配自己设备的 deviceId，否则 `device_owner_mismatch` 拒。

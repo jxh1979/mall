@@ -231,7 +231,8 @@ public class DeviceCredentialVerifier {
             if (profile == null) {
                 return null;
             }
-            if (device.staffId() != null && !device.staffId().equals(profile.id())) {
+            // ③ staffId 显式收口：无 staffId 的 bound staff_work_phone 设备不得回落用当前员工密钥 -> 视为归属不符拒。
+            if (device.staffId() == null || !device.staffId().equals(profile.id())) {
                 return INVALID_OWNER;
             }
             return staffRepository.findActiveCredential(profile.id())

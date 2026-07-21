@@ -262,6 +262,22 @@ class DeviceCredentialVerifierTests {
     }
 
     @Test
+    void staffWorkPhoneWithNullStaffIdRejected() throws Exception {
+        // 无 staffId 的 bound staff_work_phone 设备 -> 归属不符拒（不回落用当前员工密钥）。
+        when(deviceRepo.findByDeviceId(DEVICE)).thenReturn(Optional.of(deviceNullStaff()));
+        String sig = sign("POST", NOW, "n1");
+        assertThatThrownBy(() -> verifier("enforce").verify(signedRequest("POST", NOW, "n1", sig)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+    }
+
+    private static TerminalDeviceRecord deviceNullStaff() {
+        Instant now = Instant.ofEpochMilli(NOW);
+        return new TerminalDeviceRecord(
+                "td1", DEVICE, "code1", "staff_work_phone", "device", null, null, null,
+                "merchant_1", null, null, null, null, "bound", now, null, null, null, null, now, now);
+    }
+
+    @Test
     void kioskUsesDeviceLevelKey() throws Exception {
         when(deviceRepo.findByDeviceId(DEVICE)).thenReturn(Optional.of(device("kiosk", "bound")));
         when(signingKeyStore.findActivePublicKey(DEVICE)).thenReturn(Optional.of(pubB64));
