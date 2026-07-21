@@ -32,7 +32,7 @@ public class JdbcSettlementBillRepository {
     public int findRetentionBps(String projectId) {
         Integer bps = jdbcTemplate.query("""
                 SELECT retention_bps FROM platform_retention_rules
-                 WHERE status = 'active'
+                 WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
                  LIMIT 1
@@ -45,7 +45,7 @@ public class JdbcSettlementBillRepository {
     public long findGiveawayCostPerCupCent(String projectId) {
         Long cost = jdbcTemplate.query("""
                 SELECT cost_per_cup_cent FROM giveaway_cost_configs
-                 WHERE status = 'active'
+                 WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
                  LIMIT 1
@@ -58,7 +58,7 @@ public class JdbcSettlementBillRepository {
     public String findDistributionMethod(String projectId) {
         String method = jdbcTemplate.query("""
                 SELECT method_type FROM ticket_distribution_configs
-                 WHERE status = 'active'
+                 WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
                  LIMIT 1
@@ -73,7 +73,7 @@ public class JdbcSettlementBillRepository {
         // 有项目特例档位则只取项目的；否则取全局默认（project_id IS NULL）。
         List<RankTier> project = jdbcTemplate.query("""
                 SELECT rank_from, rank_to, share_bps FROM ticket_distribution_rank_tiers
-                 WHERE status = 'active' AND project_id = :project_id
+                 WHERE status = 'active' AND is_draft = FALSE AND project_id = :project_id
                  ORDER BY rank_from
                 """, params, (rs, i) -> new RankTier(rs.getInt("rank_from"), rs.getInt("rank_to"), rs.getInt("share_bps")));
         if (!project.isEmpty()) {
@@ -81,7 +81,7 @@ public class JdbcSettlementBillRepository {
         }
         return jdbcTemplate.query("""
                 SELECT rank_from, rank_to, share_bps FROM ticket_distribution_rank_tiers
-                 WHERE status = 'active' AND project_id IS NULL
+                 WHERE status = 'active' AND is_draft = FALSE AND project_id IS NULL
                  ORDER BY rank_from
                 """, new MapSqlParameterSource(), (rs, i) ->
                 new RankTier(rs.getInt("rank_from"), rs.getInt("rank_to"), rs.getInt("share_bps")));
@@ -93,7 +93,7 @@ public class JdbcSettlementBillRepository {
                 .addValue("project_id", projectId).addValue("merchant_id", merchantId);
         return jdbcTemplate.query("""
                 SELECT per_guest_cent, fixed_amount_cent FROM ticket_distribution_merchant_rates
-                 WHERE status = 'active' AND merchant_id = :merchant_id
+                 WHERE status = 'active' AND is_draft = FALSE AND merchant_id = :merchant_id
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
                  LIMIT 1
@@ -197,7 +197,7 @@ public class JdbcSettlementBillRepository {
     public int findComprehensiveServiceFeeBps(String projectId, String merchantId, String entitlementType) {
         Integer bps = jdbcTemplate.query("""
                 SELECT fee_bps FROM comprehensive_service_fee_configs
-                 WHERE status = 'active'
+                 WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                    AND (merchant_id IS NULL OR merchant_id = :merchant_id)
                    AND (entitlement_type IS NULL OR entitlement_type = :entitlement_type)
@@ -220,7 +220,7 @@ public class JdbcSettlementBillRepository {
     public ComboDiscountConfig findComboDiscountConfig(String projectId) {
         ComboDiscountConfig cfg = jdbcTemplate.query("""
                 SELECT discount_bearer, split_platform_bps FROM ticket_combo_discount_configs
-                 WHERE status = 'active'
+                 WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
                  LIMIT 1
