@@ -100,7 +100,7 @@ npm run verify:production-evidence-crosslinks` | 校验按责任组生成的一�
 | 33 | `npm run verify:nas-current-state-drift` | 校验 NAS 历史通过证据没有被误当作当前生产自动挂载、定时备份、告警和恢复演练闭环 |
 | 33 | `npm run verify:final-closed-loop-audit` | 校验最终闭环验收报告与需求矩阵、当前代码行数、Semgrep 摘要和生产证据状态一致，防止最终报告漂移 |
 | 33 | `npm run verify:closed-loop-current-state` | 校验闭环当前态快照已纳入需求矩阵、安全扫描、生产证据、NAS 和运行时验收证据 |
-| 33 | `npm run verify:runtime-acceptance-evidence` | 校验运行时验收证据快照齐全，覆盖后端测试、Web 构建、UI、真实后端 UI 和生产边界声明 |
+| 33 | `npm run verify:runtime-acceptance-evidence` | 校验运行时验收证据快照齐全，覆盖后端测试、Web 构建、UI、真实后端 UI 和生产边界声明；并将证据绑定到生成时的源码指纹与生成时效——源码已变更或证据超期（默认 30 天，`RUNTIME_EVIDENCE_MAX_AGE_DAYS` 可调）即判为陈旧失败，杜绝陈旧证据自欺通过 |
 | 33 | `npm run verify:ui-experience-acceptance` | 校验前端体验验收报告由运行态证据、Playwright spec 和截图基线生成，防止旧报告漂移 |
 | 34 | `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
 

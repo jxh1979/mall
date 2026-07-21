@@ -10,7 +10,13 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
-  reporter: [["list"], ["html", { outputFolder: "playwright-report-real-backend", open: "never" }]],
+  // json reporter 让 run-real-backend-ui-e2e.mjs 能在 Playwright 退出后核对
+  // passed/skipped/failed 计数，堵住"全部 skip 仍退出 0"的假绿（AUD-022）。
+  reporter: [
+    ["list"],
+    ["html", { outputFolder: "playwright-report-real-backend", open: "never" }],
+    ["json", { outputFile: "test-results/real-backend-results.json" }],
+  ],
   use: {
     baseURL: webBaseUrl,
     trace: "retain-on-failure",
