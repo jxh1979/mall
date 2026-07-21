@@ -72,6 +72,7 @@ public class DeviceCredentialVerifier {
     private final Map<String, Mode> perTypeMode;
     private final long toleranceSeconds;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public DeviceCredentialVerifier(
             TerminalDeviceRepository deviceRepository,
             StaffRepository staffRepository,
