@@ -10,7 +10,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -41,28 +40,23 @@ class LoyaltyConfirmConcurrencyIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    private final List<String> createdCustomerIds = new ArrayList<>();
+    // customer_points_ledger 是 append-only（V140 禁 DELETE）且 FK 引用 customers → 种子行不可删；
+    // 全机唯一自增序（起点=nanoTime，单机 nanoTime 跨进程单调递增）保证 customer_id/明文手机号跨运行不撞，
+    // 靠唯一种子隔离残留（残留行无害，无需清理）。
+    // ponytail: 单机唯一序，跨机并行跑同库才需换 UUID/含机器码。
+    private static final java.util.concurrent.atomic.AtomicLong SEQ =
+            new java.util.concurrent.atomic.AtomicLong(System.nanoTime());
 
-    @AfterEach
-    void cleanup() {
-        for (String customerId : createdCustomerIds) {
-            jdbcTemplate.update("DELETE FROM customer_points_ledger WHERE customer_id = ?", customerId);
-            jdbcTemplate.update("DELETE FROM customer_points_accounts WHERE customer_id = ?", customerId);
-            jdbcTemplate.update("DELETE FROM customers WHERE id = ?", customerId);
-        }
-        createdCustomerIds.clear();
-    }
-
-    /** 种子一名会员 + 一条 pending earn 行，返回 [customerId, sourceDocId, awarded]。 */
+    /** 种子一名会员 + 一条 pending earn 行（唯一 id，不清理）。 */
     private Seed seedPendingEarn() {
         Instant now = Instant.now();
-        String suffix = Long.toHexString(System.nanoTime());
-        String customerId = "cust_aud014_" + suffix;
-        String phone = "138" + String.format("%08d", Math.abs(suffix.hashCode()) % 100_000_000);
+        String uid = Long.toHexString(SEQ.getAndIncrement());
+        String customerId = "cust_aud014_" + uid;
+        // 明文手机号只需唯一：库存的是加密封套(enc:v1:%)，唯一性由 phone_hash 盲索引保证，明文无格式 CHECK。
+        String phone = "1" + String.format("%012d", Math.floorMod(SEQ.getAndIncrement(), 1_000_000_000_000L));
         repository.saveCustomer(new CustomerRecord(
-                customerId, phone, "138****" + phone.substring(7), "active", null, now, now, now));
-        createdCustomerIds.add(customerId);
-        String sourceDocId = "o_aud014_" + suffix;
+                customerId, phone, "1****" + phone.substring(phone.length() - 4), "active", null, now, now, now));
+        String sourceDocId = "o_aud014_" + uid;
         long awarded = loyaltyService.earnPointsPending(customerId, 50, "ticket_order", sourceDocId, "aud-014 seed", null);
         return new Seed(customerId, sourceDocId, awarded);
     }

@@ -15,7 +15,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * R5 T15 端到端验收（事件驱动，真 DB 全 Spring 上下文）：核销赠饮权益(gift_drink) → ApplicationEventPublisher
@@ -45,6 +48,9 @@ class GiftRedemptionEndToEndTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     @BeforeEach
     void authenticate() {
         // 生产中核销/冲正必有已认证主体；P0-2 后在线核销主链会按调用者商户范围校验归属。
@@ -57,6 +63,7 @@ class GiftRedemptionEndToEndTests {
                 INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
                     status, created_at, updated_at)
                 VALUES ('device_t15', 'dev-device_t15', 'DC-device_t15', 'kiosk', 'venue', 'bound', ?, ?)
+                ON CONFLICT (id) DO NOTHING
                 """, ts, ts);
     }
 
@@ -65,20 +72,30 @@ class GiftRedemptionEndToEndTests {
         com.complex.platform.support.TestSecurityActors.clear();
     }
 
+    // 权益保留证明：生产入口 TicketingService.createVerification 是 @Transactional；这里用 TransactionTemplate
+    // 复刻同一事务边界（本测试 NOT_SUPPORTED 无环境事务 → 模板真开新事务、抛错时真回滚），从而可观察到权益未被消费。
+    // 种子直插自动提交、唯一 suffix 隔离残留（种子行 append-only/FK 不可删，无需清理）。
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void giftDrinkVerificationWithoutBarItemRefIsRejectedFailClosed() {
-        // AUD-015：赠饮模板未配 bar_item_ref → 无法扣库/结算 → 核销 fail-closed 抛错回滚，票权益不被消费，绝不静默 delivered。
+        // AUD-015：赠饮模板未配 bar_item_ref → 无法扣库/结算 → 核销 fail-closed 抛错回滚整笔核销，票权益不被消费，绝不静默 delivered。
         String suffix = Long.toString(System.nanoTime());
         String barId = "bar_t15_" + suffix;
         seedBarTable(barId);
         String code = "gift-code-" + suffix;
         seedGiftEntitlement(code, barId); // 无 bar_item_ref
 
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                verificationService.createVerification(new VerificationRequest(
-                        "req-" + suffix, "qr", code, "device_t15", barId, Map.of("source", "test"))))
+                tx.executeWithoutResult(status -> verificationService.createVerification(new VerificationRequest(
+                        "req-" + suffix, "qr", code, "device_t15", barId, Map.of("source", "test")))))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("GIFT_ITEM_UNMAPPED"));
+
+        // 核销事务已回滚 → issued entitlement 的 used_times 仍为 0（权益未被消费，可再次核销）。
+        Integer usedTimes = jdbcTemplate.queryForObject(
+                "SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, "ent_" + code);
+        assertThat(usedTimes).isZero();
     }
 
     // R5 已落地#2：gift_drink 模板配 bar_item_ref=item_X → 核销 → 事件 itemRef=item_X →
