@@ -327,11 +327,17 @@ class SettlementStateMachineJdbcIntegrationTests {
     private void seedSuccessVerification(String verId, String entId, Instant at) {
         verIds.add(verId);
         java.sql.Timestamp ts = java.sql.Timestamp.from(at);
+        // ticket_verifications.device_id 有 FK → terminal_devices(id)(V159);先种一台合法已登记设备(照既有测试范式:kiosk/venue/bound)。
+        jdbcTemplate.update("""
+                INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
+                    status, created_at, updated_at)
+                VALUES ('dev_sm', 'dev-dev_sm', 'DC-dev_sm', 'kiosk', 'venue', 'bound', ?, ?)
+                ON CONFLICT (id) DO NOTHING""", ts, ts);
         jdbcTemplate.update("""
                 INSERT INTO ticket_verifications (id, verification_no, entitlement_id, entitlement_code,
                     credential_type, credential_payload, device_id, point_id, status, source_type, created_at,
                     verified_people)
-                VALUES (?, ?, ?, ?, 'qr', 'x', 'dev', 'pt', 'success', 'admin', ?, 1)""",
+                VALUES (?, ?, ?, ?, 'qr', 'x', 'dev_sm', 'pt', 'success', 'admin', ?, 1)""",
                 verId, "VN-" + verId, entId, "code_" + entId, ts);
     }
 
