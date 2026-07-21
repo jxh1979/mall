@@ -126,9 +126,10 @@ public class TicketDistributionSettlementService {
             long platformBorne = platformBorneDiscount(discountCfg, ex.discountCent());
             long gross = ex.revenueCent() + platformBorne;
             comboDiscountCent += platformBorne; // 项目承担的专属折扣入账
-            // 综合服务费:固定额优先(不超本笔毛额,防净额为负);否则比例(整数分截断余数留商户,不多扣)。默认 比例0 → fee=0(保值)。
+            // 综合服务费:固定额=每张票固定额 × 核销张数(§7.2「所有门票都过一道」·用户 2026-07-21 拍板 A 口径,非整包价),
+            //   上限本笔毛额(防净额为负);否则比例(整数分截断余数留商户,不多扣)。默认 比例0 → fee=0(保值)。
             long fee = svcFee.fixedAmountCent() != null
-                    ? Math.min(svcFee.fixedAmountCent(), gross)
+                    ? Math.min(svcFee.fixedAmountCent() * ex.verifiedCount(), gross)
                     : gross * svcFee.feeBps() / 10000;
             long net = gross - fee;
             compServiceFee += fee;

@@ -142,6 +142,35 @@ class SettlementV268Tests {
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(10000L); // 仅 ticket 那笔
     }
 
+    /**
+     * 综合服务费固定额 = 每张票固定额 × 核销张数(用户 2026-07-21 拍板 A 口径,非整包价)。
+     * 核销 5 张、固定额 100 分/张 → 服务费 = 100×5 = 500;商户拿净额 100000−500 = 99500。
+     */
+    @Test
+    void fixedAmountFee_chargedPerVerifiedTicket() {
+        String pid = newProject();
+        seedExclusive(pid, "barA", "ticket", 5, 3, 100000L); // 核销 5 张
+        seedFixedFee(pid, "barA", "ticket", 100L);            // 固定额 100 分/张
+
+        settlementService.settleMonth(pid, MONTH);
+
+        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(500L); // 100 × 5 张(非整包 100)
+        assertThat(exclusiveAmount(pid, "barA")).isEqualTo(99500L);          // 100000 − 500
+    }
+
+    /** 固定额上限本笔毛额:固定额×张数 > 收入 → 钳到收入(净额=0,防负)。 */
+    @Test
+    void fixedAmountFee_cappedAtGross() {
+        String pid = newProject();
+        seedExclusive(pid, "barA", "ticket", 5, 3, 300L);    // 核销 5 张,收入仅 300
+        seedFixedFee(pid, "barA", "ticket", 100L);            // 100×5=500 > 300 → 钳 300
+
+        settlementService.settleMonth(pid, MONTH);
+
+        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(300L); // min(500, 300)
+        assertThat(exclusiveAmount(pid, "barA")).isEqualTo(0L);              // 净额不为负
+    }
+
     /** 套票折扣归属:默认 platform_absorb;项目特例可覆盖为 merchant_absorb。 */
     @Test
     void comboDiscountConfig_defaultAndProjectOverride() {
@@ -174,6 +203,16 @@ class SettlementV268Tests {
                 "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
                         + " fee_bps, is_draft) VALUES (?, ?, ?, ?, ?, FALSE)",
                 id, projectId, merchantId, entType, feeBps);
+    }
+
+    /** 固定额综合服务费(fee_bps=0 + fixed_amount_cent,满足 V328 chk_csfc_fee_mode 二选一)。 */
+    private void seedFixedFee(String projectId, String merchantId, String entType, long fixedAmountCent) {
+        String id = "csfc_fx_" + Long.toHexString(System.nanoTime());
+        feeConfigIds.add(id);
+        jdbcTemplate.update(
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
+                        + " fee_bps, fixed_amount_cent, is_draft) VALUES (?, ?, ?, ?, 0, ?, FALSE)",
+                id, projectId, merchantId, entType, fixedAmountCent);
     }
 
     private void seedExclusive(String projectId, String exclusiveMerchantId, String entType,
