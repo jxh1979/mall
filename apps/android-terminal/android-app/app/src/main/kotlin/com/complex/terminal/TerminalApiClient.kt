@@ -139,6 +139,19 @@ class TerminalApiClient(
   fun attendanceMonthView(month: String): List<AttendanceDayRow> =
     get("/api/v1/staff/attendance/month-view?month=$month")
 
+  // ── BYOD 二期 Wave1:工资条提成明细 + 本人资料自助(只返本人;身份按 token 派生) ──
+
+  /** 本人某月提成明细(酒水/卡座 + 服务点单),与工资条 commissionCent 对账。 */
+  fun listMyPayrollCommissions(month: String): List<StaffCommissionLineRow> =
+    get<Page<StaffCommissionLineRow>>("/api/v1/staff/payroll/mine/commissions?month=$month").items
+
+  /** 本人档案(姓名/状态)。 */
+  fun myStaffProfile(): StaffProfileRecord = get("/api/v1/staff/profiles/mine")
+
+  /** 改本人有限字段(姓名)。 */
+  fun updateMyStaffProfile(request: StaffProfileSelfUpdateRequest): StaffProfileRecord =
+    post("/api/v1/staff/profiles/mine", request)
+
   // ── BYOD 二期 E 批:排班/考勤 ──
 
   /** 主管排班(双端;同员工同开始时刻幂等覆盖)。 */

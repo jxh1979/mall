@@ -149,6 +149,20 @@ PIPL 合规要求（私人手机 App 个人信息处理，回填合规文档 C4�
 | 游乐工作台 | 项目状态、预约队列、入场核销、设备巡检 |
 | 主管工作台 | 全场预警、员工在线、设备在线、待审批 |
 
+### 4.2.1 员工自助与消息中心（BYOD 二期 Wave1，2026-07-19 用户拍板）
+
+员工在自有工作手机 App 上「只看/操作自己的」三类自助/读类能力；一切「本人」数据按登录 token 派生的员工身份取，请求体不含 user_id，无法越权看他人。
+
+| 能力 | 说明 | 端点（R=已有复用 / N=Wave1 新增） |
+|---|---|---|
+| 工资条自查 | 仅人事「月结」定格月可见；逐行=固定工资+提成合计+激励-处罚-无薪假(事假)扣款-代扣个税=实发；提成明细按来源归类（酒水/卡座提成、服务点单份额…）与提成合计对账 | R `GET /api/v1/staff/payroll/mine?month=`；N `GET /api/v1/staff/payroll/mine/commissions?month=`（权限复用 `staff.payroll.view_mine`） |
+| 我的资料（个人信息） | 只读身份（账号/工号）+ 有限字段（姓名）自助编辑；手机/证件仅存不可逆哈希，不回显、不在自助编辑范围 | N `GET /api/v1/staff/profiles/mine`、`POST /api/v1/staff/profiles/mine`（权限 `staff.profile.self`，V321） |
+| 考勤/排班自查 | 本人考勤月视图（六态逐日）、最近打卡、未来 7 天排班 | R `GET /api/v1/staff/attendance/month-view`、`/attendance/mine`、`/shifts/mine` |
+| 请假/调休申请 | 事假/病假/调休/年假，走既有主管审批链 | R `POST /api/v1/staff/leaves`、`GET /api/v1/staff/leaves/mine` |
+| 待办与消息中心 | 端侧聚合本人相关消息：请假审批结果 + 派给本人的工单 + 近期排班 + 公司公告；Wave1 只读，处理仍在各自入口。四路来源逐路容错，任一失败不拖垮整屏 | R 端侧聚合 `/staff/leaves/mine`、`/facility/work-orders/assigned-to-me`、`/staff/shifts/mine`、`/staff/notices`（不新增聚合端点：读类端侧合并，避免为读做后端扇出） |
+
+> 迁移：V321 仅新增 `staff.profile.self` 权限（授 role_platform_admin，沿用 V211/V217 员工自助权限约定）；提成明细复用 `staff.payroll.view_mine`，无新增表/迁移。防越权：`getMyProfile`/`updateMyProfile`/`listMyCommissions`/既有 `*/mine` 均以 `authorizationService.currentActor().id()` 限定本人，绝不读请求体身份。
+
 ### 4.3 员工工作手机票务/权益核销
 
 | 功能 | 说明 |
@@ -529,6 +543,7 @@ PIPL 合规要求（私人手机 App 个人信息处理，回填合规文档 C4�
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-07-19 | 增 | §4.2.1 | 新增「员工自助与消息中心 Wave1」：工资条自查(补提成明细/无薪假扣款/代扣个税逐行对账)、我的资料(有限字段姓名自助)、待办与消息中心(端侧聚合请假结果/工单/排班/公告)；新增端点 `payroll/mine/commissions`、`profiles/mine`(GET/POST)；迁移 V321(`staff.profile.self`) | 用户 2026-07-19 拍板 BYOD 二期 Wave1 |
 | 2026-06-10 | 改 | §1/§2.1.1/§4.3/§11 | 私人手机身份从"读手机本机 NFC 唯一标识"改为"安装期生成存 Keystore 的设备公钥/不可逆设备指纹"；换机=先解绑旧设备凭证再绑新；仅存哈希/公钥指纹；工作手机通过摄像头扫码读取外部二维码，NFC 仅读取外部 NFC 腕带/标签/卡 | phone-3 / 统一口径基准 D8；二维码不能通过 NFC 读取 |
 | 2026-06-10 | 改 | §8.3/§11/§12 | 工作手机/平板正式方案收口为 Android Enterprise / Android Management API + 商业 MDM；自研 DPC 或未接入商业 MDM 仅可试点，不得作为 P0 强管控验收兜底；暂缓项改为商业 MDM 增强集成 | 总控拍板；phone-6 / 决策 A8 |
 | 2026-06-07 | 增 | §2.1.1 末 | 补 PIPL 告知同意/最小化/解绑删除/统一监控告知 | 合规文档 C4（私人手机个人信息处理）、C10 |

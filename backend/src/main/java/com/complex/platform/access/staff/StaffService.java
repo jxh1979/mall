@@ -671,6 +671,51 @@ public class StaffService {
 
     // ============================================================ 隔离 / 工具
 
+    // ── BYOD 二期 Wave1(2026-07-19 拍板):本人档案自助 + 工资条提成明细 ──
+
+    /** Wave1①:员工查本人某月提成明细(酒水/卡座提成 + 服务点单份额),与工资条 commissionCent 对账。 */
+    public PageResponse<StaffCommissionLineRecord> listMyCommissions(String month) {
+        authorizationService.requirePermission("staff.payroll.view_mine");
+        if (month == null || !month.matches("\\d{4}-\\d{2}")) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) is required");
+        }
+        var actor = authorizationService.currentActor();
+        return page(repository.listCommissionLines(actor.id(), month));
+    }
+
+    /** Wave1②:员工查本人档案(姓名/状态);身份按 token 派生,只返本人。 */
+    public StaffProfileRecord getMyProfile() {
+        authorizationService.requirePermission("staff.profile.self");
+        var actor = authorizationService.currentActor();
+        return repository.findProfileByUserId(actor.id())
+                .orElseThrow(() -> ApiException.notFound("PROFILE_NOT_FOUND", "本账号暂无员工档案"));
+    }
+
+    /** Wave1②:员工改本人有限字段(当前仅姓名);token 派生本人,不信请求体 userId。 */
+    public StaffProfileRecord updateMyProfile(
+            com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest request) {
+        authorizationService.requirePermission("staff.profile.self");
+        String name = trimToNull(request == null ? null : request.name());
+        if (name == null || name.length() > 128) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "name is required (<=128 chars)");
+        }
+        var actor = authorizationService.currentActor();
+        StaffProfileRecord current = repository.findProfileByUserId(actor.id())
+                .orElseThrow(() -> ApiException.notFound("PROFILE_NOT_FOUND", "本账号暂无员工档案"));
+        Instant now = Instant.now();
+        StaffProfileRecord updated = new StaffProfileRecord(
+                current.id(), current.projectId(), current.merchantId(), current.userId(), name,
+                current.phoneHash(), current.idDocHash(), current.staffLevelId(), current.registrationStatus(),
+                current.approvedBy(), current.approvedAt(), current.rejectReason(), current.status(),
+                current.createdAt(), now, current.archivedAt(), current.archivedBy(), current.deleteStatus(),
+                current.deleteRequestedBy(), current.deleteRequestedAt(), current.deleteReason());
+        StaffProfileRecord saved = repository.saveProfile(updated);
+        auditEventService.recordSuccess("staff.profile.self_updated", "staff.profile.self",
+                "staff_profile", saved.id(), null, request.idempotencyKey(),
+                java.util.Map.of("field", "name"));
+        return saved;
+    }
+
     /** 平台角色 → null（见全量）；商户角色 → merchantId（仅见本户）。 */
     private String merchantScopeOrNull() {
         return authorizationService.currentMerchantScope().orElse(null);

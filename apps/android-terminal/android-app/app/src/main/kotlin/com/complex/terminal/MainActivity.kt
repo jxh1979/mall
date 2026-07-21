@@ -247,6 +247,7 @@ class MainActivity : Activity() {
       secondaryButton("员工设备凭证") { showStaffDevice() },
       secondaryButton("票务核销冲正") { showReverse() },
       statusText("—— 员工自有手机(BYOD 一期) ——"),
+      primaryButton("待办与消息中心") { showInbox() },
       primaryButton("公司公告") { showStaffNotices() },
       primaryButton("我的工单") { showMyWorkOrders() },
       primaryButton("酒吧空位 / 帮客订位") { showBarAvailability() },
@@ -261,6 +262,7 @@ class MainActivity : Activity() {
       secondaryButton("我的收款码") { showMyPaymentCode() },
       secondaryButton("主管排班(需排班权限)") { showShiftManage() },
       secondaryButton("员工注册申请(店长/HR 代提交)") { showStaffRegistration() },
+      secondaryButton("我的资料(个人信息)") { showMyProfile() },
       secondaryButton("重新登录") { logoutAndRestart() },
     )
 
@@ -906,8 +908,9 @@ class MainActivity : Activity() {
   // ── F批(2026-07-02 拍板):我的薪资 / 考勤月视图 / 请假 ──
   private fun showMyPayroll() {
     val month = editText("月份(2026-06)")
-    val status = statusText("薪资单在人事「月结」后可见;固定工资+提成+奖金-处罚。")
+    val status = statusText("薪资单在人事「月结」后可见;固定工资+提成+激励-处罚-无薪假-个税=实发。")
     val detail = statusText("")
+    val commissionDetail = statusText("")
     val queryButton = primaryButton("查询") {
       val m = month.text.toString().trim()
       if (!Regex("\\d{4}-\\d{2}").matches(m)) { status.text = "请输入月份如 2026-06"; return@primaryButton }
@@ -917,16 +920,25 @@ class MainActivity : Activity() {
           if (rows.isEmpty()) {
             status.text = "$m 尚未月结(人事月结后可见)或无记录"
             detail.text = ""
+            commissionDetail.text = ""
           } else {
             val r = rows.first()
             status.text = "$m 薪资单(已定格)"
             detail.text = buildString {
-              append("固定工资: ¥").append("%.2f".format((r.baseCent ?: 0) / 100.0)).append('\n')
-              append("提成: ¥").append("%.2f".format((r.commissionCent ?: 0) / 100.0)).append('\n')
-              append("激励奖金: ¥").append("%.2f".format((r.bonusCent ?: 0) / 100.0)).append('\n')
-              append("处罚扣款: -¥").append("%.2f".format((r.penaltyCent ?: 0) / 100.0)).append('\n')
-              append("实发合计: ¥").append("%.2f".format((r.totalCent ?: 0) / 100.0))
+              append("固定工资: ¥").append(yuan(r.baseCent)).append('\n')
+              append("提成合计: ¥").append(yuan(r.commissionCent)).append('\n')
+              append("激励奖金: ¥").append(yuan(r.bonusCent)).append('\n')
+              append("处罚扣款: -¥").append(yuan(r.penaltyCent)).append('\n')
+              append("无薪假(事假)扣款: -¥").append(yuan(r.leaveDeductionCent)).append('\n')
+              append("代扣个税: -¥").append(yuan(r.taxCent)).append('\n')
+              append("实发合计: ¥").append(yuan(r.totalCent))
             }
+            commissionDetail.text = "提成明细加载中…"
+            runBackground(
+              action = { api.listMyPayrollCommissions(m) },
+              onSuccess = { lines -> commissionDetail.text = commissionBreakdown(lines) },
+              onError = { commissionDetail.text = "提成明细拉取失败：${friendly(it)}" },
+            )
           }
         },
         onError = { status.text = "查询失败：${friendly(it)}" },
@@ -934,7 +946,8 @@ class MainActivity : Activity() {
     }
     setContentView(screen(
       title = "我的薪资",
-      children = listOf(status, month, queryButton, detail, secondaryButton("返回首页") { showHome() }),
+      children = listOf(status, month, queryButton, detail, commissionDetail,
+        secondaryButton("返回首页") { showHome() }),
       secure = true,
     ))
   }
@@ -1666,4 +1679,105 @@ class MainActivity : Activity() {
   }
 
   private fun backButton(): Button = secondaryButton("返回首页") { showHome() }
+
+  // ── BYOD 二期 Wave1(2026-07-19 拍板) ──
+
+  /** 分金额转「元」两位小数(工资条/提成复用)。 */
+  private fun yuan(cent: Long?): String = "%.2f".format((cent ?: 0) / 100.0)
+
+  /** 工资条提成明细:按来源归类合计(酒水/卡座 vs 服务点单 …),与 commissionCent 对账。 */
+  private fun commissionBreakdown(lines: List<StaffCommissionLineRow>): String {
+    if (lines.isEmpty()) return "提成明细: 本月无提成台账"
+    val label = mapOf(
+      "bar_table" to "酒水/卡座提成", "service_order" to "服务点单份额",
+      "amusement" to "游乐提成", "ticket" to "票务提成",
+    )
+    return buildString {
+      append("提成明细(按来源):\n")
+      lines.groupBy { it.sourceType ?: "other" }.forEach { (type, rows) ->
+        val sum = rows.sumOf { it.amountCent ?: 0 }
+        append("· ").append(label[type] ?: type).append(": ¥").append(yuan(sum))
+          .append(" (").append(rows.size).append("笔)\n")
+      }
+    }.trimEnd()
+  }
+
+  /** ②员工自助:我的资料——只读身份 + 有限字段(姓名)自助编辑。手机/证件仅存不可逆哈希不回显。 */
+  private fun showMyProfile() {
+    val session = store.session
+    val identity = statusText(
+      "账号: ${session?.username ?: "-"}\n工号(用户id): ${session?.staffId ?: "-"}",
+    )
+    val status = statusText("正在拉取本人档案…")
+    val nameInput = editText("姓名")
+    val saveButton = primaryButton("保存姓名") {
+      val nm = nameInput.text.toString().trim()
+      if (nm.isEmpty()) { status.text = "姓名不能为空"; return@primaryButton }
+      runBackground(
+        action = {
+          api.updateMyStaffProfile(StaffProfileSelfUpdateRequest(
+            idempotencyKey = "profile_${System.currentTimeMillis()}", name = nm))
+        },
+        onSuccess = { p -> status.text = "已保存：${p.name ?: nm}" },
+        onError = { status.text = "保存失败：${friendly(it)}" },
+      )
+    }
+    runBackground(
+      action = { api.myStaffProfile() },
+      onSuccess = { p ->
+        nameInput.setText(p.name ?: "")
+        val reg = when (p.registrationStatus) {
+          "approved" -> "已入职"; "submitted" -> "审核中"
+          "rejected" -> "已驳回"; "suspended" -> "已停用"
+          else -> p.registrationStatus ?: "-"
+        }
+        status.text = "档案状态: $reg / ${p.status ?: "-"}(手机、证件仅存不可逆加密，不可回显)"
+      },
+      onError = { status.text = "拉取失败：${friendly(it)}(本账号可能无员工档案)" },
+    )
+    setContentView(screen(
+      title = "我的资料",
+      children = listOf(identity, status, nameInput, saveButton, secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  /** ③待办与消息中心:端侧汇总本人相关消息——请假审批结果 / 待办工单 / 近期排班 / 公告。
+   * 四路来源逐路容错(任一失败不拖垮整屏);Wave1 只读,处理仍在各自入口。 */
+  private fun showInbox() {
+    val status = statusText("正在汇总待办与消息…")
+    val list = statusText("")
+    runBackground(
+      action = {
+        val items = mutableListOf<String>()
+        runCatching { api.listMyLeaves() }.getOrDefault(emptyList())
+          .filter { it.status == "approved" || it.status == "rejected" }
+          .forEach { lv ->
+            val st = if (lv.status == "approved") "已通过" else "已驳回"
+            items.add("[请假审批] ${lv.startDate}~${lv.endDate} ${lv.leaveType} $st" +
+              (lv.reviewNote?.let { "，批注:$it" } ?: ""))
+          }
+        runCatching { api.listMyWorkOrders() }.getOrDefault(emptyList()).forEach { o ->
+          items.add("[待办工单] ${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""} 时限${o.handleDueAt ?: "-"}")
+        }
+        runCatching { api.listMyShifts() }.getOrDefault(emptyList()).forEach { s ->
+          items.add("[排班] ${s.workDate} ${s.startAt ?: "-"}~${s.endAt ?: "-"}")
+        }
+        runCatching { api.listStaffNotices() }.getOrDefault(emptyList()).forEach { n ->
+          val needAck = n.consentRequired == true && n.consentStatus != "acknowledged"
+          items.add("[公告] ${n.title ?: n.id}" + (if (needAck) "(待确认已读)" else ""))
+        }
+        items.toList()
+      },
+      onSuccess = { items ->
+        status.text = "共 ${items.size} 条(请假结果/待办工单/排班/公告)"
+        list.text = if (items.isEmpty()) "暂无待办与消息" else items.joinToString("\n\n")
+      },
+      onError = { status.text = "汇总失败：${friendly(it)}" },
+    )
+    setContentView(screen(
+      title = "待办与消息中心",
+      children = listOf(status, list, secondaryButton("公司公告(去确认已读)") { showStaffNotices() },
+        secondaryButton("返回首页") { showHome() }),
+    ))
+  }
 }

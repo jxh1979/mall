@@ -108,4 +108,10 @@ public interface StaffRepository {
 
     /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
     void setStaffProfileArchiveReason(String id, String reason);
+
+    /** BYOD 二期 Wave1:按 user_id 取本人最新档案(自助资料查看/编辑用)。 */
+    Optional<StaffProfileRecord> findProfileByUserId(String userId);
+
+    /** BYOD 二期 Wave1:本人某月提成明细(ledger 服务点单等 + bar 酒水/卡座提成,按时间倒序)。 */
+    java.util.List<StaffCommissionLineRecord> listCommissionLines(String userId, String month);
 }
