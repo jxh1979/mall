@@ -16,6 +16,7 @@ const password = process.env.REAL_BACKEND_PASSWORD ?? process.env.P0_ADMIN_PASSW
 const jarPath = path.resolve(root, process.env.REAL_BACKEND_JAR ?? "backend/target/complex-api-0.1.0-SNAPSHOT.jar");
 const logDir = path.join(root, "test-results", "real-backend");
 const logPath = path.join(logDir, "backend.log");
+const resultsPath = path.join(root, "test-results", "real-backend-results.json");
 const healthUrl = `${backendBaseUrl}/api/v1/system/health`;
 
 // Spring Boot / Hikari require a `jdbc:` URL with separate credentials. Some
@@ -62,6 +63,33 @@ function run(command, args, options = {}) {
       reject(new Error(`${command} ${args.join(" ")} failed with ${signal ?? code}`));
     });
   });
+}
+
+// AUD-022: Playwright 在所有用例被 test.skip 时仍退出 0。仅凭退出码无法区分"真跑通"
+// 与"全部跳过"。读取 json reporter 的统计，强制要求至少跑了 1 条、且 0 skip / 0 fail / 0 flaky，
+// 否则真实后端 UI 验收视为未通过。
+function assertRealBackendE2eActuallyRan() {
+  if (!fs.existsSync(resultsPath)) {
+    throw new Error(
+      `real backend UI results not found at ${resultsPath}; the Playwright json reporter did not run. skip-as-success is not accepted.`,
+    );
+  }
+  const stats = JSON.parse(fs.readFileSync(resultsPath, "utf8")).stats ?? {};
+  const expected = Number(stats.expected ?? 0);
+  const skipped = Number(stats.skipped ?? 0);
+  const unexpected = Number(stats.unexpected ?? 0);
+  const flaky = Number(stats.flaky ?? 0);
+  if (expected < 1 || skipped !== 0 || unexpected !== 0 || flaky !== 0) {
+    throw new Error(
+      `real backend UI acceptance must run with zero skips/failures ` +
+        `(expected>=1, skipped=0, unexpected=0, flaky=0); got ` +
+        `expected=${expected}, skipped=${skipped}, unexpected=${unexpected}, flaky=${flaky}. ` +
+        `skip-as-success is not accepted.`,
+    );
+  }
+  console.log(
+    `[real-backend-ui] result counts OK: expected=${expected}, skipped=${skipped}, unexpected=${unexpected}, flaky=${flaky}`,
+  );
 }
 
 async function waitForHealth(backendProcess) {
@@ -113,6 +141,8 @@ async function main() {
   }
 
   fs.mkdirSync(logDir, { recursive: true });
+  // 清掉上一轮结果，避免旧的绿色统计被误读为本轮通过（AUD-022）。
+  fs.rmSync(resultsPath, { force: true });
   const logFd = fs.openSync(logPath, "w");
   const databaseEnv = normalizeDatabaseEnv(process.env);
   if (databaseEnv.COMPLEX_DATABASE_URL) {
@@ -145,6 +175,7 @@ async function main() {
         REAL_BACKEND_PASSWORD: password,
       },
     });
+    assertRealBackendE2eActuallyRan();
     console.log("[real-backend-ui] real backend UI acceptance passed.");
   } finally {
     await stopBackend(backendProcess);

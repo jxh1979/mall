@@ -4,10 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,31 +64,46 @@ class TicketStockConcurrencyJdbcIntegrationTests {
     void atomicDeductPreventsOversellUnderConcurrency() throws InterruptedException {
         ExecutorService pool = Executors.newFixedThreadPool(32);
         CountDownLatch start = new CountDownLatch(1);
-        CountDownLatch done = new CountDownLatch(THREADS);
         AtomicInteger success = new AtomicInteger();
+        AtomicInteger rejected = new AtomicInteger();
+        List<Future<?>> futures = new ArrayList<>(THREADS);
+        List<Throwable> unexpected = new ArrayList<>();
         try {
             for (int i = 0; i < THREADS; i++) {
-                pool.submit(() -> {
-                    try {
-                        start.await();
-                        if (repository.atomicDeductTicketStock(TT_ID, 1)) {
-                            success.incrementAndGet();
-                        }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        done.countDown();
+                // submit(Callable) so每个任务的返回/异常都进入 Future——下面逐一 get()，
+                // 工作线程抛出的运行时异常不再被吞掉（AUD-023）。
+                futures.add(pool.submit(() -> {
+                    start.await(); // 同时放行，制造真实竞争
+                    if (repository.atomicDeductTicketStock(TT_ID, 1)) {
+                        success.incrementAndGet();
+                    } else {
+                        rejected.incrementAndGet(); // CAS 明确拒绝（业务售罄），与异常区分
                     }
-                });
+                    return null;
+                }));
             }
-            start.countDown(); // 同时放行，制造真实竞争
-            assertThat(done.await(30, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            // 逐一 get()：任何工作线程异常在此以 ExecutionException 浮出，不再静默留在 Future 里。
+            for (Future<?> future : futures) {
+                try {
+                    future.get(30, TimeUnit.SECONDS);
+                } catch (ExecutionException e) {
+                    unexpected.add(e.getCause() != null ? e.getCause() : e);
+                } catch (TimeoutException e) {
+                    unexpected.add(e);
+                }
+            }
         } finally {
             pool.shutdownNow();
         }
 
-        // 恰好 STOCK 笔成功，其余被 CAS 拒绝；sold_quantity 精确等于 STOCK，无超卖。
+        // 意外异常必须为 0：区分「预期的售罄拒绝」与死锁/连接错误/代码异常。
+        assertThat(unexpected)
+                .as("worker threads must not throw unexpected exceptions, got: %s", unexpected)
+                .isEmpty();
+        // 恰好 STOCK 笔成功、其余 THREADS-STOCK 笔被 CAS 拒绝；sold_quantity 精确等于 STOCK，无超卖。
         assertThat(success.get()).isEqualTo(STOCK);
+        assertThat(rejected.get()).isEqualTo(THREADS - STOCK);
         Integer sold = jdbcTemplate.queryForObject(
                 "SELECT sold_quantity FROM ticket_types WHERE id = ?", Integer.class, TT_ID);
         assertThat(sold).isEqualTo(STOCK);

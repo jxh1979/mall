@@ -1,10 +1,32 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const repoRoot = process.cwd();
 const markdownPath = "docs/runtime-acceptance-evidence-v0.1.md";
 const jsonPath = "docs/runtime-acceptance-evidence-latest.json";
 const checkMode = process.argv.includes("--check") || process.argv.includes("--verify");
+
+// AUD-021: 证据必须绑定到"生成它时的源代码内容"和"生成时间"，否则两周前或另一提交
+// 生成的陈旧证据会一直 PASS，为当前代码背书。下列 source paths 覆盖运行验收真正依赖的输入
+// （对齐 required_refresh_rule：后端、Web、Playwright、运行脚本改动）。证据文档本身不在其中，
+// 因此把再生成的证据一起提交不会自我失配。
+const SOURCE_FINGERPRINT_PATHS = [
+  "backend/src/main",
+  "backend/src/test",
+  "backend/pom.xml",
+  "apps/web/src",
+  "apps/web/package.json",
+  "tests/e2e",
+  "package.json",
+  "playwright.config.ts",
+  "playwright.real-backend.config.ts",
+  "tools/run-real-backend-ui-e2e.mjs",
+  "tools/run-backend-maven.mjs",
+];
+// 证据超过此天数即视为陈旧失败（即使源码未变，也应周期性重跑运行验收）。可用环境变量覆盖。
+const MAX_AGE_DAYS = Number(process.env.RUNTIME_EVIDENCE_MAX_AGE_DAYS ?? 30);
 
 function absolute(relativePath) {
   return path.join(repoRoot, relativePath);
@@ -15,11 +37,55 @@ function exists(relativePath) {
 }
 
 function readText(relativePath) {
-  return fs.readFileSync(absolute(relativePath), "utf8").replace(/^\uFEFF/, "");
+  return fs.readFileSync(absolute(relativePath), "utf8").replace(/^﻿/, "");
 }
 
 function readJson(relativePath) {
   return JSON.parse(readText(relativePath));
+}
+
+function runGit(args) {
+  try {
+    return execFileSync("git", args, { cwd: repoRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).trimEnd();
+  } catch (error) {
+    const stdout = error.stdout ? String(error.stdout) : "";
+    const stderr = error.stderr ? String(error.stderr) : "";
+    throw new Error(`git ${args.join(" ")} failed: ${stdout}${stderr}`);
+  }
+}
+
+// 对当前工作树中所有被跟踪的源文件内容做 sha256（含新增/删除/改名/内容改动）。
+// 用工作树内容（而非仅 index blob），以捕获尚未 staged 的源码改动。
+function computeSourceFingerprint() {
+  const listing = runGit(["ls-files", "-z", "--", ...SOURCE_FINGERPRINT_PATHS]);
+  const files = listing.split("\0").filter(Boolean).sort();
+  const hash = crypto.createHash("sha256");
+  for (const file of files) {
+    hash.update(file);
+    hash.update("\0");
+    const full = absolute(file);
+    if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+      hash.update(fs.readFileSync(full));
+    } else {
+      hash.update("<missing>");
+    }
+    hash.update("\0");
+  }
+  return { fingerprint: hash.digest("hex"), file_count: files.length };
+}
+
+function gitBinding() {
+  const source = computeSourceFingerprint();
+  return {
+    head: runGit(["rev-parse", "HEAD"]),
+    head_short: runGit(["rev-parse", "--short", "HEAD"]),
+    branch: runGit(["rev-parse", "--abbrev-ref", "HEAD"]),
+    worktree_dirty: runGit(["status", "--porcelain"]).length > 0,
+    source_fingerprint: source.fingerprint,
+    source_fingerprint_file_count: source.file_count,
+    source_fingerprint_paths: SOURCE_FINGERPRINT_PATHS,
+    max_age_days: MAX_AGE_DAYS,
+  };
 }
 
 function statInfo(relativePath) {
@@ -193,6 +259,7 @@ function buildState() {
   const webBuild = webBuildEvidence();
   const scripts = scriptsEvidence();
   const currentState = currentStateEvidence();
+  const git = gitBinding();
   const semgrepClean = semgrepState.results === 0 && semgrepState.errors === 0 && semgrepState.exit_code === 0;
   const runtimeReady =
     backend.passed &&
@@ -212,9 +279,11 @@ function buildState() {
       "RUNTIME_EVIDENCE_FROM_PLAYWRIGHT_REPORTS",
       "RUNTIME_EVIDENCE_FROM_WEB_DIST",
       "RUNTIME_EVIDENCE_FROM_SEMGREP_LATEST_SUMMARY",
+      "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
       "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST",
     ],
     generated_at: new Date().toISOString(),
+    git,
     captured_command: "npm run verify:closed-loop-runtime",
     required_refresh_rule: "After backend, web, Playwright, OpenAPI, or runtime script changes, rerun npm run verify:closed-loop-runtime, then npm run docs:runtime-acceptance-evidence.",
     scripts,
@@ -251,6 +320,19 @@ function renderMarkdown(state) {
 机器识别标记：
 
 ${state.markers.map((marker) => `- ${marker}`).join("\n")}
+
+## 0. 证据绑定（防陈旧）
+
+| 绑定项 | 当前值 |
+|---|---|
+| 生成时的 Git HEAD | \`${state.git.head}\`（${state.git.branch}） |
+| 生成时工作树 | ${state.git.worktree_dirty ? "有未提交改动" : "干净"} |
+| 源码指纹 sha256 | \`${state.git.source_fingerprint}\` |
+| 指纹覆盖文件数 | ${state.git.source_fingerprint_file_count} |
+| 生成时间 | ${state.generated_at} |
+| 最大有效天数 | ${state.git.max_age_days} |
+
+> 校验规则（\`--check\`）：若当前源码指纹与本文记录不一致（源码已变更），或本证据超过最大有效天数，则立即 FAIL；陈旧证据不再自欺 PASS。
 
 ## 1. 结论
 
@@ -324,6 +406,7 @@ function validateExisting() {
       "RUNTIME_EVIDENCE_FROM_SUREFIRE_REPORTS",
       "RUNTIME_EVIDENCE_FROM_PLAYWRIGHT_REPORTS",
       "RUNTIME_EVIDENCE_FROM_WEB_DIST",
+      "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
       "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST",
     ]) {
       if (!markdown.includes(marker)) failures.push(`${markdownPath} must include marker: ${marker}`);
@@ -338,6 +421,38 @@ function validateExisting() {
     if (data.semgrep?.clean !== true) failures.push(`${jsonPath} must record clean Semgrep state`);
     if (data.conclusion?.can_claim_production_ready !== false) failures.push(`${jsonPath} must not claim production readiness`);
     if (!data.scripts?.verify_closed_loop_runtime?.includes("verify:ui:real-backend:seeded")) failures.push(`${jsonPath} must keep real backend UI in closed-loop runtime script`);
+
+    // AUD-021: 陈旧证据不得通过。把证据绑定到当前源码指纹与生成时间。
+    const git = data.git;
+    if (!git || typeof git !== "object") {
+      failures.push(`${jsonPath} must record git binding (regenerate with npm run docs:runtime-acceptance-evidence)`);
+    } else {
+      if (!git.head) failures.push(`${jsonPath} must record git.head`);
+      if (!git.source_fingerprint) {
+        failures.push(`${jsonPath} must record git.source_fingerprint`);
+      } else {
+        const current = computeSourceFingerprint().fingerprint;
+        if (git.source_fingerprint !== current) {
+          failures.push(
+            `runtime acceptance evidence is stale: source changed since it was generated ` +
+              `(evidence fingerprint ${git.source_fingerprint.slice(0, 12)}… != current ${current.slice(0, 12)}…). ` +
+              `Rerun npm run verify:closed-loop-runtime then npm run docs:runtime-acceptance-evidence.`,
+          );
+        }
+      }
+    }
+    const generatedAtMs = Date.parse(data.generated_at);
+    if (!Number.isFinite(generatedAtMs)) {
+      failures.push(`${jsonPath} generated_at is not a valid timestamp`);
+    } else {
+      const ageDays = (Date.now() - generatedAtMs) / 86_400_000;
+      if (ageDays > MAX_AGE_DAYS) {
+        failures.push(
+          `runtime acceptance evidence is stale: generated ${ageDays.toFixed(1)} days ago exceeds ` +
+            `RUNTIME_EVIDENCE_MAX_AGE_DAYS=${MAX_AGE_DAYS}. Rerun the closed-loop runtime command and regenerate.`,
+        );
+      }
+    }
   }
   if (failures.length > 0) {
     console.error("RUNTIME_ACCEPTANCE_EVIDENCE_FAIL");
