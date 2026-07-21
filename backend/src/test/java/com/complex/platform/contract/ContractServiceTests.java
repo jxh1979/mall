@@ -76,6 +76,21 @@ class ContractServiceTests {
                         e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("CONTRACT_SPACE_CONFLICT"));
     }
 
+    // AUD-002③：幂等命中(重放)也必须走业务校验——同键但请求非法(commission_mode 越界)仍被拒，不被短路绕过。
+    @Test
+    void idempotentReplayStillEnforcesValidation() {
+        service.createDraft(new ContractDraftRequest("k_idem", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(),
+                "fixed_ratio", null, null, null, null, List.of(), null, null));
+        // 同一 idempotencyKey 但携带非法 commission_mode → 落到既有草稿短路前先过校验 → VALIDATION_FAILED（未被幂等绕过）。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createDraft(new ContractDraftRequest(
+                "k_idem", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(),
+                "NOT_A_REAL_MODE", null, null, null, null, List.of(), null, null)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
     private ContractRecord newDraft() {
         return service.createDraft(new ContractDraftRequest("k_draft", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),

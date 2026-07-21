@@ -47,6 +47,8 @@
   - **可拆边界**：「后续可拆」= 新建一条 active 绑定替换旧绑定，指向不同 运营/合同/结算 主体；**不是**在 `merchants` 的 `*_entity_id` 快照列上改写。`merchants.business_entity_id/contract_entity_id/settlement_entity_id` 仅为档案快照。
   - 合同签署时另在 `contracts.contract_subject_id/operation_subject_id/settlement_subject_id` 固化该合同主体快照，与商户当前 active 绑定**可不一致**（无外键强绑），勿假定二者恒等。
 - 转换后线索状态→已签约，生成正式 merchant 档案，喂入合同环（合同 draft 引用该商户 + 报价条款）。
+- **实现保证（AUD-002/003 修复，2026-07-21）**：签约转换 = 一次原子业务事务——`signIntent` 公有入口 `@Transactional`，自动建商户 → 即建 `business_entity_bindings`（`binding_type` 四主体、`active`，稳定幂等键按意向派生）→ 合同 draft → 线索置已签约 → 审计留痕；**任一步失败整体回滚，无孤儿商户/绑定/合同**，线索不误置已签约。幂等重签命中同一商户与同一 active 绑定、不重复建。绑定创建仅在「无既有 `merchant_id`、签约自动建档」路径触发（带既有商户签约，其主体绑定由治理域主体绑定页管理，不在此重建）。
+- **合同起草原子性（AUD-002）**：`ContractService.createDraft` 亦已 `@Transactional`——字段/空间校验前置于落库（校验失败零脏写）、空间存在性+租期重叠早检在保存前完成、幂等命中(重放)也必过业务校验后才返回既有草稿；失败草稿整体回滚，重试走完整校验、无半成品可复用。
 
 ## 7. 权限点（最小颗粒，复用现有权限体系）
 - `leasing.lead.manage`（线索增改/分配，medium）
