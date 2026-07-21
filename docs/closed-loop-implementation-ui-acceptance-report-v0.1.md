@@ -53,7 +53,7 @@
 | 常规 UI | CUST-02 buy ticket creates order and aggregate payment intent | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | CUST-03 bar reservation creates reservation and deposit intent | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | CUST-04 points page shows balance/level and check-in accrues streak | tests/e2e/customer-journey.spec.ts |
-| 常规 UI | CUST-05 wallet shows stored value balance and membership | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-05 wallet shows per-card stored value balances | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | CUST-06 my orders reflect a freshly created ticket order | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | CUST-07 buy ticket surfaces backend rejection as a visible error | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | ADM-MVP-01 login, overview route and eight MVP navigation entries | tests/e2e/full-admin-mvp.spec.ts |
@@ -102,12 +102,12 @@
 
 | 文件 | 当前行数 |
 | --- | ---: |
-| apps/web/src/main.tsx | 55 |
-| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 502 |
-| backend/src/main/java/com/complex/platform/bar/BarService.java | 649 |
-| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1108 |
-| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 600 |
-| backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 453 |
+| apps/web/src/main.tsx | 43 |
+| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 879 |
+| backend/src/main/java/com/complex/platform/bar/BarService.java | 764 |
+| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1332 |
+| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 674 |
+| backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 465 |
 
 ## 6. 可复跑命令
 

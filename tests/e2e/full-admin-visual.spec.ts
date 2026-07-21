@@ -51,7 +51,7 @@ test.describe("full admin visual and responsive acceptance", () => {
 
     await expect(page.getByTestId("admin-page-title")).toContainText("订单/出品/账单");
     await expect(page.getByTestId("bar-orders-page")).toBeVisible();
-    await expect(page.getByTestId("bar-orders-table")).toContainText("ORD-1");
+    await expect(page.getByTestId("bar-orders-table")).toContainText("order-1");
     await expectNoDocumentOverflow(page, 24);
     await expect(page).toHaveScreenshot("full-admin-bar-orders-mobile.png", {
       fullPage: true,

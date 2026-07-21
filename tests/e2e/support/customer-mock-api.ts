@@ -86,6 +86,12 @@ function listRoutes(pathname: string, state: CustomerMockState, options: Custome
       return state.checkIns;
     case "/api/v1/customer/stored-value/account":
       return { id: "sv-1", customer_id: "cust-1", project_id: "venue-1", balance_cent: 58800, status: "active", created_at: now, updated_at: now };
+    case "/api/v1/customer/stored-value/accounts":
+      // ⑧ 多卡模型（AUD-061）：通用卡 + 商户卡分卡余额；WalletPage 走此复数端点。
+      return [
+        { id: "sv-generic", customer_id: "cust-1", project_id: "venue-1", merchant_id: null, card_scope: "project", fund_ownership: null, balance_cent: 58800, status: "active", created_at: now, updated_at: now },
+        { id: "sv-merchant-1", customer_id: "cust-1", project_id: "venue-1", merchant_id: "merchant-1", card_scope: "merchant", fund_ownership: "platform_collect", balance_cent: 12000, status: "active", created_at: now, updated_at: now },
+      ];
     case "/api/v1/customer/memberships":
       return [{ id: "mem-1", customer_id: "cust-1", plan_id: "plan-gold", project_id: "venue-1", start_at: "2026-06-01", expire_at: "2027-05-31", status: "active", auto_renew: true, payment_intent_id: null, created_at: now }];
     default:

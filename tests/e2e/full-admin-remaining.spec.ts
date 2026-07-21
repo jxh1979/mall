@@ -478,33 +478,41 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-CONT-001") {
         // 合同生命周期工作台（V162 重建）：起草→并行会签→生效固化→变更/退租结算 + 审批链/到期着色配置。
+        // 页面分标签：① 合同（默认）/ ② 审批与配置（审批链表）/ ③ 变更与结算（结算表）；断言各表须先切到其所在标签。
         await expect(page.getByTestId("contract-workbench-page")).toBeVisible();
         await expect(page.getByTestId("contracts-table")).toBeVisible();
-        await expect(page.getByTestId("contract-flow-table")).toBeVisible();
-        await expect(page.getByTestId("contract-settlements-table")).toBeVisible();
         await expect(page.getByTestId("contract-draft-open")).toBeVisible();
+        await page.getByRole("tab", { name: "② 审批与配置" }).click();
+        await expect(page.getByTestId("contract-flow-table")).toBeVisible();
+        await page.getByRole("tab", { name: "③ 变更与结算" }).click();
+        await expect(page.getByTestId("contract-settlements-table")).toBeVisible();
         continue;
       }
       if (spec.pageId === "ADM-FAC-001") {
-        // 楼宇运营工作台（V165-167）：设备台账 + 维保工单 + 巡检任务闭环。
+        // 楼宇运营工作台（V165-167）：设备台账 + 维保工单 + 巡检任务分标签，逐标签核对表格。
         await expect(page.getByTestId("facility-workbench-page")).toBeVisible();
         await expect(page.getByTestId("facility-equipment-table")).toBeVisible();
+        await page.getByRole("tab", { name: "② 维保工单" }).click();
         await expect(page.getByTestId("facility-work-orders-table")).toBeVisible();
+        await page.getByRole("tab", { name: "③ 楼宇巡检" }).click();
         await expect(page.getByTestId("facility-inspection-tasks-table")).toBeVisible();
         continue;
       }
       if (spec.pageId === "ADM-ENE-001") {
-        // 能源工作台（V168）：表计台账 + 抄表异常复核 + 总分表抹差 + 能源费结算。
+        // 能源工作台（V168）：表计台账 + 抄表抹差 + 能源费结算分标签，逐标签核对表格。
         await expect(page.getByTestId("energy-workbench-page")).toBeVisible();
         await expect(page.getByTestId("energy-meters-table")).toBeVisible();
+        await page.getByRole("tab", { name: "② 抄表与抹差" }).click();
         await expect(page.getByTestId("energy-readings-table")).toBeVisible();
+        await page.getByRole("tab", { name: "③ 能源费结算" }).click();
         await expect(page.getByTestId("energy-settlements-table")).toBeVisible();
         continue;
       }
       if (spec.pageId === "ADM-ACC-003") {
-        // 访问治理工作台（V169-170）：职位↔角色模板、装配、临时授权与高危授权审批。
+        // 访问治理工作台（V169-170）：角色装配（默认）+ 高危授权审批分标签，切标签核对授权申请表。
         await expect(page.getByTestId("access-governance-page")).toBeVisible();
         await expect(page.getByTestId("access-position-role-templates-table")).toBeVisible();
+        await page.getByRole("tab", { name: "② 高危授权审批" }).click();
         await expect(page.getByTestId("access-grant-requests-table")).toBeVisible();
         continue;
       }
@@ -647,15 +655,14 @@ test.describe("full admin remaining pages acceptance", () => {
 
     // 合同生命周期工作台（V162 重建）：起草合同为可审计写动作（商户/主体/起止日期必填，POST /api/v1/contracts）。
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-CONT-001")!);
-    // 引导式流程 phase-2：起草合同改为分步弹窗（合同双方→租期与租金→结算方式→确认）。
+    // 引导式流程（单屏范式 singlePage=true）：合同双方 + 租期租金 + 结算方式 + 经营范围 同屏，一次「下一步」到确认页 → 起草。
     await page.getByTestId("contract-draft-open").click();
-    await page.getByLabel("商户 id").fill("merchant-1");
-    await page.getByLabel("合同主体 id").fill("contract-subject-1");
-    await page.getByTestId("contract-draft-next").click(); // 步1→步2
+    await page.getByLabel("商户 id").selectOption("merchant-1");
+    // 合同主体下拉选项来自 /platform/business-entities（mock 仅 org-1）；结果断言只看商户。
+    await page.getByLabel("合同主体 id").selectOption("org-1");
     await fillCnDate(page, page.getByLabel("生效日期"), "2026-07-01");
     await fillCnDate(page, page.getByLabel("到期日期"), "2027-06-30");
-    await page.getByTestId("contract-draft-next").click(); // 步2→步3
-    await page.getByTestId("contract-draft-next").click(); // 步3→确认
+    await page.getByTestId("contract-draft-next").click(); // 填写信息 → 确认信息
     await page.getByTestId("contract-draft-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("contract_drafted");
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant-1");
@@ -755,6 +762,9 @@ test.describe("full admin remaining pages acceptance", () => {
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-003")!);
     await page.getByTestId("amusement-safety-create-open").click();
     await page.getByTestId("amusement-safety-create-title").fill("开放前护栏检查");
+    // 单屏引导校验必填：巡检项目（下拉）；结果选「不合格」以驱动后续提交→整改流程。
+    await page.getByTestId("amusement-safety-create-project").selectOption("amuse-1");
+    await page.getByTestId("amusement-safety-create-result").selectOption("fail");
     await page.getByTestId("amusement-safety-guided-next").click();
     await page.getByTestId("amusement-safety-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_inspection_created");

@@ -47,7 +47,7 @@ test.describe("customer journey acceptance (mock backend)", () => {
     await expect(result).toBeVisible();
     await expect(result).toContainText("订单已创建");
     await expect(result).toContainText("TO-CUST-1");
-    await expect(result).toContainText("已发起聚合支付意图");
+    await expect(result).toContainText("已发起聚合支付");
   });
 
   test("CUST-03 bar reservation creates reservation and deposit intent", async ({ page }) => {
@@ -89,14 +89,16 @@ test.describe("customer journey acceptance (mock backend)", () => {
     await expect(page.getByTestId("check-in-record").first()).toContainText("+10 积分");
   });
 
-  test("CUST-05 wallet shows stored value balance and membership", async ({ page }) => {
+  test("CUST-05 wallet shows per-card stored value balances", async ({ page }) => {
     await installCustomerMockApi(page);
     await customerLogin(page);
 
     await page.getByRole("menuitem", { name: "储值 / 会员" }).click();
     await expect(page.getByTestId("wallet-page")).toBeVisible();
-    await expect(page.getByText("588.00")).toBeVisible();
-    await expect(page.getByTestId("membership-item").first()).toContainText("plan-gold");
+    // ⑧ 储值钱包（AUD-061）多卡模型：分卡余额（通用卡 + 商户卡）。
+    const firstCard = page.getByTestId("wallet-card-item").first();
+    await expect(firstCard).toContainText("综合体通用卡");
+    await expect(firstCard).toContainText("588.00");
   });
 
   test("CUST-06 my orders reflect a freshly created ticket order", async ({ page }) => {

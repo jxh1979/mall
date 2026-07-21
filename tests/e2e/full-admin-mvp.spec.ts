@@ -46,7 +46,7 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("access-user-phone").fill("13800000001");
     await page.getByTestId("access-user-account-type").selectOption("sales");
     await page.getByTestId("access-user-org").fill("org-1");
-    await page.getByTestId("access-user-merchant").fill("merchant-1");
+    await page.getByTestId("access-user-merchant").selectOption("merchant-1");
     await page.getByTestId("access-user-consent").fill("consent-staff-001");
     await page.getByTestId("access-user-evidence").fill("ev-staff-001,ev-hr-001");
     await page.getByTestId("access-user-status").selectOption("active");
