@@ -126,6 +126,14 @@ public class TicketCatalogService {
         EntitlementTemplateRequest actual = requireRequest(request);
         Instant now = Instant.now();
         String entitlementType = requireText(actual.entitlementType(), "entitlement_type");
+        // AUD-015：赠饮(gift_drink)模板启用前必须绑定可扣库存的吧台商品 SKU(bar_item_ref)。缺映射则核销时
+        // 无法生成 0 元出品单/扣吧台库存/进结算（业务图 :727,1044-1050；bar PRD §15.2 第 2 条）。
+        if ("gift_drink".equals(entitlementType)
+                && "active".equals(trimToDefault(actual.status(), "active"))
+                && trimToNull(actual.barItemRef()) == null) {
+            throw ApiException.badRequest("GIFT_TEMPLATE_ITEM_UNMAPPED",
+                    "赠饮模板启用前必须配置可扣库存的吧台商品映射(bar_item_ref)");
+        }
         return repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_" + slug(actual.idempotencyKey()),
                 requireText(actual.name(), "name"),

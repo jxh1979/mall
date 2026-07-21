@@ -1,5 +1,6 @@
 package com.complex.platform.bar;
 
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.GiftReversedEvent;
 import com.complex.platform.ticketing.GiftVerifiedEvent;
 import java.nio.charset.StandardCharsets;
@@ -52,8 +53,10 @@ public class BarGiftConsumer {
         String verificationId = trimToNull(event.verificationId());
         String barId = trimToNull(event.barId());
         if (verificationId == null || barId == null) {
-            // 无核销 id / 无吧台归属：无法落 FK 有效的赠饮单，跳过（不阻断核销主链）。
-            return;
+            // AUD-015：无核销 id / 无吧台归属 → 无法履约赠饮。本监听器与核销同步同事务，抛错即回滚整笔核销，
+            // 使票权益不被消费（fail-closed），绝不静默放行导致权益已用却无出品/无库存/无结算。
+            throw ApiException.badRequest("GIFT_BAR_UNRESOLVED",
+                    "赠饮核销缺核销号或吧台归属，无法履约");
         }
         // 幂等（撞唯一键即跳过）：一次核销至多一单。同步事件 + verification_id 唯一键双重保证。
         if (repository.findGiftRedemptionByVerification(verificationId).isPresent()) {
@@ -61,15 +64,34 @@ public class BarGiftConsumer {
         }
         Optional<BarTableRecord> table = repository.findFirstTableByBar(barId);
         if (table.isEmpty()) {
-            // 无可靠台位来源：结构就位但无法落 FK 有效订单，记一条 created 但 bar_order_id 为空的桥表会违反 NOT NULL，
-            // 故此处仅跳过并不落单（保持核销主链不受影响）。待台位/会话来源补齐后落单。
-            return;
+            // AUD-015：吧台无可用台位 → 无法落 FK 有效订单。抛错回滚核销，保留权益可用（fail-closed），不静默丢弃。
+            throw ApiException.badRequest("GIFT_TABLE_UNRESOLVED",
+                    "赠饮吧台无可用台位，无法履约");
+        }
+
+        // AUD-015 前置校验（在写任何单据前 fail-closed）：
+        //  ① SKU 映射(bar_item_ref)必须存在 → 否则无法扣库/结算；
+        //  ② 商户吧必须能定位内部结算价(>0) → 否则平台无从向酒吧挂应付（商户白送、平台零补偿=资金漏）。
+        //  平台自营吧(merchantId=null)无商户结算，跳过②。
+        String itemRef = trimToNull(event.itemRef());
+        if (itemRef == null) {
+            throw ApiException.badRequest("GIFT_ITEM_UNMAPPED",
+                    "赠饮未配置吧台商品映射(bar_item_ref)，无法扣库结算");
+        }
+        String merchantId = trimToNull(event.merchantId());
+        Long merchantInternalPrice = null;
+        if (receivableLedgerService != null && merchantId != null) {
+            merchantInternalPrice = repository.findProductByInventoryItem(barId, itemRef)
+                    .map(BarProductRecord::internalSettlementPriceCent).orElse(null);
+            if (merchantInternalPrice == null || merchantInternalPrice <= 0) {
+                throw ApiException.badRequest("GIFT_SETTLEMENT_PRICE_MISSING",
+                        "商户吧台商品未配置内部结算价，赠饮无法结算");
+            }
         }
 
         Instant now = Instant.now();
         String seed = "gift:" + verificationId;
         String orderId = "order_" + slug(seed);
-        String merchantId = trimToNull(event.merchantId());
 
         // 1) 0 元赠饮单（order_type='gift'，amount=0；进账单/留痕，不计商户收入）。
         // S-3: 有意不接合同经营范围 guard——赠饮兑付非销售（0 元不计应收/商户收入），属通票权益的
@@ -106,38 +128,29 @@ public class BarGiftConsumer {
                 now
         ));
 
-        // 3) 解析赠饮→吧台 SKU 映射：itemRef 为空时无可扣减 SKU → 跳过实际扣减，仅留痕。
-        String itemRef = trimToNull(event.itemRef());
-        String inventoryMovementId = null;
-        String note;
-        if (itemRef != null) {
-            // deliver 扣减：movement_type=redeem_consume（积分/兑换扣减白名单，复用 bar 既有原子扣减能力）。
-            inventoryMovementId = "movement_" + slug(seed + ":" + itemRef);
-            boolean decreased = repository.atomicDecreaseStock(itemRef, STOCK_LOCATION_DEFAULT, 1);
-            if (decreased) {
-                repository.saveStockMovement(new StockMovementSnapshot(
-                        inventoryMovementId,
-                        "redeem_consume",
-                        itemRef,
-                        STOCK_LOCATION_DEFAULT,
-                        null,
-                        1,
-                        "bar_gift_redemption",
-                        orderId,
-                        null,
-                        null,
-                        List.of(),
-                        "completed",
-                        now
-                ));
-                note = "gift redeemed; stock decreased via redeem_consume";
-            } else {
-                inventoryMovementId = null;
-                note = "gift redeemed; stock decrease skipped (insufficient stock)";
-            }
-        } else {
-            note = "gift redeemed; stock decrease skipped (no item mapping source configured)";
+        // 3) 扣减：movement_type=redeem_consume（积分/兑换扣减白名单，复用 bar 既有原子扣减能力）。
+        //    AUD-015：itemRef 已在前置校验保证非空；库存不足（含并发抢到最后一件的失败方）→ 抛错回滚，绝不标记 delivered。
+        String inventoryMovementId = "movement_" + slug(seed + ":" + itemRef);
+        if (!repository.atomicDecreaseStock(itemRef, STOCK_LOCATION_DEFAULT, 1)) {
+            throw ApiException.conflict("GIFT_STOCK_INSUFFICIENT",
+                    "赠饮对应吧台库存不足，无法履约");
         }
+        repository.saveStockMovement(new StockMovementSnapshot(
+                inventoryMovementId,
+                "redeem_consume",
+                itemRef,
+                STOCK_LOCATION_DEFAULT,
+                null,
+                1,
+                "bar_gift_redemption",
+                orderId,
+                null,
+                null,
+                List.of(),
+                "completed",
+                now
+        ));
+        String note = "gift redeemed; stock decreased via redeem_consume";
 
         // 4) 出品 deliver 事件（回填 inventory_movement_id 关联库存流水）。
         repository.saveProductionTicketEvent(new BarProductionTicketEventRecord(
@@ -184,14 +197,10 @@ public class BarGiftConsumer {
             }
             return;
         }
-        // 通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b）：本次实际落单后，平台按该酒水内部结算价向酒吧挂应付。
-        // 仅商户吧(merchantId 非空)、能由 itemRef 桥接到 bar_product 且其内部价>0 时结算；平台自营吧/无内部价不结算。
-        if (receivableLedgerService != null && merchantId != null && itemRef != null) {
-            Long internalPrice = repository.findProductByInventoryItem(barId, itemRef)
-                    .map(BarProductRecord::internalSettlementPriceCent).orElse(null);
-            if (internalPrice != null && internalPrice > 0) {
-                receivableLedgerService.createPayableForGiftSettlement(verificationId, merchantId, internalPrice);
-            }
+        // 通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b）：商户吧已在前置校验拿到内部价(>0) → 挂应付；
+        // 平台自营吧(merchantId=null)/未启用结算(receivableLedgerService=null) → merchantInternalPrice 为 null，不结算。
+        if (merchantInternalPrice != null) {
+            receivableLedgerService.createPayableForGiftSettlement(verificationId, merchantId, merchantInternalPrice);
         }
     }
 

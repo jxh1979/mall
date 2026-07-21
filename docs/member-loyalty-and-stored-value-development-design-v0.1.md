@@ -31,7 +31,7 @@
 
 落 `customer_points_ledger`（V100/V025，幂等 `uq_customer_points_ledger_source_doc`）+ `customer_points_rules`（V060 规则）：
 - `earnPoints` / `earnPointsPending`：获取/挂起（pending）；按消费金额或按核销张数等规则。
-- `confirmPoints(sourceDoc, verifiedUnits, totalUnits)`：**按已核销张数比例确认**（V151 `confirmed_amount`）；退款按已确认份额冲减（reversed）。
+- `confirmPoints(sourceDoc, verifiedUnits, totalUnits)`：**按已核销张数比例确认**（V151 `confirmed_amount`）；退款按已确认份额冲减（reversed）。 **AUD-014（2026-07-20）：算 delta 前对 earn 行加 `FOR UPDATE` 行锁（锁序 earn→account），串行化同一订单的并发确认/冲正 → 后到事务读到已提交 confirmed_amount，delta=0 幂等，杜绝两事务基于同一旧值重复给账户加钱（余额>明细的账实分叉）。**
 - `deductPoints`：兑换消耗扣 `balance`。
 - `change_type`：获取/扣减/兑换消耗/过期/调整（速查表 §二明细类型），每笔关联触发单据。
 - **过期清零** `expirePoints(now)` / `expirePointsForCustomer`：`customer_points_ledger` 的 `expire_at`/`remaining_points`/`expired`，按自然年或后台配置天数清减**成长积分**。
