@@ -99,7 +99,7 @@
 - **超总池硬约束**:各酒吧分配总额**不得超过**各酒吧总池;确需超出**仅限平台负责人特批的短期激励(≤3 个月)**,到期收回。系统对分配总额做校验,超出非特批则拒绝。**特批出口(填 `special_approval_ref` → confirmed → 过账)+ 超额 C 口径(L3 娱乐运营平台承担超额·各家应付拆两段·`platform_incentive_subsidy`)标为后续单走(D7·finance-model 标签法已定,迁移 V332)。**
 - 赠酒补偿(§5.3)、⑦ 各酒吧分配均**按实际核销/入场逐笔发生**;通票未核销部分的余额归项目公司(原则 2)。
 - "项目公司留存"= 项目公司**拿走**留存%,各酒吧分**剩余**(1−留存%);二者之和 = 可分配池。
-- **过账**:结算单算出后,由月结作业 / 网关端点 `POST /settlement/bills/{id}/post` 过账到应收应付台账(`postBill` 生产触发·**默认关·生产首次激活另行拍板**)。
+- **过账**:结算单算出后,由月结作业 / 网关端点 `POST /settlement/bills/{id}/post` 过账到应收应付台账。🔴 **过账独立闸**:月结作业内的 `postBill` 受**独立开关** `settlement.monthly.posting.enabled` 门控(默认 false·**不进 application-prod.yml**),与月度作业运行开关 `settlement.monthly.scheduled.enabled`(prod=true·本就开着算账单)**解耦**——settleMonth 照常算 confirmed 单(内部计算不落账本),**生产过账保持关**,直到用户拍板翻 `posting.enabled=true` 才首次真落账本。网关端点是人工特批路径(不受此闸,本就要人点)。
 
 ### 5.1 分账两问,均可配置
 用户明确:分账方案本身可配,20/80 只是财务平均视角。引擎设计为**可插拔的分账方案**:
