@@ -21,6 +21,8 @@ import org.springframework.stereotype.Component;
  * 晚到核销也会在下次回看窗口内并入仍未过账的月。
  *
  * <p>@Scheduled @ConditionalOnProperty 默认关闭——需显式开 settlement.monthly.scheduled.enabled=true 才注册。
+ * <p>🔴 <b>过账独立闸</b>:作业内的 postBill 过账受<b>独立开关</b> settlement.monthly.posting.enabled(默认 false·不进
+ * application-prod.yml)门控,与作业运行开关解耦。prod 月度作业本就开着(算账单),但过账保持关,直到用户拍板才激活账本首落。
  */
 @Component
 public class SettlementMonthlyJob {
@@ -30,6 +32,8 @@ public class SettlementMonthlyJob {
     private final SettlementPostingService postingService;
     private final Clock clock;
     private final boolean scheduledEnabled;
+    /** 过账独立闸(与作业运行开关解耦):默认 false·不进 application-prod.yml,过账需用户拍板后单独翻 true 才激活账本首落。 */
+    private final boolean postingEnabled;
 
     /** 每次跑回看的月数：补齐停机/失败留下的缺月（默认 6，覆盖数月连续停机的补跑窗口）。 */
     @Value("${settlement.monthly.backfill-months:6}")
@@ -40,22 +44,25 @@ public class SettlementMonthlyJob {
             TicketDistributionSettlementService service,
             JdbcSettlementBillRepository repository,
             SettlementPostingService postingService,
-            @Value("${settlement.monthly.scheduled.enabled:false}") boolean scheduledEnabled) {
-        this(service, repository, postingService, Clock.systemUTC(), scheduledEnabled);
+            @Value("${settlement.monthly.scheduled.enabled:false}") boolean scheduledEnabled,
+            @Value("${settlement.monthly.posting.enabled:false}") boolean postingEnabled) {
+        this(service, repository, postingService, Clock.systemUTC(), scheduledEnabled, postingEnabled);
     }
 
+    /** 测试构造器:作业开 + 过账开(验证过账开时的自动过账行为)。 */
     SettlementMonthlyJob(TicketDistributionSettlementService service, JdbcSettlementBillRepository repository,
             SettlementPostingService postingService, Clock clock) {
-        this(service, repository, postingService, clock, true);
+        this(service, repository, postingService, clock, true, true);
     }
 
     SettlementMonthlyJob(TicketDistributionSettlementService service, JdbcSettlementBillRepository repository,
-            SettlementPostingService postingService, Clock clock, boolean scheduledEnabled) {
+            SettlementPostingService postingService, Clock clock, boolean scheduledEnabled, boolean postingEnabled) {
         this.service = service;
         this.repository = repository;
         this.postingService = postingService;
         this.clock = clock;
         this.scheduledEnabled = scheduledEnabled;
+        this.postingEnabled = postingEnabled;
     }
 
     /** @Scheduled 薄包装:默认关闭,每月 1 日 03:00 跑;回看窗口逐月幂等补算(AUD-035)。 */
@@ -76,8 +83,10 @@ public class SettlementMonthlyJob {
                 // ① 过账(补 postBill 生产触发缺口):对未越池、已 confirmed 的常规单自动挂应付台账;
                 //   超池 draft 单不 confirmed → 不过账,待人工特批 confirmed 后走网关端点 ②(POST /bills/{id}/post)。
                 //   postBill @Transactional 全或无 + 幂等,confirmed 单重跑不重复挂账。
-                //   🔴 落码≠上线:本步骤仅在 settlement.monthly.scheduled.enabled=true(默认关)时随作业运行,不自行激活生产账本。
-                if ("confirmed".equals(repository.findBillStatus(billId))) {
+                //   🔴 过账独立闸(与作业运行解耦):过账仅在 settlement.monthly.posting.enabled=true(默认 false·不进 application-prod.yml)时执行。
+                //   月度作业开关 settlement.monthly.scheduled.enabled 在 prod 本就 =true(算账单),但过账保持关——settleMonth 照常算
+                //   confirmed 单(内部计算不落账本),直到用户拍板翻 posting.enabled 才首次真过账。网关 POST /bills/{id}/post 人工特批路径不受此闸。
+                if (postingEnabled && "confirmed".equals(repository.findBillStatus(billId))) {
                     postingService.postBill(billId);
                 }
             }

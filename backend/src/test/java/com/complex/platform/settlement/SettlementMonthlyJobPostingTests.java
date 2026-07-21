@@ -139,6 +139,32 @@ class SettlementMonthlyJobPostingTests {
         assertThat(arApCount(mdItem)).isZero();
     }
 
+    /**
+     * 🔴 过账独立闸(main follow-up):postingEnabled=false 时,settleMonth 照常算单→confirmed(内部计算),
+     * 但 postBill <b>不执行</b>——单保持 confirmed、明细 draft、无 ar_ap。防"月度作业开关 prod=true 连带自动过账"激活账本首落。
+     */
+    @Test
+    void scheduledSettleWithPostingDisabledDoesNotPostConfirmedBill() {
+        // 未越池月 → confirmed(总池 80000、固定额 5000 ≤ 80000)。
+        seedVerified(mcMerchant, 8, 4, 100000L, CONFIRMED_MONTH);
+        setGlobalMerchantFixed(mcMerchant, 5000L);
+
+        // 作业开(scheduledEnabled=true)、过账关(postingEnabled=false)。
+        SettlementMonthlyJob job = new SettlementMonthlyJob(settlementService, repository, postingService,
+                Clock.fixed(CONFIRMED_MONTH.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC),
+                        ZoneOffset.UTC),
+                true, false);
+
+        job.scheduledSettle();
+
+        // settleMonth 算出 confirmed 单(内部计算),但过账关 → 未落账本:单仍 confirmed、明细仍 draft、无 ar_ap。
+        String confirmedBill = "sb_default_" + CONFIRMED_MONTH;
+        assertThat(billStatus(confirmedBill)).isEqualTo("confirmed");
+        String mcItem = itemId(confirmedBill, mcMerchant);
+        assertThat(itemStatus(mcItem)).isEqualTo("draft");
+        assertThat(arApCount(mcItem)).isZero();
+    }
+
     // ---- helpers ----
 
     /** 全局(project_id NULL)商户固定额费率:by_fixed_amount 方式下 settleMonth(null,月) 据此给该商户直分。 */
