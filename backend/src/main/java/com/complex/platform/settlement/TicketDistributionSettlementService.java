@@ -123,9 +123,15 @@ public class TicketDistributionSettlementService {
         //   聚合已按 (merchant,entitlement_type) 拆,故费率能按票种范围精确命中;同一商户多票种的净额合并成一条明细。
         List<JdbcSettlementBillRepository.ExclusiveMerchantRevenue> exclusives =
                 repository.aggregateExclusiveRevenue(projectId, windowStart, windowEnd);
-        java.util.LinkedHashMap<String, long[]> byMerchant = new java.util.LinkedHashMap<>();
-        // byMerchant[mid] = {netAmount, verifiedCount, guestCount}
-        long compServiceFee = 0L;
+        // V336 综合服务费月度封顶(用户 2026-07-21 拍板 A「按费率规则各自封」):费率规则可跨票种(商户级规则
+        //   entitlement_type=NULL)或跨商户(全局默认 merchant_id=NULL),故封顶【不能】逐 (商户×票种) 聚合行各自压——
+        //   否则同商户多票种落同一条规则时会被压 N 次=N×封顶,违背「商户级规则=该商户当月封顶」。改为按【商户 × 解析到的规则 id】
+        //   把封顶前原始费聚合后再压:商户级规则=该商户当月封顶、票种级规则=该票种当月封顶、全局规则=各商户各自当月封顶(不跨商户合并)。
+        //   两趟:①逐聚合行累计 商户毛额 + (商户,规则)原始费/cap ②各组封顶 → 商户净额一条 exclusive_full 明细。
+        java.util.LinkedHashMap<String, long[]> merchantAgg = new java.util.LinkedHashMap<>();
+        // merchantAgg[mid] = {grossSum, verifiedCount, guestCount}
+        java.util.LinkedHashMap<String, java.util.LinkedHashMap<String, long[]>> feeByRule = new java.util.LinkedHashMap<>();
+        // feeByRule[mid][ruleId] = {rawFeeSum(封顶前), cap(-1=不封顶)}
         for (var ex : exclusives) {
             var svcFee = repository.findComprehensiveServiceFee(projectId, ex.merchantId(), ex.entitlementType());
             // D6：项目按归属承担的折扣加回该商户毛额，使其拿满额(platform_absorb 全额/split_by_ratio 平台份额/merchant_absorb=0)。
@@ -133,27 +139,38 @@ public class TicketDistributionSettlementService {
             long platformBorne = platformBorneDiscount(discountCfg, ex.discountCent());
             long gross = ex.revenueCent() + platformBorne;
             comboDiscountCent += platformBorne; // 项目承担的专属折扣入账
-            // 综合服务费:固定额=每张票固定额 × 核销张数(§7.2「所有门票都过一道」·用户 2026-07-21 拍板 A 口径,非整包价),
-            //   上限本笔毛额(防净额为负);否则比例(整数分截断余数留商户,不多扣)。默认 比例0 → fee=0(保值)。
-            long fee = svcFee.fixedAmountCent() != null
+            // 封顶前原始费:固定额=每张票固定额 × 核销张数(§7.2「所有门票都过一道」·用户 A 口径,非整包价),上限本笔毛额(防净额为负);
+            //   否则比例(整数分截断余数留商户,不多扣)。默认 比例0 → rawFee=0(保值)。
+            long rawFee = svcFee.fixedAmountCent() != null
                     ? Math.min(svcFee.fixedAmountCent() * ex.verifiedCount(), gross)
                     : gross * svcFee.feeBps() / 10000;
-            // V336 月度封顶(可配·默认不封顶):该费率规则(项目×商户×票种)当月服务费不超封顶值;
-            //   ex 即该 (商户×票种) 当月聚合行,故此处 fee 就是该规则当月服务费,clamp 即月度封顶。
-            //   比例与固定额两模式共用同一绝对上限;cap 为 null 则不封(零行为变更)。封顶只压不抬。
-            if (svcFee.monthlyCapAmountCent() != null) {
-                fee = Math.min(fee, svcFee.monthlyCapAmountCent());
-            }
-            long net = gross - fee;
-            compServiceFee += fee;
-            long[] acc = byMerchant.computeIfAbsent(ex.merchantId(), k -> new long[3]);
-            acc[0] += net;
-            acc[1] += ex.verifiedCount();
-            acc[2] += ex.guestCount();
+            long[] mg = merchantAgg.computeIfAbsent(ex.merchantId(), k -> new long[3]);
+            mg[0] += gross;
+            mg[1] += ex.verifiedCount();
+            mg[2] += ex.guestCount();
+            long[] rule = feeByRule.computeIfAbsent(ex.merchantId(), k -> new java.util.LinkedHashMap<>())
+                    .computeIfAbsent(svcFee.id(), k -> new long[]{0L, -1L});
+            rule[0] += rawFee;
+            rule[1] = svcFee.monthlyCapAmountCent() == null ? -1L : svcFee.monthlyCapAmountCent();
         }
-        for (var e : byMerchant.entrySet()) {
-            long[] acc = e.getValue();
-            items.add(new ItemCalc(e.getKey(), (int) acc[1], (int) acc[2], null, acc[0], METHOD_EXCLUSIVE_FULL));
+        // 各「商户×规则」组封顶(cap≥0 则 min),汇成每商户当月总费 + comp 服务费合计。
+        long compServiceFee = 0L;
+        java.util.HashMap<String, Long> feeByMerchant = new java.util.HashMap<>();
+        for (var me : feeByRule.entrySet()) {
+            long merchantFee = 0L;
+            for (long[] rule : me.getValue().values()) {
+                long raw = rule[0];
+                long cap = rule[1];
+                merchantFee += cap < 0 ? raw : Math.min(raw, cap); // 封顶只压不抬
+            }
+            feeByMerchant.put(me.getKey(), merchantFee);
+            compServiceFee += merchantFee;
+        }
+        // 商户净额 = 毛额合计 − 封顶后总费;各商户一条 exclusive_full 直付明细(同商户多票种合并)。
+        for (var e : merchantAgg.entrySet()) {
+            long[] mg = e.getValue();
+            long net = mg[0] - feeByMerchant.getOrDefault(e.getKey(), 0L);
+            items.add(new ItemCalc(e.getKey(), (int) mg[1], (int) mg[2], null, net, METHOD_EXCLUSIVE_FULL));
         }
 
         // distributed = 池分账 + 专属直付（两口径并列写入同一结算单明细）。

@@ -203,7 +203,7 @@ public class JdbcSettlementBillRepository {
      */
     public ServiceFeeConfig findComprehensiveServiceFee(String projectId, String merchantId, String entitlementType) {
         ServiceFeeConfig cfg = jdbcTemplate.query("""
-                SELECT fee_bps, fixed_amount_cent, monthly_cap_amount_cent FROM comprehensive_service_fee_configs
+                SELECT id, fee_bps, fixed_amount_cent, monthly_cap_amount_cent FROM comprehensive_service_fee_configs
                  WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                    AND (merchant_id IS NULL OR merchant_id = :merchant_id)
@@ -217,7 +217,7 @@ public class JdbcSettlementBillRepository {
                 .addValue("merchant_id", merchantId)
                 .addValue("entitlement_type", entitlementType),
                 rs -> rs.next()
-                        ? new ServiceFeeConfig(rs.getInt("fee_bps"),
+                        ? new ServiceFeeConfig(rs.getString("id"), rs.getInt("fee_bps"),
                                 rs.getObject("fixed_amount_cent") == null ? null : rs.getLong("fixed_amount_cent"),
                                 rs.getObject("monthly_cap_amount_cent") == null ? null
                                         : rs.getLong("monthly_cap_amount_cent"))
@@ -499,8 +499,9 @@ public class JdbcSettlementBillRepository {
     }
 
     /** V268 综合服务费配置读投影(§7.2):fixedAmountCent 非空=用固定额,否则用 feeBps 比例。
-     *  V336 monthlyCapAmountCent:该费率规则当月封顶(绝对分值);非空则引擎算出 fee 后 min(fee, cap);null=不封顶。 */
-    public record ServiceFeeConfig(int feeBps, Long fixedAmountCent, Long monthlyCapAmountCent) {
+     *  V336 monthlyCapAmountCent:该费率规则当月封顶(绝对分值);非空则封顶。id=解析到的规则主键,
+     *  供引擎按「商户×规则」聚合封顶(同一商户多票种落同一条规则时封顶按合计压,honor「商户级规则=该商户当月封顶」)。 */
+    public record ServiceFeeConfig(String id, int feeBps, Long fixedAmountCent, Long monthlyCapAmountCent) {
     }
 
     public record RankTier(int rankFrom, int rankTo, int shareBps) {

@@ -218,6 +218,24 @@ class SettlementV268Tests {
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(90000L);
     }
 
+    /**
+     * V336 封顶按「商户×规则」聚合(用户 A 口径核心):同一商户多票种落【同一条商户级规则】(entitlement_type 留空)时,
+     * 封顶压的是该商户在该规则下当月<b>合计</b>费,而非逐票种各压一次(逐票种各压=N×封顶,违背「商户级规则=该商户当月封顶」)。
+     * barA 两票种各原始费 10%×100000=10000,合计 20000;商户级封顶 15000 → 压到 15000(非各压后的 20000)。
+     */
+    @Test
+    void capAggregatesPerMerchantRuleAcrossEntitlementTypes() {
+        String pid = newProject();
+        seedExclusive(pid, "barA", "ticket", 5, 3, 100000L);
+        seedExclusive(pid, "barA", "amusement", 4, 2, 100000L);
+        seedRatioFeeWithCap(pid, "barA", null, 1000, 15000L); // 商户级(票种留空)10% + 封顶 15000
+
+        settlementService.settleMonth(pid, MONTH);
+
+        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(15000L); // 聚合 20000 → 封 15000(非逐票种各压=20000)
+        assertThat(exclusiveAmount(pid, "barA")).isEqualTo(185000L);           // 200000 - 15000
+    }
+
     /** 套票折扣归属:默认 platform_absorb;项目特例可覆盖为 merchant_absorb。 */
     @Test
     void comboDiscountConfig_defaultAndProjectOverride() {
