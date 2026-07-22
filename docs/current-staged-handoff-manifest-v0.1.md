@@ -16,10 +16,10 @@
 |---|---|
 | 状态 | not_ready_for_commit_or_patch_package |
 | 分支 | main |
-| HEAD | 786946c |
+| HEAD | 786130c8 |
 | 暂存文件数 | 0 |
 | 未跟踪文件 | 0 |
-| 混合/未暂存变更 | 0 |
+| 混合/未暂存变更 | 11 |
 | 缺失关键文件 | 21 |
 | name-status 指纹 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 
