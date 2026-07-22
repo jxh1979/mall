@@ -20737,6 +20737,45 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/analytics/abandoned-entitlement-revenue:
+    get:
+      tags:
+        - analytics
+      operationId: getAbandonedEntitlementRevenue
+      summary: 放弃权益额外收入报表(票种×权益类型)
+      description: 已过期未使用权益归项目公司的额外收入，按 通票/单独门票 × 酒水/入场/游乐/演出/其他 交叉列金额与笔数；数据源=SettlementExpiryJob 写的 unverified_expired 归项目流水，只读。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.abandoned_entitlement_revenue.viewed
+      x-audit-event-failure: analytics.abandoned_entitlement_revenue.view_failed
+      parameters:
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+            maxLength: 10
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+            maxLength: 10
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/analytics/rent-to-sales:
     get:
       tags:
