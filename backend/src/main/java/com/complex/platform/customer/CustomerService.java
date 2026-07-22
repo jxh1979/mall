@@ -44,6 +44,8 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class CustomerService {
@@ -1147,14 +1149,6 @@ public class CustomerService {
         return request;
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     private String firstNonBlank(String first, String second) {
         String firstTrimmed = trimToNull(first);
         return firstTrimmed == null ? second : firstTrimmed;
@@ -1163,11 +1157,6 @@ public class CustomerService {
     private String trimToDefault(String value, String defaultValue) {
         String trimmed = trimToNull(value);
         return trimmed == null ? defaultValue : trimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private boolean redemptionItemIsActive(CustomerRedemptionCatalogItemRecord item, Instant now) {

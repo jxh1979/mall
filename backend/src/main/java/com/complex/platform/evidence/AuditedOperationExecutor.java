@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
 
 @Service
 public class AuditedOperationExecutor {
@@ -180,11 +181,6 @@ public class AuditedOperationExecutor {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
         }
         return trimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String codeOf(RuntimeException exception) {

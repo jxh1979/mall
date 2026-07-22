@@ -19,6 +19,7 @@ import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * AUD-077 门票权益转赠状态机。转赠单位=人员权益组 slot=(parent_ticket_id, slot_index)。
@@ -361,14 +362,6 @@ public class TicketTransferService {
             return phone.charAt(0) + "****" + phone.charAt(phone.length() - 1);
         }
         return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 
     private String codeOf(RuntimeException exception) {

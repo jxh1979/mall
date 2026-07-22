@@ -41,6 +41,8 @@ import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class AnalyticsService {
@@ -1508,19 +1510,6 @@ public class AnalyticsService {
     private String normalizeText(String value, String fallback) {
         String text = trimToNull(value);
         return text == null ? fallback : text;
-    }
-
-    private String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String businessId(Object value) {

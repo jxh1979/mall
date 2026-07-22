@@ -22,6 +22,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
+import com.complex.platform.common.Strings;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class FloorPlanService {
@@ -354,7 +357,7 @@ public class FloorPlanService {
         }
 
         List<String> candidateIds = request.candidateIds().stream()
-                .map(this::trimToNull)
+                .map(Strings::trimToNull)
                 .filter(value -> value != null)
                 .distinct()
                 .toList();
@@ -598,22 +601,6 @@ public class FloorPlanService {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is invalid");
         }
         return normalized;
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String slug(String value) {

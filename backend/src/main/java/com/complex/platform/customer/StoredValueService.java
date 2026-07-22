@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import static com.complex.platform.common.Strings.trimToNull;
+import com.complex.platform.common.Strings;
 
 /**
  * 储值（预付卡 / 余额账户，gap-analysis §7A P1）。
@@ -680,7 +682,7 @@ public class StoredValueService {
         try {
             return repository.findCustomerById(normalizedCustomerId)
                     .map(CustomerRecord::phone)
-                    .map(this::trimToNull)
+                    .map(Strings::trimToNull)
                     .orElse(null);
         } catch (RuntimeException exception) {
             log.warn("failed to resolve stored value customer phone: customer_id={}",
@@ -822,11 +824,6 @@ public class StoredValueService {
     private CustomerRecord requireCustomer(String customerId) {
         return repository.findCustomerById(customerId)
                 .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "customer not found"));
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private Instant now() {

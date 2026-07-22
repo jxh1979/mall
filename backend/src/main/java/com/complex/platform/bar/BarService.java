@@ -10,6 +10,7 @@ import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class BarService {
@@ -772,13 +773,5 @@ public class BarService {
                 BarWriteOperation.CLOSE_SHIFT,
                 () -> shiftService.closeShift(id, request)
         );
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? null : value.trim();
-        if (trimmed == null || trimmed.isEmpty()) {
-            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 }

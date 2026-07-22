@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 综合体经营参数「配置」服务（T4.2 坪效）：平台管理员维护 complex_operating_params（可经营面积），
@@ -382,14 +383,6 @@ public class OperatingParamsService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 
     private BigDecimal requirePositive(BigDecimal value, String field) {

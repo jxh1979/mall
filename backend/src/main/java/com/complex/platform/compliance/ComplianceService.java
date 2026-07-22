@@ -20,6 +20,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class ComplianceService {
@@ -475,14 +477,6 @@ public class ComplianceService {
         return normalized;
     }
 
-    private String requireText(String value, String field) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
-    }
-
     private String defaultText(String value, String fallback) {
         String trimmed = trimToNull(value);
         return trimmed == null ? fallback : trimmed;
@@ -504,14 +498,6 @@ public class ComplianceService {
             return scope.get();
         }
         return requireText(requestedMerchantId, "merchant_id");
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String requestId() {

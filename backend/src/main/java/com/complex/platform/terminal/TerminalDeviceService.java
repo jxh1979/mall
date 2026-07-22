@@ -25,6 +25,8 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class TerminalDeviceService {
@@ -871,14 +873,6 @@ public class TerminalDeviceService {
                 && DEVICE_CREDENTIAL_REJECTION_CODES.contains(apiException.code());
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     private <T> T requireRequest(T request) {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
@@ -889,11 +883,6 @@ public class TerminalDeviceService {
     private String firstNonBlank(String first, String second) {
         String trimmed = trimToNull(first);
         return trimmed == null ? trimToNull(second) : trimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String trimToDefault(String value, String defaultValue) {

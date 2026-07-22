@@ -20,6 +20,7 @@ import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 方案2 整票退款（AUD-006）+ 规则2 可退配置。退款单位 = 父票实例（ticket_instances），不再受理单条权益/自由金额：
@@ -591,22 +592,9 @@ public class TicketRefundService {
         return request;
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     private String trimToDefault(String value, String defaultValue) {
         String trimmed = value == null ? "" : value.trim();
         return trimmed.isEmpty() ? defaultValue : trimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     /** 复核修正（P1-A）：批次后缀定长 32 位哈希，保证退款单 id 恒 ≤64 字符且同批次确定可幂等。 */

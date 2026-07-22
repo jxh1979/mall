@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import static com.complex.platform.common.Strings.trimToNull;
 
 /**
  * 结算状态机重构(AUD-013)：核销冲正 → 追加一条<b>不可变负向</b>结算事实（严格取原核销行的反）。
@@ -100,13 +101,5 @@ public class SettlementReversedConsumer {
         String status = billRepository.findBillStatusByPeriod(projectId, periodStart, periodEnd);
         boolean posted = status != null && !STATUS_DRAFT.equals(status) && !"confirmed".equals(status);
         return posted ? Instant.now() : originalBusinessAt;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

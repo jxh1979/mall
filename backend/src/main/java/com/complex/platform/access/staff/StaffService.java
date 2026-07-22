@@ -24,6 +24,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 员工三表领域服务（R5 T1）：员工注册→审批闭环；设备凭证绑定/换机（解绑旧→绑新 pending_review→生效，
@@ -1176,12 +1178,6 @@ public class StaffService {
         return null;
     }
 
-    private String trimToNull(String value) {
-        if (value == null) return null;
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
     private String slug(String value) {
         String slug = (value == null ? "" : value).toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9]+", "_")
@@ -1194,13 +1190,5 @@ public class StaffService {
             return apiException.code();
         }
         return exception.getClass().getSimpleName();
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? null : value.trim();
-        if (trimmed == null || trimmed.isEmpty()) {
-            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 }

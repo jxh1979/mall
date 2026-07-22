@@ -17,6 +17,8 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 统一异常责任链服务（evidence-risk-layer-spec §8，P0 清单#5）。
@@ -423,24 +425,11 @@ public class RiskAlertService {
         return level;
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     private <T> T requireRequest(T request) {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String slug(String value) {

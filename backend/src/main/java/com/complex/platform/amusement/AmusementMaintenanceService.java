@@ -15,6 +15,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 游乐设施定期检修与主管确认恢复营业（设计 §5.1.1/§6.6.1/§7.14a/§8.7.1）。
@@ -302,21 +304,6 @@ final class AmusementMaintenanceService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
-    }
-
-    private String requireText(String value, String fieldName) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
     }
 
     private String enumValue(String value, Set<String> allowed, String fieldName) {

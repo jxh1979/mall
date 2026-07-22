@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 第三方券(批3):通票包含的餐厅/第三方券。配置结算口径 + 接收餐厅自己系统核销后的对账回流并结算。
@@ -99,24 +101,11 @@ public class PartnerVoucherService {
         return request;
     }
 
-    private String requireText(String value, String field) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
-    }
-
     private String requireEnum(String value, Set<String> allowed, String field) {
         String trimmed = requireText(value, field);
         if (!allowed.contains(trimmed)) {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " must be one of " + allowed);
         }
         return trimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

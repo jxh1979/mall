@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 图形化点单 POS 目录服务（V256/V257 阶段1）：分类 CRUD、套餐 CRUD、给 SKU 设分类/图片、按分类列 SKU。
@@ -453,14 +455,6 @@ public class BarPosCatalogService {
         return request;
     }
 
-    private static String requireText(String value, String field) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
-    }
-
     private static long nonNegative(Long value, String field) {
         if (value == null || value < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " must be a non-negative number");
@@ -471,14 +465,6 @@ public class BarPosCatalogService {
     private static String statusOrDefault(String status) {
         String trimmed = trimToNull(status);
         return trimmed == null ? "active" : trimmed;
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private static String slug() {

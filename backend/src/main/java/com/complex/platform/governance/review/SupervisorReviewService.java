@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class SupervisorReviewService {
@@ -342,12 +343,5 @@ public class SupervisorReviewService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-    }
-
-    private String requireText(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return value.trim();
     }
 }

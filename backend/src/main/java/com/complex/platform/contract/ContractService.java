@@ -41,6 +41,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import static com.complex.platform.common.Strings.trimToNull;
+import com.complex.platform.common.Strings;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 合同租赁全生命周期（V162 重建，据 contract-lifecycle-prd-v1.0 V1.1 + M1 §2 + 用户裁决）。
@@ -752,7 +755,7 @@ public class ContractService {
                     .filter(merchant -> normalizedMerchantId.equals(merchant.id()))
                     .findFirst()
                     .map(MerchantRecord::contactPhone)
-                    .map(this::trimToNull)
+                    .map(Strings::trimToNull)
                     .orElse(null);
         } catch (RuntimeException exception) {
             log.warn("failed to resolve merchant primary contact phone: merchant_id={}", normalizedMerchantId, exception);
@@ -1481,14 +1484,6 @@ public class ContractService {
         return request;
     }
 
-    private String requireText(String value, String field) {
-        String t = value == null ? "" : value.trim();
-        if (t.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return t;
-    }
-
     private String requireEnum(String value, Set<String> allowed, String field) {
         String t = requireText(value, field);
         if (!allowed.contains(t)) {
@@ -1502,10 +1497,5 @@ public class ContractService {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
         }
         return value;
-    }
-
-    private String trimToNull(String value) {
-        String t = value == null ? "" : value.trim();
-        return t.isEmpty() ? null : t;
     }
 }

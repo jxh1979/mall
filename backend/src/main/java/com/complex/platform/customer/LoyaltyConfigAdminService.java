@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 会员忠诚度运营配置后台管理（会员忠诚度 PRD §3/§6）：会员等级档位/门槛/保级/倍率、连续签到阶梯、生日加倍规则。
@@ -252,13 +253,6 @@ public class LoyaltyConfigAdminService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
-    }
-
-    private String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return value.trim();
     }
 
     private long requireMin(Integer value, int min, String field) {

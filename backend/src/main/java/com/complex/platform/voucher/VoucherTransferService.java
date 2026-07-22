@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * V313 券包会员间转赠状态机（TicketTransferService 同款范式，转赠单位＝单张统一台账券实例）。
@@ -312,14 +313,6 @@ public class VoucherTransferService {
             return phone.charAt(0) + "****" + phone.charAt(phone.length() - 1);
         }
         return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 
     private String codeOf(RuntimeException exception) {

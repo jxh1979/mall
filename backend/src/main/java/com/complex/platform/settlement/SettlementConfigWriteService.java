@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 结算配置中心批1 写入面服务(§2/§3):校验 → 强制落草案(is_draft=TRUE) → 审计;以及草案复核转正/软删。
@@ -372,14 +373,6 @@ public class SettlementConfigWriteService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 
     private int requireBps(Integer value, String field) {

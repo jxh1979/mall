@@ -20,6 +20,8 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class EvidenceEventService {
@@ -478,14 +480,6 @@ public class EvidenceEventService {
         return null;
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     private static final Pattern SHA256_CHECKSUM = Pattern.compile("^sha256:[0-9a-f]{64}$");
 
     /**
@@ -522,11 +516,6 @@ public class EvidenceEventService {
     private String trimToDefault(String value, String defaultValue) {
         String trimmed = trimToNull(value);
         return trimmed == null ? defaultValue : trimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String slug(String value) {

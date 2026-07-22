@@ -19,6 +19,9 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import com.complex.platform.common.Strings;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class SiteEntryReportService {
@@ -267,29 +270,13 @@ public class SiteEntryReportService {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
         }
         List<String> cleaned = values.stream()
-                .map(this::trimToNull)
+                .map(Strings::trimToNull)
                 .filter(value -> value != null)
                 .toList();
         if (cleaned.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
         }
         return cleaned;
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private Map<String, Object> metadata(SiteEntryReportRecord record, String note) {

@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import static com.complex.platform.common.Strings.trimToNull;
 
 @RestController
 @RequestMapping("/api/v1/customer")
@@ -400,10 +401,5 @@ public class CustomerController {
     private String firstNonBlank(String first, String second) {
         String firstTrimmed = trimToNull(first);
         return firstTrimmed == null ? second : firstTrimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

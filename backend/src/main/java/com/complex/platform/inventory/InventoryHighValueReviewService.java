@@ -15,6 +15,9 @@ import java.util.Set;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import com.complex.platform.common.Strings;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * R5 T6（库存域内自建）高价值复核服务（inventory_high_value_reviews）。
@@ -361,17 +364,9 @@ public class InventoryHighValueReviewService {
         return request;
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     private List<String> requireNonEmptyList(List<String> value, String fieldName) {
         List<String> cleaned = value == null ? List.of()
-                : value.stream().map(this::trimToNull).filter(java.util.Objects::nonNull).toList();
+                : value.stream().map(Strings::trimToNull).filter(java.util.Objects::nonNull).toList();
         if (cleaned.isEmpty()) {
             throw ApiException.badRequest("HIGH_VALUE_EVIDENCE_REQUIRED",
                     "高价值动作需照片+视频双证据；" + fieldName + " 不能为空");
@@ -385,14 +380,6 @@ public class InventoryHighValueReviewService {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is invalid");
         }
         return normalized;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String slug(String seed) {
