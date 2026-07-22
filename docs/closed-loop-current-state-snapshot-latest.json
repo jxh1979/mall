@@ -128,7 +128,7 @@
       "reason": "current live mount check failed, and historical passed evidence cannot prove current automount or production recovery readiness"
     },
     "runtime_acceptance": {
-      "backend_tests": 2582,
+      "backend_tests": 2583,
       "backend_failures": 0,
       "backend_errors": 0,
       "web_unit_tests": 741,
