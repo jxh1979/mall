@@ -44,6 +44,7 @@ const MerchantZoneContractsPage = React.lazy(() => import("./pages/MerchantZoneC
 const MerchantZoneFeeRecipientsPage = React.lazy(() => import("./pages/MerchantZoneFeeRecipientsPage").then((m) => ({ default: m.MerchantZoneFeeRecipientsPage })));
 const ReceivablesAnalyticsPage = React.lazy(() => import("./pages/ReceivablesAnalyticsPage").then((m) => ({ default: m.ReceivablesAnalyticsPage })));
 const OccupancyAnalyticsPage = React.lazy(() => import("./pages/OccupancyAnalyticsPage").then((m) => ({ default: m.OccupancyAnalyticsPage })));
+const AbandonedEntitlementRevenuePage = React.lazy(() => import("./pages/AbandonedEntitlementRevenuePage").then((m) => ({ default: m.AbandonedEntitlementRevenuePage })));
 const WorkOrderSlaPage = React.lazy(() => import("./pages/WorkOrderSlaPage").then((m) => ({ default: m.WorkOrderSlaPage })));
 const EnergyAnalyticsPage = React.lazy(() => import("./pages/EnergyAnalyticsPage").then((m) => ({ default: m.EnergyAnalyticsPage })));
 const MonthlyComparisonPage = React.lazy(() => import("./pages/MonthlyComparisonPage").then((m) => ({ default: m.MonthlyComparisonPage })));
@@ -307,6 +308,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <NotificationWindowsPage {...props} />;
     case "ADM-ANA-012":
       return <MetricDetailPage {...props} />;
+    case "ADM-ANA-013":
+      return <AbandonedEntitlementRevenuePage {...props} />;
     case "ADM-GOV-007":
       return <SpaceTypesPage {...props} />;
     case "ADM-VND-004":

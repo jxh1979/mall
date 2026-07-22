@@ -224,6 +224,17 @@ public interface AnalyticsRepository {
         return new AnalyticsRecords.RentToSalesAggregate(java.util.List.of(), 0L);
     }
 
+    /**
+     * 结算B2 放弃权益额外收入取数：settlement_transactions 的 unverified_expired 归项目流水，
+     * 按 权益类型桶 × 票种（issued_entitlements.bar_id：NULL=通票 / 非空=单独门票）交叉聚合，
+     * 金额取权威 unverified_amount_cent、笔数 COUNT(*)；窗口 [start(含), end(不含)) 经营日切分。
+     * 默认空聚合（供无需此能力的内存测试替身）；真实实现见 JdbcAnalyticsRepository。
+     */
+    default java.util.List<AnalyticsRecords.AbandonedEntitlementCell> abandonedEntitlementRevenue(
+            LocalDate start, LocalDate end) {
+        return java.util.List.of();
+    }
+
     /** M3:更新异常检测阈值配置(经营参数页后台可调)。 */
     AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now);

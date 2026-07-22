@@ -68,6 +68,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-ANA-008", label: "月度对比", module: "分析", group: "overview", route: "/admin/analytics/monthly", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-009", label: "T3-A 只读经营分析", module: "分析", group: "overview", route: "/admin/analytics/t3a-readonly", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-012", label: "指标明细", module: "分析", group: "overview", route: "/admin/metric-detail", requiredPermissions: ["analytics.dashboard.view"] },
+  { pageId: "ADM-ANA-013", label: "放弃权益额外收入", module: "分析", group: "overview", route: "/admin/analytics/abandoned-entitlement-revenue", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-STF-001", label: "排班与考勤", module: "人事", group: "ops", route: "/admin/staff/shifts", requiredPermissions: ["staff.shift.manage"] },
   { pageId: "ADM-STF-002", label: "薪酬与请假", module: "人事", group: "ops", route: "/admin/staff/payroll", requiredPermissions: ["staff.payroll.manage"] },
   { pageId: "ADM-STF-003", label: "个税税表", module: "人事", group: "ops", route: "/admin/staff/tax-brackets", requiredPermissions: ["staff.payroll.manage"] },
