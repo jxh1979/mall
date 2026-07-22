@@ -110,7 +110,7 @@
 | REQ-15 | 酒吧可独立成酒吧 SaaS | bar-business-operations PRD；operation-traceability PRD §5（终端开关 SaaS 化） | 已覆盖 | — |
 | REQ-16 | 酒吧合同/合作形式（租赁/联营/自营/合作）与收益模式 | platform-governance PRD 合同；business-decision-log §6 | 已覆盖 | 合同摘要由平台治理管理 |
 | REQ-17 | 桌台/卡座/吧台位/最低消费/点酒/支付/赠饮/账单/异常/存酒 | bar PRD §5-§9；bar-operations-development-design | 已覆盖 | — |
-| REQ-18 | **最低消费按时间/卡座/位置配置，原则上不按人数** | business-decision-log §16；bar dev-design §5.2.2；bar PRD §11 | 已覆盖 | P0 明确不按人数计算，`guest_count` 仅记录；按人数例外作为后置扩展。 |
+| REQ-18 | **最低消费按时间/卡座/位置配置，不按人数** | business-decision-log §16；bar dev-design §5.2.2；bar PRD §11 | 已覆盖 | P0 明确不按人数计算，`guest_count` 仅记录；按人数例外作为后置扩展。 |
 | REQ-19 | 平板只做点酒下单，必须绑定酒吧+卡座、低消未满不能提交 | bar PRD §7.4；android-device-terminal dev-design；business-decision-log §11 | 已覆盖 | — |
 | REQ-20 | 下单生成二维码扫码支付，或平板扫客付款码 | bar PRD 支付处理；bar dev-design §6.10 | 已覆盖 | — |
 | REQ-21 | **吧台买酒优先线上支付，但必须支持现金和 POS（中国法律）** | business-decision-log §5/§16；bar dev-design §6.10/§13/§14；operation-traceability PRD §4.1 `payment.cash_received`/`payment.pos_received` | 已覆盖 | 酒吧开发设计已将现金/POS 纳入 P0，记录收款人、POS 流水号，并进入账单、日结、对账和事件中心。<!-- R2 修订（2026-06-18 代码审计 r2-code-audit-req26b-req21-req30）：经代码核实，收款人字段 cashier_staff_id、POS 流水号 pos_transaction_no 及事件 payment.cash_received/pos_received 在 backend 中零命中（真实缺口 P1）；聚合支付意图已复用 finance_payment_intents 同表但旁路 FinanceService，channel 无枚举无映射。"记录收款人/POS 流水号"为设计声明，代码尚未落地。 --> |
