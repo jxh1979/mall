@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
 
 /**
  * 服务点单(G批六口径拍板;H批 2026-07-02 最终拍板将④修订为公司统一账户代收):
@@ -453,13 +454,5 @@ public class ServiceOrderService {
 
     private <T> PageResponse<T> page(List<T> items) {
         return new PageResponse<>(items, 1, 500, items.size());
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

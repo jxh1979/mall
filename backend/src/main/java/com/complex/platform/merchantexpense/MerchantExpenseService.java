@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 商户费用归集台账（持股分红净利润制费用侧）。资金类仅追加：更正走红字冲销新行，不改历史行。
@@ -290,13 +291,6 @@ public class MerchantExpenseService {
             throw ApiException.badRequest("VALIDATION_FAILED", "period must be yyyy-MM, e.g. 2026-07");
         }
         return p;
-    }
-
-    private static String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return value.trim();
     }
 
     private static String blankToNull(String value) {

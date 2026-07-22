@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 外部协作机构与自助下属门户（条目2 业务层）：
@@ -187,19 +189,6 @@ public class PartnerService {
             case "construction" -> "role_outsourced_construction";
             default -> "role_outsourced_facility";
         };
-    }
-
-    private String requireText(String value, String field) {
-        String t = value == null ? "" : value.trim();
-        if (t.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return t;
-    }
-
-    private String trimToNull(String value) {
-        String t = value == null ? "" : value.trim();
-        return t.isEmpty() ? null : t;
     }
 
     private String trimToDefault(String value, String def) {

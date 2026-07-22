@@ -7,6 +7,8 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import static com.complex.platform.common.Strings.trimToNull;
+import com.complex.platform.common.Strings;
 
 @Component
 public class MerchantFeeNotificationRecipientResolver {
@@ -63,7 +65,7 @@ public class MerchantFeeNotificationRecipientResolver {
                     .filter(merchant -> merchantId.equals(merchant.id()))
                     .findFirst()
                     .map(MerchantRecord::contactPhone)
-                    .map(this::trimToNull)
+                    .map(Strings::trimToNull)
                     .orElse(null);
         } catch (RuntimeException exception) {
             log.warn("failed to resolve merchant primary contact phone: merchant_id={}", merchantId, exception);
@@ -78,13 +80,5 @@ public class MerchantFeeNotificationRecipientResolver {
         }
         normalized = normalized.toLowerCase();
         return FEE_EVENTS.contains(normalized) ? normalized : null;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

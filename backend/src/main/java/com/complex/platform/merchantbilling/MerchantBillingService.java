@@ -36,6 +36,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import static com.complex.platform.common.Strings.trimToNull;
+import com.complex.platform.common.Strings;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class MerchantBillingService {
@@ -495,7 +498,7 @@ public class MerchantBillingService {
                     .filter(merchant -> normalizedMerchantId.equals(merchant.id()))
                     .findFirst()
                     .map(MerchantRecord::contactPhone)
-                    .map(this::trimToNull)
+                    .map(Strings::trimToNull)
                     .orElse(null);
         } catch (RuntimeException exception) {
             log.warn("failed to resolve merchant primary contact phone: merchant_id={}", normalizedMerchantId, exception);
@@ -670,14 +673,6 @@ public class MerchantBillingService {
         return normalized == null ? null : normalizeAllowed(normalized, field, allowed);
     }
 
-    private String requireText(String value, String field) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
-    }
-
     private LocalDate requireDate(LocalDate value, String field) {
         if (value == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
@@ -690,14 +685,6 @@ public class MerchantBillingService {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " must be positive");
         }
         return value;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private List<String> evidenceIds(List<String> values) {

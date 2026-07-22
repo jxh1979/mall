@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
 
 @Service
 public class TicketOfflinePackageService {
@@ -64,11 +65,6 @@ public class TicketOfflinePackageService {
             auditEventService.recordFailure("terminal.offline_entitlements.viewed_failed", "terminal.device.bind", "offline_entitlement", "all", null, null, codeOf(exception));
             throw exception;
         }
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String codeOf(RuntimeException exception) {

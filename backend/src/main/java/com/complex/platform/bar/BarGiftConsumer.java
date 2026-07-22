@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import static com.complex.platform.common.Strings.trimToNull;
 
 /**
  * R5 T15 赠饮兑换消费者（事件驱动，同步 @EventListener）。
@@ -264,14 +265,6 @@ public class BarGiftConsumer {
                         verificationId, redemption.merchantId(), internalPrice);
             }
         }
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String slug(String seed) {

@@ -30,6 +30,8 @@ import java.util.UUID;
 import com.complex.platform.common.NotificationWindowConfig;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 招商获客（V161 重建，据 leasing-acquisition-prd-v1.0 + 业务 HTML §10 + M1 需求采集 §1）。
@@ -437,24 +439,11 @@ public class LeasingService {
         return request;
     }
 
-    private String requireText(String value, String field) {
-        String t = value == null ? "" : value.trim();
-        if (t.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return t;
-    }
-
     private String requireEnum(String value, Set<String> allowed, String field) {
         String t = requireText(value, field);
         if (!allowed.contains(t)) {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is invalid");
         }
         return t;
-    }
-
-    private String trimToNull(String value) {
-        String t = value == null ? "" : value.trim();
-        return t.isEmpty() ? null : t;
     }
 }

@@ -25,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 积分/券统一台账（方案A，2026-07-18 拍板）：券定义/券实例/统一核销记录。
@@ -565,13 +566,6 @@ public class VoucherService implements VoucherIssuePort {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
-    }
-
-    private static String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return value.trim();
     }
 
     private static String requireEnum(String value, Set<String> allowed, String field) {

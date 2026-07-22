@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import static com.complex.platform.common.Strings.trimToNull;
 
 /**
  * P1 清单#19 跨模块闭环②b：finance 侧消费 ticketing 的 {@link VerificationReversedEvent}（核销已冲正权威信号），
@@ -110,14 +111,6 @@ public class VerificationReversedConsumer {
                 reversalId,
                 metadata);
         return Boolean.TRUE;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String nullToEmpty(String value) {

@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 final class InventoryStockMovementService {
 
@@ -645,14 +647,6 @@ final class InventoryStockMovementService {
         }
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     /** 可空非负长整：null 透传（如调整单价 null=不视高价值），非空须 >= 0。 */
     private Long nonNegativeOrNull(Long value, String fieldName) {
         if (value != null && value < 0) {
@@ -699,14 +693,6 @@ final class InventoryStockMovementService {
 
     private List<String> safeList(List<String> value) {
         return value == null ? List.of() : List.copyOf(value);
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String snakeToCamel(String value) {

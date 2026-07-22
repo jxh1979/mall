@@ -15,6 +15,8 @@ import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 商户专区一期(3.18 方案A)商户自助层:我的合同 / 我的对账只读 + 结算异议留言。
@@ -132,21 +134,5 @@ public class MerchantPortalService {
                 Map.of("merchant_id", contract.merchantId(), "reason", reason)
         );
         return disputed;
-    }
-
-    private static String requireText(String value, String field) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

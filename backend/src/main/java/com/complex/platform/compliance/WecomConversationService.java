@@ -29,6 +29,8 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * R5 T8 企微会话合规链（PIPL 平台侧合规能力）。
@@ -723,22 +725,6 @@ public class WecomConversationService {
     private WecomRetentionPolicyRecord defaultPolicy(Instant now) {
         return new WecomRetentionPolicyRecord(
                 "wrp_global_default", "global", "*", DEFAULT_RETENTION_DAYS, "anonymize", true, now, now);
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String blankToUnknown(String value) {

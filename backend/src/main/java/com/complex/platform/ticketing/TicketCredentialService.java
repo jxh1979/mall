@@ -5,6 +5,7 @@ import com.complex.platform.evidence.AuditEventService;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class TicketCredentialService {
@@ -41,14 +42,6 @@ public class TicketCredentialService {
             auditEventService.recordFailure("ticket_credential.refresh_failed", "not_applicable", "ticket_credential", ticketId, null, null, codeOf(exception));
             throw exception;
         }
-    }
-
-    private String requireText(String value, String fieldName) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
     }
 
     private String codeOf(RuntimeException exception) {

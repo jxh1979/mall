@@ -21,6 +21,8 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /** 楼宇运营 S4 能耗抄表。 */
 @Service
@@ -320,13 +322,6 @@ public class EnergyService {
         return request;
     }
 
-    private String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return value.trim();
-    }
-
     private BigDecimal requireDecimal(BigDecimal value, String field) {
         if (value == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
@@ -340,10 +335,6 @@ public class EnergyService {
 
     private static String projectKey(String projectId) {
         return projectId == null ? "__default__" : projectId;
-    }
-
-    private String trimToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
     }
 
     static String energyFeeSourceId(String merchantId, String contractId, String period) {

@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 后台积分规则引擎管理（REQ-12, P0-6）：CRUD 积分获取/有效期/过期/等级阈值配置。
@@ -153,13 +154,6 @@ public class CustomerPointsRuleAdminService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
-    }
-
-    private String requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return value.trim();
     }
 
     private long requireNonNegative(Long value, String field) {

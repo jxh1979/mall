@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 退款分级授权「配置」服务（Stage C，审计 A2 闭环）：平台管理员维护 refund_authority_limits / refund_auto_rules
@@ -89,14 +90,6 @@ public class RefundAuthorizationConfigService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         return request;
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 
     private long requireNonNegative(Long value, String field) {

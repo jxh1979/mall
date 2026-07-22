@@ -33,6 +33,8 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlementPort, DividendPayoutPort, TerminationSettlementPort {
@@ -2034,14 +2036,6 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         return request;
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     private LocalDate requireDate(LocalDate value, String fieldName) {
         if (value == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
@@ -2081,11 +2075,6 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     private String trimToDefault(String value, String defaultValue) {
         String trimmed = trimToNull(value);
         return trimmed == null ? defaultValue : trimmed;
-    }
-
-    private String trimToNull(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String slug(String value) {

@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 集中数据清理工具（数据删除四层之第四层：Tier-D 集中清理入口）。
@@ -183,23 +185,7 @@ public class DataCleanupService {
         return trimmed;
     }
 
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
     private static String slug() {
         return UUID.randomUUID().toString().replace("-", "");
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? null : value.trim();
-        if (trimmed == null || trimmed.isEmpty()) {
-            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 }

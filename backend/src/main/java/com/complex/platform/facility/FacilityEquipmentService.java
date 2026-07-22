@@ -17,6 +17,7 @@ import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * 楼宇机电设备台账（③楼宇运营 S1，据 M1 第3节 + 速查表第十节重建）。
@@ -271,13 +272,5 @@ public class FacilityEquipmentService {
                 c.vendor(), c.responsibleUserId(), status, c.maintenanceCycleDays(), lastMaintenanceAt, nextDue,
                 c.installDate(), c.warrantyUntil(), alarmSource, alarmNote, alarmRaisedAt, c.projectId(),
                 c.merchantId(), c.createdAt(), Instant.now());
-    }
-
-    private String requireText(String value, String field) {
-        String trimmed = value == null ? null : value.trim();
-        if (trimmed == null || trimmed.isEmpty()) {
-            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", field + " is required");
-        }
-        return trimmed;
     }
 }

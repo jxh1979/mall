@@ -18,6 +18,8 @@ import java.util.Set;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import static com.complex.platform.common.Strings.trimToNull;
+import static com.complex.platform.common.Strings.requireText;
 
 /**
  * P1#18 供应商资质（进货查验）+ 结算多档/账期子表服务。
@@ -325,14 +327,6 @@ public class SupplierQualificationService {
         return request;
     }
 
-    private String requireText(String value, String fieldName) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
-        }
-        return trimmed;
-    }
-
     private String normalizeAllowed(String value, Set<String> allowed, String fieldName) {
         String normalized = requireText(value, fieldName).toLowerCase(Locale.ROOT);
         if (!allowed.contains(normalized)) {
@@ -358,14 +352,6 @@ public class SupplierQualificationService {
 
     private List<String> safeList(List<String> value) {
         return value == null ? List.of() : List.copyOf(value);
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String slug(String seed) {
