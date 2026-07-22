@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 679 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 680 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 321 | 人工权限矩阵正文未覆盖 219 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1358 | 人工事件矩阵正文未覆盖 1316 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 679 | 人工任务映射正文未逐项覆盖 673 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1360 | 人工事件矩阵正文未覆盖 1318 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 680 | 人工任务映射正文未逐项覆盖 674 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 408 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -83,7 +83,7 @@
 | `amusement.verification.override` | staff-token | project-amusement, project-amusement-point | 2 | listAmusementManualOverrides, createAmusementManualOverride | 已在权限矩阵正文出现 |
 | `amusement.verification.view` | staff-token | project-amusement | 1 | listAmusementVerifications | 已在权限矩阵正文出现 |
 | `amusement.waiver.acknowledge` | staff-token | project-amusement | 1 | acknowledgeAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
-| `analytics.dashboard.view` | staff-token | platform, project | 18 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getMetricDetail, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, getAiThresholds, listNotificationWindows ... | 已在权限矩阵正文出现 |
+| `analytics.dashboard.view` | staff-token | platform, project | 19 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getMetricDetail, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, getAiThresholds, listNotificationWindows ... | 已在权限矩阵正文出现 |
 | `analytics.group.view` | staff-token | group | 1 | getGroupOverview | OpenAPI 补充，以本附录为准 |
 | `analytics.metric_anomaly.manage` | staff-token | project | 1 | disposeMetricAnomaly | OpenAPI 补充，以本附录为准 |
 | `analytics.operating_params.manage` | staff-token | platform, project | 7 | upsertOperatingParams, updateAiThresholds, upsertRevenueAttributionRule, upsertBusinessDayCutoff, updateAnomalyConfig, upsertHolidayPeriod, fetchHolidayCalendar | OpenAPI 补充，以本附录为准 |
@@ -506,6 +506,8 @@
 | `amusement.waiver.acknowledge_failed` | failure | `acknowledgeAmusementSafetyNotice` | `POST` | `/api/v1/amusement/safety-notices/{noticeId}/acknowledgements` | AMU-游乐安全 | `amusement.waiver.acknowledge` | 接口级事件，以本附录为准 |
 | `analytics_business_metric_snapshot.viewed.failure` | failure | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics_business_metric_snapshot.viewed.success` | success | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.abandoned_entitlement_revenue.view_failed` | failure | `getAbandonedEntitlementRevenue` | `GET` | `/api/v1/analytics/abandoned-entitlement-revenue` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.abandoned_entitlement_revenue.viewed` | success | `getAbandonedEntitlementRevenue` | `GET` | `/api/v1/analytics/abandoned-entitlement-revenue` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.abnormal_readings.view_failed` | failure | `listAbnormalReadings` | `GET` | `/api/v1/analytics/energy/abnormal-readings` | ANA-风控分析 | `energy.reading.manage` | 接口级事件，以本附录为准 |
 | `analytics.abnormal_readings.viewed` | success | `listAbnormalReadings` | `GET` | `/api/v1/analytics/energy/abnormal-readings` | ANA-风控分析 | `energy.reading.manage` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality_result.viewed` | success | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
@@ -1783,6 +1785,7 @@
 | ANA-风控分析 | `exportMonthlyReport` | `GET` | `/api/v1/analytics/reports/monthly-export` | 月度经营报表导出(分权) | `analytics.report.export` | `analytics.monthly_report.exported` / `analytics.monthly_report.export_failed` | web | operation 级补充 |
 | ANA-风控分析 | `fetchHolidayCalendar` | `POST` | `/api/v1/analytics/holiday-calendar/fetch` | 从 URL 抓取节假日日历 | `analytics.operating_params.manage` | `analytics.holiday_calendar.fetched` / `analytics.holiday_calendar.fetch_failed` | web | operation 级补充 |
 | ANA-风控分析 | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | Generate local LLM AI quality suggestion | `analytics.risk_alert.manage` | `analytics.ai_quality.local_llm_suggestion.created` / `analytics.ai_quality.local_llm_suggestion.failed` | web | operation 级补充 |
+| ANA-风控分析 | `getAbandonedEntitlementRevenue` | `GET` | `/api/v1/analytics/abandoned-entitlement-revenue` | 放弃权益额外收入报表(票种×权益类型) | `analytics.dashboard.view` | `analytics.abandoned_entitlement_revenue.viewed` / `analytics.abandoned_entitlement_revenue.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getAiThresholds` | `GET` | `/api/v1/analytics/ai-thresholds` | AI/对标阈值配置 | `analytics.dashboard.view` | `analytics.ai_thresholds.viewed` / `analytics.ai_thresholds.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | P0 经营看板下钻（按域） | `analytics.dashboard.view` | `analytics.dashboard_domain.viewed` / `analytics.dashboard_domain.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getAnalyticsTrafficHourly` | `GET` | `/api/v1/analytics/traffic-hourly` | 分时段客流分布 | `analytics.dashboard.view` | `analytics.traffic_hourly.viewed` / `analytics.traffic_hourly.view_failed` | web | operation 级补充 |
