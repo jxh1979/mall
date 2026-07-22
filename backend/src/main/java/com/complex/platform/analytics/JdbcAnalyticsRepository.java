@@ -1432,6 +1432,9 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                        COALESCE(SUM(st.unverified_amount_cent), 0) AS amount_cent,
                        COUNT(*) AS cnt
                   FROM settlement_transactions st
+                  -- INNER JOIN 安全依赖:issued_entitlements 受软删铁律永不硬删,且 unverified_expired 行由 SettlementExpiryJob
+                  --   读该表后写入(entitlement_id=ie.id 恒有匹配)→ 不丢行、不少报。ie.id 是 PK → 一对一、不扇出翻倍。
+                  --   (对抗审计 2026-07-21 复核:若将来违反软删铁律清档,孤儿流水会被整条丢弃致静默少报,届时改 LEFT JOIN。)
                   JOIN issued_entitlements ie ON ie.id = st.entitlement_id
                  WHERE st.transaction_type = 'unverified_expired'
                    AND st.beneficiary_type = 'project'

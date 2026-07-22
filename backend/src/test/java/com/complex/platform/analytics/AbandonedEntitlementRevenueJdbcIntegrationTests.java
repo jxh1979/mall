@@ -138,6 +138,34 @@ class AbandonedEntitlementRevenueJdbcIntegrationTests {
         assertThat(resp.grandTotal().count()).isEqualTo(4L);
     }
 
+    /**
+     * 补充边界(对抗审计 2026-07-21 建议):① start 边界含——business_at == startInstant(start) 的行被计入(左闭);
+     * ② 未知 entitlement_type('meal')落 other 桶;③ business_at=NULL 时按 created_at 回退归窗(COALESCE 分支)。
+     */
+    @Test
+    void startBoundaryInclusive_otherBucketHit_businessAtNullFallback() {
+        seedBase();
+        Instant startEdge = businessDayResolver.startInstant(DAY);          // 恰 start(左闭,须含)
+        Instant inWin = startEdge.plusSeconds(3600);
+        // ① start 边界含:通票×酒水 500 落 start 那一刻
+        seedTxn("edge", null, "drink", 500, startEdge, null, "unverified_expired", "project");
+        // ② 未知票种 'meal' → other 桶:单独门票 700
+        seedTxn("meal", BAR, "meal", 700, inWin, null, "unverified_expired", "project");
+        // ③ business_at=NULL、created_at 落窗 → 按 created_at 回退计入:通票×入场 300
+        seedTxnNullBusinessAt("nb", "entry", 300, inWin);
+
+        AnalyticsRecords.AbandonedEntitlementRevenueResponse resp =
+                service.abandonedEntitlementRevenue(DAY, DAY.plusDays(1));
+
+        assertThat(rowOf(resp, "drink").pass().amountCent()).isEqualTo(500L);   // ① 边界含
+        AnalyticsRecords.AbandonedEntitlementRow other = rowOf(resp, "other");  // ② other 桶命中
+        assertThat(other.ticket().amountCent()).isEqualTo(700L);
+        assertThat(other.ticket().count()).isEqualTo(1L);
+        assertThat(rowOf(resp, "entry").pass().amountCent()).isEqualTo(300L);   // ③ business_at=NULL 回退计入
+        assertThat(resp.grandTotal().amountCent()).isEqualTo(1500L);            // 三条都在
+        assertThat(resp.grandTotal().count()).isEqualTo(3L);
+    }
+
     private static AnalyticsRecords.AbandonedEntitlementRow rowOf(
             AnalyticsRecords.AbandonedEntitlementRevenueResponse resp, String bucket) {
         return resp.rows().stream().filter(r -> r.bucket().equals(bucket)).findFirst().orElseThrow();
@@ -196,5 +224,30 @@ class AbandonedEntitlementRevenueJdbcIntegrationTests {
                 VALUES (?, ?, ?, ?, ?, 1, 4, 1, ?, 0, ?, ?, ?, NULL, 'confirmed', ?, ?, ?, 0, ?, ?)
                 """, "st_b2rep_" + suffix, "ST-B2REP-" + suffix, transactionType, ent, entitlementType,
                 unverifiedCent, unverifiedCent, beneficiaryType, merchantId, bat, exclusiveMerchantId, bat, bat, bat);
+    }
+
+    /** business_at=NULL、created_at=给定时刻 的归项目行(通票),验证窗口 COALESCE(business_at,created_at) 回退分支。 */
+    private void seedTxnNullBusinessAt(String suffix, String entitlementType, long unverifiedCent, Instant createdAt) {
+        String ent = "ent_b2rep_" + suffix;
+        entIds.add(ent);
+        jdbcTemplate.update("""
+                INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id,
+                    entitlement_code, entitlement_type, merchant_id, venue_id, point_id,
+                    total_times, used_times, value_amount_cent, status, valid_from, valid_to,
+                    created_at, updated_at, num_people, allocated_revenue_cent, bar_id)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 4, 1, 0, 'active', now(), now(),
+                    now(), now(), 1, ?, NULL)
+                """, ent, TICKET_TYPE, ORDER_ID, TEMPLATE, "code_b2rep_" + suffix, entitlementType, unverifiedCent);
+        java.sql.Timestamp cat = java.sql.Timestamp.from(createdAt);
+        jdbcTemplate.update("""
+                INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
+                    entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
+                    verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
+                    settlement_status, entitlement_valid_to, exclusive_merchant_id, business_at,
+                    discount_amount_cent, created_at, updated_at)
+                VALUES (?, ?, 'unverified_expired', ?, ?, 1, 4, 1, ?, 0, ?, 'project', NULL, NULL,
+                    'confirmed', ?, NULL, NULL, 0, ?, ?)
+                """, "st_b2rep_" + suffix, "ST-B2REP-" + suffix, ent, entitlementType,
+                unverifiedCent, unverifiedCent, cat, cat, cat);
     }
 }

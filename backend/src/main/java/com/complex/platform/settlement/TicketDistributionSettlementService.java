@@ -154,6 +154,15 @@ public class TicketDistributionSettlementService {
             rule[1] = svcFee.monthlyCapAmountCent() == null ? -1L : svcFee.monthlyCapAmountCent();
         }
         // 各「商户×规则」组封顶(cap≥0 则 min),汇成每商户当月总费 + comp 服务费合计。
+        // 🔴🔴 过账激活前必修(对抗审计 2026-07-21):封顶 min(raw,cap) 与固定额毛额钳 min(fixed×张数,gross)
+        //   都是【月度非线性】运算,不满足核销↔冲正的「带符号线性可加」(f(-x)=-f(x))。当过账开启(settlement.monthly.
+        //   posting.enabled=true)后,原核销月已过账时其跨月红冲落【当月】(business_at=now)、聚合行 gross 带负,
+        //   本处按费率/毛额【重算】fee 而非按原月实收 fee 取反 → 触顶场景下红冲月退的 fee > 原月实收 fee(项目倒亏、
+        //   商户多拿),且 net<0 撞 V224 chk_si_amount 致当月 settleMonth 崩。
+        //   当前生产【过账 gated off】(账单永停 draft/confirmed,红冲总落原月同月净掉)→ 不可触发,故本潜伏 bug 不影响
+        //   在服口径;但「激活首落账本」前【必须】先改:exclusive 服务费线也要按 verificationId 溯源原核销实收 fee、
+        //   红冲严格取原行实收之反(不可变红冲事实),而非红冲月按费率/毛额重算。固定额模式此问题自 B1-2 起潜伏、封顶叠加放大。
+        //   追踪见 PRD settlement-rebuild §7.2「🔴 过账激活前必修」清单;与折扣侧 V335 不同(去钳线性化即可),封顶天生非线性无法线性化,须架构级改(存每笔实收 fee)。
         long compServiceFee = 0L;
         java.util.HashMap<String, Long> feeByMerchant = new java.util.HashMap<>();
         for (var me : feeByRule.entrySet()) {
@@ -161,7 +170,7 @@ public class TicketDistributionSettlementService {
             for (long[] rule : me.getValue().values()) {
                 long raw = rule[0];
                 long cap = rule[1];
-                merchantFee += cap < 0 ? raw : Math.min(raw, cap); // 封顶只压不抬
+                merchantFee += cap < 0 ? raw : Math.min(raw, cap); // 封顶只压不抬(负 gross 红冲行的非守恒隐患见上,过账开启前修)
             }
             feeByMerchant.put(me.getKey(), merchantFee);
             compServiceFee += merchantFee;
