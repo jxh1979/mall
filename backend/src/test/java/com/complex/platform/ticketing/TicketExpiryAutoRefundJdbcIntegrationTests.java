@@ -105,6 +105,10 @@ class TicketExpiryAutoRefundJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT status FROM ticket_instances WHERE id = ?", String.class, instPending))
                 .isEqualTo("refund_pending");
-        assertThat(processed).isEqualTo(1);
+        // processExpiredPaidEntitlements 是【全库】过期归属 Job,processed 计当次处理的所有过期权益数,
+        // 非本测试独占——共享测试库里其它用例遗留的已提交过期权益会一并被处理致 processed>1(隔离 flaky)。
+        // 本测试的行为正确性由上面「entActive→refunded / instActive→refunded / entPending 仍 active / instPending 仍
+        // refund_pending」四条独占断言精确覆盖;此处只需确认本测试的 active 权益确被处理(≥1),不假设全库仅此一条。
+        assertThat(processed).isGreaterThanOrEqualTo(1);
     }
 }

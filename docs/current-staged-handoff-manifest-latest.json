@@ -1,7 +1,7 @@
 {
   "manifest_version": "v0.1",
   "generated_at": "generated-from-current-git-index",
-  "git_head": "786946c",
+  "git_head": "786130c8",
   "branch": "main",
   "markers": [
     "STAGED_HANDOFF_MANIFEST_READY",
@@ -24,7 +24,7 @@
     "staged_modified": 0,
     "staged_deleted": 0,
     "untracked_files": 0,
-    "unstaged_or_mixed_entries": 0,
+    "unstaged_or_mixed_entries": 11,
     "missing_critical_files": 21
   },
   "staged_status_counts": {},
@@ -140,7 +140,19 @@
     "docs/production-evidence-closure-gap-report-v0.1.md"
   ],
   "untracked": [],
-  "unstaged_or_mixed": [],
+  "unstaged_or_mixed": [
+    " M README.md",
+    " M backend/src/test/java/com/complex/platform/ticketing/TicketExpiryAutoRefundJdbcIntegrationTests.java",
+    " M docs/00-current-effective-document-entry-v0.1.md",
+    " M docs/closed-loop-current-state-snapshot-latest.json",
+    " M docs/closed-loop-current-state-snapshot-v0.1.md",
+    " M docs/closed-loop-implementation-ui-acceptance-report-v0.1.md",
+    " M docs/final-closed-loop-acceptance-audit-v0.1.md",
+    " M docs/runtime-acceptance-evidence-latest.json",
+    " M docs/runtime-acceptance-evidence-v0.1.md",
+    " M tests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-ops-readiness-desktop-chromium-linux.png",
+    " M tests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-overview-desktop-chromium-linux.png"
+  ],
   "staged_files": [],
   "diff_stat": ""
 }
