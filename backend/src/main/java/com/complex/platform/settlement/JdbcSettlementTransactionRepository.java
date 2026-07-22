@@ -51,7 +51,9 @@ public class JdbcSettlementTransactionRepository {
                 .addValue("entitlement_valid_to", Timestamp.from(record.entitlementValidTo()))
                 .addValue("exclusive_merchant_id", record.exclusiveMerchantId())
                 .addValue("business_at", record.businessAt() == null ? null : Timestamp.from(record.businessAt()))
-                .addValue("discount_amount_cent", record.discountAmountCent());
+                .addValue("discount_amount_cent", record.discountAmountCent())
+                .addValue("comp_service_fee_cent", record.compServiceFeeCent())
+                .addValue("comp_service_fee_config_id", record.compServiceFeeConfigId());
 
         jdbcTemplate.update("""
                 INSERT INTO settlement_transactions (
@@ -59,14 +61,16 @@ public class JdbcSettlementTransactionRepository {
                     verification_id, entitlement_type, verified_count, total_times, num_people,
                     allocated_revenue_cent, verified_amount_cent, unverified_amount_cent,
                     beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to,
-                    exclusive_merchant_id, business_at, discount_amount_cent
+                    exclusive_merchant_id, business_at, discount_amount_cent,
+                    comp_service_fee_cent, comp_service_fee_config_id
                 )
                 VALUES (
                     :id, :transaction_no, :transaction_type, :entitlement_id, :order_id, :ticket_type_id,
                     :verification_id, :entitlement_type, :verified_count, :total_times, :num_people,
                     :allocated_revenue_cent, :verified_amount_cent, :unverified_amount_cent,
                     :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to,
-                    :exclusive_merchant_id, :business_at, :discount_amount_cent
+                    :exclusive_merchant_id, :business_at, :discount_amount_cent,
+                    :comp_service_fee_cent, :comp_service_fee_config_id
                 )
                 ON CONFLICT (transaction_no) DO NOTHING
                 """, params);
@@ -86,7 +90,8 @@ public class JdbcSettlementTransactionRepository {
     public SettledFactRow findVerificationSettledByVerificationId(String verificationId) {
         SettledFactRow modern = jdbcTemplate.query("""
                 SELECT entitlement_id, order_id, ticket_type_id, entitlement_type, num_people, total_times,
-                       verified_amount_cent, discount_amount_cent, beneficiary_type, merchant_id, project_id, exclusive_merchant_id,
+                       verified_amount_cent, discount_amount_cent, comp_service_fee_cent, comp_service_fee_config_id,
+                       beneficiary_type, merchant_id, project_id, exclusive_merchant_id,
                        entitlement_valid_to, COALESCE(business_at, created_at) AS business_at
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
@@ -103,6 +108,8 @@ public class JdbcSettlementTransactionRepository {
                       - round(leg.allocated_revenue_cent::numeric * (k.k - 1) / NULLIF(leg.total_times, 0)))::bigint
                             AS verified_amount_cent,
                        0::bigint AS discount_amount_cent,  -- 遗留累计行无满额价快照 → 折扣 0（红冲不动折扣，与新行配对天然净掉）
+                       0::bigint AS comp_service_fee_cent,  -- P6 遗留累计行无 fee 快照 → 0（无正向可冲，且 legacy 已清理）
+                       NULL::varchar AS comp_service_fee_config_id,
                        leg.beneficiary_type, leg.merchant_id, leg.project_id, leg.exclusive_merchant_id,
                        leg.entitlement_valid_to, COALESCE(leg.business_at, leg.created_at) AS business_at
                   FROM ticket_verifications v
@@ -132,7 +139,8 @@ public class JdbcSettlementTransactionRepository {
                 rs.getString("merchant_id"), rs.getString("project_id"), rs.getString("exclusive_merchant_id"),
                 rs.getTimestamp("entitlement_valid_to").toInstant(),
                 rs.getTimestamp("business_at").toInstant(),
-                rs.getLong("discount_amount_cent")) : null;
+                rs.getLong("discount_amount_cent"),
+                rs.getLong("comp_service_fee_cent"), rs.getString("comp_service_fee_config_id")) : null;
     }
 
     /** AUD-013 冲正取反读投影：原核销结算行的金额与归属维度。D6：加 discountAmountCent，冲正时取原行反。 */
@@ -140,7 +148,8 @@ public class JdbcSettlementTransactionRepository {
             String entitlementId, String orderId, String ticketTypeId, String entitlementType,
             int numPeople, int totalTimes, long verifiedAmountCent, String beneficiaryType,
             String merchantId, String projectId, String exclusiveMerchantId,
-            Instant entitlementValidTo, Instant businessAt, long discountAmountCent) {
+            Instant entitlementValidTo, Instant businessAt, long discountAmountCent,
+            long compServiceFeeCent, String compServiceFeeConfigId) {
     }
 
     // ---- 结算重构批1 第3步:双写观察期对账(观察用途,不改现有 net 聚合口径) ----

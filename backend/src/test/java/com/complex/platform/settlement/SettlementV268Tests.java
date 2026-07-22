@@ -77,7 +77,7 @@ class SettlementV268Tests {
         String pid = newProject();
         seedExclusive(pid, "barA", "ticket", 10, 5, 100000L);
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(100000L); // 全额,未扣费
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(0L);
@@ -90,7 +90,7 @@ class SettlementV268Tests {
         seedExclusive(pid, "barA", "ticket", 10, 5, 100000L);
         seedFee(pid, "barA", "ticket", 1000); // 10%
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(90000L); // 100000 - 10%
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(10000L);
@@ -109,7 +109,7 @@ class SettlementV268Tests {
         seedFee(pid, "barA", "ticket", 1000);      // barA 10%
         seedFee(pid, "barC", "amusement", 2500);   // barC 25%（不同票种范围）
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(90000L);  // 100000 - 10000
         assertThat(exclusiveAmount(pid, "barB")).isEqualTo(60000L);  // 无配置,全额
@@ -136,7 +136,7 @@ class SettlementV268Tests {
         seedExclusive(pid, "barA", "amusement", 4, 2, 40000L);
         seedFee(pid, "barA", "ticket", 1000); // 仅 ticket 10%,amusement 未配=0%
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(130000L); // 90000 + 40000
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(10000L); // 仅 ticket 那笔
@@ -152,7 +152,7 @@ class SettlementV268Tests {
         seedExclusive(pid, "barA", "ticket", 5, 3, 100000L); // 核销 5 张
         seedFixedFee(pid, "barA", "ticket", 100L);            // 固定额 100 分/张
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(500L); // 100 × 5 张(非整包 100)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(99500L);          // 100000 − 500
@@ -165,7 +165,7 @@ class SettlementV268Tests {
         seedExclusive(pid, "barA", "ticket", 5, 3, 300L);    // 核销 5 张,收入仅 300
         seedFixedFee(pid, "barA", "ticket", 100L);            // 100×5=500 > 300 → 钳 300
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(300L); // min(500, 300)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(0L);              // 净额不为负
@@ -183,7 +183,7 @@ class SettlementV268Tests {
         seedExclusive(pid, "barA", "ticket", 10, 5, 100000L);
         seedRatioFeeWithCap(pid, "barA", "ticket", 1000, 5000L); // 10% 封顶 5000
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(5000L);  // min(10000, 5000)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(95000L);            // 100000 - 5000
@@ -199,7 +199,7 @@ class SettlementV268Tests {
         seedExclusive(pid, "barA", "ticket", 5, 3, 100000L);   // 核销 5 张
         seedFixedFeeWithCap(pid, "barA", "ticket", 100L, 300L); // 100×5=500,封顶 300
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(300L);  // min(500, 300)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(99700L);          // 100000 - 300
@@ -212,7 +212,7 @@ class SettlementV268Tests {
         seedExclusive(pid, "barA", "ticket", 10, 5, 100000L);
         seedRatioFeeWithCap(pid, "barA", "ticket", 1000, 20000L); // 10% 封顶 20000(高于 fee)
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(10000L); // 未触顶,原样
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(90000L);
@@ -230,7 +230,7 @@ class SettlementV268Tests {
         seedExclusive(pid, "barA", "amusement", 4, 2, 100000L);
         seedRatioFeeWithCap(pid, "barA", null, 1000, 15000L); // 商户级(票种留空)10% + 封顶 15000
 
-        settlementService.settleMonth(pid, MONTH);
+        settle(pid);
 
         assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(15000L); // 聚合 20000 → 封 15000(非逐票种各压=20000)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(185000L);           // 200000 - 15000
@@ -254,6 +254,50 @@ class SettlementV268Tests {
     }
 
     // ---- helpers ----
+
+    /**
+     * P6:测试直插 settlement_transactions 绕过了 {@link SettlementSettledConsumer},故在结算前回填每行实收综合服务费——
+     * 镜像消费者口径(按 projectId 解析费率+折扣,每笔算 fee,按「商户×规则」当月增量封顶),使 settleMonth 线性求和 = 旧月末重算。
+     * 处理顺序 ORDER BY id 确定,增量封顶查已回填行的月累计。
+     */
+    private void applyFees(String projectId) {
+        var rows = jdbcTemplate.queryForList(
+                "SELECT id, exclusive_merchant_id, entitlement_type, verified_amount_cent, verified_count,"
+                        + " discount_amount_cent FROM settlement_transactions"
+                        + " WHERE project_id = ? AND transaction_type = 'verification_settled'"
+                        + " AND exclusive_merchant_id IS NOT NULL AND comp_service_fee_cent = 0 ORDER BY id",
+                projectId);
+        Instant ms = MONTH.atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant me = MONTH.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        for (var r : rows) {
+            String merchant = (String) r.get("exclusive_merchant_id");
+            String type = (String) r.get("entitlement_type");
+            long verified = ((Number) r.get("verified_amount_cent")).longValue();
+            int count = ((Number) r.get("verified_count")).intValue();
+            long discount = ((Number) r.get("discount_amount_cent")).longValue();
+            var cfg = billRepository.findComprehensiveServiceFee(projectId, merchant, type);
+            long platformBorne = ComprehensiveServiceFee.platformBorneCent(
+                    billRepository.findComboDiscountConfig(projectId), discount);
+            long fee = ComprehensiveServiceFee.perTicketCent(cfg, verified + platformBorne, count);
+            String cfgId = null;
+            if (fee > 0L) {
+                if (cfg.monthlyCapAmountCent() != null) {
+                    long mtd = billRepository.sumMonthToDateServiceFee(merchant, cfg.id(), ms, me);
+                    fee = Math.min(fee, Math.max(0L, cfg.monthlyCapAmountCent() - mtd));
+                }
+                cfgId = cfg.id();
+            }
+            jdbcTemplate.update(
+                    "UPDATE settlement_transactions SET comp_service_fee_cent = ?, comp_service_fee_config_id = ?"
+                            + " WHERE id = ?", fee, cfgId, r.get("id"));
+        }
+    }
+
+    private void settle(String projectId) {
+        applyFees(projectId);
+        settlementService.settleMonth(projectId, MONTH);
+    }
+
 
     private String newProject() {
         String pid = "pv268" + Long.toHexString(System.nanoTime() & 0xFFFFFFFL);
@@ -310,12 +354,13 @@ class SettlementV268Tests {
                 "INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,"
                         + " entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,"
                         + " verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,"
-                        + " settlement_status, entitlement_valid_to, exclusive_merchant_id, created_at, updated_at)"
+                        + " settlement_status, entitlement_valid_to, exclusive_merchant_id, verification_id,"
+                        + " created_at, updated_at)"
                         + " VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?,"
-                        + " 'draft', ?, ?, ?, ?)",
+                        + " 'draft', ?, ?, ?, ?, ?)",
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                exclusiveMerchantId, projectId, ts, exclusiveMerchantId, ts, ts);
+                exclusiveMerchantId, projectId, ts, exclusiveMerchantId, "vf_" + id, ts, ts);
     }
 
     private Map<String, Object> bill(String projectId) {

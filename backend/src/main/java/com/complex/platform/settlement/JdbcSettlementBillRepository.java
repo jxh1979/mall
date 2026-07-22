@@ -119,6 +119,7 @@ public class JdbcSettlementBillRepository {
                 SELECT COALESCE(SUM(verified_amount_cent), 0)
                   FROM settlement_transactions
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
+                   AND verification_id IS NOT NULL
                    AND exclusive_merchant_id IS NULL
                    AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
@@ -134,6 +135,7 @@ public class JdbcSettlementBillRepository {
                        COALESCE(SUM(num_people), 0)     AS guest_count
                   FROM settlement_transactions
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
+                   AND verification_id IS NOT NULL
                    AND beneficiary_type = 'merchant'
                    AND merchant_id IS NOT NULL
                    AND exclusive_merchant_id IS NULL
@@ -158,9 +160,11 @@ public class JdbcSettlementBillRepository {
                        COALESCE(SUM(verified_amount_cent), 0) AS revenue_cent,
                        COALESCE(SUM(discount_amount_cent), 0) AS discount_cent,
                        COALESCE(SUM(verified_count), 0)       AS verified_count,
-                       COALESCE(SUM(num_people), 0)           AS guest_count
+                       COALESCE(SUM(num_people), 0)           AS guest_count,
+                       COALESCE(SUM(comp_service_fee_cent), 0) AS comp_service_fee_cent
                   FROM settlement_transactions
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
+                   AND verification_id IS NOT NULL
                    AND exclusive_merchant_id IS NOT NULL
                    AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
@@ -169,7 +173,8 @@ public class JdbcSettlementBillRepository {
                 """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
                 new ExclusiveMerchantRevenue(rs.getString("merchant_id"), rs.getString("entitlement_type"),
                         rs.getLong("revenue_cent"), rs.getLong("discount_cent"),
-                        rs.getInt("verified_count"), rs.getInt("guest_count")));
+                        rs.getInt("verified_count"), rs.getInt("guest_count"),
+                        rs.getLong("comp_service_fee_cent")));
     }
 
     /**
@@ -182,10 +187,33 @@ public class JdbcSettlementBillRepository {
                 SELECT COALESCE(SUM(discount_amount_cent), 0)
                   FROM settlement_transactions
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
+                   AND verification_id IS NOT NULL
                    AND exclusive_merchant_id IS NULL
                    AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                 """, monthWindow(projectId, monthStart, nextMonthStart), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    /**
+     * P6 增量封顶:某专属商户×费率规则 在 [monthStart,nextMonthStart) 内【已落】的实收综合服务费累计
+     * (核销正 + 冲正负 → 冲正天然释放封顶额度)。核销时算本笔前先查此累计,remaining = max(0, cap - mtd)。
+     * business_at 落月窗(与聚合口径一致);不含本笔(本笔尚未 insert)。
+     */
+    public long sumMonthToDateServiceFee(String exclusiveMerchantId, String configId,
+                                         Instant monthStart, Instant nextMonthStart) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(comp_service_fee_cent), 0)
+                  FROM settlement_transactions
+                 WHERE transaction_type IN ('verification_settled','verification_reversed')
+                   AND exclusive_merchant_id = :merchant_id
+                   AND comp_service_fee_config_id = :config_id
+                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
+                """, new MapSqlParameterSource()
+                .addValue("merchant_id", exclusiveMerchantId)
+                .addValue("config_id", configId)
+                .addValue("start", Timestamp.from(monthStart))
+                .addValue("end", Timestamp.from(nextMonthStart)), Long.class);
         return sum == null ? 0L : sum;
     }
 
@@ -459,7 +487,7 @@ public class JdbcSettlementBillRepository {
      */
     public OverPoolContext findOverPoolContext(String billId) {
         return jdbcTemplate.query("""
-                SELECT b.status, b.spv_pool_cent,
+                SELECT b.status, b.project_id, b.spv_pool_cent,
                        COALESCE((SELECT SUM(i.final_amount_cent) FROM settlement_items i
                                   WHERE i.bill_id = b.id
                                     AND i.distribution_method <> 'exclusive_full'), 0) AS pooled_distributed_cent
@@ -467,8 +495,8 @@ public class JdbcSettlementBillRepository {
                  WHERE b.id = :id
                 """, new MapSqlParameterSource().addValue("id", billId),
                 rs -> rs.next()
-                        ? new OverPoolContext(rs.getString("status"), rs.getLong("spv_pool_cent"),
-                                rs.getLong("pooled_distributed_cent"))
+                        ? new OverPoolContext(rs.getString("status"), rs.getString("project_id"),
+                                rs.getLong("spv_pool_cent"), rs.getLong("pooled_distributed_cent"))
                         : null);
     }
 
@@ -486,7 +514,7 @@ public class JdbcSettlementBillRepository {
     }
 
     /** D7 超池上下文读投影：overPool = pooledDistributedCent > spvPoolCent。 */
-    public record OverPoolContext(String status, long spvPoolCent, long pooledDistributedCent) {
+    public record OverPoolContext(String status, String projectId, long spvPoolCent, long pooledDistributedCent) {
         public boolean overPool() {
             return pooledDistributedCent > spvPoolCent;
         }
@@ -517,6 +545,7 @@ public class JdbcSettlementBillRepository {
      *  V268 加 entitlementType：综合服务费(§7.2)按 项目x商户x票种范围 查费率,故按票种拆聚合。
      *  D6 加 discountCent：该专属商户x票种当月套票折扣额合计（供引擎按归属把项目承担部分补回商户净额）。 */
     public record ExclusiveMerchantRevenue(String merchantId, String entitlementType, long revenueCent,
-                                           long discountCent, int verifiedCount, int guestCount) {
+                                           long discountCent, int verifiedCount, int guestCount,
+                                           long compServiceFeeCent) {
     }
 }

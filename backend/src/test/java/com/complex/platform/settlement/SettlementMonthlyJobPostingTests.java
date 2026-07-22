@@ -68,8 +68,10 @@ class SettlementMonthlyJobPostingTests {
 
     @BeforeEach
     void setUp() {
-        // 过账走 FinanceService.createArApItem(@GuardedAction)——需登录主体过鉴权/审计(同批2-4 过账测试口径)。
-        TestSecurityActors.asPlatformAdmin();
+        // 🔴 P1(2026-07-21):【故意不再注入登录主体】——生产调度线程(SettlementMonthlyJob.scheduledSettle)
+        //   跑在无主体上下文,过账走 FinanceService.createArApItem(@GuardedAction)靠 currentActor() 必抛 UNAUTHENTICATED。
+        //   旧测试在此 setUp 注入 asPlatformAdmin() 掩盖了该生产缺陷(测试绿、生产必挂)。现去掉注入=让测试真实复现调度线程无主体,
+        //   由作业【自身装配系统主体 SCHEDULER_ACTOR】(照 FacilityInspectionScheduleJob 范式)使过账在生产真能落账。
         // 临时把全局默认分配方式切 by_fixed_amount(唯一全局行),使 settleMonth(null,月) 能按固定额造 未越池/超池 两态。
         originalGlobalMethod = jdbcTemplate.queryForObject(
                 "SELECT method_type FROM ticket_distribution_configs"
@@ -185,13 +187,13 @@ class SettlementMonthlyJobPostingTests {
                 INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
-                    settlement_status, entitlement_valid_to, created_at, updated_at)
-                VALUES (?, ?, 'verification_settled', ?, 'entry', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?,
+                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at)
+                VALUES (?, ?, 'verification_settled', ?, 'entry', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
                     'draft', ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, seedProject, ts, ts, ts);
+                merchantId, seedProject, "vf_" + id, ts, ts, ts);
     }
 
     private String billStatus(String billId) {

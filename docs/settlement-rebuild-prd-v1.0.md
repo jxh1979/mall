@@ -100,6 +100,10 @@
 - 赠酒补偿(§5.3)、⑦ 各酒吧分配均**按实际核销/入场逐笔发生**;通票未核销部分的余额归项目公司(原则 2)。
 - "项目公司留存"= 项目公司**拿走**留存%,各酒吧分**剩余**(1−留存%);二者之和 = 可分配池。
 - **过账**:结算单算出后,由月结作业 / 网关端点 `POST /settlement/bills/{id}/post` 过账到应收应付台账。🔴 **过账独立闸**:月结作业内的 `postBill` 受**独立开关** `settlement.monthly.posting.enabled` 门控(默认 false·**不进 application-prod.yml**),与月度作业运行开关 `settlement.monthly.scheduled.enabled`(prod=true·本就开着算账单)**解耦**——settleMonth 照常算 confirmed 单(内部计算不落账本),**生产过账保持关**,直到用户拍板翻 `posting.enabled=true` 才首次真落账本。网关端点是人工特批路径(不受此闸,本就要人点)。
+- **过账 go-live 前置修复(2026-07-21·P1/P2/P3,过账管道安全激活的硬前提)**:
+  - **P1 调度自动过账主体**:`SettlementMonthlyJob.scheduledSettle` 跑在无登录主体的调度线程,`posting.enabled=true` 后过账走 `FinanceService.createArApItem`(@GuardedAction)必抛 `UNAUTHENTICATED`、账本永远落不下(每月复现,曾被测试注入伪主体掩盖)。修:照 `FacilityInspectionScheduleJob` 范式装配系统主体(平台管理员·active),try/finally 严格还原上下文。
+  - **P2 过账 project_id 按 source_type 派生**:`postBill` 挂应付时项目归属显式派生——`ticket_distribution`=`bill.projectId`、`platform_incentive_subsidy`=**平台域 NULL**(不进项目公司聚合),不再继承过账人 token 项目域(防项目域管理员经网关过账错打项目)。`createArApItem` 加显式 projectId 重载(`Optional.ofNullable` 表达平台 NULL)。
+  - **P3 结算聚合排除 legacy 行**:`settleMonth` 的四个月度聚合查询加 `verification_id IS NOT NULL`,与 AUD-017 重建路径口径统一,防历史/污染累计行(verification_id 空)被聚成账单误过账。
 
 ### 5.1 分账两问,均可配置
 用户明确:分账方案本身可配,20/80 只是财务平均视角。引擎设计为**可插拔的分账方案**:
@@ -210,7 +214,7 @@
 > ✅ **已落地(V328)**:综合服务费现支持**比例或固定额二选一**——配固定额(`fixed_amount_cent`)则费率(`fee_bps`)须为 0(DB 约束 `chk_csfc_fee_mode` 保证二者不并存);默认仍费率 0 → 零行为变更。
 > ✅ **月度封顶(V336·批2·用户 2026-07-21 拍板 A「按费率规则各自封」)**:综合服务费加**可配月度封顶** `monthly_cap_amount_cent`(绝对分值·比例与固定额两模式**共用**同一上限)。封顶配在**每条费率规则上**(项目×商户×票种作用域)。引擎按**【商户 × 解析到的规则 id】聚合**封顶前原始费后再 clamp `fee = min(Σraw, cap)`——因费率规则可跨票种(商户级规则 entitlement_type=NULL)或跨商户(全局默认 merchant_id=NULL),故封顶**不能**逐 (商户×票种) 聚合行各自压(否则同商户多票种落同一规则被压 N 次=N×封顶):商户级规则=该商户当月封顶、票种级规则=该票种封顶、全局规则=各商户各自封顶(不跨商户合并)。**默认 NULL = 不封顶 → 零行为变更**;`chk_csfc_monthly_cap` 保证 ≥0;封顶只压不抬(未触顶 fee 原样)。全链:引擎两趟(读侧 ServiceFeeConfig 带规则 id)+ 写侧(草案→差人转正)+ 前端总控页输入框;`SettlementV268Tests` 11 绿(比例/固定额/未触顶/**跨商户多票种聚合封顶回归锁**)+ 写侧往返绿。**(对抗自查修:初版逐 (商户×票种) 各自压致同商户多票种被 N×封顶,已改聚合封。)**
 >
-> 🔴🔴 **过账激活前必修(2026-07-21 资金守恒对抗审计)**:封顶 `min(raw,cap)` 与固定额毛额钳 `min(fixed×张数,gross)` 都是**月度非线性**运算,不满足核销↔冲正的「带符号线性可加」(`f(-x)=-f(x)`)。**过账开启**(`settlement.monthly.posting.enabled=true`)后,原核销月已过账时其跨月红冲落**当月**(business_at=now)、聚合行 gross 带负,引擎按费率/毛额**重算** fee 而非按原月实收 fee 取反 → 触顶场景红冲月退的 fee > 原月实收 fee(**项目倒亏、商户多拿**),且 `net<0` 撞 `V224 chk_si_amount` 致当月 `settleMonth` 崩。**当前生产过账 gated off(账单永停 draft/confirmed,红冲总落原月同月净掉)→ 不可触发,不影响在服口径**。与折扣侧 V335(去钳线性化即可)不同,封顶天生非线性无法线性化,须**架构级改**:exclusive 服务费线按 `verificationId` 溯源原核销实收 fee、红冲严格取原行实收之反(不可变红冲事实)。固定额模式此问题**自 B1-2 起潜伏**、封顶叠加放大。**「激活首落账本」前必修**(与本节其余过账红线同为过账激活硬阻断)。
+> ✅ **P6 综合服务费守恒架构改已修复(2026-07-21)**:原封顶 `min(raw,cap)` 与固定额毛额钳 `min(fixed×张数,gross)` 是**月度非线性**运算,不满足核销↔冲正的「带符号线性可加」(`f(-x)=-f(x)`),过账开启后跨月红冲落当月、聚合行 gross 带负、引擎按费率/毛额**重算** fee ≠ 原月实收之反 → 触顶场景项目倒亏商户多拿、`net<0` 撞 `chk_si_amount` 崩(固定额自 B1-2 潜伏、封顶叠加放大)。**修法(V337)**:综合服务费改为**每笔核销落库实收 fee**——`SettlementSettledConsumer` 核销时按**每笔 + 「商户×规则」当月增量封顶**算实收 fee 存 `settlement_transactions.comp_service_fee_cent`;`SettlementReversedConsumer` 冲正时严格取原 `ST-VS` 行 fee 之反(不可变红冲事实);`settleMonth` 改为**线性求和**各行 `comp_service_fee_cent` 替代月末重算。固定额/封顶/比例三模式跨月红冲全守恒(验收 `SettlementServiceFeeConservationTests`:触顶固定额红冲取反 -500 非旧 min 重算的 -800、封顶两笔各取原行之反)。共享计算器 `ComprehensiveServiceFee` 供核销消费者与结算引擎同源防漂移。**过账管道随之可安全激活**(本阻断解除)。
 > **固定额口径(用户 2026-07-21 拍板 A)**:固定额=**每张票固定额 × 核销张数**(对齐「所有门票都过一道」=每张都过),**非**「每票种/每月整包一口价」;引擎实扣 `min(固定额 × 核销张数, 本笔毛额)`(上限本笔收入防净额为负)。比例口径不受影响(比例天然随每张收入缩放)。
 
 ### 7.3 单点消费(用户口径 9)
