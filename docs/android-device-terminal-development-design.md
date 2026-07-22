@@ -800,6 +800,7 @@ NFC 策略（⚠️ 2026-07-04 整节作废，仅历史留存）：
 - 按优先级排序：核销 > 设备状态 > 补录 > 事件。
 - 服务端按 `idempotency_key` 幂等。
 - 返回逐条结果，不因单条失败阻断整批。
+- 实现口径：请求携带的是设备 `device_code`（终端本地绑定编号），服务端重放 `offline_verification` 落核销记录前，须先把 `device_code` 解析成注册设备主键 `terminal_devices.id`（`ticket_verifications.device_id` 外键引用的是主键 id，非编号）。解析不到即视为设备未注册（`DEVICE_NOT_REGISTERED`）。此路径为 P1 离线核销启用后才走通，P0 离线包默认关闭不触发。
 
 #### `POST /api/mobile/events`
 

@@ -81,7 +81,11 @@ class TerminalApiClient(
   fun returnDevice(request: DeviceReturnRequest): DeviceBinding =
     post("/api/v1/terminals/devices/return", request)
 
-  fun events(limit: Int = 20): List<JsonObject> = get("/api/v1/evidence/events?limit=$limit")
+  fun events(limit: Int = 20): List<JsonObject> {
+    // /api/v1/evidence/events 的 data 是分页信封 {items,page,page_size,total},非裸数组——取 items。
+    val page: JsonObject = get("/api/v1/evidence/events?limit=$limit")
+    return (page["items"] as? JsonArray)?.mapNotNull { it as? JsonObject } ?: emptyList()
+  }
 
   // 游乐核销（复用 ticketing VerificationRequest 契约）
   fun amusementVerify(request: VerificationRequest): AmusementVerificationRecord =
