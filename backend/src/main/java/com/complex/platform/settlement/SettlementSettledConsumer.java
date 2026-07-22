@@ -1,6 +1,8 @@
 package com.complex.platform.settlement;
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -29,9 +31,13 @@ public class SettlementSettledConsumer {
     private static final String STATUS_DRAFT = "draft";
 
     private final JdbcSettlementTransactionRepository repository;
+    // P6:算每笔实收综合服务费需读费率/折扣配置 + 增量封顶月累计(平台口径 project=null,与 settleMonth 同源)。
+    private final JdbcSettlementBillRepository billRepository;
 
-    public SettlementSettledConsumer(JdbcSettlementTransactionRepository repository) {
+    public SettlementSettledConsumer(JdbcSettlementTransactionRepository repository,
+                                     JdbcSettlementBillRepository billRepository) {
         this.repository = repository;
+        this.billRepository = billRepository;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -61,6 +67,31 @@ public class SettlementSettledConsumer {
             discountIncrement = SettlementAmounts.incrementalVerified(discountTotal, total, used, false, null);
         }
 
+        // P6 综合服务费实收(每笔·增量封顶):仅【专属】核销抽(非专属进池不抽);毛额=净收入+项目承担折扣(与 settleMonth 同口径),
+        //   固定额/比例算本笔费,再按「商户×规则」当月增量封顶(月内 Σfee≤cap),落库作不可变实收事实供冲正精确取反。
+        long compServiceFeeCent = 0L;
+        String compServiceFeeConfigId = null;
+        if (event.exclusiveMerchantId() != null && verified > 0L) {
+            var svcFee = billRepository.findComprehensiveServiceFee(
+                    null, event.exclusiveMerchantId(), event.entitlementType());
+            long platformBorne = ComprehensiveServiceFee.platformBorneCent(
+                    billRepository.findComboDiscountConfig(null), discountIncrement);
+            long perTicket = ComprehensiveServiceFee.perTicketCent(svcFee, verified + platformBorne, 1);
+            if (perTicket > 0L) {
+                if (svcFee.monthlyCapAmountCent() != null) {
+                    // 增量封顶:查月内同「商户×规则」已落 fee 累计(含冲正负→已释放额度),本笔 fee=min(perTicket, 剩余额度)。
+                    YearMonth m = YearMonth.from(event.verifiedAt().atZone(ZoneOffset.UTC));
+                    long mtd = billRepository.sumMonthToDateServiceFee(
+                            event.exclusiveMerchantId(), svcFee.id(),
+                            m.atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC),
+                            m.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC));
+                    perTicket = Math.min(perTicket, Math.max(0L, svcFee.monthlyCapAmountCent() - mtd));
+                }
+                compServiceFeeCent = perTicket;
+                compServiceFeeConfigId = svcFee.id();
+            }
+        }
+
         repository.insertImmutableFact(new SettlementTransactionRecord(
                 "st_vs_" + event.verificationId(),
                 "ST-VS-" + event.verificationId(),
@@ -83,7 +114,9 @@ public class SettlementSettledConsumer {
                 event.validTo(),
                 event.exclusiveMerchantId(),
                 event.verifiedAt(),      // business_at：核销业务时刻（account 月窗聚合基准）
-                discountIncrement        // D6 折扣额增量（>=0；下传账本供结算按归属应用）
+                discountIncrement,       // D6 折扣额增量（>=0；下传账本供结算按归属应用）
+                compServiceFeeCent,      // P6 本笔实收综合服务费（>=0；增量封顶后）
+                compServiceFeeConfigId   // P6 解析到的费率规则 id（供增量封顶月累计 + 冲正沿用）
         ));
     }
 }

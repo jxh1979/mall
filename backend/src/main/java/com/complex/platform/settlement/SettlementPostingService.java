@@ -147,18 +147,18 @@ public class SettlementPostingService {
                 long excessI = a - poolI;
                 String tdId = poolI > 0
                         ? createPayable(item.itemId(), item.merchantId(), poolI, dueDate,
-                                SOURCE_TICKET_DISTRIBUTION, "settle-td-")
+                                SOURCE_TICKET_DISTRIBUTION, "settle-td-", ctx.projectId())
                         : null;
                 String pisId = excessI > 0
                         ? createPayable(item.itemId(), item.merchantId(), excessI, dueDate,
-                                SOURCE_PLATFORM_INCENTIVE_SUBSIDY, "settle-pis-")
+                                SOURCE_PLATFORM_INCENTIVE_SUBSIDY, "settle-pis-", ctx.projectId())
                         : null;
                 // 明细一列 ar_ap_item_id 回写以池内行为主键；spvPool=0 全超额时回写补贴行（tdId=null）。
                 primaryArApId = tdId != null ? tdId : pisId;
             } else {
                 // 未超池 or 专属直付：完全现状，单条 ticket_distribution 全额。
                 primaryArApId = createPayable(item.itemId(), item.merchantId(), item.finalAmountCent(), dueDate,
-                        SOURCE_TICKET_DISTRIBUTION, "settle-td-");
+                        SOURCE_TICKET_DISTRIBUTION, "settle-td-", ctx.projectId());
             }
             // 回写仅当仍 draft（并发下另一过账已置 posted 则 0 行，跳过，不重复）。
             repository.markItemPosted(item.itemId(), primaryArApId);
@@ -182,10 +182,13 @@ public class SettlementPostingService {
      * 的池内行与补贴行哈希 slug 互不相撞，各自独立幂等；同 source_type 重复过账哈希相同 → 幂等命中不重复插。
      */
     String createPayable(String settlementItemId, String merchantId, long amountCent, LocalDate dueDate,
-                         String sourceType, String idempotencyPrefix) {
+                         String sourceType, String idempotencyPrefix, String billProjectId) {
         String note = SOURCE_PLATFORM_INCENTIVE_SUBSIDY.equals(sourceType)
                 ? "platform incentive subsidy (over-pool special approval): item " + settlementItemId
                 : "ticket distribution settlement payable: item " + settlementItemId;
+        // 🔴 P2:显式项目归属——platform_incentive_subsidy 恒平台域 NULL(不进项目公司聚合)、ticket_distribution 取 bill.projectId;
+        //   不继承过账人 token 项目域(防项目域管理员经网关过账错打项目)。
+        String explicitProjectId = SOURCE_PLATFORM_INCENTIVE_SUBSIDY.equals(sourceType) ? null : billProjectId;
         ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
                 idempotencyKey(idempotencyPrefix, settlementItemId),
                 note,
@@ -197,7 +200,7 @@ public class SettlementPostingService {
                 amountCent,
                 dueDate,
                 YearMonth.from(dueDate).toString()
-        ));
+        ), explicitProjectId);
         return item.id();
     }
 

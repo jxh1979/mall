@@ -351,13 +351,13 @@ class SettlementOverPoolSpecialApprovalTests {
                 INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
-                    exclusive_merchant_id, settlement_status, entitlement_valid_to, created_at, updated_at,
+                    exclusive_merchant_id, verification_id, settlement_status, entitlement_valid_to, created_at, updated_at,
                     business_at, discount_amount_cent)
-                VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, 'draft', ?, ?, ?, ?, 0)
+                VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, ?, 'draft', ?, ?, ?, ?, 0)
                 """,
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, exclusiveMerchantId, ts, ts, ts, ts);
+                merchantId, projectId, exclusiveMerchantId, "vf_" + id, ts, ts, ts, ts);
     }
 
     // ─── 断言/读取 helpers ─────────────────────────────────────────────────────

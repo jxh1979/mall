@@ -251,7 +251,26 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 "finance_ar_ap.create_failed",
                 "finance.ar_ap.manage",
                 "ar_ap_item",
-                () -> createItem(request)
+                () -> createItem(request, false, null)
+        );
+    }
+
+    /**
+     * 🔴 P2:显式项目归属过账(覆盖 token 项目域)。结算过账用:ticket_distribution 传 bill.projectId、
+     * platform_incentive_subsidy 传 null(平台域)——不继承过账人 token 域,保项目公司聚合口径正确。
+     * explicitProjectId 可为 null(=平台域)。鉴权/审计/幂等同 createArApItem(request)。
+     */
+    public ArApItemRecord createArApItem(ArApItemRequest request, String explicitProjectId) {
+        return executeWrite(
+                "createArApItem",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ArApItemRecord.class,
+                "finance_ar_ap.created",
+                "finance_ar_ap.create_failed",
+                "finance.ar_ap.manage",
+                "ar_ap_item",
+                () -> createItem(request, true, explicitProjectId)
         );
     }
 
@@ -974,7 +993,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         return value;
     }
 
-    private ArApItemRecord createItem(ArApItemRequest request) {
+    private ArApItemRecord createItem(ArApItemRequest request, boolean overrideProjectScope, String overrideProjectId) {
         ArApItemRequest actual = requireRequest(request);
         String direction = requireEnum(actual.direction(), DIRECTIONS, "direction");
         String sourceType = optionalEnum(actual.sourceType(), SOURCE_TYPES, "source_type");
@@ -984,7 +1003,13 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // 商户 scope 仅受本商户封账约束，平台口径受任一封账约束。
         Optional<String> scope = authorizationService.currentMerchantScope();
         // P1-A：落账即写入综合体维度(与 merchantId 同来源=创建方 token 的 scope),历史行由 V243 回填。
-        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
+        // 🔴 P2(2026-07-21):调用方可显式指定项目归属覆盖 token 项目域——结算过账按 source_type 派生
+        //   (ticket_distribution=bill.projectId、platform_incentive_subsidy=平台域 NULL),不再继承过账人 token 域,
+        //   防项目域管理员经网关过账把 td/pis 两类行错打成其项目(下游项目公司聚合会误吸补贴/错算)。
+        //   Optional.ofNullable 天然表达「显式平台 NULL」:override=true 且 overrideProjectId=null → empty → project_id=NULL。
+        Optional<String> projectScope = overrideProjectScope
+                ? Optional.ofNullable(overrideProjectId)
+                : authorizationService.currentProjectScopeQuietly();
         // R5 T7 硬拦截：禁止向已锁定经营日新增/回填台账，必须走补录审批。
         if (repository.lockedDailyCloseExistsForDate(dueDate, scope.orElse(null))) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",

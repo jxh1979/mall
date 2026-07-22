@@ -219,13 +219,13 @@ class SettlementBatch2EngineTests {
                 INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
-                    settlement_status, entitlement_valid_to, created_at, updated_at)
-                VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?,
+                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at)
+                VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
                     'draft', ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, ts, ts, ts);
+                merchantId, projectId, "vf_" + id, ts, ts, ts);
     }
 
     private void setMethod(String projectId, String method) {

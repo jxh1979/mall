@@ -1,12 +1,18 @@
 package com.complex.platform.settlement;
 import org.springframework.beans.factory.annotation.Value;
 
+import com.complex.platform.access.AccessActor;
 import java.time.Clock;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 /**
@@ -26,6 +32,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class SettlementMonthlyJob {
+
+    // 🔴 P1(2026-07-21):调度线程无登录主体,过账走 FinanceService.createArApItem(@GuardedAction)靠 currentActor()
+    //   在生产必抛 UNAUTHENTICATED(自动过账彻底不工作、每月复现,且原被 SettlementMonthlyJobPostingTests 注入伪主体掩盖)。
+    //   照 FacilityInspectionScheduleJob 范式装配系统主体:平台管理员(platform_admin·active)使过账在无人上下文能过鉴权/审计。
+    private static final AccessActor SCHEDULER_ACTOR = new AccessActor(
+            "system_scheduler", "system_scheduler", "platform_admin", null, null, "active");
 
     private final TicketDistributionSettlementService service;
     private final JdbcSettlementBillRepository repository;
@@ -72,23 +84,41 @@ public class SettlementMonthlyJob {
         if (!scheduledEnabled) {
             return;
         }
-        YearMonth lastMonth = YearMonth.now(clock.withZone(ZoneOffset.UTC)).minusMonths(1);
-        int window = Math.max(1, backfillMonths);
-        for (int i = window - 1; i >= 0; i--) {
-            YearMonth month = lastMonth.minusMonths(i);
-            // 平台口径 projectId=null;按期预判状态,只对缺月/未过账月补算,已过账(settled/reversed)跳过。
-            String status = repository.findBillStatusByPeriod(null, month.atDay(1), month.atEndOfMonth());
-            if (status == null || "draft".equals(status) || "confirmed".equals(status)) {
-                String billId = service.settleMonth(null, month);
-                // ① 过账(补 postBill 生产触发缺口):对未越池、已 confirmed 的常规单自动挂应付台账;
-                //   超池 draft 单不 confirmed → 不过账,待人工特批 confirmed 后走网关端点 ②(POST /bills/{id}/post)。
-                //   postBill @Transactional 全或无 + 幂等,confirmed 单重跑不重复挂账。
-                //   🔴 过账独立闸(与作业运行解耦):过账仅在 settlement.monthly.posting.enabled=true(默认 false·不进 application-prod.yml)时执行。
-                //   月度作业开关 settlement.monthly.scheduled.enabled 在 prod 本就 =true(算账单),但过账保持关——settleMonth 照常算
-                //   confirmed 单(内部计算不落账本),直到用户拍板翻 posting.enabled 才首次真过账。网关 POST /bills/{id}/post 人工特批路径不受此闸。
-                if (postingEnabled && "confirmed".equals(repository.findBillStatus(billId))) {
-                    postingService.postBill(billId);
+        // 🔴 P1:装配系统主体(平台管理员),使过账 createArApItem(@GuardedAction)在无人调度线程能过 currentActor()/鉴权/审计;
+        //   try/finally 严格还原上一上下文(无则 clear),不污染线程池后续任务。仅过账(postingEnabled)才真需要主体,
+        //   但整段包住无害且简单(settleMonth 内部不依赖主体,读种子/upsert 走仓储)。
+        SecurityContext previousContext = SecurityContextHolder.getContext();
+        Authentication previousAuthentication = previousContext.getAuthentication();
+        try {
+            SecurityContext systemContext = SecurityContextHolder.createEmptyContext();
+            systemContext.setAuthentication(
+                    new UsernamePasswordAuthenticationToken(SCHEDULER_ACTOR, null, List.of()));
+            SecurityContextHolder.setContext(systemContext);
+
+            YearMonth lastMonth = YearMonth.now(clock.withZone(ZoneOffset.UTC)).minusMonths(1);
+            int window = Math.max(1, backfillMonths);
+            for (int i = window - 1; i >= 0; i--) {
+                YearMonth month = lastMonth.minusMonths(i);
+                // 平台口径 projectId=null;按期预判状态,只对缺月/未过账月补算,已过账(settled/reversed)跳过。
+                String status = repository.findBillStatusByPeriod(null, month.atDay(1), month.atEndOfMonth());
+                if (status == null || "draft".equals(status) || "confirmed".equals(status)) {
+                    String billId = service.settleMonth(null, month);
+                    // ① 过账(补 postBill 生产触发缺口):对未越池、已 confirmed 的常规单自动挂应付台账;
+                    //   超池 draft 单不 confirmed → 不过账,待人工特批 confirmed 后走网关端点 ②(POST /bills/{id}/post)。
+                    //   postBill @Transactional 全或无 + 幂等,confirmed 单重跑不重复挂账。
+                    //   🔴 过账独立闸(与作业运行解耦):过账仅在 settlement.monthly.posting.enabled=true(默认 false·不进 application-prod.yml)时执行。
+                    //   月度作业开关 settlement.monthly.scheduled.enabled 在 prod 本就 =true(算账单),但过账保持关——settleMonth 照常算
+                    //   confirmed 单(内部计算不落账本),直到用户拍板翻 posting.enabled 才首次真过账。网关 POST /bills/{id}/post 人工特批路径不受此闸。
+                    if (postingEnabled && "confirmed".equals(repository.findBillStatus(billId))) {
+                        postingService.postBill(billId);
+                    }
                 }
+            }
+        } finally {
+            if (previousAuthentication == null) {
+                SecurityContextHolder.clearContext();
+            } else {
+                SecurityContextHolder.setContext(previousContext);
             }
         }
     }

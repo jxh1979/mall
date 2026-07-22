@@ -113,7 +113,8 @@ public class SettlementReconciliationJob {
                     f.validTo(),
                     f.exclusiveMerchantId(),
                     f.verifiedAt(),
-                    discountIncrement));  // D6：重建行还原折扣（与在线一致）
+                    discountIncrement,  // D6：重建行还原折扣（与在线一致）
+                    0L, null));  // P6:重建行暂不还原综合服务费(fee=0/config=null;fee 特性未启用,重建为罕见修复路径)
             rebuilt++;
         }
         return rebuilt;

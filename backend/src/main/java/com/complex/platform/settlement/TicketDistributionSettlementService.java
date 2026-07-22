@@ -129,56 +129,33 @@ public class TicketDistributionSettlementService {
         //   把封顶前原始费聚合后再压:商户级规则=该商户当月封顶、票种级规则=该票种当月封顶、全局规则=各商户各自当月封顶(不跨商户合并)。
         //   两趟:①逐聚合行累计 商户毛额 + (商户,规则)原始费/cap ②各组封顶 → 商户净额一条 exclusive_full 明细。
         java.util.LinkedHashMap<String, long[]> merchantAgg = new java.util.LinkedHashMap<>();
-        // merchantAgg[mid] = {grossSum, verifiedCount, guestCount}
-        java.util.LinkedHashMap<String, java.util.LinkedHashMap<String, long[]>> feeByRule = new java.util.LinkedHashMap<>();
-        // feeByRule[mid][ruleId] = {rawFeeSum(封顶前), cap(-1=不封顶)}
+        // P6:merchantAgg[mid] = {grossSum, verifiedCount, guestCount, compServiceFeeSum}
+        //   compServiceFeeSum = 每笔核销/冲正落库的【实收】综合服务费之和(核销 fee>=0·增量封顶后·冲正 fee<=0·取原行之反)。
         for (var ex : exclusives) {
-            var svcFee = repository.findComprehensiveServiceFee(projectId, ex.merchantId(), ex.entitlementType());
             // D6：项目按归属承担的折扣加回该商户毛额，使其拿满额(platform_absorb 全额/split_by_ratio 平台份额/merchant_absorb=0)。
-            //   综合服务费在此毛额上叠加(顺序不冲突)；折扣=0 时 gross=revenue → 与 D6 前逐分一致(零行为变更)。
+            //   综合服务费在【核销时】已在此同口径毛额上算并落库(见 ComprehensiveServiceFee + SettlementSettledConsumer);
+            //   此处只用毛额算净额，不再月末重算 fee。折扣=0 时 gross=revenue → 与 D6 前逐分一致(零行为变更)。
             long platformBorne = platformBorneDiscount(discountCfg, ex.discountCent());
             long gross = ex.revenueCent() + platformBorne;
             comboDiscountCent += platformBorne; // 项目承担的专属折扣入账
-            // 封顶前原始费:固定额=每张票固定额 × 核销张数(§7.2「所有门票都过一道」·用户 A 口径,非整包价),上限本笔毛额(防净额为负);
-            //   否则比例(整数分截断余数留商户,不多扣)。默认 比例0 → rawFee=0(保值)。
-            long rawFee = svcFee.fixedAmountCent() != null
-                    ? Math.min(svcFee.fixedAmountCent() * ex.verifiedCount(), gross)
-                    : gross * svcFee.feeBps() / 10000;
-            long[] mg = merchantAgg.computeIfAbsent(ex.merchantId(), k -> new long[3]);
+            long[] mg = merchantAgg.computeIfAbsent(ex.merchantId(), k -> new long[4]);
             mg[0] += gross;
             mg[1] += ex.verifiedCount();
             mg[2] += ex.guestCount();
-            long[] rule = feeByRule.computeIfAbsent(ex.merchantId(), k -> new java.util.LinkedHashMap<>())
-                    .computeIfAbsent(svcFee.id(), k -> new long[]{0L, -1L});
-            rule[0] += rawFee;
-            rule[1] = svcFee.monthlyCapAmountCent() == null ? -1L : svcFee.monthlyCapAmountCent();
+            // ✅ P6 守恒修复(2026-07-21·过账激活前必修·对抗审计坐实):综合服务费【不再月末对聚合 gross 重算】——
+            //   旧 min(fixed×count,gross)/min(raw,cap) 是月度非线性(f(-x)≠-f(x))，过账开启后原核销月已过账时其跨月红冲落
+            //   当月、聚合行 gross 带负，按费率/毛额重算 fee≠原月实收之反 → 触顶/固定额场景项目倒亏商户多拿、net<0 撞
+            //   chk_si_amount 崩。改为【每笔实收 fee 之和】(核销时按每笔+增量封顶落库、冲正严格取原行之反)→ 固定额/封顶/
+            //   比例三模式跨月红冲全守恒。封顶已在核销时按「商户×规则」按月增量应用，此处无需再 clamp。
+            mg[3] += ex.compServiceFeeCent();
         }
-        // 各「商户×规则」组封顶(cap≥0 则 min),汇成每商户当月总费 + comp 服务费合计。
-        // 🔴🔴 过账激活前必修(对抗审计 2026-07-21):封顶 min(raw,cap) 与固定额毛额钳 min(fixed×张数,gross)
-        //   都是【月度非线性】运算,不满足核销↔冲正的「带符号线性可加」(f(-x)=-f(x))。当过账开启(settlement.monthly.
-        //   posting.enabled=true)后,原核销月已过账时其跨月红冲落【当月】(business_at=now)、聚合行 gross 带负,
-        //   本处按费率/毛额【重算】fee 而非按原月实收 fee 取反 → 触顶场景下红冲月退的 fee > 原月实收 fee(项目倒亏、
-        //   商户多拿),且 net<0 撞 V224 chk_si_amount 致当月 settleMonth 崩。
-        //   当前生产【过账 gated off】(账单永停 draft/confirmed,红冲总落原月同月净掉)→ 不可触发,故本潜伏 bug 不影响
-        //   在服口径;但「激活首落账本」前【必须】先改:exclusive 服务费线也要按 verificationId 溯源原核销实收 fee、
-        //   红冲严格取原行实收之反(不可变红冲事实),而非红冲月按费率/毛额重算。固定额模式此问题自 B1-2 起潜伏、封顶叠加放大。
-        //   追踪见 PRD settlement-rebuild §7.2「🔴 过账激活前必修」清单;与折扣侧 V335 不同(去钳线性化即可),封顶天生非线性无法线性化,须架构级改(存每笔实收 fee)。
         long compServiceFee = 0L;
-        java.util.HashMap<String, Long> feeByMerchant = new java.util.HashMap<>();
-        for (var me : feeByRule.entrySet()) {
-            long merchantFee = 0L;
-            for (long[] rule : me.getValue().values()) {
-                long raw = rule[0];
-                long cap = rule[1];
-                merchantFee += cap < 0 ? raw : Math.min(raw, cap); // 封顶只压不抬(负 gross 红冲行的非守恒隐患见上,过账开启前修)
-            }
-            feeByMerchant.put(me.getKey(), merchantFee);
-            compServiceFee += merchantFee;
-        }
-        // 商户净额 = 毛额合计 − 封顶后总费;各商户一条 exclusive_full 直付明细(同商户多票种合并)。
+        // 商户净额 = 毛额合计 − 该商户当月【实收】综合服务费合计;各商户一条 exclusive_full 直付明细(同商户多票种合并)。
         for (var e : merchantAgg.entrySet()) {
             long[] mg = e.getValue();
-            long net = mg[0] - feeByMerchant.getOrDefault(e.getKey(), 0L);
+            long merchantFee = mg[3];
+            compServiceFee += merchantFee;
+            long net = mg[0] - merchantFee;
             items.add(new ItemCalc(e.getKey(), (int) mg[1], (int) mg[2], null, net, METHOD_EXCLUSIVE_FULL));
         }
 

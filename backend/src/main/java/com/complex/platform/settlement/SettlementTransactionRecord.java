@@ -32,6 +32,11 @@ public record SettlementTransactionRecord(
         Instant businessAt,
         // D6 套票折扣额增量（分）：本笔核销的 满额−净额（核销行 >=0；冲正行取原行反 <=0；到期归项目=0）。
         //   下传 append-only 账本，结算引擎按 discount_bearer 归属应用。守 V331 资金守恒 CHECK（配对天然净 0）。
-        long discountAmountCent
+        long discountAmountCent,
+        // P6 综合服务费实收(分):核销行=每笔增量封顶后实收(>=0);冲正行=取原 ST-VS 行 fee 之反(<=0);无专属/无费率=0。
+        //   settleMonth 线性求和替代月末重算 → 固定额/封顶/比例三模式跨月红冲全守恒(每笔实收精确对冲)。
+        long compServiceFeeCent,
+        // P6 本笔 fee 解析到的综合服务费费率规则 id;供增量封顶按「商户×规则」查月内累计。无 fee=null。
+        String compServiceFeeConfigId
 ) {
 }

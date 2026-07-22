@@ -168,12 +168,12 @@ class SettlementBatch34ExclusiveE2ETests {
                 "INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,"
                         + " entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,"
                         + " verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,"
-                        + " settlement_status, entitlement_valid_to, exclusive_merchant_id, created_at, updated_at)"
+                        + " settlement_status, entitlement_valid_to, exclusive_merchant_id, verification_id, created_at, updated_at)"
                         + " VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?,"
-                        + " 'draft', ?, ?, ?, ?)",
+                        + " 'draft', ?, ?, ?, ?, ?)",
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, ts, exclusiveMerchantId, ts, ts);
+                merchantId, projectId, ts, exclusiveMerchantId, "vf_" + id, ts, ts);
     }
 
     private Map<String, Object> bill(String projectId) {
