@@ -1029,13 +1029,18 @@ public class TicketVerificationService {
         if ("offline_verification".equals(taskType)) {
             String entitlementCode = firstPayload(payload, "entitlementCode", "entitlement_code", "credentialPayload", "credential_payload");
             String pointId = firstPayloadOptional(payload, "pointId", "point_id", "gateId", "gate_id", "point");
+            // 同步请求携带 device_code(≠ 设备 PK id),须解析成真 id 才能落 ticket_verifications.device_id(FK);
+            // 查不到=设备未注册,抛干净业务错(避免下游 FK 违反污染事务)。
+            String resolvedDeviceId = repository.resolveTerminalDeviceId(deviceCode)
+                    .orElseThrow(() -> ApiException.badRequest(
+                            "DEVICE_NOT_REGISTERED", "device is not registered: " + deviceCode));
             VerificationResponse verification = verifyEntitlement(
                     new VerificationRequest(
                             "sync-task-" + clientTaskId,
                             "qr",
                             entitlementCode,
-                            deviceCode,
-                            pointId == null ? deviceCode : pointId,
+                            resolvedDeviceId,
+                            pointId == null ? resolvedDeviceId : pointId,
                             Map.of("source", "terminal_sync_task")
                     ),
                     "android_terminal_offline",

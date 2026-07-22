@@ -180,6 +180,32 @@ class AmusementVerifyRoutingJdbcIntegrationTests {
         assertThat(sessionUsedCapacity(projectId)).isEqualTo(1);       // 容量只扣一次(证伪:重复扣则=2,断言红)
     }
 
+    @Test
+    void offlineSyncResolvesDeviceByDeviceCodeNotPrimaryKey() {
+        // 回归(生产真 bug):离线核销回传的 sync 请求携带 device_code(≠ 设备 PK id)。曾 bug——
+        // createSyncTask 直接拿 device_code 当 id 查 terminal_devices → DEVICE_NOT_REGISTERED,
+        // 任何真实设备的离线核销回传全崩(仅因 Android P0 冒烟长期无 SDK 从未端到端跑过而潜伏)。
+        // 修复:按 device_code 解析成真 id 再重放核销。seedDevice 落 id≠device_code("DC-"前缀),
+        // 传真 device_code 才能证伪(旧测试恰把所传值塞进 id 列而蒙混)。
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        String suffix = Long.toString(System.nanoTime());
+        seedDevice(suffix);                              // id=deviceCode, device_code="DC-"+deviceCode
+        String code = seedAmusementEntitlement(suffix);
+        String genericPoint = "point_sync_" + suffix;    // 非游乐闸 → 通用逐次核销路
+
+        var resp = ticketingService.syncTerminalTasks(new com.complex.platform.ticketing.dto.TerminalSyncTasksRequest(
+                "sync-devcode-" + suffix, null, null,
+                "DC-" + deviceCode,                      // 传真 device_code(≠ PK id)
+                "staff_" + suffix,
+                List.of(new com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest(
+                        "offreq-devcode-" + suffix, "offline_verification", "2026-07-05T00:00:00Z",
+                        Map.of("entitlementCode", code, "pointId", genericPoint)))));
+
+        // 证伪:曾 DEVICE_NOT_REGISTERED 抛错 → 根本拿不到 resp;修复后核销成功落库。
+        assertThat(resp.results().get(0).verificationId()).isNotBlank();
+        assertThat(successCount(code)).isEqualTo(1);
+    }
+
     // ===== helpers =====
 
     private VerificationResponse verify(String suffix, String code, String pointId) {

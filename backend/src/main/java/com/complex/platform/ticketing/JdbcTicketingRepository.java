@@ -516,6 +516,14 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public Optional<String> resolveTerminalDeviceId(String deviceCodeOrId) {
+        // 离线同步传的是 device_code(≠ PK id);兼收 id(既有内部调用/旧集成用例直接传 id)。两列均唯一。
+        return jdbcTemplate.queryForList(
+                "SELECT id FROM terminal_devices WHERE id = :c OR device_code = :c LIMIT 1",
+                Map.of("c", deviceCodeOrId), String.class).stream().findFirst();
+    }
+
+    @Override
     public PartnerVoucherConfigRecord savePartnerVoucherConfig(PartnerVoucherConfigRecord c) {
         jdbcTemplate.update("""
                 INSERT INTO partner_voucher_configs (entitlement_template_id, settlement_mode, partner_kind, partner_id, internal_price_cent)

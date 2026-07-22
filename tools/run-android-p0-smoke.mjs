@@ -125,7 +125,9 @@ async function startBackend() {
   fs.mkdirSync(logDir, { recursive: true });
   const logFd = fs.openSync(logPath, "w");
   console.log(`[android-p0-smoke] starting temporary backend at ${backendBaseUrl} with seeded test admin ${username}`);
-  const backendProcess = spawn(javaCommand, ["-jar", jarPath, `--server.port=${port}`], {
+  // P0 终端冒烟要跑离线核销(下发离线权益包→断网核销),该能力默认关(安全姿态:离线绕过实时校验须按部署显式开)。
+  // 仅对本冒烟临时后端开启,不影响生产 profile。
+  const backendProcess = spawn(javaCommand, ["-jar", jarPath, `--server.port=${port}`, "--complex.ticketing.offline-entitlements.enabled=true"], {
     cwd: root,
     stdio: ["ignore", logFd, logFd],
     env: {

@@ -100,7 +100,9 @@ class P0Fixture(
         "project_id" to venue.id,
         "merchant_id" to merchant.id,
         "space_name" to "P0 Android Gate $stamp",
-        "space_type" to "facility",
+        // 空间类型必须是 space_type_dictionary(V184)里的 active 值,原 "facility" 不在字典致 P0 smoke 400;
+        // 闸机点位归到 "booth"(岗亭/闸口)。{building,floor,zone,shop,public_area,parking,booth,other}
+        "space_type" to "booth",
         "floor_no" to "1F",
         "area_square_meter" to 30,
         *fixtureMutationMetadata("point"),
