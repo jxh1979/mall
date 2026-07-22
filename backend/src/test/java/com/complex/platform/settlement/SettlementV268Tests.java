@@ -171,6 +171,71 @@ class SettlementV268Tests {
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(0L);              // 净额不为负
     }
 
+    // ── V336 综合服务费月度封顶(可配·默认不封顶·比例与固定额两模式共用) ──────────────
+
+    /**
+     * 比例费封顶:barA 配 10%(ticket)+ 封顶 5000。收入 100000 → 未封顶 fee=10000,封顶后 = min(10000, 5000)=5000。
+     * 商户拿净额 95000,服务费 5000 归项目。
+     */
+    @Test
+    void ratioFee_clampedByMonthlyCap() {
+        String pid = newProject();
+        seedExclusive(pid, "barA", "ticket", 10, 5, 100000L);
+        seedRatioFeeWithCap(pid, "barA", "ticket", 1000, 5000L); // 10% 封顶 5000
+
+        settlementService.settleMonth(pid, MONTH);
+
+        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(5000L);  // min(10000, 5000)
+        assertThat(exclusiveAmount(pid, "barA")).isEqualTo(95000L);            // 100000 - 5000
+    }
+
+    /**
+     * 固定额费封顶:barA 固定额 100/张 × 核销 5 张 = 500,封顶 300 → fee = min(500, 300)=300。
+     * 商户拿净额 99700,服务费 300 归项目。
+     */
+    @Test
+    void fixedAmountFee_clampedByMonthlyCap() {
+        String pid = newProject();
+        seedExclusive(pid, "barA", "ticket", 5, 3, 100000L);   // 核销 5 张
+        seedFixedFeeWithCap(pid, "barA", "ticket", 100L, 300L); // 100×5=500,封顶 300
+
+        settlementService.settleMonth(pid, MONTH);
+
+        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(300L);  // min(500, 300)
+        assertThat(exclusiveAmount(pid, "barA")).isEqualTo(99700L);          // 100000 - 300
+    }
+
+    /** 封顶未触顶(cap > fee):10% fee=10000 < 封顶 20000 → 不封,fee 仍 10000(封顶只压不抬)。 */
+    @Test
+    void cap_notHit_feeUnchanged() {
+        String pid = newProject();
+        seedExclusive(pid, "barA", "ticket", 10, 5, 100000L);
+        seedRatioFeeWithCap(pid, "barA", "ticket", 1000, 20000L); // 10% 封顶 20000(高于 fee)
+
+        settlementService.settleMonth(pid, MONTH);
+
+        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(10000L); // 未触顶,原样
+        assertThat(exclusiveAmount(pid, "barA")).isEqualTo(90000L);
+    }
+
+    /**
+     * V336 封顶按「商户×规则」聚合(用户 A 口径核心):同一商户多票种落【同一条商户级规则】(entitlement_type 留空)时,
+     * 封顶压的是该商户在该规则下当月<b>合计</b>费,而非逐票种各压一次(逐票种各压=N×封顶,违背「商户级规则=该商户当月封顶」)。
+     * barA 两票种各原始费 10%×100000=10000,合计 20000;商户级封顶 15000 → 压到 15000(非各压后的 20000)。
+     */
+    @Test
+    void capAggregatesPerMerchantRuleAcrossEntitlementTypes() {
+        String pid = newProject();
+        seedExclusive(pid, "barA", "ticket", 5, 3, 100000L);
+        seedExclusive(pid, "barA", "amusement", 4, 2, 100000L);
+        seedRatioFeeWithCap(pid, "barA", null, 1000, 15000L); // 商户级(票种留空)10% + 封顶 15000
+
+        settlementService.settleMonth(pid, MONTH);
+
+        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(15000L); // 聚合 20000 → 封 15000(非逐票种各压=20000)
+        assertThat(exclusiveAmount(pid, "barA")).isEqualTo(185000L);           // 200000 - 15000
+    }
+
     /** 套票折扣归属:默认 platform_absorb;项目特例可覆盖为 merchant_absorb。 */
     @Test
     void comboDiscountConfig_defaultAndProjectOverride() {
@@ -213,6 +278,27 @@ class SettlementV268Tests {
                 "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
                         + " fee_bps, fixed_amount_cent, is_draft) VALUES (?, ?, ?, ?, 0, ?, FALSE)",
                 id, projectId, merchantId, entType, fixedAmountCent);
+    }
+
+    /** V336 比例费 + 月度封顶(fee_bps>0 + monthly_cap_amount_cent)。 */
+    private void seedRatioFeeWithCap(String projectId, String merchantId, String entType, int feeBps, long capCent) {
+        String id = "csfc_rc_" + Long.toHexString(System.nanoTime());
+        feeConfigIds.add(id);
+        jdbcTemplate.update(
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
+                        + " fee_bps, monthly_cap_amount_cent, is_draft) VALUES (?, ?, ?, ?, ?, ?, FALSE)",
+                id, projectId, merchantId, entType, feeBps, capCent);
+    }
+
+    /** V336 固定额费 + 月度封顶(fee_bps=0 + fixed_amount_cent + monthly_cap_amount_cent)。 */
+    private void seedFixedFeeWithCap(String projectId, String merchantId, String entType,
+                                     long fixedAmountCent, long capCent) {
+        String id = "csfc_fc_" + Long.toHexString(System.nanoTime());
+        feeConfigIds.add(id);
+        jdbcTemplate.update(
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
+                        + " fee_bps, fixed_amount_cent, monthly_cap_amount_cent, is_draft) VALUES (?, ?, ?, ?, 0, ?, ?, FALSE)",
+                id, projectId, merchantId, entType, fixedAmountCent, capCent);
     }
 
     private void seedExclusive(String projectId, String exclusiveMerchantId, String entType,

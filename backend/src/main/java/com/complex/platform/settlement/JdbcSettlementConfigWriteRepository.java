@@ -111,24 +111,27 @@ public class JdbcSettlementConfigWriteRepository {
 
     public String upsertComprehensiveServiceFeeDraft(String id, String projectId, String merchantId,
                                                      String entitlementType, int feeBps, Long fixedAmountCent,
-                                                     String updatedBy) {
+                                                     Long monthlyCapAmountCent, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO comprehensive_service_fee_configs
                     (id, project_id, merchant_id, entitlement_type, fee_bps, fixed_amount_cent,
-                     status, is_draft, updated_by, updated_at)
+                     monthly_cap_amount_cent, status, is_draft, updated_by, updated_at)
                 VALUES (:id, :project_id, :merchant_id, :entitlement_type, :fee_bps, :fixed_amount_cent,
-                        'active', TRUE, :updated_by, now())
+                        :monthly_cap_amount_cent, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
                              COALESCE(entitlement_type, '__ANY__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     fee_bps = EXCLUDED.fee_bps,
                     fixed_amount_cent = EXCLUDED.fixed_amount_cent,
+                    monthly_cap_amount_cent = EXCLUDED.monthly_cap_amount_cent,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
                 .addValue("entitlement_type", entitlementType).addValue("fee_bps", feeBps)
-                .addValue("fixed_amount_cent", fixedAmountCent).addValue("updated_by", updatedBy), String.class);
+                .addValue("fixed_amount_cent", fixedAmountCent)
+                .addValue("monthly_cap_amount_cent", monthlyCapAmountCent)
+                .addValue("updated_by", updatedBy), String.class);
     }
 
     public String upsertComboDiscountDraft(String id, String projectId, String discountBearer,
@@ -321,7 +324,8 @@ public class JdbcSettlementConfigWriteRepository {
                     SELECT id, 'comprehensive_service_fee',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || COALESCE(merchant_id, '__ANY__')
                                || ' 票种=' || COALESCE(entitlement_type, '__ANY__')
-                               || ' 费=' || CASE WHEN fixed_amount_cent IS NULL THEN fee_bps || 'bps' ELSE fixed_amount_cent || '分' END,
+                               || ' 费=' || CASE WHEN fixed_amount_cent IS NULL THEN fee_bps || 'bps' ELSE fixed_amount_cent || '分' END
+                               || CASE WHEN monthly_cap_amount_cent IS NULL THEN '' ELSE ' 封顶' || monthly_cap_amount_cent || '分' END,
                            updated_at
                       FROM comprehensive_service_fee_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

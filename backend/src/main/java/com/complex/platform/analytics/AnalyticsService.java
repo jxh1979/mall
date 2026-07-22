@@ -475,6 +475,73 @@ public class AnalyticsService {
         return new AnalyticsRecords.RentToSalesRow(key, label, rentCent, salesCent, ratioBps, note);
     }
 
+    /** 结算B2 放弃权益额外收入（客人买票但已过期未核销的权益，其未核销部分归项目公司的额外收入）：
+     *  按 票种（通票/单独门票）× 权益类型（酒水/入场/游乐/演出/其他）交叉呈现。只读、零迁移。
+     *  权限 analytics.dashboard.view（复用分析只读权限，不新造权限点）；平台级跨商户聚合在控制器 requirePlatformScope。 */
+    public AnalyticsRecords.AbandonedEntitlementRevenueResponse abandonedEntitlementRevenue(
+            java.time.LocalDate start, java.time.LocalDate end) {
+        return readSingle(
+                "analytics.abandoned_entitlement_revenue.viewed",
+                "analytics.abandoned_entitlement_revenue.view_failed",
+                "analytics.dashboard.view",
+                "settlement_transactions",
+                () -> buildAbandonedEntitlementRevenue(start, end));
+    }
+
+    // 五桶固定行序：空桶=0，诚实呈现每一类权益（含无数据的类）。{机读桶键, 中文标签}
+    private static final java.util.List<String[]> ABANDONED_BUCKETS = java.util.List.of(
+            new String[]{"drink", "酒水"},
+            new String[]{"entry", "入场"},
+            new String[]{"amusement", "游乐"},
+            new String[]{"show", "演出"},
+            new String[]{"other", "其他"});
+
+    private AnalyticsRecords.AbandonedEntitlementRevenueResponse buildAbandonedEntitlementRevenue(
+            java.time.LocalDate start, java.time.LocalDate end) {
+        Map<String, long[]> pass = new LinkedHashMap<>();    // bucket -> [amountCent, count]（通票列 bar_id IS NULL）
+        Map<String, long[]> ticket = new LinkedHashMap<>();  // bucket -> [amountCent, count]（单独门票列 bar_id 非空）
+        for (String[] b : ABANDONED_BUCKETS) {
+            pass.put(b[0], new long[2]);
+            ticket.put(b[0], new long[2]);
+        }
+        for (AnalyticsRecords.AbandonedEntitlementCell cell : repository.abandonedEntitlementRevenue(start, end)) {
+            Map<String, long[]> col = "ticket".equals(cell.ticketType()) ? ticket : pass;
+            long[] acc = col.get(cell.bucket());
+            if (acc == null) {
+                continue; // 防御：SQL 桶闭合于五值，未知桶不应发生，忽略不污染报表。
+            }
+            acc[0] += cell.amountCent();
+            acc[1] += cell.count();
+        }
+        java.util.List<AnalyticsRecords.AbandonedEntitlementRow> rows = new java.util.ArrayList<>();
+        long passAmt = 0;
+        long passCnt = 0;
+        long tktAmt = 0;
+        long tktCnt = 0;
+        for (String[] b : ABANDONED_BUCKETS) {
+            long[] p = pass.get(b[0]);
+            long[] t = ticket.get(b[0]);
+            passAmt += p[0];
+            passCnt += p[1];
+            tktAmt += t[0];
+            tktCnt += t[1];
+            rows.add(new AnalyticsRecords.AbandonedEntitlementRow(
+                    b[0], b[1],
+                    new AnalyticsRecords.AbandonedEntitlementAmount(p[0], p[1]),
+                    new AnalyticsRecords.AbandonedEntitlementAmount(t[0], t[1]),
+                    new AnalyticsRecords.AbandonedEntitlementAmount(p[0] + t[0], p[1] + t[1])));
+        }
+        String note = "数据源=settlement_transactions 未核销到期归项目流水（每日 02:30 生成）；金额取权威 unverified_amount_cent；"
+                + "票种按 issued_entitlements.bar_id 判定（空=通票 / 非空=单独门票）；"
+                + "未做项目维度过滤（归项目流水 project_id 为 NULL，按全局+日期口径）。";
+        return new AnalyticsRecords.AbandonedEntitlementRevenueResponse(
+                start.toString(), end.toString(), rows,
+                new AnalyticsRecords.AbandonedEntitlementAmount(passAmt, passCnt),
+                new AnalyticsRecords.AbandonedEntitlementAmount(tktAmt, tktCnt),
+                new AnalyticsRecords.AbandonedEntitlementAmount(passAmt + tktAmt, passCnt + tktCnt),
+                note);
+    }
+
     /** H1(2026-07-02 拍板):同名节假日今年 vs 去年——流量=区间累计+日均双列(天数不同看日均才公平,
      * 同比按日均比);存量=假期末时点(同比按值比);去年无同名区间→previous 侧 null(积累中,不伪造)。 */
     public AnalyticsRecords.HolidayComparisonResponse holidayComparison(String holidayName, int year) {

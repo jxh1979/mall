@@ -123,7 +123,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertThat(billRepository.findChannelFeeBps(PROJECT)).isEqualTo(500);
 
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("s1", PROJECT, null, null, 250, null), DRAFTER);
+                new ComprehensiveServiceFeeRequest("s1", PROJECT, null, null, 250, null, null), DRAFTER);
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isZero();
         writeService.activateDraft("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
@@ -133,6 +133,21 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertThat(billRepository.findComboDiscountConfig(PROJECT).discountBearer()).isEqualTo("platform_absorb");
         writeService.activateDraft("combo_discount", draftRowId("ticket_combo_discount_configs"), APPROVER);
         assertThat(billRepository.findComboDiscountConfig(PROJECT).discountBearer()).isEqualTo("merchant_absorb");
+    }
+
+    /** V336 综合服务费月度封顶写侧往返:写(含封顶)→ 转正 → 读侧 monthlyCapAmountCent 落库(草案期不生效)。 */
+    @Test
+    void comprehensiveServiceFeeMonthlyCapDraftThenActivate() {
+        writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("cap1", PROJECT, MERCHANT, "ticket", 1000, null, 5000L), DRAFTER);
+        // 草案期读侧仍回退全局默认(无封顶、费 0),保值
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, "ticket").monthlyCapAmountCent())
+                .isNull();
+        writeService.activateDraft("comprehensive_service_fee",
+                draftRowId("comprehensive_service_fee_configs"), APPROVER);
+        var cfg = billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, "ticket");
+        assertThat(cfg.feeBps()).isEqualTo(1000);
+        assertThat(cfg.monthlyCapAmountCent()).isEqualTo(5000L); // 封顶值落库并生效
     }
 
     /** merchant-rate:草案期 finder 返 null(项目未生效);转正后返配置值。 */
