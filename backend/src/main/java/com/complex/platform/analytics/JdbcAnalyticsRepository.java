@@ -1404,6 +1404,46 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public java.util.List<AnalyticsRecords.AbandonedEntitlementCell> abandonedEntitlementRevenue(
+            LocalDate start, LocalDate end) {
+        // 结算B2 放弃权益额外收入：直接读生产每日 02:30 已写好的 unverified_expired 归项目流水，零重算。
+        //   金额=权威 unverified_amount_cent（SettlementExpiryJob 按 allocated×(total−used)/total 算好）、笔数=COUNT(*)。
+        //   票种维度：JOIN issued_entitlements 取 bar_id（NULL=通票 / 非空=单独门票，V288 票绑酒吧列；
+        //     绝不用 exclusive_merchant_id——那是结算专属标记、正交维度）。
+        //   权益类型桶：沿用 analytics 现有口径（酒水 drink/gift_drink/bar_、入场 entry、游乐 amusement*、演出 show、其余 other）。
+        //   窗口 [start(含), end(不含))：与 rentToSales 同法用 BusinessDayResolver 派生经营日窗，按 business_at（=到期业务时刻，
+        //     存量行回退 created_at）归窗。
+        java.time.Instant windowStart = businessDayResolver.startInstant(start);
+        java.time.Instant windowEnd = businessDayResolver.startInstant(end);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("window_start", timestampWithTimeZone(windowStart))
+                .addValue("window_end", timestampWithTimeZone(windowEnd));
+        return jdbcTemplate.query("""
+                SELECT CASE
+                           WHEN st.entitlement_type IN ('drink', 'gift_drink')
+                                OR st.entitlement_type LIKE 'bar\\_%' ESCAPE '\\' THEN 'drink'
+                           WHEN st.entitlement_type = 'entry' THEN 'entry'
+                           WHEN st.entitlement_type = 'amusement'
+                                OR st.entitlement_type LIKE 'amusement\\_%' ESCAPE '\\' THEN 'amusement'
+                           WHEN st.entitlement_type = 'show' THEN 'show'
+                           ELSE 'other'
+                       END AS bucket,
+                       CASE WHEN ie.bar_id IS NULL THEN 'pass' ELSE 'ticket' END AS ticket_type,
+                       COALESCE(SUM(st.unverified_amount_cent), 0) AS amount_cent,
+                       COUNT(*) AS cnt
+                  FROM settlement_transactions st
+                  JOIN issued_entitlements ie ON ie.id = st.entitlement_id
+                 WHERE st.transaction_type = 'unverified_expired'
+                   AND st.beneficiary_type = 'project'
+                   AND COALESCE(st.business_at, st.created_at) >= :window_start
+                   AND COALESCE(st.business_at, st.created_at) <  :window_end
+                 GROUP BY 1, 2
+                """, params, (rs, n) -> new AnalyticsRecords.AbandonedEntitlementCell(
+                        rs.getString("bucket"), rs.getString("ticket_type"),
+                        rs.getLong("amount_cent"), rs.getLong("cnt")));
+    }
+
+    @Override
     public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
             boolean enabled, String updatedBy, java.time.Instant now) {
         jdbcTemplate.update("""

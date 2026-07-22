@@ -173,6 +173,25 @@ public class AnalyticsController {
         return ApiResponse.ok(service.rentToSales(month));
     }
 
+    @GetMapping("/abandoned-entitlement-revenue")
+    public ApiResponse<AnalyticsRecords.AbandonedEntitlementRevenueResponse> abandonedEntitlementRevenue(
+            @org.springframework.web.bind.annotation.RequestParam(value = "start", required = false) String start,
+            @org.springframework.web.bind.annotation.RequestParam(value = "end", required = false) String end) {
+        // 结算B2 放弃权益额外收入交叉表（票种×权益类型）：只读、复用分析只读权限（不新造权限点）；
+        // 数据源为归项目流水（project_id 恒 NULL）→ 平台级跨商户聚合，fail-closed 拒绝商户级调用方。
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        java.time.LocalDate startDate = parseOverviewDate(start);
+        java.time.LocalDate endDate = parseOverviewDate(end);
+        if (startDate == null || endDate == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "start 与 end 为必填的 YYYY-MM-DD 日期");
+        }
+        if (!startDate.isBefore(endDate)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "start 必须早于 end（start 含、end 不含）");
+        }
+        return ApiResponse.ok(service.abandonedEntitlementRevenue(startDate, endDate));
+    }
+
     @GetMapping("/work-order-sla/overdue-orders")
     public ApiResponse<PageResponse<AnalyticsRecords.OverdueWorkOrderRow>> listOverdueWorkOrders(
             @org.springframework.web.bind.annotation.RequestParam(value = "source", required = false, defaultValue = "facility") String source,

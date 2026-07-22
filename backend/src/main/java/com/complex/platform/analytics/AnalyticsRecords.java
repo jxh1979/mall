@@ -453,6 +453,47 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** 结算B2 放弃权益额外收入取数原始格（repo→service）：某权益类型桶 × 票种 的未核销归项目金额与笔数。
+     *  bucket∈{drink,entry,amusement,show,other}；ticketType∈{pass(通票 bar_id IS NULL), ticket(单独门票 bar_id 非空)}。 */
+    public record AbandonedEntitlementCell(
+            String bucket,
+            String ticketType,
+            long amountCent,
+            long count
+    ) {
+    }
+
+    /** 结算B2 报表一格：金额（分）+ 笔数。 */
+    public record AbandonedEntitlementAmount(
+            long amountCent,
+            long count
+    ) {
+    }
+
+    /** 结算B2 报表一行：某权益类型 × {通票, 单独门票, 行合计}。 */
+    public record AbandonedEntitlementRow(
+            String bucket,
+            String label,
+            AbandonedEntitlementAmount pass,
+            AbandonedEntitlementAmount ticket,
+            AbandonedEntitlementAmount rowTotal
+    ) {
+    }
+
+    /** 结算B2 放弃权益额外收入交叉表响应：行=权益类型、列=通票/单独门票，附列合计与总计。
+     *  数据源=settlement_transactions(transaction_type=unverified_expired, beneficiary_type=project) 归项目流水，
+     *  金额取权威 unverified_amount_cent（SettlementExpiryJob 已按 allocated×(total−used)/total 算好），零重算。 */
+    public record AbandonedEntitlementRevenueResponse(
+            String start,
+            String end,
+            java.util.List<AbandonedEntitlementRow> rows,
+            AbandonedEntitlementAmount passTotal,
+            AbandonedEntitlementAmount ticketTotal,
+            AbandonedEntitlementAmount grandTotal,
+            String note
+    ) {
+    }
+
     /** S4 工单时效聚合(P50 小时/超时分子分母/时点积压)。 */
     public record WorkOrderSla(
             BigDecimal responseP50Hours,
