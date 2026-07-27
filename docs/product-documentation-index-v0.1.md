@@ -7,6 +7,8 @@
 本文档不替代任何 PRD，只作为总控索引、完成审计和后续任务分派依据。
 
 > 当前第一阅读入口为 `00-current-effective-document-entry-v0.1.md`。新接手的产品、开发、测试、运营、供应商和外部机器智能体必须先阅读该文档，再进入本文档和各模块 PRD/开发设计。
+>
+> 业务事实源顺序：三份业务 HTML 拥有最终解释权；本索引、原始需求、决策日志、PRD、开发设计和实现均为承接或追溯材料。任何下游材料与 HTML 冲突时，先按 HTML 标记并修正文档，不以当前实现反向解释 HTML。
 
 ## 2. 上层总纲
 
@@ -22,11 +24,11 @@
 | `code-contract-difference-and-migration-audit-v0.1.md` | 旧 TypeScript/Fastify/SQLite 原型、旧 Web/Android 路径和正式 Java/OpenAPI 契约的迁移审计 | 新增·代码迁移闸口 |
 | `p0-user-story-map-and-sprint-slices-v0.1.md` | P0 用户故事地图与迭代切片，按角色、业务旅程和验收标准拆分开发故事 | 新增·迭代排期入口 |
 | `p0-task-api-permission-event-acceptance-map-v0.1.md` | P0 任务、接口、权限、事件和验收标准逐行映射 | 新增·执行映射入口 |
-| `original-requirements-capture-v0.1.md` | 用户原始需求口径汇总（需求溯源源头） | 已收录 |
+| `original-requirements-capture-v0.1.md` | 历史原始需求汇总（用于追溯，不是当前业务最终解释权） | 已收录 |
 | `business-decision-log-v0.1.md` | 业务决策追溯日志 | 已收录 |
 | `product-requirements-v0.1.md` | 综合体管理系统产品需求总纲 | 已同步到本地 |
 | `business-functional-topology-v0.1.md` | 综合体管理系统业务功能拓扑图 | 已完成 |
-| `business-system-map-for-operations-v0.1.html` | 面向非产品/非技术业务人员的可点击 HTML 业务说明地图 | 已完成 |
+| `business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html` | 当前业务最终解释权：经营地图、治理地图和枚举速查 | 已完成·最高业务口径 |
 | `compliance-and-personal-information-protection-requirements-v0.1.md` | 合规与个人信息保护要求（P0 前置约束） | 已纳入当前复核；留存、文本和实名范围按最终执行口径处理，仅国家法令强制事项实施复核 |
 | `_archive/20260610-retention-audit/historical-audits/` | 早期审计、复核、市场基准与对抗式审计历史报告 | 已归档·仅供追溯 |
 | `contract-date-compliance-field-granularity-options-20260610.md` | 合同关键日期、证照/资质/保险到期字段 P0 颗粒度建议与已确认方案 B | 新增·已确认口径入口 |

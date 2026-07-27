@@ -1,8 +1,8 @@
 # 集团治理重建 PRD（V1.0·补断点）
 
-> 2026-07-04 逻辑一致性修订：①澄清角色分级——平台/集团级角色可跨项目公司下钻（requirePlatformScope 放行），项目公司管理员限本项目，商户用户 fail-closed 403，消除「集团下钻」与「项目公司级隔离」的表述冲突；②高危权限审批开关 `access.grant_approval.enabled` 据代码校正为**默认开**（原文「默认关」与代码不符）；③57 个高危权限码的 risk_level/requires_approval 改「后台可配、V170 预置不锁死」口径；④对标红点阈值据代码（V218）校正为「后台可配，默认 0.20；analytics_ai_thresholds」，非固定值。
+> 2026-07-27 PRD 审计修订：①平台/集团级角色可按职位模板跨项目公司下钻，项目公司管理员限本项目，商户用户 fail-closed；②四类高危授权审批按治理 HTML 改为不可关闭的强制闸门，配置只能加严；③补授权申请人与审批人职责分离；④补岗位、职级、组织、商户或责任范围变化后立即重算并收回旧范围派生权限。当前实现若不满足这些规则，记为实现待对齐，不反向改写 PRD。
 
-> 生成：2026-06-27。依据：M1 需求采集 §7 + `platform-governance-map-for-operations-v0.1.html`「综合体和集团 / 权限规则」+ V169-V170 迁移 + `com.complex.platform.access` 本轮新增角色装配/授权审批 + `analytics/group-overview` 代码。本文向业务 HTML §十及治理 HTML 对齐；冲突以业务 HTML 为最终解释权，技术字段以真实 DB CHECK 和 Controller 为准。
+> 生成：2026-06-27。业务规则以三份业务 HTML 为最终解释权；迁移、代码和接口只作为当前实现证据，不得反向改写业务规则。本文承接治理 HTML「综合体和集团 / 权限规则」及枚举 HTML §九，M1 需求、V169-V170 和当前代码仅用于说明追溯与实现状态。
 > 重建动因：补断点非绿地：现有 RBAC/SupervisorReview 地基不动，只重建 V169-170 的装配闭环+审批激活+下钻。现有权限模板、临时授权、有效权限计算、SupervisorReview 三档审批继续复用；本轮只补“职位 ↔ 模板 ↔ 角色自动适配”“高危授权先审批再生效”“集团按职位模板可见的下钻对标”三处断点。
 
 ## 0. 定位与边界
@@ -18,7 +18,7 @@
 | 职位角色模板 `position_role_templates` | `status` | `active` / `inactive` | 活跃模板参与定岗匹配；同组织、职位、职级仅允许一个活跃模板 |
 | 授权申请 `access_grant_requests` | `request_type` | `user_role` / `user_position` / `temporary_permission` / `role_permission` | DB CHECK 预留 4 类；当前 `AccessService` 实际支持前三类，`role_permission` 服务层未开放 |
 | 授权申请 `access_grant_requests` | `status` | `pending` / `applied` / `rejected` | 待审批 / 已应用 / 已驳回 |
-| 权限定义 `permissions` | `requires_approval` | `true` / `false` | 高危权限审批开关字段（后台可配，逐权限码可改）；V170 预置把一批高危权限置为 `true`，数值可后台调整 |
+| 权限定义 `permissions` | `requires_approval` | `true` / `false` | 实现字段；四类 HTML 强制高危权限必须为 `true`，后台只能新增高危项或提高审批等级，不能关闭强制项 |
 | 权限定义 `permissions` | `risk_level` | 现有表无 CHECK；服务按 `critical` / `high` / 其他分档 | `critical` → l3 / 最高审批；`high` → l2 / 上两级；其他 → l1 / 上一级 |
 | 临时授权 `temporary_permission_grants` | `status` | 现有表无 CHECK；V170 默认写 `active` | 到期由有效权限查询按 `expires_at` 过滤；撤销写 `revoked_by/revoked_at`，单次授权写 `single_use/consumed/consumed_at` |
 | 集团总览 API 参数 | `groupBy` | `project` / `entity` | Controller/Service 校验；非法返回 `VALIDATION_FAILED` |
@@ -31,7 +31,7 @@
 - 给用户定岗 `assignUserPosition` 时，系统按目标用户组织、职位、职级查模板，写三类结果：`staff_level_assignments`、`user_position_assignments`、`user_roles`，并套用 `permission_templates`。
 - 跨组织闸保持原 RBAC 规则：非平台管理员不得给其他组织用户定岗；角色或模板若带组织归属，也必须与目标用户组织一致。
 - `access.role.assign` 独立为高危权限，V169 设为 `risk_level=high`、`requires_approval=true`，避免把“配角色”混在普通 `access.role.manage` 里。
-- 直接分配/取消角色同样复用 `requireActorCanGrant` 和跨组织闸；如果开启授权审批开关，含 `requires_approval=true` 权限的角色装配会被 `GRANT_REQUIRES_APPROVAL` 拦截，必须走 §3 申请。
+- 直接分配/取消角色同样复用 `requireActorCanGrant` 和跨组织闸；角色装配只要包含四类强制高危权限或其他 `requires_approval=true` 权限，就必须被审批闸拦截并走 §3 申请，不受可关闭总开关影响。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/access/position-role-templates`
@@ -53,8 +53,8 @@
 
 ## 3. 高危授权审批（V170）
 **业务规则**
-- 审批总开关：`access.grant_approval.enabled` **默认开（`:true`，以代码 `AccessService` 默认值为准）**，后台可配。开启时含 `requires_approval=true` 权限的直接授权会被 `GRANT_REQUIRES_APPROVAL` 阻断，高危权限必须先走授权申请（§3 流程）；若后台关闭，直接授权仍按提权闸和跨组织闸执行，但不再因 `requires_approval=true` 自动阻断。（注：历史文档曾记「默认关」，与当前代码不符，2026-07-04 据代码校正。）
-- V170 预置高危权限审批字段：按迁移 `high_risk` 清单（四类，预置 57 个权限码）对资金/核销/退款/调账类、提权或跨商户跨项目公司类、敏感数据类、高危业务操作类权限批量设置 `requires_approval=true`。**该清单为 P0 预置基线、非锁死：`permissions.risk_level` 与 `requires_approval` 均为后台可配字段，可逐权限码增删改（配置表 `permissions`）；V170 只给初值，不硬编码为不可变策略。**清单初值以 V170 迁移为准，不从业务说明另造权限数量。
+- 审批闸门：资金/核销/退款/调账/分红发放、提权或跨商户跨综合体、敏感数据、高危业务四类权限授出前必须先审批才生效。`access.grant_approval.enabled` 不得关闭这四类强制审批；若当前实现允许关闭，则该实现属于待对齐缺口，不能被本文解释为业务可选项。
+- 高危权限配置：迁移清单只是当前实现初值。后台可以新增高危权限、提高风险等级或提高审批层级，但不得把 HTML 明确的四类强制项降级为无需审批，也不得移出强制范围。
 - 四类高危覆盖口径：
   - 资金/核销/退款/调账：如 `finance.ar_ap.manage`、`finance.refund.create`、`finance.property_fee.manage`、`bar.bill.adjust`、`customer.stored_value.refund`、`inventory.stock.adjust`。
   - 提权或跨商户跨项目公司：如 `access.permission_template.manage/apply/revoke`、`access.role.manage`、`access.role.assign`、`access.temporary_grant.create/revoke`、`access.grant_request.review`、`governance.supervisor_review.approve`、`governance.project.manage`、`contract.approve.gm`。
@@ -63,8 +63,10 @@
 - 申请类型当前服务支持三类：`user_role`、`user_position`、`temporary_permission`。DB CHECK 预留 `role_permission`，但 `AccessService` 当前不支持该分支。
 - 申请时服务先解析目标授权会授出的权限码，只允许包含 `requires_approval=true` 的授权申请；若没有审批必需权限，返回 `GRANT_APPROVAL_NOT_REQUIRED`，应走直接授权。
 - 审批等级按风险等级派生：`critical` → `permission_grant_l3` / `top_authority` / `required_level=3`；`high` → `permission_grant_l2` / `two_levels_up` / `required_level=2`；其他 → `permission_grant_l1` / `one_level_up` / `required_level=1`。
+- 授权申请人与审批人必须职责分离；同一人审批自己的授权申请时一律拒绝并留痕。
 - 流程：申请创建 `access_grant_requests(status=pending)` 并调用 `SupervisorReviewService.blockForAdmission` 生成 `review_id`；审批端调用 SupervisorReview `approve` 后，批准则应用角色/定岗/临时权限并写 `applied`，驳回写 `rejected`。
 - 临时权限必须有 `expires_at`；可带 `valid_from`、`single_use`。V170 扩展 `temporary_permission_grants` 的 `status`、`valid_from`、撤销、单次消耗字段；有效权限查询按有效期和消耗状态过滤。
+- 岗位、职级、所属组织、所属商户或责任范围变化时，立即按新归属重新计算有效权限；旧岗位和旧范围派生权限同步失效，员工单独授权若超出新范围则暂停并重新审批，不允许只提示人工收回。
 - 智能总结：`grantSummary` 统计窗口内临时权限申请。某职位/层级/权限组合达到阈值时返回“建议转固定权限”；某用户频繁申请时返回异常总结供复核。
 
 **关键端点（实际 Controller）**
