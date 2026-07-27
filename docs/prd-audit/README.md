@@ -1,0 +1,50 @@
+# PRD 全量审计
+
+状态：进行中
+唯一正式版本：`192.168.88.160:/home/james/complex-management` 的 `main`
+
+## 权威层级
+
+1. `docs/business-system-map-for-operations-v0.1.html`
+2. `docs/platform-governance-map-for-operations-v0.1.html`
+3. `docs/business-enum-quick-reference-v0.1.html`
+4. 用户已确认且未被现行 HTML 推翻的业务裁决
+5. 现行 PRD、产品规格、术语、追溯矩阵和产品文档入口
+
+三个 HTML 共同拥有最终业务解释权。PRD 和历史裁决不得反向削弱 HTML；HTML 之间无法唯一推出结论时进入单问题裁决队列。
+
+## 正式范围
+
+- 纳入范围见 `document-scope-manifest.csv`。
+- 备份与当前版本关系见 `backup-current-diff.md`。
+- 历史和本轮业务裁决见 `business-decision-ledger.md`。
+- 原子规则账本和覆盖矩阵在阶段 2 建立。
+- 最终结论写入 `prd-audit-report.md`；阶段 7 完成前不得把该报告视为最终结论。
+
+## 阶段
+
+| 阶段 | 内容 | 状态 |
+|---:|---|---|
+| 1 | 基线、范围和历史续接 | 完成 |
+| 2 | 三个 HTML 原子规则账本 | 未开始 |
+| 3 | 平台治理与通用规则 | 未开始 |
+| 4 | 交易、会员、票务与酒吧 | 未开始 |
+| 5 | 地产、招商、合同、楼宇与供应链 | 未开始 |
+| 6 | 游乐、终端、第三方与数据分析 | 未开始 |
+| 7 | 跨域一致性与最终收口 | 未开始 |
+
+## 审计状态
+
+覆盖状态固定为 `FULL`、`PARTIAL`、`CONFLICT`、`MISSING`、`AMBIGUOUS`、`STALE`、`NOT_APPLICABLE`。
+
+严重度固定为：
+
+- `P0`：资金或权益不守恒、越权、自审自批、责任主体错误、不可恢复状态或相反实现。
+- `P1`：核心流程或跨域规则缺失，导致业务无法闭环或验收错误。
+- `P2`：局部不完整、追溯断裂或术语和状态不一致，但有明确替代路径。
+- `P3`：不改变业务含义的引用、结构或表述问题。
+
+## 设计与计划
+
+- `docs/superpowers/specs/2026-07-27-prd-audit-design.md`
+- `docs/superpowers/plans/2026-07-27-prd-audit.md`
