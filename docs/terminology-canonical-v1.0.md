@@ -1,7 +1,7 @@
 # 组织实体与结算主体 术语权威表 v1.0
 
-> 结算重构 批 0 产出。**权威口径来源 = 现行迁移与代码(origin/main),非任何单份 PRD。** 用于统一全部 PRD/设计文档对"四层实体 / 六类业态主体 / 结算术语"的称谓,消解"综合体/集团/项目/组织"混用。
-> 关联:`merchant-space-contract-model-v0.1.md`(数据模型权威 ER)、`settlement-rebuild-prd-v1.0.md`(结算口径权威)。
+> 结算重构批 0 产出。**业务术语与边界的最终解释权属于三份业务 HTML**：`business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html`。迁移、代码、数据模型和 PRD 只能说明当前实现或承接方式，不得反向改写业务术语。
+> 关联：`merchant-space-contract-model-v0.1.md`（数据模型承接）、`settlement-rebuild-prd-v1.0.md`（结算 PRD 承接）。
 
 ## 一、四层组织实体(定死)
 
@@ -12,7 +12,7 @@
 | L3 | **管理公司 / 业态主体(SPV)** | 项目公司与商户之间的分账主体 | `business_entities`(entity_role=management_company / spv …) |
 | L4 | **商户** | 具体经营单位 | `merchants` 表 |
 
-## 二、DB 落点铁律(勿臆造独立表)
+## 二、当前实现落点（不得反向解释业务术语）
 
 - **无 `organizations` / `org_type` 表**;四层主体统一用 **`business_entities` 一表多角色**(`entity_role` 文本,无 CHECK)承载。
 - **层级父链(V318)** = `business_entities.parent_entity_id`:L3 管理公司 → L2 项目公司,L2 → L1 平台,L1=NULL。「一个项目公司下多个管理公司主体」= 多行 `parent_entity_id` 指向同一项目公司。
@@ -45,7 +45,7 @@
 | "项目" | 按语境区分:**项目公司**(经营体)vs **`projects` 表**(业态场馆);文中明确指出 |
 | "组织 / organization" | 权限侧保留 `organization_id`(仅角色/用户权限用);业务主体一律 `business_entities` |
 
-## 五、结算核心术语(结算重构 PRD 权威)
+## 五、结算核心术语（三份业务 HTML 最终解释，结算 PRD 承接）
 
 - **按核销结算 / 未核销归项目**:通票权益在核销时才结算给商户/SPV;未核销部分归项目公司(平台留存)。
 - **平台留存 20% = 综合服务费**:所有门票(含通票)都过一道,费率可配。
