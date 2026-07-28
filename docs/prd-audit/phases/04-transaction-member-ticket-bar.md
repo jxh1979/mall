@@ -1,6 +1,6 @@
 # 阶段 4：交易、会员、票务与酒吧审计
 
-状态：进行中（覆盖初评 + 强制对抗场景已完成；**未自动修改业务 PRD 正文**，修订待批准）
+状态：**阶段 4 文档收口完成**（覆盖初评 + 对抗场景 + 积分相关裁决已并入 main 会员积分重构文档；本 PR 仅保留 prd-audit 产物与进度）
 日期：2026-07-28
 基线提交：`b433fda2`
 分支：`audit/prd-phase4-transaction`
@@ -114,4 +114,30 @@ coverage 总行数（含历史）：**601**
 > - 按活动/商户/积分类型差异化（请说明维度与默认值）；
 > - 由清算中心按账期结算价（请说明谁定价、何时生效）；
 > - 或其他（请写明公式）。
+
+
+## PR #218 收口说明（2026-07-28）
+
+### 本 PR 保留内容
+- `docs/prd-audit/html-prd-coverage.csv` phase4 覆盖行
+- `docs/prd-audit/phase4-*.csv/json`
+- `docs/prd-audit/phases/04-transaction-member-ticket-bar.md`
+- `docs/prd-audit/prd-audit-report.md` 进度更新
+
+### 与 main 会员积分重构的关系（docs-only，已在 main）
+- 主 PRD：`member-points-tier-and-clearing-prd-v1.0.md`
+- P1 参数表：`member-points-p1-ops-parameter-tables-v0.1.md`（A–K 已裁）
+- 实现切片（规划文档）：`superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`
+- **POINTS-VOUCHER-ACCRUAL-002**：到店核销才记商户承接（废止本分支曾写的 ACCRUAL-001）
+- **DEC-CFG-ALL-NUMERIC-001**：时间/数字一律可配
+- 本审计线程约定：**不改代码**，仅文档
+
+### 阶段 4 结论（收口）
+- 交易/会员/票务/酒吧规则覆盖初评已完成并写入 coverage
+- 强制对抗场景矩阵已归档
+- 积分域结构性未决已通过 R3/P0/P1 决策与主 PRD 收口；残余为运营填数与**未来编码**（另许可）
+- 非积分 GAP（如储值混退 ADV-TX-003、卡座转并续 ADV-TX-007 等）仍可在后续文档迭代处理，不阻塞本 PR 合并
+
+### 下一步（文档或编码均需另指令）
+- 阶段 5+ 审计 或 积分实现切片编码（编码需明确许可）
 

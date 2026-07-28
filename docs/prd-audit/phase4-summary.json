@@ -42,8 +42,9 @@
     },
     {
       "id": "ADV-TX-004",
-      "result": "GAP",
-      "severity": "P0"
+      "result": "PARTIAL",
+      "severity": "P0",
+      "decision": "POINTS-VOUCHER-ACCRUAL-002"
     },
     {
       "id": "ADV-TX-005",
@@ -85,5 +86,13 @@
     "business-system-map-for-operations-v0.1.html": "0492b9112fec7ac03366f8c69a7a948f7706e9483b70370396359197f2ca087e",
     "platform-governance-map-for-operations-v0.1.html": "a18cfff21c9cfbaf68d48ec6a0d68eeaa9afd3ae462dff76093c0a56dc31572b",
     "business-enum-quick-reference-v0.1.html": "3e2071d8b740aea43df8a4685871c307a4185591ced4f1ced279ffa202e39648"
+  },
+  "closeout": {
+    "date": "2026-07-28",
+    "pr": 218,
+    "status": "docs_closeout_complete",
+    "accrual": "POINTS-VOUCHER-ACCRUAL-002",
+    "code_changes": false,
+    "note": "Merged with main member-points PRD/P1; ACCRUAL-001 superseded"
   }
 }
