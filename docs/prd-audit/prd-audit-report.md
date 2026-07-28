@@ -92,3 +92,10 @@
 ### B 线 Batch1（2026-07-28）
 
 见 `PHASE-B-DEFERRED-BATCH1.md`。闭合 19 条；剩余高严重度 OPEN 见该文。
+
+
+## APPENDIX 深审（2026-07-28）
+
+- 状态：完成（探针法 + 行动队列）
+- 详见 `phases/08-appendix-deep-audit.md`
+- 附录不得反向立法；正文修订待用户批准 A1/A2/A3

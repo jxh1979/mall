@@ -1,0 +1,30 @@
+{
+  "findings_total": 78,
+  "verdict_counts": {
+    "HISTORICAL_STALE_OK": 6,
+    "HISTORICAL_MIXED": 5,
+    "SUPPORTS_MAIN": 58,
+    "POTENTIAL_STALE_OR_REVERSE": 6,
+    "FALSE_POSITIVE_CONTEXT": 2,
+    "MIXED_STALE_AND_SUPPORT": 1
+  },
+  "action_queue_count": 8,
+  "action_by_severity": {
+    "P1": 8
+  },
+  "action_by_probe": {
+    "APX-SEAT-TM": 7,
+    "APX-SV-LEDGER": 1
+  },
+  "action_paths": [
+    "docs/development-ready-spec-draft-v0.1.md",
+    "docs/full-admin-mvp-coding-task-breakdown-v0.1.csv",
+    "docs/full-admin-mvp-requirements-code-matrix-v0.1.csv",
+    "docs/full-admin-page-permission-field-matrix-v0.1.csv",
+    "docs/full-admin-srs-v0.1.md",
+    "docs/full-admin-ui-acceptance-matrix-v0.1.md",
+    "docs/p1-bar-table-session-api-contract-v0.1.md",
+    "docs/member-loyalty-and-stored-value-development-design-v0.1.md"
+  ],
+  "note": "Non-hist P0 greps clean for ACCRUAL-001/先生效后审/抵现/代收. Real debt: 续卡 in admin/P1 contracts; stored-value design predates DEC-SV."
+}

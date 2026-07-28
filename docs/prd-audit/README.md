@@ -66,3 +66,9 @@
 - 覆盖：`html-prd-coverage.csv`（与 authority-rule-ledger 全量对齐）
 - 约束：仅文档；不改代码；HTML 未改
 
+## APPENDIX 深审（2026-07-28）
+
+- 报告：`phases/08-appendix-deep-audit.md`
+- 全量命中：`appendix-deep-findings.csv`
+- 行动队列：`appendix-deep-action-queue.csv`
+- 摘要：`appendix-deep-summary.json`
