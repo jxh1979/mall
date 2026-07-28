@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-07-22T07:04:55.757Z",
+  "generated_at": "2026-07-28T12:33:06.963Z",
   "git": {
-    "head": "f855c7ffcb8b626dc604e1c84ccf0364a1fb6cf0",
-    "head_short": "f855c7ff",
-    "branch": "main",
-    "worktree_dirty": false,
-    "source_fingerprint": "7f58db75ffbce5ca5d9674e8a39639e4d114c3a630e78bb7d85b49ce08fb47f5",
-    "source_fingerprint_file_count": 2059,
+    "head": "2ec37f0f770f55579a1acae83f28300784264f11",
+    "head_short": "2ec37f0f",
+    "branch": "feat/misc-config-and-workbench",
+    "worktree_dirty": true,
+    "source_fingerprint": "c92b4fa55fde188892fa5ce8cb86206d487e3bf9da35d857e435d2e1775d7cbd",
+    "source_fingerprint_file_count": 2085,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 228,
-    "tests": 2583,
+    "suites": 236,
+    "tests": 2944,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-07-22T06:46:54.809Z",
+    "latest_mtime": "2026-07-28T12:32:32.936Z",
     "passed": true
   },
   "web_unit_source": {
@@ -88,6 +88,7 @@
       "apps/web/src/admin/pages/AmusementSafetyPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.test.tsx",
+      "apps/web/src/admin/pages/AmusementSessionsPage.entitlementsoftdelete.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.test.tsx",
@@ -179,7 +180,6 @@
       "apps/web/src/admin/pages/PayrollTaxBracketsPage.test.tsx",
       "apps/web/src/admin/pages/PermissionTemplatesPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/PermissionTemplatesPage.test.tsx",
-      "apps/web/src/admin/pages/PointsRulesPage.test.tsx",
       "apps/web/src/admin/pages/ReceivablesAnalyticsPage.kpi.test.tsx",
       "apps/web/src/admin/pages/ReceivablesAnalyticsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/ReceivablesAnalyticsPage.robustness.test.tsx",
@@ -247,43 +247,33 @@
       "apps/web/src/shared/apiError.test.ts"
     ],
     "file_count": 185,
-    "test_count_from_source": 741
+    "test_count_from_source": 746
   },
   "web_build": {
-    "dist_index_exists": true,
+    "dist_index_exists": false,
     "route_indexes": [
       {
         "path": "apps/web/dist/ticketing/index.html",
-        "exists": true
+        "exists": false
       },
       {
         "path": "apps/web/dist/bar/index.html",
-        "exists": true
+        "exists": false
       },
       {
         "path": "apps/web/dist/amusement/index.html",
-        "exists": true
+        "exists": false
       }
     ],
-    "asset_count": 125,
-    "main_js_assets": [
-      {
-        "path": "apps/web/dist/assets/main-DjeFogQ0.js",
-        "size_bytes": 3532,
-        "mtime": "2026-07-22T06:47:00.808Z"
-      }
-    ],
-    "largest_asset": {
-      "path": "apps/web/dist/assets/vendor-antd-CBmYl4fp.js",
-      "size_bytes": 538825,
-      "mtime": "2026-07-22T06:47:00.810Z"
-    },
+    "asset_count": 0,
+    "main_js_assets": [],
+    "largest_asset": null,
     "no_main_bundle_warning_expected": true
   },
   "playwright": {
     "normal": {
       "report_path": "playwright-report/index.html",
-      "report_exists": true,
+      "report_exists": false,
       "spec_files": [
         "tests/e2e/customer-account-lifecycle-live-evidence.spec.ts",
         "tests/e2e/customer-journey.spec.ts",
@@ -299,17 +289,14 @@
     },
     "real_backend": {
       "report_path": "playwright-report-real-backend/index.html",
-      "report_exists": true,
+      "report_exists": false,
       "spec_files": [
         "tests/e2e/web-ui-real-backend.spec.ts"
       ],
       "test_count_from_source": 3
     },
-    "last_run": {
-      "status": "passed",
-      "failedTests": []
-    },
-    "last_run_passed": true
+    "last_run": null,
+    "last_run_passed": false
   },
   "semgrep": {
     "scan_id": "semgrep-20260703-delivery-gates-clean",
@@ -327,8 +314,8 @@
     "can_claim_production_ready": false
   },
   "conclusion": {
-    "runtime_ready_for_integration_and_business_acceptance": true,
+    "runtime_ready_for_integration_and_business_acceptance": false,
     "can_claim_production_ready": false,
-    "reason": "Runtime evidence supports integration and business acceptance; production readiness remains blocked by external production evidence and NAS current mount state."
+    "reason": "Runtime evidence is incomplete or stale; rerun the closed-loop runtime command and regenerate this evidence."
   }
 }

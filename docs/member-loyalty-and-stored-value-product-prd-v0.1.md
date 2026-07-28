@@ -174,9 +174,13 @@
 
 | 配置项 | 后台页 | 承接端点 | 权限 |
 |---|---|---|---|
-| 积分获取方式/系数、等级累计成长积分阈值、有效期与过期策略（§3/§4） | 「积分规则配置」ADM-CUS-003 | `/api/v1/customer/points-rules`（CRUD，V060/V269） | 查看 customer.points_rule.view / 维护 customer.points_rule.manage |
 | **积分累计率（每积 1 分所需消费金额，项目公司 × 商户）（§4）** | 「结算配置中心 → 提成与积分」ADM-STL-001 | `POST /api/v1/settlement/config/points-accrual-rate`（落草案）+ `/{configType}/{id}/activate`（复核转正），V340 `points_accrual_rate_configs` | settlement.config.view / settlement.config.manage（高敏·差人复核） |
-> ⚠️ 口径边界（2026-07-28）：**引擎实际取用的积分累计率是上表最后一行的 `points_accrual_rate_configs`**；ADM-CUS-003 上的「获取系数」字段（`customer_points_rules.earn_ratio`，V060）当前**未被任何引擎读取**，两者收敛（保留其一）待另行拍板，改前请勿以 ADM-CUS-003 的系数为准。
+> ✅ 收敛已拍板（2026-07-28，V352）：上一版这里还有一行「积分规则配置」ADM-CUS-003（`customer_points_rules`，V060/V269）。
+> 用户拍板**停用旧表和旧页，只留配置中心**——那一页除「规则名称」外改任何字段都不影响任何计算：获取系数的真身是本表
+> `points_accrual_rate_configs`（ADM-STL-001），等级阈值的真身是 `customer_member_levels`（ADM-CUS-004），签到的真身是
+> `customer_check_in_tiers`（ADM-CUS-004），生日与有效期的真身是 `customer_birthday_rules`（ADM-CUS-004）。
+> 现状：页面/路由/菜单/四个 CRUD 端点已下线，`customer.points_rule.view|manage` 两个权限点已从所有角色解绑并置 inactive；
+> `customer_points_rules` 按删除铁律**留库不物删**（全表打 `archived_at`/`archive_reason` 存档标记，随时可查可恢复）。
 | 会员等级档位/升级门槛/保级/宽限/积分倍率（§3） | 「会员等级与忠诚度」ADM-CUS-004 | `/api/v1/loyalty/config/member-levels` | 查看 customer.loyalty.view / 维护 customer.loyalty.manage |
 | 连续签到阶梯奖励（§6） | 同上 | `/api/v1/loyalty/config/check-in-tiers` | 同上 |
 | 生日加倍规则（§6） | 同上 | `/api/v1/loyalty/config/birthday-rules` | 同上 |

@@ -48,7 +48,8 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-TER-001", label: "终端开关矩阵", module: "终端", group: "integration", route: "/admin/terminals/switch-matrix", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-CUS-001", label: "客人账号管理", module: "客人", group: "governance", route: "/admin/customers/accounts", requiredPermissions: ["customer.account.manage"] },
   { pageId: "ADM-CUS-002", label: "券台账管理", module: "客人", group: "governance", route: "/admin/customers/vouchers", requiredPermissions: ["customer.voucher.view"] },
-  { pageId: "ADM-CUS-003", label: "积分规则配置", module: "客人", group: "governance", route: "/admin/customers/points-rules", requiredPermissions: ["customer.points_rule.view"] },
+  // ADM-CUS-003「积分规则配置」已于 2026-07-28 停用下线（V352）：该页所配四项口径全被别的活表接管，
+  // 改任何字段都不影响任何计算，运营改完以为生效实际无效。积分口径统一在结算配置中心配置。
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", module: "客人", group: "governance", route: "/admin/customers/loyalty-config", requiredPermissions: ["customer.loyalty.view"] },
   { pageId: "ADM-CUS-005", label: "储值规则配置", module: "客人", group: "governance", route: "/admin/customers/stored-value-rules", requiredPermissions: ["customer.stored_value.refund"] },
   { pageId: "ADM-INT-004", label: "短信通知开关", module: "第三方接入", group: "integration", route: "/admin/integrations/sms-switches", requiredPermissions: ["terminal.switch.view"] },
@@ -75,7 +76,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-SVC-001", label: "服务点单", module: "服务", group: "ops", route: "/admin/services/orders", requiredPermissions: ["service.catalog.manage"] },
   { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-010", label: "AI阈值", module: "分析", group: "overview", route: "/admin/analytics/ai-thresholds", requiredPermissions: ["analytics.dashboard.view"] },
-  { pageId: "ADM-ANA-011", label: "提醒窗配置", module: "分析", group: "overview", route: "/admin/analytics/notification-windows", requiredPermissions: ["analytics.dashboard.view"] },
+  { pageId: "ADM-ANA-011", label: "提醒与留存天数配置", module: "分析", group: "overview", route: "/admin/analytics/notification-windows", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-MER-003", label: "我的账单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/bills", requiredPermissions: ["merchant.billing.view"], accountForms: ["merchant"] },
   { pageId: "ADM-MER-004", label: "我的工单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/work-orders", requiredPermissions: ["merchant.service_work_order.view"], accountForms: ["merchant"] },
   { pageId: "ADM-MER-005", label: "我的对账", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/settlements", requiredPermissions: ["merchant.portal.settlement.view"], accountForms: ["merchant"] },

@@ -48,23 +48,9 @@ public interface CustomerRepository {
         return java.util.Optional.empty();
     }
 
-    /** 积分规则引擎（REQ-12, P0-6）。默认空/抛出，JdbcCustomerRepository 覆盖。 */
-    default CustomerPointsRuleRecord savePointsRule(CustomerPointsRuleRecord rule) {
-        throw new UnsupportedOperationException("savePointsRule not supported by this repository");
-    }
-
-    default List<CustomerPointsRuleRecord> listPointsRules() {
-        return List.of();
-    }
-
-    default Optional<CustomerPointsRuleRecord> findPointsRuleById(String id) {
-        return Optional.empty();
-    }
-
-    /** 按综合体(project_id)隔离列积分规则（后台项目级管理员只见本项目）。JdbcCustomerRepository 覆盖。 */
-    default List<CustomerPointsRuleRecord> listPointsRulesByProject(String projectId) {
-        return List.of();
-    }
+    // 积分规则引擎读写口（原 REQ-12/P0-6）已于 2026-07-28 随 customer_points_rules 停用一并删除（V352）：
+    // 该表四个配置维度全被活表接管（points_accrual_rate_configs / customer_member_levels /
+    // customer_check_in_tiers / customer_birthday_rules），本表零读取方。表按删除铁律留库不物删。
 
     List<CustomerBarReservationOptionResponse> listBarReservationOptions();
 

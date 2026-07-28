@@ -83,7 +83,6 @@ const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdap
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
 const TerminalSwitchMatrixPage = React.lazy(() => import("./pages/TerminalSwitchMatrixPage").then((m) => ({ default: m.TerminalSwitchMatrixPage })));
 const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPage").then((m) => ({ default: m.CustomerAccountsPage })));
-const PointsRulesPage = React.lazy(() => import("./pages/PointsRulesPage").then((m) => ({ default: m.PointsRulesPage })));
 const MemberLoyaltyConfigPage = React.lazy(() => import("./pages/MemberLoyaltyConfigPage").then((m) => ({ default: m.MemberLoyaltyConfigPage })));
 const StoredValueRulesPage = React.lazy(() => import("./pages/StoredValueRulesPage").then((m) => ({ default: m.StoredValueRulesPage })));
 const RefundAuthorityPage = React.lazy(() => import("./pages/RefundAuthorityPage").then((m) => ({ default: m.RefundAuthorityPage })));
@@ -332,8 +331,6 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <MerchantZoneDividendsPage {...props} />;
     case "ADM-CUS-002":
       return <VoucherLedgerPage {...props} />;
-    case "ADM-CUS-003":
-      return <PointsRulesPage {...props} />;
     case "ADM-CUS-004":
       return <MemberLoyaltyConfigPage {...props} />;
     case "ADM-CUS-005":

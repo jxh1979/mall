@@ -129,13 +129,17 @@ public class OperatingParamsService {
         return repository.listNotificationWindows();
     }
 
-    /** V219:维护提醒窗天数(续约/存酒临期/招商跟进等);days>0;审计留痕。 */
+    /**
+     * V219:维护按天计的运营参数(提醒类:续约/存酒临期/招商跟进;留存类:V353 人脸照留存);审计留痕。
+     * V353 起上界 3650 天(对齐 wecom_retention_policies 的 1..3650)——留存类键管的是个人信息销毁时点，
+     * 没有上界等于允许"事实上永久留存"，与 PIPL 最短必要期冲突；提醒类键本就远小于 3650，行为不变。
+     */
     public AnalyticsRecords.NotificationWindow upsertNotificationWindow(NotificationWindowRequest request) {
         NotificationWindowRequest actual = requireRequest(request);
         String key = requireText(actual.windowKey(), "window_key");
         Integer days = actual.days();
-        if (days == null || days <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "days must be > 0");
+        if (days == null || days <= 0 || days > 3650) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "days must be between 1 and 3650");
         }
         AnalyticsRecords.NotificationWindow saved = repository.upsertNotificationWindow(
                 key, days, actual.description(), null, Instant.now(clock));

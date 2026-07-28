@@ -594,75 +594,8 @@ class JdbcCustomerRepository implements CustomerRepository {
         return reservation;
     }
 
-    @Override
-    public CustomerPointsRuleRecord savePointsRule(CustomerPointsRuleRecord rule) {
-        jdbcTemplate.update("""
-                INSERT INTO customer_points_rules (
-                    id, project_id, rule_name, earn_method, earn_ratio, level_threshold, validity_type,
-                    validity_days, expire_mode, clear_day, status, created_at, updated_at
-                )
-                VALUES (
-                    :id, :project_id, :rule_name, :earn_method, :earn_ratio, CAST(:level_threshold AS jsonb), :validity_type,
-                    :validity_days, :expire_mode, :clear_day, :status, :created_at, :updated_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    project_id = EXCLUDED.project_id,
-                    rule_name = EXCLUDED.rule_name,
-                    earn_method = EXCLUDED.earn_method,
-                    earn_ratio = EXCLUDED.earn_ratio,
-                    level_threshold = EXCLUDED.level_threshold,
-                    validity_type = EXCLUDED.validity_type,
-                    validity_days = EXCLUDED.validity_days,
-                    expire_mode = EXCLUDED.expire_mode,
-                    clear_day = EXCLUDED.clear_day,
-                    status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
-                """, new MapSqlParameterSource()
-                .addValue("id", rule.id())
-                .addValue("project_id", rule.projectId())
-                .addValue("rule_name", rule.ruleName())
-                .addValue("earn_method", rule.earnMethod())
-                .addValue("earn_ratio", rule.earnRatio())
-                .addValue("level_threshold", rule.levelThreshold() == null ? "{}" : rule.levelThreshold())
-                .addValue("validity_type", rule.validityType())
-                .addValue("validity_days", rule.validityDays())
-                .addValue("expire_mode", rule.expireMode())
-                .addValue("clear_day", rule.clearDay())
-                .addValue("status", rule.status())
-                .addValue("created_at", timestampWithTimeZone(rule.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(rule.updatedAt())));
-        return rule;
-    }
-
-    @Override
-    public List<CustomerPointsRuleRecord> listPointsRules() {
-        return jdbcTemplate.query("SELECT * FROM customer_points_rules ORDER BY created_at DESC, id",
-                this::mapPointsRule);
-    }
-
-    @Override
-    public Optional<CustomerPointsRuleRecord> findPointsRuleById(String id) {
-        List<CustomerPointsRuleRecord> result = jdbcTemplate.query(
-                "SELECT * FROM customer_points_rules WHERE id = :id", Map.of("id", id), this::mapPointsRule);
-        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
-    }
-
-    private CustomerPointsRuleRecord mapPointsRule(ResultSet rs, int rowNumber) throws SQLException {
-        return new CustomerPointsRuleRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("rule_name"),
-                rs.getString("earn_method"),
-                rs.getLong("earn_ratio"),
-                rs.getString("level_threshold"),
-                rs.getString("validity_type"),
-                rs.getObject("validity_days", Integer.class),
-                rs.getString("expire_mode"),
-                rs.getString("clear_day"),
-                rs.getString("status"),
-                nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
-    }
+    // 积分规则引擎 CRUD(savePointsRule/listPointsRules/findPointsRuleById/mapPointsRule)已于 2026-07-28
+    // 随 customer_points_rules 停用一并删除(V352):该表零读取方,后台页 ADM-CUS-003 同批下线。表留库不物删。
 
     private MapSqlParameterSource customerParameters(CustomerRecord customer) {
         return new MapSqlParameterSource()
@@ -1123,14 +1056,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                  WHERE project_id = :project_id
                  ORDER BY multiplier_basis_points DESC, id ASC
                 """, Map.of("project_id", projectId), this::mapBirthdayRule);
-    }
-
-    public List<CustomerPointsRuleRecord> listPointsRulesByProject(String projectId) {
-        return jdbcTemplate.query("""
-                SELECT * FROM customer_points_rules
-                 WHERE project_id = :project_id
-                 ORDER BY created_at DESC, id
-                """, Map.of("project_id", projectId), this::mapPointsRule);
     }
 
     public List<CustomerRedemptionCatalogItemRecord> listRedemptionCatalogItemsByProject(String projectId) {
