@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 702 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 703 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 323 | 人工权限矩阵正文未覆盖 221 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1404 | 人工事件矩阵正文未覆盖 1362 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 702 | 人工任务映射正文未逐项覆盖 696 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 423 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1406 | 人工事件矩阵正文未覆盖 1364 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 703 | 人工任务映射正文未逐项覆盖 697 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 424 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -327,7 +327,7 @@
 | `ticket.dynamic_pricing.simulate` | staff-token | project-channel | 1 | simulateTicketDynamicPricing | OpenAPI 补充，以本附录为准 |
 | `ticket.dynamic_pricing.view` | staff-token | project-channel | 1 | listTicketDynamicPricingRules | OpenAPI 补充，以本附录为准 |
 | `ticket.entitlement.approve` | staff-token | project | 1 | approveDeleteEntitlementTemplate | OpenAPI 补充，以本附录为准 |
-| `ticket.entitlement.manage` | staff-token | project | 4 | createEntitlementTemplate, archiveEntitlementTemplate, unarchiveEntitlementTemplate, requestDeleteEntitlementTemplate | 已在权限矩阵正文出现 |
+| `ticket.entitlement.manage` | staff-token | project | 5 | createEntitlementTemplate, archiveEntitlementTemplate, updateEntitlementTemplateAgreementPrice, unarchiveEntitlementTemplate, requestDeleteEntitlementTemplate | 已在权限矩阵正文出现 |
 | `ticket.entitlement.view` | staff-token | project | 1 | listEntitlementTemplates | 已在权限矩阵正文出现 |
 | `ticket.order.create` | staff-token | platform, project-channel | 2 | createTicketOrder, cancelTicketOrder | 已在权限矩阵正文出现 |
 | `ticket.order.read` | staff-token | project | 1 | listTicketOrders | OpenAPI 补充，以本附录为准 |
@@ -1650,6 +1650,8 @@
 | `ticket_dynamic_pricing.simulated.success` | success | `simulateTicketDynamicPricing` | `POST` | `/api/v1/ticketing/dynamic-pricing/simulations` | TIC-票务权益 | `ticket.dynamic_pricing.simulate` | 接口级事件，以本附录为准 |
 | `ticket_dynamic_pricing.viewed.failure` | failure | `listTicketDynamicPricingRules` | `GET` | `/api/v1/ticketing/dynamic-pricing-rules` | TIC-票务权益 | `ticket.dynamic_pricing.view` | 接口级事件，以本附录为准 |
 | `ticket_dynamic_pricing.viewed.success` | success | `listTicketDynamicPricingRules` | `GET` | `/api/v1/ticketing/dynamic-pricing-rules` | TIC-票务权益 | `ticket.dynamic_pricing.view` | 接口级事件，以本附录为准 |
+| `ticket_entitlement_template.agreement_price_change_failed` | failure | `updateEntitlementTemplateAgreementPrice` | `PUT` | `/api/v1/ticketing/entitlement-templates/{id}/agreement-price` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
+| `ticket_entitlement_template.agreement_price_changed` | success | `updateEntitlementTemplateAgreementPrice` | `PUT` | `/api/v1/ticketing/entitlement-templates/{id}/agreement-price` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.archive_failed` | failure | `archiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/archive` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.archived` | success | `archiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/archive` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.changed` | success | `createEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
@@ -2468,6 +2470,7 @@
 | TIC-票务权益 | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | 核销冲正 | `ticket.verify.reverse` | `ticket.verification_reversed` / `ticket.verification_reverse_failed` | web, staff_work_phone, mobile_admin | operation 级补充 |
 | TIC-票务权益 | `simulateTicketDynamicPricing` | `POST` | `/api/v1/ticketing/dynamic-pricing/simulations` | Simulate P2 ticket dynamic pricing without creating an order | `ticket.dynamic_pricing.simulate` | `ticket_dynamic_pricing.simulated.success` / `ticket_dynamic_pricing.simulated.failure` | web | operation 级补充 |
 | TIC-票务权益 | `unarchiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/unarchive` | 取消存档权益模板 | `ticket.entitlement.manage` | `ticket_entitlement_template.unarchived` / `ticket_entitlement_template.unarchive_failed` | web | operation 级补充 |
+| TIC-票务权益 | `updateEntitlementTemplateAgreementPrice` | `PUT` | `/api/v1/ticketing/entitlement-templates/{id}/agreement-price` | 改虚拟权益签约价 | `ticket.entitlement.manage` | `ticket_entitlement_template.agreement_price_changed` / `ticket_entitlement_template.agreement_price_change_failed` | web | operation 级补充 |
 | TIC-票务权益 | `updateTicketQrRefreshConfig` | `PUT` | `/api/v1/ticketing/qr-refresh-config` | 改全场统一动态码刷新间隔 | `ticket.product.manage` | `ticket.qr_refresh_config.updated` / `ticket.qr_refresh_config.update_failed` | web | operation 级补充 |
 
 ## 6. OpenAPI 示例覆盖执行口径

@@ -97,4 +97,15 @@ public record EntitlementTemplateRecord(
                 consumptionWindow, exclusiveMerchantId, requireFacePhoto,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
     }
+
+    /**
+     * 改签约价（=内部结算价）。只动模板这一层——已发放权益/已核销记录各持自己的快照，本方法碰不到。
+     * 见 {@code TicketCatalogService#updateAgreementPrice}。
+     */
+    public EntitlementTemplateRecord withAgreementPrice(Long agreementPriceCent, Instant updatedAt) {
+        return new EntitlementTemplateRecord(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status,
+                merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
+                consumptionWindow, exclusiveMerchantId, requireFacePhoto,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+    }
 }

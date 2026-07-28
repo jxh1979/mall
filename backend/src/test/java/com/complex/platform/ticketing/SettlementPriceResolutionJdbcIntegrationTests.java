@@ -138,6 +138,64 @@ class SettlementPriceResolutionJdbcIntegrationTests {
         assertThat(settlementPrice(code)).isEqualTo(6666L); // 回退 value_amount
     }
 
+    /**
+     * 配置中心批5：改模板签约价，历史一分钱都不动。
+     *
+     * <p>这条断言的是资金安全，不是接口通不通——签约价决定平台结算给商户多少钱，
+     * 若改价能倒着改已发生的账，运营改一次价就等于篡改历史结算。四步：
+     * <ol>
+     *   <li>模板签约价 8000，从它发两张权益（A、B，快照各持 8000）。</li>
+     *   <li>先核销 A → ticket_verifications.settlement_price_cent = 8000（这笔已发生）。</li>
+     *   <li>把模板签约价改成 3000（真改成了，不是空转）。</li>
+     *   <li>断言：A 那条已核销记录仍是 8000；B（改价前已发放、改价后才核销）仍按 8000 结算。</li>
+     * </ol>
+     * 即改价只对**之后发放**的权益生效；已发放/已核销的按各自快照走。
+     */
+    @Test
+    void agreementPriceChangeDoesNotMoveAlreadyIssuedOrVerifiedSettlementMoney() {
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        String suffix = Long.toString(System.nanoTime());
+        seedDevice(suffix);
+        // 模板签约价 8000；权益 A 由 seedEntitlement 发出（快照 8000），value_amount=9999 作回退基准。
+        String codeA = seedEntitlement(suffix, "virtual", null, 8000L, 9999L);
+        String templateId = "et_" + codeA;
+        // 权益 B：同一模板、同一订单，改价前就已发放，快照同为 8000。
+        String codeB = seedSiblingEntitlement(suffix, codeA, templateId, 8000L, 9999L);
+
+        // ① 改价前先核销 A —— 这笔钱已经发生。
+        verify(suffix + "-a", codeA);
+        assertThat(settlementPrice(codeA)).isEqualTo(8000L);
+
+        // ② 把模板签约价从 8000 改到 3000。
+        ticketingService.updateEntitlementTemplateAgreementPrice(templateId,
+                new com.complex.platform.ticketing.dto.EntitlementAgreementPriceRequest(
+                        "idem-price-" + suffix, null, java.util.List.of(), 3000L, "签约价录入笔误更正"));
+        assertThat(ticketingRepository.findEntitlementTemplateById(templateId).orElseThrow().agreementPriceCent())
+                .isEqualTo(3000L); // 改价真落库了，否则下面的"没变"是假绿
+
+        // ③ 已核销的 A：结算价仍是 8000，改价没有倒着改历史账。
+        assertThat(settlementPrice(codeA)).isEqualTo(8000L);
+
+        // ④ 改价前已发放、改价后才核销的 B：仍按发放当时的 8000 结算，不是新价 3000、也不是回退面值 9999。
+        verify(suffix + "-b", codeB);
+        assertThat(settlementPrice(codeB)).isEqualTo(8000L);
+    }
+
+    /** 在既有模板/订单下再发一张权益（改价前已发放，用于验证改价后核销仍按发放时快照）。 */
+    private String seedSiblingEntitlement(String suffix, String siblingCode, String templateId,
+            Long agreementPrice, Long valueAmount) {
+        String code = "sp-code-b-" + suffix;
+        // 插队首：B 复用 A 的订单/模板，必须先清 B 的权益行，否则清 A 时删 ticket_orders 撞 FK。
+        seededCodes.add(0, code);
+        Instant now = Instant.now();
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + code, code, "tt_" + siblingCode, "order_" + siblingCode, templateId, "entry",
+                "merchant_a", null, "point_" + suffix, 1, 0, valueAmount, "active",
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
+                "virtual", agreementPrice));
+        return code;
+    }
+
     private void verify(String suffix, String code) {
         var response = ticketingService.createVerification(new VerificationRequest(
                 "idem-" + suffix, "qr", code, deviceCode, "point_" + suffix, Map.of()));
