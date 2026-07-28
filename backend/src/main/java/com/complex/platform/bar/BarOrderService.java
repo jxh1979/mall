@@ -63,6 +63,21 @@ public class BarOrderService {
     @Autowired(required = false)
     com.complex.platform.contract.ContractScopeGuard contractScopeGuard;
 
+    // P0-C/FLOW-07（V345·BAR-VOID-A1）：高价值退酒阈值改后台可配（消灭「5000 元」写死的可能）。
+    // 字段注入免改构造点（同上四例）；生产由 Spring 恒注入 JdbcBarVoidApprovalConfigRepository。
+    // 资金级 fail-closed：为 null 即拒绝受理退酒（见 requireVoidHighValueThresholdCent），
+    // 绝不静默回落硬编码阈值——回落常量正是 DEC-CFG-ALL-NUMERIC-001 要根除的东西。
+    @Autowired(required = false)
+    BarVoidApprovalConfigPort voidApprovalConfigPort;
+
+    /** BAR-VOID-A1 审批闸模式：未出品 cancel / 已出品低价值 —— 库存与账单在发起时即时生效。 */
+    static final String VOID_MODE_IMMEDIATE = "immediate";
+    /** BAR-VOID-A1 审批闸模式：已出品且超阈值 —— 先审后行，审批通过前不动库存/账单/明细。 */
+    static final String VOID_MODE_APPROVAL_FIRST = "approval_first";
+    /** 双证据之一「结构化原因码」的形态：小写字母开头的 snake_case 短码，2~32 位（非自由文本）。 */
+    private static final java.util.regex.Pattern VOID_REASON_CODE_PATTERN =
+            java.util.regex.Pattern.compile("^[a-z][a-z0-9_]{1,31}$");
+
     @Autowired
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
             AuditEventService auditEventService, TraceabilityService traceabilityService,
@@ -882,6 +897,8 @@ public class BarOrderService {
 
     // ========================================================================
     // V091 退菜退酒：未出品→直接取消明细（不计库存损耗）；已出品→退酒（可回补库存）+ 资金从账单扣减。
+    // V345 P0-C/FLOW-07（BAR-VOID-A1）：已出品且超可配阈值的高价值退酒改为「先审后行」——
+    //   审批通过前不扣库存、不改账单金额、不标 voided，因而也不进分账；低价值/未出品维持即时生效。
     // ========================================================================
     BarOrderItemVoidRecord voidOrderItem(String orderId, BarOrderItemVoidRequest request) {
         BarOrderItemVoidRequest actual = requireRequest(request);
@@ -896,13 +913,175 @@ public class BarOrderService {
         if (item.voided()) {
             throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_VOIDED", "bar order item is already voided");
         }
+        // V345：先审后行模式下明细在审批前【不】被标 voided，上面那条 already-voided 守卫拦不住
+        // 「同一明细重复发起高价值申请」——两笔 pending 各自被批 = 双倍退款 + 双倍回库。此处补守卫。
+        requireNoPendingVoid(order.id(), item.id());
         String reason = requireText(actual.reason(), "reason");
         String actorId = authorizationService.currentActor().id();
         String idempotencyKey = requireText(actual.idempotencyKey(), "idempotency_key");
         boolean wasDelivered = "delivered".equals(item.deliveryStatus());
         boolean returnToStock = wasDelivered && Boolean.TRUE.equals(actual.returnToStock());
         Instant now = Instant.now();
+        String billId = trimToNull(actual.billId());
+        List<String> evidenceAttachmentIds = safeList(actual.evidenceAttachmentIds());
+        String reasonCode = trimToNull(actual.reasonCode());
 
+        // BAR-VOID-A1：阈值后台可配（默认 5000 元），只对【已出品】计高价值；出品前 cancel 不进本判定。
+        long thresholdCent = requireVoidHighValueThresholdCent(order.merchantId());
+        boolean highValue = wasDelivered && item.amountCent() > thresholdCent;
+        String approvalMode = highValue ? VOID_MODE_APPROVAL_FIRST : VOID_MODE_IMMEDIATE;
+
+        String inventoryMovementId = null;
+        String billAdjustmentId = null;
+        Instant effectsAppliedAt = null;
+        if (highValue) {
+            // 先审后行：本次【只】落一条待审申请，库存/账单/明细一律不动（见 decideOrderItemVoid 通过后再施加）。
+            requireVoidDualEvidence(reasonCode, evidenceAttachmentIds);
+            // 资金闸不因「先审后行」丢失：账单归属/跨单守卫与「已结账单退酒须持退款高危权限」
+            // 提前到申请时校验（纯校验、零副作用），既 fail fast 又不让申请人凭退酒权限绕过退款把关。
+            preflightVoidBill(billId, item);
+        } else {
+            VoidSideEffects effects = applyVoidSideEffects(
+                    order, item, reason, actorId, idempotencyKey, returnToStock, billId, evidenceAttachmentIds, now);
+            inventoryMovementId = effects.inventoryMovementId();
+            billAdjustmentId = effects.billAdjustmentId();
+            effectsAppliedAt = now;
+        }
+
+        // 退菜退酒为高危需审批动作：流水 status 承载审批生命周期，一律落 'pending'。
+        // 二者的区别在 approvalMode：immediate=副作用已生效（审批为事后抽检，驳回则对称冲销）；
+        // approval_first=副作用尚未生效（审批通过才施加，驳回则无任何冲销可言）。
+        boolean approvalRequired = true;
+        String initialStatus = "pending";
+        BarOrderItemVoidRecord voidRecord = repository.saveOrderItemVoid(new BarOrderItemVoidRecord(
+                boundedAdjustmentId("void_", item.id() + ":" + idempotencyKey),
+                item.id(),
+                order.id(),
+                order.barId(),
+                order.merchantId(),
+                wasDelivered ? "return" : "cancel",
+                item.quantity(),
+                item.amountCent(),
+                wasDelivered,
+                returnToStock,
+                inventoryMovementId,
+                billId,
+                billAdjustmentId,
+                reason,
+                actorId,
+                approvalRequired,
+                initialStatus,
+                idempotencyKey,
+                evidenceAttachmentIds,
+                now,
+                null,
+                null,
+                null,
+                approvalMode,
+                reasonCode,
+                thresholdCent,
+                effectsAppliedAt));
+
+        auditEventService.recordSuccess(
+                "bar.order_item_voided",
+                "bar.order_item.void",
+                "bar_order_item",
+                item.id(),
+                null,
+                idempotencyKey,
+                Map.of(
+                        "order_id", order.id(),
+                        "void_type", voidRecord.voidType(),
+                        "was_delivered", wasDelivered,
+                        "return_to_stock", returnToStock,
+                        "amount_cent", item.amountCent(),
+                        "approval_mode", approvalMode,
+                        "high_value_threshold_cent", thresholdCent));
+        return voidRecord;
+    }
+
+    /**
+     * P0-C/FLOW-07（V345）取高价值退酒阈值（分）。资金级 fail-closed：配置端口缺失（仅旧构造/未注入的单测，
+     * 生产恒注入）时<b>拒绝受理退酒</b>而非回落硬编码 5000 元 —— DEC-CFG-ALL-NUMERIC-001 的落地方式。
+     *
+     * <p>projectId 取操作者的综合体 scope（平台管理员为空 = 全局默认口径），merchantId 取订单归属商户
+     * （权威、不来自请求体），与 {@code BarBillingService.requireCommissionRateBp} 取值方式一致。
+     */
+    private long requireVoidHighValueThresholdCent(String merchantId) {
+        if (voidApprovalConfigPort == null) {
+            throw ApiException.badRequest("BAR_VOID_THRESHOLD_CONFIG_UNAVAILABLE",
+                    "高价值退酒阈值配置不可用，无法受理退酒；请先在结算配置中心配置阈值并复核转正");
+        }
+        return voidApprovalConfigPort.findVoidHighValueThresholdCent(
+                authorizationService.currentProjectScopeQuietly().orElse(null), merchantId);
+    }
+
+    /**
+     * BAR-VOID-A1 双证据（仅高价值已出品退酒强制）：<b>结构化原因码</b> + <b>附件证据</b>，缺一不可。
+     * 与自由文本 reason 分开——reason 是给人看的说明，reason_code 是可聚合、可比对的机读证据项。
+     */
+    private void requireVoidDualEvidence(String reasonCode, List<String> evidenceAttachmentIds) {
+        if (reasonCode == null || !VOID_REASON_CODE_PATTERN.matcher(reasonCode).matches()) {
+            throw ApiException.badRequest("BAR_VOID_EVIDENCE_REQUIRED",
+                    "高价值已出品退酒须双证据：缺结构化原因码（reason_code 须为小写字母开头的短码，2~32 位）");
+        }
+        if (evidenceAttachmentIds.isEmpty()) {
+            throw ApiException.badRequest("BAR_VOID_EVIDENCE_REQUIRED",
+                    "高价值已出品退酒须双证据：缺附件证据（evidence_attachment_ids 不可为空）");
+        }
+    }
+
+    /** 同一明细已有待审批申请时拒绝再次发起（先审后行模式下明细不被标 voided，需本守卫兜住重复申请）。 */
+    private void requireNoPendingVoid(String orderId, String orderItemId) {
+        boolean pendingExists = repository.listOrderItemVoids(orderId).stream()
+                .anyMatch(v -> orderItemId.equals(v.orderItemId()) && "pending".equals(v.status()));
+        if (pendingExists) {
+            throw ApiException.conflict("BAR_ORDER_ITEM_VOID_PENDING_EXISTS",
+                    "该明细已有待审批的退菜退酒申请，不能重复发起");
+        }
+    }
+
+    /**
+     * 先审后行申请时的账单预检（<b>纯校验、零副作用</b>）：账单归属本单（P1-4 跨单守卫）+
+     * 已结账单退酒须持 {@code bar.bill.refund} 高危权限（C4/P1-3 退款把关不因延后生效而丢失）。
+     */
+    private void preflightVoidBill(String billId, BarOrderItemRecord item) {
+        if (billId == null || item.amountCent() <= 0) {
+            return;
+        }
+        BarBillRecord bill = repository.findBillById(billId).orElse(null);
+        if (bill == null) {
+            return;
+        }
+        checkMerchantOwnership(bill.merchantId());
+        if (!bill.orderId().equals(item.orderId())) {
+            throw ApiException.conflict("BAR_BILL_ORDER_MISMATCH", "bill does not belong to the voided item's order");
+        }
+        if ("settled".equals(bill.settlementStatus())) {
+            authorizationService.requirePermission("bar.bill.refund");
+        }
+    }
+
+    /**
+     * 退菜退酒副作用统一施加点（库存回补 + 账单减项/退款过账 + 明细标 voided）。
+     *
+     * <p>两条调用路径共用同一实现，杜绝「即时路径与审批后路径行为漂移」：
+     * <ul>
+     *   <li>{@link #voidOrderItem} 的 immediate 分支（未出品 cancel / 已出品低价值）——发起即施加；</li>
+     *   <li>{@link #decideOrderItemVoid} 的 approval_first 通过分支 —— 审批通过才施加。</li>
+     * </ul>
+     */
+    private VoidSideEffects applyVoidSideEffects(
+            BarOrderRecord order,
+            BarOrderItemRecord item,
+            String reason,
+            String actorId,
+            String idempotencyKey,
+            boolean returnToStock,
+            String billId,
+            List<String> evidenceAttachmentIds,
+            Instant now
+    ) {
         BarProductRecord product = repository.findProductById(item.productId())
                 .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
 
@@ -927,13 +1106,14 @@ public class BarOrderService {
                     item.id(),
                     null,
                     actorId,
-                    safeList(actual.evidenceAttachmentIds()),
+                    evidenceAttachmentIds,
                     "completed",
                     now));
         }
 
         // 资金：从关联账单扣减（结账前减应付 = waiver 类减项；结账后走 refund 冲正——复用既有账单调整路径）。
-        String billAdjustmentId = handleVoidBillAmount(actual, item, reason, actorId, idempotencyKey);
+        String billAdjustmentId = handleVoidBillAmount(
+                billId, evidenceAttachmentIds, item, reason, actorId, idempotencyKey);
 
         // 标记明细已撤单（保留原金额，撤单状态独立列承载，便于审计与聚合）。
         repository.saveOrderItem(new BarOrderItemRecord(
@@ -956,62 +1136,25 @@ public class BarOrderService {
                 returnToStock,
                 item.isGift(),
                 item.deliveredAt()));
+        return new VoidSideEffects(inventoryMovementId, billAdjustmentId);
+    }
 
-        // 退菜退酒为高危需审批动作：流水 status 承载审批生命周期。
-        // approvalRequired=TRUE → 落 'pending'（待审批，由审批决策回写 approved/rejected）；FALSE → 'applied'（直接生效）。
-        boolean approvalRequired = true;
-        String initialStatus = approvalRequired ? "pending" : "applied";
-        BarOrderItemVoidRecord voidRecord = repository.saveOrderItemVoid(new BarOrderItemVoidRecord(
-                boundedAdjustmentId("void_", item.id() + ":" + idempotencyKey),
-                item.id(),
-                order.id(),
-                order.barId(),
-                order.merchantId(),
-                wasDelivered ? "return" : "cancel",
-                item.quantity(),
-                item.amountCent(),
-                wasDelivered,
-                returnToStock,
-                inventoryMovementId,
-                trimToNull(actual.billId()),
-                billAdjustmentId,
-                reason,
-                actorId,
-                approvalRequired,
-                initialStatus,
-                idempotencyKey,
-                safeList(actual.evidenceAttachmentIds()),
-                now,
-                null,
-                null,
-                null));
-
-        auditEventService.recordSuccess(
-                "bar.order_item_voided",
-                "bar.order_item.void",
-                "bar_order_item",
-                item.id(),
-                null,
-                idempotencyKey,
-                Map.of(
-                        "order_id", order.id(),
-                        "void_type", voidRecord.voidType(),
-                        "was_delivered", wasDelivered,
-                        "return_to_stock", returnToStock,
-                        "amount_cent", item.amountCent()));
-        return voidRecord;
+    /** 退菜退酒副作用施加结果：本次生成的库存流水 id 与账单调整 id（未生成为 null）。 */
+    private record VoidSideEffects(String inventoryMovementId, String billAdjustmentId) {
     }
 
     /**
      * V115 / 延期项④：退菜退酒审批决策回写 + 驳回反向冲销。把 pending 流水回写为 approved（通过）
      * 或 rejected（驳回），落审批人/时点/理由，闭合“审批结果未落到 void 流水”的审计缺口。
      *
-     * <p>语义：void 设计为“先生效后审批”——库存/资金副作用在 {@link #voidOrderItem} 时已同步施加。
+     * <p>语义按 V345（BAR-VOID-A1）分两种闸，由流水 {@code approvalMode} 承载：
      * <ul>
-     *   <li><b>approved（通过）</b>：副作用已生效，审批通过即确认，无需重复施加。</li>
-     *   <li><b>rejected（驳回）</b>：该 void 无效，须把 voidOrderItem 已施加的副作用逐一对称回滚——
-     *       已回补的库存重新扣减、已减的账单项恢复、已生成的退款应付冲正，恢复到 void 前状态。
-     *       见 {@link #reverseVoidSideEffects}。</li>
+     *   <li><b>immediate</b>（未出品 cancel / 已出品低价值）——副作用在 {@link #voidOrderItem} 时已施加：
+     *     approved 即确认、无需重复施加；rejected 则把已施加的副作用逐一对称回滚（已回补的库存重新扣减、
+     *     已减的账单项恢复、已生成的退款应付冲正），见 {@link #reverseVoidSideEffects}。</li>
+     *   <li><b>approval_first</b>（已出品且超阈值的高价值退酒）——副作用<b>尚未施加</b>：
+     *     approved 时才在本方法内施加（{@link #applyVoidSideEffects}）；rejected 则申请关闭，
+     *     <b>无任何资金/库存冲销</b>（因为从未生效）——这正是 A1 相对旧「先生效后审」的价值。</li>
      * </ul>
      * 审批决策需 bar.order_item.void_decide 权限（V125 P1-2：与申请权限 bar.order_item.void 分离，
      * 杜绝自审批/自驳回）。
@@ -1033,10 +1176,35 @@ public class BarOrderService {
         String reviewReason = trimToNull(actual.reason());
         Instant now = Instant.now();
 
+        boolean approvalFirst = VOID_MODE_APPROVAL_FIRST.equals(current.approvalMode());
+        String inventoryMovementId = current.inventoryMovementId();
+        String billAdjustmentId = current.billAdjustmentId();
+        Instant effectsAppliedAt = current.effectsAppliedAt();
+
         // 延期项④：驳回 = 该 void 无效 → 对称冲销已施加的库存/账单/退款副作用，恢复 void 前状态。
         // 仅入口处由 status==pending 守卫保证幂等（再次决策被 BAR_ORDER_ITEM_VOID_NOT_PENDING 拦截，不会重复冲销）。
-        if ("rejected".equals(decision)) {
+        // V345：approval_first 从未施加副作用 → 无可冲销，驳回只关闭申请。
+        if ("rejected".equals(decision) && !approvalFirst) {
             reverseVoidSideEffects(current, reviewer, now);
+        }
+
+        // V345 A1 先审后行：审批通过才施加库存/账单/明细副作用（此前一律未动，故也从未进过分账）。
+        if ("approved".equals(decision) && approvalFirst && effectsAppliedAt == null) {
+            BarOrderRecord order = repository.findOrderById(current.orderId())
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+            BarOrderItemRecord item = repository.findOrderItemById(current.orderItemId())
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "bar order item not found"));
+            if (item.voided()) {
+                throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_VOIDED", "bar order item is already voided");
+            }
+            // 操作人一律记申请人：同一业务事件在两条路径（即时 / 审批后）留同一责任人，
+            // 审批人另由本流水的 reviewed_by_user_id 独立承载，二者不混。
+            VoidSideEffects effects = applyVoidSideEffects(
+                    order, item, current.reason(), current.requestedByUserId(), current.idempotencyKey(),
+                    current.returnToStock(), current.billId(), safeList(current.evidenceAttachmentIds()), now);
+            inventoryMovementId = effects.inventoryMovementId();
+            billAdjustmentId = effects.billAdjustmentId();
+            effectsAppliedAt = now;
         }
 
         BarOrderItemVoidRecord resolved = new BarOrderItemVoidRecord(
@@ -1050,9 +1218,9 @@ public class BarOrderService {
                 current.amountCent(),
                 current.wasDelivered(),
                 current.returnToStock(),
-                current.inventoryMovementId(),
+                inventoryMovementId,
                 current.billId(),
-                current.billAdjustmentId(),
+                billAdjustmentId,
                 current.reason(),
                 current.requestedByUserId(),
                 current.approvalRequired(),
@@ -1062,7 +1230,11 @@ public class BarOrderService {
                 current.createdAt(),
                 reviewer,
                 now,
-                reviewReason);
+                reviewReason,
+                current.approvalMode(),
+                current.reasonCode(),
+                current.highValueThresholdCent(),
+                effectsAppliedAt);
         BarOrderItemVoidRecord saved = repository.saveOrderItemVoid(resolved);
 
         auditEventService.recordSuccess(
@@ -1077,7 +1249,9 @@ public class BarOrderService {
                         "order_item_id", saved.orderItemId(),
                         "decision", decision,
                         "void_type", saved.voidType(),
-                        "amount_cent", saved.amountCent()));
+                        "amount_cent", saved.amountCent(),
+                        "approval_mode", String.valueOf(saved.approvalMode()),
+                        "effects_applied", saved.effectsAppliedAt() != null));
         return saved;
     }
 
@@ -1219,13 +1393,14 @@ public class BarOrderService {
 
     /** 退菜退酒资金回退：在关联账单上做减项（未结=waiver 减应付；已结=refund 冲正）；无账单则仅明细取消不动资金。 */
     private String handleVoidBillAmount(
-            BarOrderItemVoidRequest request,
+            String requestedBillId,
+            List<String> evidenceAttachmentIds,
             BarOrderItemRecord item,
             String reason,
             String actorId,
             String idempotencyKey
     ) {
-        String billId = trimToNull(request.billId());
+        String billId = trimToNull(requestedBillId);
         if (billId == null || item.amountCent() <= 0) {
             return null;
         }
@@ -1256,7 +1431,7 @@ public class BarOrderService {
             arApItemId = receivableLedgerService.createRefundPayable(
                     bill, refundOrder,
                     boundedAdjustmentId("bill_adjustment_void_", bill.id() + ":" + item.id() + ":" + idempotencyKey),
-                    amount, idempotencyKey, reason, safeList(request.evidenceAttachmentIds()));
+                    amount, idempotencyKey, reason, evidenceAttachmentIds);
         }
         repository.saveBill(com.complex.platform.bar.BarBillRecords.billWithAmounts(
                 bill,
@@ -1281,7 +1456,7 @@ public class BarOrderService {
                 true,
                 "applied",
                 idempotencyKey,
-                safeList(request.evidenceAttachmentIds()),
+                evidenceAttachmentIds,
                 arApItemId,
                 com.complex.platform.bar.BarBillRecords.billAdjustmentSnapshot(
                         bill, afterPayable, bill.paymentStatus(), bill.settlementStatus(), arApItemId),

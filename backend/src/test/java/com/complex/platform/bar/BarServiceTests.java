@@ -48,6 +48,26 @@ class BarServiceTests {
     private BarBillingService billingService;
     private BarOrderService barOrderService;
     private StubCommissionRateConfigPort commissionRateStub;
+    private StubVoidApprovalConfigPort voidThresholdStub;
+
+    /**
+     * P0-C/FLOW-07（V345·BAR-VOID-A1）高价值退酒阈值配置端口测试双子：阈值可改，
+     * 用于验证「阈值改配置后判定随之改变」——阈值不是写死的常量。
+     */
+    private static final class StubVoidApprovalConfigPort implements BarVoidApprovalConfigPort {
+        private long thresholdCent;
+        private String lastMerchantId;
+
+        StubVoidApprovalConfigPort(long thresholdCent) {
+            this.thresholdCent = thresholdCent;
+        }
+
+        @Override
+        public long findVoidHighValueThresholdCent(String projectId, String merchantId) {
+            lastMerchantId = merchantId;
+            return thresholdCent;
+        }
+    }
 
     /** P0-D/CFG-01（V340）提成费率配置端口测试双子：记录被问到的作用域，按角色档返回可设定的费率。 */
     private static final class StubCommissionRateConfigPort implements BarCommissionRateConfigPort {
@@ -87,6 +107,10 @@ class BarServiceTests {
         barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
                 new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
                 receivableLedgerService);
+        // P0-C/FLOW-07（V345·BAR-VOID-A1）：高价值退酒阈值改后台可配。注入「出厂种子等值」测试双子
+        // （500000 分 = 5000 元）——既有退酒用例金额均在阈值内，故一字未改仍走即时生效路径、全绿。
+        voidThresholdStub = new StubVoidApprovalConfigPort(500_000L);
+        barOrderService.voidApprovalConfigPort = voidThresholdStub;
         billingService = new BarBillingService(
                 barRepository, receivableLedgerService, authorizationService, auditEventService);
         // P0-D/CFG-01（V340）：提成率改后台可配。单测注入「出厂种子等值」测试双子（销售 1500bp / 非销售 1000bp）——
@@ -2602,7 +2626,7 @@ class BarServiceTests {
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-pending-1", "wrong item", List.of(), orderItemId, "customer changed mind", false, null));
+                "void-pending-1", "wrong item", List.of(), orderItemId, "customer changed mind", false, null, null));
 
         assertThat(voided.voidType()).isEqualTo("cancel");
         assertThat(voided.wasDelivered()).isFalse();
@@ -2636,7 +2660,7 @@ class BarServiceTests {
         long payableBefore = bill.payableAmountCent();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-return-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+                "void-return-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id(), null));
 
         assertThat(voided.voidType()).isEqualTo("return");
         assertThat(voided.wasDelivered()).isTrue();
@@ -2662,10 +2686,10 @@ class BarServiceTests {
                 List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
         service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-twice-1", "x", List.of(), orderItemId, "first", false, null));
+                "void-twice-1", "x", List.of(), orderItemId, "first", false, null, null));
 
         assertThatThrownBy(() -> service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-twice-2", "y", List.of(), orderItemId, "second", false, null)))
+                "void-twice-2", "y", List.of(), orderItemId, "second", false, null, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("BAR_ORDER_ITEM_ALREADY_VOIDED");
@@ -2684,7 +2708,7 @@ class BarServiceTests {
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-approve-1", "x", List.of(), orderItemId, "guest left", false, null));
+                "void-approve-1", "x", List.of(), orderItemId, "guest left", false, null, null));
         // 高危需审批 → 流水落待审批态。
         assertThat(voided.approvalRequired()).isTrue();
         assertThat(voided.status()).isEqualTo("pending");
@@ -2714,7 +2738,7 @@ class BarServiceTests {
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-reject-1", "x", List.of(), orderItemId, "mistake", false, null));
+                "void-reject-1", "x", List.of(), orderItemId, "mistake", false, null, null));
         assertThat(voided.status()).isEqualTo("pending");
 
         BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
@@ -2763,7 +2787,7 @@ class BarServiceTests {
 
         // void：回补库存 3→5、账单减 200000。
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-rej-reverse-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+                "void-rej-reverse-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id(), null));
         assertThat(barRepository.findStockBalance("inventory_void_rej_reverse", "bar_1"))
                 .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(5);
         assertThat(barRepository.bills.get(bill.id()).payableAmountCent()).isEqualTo(payableBeforeVoid - 200000L);
@@ -2809,7 +2833,7 @@ class BarServiceTests {
         long payableBeforeVoid = bill.payableAmountCent();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-appr-keep-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+                "void-appr-keep-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id(), null));
         // void 副作用：库存回补 5、账单减项。
         long payableAfterVoid = barRepository.bills.get(bill.id()).payableAmountCent();
         assertThat(payableAfterVoid).isEqualTo(payableBeforeVoid - 200000L);
@@ -2847,7 +2871,7 @@ class BarServiceTests {
         BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
                 "bill-void-rej-idem", "create bill", List.of(), "offline", false, 0));
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-rej-idem-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+                "void-rej-idem-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id(), null));
 
         service.decideOrderItemVoid(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-rej-idem-decide-1", "rejected", "not justified"));
@@ -2900,7 +2924,7 @@ class BarServiceTests {
 
         // void：回补库存 3→5、账单减 200000（未结 → 后续驳回走 waiver_reversal）。
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
-                "void-rej-once-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+                "void-rej-once-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id(), null));
         assertThat(barRepository.findStockBalance("inventory_void_rej_once", "bar_1"))
                 .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(5);
 
@@ -2924,6 +2948,234 @@ class BarServiceTests {
                 .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(3);
         assertThat(barRepository.billAdjustments.stream()
                 .filter(a -> "waiver_reversal".equals(a.adjustmentType())).count()).isEqualTo(1L);
+    }
+
+    // ========================================================================
+    // P0-C / FLOW-07（V345·BAR-VOID-A1）高价值已出品退酒「先审后行」
+    // 口径：仅已出品进入判定；阈值后台可配（默认 5000 元）；超阈值先审后行 + 双证据；
+    //       低于阈值即时生效不受影响。审批通过前不得扣库存、不得改账单金额、不得进分账。
+    // ========================================================================
+
+    /** 造一笔「已出品 + 已出账单」的高价值明细（单价 3000 元 × 2 = 6000 元 > 默认阈值 5000 元）。 */
+    private HighValueVoidFixture highValueDeliveredItem(String key, long unitPriceCent, int quantity) {
+        BarReservationRecord reservation = createReservation(key, "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-" + key, "create product", List.of(), "bar_1", "Vintage Champagne", "wine",
+                unitPriceCent, null, null, "active", "inventory_" + key, "bar_1", true));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-" + key, "inventory_" + key, "bar_1", 5, 0, 5, Instant.now()));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-" + key, "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", quantity)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-" + key, "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", quantity)), "staff_1", List.of("att1")));
+        BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
+                "bill-" + key, "create bill", List.of(), "offline", false, 0));
+        return new HighValueVoidFixture(order, orderItemId, bill,
+                barRepository.findStockBalance("inventory_" + key, "bar_1").orElseThrow().quantity(),
+                "inventory_" + key);
+    }
+
+    private record HighValueVoidFixture(BarOrderRecord order, String orderItemId, BarBillRecord bill,
+                                        int stockAfterDelivery, String inventoryItemId) {
+    }
+
+    @Test
+    void highValueDeliveredVoidStaysPendingWithoutTouchingStockBillOrItem() {
+        HighValueVoidFixture f = highValueDeliveredItem("void-highvalue-hold", 300_000L, 2);
+        long payableBefore = f.bill().payableAmountCent();
+        int adjustmentsBefore = barRepository.billAdjustments.size();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-highvalue-hold-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect"));
+
+        assertThat(voided.voidType()).isEqualTo("return");
+        assertThat(voided.approvalMode()).isEqualTo("approval_first");
+        assertThat(voided.status()).isEqualTo("pending");
+        assertThat(voided.highValueThresholdCent()).isEqualTo(500_000L);
+        assertThat(voided.effectsAppliedAt()).isNull();
+        // 🔴 先审后行三不动：库存不动、账单金额不动、明细不标 voided（因而也没有任何减项进分账）。
+        assertThat(barRepository.findStockBalance(f.inventoryItemId(), "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(f.stockAfterDelivery());
+        assertThat(barRepository.bills.get(f.bill().id()).payableAmountCent()).isEqualTo(payableBefore);
+        assertThat(barRepository.billAdjustments).hasSize(adjustmentsBefore);
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isFalse();
+        assertThat(barRepository.orderItems.get(f.orderItemId()).deliveryStatus()).isEqualTo("delivered");
+        assertThat(voided.inventoryMovementId()).isNull();
+        assertThat(voided.billAdjustmentId()).isNull();
+        assertThat(barRepository.stockMovements.stream().noneMatch(m -> "inbound".equals(m.movementType()))).isTrue();
+    }
+
+    @Test
+    void highValueDeliveredVoidAppliesStockAndBillOnlyAfterApproval() {
+        HighValueVoidFixture f = highValueDeliveredItem("void-highvalue-approve", 300_000L, 2);
+        long payableBefore = f.bill().payableAmountCent();
+        BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-highvalue-approve-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect"));
+
+        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("decide-highvalue-approve", "approved", "supervisor ok"));
+
+        assertThat(decided.status()).isEqualTo("approved");
+        assertThat(decided.effectsAppliedAt()).isNotNull();
+        // 审批通过后才动：库存回补、账单减项、明细标 voided。
+        assertThat(barRepository.findStockBalance(f.inventoryItemId(), "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(f.stockAfterDelivery() + 2);
+        assertThat(barRepository.bills.get(f.bill().id()).payableAmountCent())
+                .isEqualTo(payableBefore - 600_000L);
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isTrue();
+        assertThat(decided.billAdjustmentId()).isNotNull();
+        assertThat(decided.inventoryMovementId()).isNotNull();
+        assertThat(barRepository.billAdjustments.stream()
+                .filter(a -> "waiver".equals(a.adjustmentType())).count()).isEqualTo(1L);
+    }
+
+    @Test
+    void highValueDeliveredVoidRejectionLeavesMoneyAndStockUntouchedWithNoReversal() {
+        HighValueVoidFixture f = highValueDeliveredItem("void-highvalue-reject", 300_000L, 2);
+        long payableBefore = f.bill().payableAmountCent();
+        BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-highvalue-reject-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect"));
+
+        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("decide-highvalue-reject", "rejected", "证据不足"));
+
+        assertThat(decided.status()).isEqualTo("rejected");
+        assertThat(decided.effectsAppliedAt()).isNull();
+        // 从未生效 → 没有正向减项、也没有任何冲销（这正是 A1 相对旧「先生效后审」的价值）。
+        assertThat(barRepository.bills.get(f.bill().id()).payableAmountCent()).isEqualTo(payableBefore);
+        assertThat(barRepository.findStockBalance(f.inventoryItemId(), "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(f.stockAfterDelivery());
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isFalse();
+        assertThat(barRepository.billAdjustments.stream()
+                .noneMatch(a -> a.adjustmentType().contains("waiver") || a.adjustmentType().contains("refund")))
+                .isTrue();
+    }
+
+    @Test
+    void lowValueDeliveredVoidTakesEffectImmediatelyWithoutWaitingForApproval() {
+        // A1 明确允许低价值即时生效：不能一刀切全拦。单价 1000 元 × 2 = 2000 元 ≤ 5000 元阈值。
+        HighValueVoidFixture f = highValueDeliveredItem("void-lowvalue-now", 100_000L, 2);
+        long payableBefore = f.bill().payableAmountCent();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-lowvalue-now-1", "ops", List.of(), f.orderItemId(), "guest changed mind", true,
+                f.bill().id(), null));
+
+        assertThat(voided.approvalMode()).isEqualTo("immediate");
+        assertThat(voided.effectsAppliedAt()).isNotNull();
+        assertThat(barRepository.bills.get(f.bill().id()).payableAmountCent())
+                .isEqualTo(payableBefore - 200_000L);
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isTrue();
+        assertThat(barRepository.findStockBalance(f.inventoryItemId(), "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(f.stockAfterDelivery() + 2);
+    }
+
+    @Test
+    void voidHighValueThresholdIsConfigurableSoClassificationFollowsTheConfig() {
+        // 阈值不是写死的 5000 元：把阈值调低到 1000 元后，同样一笔 2000 元退酒改判为高价值 → 先审后行。
+        voidThresholdStub.thresholdCent = 100_000L;
+        HighValueVoidFixture f = highValueDeliveredItem("void-threshold-config", 100_000L, 2);
+        long payableBefore = f.bill().payableAmountCent();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-threshold-config-1", "ops", List.of("att-void-photo"), f.orderItemId(),
+                "guest changed mind", true, f.bill().id(), "guest_request"));
+
+        assertThat(voided.approvalMode()).isEqualTo("approval_first");
+        assertThat(voided.highValueThresholdCent()).isEqualTo(100_000L);
+        assertThat(barRepository.bills.get(f.bill().id()).payableAmountCent()).isEqualTo(payableBefore);
+        // 阈值抬到 5 万元：同一笔金额回到低价值即时生效路径。
+        voidThresholdStub.thresholdCent = 5_000_000L;
+        HighValueVoidFixture g = highValueDeliveredItem("void-threshold-config-2", 100_000L, 2);
+        BarOrderItemVoidRecord immediate = service.voidOrderItem(g.order().id(), new BarOrderItemVoidRequest(
+                "void-threshold-config-2-1", "ops", List.of(), g.orderItemId(),
+                "guest changed mind", true, g.bill().id(), null));
+        assertThat(immediate.approvalMode()).isEqualTo("immediate");
+    }
+
+    @Test
+    void highValueVoidWithoutStructuredReasonCodeIsRejected() {
+        HighValueVoidFixture f = highValueDeliveredItem("void-noreasoncode", 300_000L, 2);
+
+        assertThatThrownBy(() -> service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-noreasoncode-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_VOID_EVIDENCE_REQUIRED");
+    }
+
+    @Test
+    void highValueVoidWithoutAttachmentEvidenceIsRejected() {
+        HighValueVoidFixture f = highValueDeliveredItem("void-noattachment", 300_000L, 2);
+
+        assertThatThrownBy(() -> service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-noattachment-1", "quality issue", List.of(), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_VOID_EVIDENCE_REQUIRED");
+        // 双证据缺一即拒 → 库存/账单一律未动。
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isFalse();
+    }
+
+    @Test
+    void duplicatePendingHighValueVoidRequestOnSameItemIsRejected() {
+        HighValueVoidFixture f = highValueDeliveredItem("void-duplicate-pending", 300_000L, 2);
+        service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-duplicate-pending-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect"));
+
+        // 先审后行模式下明细未被标 voided，若无守卫则可重复申请 → 两笔各自被批 = 双倍退款 + 双倍回库。
+        assertThatThrownBy(() -> service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-duplicate-pending-2", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_ORDER_ITEM_VOID_PENDING_EXISTS");
+    }
+
+    @Test
+    void undeliveredCancelIsNeverApprovalFirstEvenAboveThreshold() {
+        // A1「只审已出品」：出品前 cancel 即便金额高于阈值也不强制先审后行。
+        BarReservationRecord reservation = createReservation("void-cancel-highamount", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-cancel-highamount", "create product", List.of(), "bar_1", "Vintage", "wine",
+                800_000L, null, null, "active", null, null, false));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-cancel-highamount", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-cancel-highamount-1", "ops", List.of(), orderItemId, "wrong order", false, null, null));
+
+        assertThat(voided.voidType()).isEqualTo("cancel");
+        assertThat(voided.approvalMode()).isEqualTo("immediate");
+        assertThat(voided.effectsAppliedAt()).isNotNull();
+        assertThat(barRepository.orderItems.get(orderItemId).voided()).isTrue();
+    }
+
+    @Test
+    void voidIsRefusedWhenThresholdConfigPortIsUnavailable() {
+        // 零硬编码 fail-closed：阈值配置端口缺失时拒绝受理退酒，绝不静默回落 5000 元常量。
+        barOrderService.voidApprovalConfigPort = null;
+        HighValueVoidFixture f = highValueDeliveredItem("void-config-missing", 300_000L, 2);
+
+        assertThatThrownBy(() -> service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-config-missing-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_VOID_THRESHOLD_CONFIG_UNAVAILABLE");
     }
 
     @Test

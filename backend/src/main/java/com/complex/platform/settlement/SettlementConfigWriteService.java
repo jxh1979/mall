@@ -7,6 +7,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.settlement.JdbcSettlementConfigWriteRepository.SingleRowConfig;
 import com.complex.platform.settlement.JdbcSettlementConfigWriteRepository.TierRow;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.BarVoidThresholdRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ChannelFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscountRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
@@ -42,7 +43,7 @@ public class SettlementConfigWriteService {
     private static final Set<String> SCOPE_SENTINELS = Set.of("__DEFAULT__", "__ANY__", "__ALL__");
     /** V340 全局默认种子行 id(禁止软删;见 {@link #rejectDefaultSeedArchive})。 */
     private static final Set<String> DEFAULT_SEED_IDS =
-            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default");
+            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default", "bvac_default");
 
     private final JdbcSettlementConfigWriteRepository writeRepository;
     private final RevenueStreamAttributionRepository attributionRepository;
@@ -213,6 +214,29 @@ public class SettlementConfigWriteService {
                         "amount_cent_per_point", String.valueOf(unit)));
     }
 
+    /**
+     * V345（P0-C/FLOW-07·BAR-VOID-A1）高价值退酒审批阈值落草案：项目 × 商户，单位分。
+     * 出厂种子 500000（5000 元）；此处只写草案，复核转正后酒吧退酒判定才读到。
+     * 阈值 0 = 所有已出品退酒都算高价值（全部先审后行），业务上合法故放行；负数拒绝。
+     */
+    public void saveBarVoidThreshold(BarVoidThresholdRequest request, String actorId) {
+        BarVoidThresholdRequest req = requireRequest(request);
+        String idem = requireText(req.idempotencyKey(), "idempotency_key");
+        rejectSentinel(req.projectId(), "project_id");
+        rejectSentinel(req.merchantId(), "merchant_id");
+        Long threshold = req.highValueThresholdCent();
+        if (threshold == null || threshold < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "high_value_threshold_cent must be >= 0");
+        }
+        String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId());
+        String landedId = writeRepository.upsertBarVoidThresholdDraft(draftId("bvac_d_", scopeKey, idem),
+                req.projectId(), req.merchantId(), threshold, actorId);
+        audit("settlement.config.bar_void_approval_configs.updated",
+                "bar_void_approval_configs", landedId, idem,
+                Map.of("project_scope", defaultScope(req.projectId()), "merchant_id", anyScope(req.merchantId()),
+                        "high_value_threshold_cent", String.valueOf(threshold)));
+    }
+
     public void saveRankTiers(RankTiersRequest request, String actorId) {
         RankTiersRequest req = requireRequest(request);
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
@@ -327,7 +351,8 @@ public class SettlementConfigWriteService {
                 rows = attributionRepository.softDelete(targetId, reason, actorId, now);
             }
             // V340:提成费率 / 积分累计率的商户级特例条目可下线(回落项目/全局默认);全局默认种子受守卫保护。
-            case "commission_rate", "points_accrual_rate" -> {
+            // V345:高价值退酒阈值的商户级特例条目同理可下线(回落项目/全局默认);全局默认种子受守卫保护。
+            case "commission_rate", "points_accrual_rate", "bar_void_threshold" -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 table = cfg.table();
                 rejectDefaultSeedArchive(targetId);

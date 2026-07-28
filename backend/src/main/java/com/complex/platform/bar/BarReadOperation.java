@@ -15,7 +15,10 @@ enum BarReadOperation implements AuditedOperation {
     LIST_BILL_OPERATIONS("bar.bill_operations.viewed", "bar.bill_operations.view_failed", "bar.bill.split_merge", "bar_bill_operation"),
     LIST_TABLES_WITHOUT_SPACE("bar.table_space_backlog.viewed", "bar.table_space_backlog.view_failed", "bar.table.manage", "bar_table"),
     LIST_SHIFTS("bar.shift.viewed", "bar.shift.view_failed", "bar.shift.manage", "bar_shift"),
-    LIST_GIFT_REDEMPTIONS("bar.entitlement_redemption.viewed", "bar.entitlement_redemption.view_failed", "bar.entitlement.read", "bar_gift_redemption");
+    LIST_GIFT_REDEMPTIONS("bar.entitlement_redemption.viewed", "bar.entitlement_redemption.view_failed", "bar.entitlement.read", "bar_gift_redemption"),
+    // V345 退酒审批待审队列：凭 bar.order_item.void(退菜退酒域权限)可看，申请人看自己申请的状态、
+    // 主管在审批前看清单;真正的审批动作另需 bar.order_item.void_decide(V125 已分离),读写权限不混。
+    LIST_ORDER_ITEM_VOIDS("bar.order_item_void.viewed", "bar.order_item_void.view_failed", "bar.order_item.void", "bar_order_item_void");
 
     private final String successEvent;
     private final String failureEvent;
