@@ -189,6 +189,8 @@ final class JdbcIntegrationRowMapper {
                 resultSet.getString("resolution_note"),
                 readMap(resultSet.getString("provider_payload_json")),
                 readStringList(resultSet.getString("evidence_attachment_ids")),
+                resultSet.getString("amount_source"),
+                resultSet.getString("registered_by_user_id"),
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at")
         );

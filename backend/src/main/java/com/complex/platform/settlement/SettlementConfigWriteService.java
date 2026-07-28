@@ -281,7 +281,13 @@ public class SettlementConfigWriteService {
 
     // ================= §3 复核转正(差人守卫 + Path 2 软替换)=================
 
-    /** 单行/归属/归因规则草案转正泛化(configType 白名单,不含 giveaway);差人守卫 + 资金级前态守卫。 */
+    /**
+     * 单行/归属/归因规则草案转正泛化(configType 白名单,不含 giveaway);差人守卫 + 资金级前态守卫。
+     *
+     * <p>V346(P0-E)新增 {@code turnover_rent_rule}(营业额抽成规则):写面在
+     * {@code FinanceService.createTurnoverRentRule}(落草案),转正走本方法 default 分支——
+     * 同 contract_id + merchant_id 的旧生效规则软替换为 inactive,草案翻为生效,起草人不得自审。
+     */
     public void activateDraft(String configType, String id, String actorId) {
         String type = requireText(configType, "config_type");
         String draftId = requireText(id, "id");
@@ -326,7 +332,8 @@ public class SettlementConfigWriteService {
 
     /**
      * 软删:status→inactive + archive_reason;差人守卫。
-     * 白名单 = merchant_rate / revenue_stream_attribution(批1)+ commission_rate / points_accrual_rate(V340)。
+     * 白名单 = merchant_rate / revenue_stream_attribution(批1)+ commission_rate / points_accrual_rate(V340)
+     * + turnover_rent_rule(V346·P0-E 营业额抽成规则)。
      *
      * <p>V340 两类必须可软删的理由:提成率/积分累计率一旦落了<b>商户级特例</b>行,该商户就永久被特例遮挡、
      * 再也回落不到项目/全局默认口径(改回同值只是又一条特例行)。软删 = 该特例下线、商户回落默认,且留档可追溯。
@@ -352,7 +359,8 @@ public class SettlementConfigWriteService {
             }
             // V340:提成费率 / 积分累计率的商户级特例条目可下线(回落项目/全局默认);全局默认种子受守卫保护。
             // V345:高价值退酒阈值的商户级特例条目同理可下线(回落项目/全局默认);全局默认种子受守卫保护。
-            case "commission_rate", "points_accrual_rate", "bar_void_threshold" -> {
+            // V346(P0-E):营业额抽成规则可下线(合同终止/换规则),下线后该合同回落"无抽成规则"=不产生抽成应收。
+            case "commission_rate", "points_accrual_rate", "bar_void_threshold", "turnover_rent_rule" -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 table = cfg.table();
                 rejectDefaultSeedArchive(targetId);

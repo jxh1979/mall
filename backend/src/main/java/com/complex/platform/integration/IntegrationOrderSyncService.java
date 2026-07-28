@@ -375,6 +375,9 @@ final class IntegrationOrderSyncService {
                     null,
                     autoReconcilePayload(channel, draft),
                     List.of(),
+                    // P0-E：自动对账两侧金额均系统取数（平台侧=批次期望明细、第三方侧=回流），无人工登记人。
+                    "system",
+                    null,
                     now,
                     now
             );

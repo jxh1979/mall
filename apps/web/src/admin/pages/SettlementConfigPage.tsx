@@ -100,10 +100,19 @@ const GROUP_LABELS: Record<string, string> = {
   attribution_rule: "收入归因规则",
   commission_rate: "卡座提成费率",
   points_accrual_rate: "积分累计率",
+  // V346（P0-E）：营业额抽成规则在「合同工作台」填写并落草案，在此复核转正后才对结算生效。
+  turnover_rent_rule: "营业额抽成规则",
 };
 // 支持「下线」（软删）的草案类型，对齐后端 archive 白名单。
 // V340 提成/积分：商户级特例条目须可下线，否则该商户被特例永久遮挡、回落不到项目/全局默认口径。
-const ARCHIVABLE = new Set(["merchant_rate", "revenue_stream_attribution", "commission_rate", "points_accrual_rate"]);
+// V346 抽成规则：合同终止/换规则时须可下线，下线后该合同不再产生抽成应收。
+const ARCHIVABLE = new Set([
+  "merchant_rate",
+  "revenue_stream_attribution",
+  "commission_rate",
+  "points_accrual_rate",
+  "turnover_rent_rule",
+]);
 
 type TierRow = { rankFrom: string; rankTo: string; shareBps: string };
 type Form = {

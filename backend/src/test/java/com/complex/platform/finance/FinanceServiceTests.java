@@ -1527,6 +1527,63 @@ class FinanceServiceTests {
         assertThat(item.amountCent()).isEqualTo(80000L);
     }
 
+    // ─── P0-E（v7 审计）抽成规则草案闸 ────────────────────────────────────────
+
+    private com.complex.platform.finance.dto.TurnoverRentRuleRequest turnoverRuleRequest(String idempotencyKey) {
+        return new com.complex.platform.finance.dto.TurnoverRentRuleRequest(
+                idempotencyKey, "note", List.of(), "ct_p0e", "merchant_1", "阶梯提成规则",
+                10000L, LocalDate.parse("2026-08-01"), null,
+                List.of(new com.complex.platform.finance.dto.TurnoverRentRuleRequest.TierInput(null, 500)));
+    }
+
+    @Test
+    void p0eTurnoverRentRuleLandsAsDraftAndCannotBeBilledBeforeActivation() {
+        TurnoverRentRuleRecord rule = service.createTurnoverRentRule(turnoverRuleRequest("trr-p0e-draft"));
+
+        // 建规则只落草案（不进结算）。
+        assertThat(financeRepository.isTurnoverRentRuleDraft(rule.id())).isTrue();
+
+        financeRepository.reflowTurnoverByMerchant.put("merchant_1", 1000000L);
+        // 草案规则不得计费 —— 单人改动不经转正绝不生效。
+        assertThatThrownBy(() -> service.billTurnoverRent(new com.complex.platform.finance.dto.TurnoverRentBillRequest(
+                "bill-p0e-draft", "note", List.of(), rule.id(),
+                LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-31"), LocalDate.parse("2026-09-10"))))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("TURNOVER_RENT_RULE_NOT_ACTIVATED");
+    }
+
+    @Test
+    void p0eTurnoverRentRuleBillsOnlyAfterActivation() {
+        TurnoverRentRuleRecord rule = service.createTurnoverRentRule(turnoverRuleRequest("trr-p0e-activated"));
+        financeRepository.reflowTurnoverByMerchant.put("merchant_1", 1000000L);
+
+        // 复核转正后（配置中心 activateDraft），同一规则才可计费：1,000,000 × 5% = 50000，高于保底 10000。
+        financeRepository.activateTurnoverRule(rule.id());
+        ArApItemRecord item = service.billTurnoverRent(new com.complex.platform.finance.dto.TurnoverRentBillRequest(
+                "bill-p0e-activated", "note", List.of(), rule.id(),
+                LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-31"), LocalDate.parse("2026-09-10")));
+
+        assertThat(item.sourceType()).isEqualTo("turnover_rent");
+        assertThat(item.amountCent()).isEqualTo(50000L);
+    }
+
+    @Test
+    void p0eArchivedTurnoverRentRuleCannotBeBilled() {
+        // 软删（下线）后的规则不得计费。
+        financeRepository.turnoverRentRules.put("rule_archived", new TurnoverRentRuleRecord(
+                "rule_archived", "ct_p0e", "merchant_1", "已下线规则", 500, 10000L, null,
+                LocalDate.parse("2026-01-01"), null, "inactive", Instant.now()));
+        financeRepository.reflowTurnoverByMerchant.put("merchant_1", 1000000L);
+
+        assertThatThrownBy(() -> service.billTurnoverRent(new com.complex.platform.finance.dto.TurnoverRentBillRequest(
+                "bill-p0e-archived", "note", List.of(), "rule_archived",
+                LocalDate.parse("2026-08-01"), LocalDate.parse("2026-08-31"), LocalDate.parse("2026-09-10"))))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("TURNOVER_RENT_RULE_NOT_ACTIVE");
+    }
+
     // ─── P1#14 保证金四动作台账 ───────────────────────────────────────────────
 
     @Test
@@ -2120,9 +2177,49 @@ class FinanceServiceTests {
         private final Map<String, Long> reflowTurnoverByMerchant = new LinkedHashMap<>();
         private final List<DepositLedgerRecord> depositLedger = new ArrayList<>();
 
+        // P0-E：抽成规则草案闸——落草案的规则 id 记在这里，isTurnoverRentRuleDraft 据此判定（对齐真库 is_draft 列）。
+        private final java.util.Set<String> draftTurnoverRuleIds = new java.util.LinkedHashSet<>();
+
         @Override
         public Optional<TurnoverRentRuleRecord> findTurnoverRentRuleById(String id) {
             return Optional.ofNullable(turnoverRentRules.get(id));
+        }
+
+        @Override
+        public TurnoverRentRuleRecord saveTurnoverRentRule(TurnoverRentRuleRecord rule) {
+            turnoverRentRules.put(rule.id(), rule);
+            return rule;
+        }
+
+        @Override
+        public TurnoverRentRuleRecord saveTurnoverRentRuleDraft(TurnoverRentRuleRecord rule, String updatedBy) {
+            turnoverRentRules.put(rule.id(), rule);
+            draftTurnoverRuleIds.add(rule.id());
+            return rule;
+        }
+
+        @Override
+        public boolean isTurnoverRentRuleDraft(String id) {
+            return draftTurnoverRuleIds.contains(id);
+        }
+
+        /** 测试用：模拟配置中心复核转正（草案翻生效）。 */
+        void activateTurnoverRule(String id) {
+            draftTurnoverRuleIds.remove(id);
+        }
+
+        // 阶梯档位：真库里挂 turnover_rent_rule_tiers，双子里按 ruleId 分组存，令阶梯计费口径可被单测覆盖。
+        private final Map<String, List<TurnoverRentRuleTierRecord>> turnoverRentRuleTiers = new LinkedHashMap<>();
+
+        @Override
+        public TurnoverRentRuleTierRecord saveTurnoverRentRuleTier(TurnoverRentRuleTierRecord tier) {
+            turnoverRentRuleTiers.computeIfAbsent(tier.ruleId(), key -> new ArrayList<>()).add(tier);
+            return tier;
+        }
+
+        @Override
+        public List<TurnoverRentRuleTierRecord> listTurnoverRentRuleTiers(String ruleId) {
+            return List.copyOf(turnoverRentRuleTiers.getOrDefault(ruleId, List.of()));
         }
 
         @Override

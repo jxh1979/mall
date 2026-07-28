@@ -221,13 +221,18 @@ public class IntegrationController {
         return ApiResponse.ok(service.listReconciliationDifferences());
     }
 
+    /**
+     * 登记对账差异。P0-E：金额一律系统取数（第三方侧取回流聚合、平台侧本域无取数源恒 0），
+     * 请求体带任何金额字段一律 400；登记结果强制进复核态 needs_review。
+     */
     @PostMapping("/reconciliation/differences")
     public ApiResponse<ReconciliationDifferenceRecord> createReconciliationDifference(@RequestBody @jakarta.validation.Valid ReconciliationDifferenceRequest request) {
         authorizationService.requirePermission(RECONCILIATION_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createReconciliationDifference(request));
+        return ApiResponse.ok(service.createReconciliationDifference(request, authorizationService.currentActor().id()));
     }
 
+    /** 复核（处置）对账差异。P0-E：登记人不得自审（actor 取会话，不采信请求体 operator_user_id）。 */
     @PostMapping("/reconciliation/differences/{id}/resolve")
     public ApiResponse<ReconciliationDifferenceRecord> resolveReconciliationDifference(
             @PathVariable String id,
@@ -235,7 +240,7 @@ public class IntegrationController {
     ) {
         authorizationService.requirePermission(RECONCILIATION_RESOLVE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.resolveReconciliationDifference(id, request));
+        return ApiResponse.ok(service.resolveReconciliationDifference(id, request, authorizationService.currentActor().id()));
     }
 
     @PostMapping("/reconciliation/channel-auto")
