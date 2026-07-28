@@ -17,7 +17,7 @@ const RESOLVE_PERM = ["finance.reconciliation.resolve"];
 
 const TEXT = {
   title: "对账差异",
-  description: "查看对账批次和差异；对选中差异填原因+附件后可正式关闭（调用后端 close 接口，落库+进审计）。",
+  description: "查看对账批次和差异；对选中差异填原因+附件后可正式关闭（调用后端 close 接口，落库+进审计）。差异金额一律由系统取数，本页与后端均不提供任何手工填写金额的入口。",
   evidence: "接口证据：读取 batches/differences；正式关闭调用 POST /api/v1/finance/reconciliation/differences/{id}/close。",
   loadFailed: "对账数据读取失败",
   noDiff: "当前没有可复核差异。",
@@ -242,6 +242,10 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
   return (
     <section data-testid="reconciliation-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
+      {/* P0-E 对账旁路手填封堵：把「金额只能系统取数」写在页面上，避免有人再去找手填入口。 */}
+      <div className="admin-state" data-testid="reconciliation-no-manual-notice">
+        对账金额口径：平台侧与第三方侧金额<strong>全部由系统取数</strong>，任何角色都不能手工填写或修改。第三方对账单缺数时，只能「登记差异」并进复核，由另一位同事复核处置——登记人不能自审。
+      </div>
       <TechDetails><div className="admin-generic-evidence" data-testid="reconciliation-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="finance.reconciliation_batch.viewed / finance_reconciliation.difference_found / local.manual_review_logged" />
       <AdminDataState loading={loading} error={error} empty={batches.length === 0 && differences.length === 0} onRetry={reload}>

@@ -92,10 +92,11 @@ class IntegrationServiceTests {
         ));
     }
 
-    @Test
-    void p1ReconciliationDifferenceAmountIsComputedServerSideIgnoringRequestValue() {
-        ReconciliationBatchRecord batch = service.createReconciliationBatch(new ReconciliationBatchRequest(
-                "batch-for-diff-amount-test",
+    // ─── P0-E（v7 审计）对账旁路手填封堵 ────────────────────────────────────────
+
+    private ReconciliationBatchRecord seedReconciliationBatch(String idempotencyKey) {
+        return service.createReconciliationBatch(new ReconciliationBatchRequest(
+                idempotencyKey,
                 "batch note",
                 List.of(),
                 "mock-provider",
@@ -107,25 +108,146 @@ class IntegrationServiceTests {
                 1,
                 100L
         ));
+    }
 
-        // Caller passes wrong differenceAmountCent=999; server must compute Math.abs(128800-128700)=100
-        ReconciliationDifferenceRecord difference = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
-                "diff-for-amount-test",
-                "diff note",
+    private void seedProviderReflow(String idempotencyKey, String externalBusinessId, long amountCent) {
+        service.createOrderSync(new IntegrationOrderSyncRequest(
+                idempotencyKey,
+                "record catering order",
                 List.of(),
-                batch.id(),
                 "mock-provider",
                 "catering",
-                "ext-order-1",
-                "amount_mismatch",
-                128800L,
-                128700L,
-                999L,
+                "order",
+                externalBusinessId,
+                "synced",
+                amountCent,
+                "CNY",
+                "meituan",
+                "mt-" + externalBusinessId,
                 null,
                 Map.of()
         ));
+    }
 
-        assertThat(difference.differenceAmountCent()).isEqualTo(100L);
+    private ReconciliationDifferenceRequest registrationRequest(
+            String idempotencyKey, String batchId, String externalBusinessId,
+            Long internal, Long provider, Long difference) {
+        return new ReconciliationDifferenceRequest(
+                idempotencyKey,
+                "diff note",
+                List.of(),
+                batchId,
+                "mock-provider",
+                "catering",
+                externalBusinessId,
+                "amount_mismatch",
+                internal,
+                provider,
+                difference,
+                null,
+                Map.of()
+        );
+    }
+
+    @Test
+    void p0eReconciliationDifferenceRejectsManuallyFilledAmounts() {
+        ReconciliationBatchRecord batch = seedReconciliationBatch("batch-p0e-manual-amount");
+        seedProviderReflow("sync-p0e-manual", "ext-order-manual", 128700L);
+
+        // 平台侧金额手填 → 拒（旁路封堵的核心断言）。
+        assertThatThrownBy(() -> service.createReconciliationDifference(
+                registrationRequest("diff-p0e-manual-internal", batch.id(), "ext-order-manual", 128800L, null, null),
+                "ops_1"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("RECONCILIATION_MANUAL_AMOUNT_FORBIDDEN");
+
+        // 第三方侧金额手填 → 拒。
+        assertThatThrownBy(() -> service.createReconciliationDifference(
+                registrationRequest("diff-p0e-manual-provider", batch.id(), "ext-order-manual", null, 128700L, null),
+                "ops_1"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("RECONCILIATION_MANUAL_AMOUNT_FORBIDDEN");
+
+        // 差额手填 → 拒。
+        assertThatThrownBy(() -> service.createReconciliationDifference(
+                registrationRequest("diff-p0e-manual-diff", batch.id(), "ext-order-manual", null, null, 999L),
+                "ops_1"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("RECONCILIATION_MANUAL_AMOUNT_FORBIDDEN");
+    }
+
+    @Test
+    void p0eReconciliationDifferenceRejectsRegistrationWithoutSystemTakings() {
+        ReconciliationBatchRecord batch = seedReconciliationBatch("batch-p0e-no-takings");
+
+        // 该外部单号第三方毫无回流 → 纯手填差异无处可生，直接拒。
+        assertThatThrownBy(() -> service.createReconciliationDifference(
+                registrationRequest("diff-p0e-no-takings", batch.id(), "ext-order-ghost", null, null, null),
+                "ops_1"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("RECONCILIATION_NO_SYSTEM_TAKINGS");
+    }
+
+    @Test
+    void p0eReconciliationDifferenceUsesSystemTakingsAndForcesReview() {
+        ReconciliationBatchRecord batch = seedReconciliationBatch("batch-p0e-system");
+        seedProviderReflow("sync-p0e-system", "ext-order-system", 128700L);
+
+        ReconciliationDifferenceRecord difference = service.createReconciliationDifference(
+                registrationRequest("diff-p0e-system", batch.id(), "ext-order-system", null, null, null),
+                "ops_1");
+
+        // 第三方侧 = 系统取数；平台侧本域无取数源恒 0；差额 = 两者之差。
+        assertThat(difference.providerAmountCent()).isEqualTo(128700L);
+        assertThat(difference.internalAmountCent()).isZero();
+        assertThat(difference.differenceAmountCent()).isEqualTo(128700L);
+        // 人工登记强制进复核 + 留登记人。
+        assertThat(difference.status()).isEqualTo("needs_review");
+        assertThat(difference.amountSource()).isEqualTo("manual_registration");
+        assertThat(difference.registeredByUserId()).isEqualTo("ops_1");
+    }
+
+    @Test
+    void p0eReconciliationDifferenceRegistrantCannotSelfReview() {
+        ReconciliationBatchRecord batch = seedReconciliationBatch("batch-p0e-self-review");
+        seedProviderReflow("sync-p0e-self-review", "ext-order-self-review", 50000L);
+        ReconciliationDifferenceRecord difference = service.createReconciliationDifference(
+                registrationRequest("diff-p0e-self-review", batch.id(), "ext-order-self-review", null, null, null),
+                "ops_1");
+
+        ReconciliationDifferenceResolveRequest resolveRequest = new ReconciliationDifferenceResolveRequest(
+                "resolve-p0e-self-review",
+                "resolved",
+                List.of("att-diff"),
+                "ops_1",
+                "resolved",
+                "自审企图");
+
+        // 登记人自己复核 → 403。
+        assertThatThrownBy(() -> service.resolveReconciliationDifference(difference.id(), resolveRequest, "ops_1"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("SELF_REVIEW_FORBIDDEN");
+
+        // 换一位同事复核 → 通过，且金额不因复核而改变。
+        ReconciliationDifferenceRecord resolved = service.resolveReconciliationDifference(
+                difference.id(),
+                new ReconciliationDifferenceResolveRequest(
+                        "resolve-p0e-self-review-2",
+                        "resolved",
+                        List.of("att-diff"),
+                        "ops_2",
+                        "resolved",
+                        "复核通过"),
+                "ops_2");
+        assertThat(resolved.status()).isEqualTo("resolved");
+        assertThat(resolved.providerAmountCent()).isEqualTo(50000L);
+        assertThat(resolved.internalAmountCent()).isZero();
+        assertThat(resolved.registeredByUserId()).isEqualTo("ops_1");
     }
 
     @Test
@@ -583,6 +705,7 @@ class IntegrationServiceTests {
                 1,
                 100L
         ));
+        // P0-E：登记差异不带任何金额（金额一律系统取数：external-order-1 的回流 128800）。
         ReconciliationDifferenceRecord difference = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
                 "reconcile-difference",
                 "missing voucher",
@@ -592,12 +715,13 @@ class IntegrationServiceTests {
                 "catering",
                 "external-order-1",
                 "amount_mismatch",
-                128800L,
-                128700L,
-                100L,
+                null,
+                null,
+                null,
                 "finance_1",
                 Map.of("provider_private_status", "DIFF")
-        ));
+        ), "ops_register_1");
+        // 登记人 ops_register_1 不得自审 → 由 finance_1 复核。
         ReconciliationDifferenceRecord resolvedDifference = service.resolveReconciliationDifference(
                 difference.id(),
                 new ReconciliationDifferenceResolveRequest(
@@ -607,7 +731,8 @@ class IntegrationServiceTests {
                         "finance_1",
                         "resolved",
                         "confirmed platform amount"
-                )
+                ),
+                "finance_1"
         );
 
         assertThat(orderSync.providerPayload()).containsEntry("provider_private_status", "PAID");
@@ -1162,6 +1287,21 @@ class IntegrationServiceTests {
         @Override
         public List<IntegrationOrderSyncRecord> listOrderSyncs() {
             return new ArrayList<>(orderSyncs.values());
+        }
+
+        /** P0-E：第三方侧系统取数（订单额 − 退款额，钳 0），与 JdbcIntegrationRepository 同口径。 */
+        @Override
+        public long aggregateProviderTakingsForExternalBusiness(
+                String providerCode, String businessType, String externalBusinessId) {
+            long total = orderSyncs.values().stream()
+                    .filter(record -> record.providerCode().equals(providerCode))
+                    .filter(record -> record.businessType().equals(businessType))
+                    .filter(record -> record.externalBusinessId().equals(externalBusinessId))
+                    .filter(record -> "order".equals(record.syncType()) || "refund".equals(record.syncType()))
+                    .filter(record -> "synced".equals(record.status()) || "difference_found".equals(record.status()))
+                    .mapToLong(record -> "refund".equals(record.syncType()) ? -record.amountCent() : record.amountCent())
+                    .sum();
+            return Math.max(total, 0L);
         }
 
         @Override

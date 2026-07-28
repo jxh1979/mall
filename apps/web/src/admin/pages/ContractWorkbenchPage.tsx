@@ -120,7 +120,8 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         effectiveTo: turnoverForm.effectiveTo || null,
         tiers,
       });
-      setActionResult({ action: "turnover_rule_created", contractId: turnoverForm.contractId.trim() });
+      // P0-E：本提交只落草案，须由另一位同事在「结算配置中心」复核转正后才对结算生效。
+      setActionResult({ action: "turnover_rule_draft_saved", contractId: turnoverForm.contractId.trim() });
       setTurnoverTiers([{ upperWan: "", ratePct: "" }]);
       setTurnoverForm({ ...turnoverForm, ruleName: "", minYuan: "" });
     } catch (e) {
@@ -676,6 +677,9 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
 
         <h3>提成租金规则（阶梯超额累进，挂合同）</h3>
         <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>按月销售额分档，每档只对落在本档区间的销售额用本档费率（像个税）；保底=提成下限（可空），无封顶。合同「收租方式」选纯提成/取高/叠加时按此规则出账。</p>
+        <p style={{ color: "var(--adm-text-3)", fontSize: 13 }} data-testid="turnover-rule-draft-notice">
+          提交后<strong>先存为草案，不会马上影响结算</strong>：须由另一位有结算配置管理权限的同事在「结算配置中心 → 待复核草案」里复核转正，转正后才对后续结算生效（同合同同商户的旧规则在转正时自动下线留档）。起草人不能自己转正。
+        </p>
         <div className="admin-inline-form">
           <input aria-label="提成-合同id" placeholder="合同 id" value={turnoverForm.contractId} onChange={(e) => setTurnoverForm({ ...turnoverForm, contractId: e.target.value })} />
           <input aria-label="提成-商户id" placeholder="商户 id" value={turnoverForm.merchantId} onChange={(e) => setTurnoverForm({ ...turnoverForm, merchantId: e.target.value })} />
@@ -702,7 +706,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-inline-form">
           <button type="button" onClick={() => setTurnoverTiers([...turnoverTiers, { upperWan: "", ratePct: "" }])}>＋ 加一档</button>
           <PermissionButton permissionsState={effectivePermissions} permissions={["finance.turnover_rent.bill"]}
-            data-testid="turnover-rule-create" onClick={() => void submitTurnoverRule()}>建提成规则</PermissionButton>
+            data-testid="turnover-rule-create" onClick={() => void submitTurnoverRule()}>存为草案（待复核转正）</PermissionButton>
         </div>
 
         <h3>铺位到期着色分类</h3>

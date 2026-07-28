@@ -15555,19 +15555,19 @@
                   },
                   "internal_amount_cent": {
                     "type": "integer",
-                    "description": "内部金额。（单位：分，禁止浮点）",
+                    "description": "内部金额（已废止·禁止手填）。平台侧金额一律系统取数；传入本字段即 400 RECONCILIATION_MANUAL_AMOUNT_FORBIDDEN。（单位：分，禁止浮点）",
                     "minimum": -999999999999,
                     "maximum": 999999999999
                   },
                   "provider_amount_cent": {
                     "type": "integer",
-                    "description": "渠道金额。（单位：分，禁止浮点）",
+                    "description": "渠道金额（已废止·禁止手填）。第三方侧金额由回流系统取数；传入本字段即 400 RECONCILIATION_MANUAL_AMOUNT_FORBIDDEN。（单位：分，禁止浮点）",
                     "minimum": -999999999999,
                     "maximum": 999999999999
                   },
                   "difference_amount_cent": {
                     "type": "integer",
-                    "description": "差异金额。（单位：分，禁止浮点）",
+                    "description": "差异金额（已废止·禁止手填）。差额由系统两侧取数相减；传入本字段即 400 RECONCILIATION_MANUAL_AMOUNT_FORBIDDEN。（单位：分，禁止浮点）",
                     "minimum": -999999999999,
                     "maximum": 999999999999
                   },

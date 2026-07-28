@@ -39,7 +39,11 @@ public class JdbcSettlementConfigWriteRepository {
                 List.of("project_id", "merchant_id")),
         // V345（P0-C/FLOW-07·BAR-VOID-A1）：高价值退酒审批阈值按 项目 × 商户。同 Path 2 草案/转正范式。
         BAR_VOID_THRESHOLD("bar_void_approval_configs", "bar_void_threshold",
-                List.of("project_id", "merchant_id"));
+                List.of("project_id", "merchant_id")),
+        // V346（P0-E）：营业额抽成规则收进配置中心草案闸。scope = 合同 × 商户
+        //（同合同同商户的旧生效规则在转正时软替换；写面在 FinanceService.createTurnoverRentRule，本处只做转正/软删）。
+        TURNOVER_RENT_RULE("turnover_rent_rules", "turnover_rent_rule",
+                List.of("contract_id", "merchant_id"));
 
         private final String table;
         private final String configType;
@@ -478,6 +482,15 @@ public class JdbcSettlementConfigWriteRepository {
                            rule_scope || ' / ' || revenue_source || ' · ' || attribution_mode || ' · ' || share_bps || 'bps',
                            updated_at
                       FROM merchant_revenue_attribution_rules WHERE is_draft = TRUE AND status = 'active'
+                    UNION ALL
+                    -- V346（P0-E）营业额抽成规则草案：合同 × 商户，档位明细挂 turnover_rent_rule_tiers（随规则行整体转正）。
+                    SELECT id, 'turnover_rent_rule',
+                           '合同=' || COALESCE(contract_id, '-') || ' 商户=' || merchant_id
+                               || ' 规则=' || rule_name
+                               || ' 保底=' || COALESCE(min_amount_cent::text, '-') || '分'
+                               || ' 生效起=' || effective_from,
+                           updated_at
+                      FROM turnover_rent_rules WHERE is_draft = TRUE AND status = 'active'
                 ) q
                 ORDER BY updated_at DESC NULLS LAST, config_group, id
                 """, new MapSqlParameterSource(), (rs, i) ->

@@ -502,13 +502,15 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                     id, batch_id, provider_code, business_type, external_business_id,
                     difference_type, internal_amount_cent, provider_amount_cent,
                     difference_amount_cent, status, source_domain, assigned_to_user_id, resolution_note,
-                    provider_payload_json, evidence_attachment_ids, created_at, updated_at
+                    provider_payload_json, evidence_attachment_ids, amount_source, registered_by_user_id,
+                    created_at, updated_at
                 )
                 VALUES (
                     :id, :batch_id, :provider_code, :business_type, :external_business_id,
                     :difference_type, :internal_amount_cent, :provider_amount_cent,
                     :difference_amount_cent, :status, :source_domain, :assigned_to_user_id, :resolution_note,
                     CAST(:provider_payload_json AS jsonb), CAST(:evidence_attachment_ids AS jsonb),
+                    :amount_source, :registered_by_user_id,
                     :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -517,6 +519,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                     resolution_note = EXCLUDED.resolution_note,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
                     updated_at = EXCLUDED.updated_at
+                -- P0-E：三个金额列 + amount_source + registered_by_user_id 刻意不进 DO UPDATE ——
+                -- 差异一旦按系统取数落库，处置（resolve）只能改状态/处理人/结论，永远改不动金额与登记人。
                 """, reconciliationDifferenceParameters(record));
         return record;
     }
@@ -527,7 +531,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 SELECT id, batch_id, provider_code, business_type, external_business_id,
                        difference_type, internal_amount_cent, provider_amount_cent,
                        difference_amount_cent, status, source_domain, assigned_to_user_id, resolution_note,
-                       provider_payload_json, evidence_attachment_ids, created_at, updated_at
+                       provider_payload_json, evidence_attachment_ids, amount_source, registered_by_user_id,
+                       created_at, updated_at
                   FROM integration_reconciliation_differences
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapReconciliationDifference).stream().findFirst();
@@ -539,11 +544,36 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 SELECT id, batch_id, provider_code, business_type, external_business_id,
                        difference_type, internal_amount_cent, provider_amount_cent,
                        difference_amount_cent, status, source_domain, assigned_to_user_id, resolution_note,
-                       provider_payload_json, evidence_attachment_ids, created_at, updated_at
+                       provider_payload_json, evidence_attachment_ids, amount_source, registered_by_user_id,
+                       created_at, updated_at
                   FROM integration_reconciliation_differences
                  ORDER BY created_at DESC, id
                  LIMIT 200
                 """, rowMapper::mapReconciliationDifference);
+    }
+
+    /**
+     * P0-E 第三方侧系统取数：该外部单号的回流实收 = 订单额 − 退款额（钳 0）。
+     * 只认 status='synced'（已确认入账的回流）与 'difference_found'（已标差异但金额已回流）；
+     * 'received'/'failed' 尚未确认，不作为取数依据。
+     */
+    @Override
+    public long aggregateProviderTakingsForExternalBusiness(
+            String providerCode, String businessType, String externalBusinessId) {
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT GREATEST(COALESCE(SUM(
+                           CASE WHEN sync_type = 'refund' THEN -amount_cent ELSE amount_cent END), 0), 0)
+                  FROM integration_order_syncs
+                 WHERE provider_code = :provider_code
+                   AND business_type = :business_type
+                   AND external_business_id = :external_business_id
+                   AND sync_type IN ('order', 'refund')
+                   AND status IN ('synced', 'difference_found')
+                """, new MapSqlParameterSource()
+                .addValue("provider_code", providerCode)
+                .addValue("business_type", businessType)
+                .addValue("external_business_id", externalBusinessId), Long.class);
+        return total == null ? 0L : total;
     }
 
     @Override
@@ -790,6 +820,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 .addValue("resolution_note", record.resolutionNote())
                 .addValue("provider_payload_json", writeJson(record.providerPayload()))
                 .addValue("evidence_attachment_ids", writeJson(record.evidenceAttachmentIds()))
+                .addValue("amount_source", record.amountSource() == null ? "system" : record.amountSource())
+                .addValue("registered_by_user_id", record.registeredByUserId())
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
     }

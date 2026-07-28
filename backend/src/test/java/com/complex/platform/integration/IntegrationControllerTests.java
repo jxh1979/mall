@@ -57,6 +57,9 @@ class IntegrationControllerTests {
     @BeforeEach
     void resetMocks() {
         Mockito.reset(service, authorizationService);
+        // P0-E：对账差异登记/复核端点要从会话取操作者（落 registered_by_user_id + 差人守卫），先给默认操作者。
+        when(authorizationService.currentActor()).thenReturn(new com.complex.platform.access.AccessActor(
+                "staff-1", "staff", "staff", null, null, "active"));
         when(service.listLedger(anyString(), anyString(), anyString())).thenReturn(new PageResponse<>(
                 List.of(ledger("device", "device-1")),
                 1,
@@ -89,7 +92,8 @@ class IntegrationControllerTests {
         when(service.listReconciliationBatches()).thenReturn(new PageResponse<>(List.of(batch()), 1, 50, 1));
         when(service.createReconciliationBatch(any(ReconciliationBatchRequest.class))).thenReturn(batch());
         when(service.listReconciliationDifferences()).thenReturn(new PageResponse<>(List.of(difference("open")), 1, 50, 1));
-        when(service.createReconciliationDifference(any(ReconciliationDifferenceRequest.class))).thenReturn(difference("open"));
+        when(service.createReconciliationDifference(any(ReconciliationDifferenceRequest.class), anyString()))
+                .thenReturn(difference("needs_review"));
         when(service.recordPollingCheck(any(IntegrationPollingCheckRequest.class))).thenReturn(new IntegrationPollingCheckRecord(
                 "polling_check_1",
                 "recorded",
@@ -101,7 +105,8 @@ class IntegrationControllerTests {
                 Instant.parse("2026-06-18T10:00:00Z"),
                 "platform_task_status_only_not_supplier_execution"
         ));
-        when(service.resolveReconciliationDifference(eq("difference_1"), any(ReconciliationDifferenceResolveRequest.class))).thenReturn(difference("resolved"));
+        when(service.resolveReconciliationDifference(eq("difference_1"), any(ReconciliationDifferenceResolveRequest.class), anyString()))
+                .thenReturn(difference("resolved"));
     }
 
     @Test
@@ -409,9 +414,6 @@ class IntegrationControllerTests {
                   "business_type": "catering",
                   "external_business_id": "external-order-1",
                   "difference_type": "amount_mismatch",
-                  "internal_amount_cent": 128800,
-                  "provider_amount_cent": 128700,
-                  "difference_amount_cent": 100,
                   "assigned_to_user_id": "finance_1",
                   "provider_payload": {"provider_private_status": "DIFF"}
                 }
@@ -567,6 +569,8 @@ class IntegrationControllerTests {
                 "resolved".equals(status) ? "confirmed platform amount" : null,
                 Map.of("provider_private_status", "DIFF"),
                 List.of(),
+                "system",
+                null,
                 now,
                 now
         );

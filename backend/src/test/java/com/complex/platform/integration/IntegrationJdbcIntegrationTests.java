@@ -307,6 +307,8 @@ class IntegrationJdbcIntegrationTests {
                 null,
                 Map.of("provider_private_status", "DIFF"),
                 List.of(),
+                "system",
+                null,
                 now,
                 now
         ));

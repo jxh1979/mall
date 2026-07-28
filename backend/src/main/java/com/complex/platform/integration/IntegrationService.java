@@ -413,15 +413,22 @@ public class IntegrationService {
         return reconciliationService.listReconciliationDifferences();
     }
 
-    public ReconciliationDifferenceRecord createReconciliationDifference(ReconciliationDifferenceRequest request) {
-        return reconciliationService.createReconciliationDifference(request);
+    /**
+     * 登记对账差异（P0-E：金额一律系统取数，请求体禁手填）。
+     * actorUserId 由 controller 从会话取得，落 registered_by_user_id 供复核差人守卫。
+     */
+    public ReconciliationDifferenceRecord createReconciliationDifference(
+            ReconciliationDifferenceRequest request, String actorUserId) {
+        return reconciliationService.createReconciliationDifference(request, actorUserId);
     }
 
+    /** 复核（处置）对账差异（P0-E：登记人不得自审）。 */
     public ReconciliationDifferenceRecord resolveReconciliationDifference(
             String id,
-            ReconciliationDifferenceResolveRequest request
+            ReconciliationDifferenceResolveRequest request,
+            String actorUserId
     ) {
-        return reconciliationService.resolveReconciliationDifference(id, request);
+        return reconciliationService.resolveReconciliationDifference(id, request, actorUserId);
     }
 
     public PageResponse<ProviderAdapterRecord> listProviderAdapters() {

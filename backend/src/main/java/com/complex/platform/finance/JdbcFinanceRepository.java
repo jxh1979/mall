@@ -967,10 +967,36 @@ class JdbcFinanceRepository implements FinanceRepository {
                 SELECT id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, max_amount_cent,
                        effective_from, effective_to, status, created_at
                   FROM turnover_rent_rules
-                 WHERE contract_id = :contract_id AND status = 'active'
+                 WHERE contract_id = :contract_id AND status = 'active' AND is_draft = FALSE
                  ORDER BY effective_from DESC, created_at DESC
                  LIMIT 1
                 """, Map.of("contract_id", contractId), this::mapTurnoverRentRule).stream().findFirst();
+    }
+
+    /**
+     * P0-E：落草案（is_draft=TRUE）+ 记起草人。读侧 findActiveTurnoverRentRuleByContract 只认 is_draft=FALSE，
+     * 故草案落库后对结算<b>零影响</b>，须经配置中心差人复核转正才生效。
+     */
+    @Override
+    public TurnoverRentRuleRecord saveTurnoverRentRuleDraft(TurnoverRentRuleRecord rule, String updatedBy) {
+        jdbcTemplate.update("""
+                INSERT INTO turnover_rent_rules (
+                    id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, max_amount_cent,
+                    effective_from, effective_to, status, is_draft, updated_by, created_at, updated_at
+                ) VALUES (
+                    :id, :contract_id, :merchant_id, :rule_name, :rate_bps, :min_amount_cent, :max_amount_cent,
+                    :effective_from, :effective_to, :status, TRUE, :updated_by, :created_at, :created_at
+                )
+                """, turnoverRentRuleParameters(rule).addValue("updated_by", updatedBy));
+        return rule;
+    }
+
+    @Override
+    public boolean isTurnoverRentRuleDraft(String id) {
+        Boolean draft = jdbcTemplate.query(
+                "SELECT is_draft FROM turnover_rent_rules WHERE id = :id",
+                Map.of("id", id), rs -> rs.next() ? rs.getBoolean(1) : null);
+        return Boolean.TRUE.equals(draft);
     }
 
     @Override
@@ -983,7 +1009,12 @@ class JdbcFinanceRepository implements FinanceRepository {
                     :id, :contract_id, :merchant_id, :rule_name, :rate_bps, :min_amount_cent, :max_amount_cent,
                     :effective_from, :effective_to, :status, :created_at, :created_at
                 )
-                """, new MapSqlParameterSource()
+                """, turnoverRentRuleParameters(rule));
+        return rule;
+    }
+
+    private MapSqlParameterSource turnoverRentRuleParameters(TurnoverRentRuleRecord rule) {
+        return new MapSqlParameterSource()
                 .addValue("id", rule.id())
                 .addValue("contract_id", rule.contractId())
                 .addValue("merchant_id", rule.merchantId())
@@ -994,8 +1025,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("effective_from", rule.effectiveFrom())
                 .addValue("effective_to", rule.effectiveTo())
                 .addValue("status", rule.status())
-                .addValue("created_at", timestampWithTimeZone(rule.createdAt())));
-        return rule;
+                .addValue("created_at", timestampWithTimeZone(rule.createdAt()));
     }
 
     @Override

@@ -43,6 +43,23 @@ public interface FinanceRepository {
     }
 
     /** 保存提成租金规则。default no-op 兼容测试双子。 */
+    /**
+     * P0-E（v7 审计·抽成规则草案闸）：建/改抽成规则一律<b>落草案</b>（is_draft=TRUE）+ 记起草人 updated_by。
+     * 转正走结算配置中心 {@code POST /api/v1/settlement/config/turnover_rent_rule/{id}/activate}（差人复核）。
+     * default 委托旧直写实现，兼容既有测试双子。
+     */
+    default TurnoverRentRuleRecord saveTurnoverRentRuleDraft(TurnoverRentRuleRecord rule, String updatedBy) {
+        return saveTurnoverRentRule(rule);
+    }
+
+    /**
+     * P0-E：该抽成规则是否仍是未转正草案。草案不得用于计费（billTurnoverRent 据此 fail-loud）。
+     * default 返回 false 以兼容既有测试双子。
+     */
+    default boolean isTurnoverRentRuleDraft(String id) {
+        return false;
+    }
+
     default TurnoverRentRuleRecord saveTurnoverRentRule(TurnoverRentRuleRecord rule) {
         return rule;
     }
