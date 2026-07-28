@@ -170,12 +170,16 @@ public class SettlementConfigWriteService {
         String bearer = requireOneOf(req.discountBearer(), "discount_bearer",
                 "platform_absorb", "merchant_absorb", "split_by_ratio");
         int split = requireBps(req.splitPlatformBps(), "split_platform_bps");
+        // V369 凑整允许误差(分):留空=沿用出厂 500 分;非空必须 ≥0(对齐 chk_tcdc_rounding_tolerance)。
+        long tolerance = req.roundingToleranceCent() == null ? 500L : req.roundingToleranceCent();
+        requireNonNegative(tolerance, "rounding_tolerance_cent");
         String scopeKey = defaultScope(req.projectId());
         String landedId = writeRepository.upsertComboDiscountDraft(draftId("tcdc_d_", scopeKey, idem),
-                req.projectId(), bearer, split, actorId);
+                req.projectId(), bearer, split, tolerance, actorId);
         audit("settlement.config.ticket_combo_discount_configs.updated",
                 "ticket_combo_discount_configs", landedId, idem,
-                Map.of("project_scope", scopeKey, "discount_bearer", bearer, "split_platform_bps", String.valueOf(split)));
+                Map.of("project_scope", scopeKey, "discount_bearer", bearer, "split_platform_bps", String.valueOf(split),
+                        "rounding_tolerance_cent", String.valueOf(tolerance)));
     }
 
     public void saveChannelFee(ChannelFeeRequest request, String actorId) {

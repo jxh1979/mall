@@ -255,6 +255,26 @@ public class TicketingController {
         return ApiResponse.ok(service.createEntitlementTemplate(request));
     }
 
+    /**
+     * V369 票种定价核算（业务 HTML:741）：各业态票面原价合计 × 票种折扣 = 系统算出售价，
+     * 与运营填的售价差多少、后台允许差多少、超没超、凑整该填哪个数。建票/改票页据此实时提示。
+     */
+    @GetMapping("/ticketing/ticket-types/{id}/price-check")
+    public ApiResponse<TicketTypePriceCheck> ticketTypePriceCheck(@PathVariable("id") String id) {
+        authorizationService.requirePermission("ticket.product.view");
+        return ApiResponse.ok(service.ticketTypePriceCheck(id));
+    }
+
+    /** V369 改票种售价／折扣：保存当场比对允许误差，超出即拒（不等到发布才报错）。 */
+    @PutMapping("/ticketing/ticket-types/{id}/pricing")
+    public ApiResponse<TicketTypeRecord> updateTicketTypePricing(
+            @PathVariable("id") String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.ticketing.dto.TicketTypePricingRequest request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.updateTicketTypePricing(id, request));
+    }
+
     /** S5 票面赠酒清单：该票种各酒吧分别赠几杯（售票时要写明票面，业务 HTML §通票赠酒按酒吧分配）。 */
     @GetMapping("/ticketing/ticket-types/{id}/gift-coverage")
     public ApiResponse<PageResponse<TicketTypeGiftCoverageRow>> listTicketTypeGiftCoverage(

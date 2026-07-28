@@ -124,6 +124,30 @@ public class TicketingService {
         );
     }
 
+    /**
+     * V369 票种定价核算：各业态票面原价合计 × 票种折扣 = 系统算出售价，与运营填的售价差多少、超没超允许误差。
+     * 建票/改票页拿它做实时提示，发布闸拒绝时报的是同一份计算。
+     */
+    public TicketTypePriceCheck ticketTypePriceCheck(String ticketTypeId) {
+        return catalogService.priceCheck(operations.requireText(ticketTypeId, "ticket_type_id"));
+    }
+
+    /** V369 改票种售价／折扣：保存当场比对允许误差，超出即拒（不等到发布才报错）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
+    @Transactional
+    public TicketTypeRecord updateTicketTypePricing(String ticketTypeId,
+            com.complex.platform.ticketing.dto.TicketTypePricingRequest request) {
+        String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        return operations.executeWrite(
+                "updateTicketTypePricing:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTypeRecord.class,
+                TicketingWriteOperation.UPDATE_TICKET_TYPE_PRICING,
+                () -> catalogService.updatePricing(id, request)
+        );
+    }
+
     /** V359：要求购票人拍入场人脸照的票种 id 集合（供客人端购票页判定是否弹拍照）。 */
     public java.util.Set<String> ticketTypeIdsRequiringFacePhoto() {
         return repository.listTicketTypeIdsRequiringFacePhoto();

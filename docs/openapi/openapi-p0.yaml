@@ -8306,6 +8306,71 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/ticketing/ticket-types/{id}/price-check:
+    get:
+      tags:
+        - ticketing
+      operationId: ticketTypePriceCheck
+      summary: 票种定价核算（系统算出售价 vs 填的售价）
+      description: >-
+        综合／联合通票的售价由各业态票面原价相加后按票种折扣自动算出。本接口返回票面原价合计、折扣、系统算出售价、
+        运营现在填的售价、两者差额、后台可配的允许误差、是否超限，以及按「整元且尾数 8/9/0」建议的凑整售价。
+        建票／改票页据此实时提示，发布闸拒绝时报的是同一份计算。
+      x-permission: ticket.product.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: ticket_product.viewed
+      x-audit-event-failure: ticket_product.view_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/ticket-types/{id}/pricing:
+    put:
+      tags:
+        - ticketing
+      operationId: updateTicketTypePricing
+      summary: 改票种售价／折扣（凑整误差闸）
+      description: >-
+        设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态票面原价×折扣算出的售价，
+        差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。
+      x-permission: ticket.product.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_product.pricing_changed
+      x-audit-event-failure: ticket_product.pricing_change_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/TicketTypePricingRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/ticketing/ticket-types/{id}/gift-coverage:
     get:
       tags:
@@ -25675,6 +25740,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/TicketTypeRequest"
+    TicketTypePricingRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TicketTypePricingRequest"
     TicketPriceRuleRequest:
       required: true
       content:
@@ -28524,6 +28595,41 @@ components:
           type: string
           description: 检查备注；用于记录本次检查目的、范围或例外说明。
           maxLength: 1000
+    TicketTypePricingRequest:
+      type: object
+      description: 改票种售价／折扣请求载荷；保存当场比对凑整允许误差，超出即拒。
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        reason:
+          type: string
+          description: 改价理由（必填）；进入审计留痕，事后能查是谁为什么把价改成这个数。
+          maxLength: 1000
+        combo_discount_rate:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: 票种折扣（百分数，100=不打折，85=八五折）；系统算出售价 = 各业态票面原价合计 × 本折扣 ÷ 100。
+        weekday_price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 平日售价（分）＝这张票的基准售价；凑整误差闸比的就是它与系统算出售价的差额。
+        weekend_price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 周末售价（分，可空）；周末加价按日历规则走，不在误差闸内。
+        holiday_price_cent:
+          type: integer
+          minimum: 0
+          maximum: 999999999999
+          description: 节假日售价（分，可空）；节假日加价按日历规则走，不在误差闸内。
     TicketTypeRequest:
       type: object
       description: 请求载荷 `TicketTypeRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -28572,6 +28678,11 @@ components:
           description: 节假日票价，单位分；派生票价可基于该值折扣或覆盖固定价。
           minimum: 0
           maximum: 999999999999
+        combo_discount_rate:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: V369 票种折扣（百分数，100=不打折）；系统算出售价 = 各业态票面原价合计 × 本折扣 ÷ 100。
         stock_required:
           type: boolean
           description: 是否强制库存扣减；为 true 时售票必须锁定并扣减库存。

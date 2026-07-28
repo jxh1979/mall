@@ -47,9 +47,21 @@ public final class SettlementConfigWriteRequests {
                                                  Long monthlyCapAmountCent) {
     }
 
-    /** ticket_combo_discount_configs:套票折扣归属 ∈{platform_absorb,merchant_absorb,split_by_ratio};splitPlatformBps∈[0,10000]。 */
+    /**
+     * ticket_combo_discount_configs:套票折扣归属 ∈{platform_absorb,merchant_absorb,split_by_ratio};splitPlatformBps∈[0,10000]。
+     *
+     * <p>V369 roundingToleranceCent:综合/联合通票「凑整允许误差」(分,≥0,留空=不改沿用 500 出厂值)。
+     * 运营给通票填的近似售价与系统按各业态票面原价×折扣算出的售价,差额超过这个数就不许开卖。
+     * 和折扣归属同填一处,因为凑整多出/少收的那点钱走的正是这条折扣承担口径。
+     */
     public record ComboDiscountRequest(String idempotencyKey, String projectId, String discountBearer,
-                                       Integer splitPlatformBps) {
+                                       Integer splitPlatformBps, Long roundingToleranceCent) {
+
+        /** V369 前的 4 参签名(无 roundingToleranceCent)→ null=沿用出厂 500 分。 */
+        public ComboDiscountRequest(String idempotencyKey, String projectId, String discountBearer,
+                                    Integer splitPlatformBps) {
+            this(idempotencyKey, projectId, discountBearer, splitPlatformBps, null);
+        }
     }
 
     /** channel_fee_configs:渠道抽成万分比。批1 UI 只填 channel=null 通用率;feeBps∈[0,10000]。 */

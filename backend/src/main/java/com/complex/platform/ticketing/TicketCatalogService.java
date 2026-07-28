@@ -9,6 +9,7 @@ import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalReque
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
+import com.complex.platform.ticketing.dto.TicketTypePricingRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -36,6 +37,16 @@ public class TicketCatalogService {
     private final TicketingRepository repository;
     // AUD-076：按 id 取酒吧商户（判业态/存档/取名）。可为 null=兼容既有单测（不校验酒吧、不解析名称）。
     private final BarMerchantDirectory barDirectory;
+
+    // V369：凑整允许误差（后台可配，取自结算配置中心「通票分账 → 套票折扣归属」那一行）。
+    // 字段注入免改构造点；生产由 Spring 恒注入 JdbcSettlementBillRepository，端口自身缺配置时 fail-loud。
+    // 为 null（旧构造/未注入的单测）= 不做误差校验，与 barDirectory 同范式。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    ComboPriceToleranceConfigPort comboPriceToleranceConfigPort;
+
+    // V369：解析当前登录人的项目公司作用域，用于按项目取允许误差。为 null 时取全局默认作用域。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.access.AuthorizationService authorizationService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketCatalogService(TicketingRepository repository, BarMerchantDirectory barDirectory) {
@@ -76,8 +87,56 @@ public class TicketCatalogService {
                 // 方案2/规则2（V286）：是否可退票（可空=不可退，默认最安全）。
                 actual.refundable() != null && actual.refundable(),
                 // AUD-076 单店票挂酒吧：校验并挂定酒吧归属（非空必须是业态 bar 且未存档的商户；建后不可变）。
-                validateBarBinding(actual.barId())
+                validateBarBinding(actual.barId()),
+                // V369：票种折扣（0~100 百分数，可空=100 不打折）。系统据此自动算出售价。
+                requireDiscountRate(actual.comboDiscountRate())
         ));
+    }
+
+    /**
+     * V369 改售价／折扣（业务 HTML:741「运营可在此基础上填一个近似售价用于凑整……上调下调均可」）。
+     *
+     * <p><b>为什么改价也要当场卡</b>：让运营先把一个明知超限的价存下去、等到点发布才报错，等于让他白填一遍，
+     * 而且中间这段时间票种页上挂着一个错的价，别人看了会以为已经定了。所以保存这一步就比对。
+     *
+     * <p>只动定价三档与折扣，其余（库存/有效期/权益/已售数）一律原样不动。
+     */
+    TicketTypeRecord updatePricing(String ticketTypeId, TicketTypePricingRequest request) {
+        TicketTypePricingRequest actual = requireRequest(request);
+        requireText(actual.reason(), "reason");
+        TicketTypeRecord current = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        if (current.archivedAt() != null || !"none".equals(current.deleteStatus())) {
+            throw ApiException.conflict("TICKET_TYPE_NOT_CONFIGURABLE", "已存档或待删除的票种不可改售价");
+        }
+        TicketTypeRecord updated = current.withPricing(
+                requireDiscountRate(actual.comboDiscountRate()),
+                nonNegativeOrNull(actual.weekdayPriceCent(), "weekday_price_cent"),
+                nonNegativeOrNull(actual.weekendPriceCent(), "weekend_price_cent"),
+                nonNegativeOrNull(actual.holidayPriceCent(), "holiday_price_cent"),
+                Instant.now());
+        requirePriceWithinTolerance(updated, repository.listTicketTypeEntitlements(current.id()));
+        return repository.saveTicketType(updated);
+    }
+
+    /** V369 定价核算（前端建票/改票时实时提示用）：算出售价、差额、允许误差、超没超。 */
+    TicketTypePriceCheck priceCheck(String ticketTypeId) {
+        TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        long tolerance = comboPriceToleranceConfigPort == null
+                ? 0L : comboPriceToleranceConfigPort.findRoundingToleranceCent(currentProjectId());
+        return priceCheck(ticketType, repository.listTicketTypeEntitlements(ticketType.id()), tolerance);
+    }
+
+    /** V369：票种折扣（百分数）校验，可空=100 不打折；越界拒（DB 另有 CHECK 兜底）。 */
+    private BigDecimal requireDiscountRate(BigDecimal rate) {
+        if (rate == null) {
+            return TicketTypeRecord.NO_COMBO_DISCOUNT;
+        }
+        if (rate.compareTo(MIN_DISCOUNT_RATE) < 0 || rate.compareTo(MAX_DISCOUNT_RATE) > 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "票种折扣必须在 0~100 之间（100=不打折）");
+        }
+        return rate;
     }
 
     TicketPriceRuleRecord createPriceRule(TicketPriceRuleRequest request) {
@@ -452,7 +511,7 @@ public class TicketCatalogService {
                     "单店票只能绑定归属本店的权益模板");
         }
         Instant now = Instant.now();
-        return repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+        TicketTypeEntitlementRecord binding = new TicketTypeEntitlementRecord(
                 "ticket_link_" + slug(actual.idempotencyKey()),
                 ticketType.id(),
                 template.id(),
@@ -466,7 +525,28 @@ public class TicketCatalogService {
                 nonNegativeOrNull(actual.componentPriceCent(), "component_price_cent"),
                 now,
                 now
-        ));
+        );
+        // V369：已上架的票被改了组成（加权益／改票面原价）后，售价若已经对不上新的业态构成，就把票退回草稿。
+        //   直接拒绝会把「先建票、再一次性配组合权益」这条正常流程堵死；继续挂着卖则是让客人按一个
+        //   系统自己都算不出来的价买。只在真的对不上时才下架，改完价重新发布即可（重新走一遍误差闸）。
+        if ("published".equals(ticketType.status())
+                && !priceWithinTolerance(ticketType, withBinding(ticketType.id(), binding))) {
+            repository.saveTicketType(ticketType.withStatus("draft", now));
+        }
+        return repository.saveTicketTypeEntitlement(binding);
+    }
+
+    /** 该票种现有绑定 + 这条待写入的绑定（同 id 视为改这一条，不重复计）。 */
+    private java.util.List<TicketTypeEntitlementRecord> withBinding(String ticketTypeId,
+            TicketTypeEntitlementRecord binding) {
+        java.util.List<TicketTypeEntitlementRecord> merged = new java.util.ArrayList<>();
+        for (TicketTypeEntitlementRecord existing : repository.listTicketTypeEntitlements(ticketTypeId)) {
+            if (!existing.id().equals(binding.id())) {
+                merged.add(existing);
+            }
+        }
+        merged.add(binding);
+        return merged;
     }
 
     TicketTypeRecord publishTicketType(String ticketTypeId, StatusChangeRequest request) {
@@ -481,30 +561,10 @@ public class TicketCatalogService {
         }
         requireComponentPrices(current.id());
         requireBarGiftCoverage(current.id());
-        Instant now = Instant.now();
-        return repository.saveTicketType(new TicketTypeRecord(
-                current.id(),
-                current.ticketName(),
-                current.baseCalendarPriceMode(),
-                current.weekdayPriceCent(),
-                current.weekendPriceCent(),
-                current.holidayPriceCent(),
-                current.stockRequired(),
-                "published",
-                current.validityDays(),
-                current.refreshIntervalSeconds(),
-                current.createdAt(),
-                now,
-                // P0 修复（V133）：发布时保留既有库存上限与已售数，避免被置空/清零。
-                current.stockQuantity(),
-                current.soldQuantity(),
-                // 结算重构批4（V230）：发布时保留既有分类标签，避免被置空。
-                current.ticketCategory(),
-                // 方案2/规则2（V286）：发布时保留既有可退配置。
-                current.refundable(),
-                // AUD-076：发布时保留既有酒吧归属（不可变）。
-                current.barId()
-        ));
+        // V369 凑整误差闸：填的售价与系统算出的售价差太多就不许开卖（HTML:741「超出即拒绝发布」）。
+        requirePriceWithinTolerance(current, repository.listTicketTypeEntitlements(current.id()));
+        // 发布只翻状态，其余（库存/已售/分类/可退/酒吧归属/折扣）一律原样带过，避免被置空/清零。
+        return repository.saveTicketType(current.withStatus("published", Instant.now()));
     }
 
     /** S5 K17：入场类权益的类型（这些权益让客人能进这家吧的门）。 */
@@ -600,6 +660,119 @@ public class TicketCatalogService {
      * <p><b>免费的怎么办</b>：免费权益把票面原价<b>填 0</b>（0 = 免费 = 不参与分钱），
      * 不是留空。留空的意思是「还没想好这份值多少钱」，那就还不能卖。
      */
+    /**
+     * V369 综合／联合通票<b>售价自动算</b> + <b>凑整误差闸</b>（业务 HTML:741 逐字：
+     * 「售价由各业态价格相加后统一打折得出……由系统自动算出售价。运营可在此基础上填一个近似售价用于凑整……
+     *   但与系统算出的售价之间的差额不得超过后台配置的允许误差，超出即拒绝发布」）。
+     *
+     * <p><b>为什么必须有这道闸（业务人员角度）</b>：以前运营在票种上填一个售价，又在每条权益上分别填票面原价，
+     * 两处各填各的、系统从不比对。想填 197 手滑填成 179，票照样上架照样卖——少收的那 18 块在月度结算里
+     * 被当成「套票折扣」，默认由项目公司吃掉，没有任何人会收到提醒。等财务发现毛利不对，票已经卖出去几百张，
+     * 只能一张张翻单子人工调账。现在系统自己把售价算出来，运营填的数一旦离得太远，票根本上不了架。
+     *
+     * <p><b>为什么只比平日价</b>：算出售价只有一个数（各业态票面原价是单值的），而周末价/节假日价是在同一张票上
+     * 叠的<b>日历加价</b>，本来就该比平日价高。若三档都拿这一个数去卡，运营为了让周末价过闸只能把允许误差调到
+     * 几十元——那道闸就等于没有了，连 197→179 都能溜过去。所以闸卡在平日价（=这张票的基准售价），
+     * 周末/节假日加价另按日历规则走（真要差很多就是 HTML:721 说的另一个「周末票」票种）。
+     *
+     * @param bindings 参与计价的权益绑定（发布时=库里现有的；加绑时=现有的 + 这条新的）
+     */
+    private void requirePriceWithinTolerance(TicketTypeRecord ticketType,
+            java.util.List<TicketTypeEntitlementRecord> bindings) {
+        if (comboPriceToleranceConfigPort == null) {
+            return; // 未注入（旧构造/单测）：不校验。生产由 Spring 恒注入，端口自身缺配置时 fail-loud。
+        }
+        TicketTypePriceCheck check = priceCheck(ticketType, bindings,
+                comboPriceToleranceConfigPort.findRoundingToleranceCent(currentProjectId()));
+        if (check.withinTolerance()) {
+            return;
+        }
+        if (check.filledPriceCent() == null) {
+            throw ApiException.badRequest("TICKET_PRICE_REQUIRED",
+                    "这张票还没填平日售价，不能开卖。系统按各业态票面原价算出的售价是 "
+                            + yuan(check.computedPriceCent()) + " 元");
+        }
+        long over = Math.abs(check.diffCent()) - check.toleranceCent();
+        throw ApiException.badRequest("TICKET_PRICE_OUT_OF_TOLERANCE",
+                "填的售价和系统算出的售价差太多，票不能开卖：系统算出 " + yuan(check.computedPriceCent())
+                        + " 元（各业态票面原价合计 " + yuan(check.componentTotalCent()) + " 元 × "
+                        + check.comboDiscountRate().stripTrailingZeros().toPlainString() + "% 折扣），"
+                        + "填的是 " + yuan(check.filledPriceCent()) + " 元，"
+                        + (check.diffCent() > 0 ? "上调 " : "下调 ") + yuan(Math.abs(check.diffCent())) + " 元，"
+                        + "超出允许误差 " + yuan(check.toleranceCent()) + " 元 达 " + yuan(over) + " 元。"
+                        + "凑整可填 " + yuan(check.roundingSuggested()) + " 元");
+    }
+
+    /** 同上，但只回答「在不在误差内」、不抛错（供加绑权益时判断要不要把已上架的票退回草稿）。 */
+    private boolean priceWithinTolerance(TicketTypeRecord ticketType,
+            java.util.List<TicketTypeEntitlementRecord> bindings) {
+        if (comboPriceToleranceConfigPort == null) {
+            return true;
+        }
+        return priceCheck(ticketType, bindings,
+                comboPriceToleranceConfigPort.findRoundingToleranceCent(currentProjectId())).withinTolerance();
+    }
+
+    /**
+     * V369 定价核算：算出售价、与填的价差多少、超没超。前端实时提示与发布闸用的是同一份计算。
+     *
+     * @param toleranceCent 后台可配的允许误差（分）
+     */
+    TicketTypePriceCheck priceCheck(TicketTypeRecord ticketType,
+            java.util.List<TicketTypeEntitlementRecord> bindings, long toleranceCent) {
+        // 各业态票面原价相加：每条绑定按【份数】计（一条 3 杯赠酒的绑定，票面上就是 3 份的价）。
+        // 免费权益票面原价为 0 → 自然不计入价值（HTML:741「免费的（价格为 0）不计入价值」）；
+        // NULL=没配价，发布前已被 requireComponentPrices 拦下，此处按 0 读、绝不回退均摊。
+        long componentTotal = 0L;
+        for (TicketTypeEntitlementRecord binding : bindings) {
+            long unit = binding.componentPriceCent() == null ? 0L : binding.componentPriceCent();
+            componentTotal += unit * Math.max(1, binding.quantity());
+        }
+        BigDecimal rate = ticketType.comboDiscountRate() == null
+                ? TicketTypeRecord.NO_COMBO_DISCOUNT : ticketType.comboDiscountRate();
+        // 折扣按百分数：算出售价 = 合计 × 折扣 ÷ 100，四舍五入到分（全场金额口径 MoneyRounding）。
+        long computed = com.complex.platform.common.money.MoneyRounding.toCent(
+                BigDecimal.valueOf(componentTotal).multiply(rate).divide(MAX_DISCOUNT_RATE));
+        Long filled = ticketType.weekdayPriceCent();
+        Long diff = filled == null ? null : filled - computed;
+        boolean within = diff != null && Math.abs(diff) <= toleranceCent;
+        return new TicketTypePriceCheck(ticketType.id(), componentTotal, rate, computed,
+                filled, diff, toleranceCent, within, roundToNiceEnding(computed));
+    }
+
+    /**
+     * 凑整建议：离算出售价最近的「整元、且元位尾数是 8/9/0」的价（HTML:741 括号里那句）。
+     * 只是给运营的建议数，不强制——真正拒绝发布的只有「超出允许误差」这一条。
+     */
+    static long roundToNiceEnding(long computedCent) {
+        long bestCent = 0L;
+        long bestGap = Long.MAX_VALUE;
+        long yuan = computedCent / 100;
+        for (long candidate = Math.max(0, yuan - 10); candidate <= yuan + 10; candidate++) {
+            long lastDigit = candidate % 10;
+            if (lastDigit != 8 && lastDigit != 9 && lastDigit != 0) {
+                continue;
+            }
+            long gap = Math.abs(candidate * 100 - computedCent);
+            if (gap < bestGap) {
+                bestGap = gap;
+                bestCent = candidate * 100;
+            }
+        }
+        return bestCent;
+    }
+
+    /** 报错文案用：分 → 元（两位小数）。 */
+    private static String yuan(long cent) {
+        return BigDecimal.valueOf(cent).movePointLeft(2).toPlainString();
+    }
+
+    /** 当前登录人的项目公司作用域（未注入授权服务的单测取 null=全局默认作用域）。 */
+    private String currentProjectId() {
+        return authorizationService == null
+                ? null : authorizationService.currentProjectScopeQuietly().orElse(null);
+    }
+
     private void requireComponentPrices(String ticketTypeId) {
         java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketTypeId);
         java.util.List<String> missing = bindings.stream()

@@ -44,6 +44,9 @@ final class JdbcTicketingParameterSource {
                 .addValue("delete_reason", ticketType.deleteReason())
                 .addValue("created_at", timestampWithTimeZone(ticketType.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()))
+                // V369：票种折扣（百分数，100=不打折）；系统据此自动算出售价。
+                .addValue("combo_discount_rate", ticketType.comboDiscountRate() == null
+                        ? TicketTypeRecord.NO_COMBO_DISCOUNT : ticketType.comboDiscountRate())
                 .addValue("bar_id", ticketType.barId());
     }
 

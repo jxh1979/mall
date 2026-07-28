@@ -29,6 +29,8 @@ enum TicketingWriteOperation implements AuditedOperation {
     CONFIRM_TICKET_ORDER_PAYMENT("ticket_order.payment_confirmed", "ticket_order.payment_confirm_failed", "finance.payment.register", "ticket_order"),
     CANCEL_TICKET_ORDER("ticket_order.cancelled", "ticket_order.cancel_failed", "ticket.order.create", "ticket_order"),
     ISSUE_TICKET_ORDER("ticket.issued", "ticket.issue_failed", "ticket.ticket.issue", "issued_entitlement"),
+    // V369 改票种售价/折扣(综合/联合通票售价自动算 + 凑整误差闸):保存当场比对允许误差,超出即拒。
+    UPDATE_TICKET_TYPE_PRICING("ticket_product.pricing_changed", "ticket_product.pricing_change_failed", "ticket.product.manage", "ticket_type"),
     PUBLISH_TICKET_TYPE("ticket_price.published", "ticket_price.publish_failed", "ticket.product.manage", "ticket_type"),
     REQUEST_TICKET_REFUND("ticket_refund.requested", "ticket_refund.request_failed", "ticket.refund.request", "ticket_refund"),
     APPROVE_TICKET_REFUND("ticket_refund.approved", "ticket_refund.approve_failed", "ticket.refund.approve", "ticket_refund"),
