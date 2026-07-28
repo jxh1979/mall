@@ -308,11 +308,9 @@ public class VoucherTransferService {
         return "vclm_" + HexFormat.of().formatHex(bytes);
     }
 
+    // V339 起统一委派 common.PhoneMask（原三处私有实现逐字相同，提升为公共能力避免规则漂移）。
     private String maskPhone(String phone) {
-        if (phone.length() <= 7) {
-            return phone.charAt(0) + "****" + phone.charAt(phone.length() - 1);
-        }
-        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
+        return com.complex.platform.common.PhoneMask.mask(phone);
     }
 
     private String codeOf(RuntimeException exception) {

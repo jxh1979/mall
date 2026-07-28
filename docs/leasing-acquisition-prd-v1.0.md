@@ -75,6 +75,9 @@
 
 ## 8. 数据模型（迁移 V161，对齐 §1 枚举落 CHECK）
 - `leasing_leads`(id, source CHECK 4 值, contact_name, contact_phone, intended_business_type, intended_space_id, intended_area, owner_user_id, status CHECK 7 值, lost_reason, project_id, last_follow_up_at, created/updated_at)
+
+> **联系人手机号 PII 加密（P0-A / ★GAP-07 / SEC-04，迁移 V339，2026-07-27）**：`leasing_leads.contact_phone` 落库为 AES-GCM 信封密文（`enc:v1:`），仓库层写时加密、读时解密，业务层拿到的仍是明文；数据库 `CHECK` 约束（`NOT VALID`）卡死任何明文新写入，仓库以外的手写 SQL / 批量导入绕不过；存量明文由启动期 `MultiPartyContactPhonePiiBackfill` 幂等回填就地加密（三层防二次加密）。读端按权限脱敏：持 `pii.contact_phone.view`（高危，默认仅平台管理员）才见明文，其余见掩码（前 3 后 4）。本域无按手机号的后端检索路径，加密不影响任何既有查询，也未建盲索引。统一口径见 `compliance-and-personal-information-protection-requirements-v0.1.md` §6.1。
+
 - `leasing_intents`(id, lead_id FK, stage CHECK 5 值, intended_space_id, intended_area, rent_terms JSONB, last_stage_change_at, project_id, created/updated_at)
 - `leasing_brands`(id, brand_name UNIQUE-ish, brand_type CHECK 4 值, blacklist_reason, project_id, created/updated_at)
 - `leasing_follow_ups`(id, ref_type CHECK[lead,intent], ref_id, method, content, next_plan_at, operator_user_id, created_at)

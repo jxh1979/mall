@@ -56,6 +56,9 @@ P0 五能力全部上线(后台「商户专区」菜单组,ADM-MER-003..007):
 | 我的合同 | ADM-MER-006 | 商户自助层 /api/v1/merchant-portal/contracts(关键信息最小披露) |
 | 费用通知 | ADM-MER-007 | 复用接收人配置(商户自助口径:强制本商户+登录主体) |
 
+> **联系人手机号 PII 加密（P0-A / ★GAP-07 / SEC-04，迁移 V339，2026-07-27）**：`merchant_fee_notification_recipient.recipient_phone` 落库为 AES-GCM 信封密文（`enc:v1:`），仓库层写时加密、读时解密，业务层拿到的仍是明文；数据库 `CHECK` 约束（`NOT VALID`）卡死任何明文新写入，仓库以外的手写 SQL / 批量导入绕不过；存量明文由启动期 `MultiPartyContactPhonePiiBackfill` 幂等回填就地加密（三层防二次加密）。读端按权限脱敏：持 `pii.contact_phone.view`（高危，默认仅平台管理员）才见明文，其余见掩码（前 3 后 4）。短信触达链路不受影响——发送侧（`MerchantFeeNotificationRecipientResolver`）经仓库读取，拿到的是解密后的明文。本域无按手机号的后端检索路径，加密不影响任何既有查询，也未建盲索引。统一口径见 `compliance-and-personal-information-protection-requirements-v0.1.md` §6.1。
+
+
 - 分页口径(AUD-005 收尾·#187):/settlements 与 /contracts 走真分页——`page`/`size`(默认 page=1、size=500),`total` 取同 scope 谓词的 `SELECT COUNT(*)` 真值、第 501+ 条经翻页可达(平台管理员全量口径下不再截断/撒谎 total);商户自 scope 仍无 LIMIT 谓词隔离、只见本商户。
 - 数据边界铁律已活证据实证:只见本商户 / 跨商户拒 / 员工无商户归属 fail-closed(ops/160/merchant-zone-live-evidence-slice{1,2,34,5}.sh);
 - 终端管控:merchant 归属账号整个后台会话按 merchant_portal 终端上报,受总开关(V197)+商户专区模块开关(V199)约束,总开关关闭即整端硬拒(AND 语义);

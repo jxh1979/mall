@@ -2,6 +2,7 @@ package com.complex.platform.governance;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -52,14 +53,14 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("merchant.profile.view");
-        return ApiResponse.ok(service.listMerchants(includeArchived, page, size));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.listMerchants(includeArchived, page, size)));
     }
 
     @PostMapping("/merchants")
     public ApiResponse<MerchantRecord> createMerchant(@RequestBody @jakarta.validation.Valid MerchantProfileRequest request) {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createMerchant(request));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.createMerchant(request)));
     }
 
     @PutMapping("/merchants/{merchant_id}")
@@ -69,7 +70,7 @@ public class PlatformController {
     ) {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.updateMerchant(merchantId, request));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.updateMerchant(merchantId, request)));
     }
 
     // ================= V260 商户存档与审批后删除范式 =================
@@ -80,7 +81,7 @@ public class PlatformController {
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantArchiveRequest request) {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.archiveMerchant(merchantId, request));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.archiveMerchant(merchantId, request)));
     }
 
     @PostMapping("/merchants/{merchant_id}/unarchive")
@@ -89,7 +90,7 @@ public class PlatformController {
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantArchiveRequest request) {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.unarchiveMerchant(merchantId, request));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.unarchiveMerchant(merchantId, request)));
     }
 
     @PostMapping("/merchants/{merchant_id}/delete-request")
@@ -98,7 +99,7 @@ public class PlatformController {
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantDeleteRequest request) {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.requestDeleteMerchant(merchantId, request));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.requestDeleteMerchant(merchantId, request)));
     }
 
     @PostMapping("/merchants/{merchant_id}/delete-approve")
@@ -180,6 +181,24 @@ public class PlatformController {
         return ApiResponse.ok(service.changeBusinessEntityBinding(id, request));
     }
 
+    // ── P0-A/GAP-07 联系人手机号展示脱敏（V339）──────────────────────────────
+    // 业务 HTML「员工日常界面只显示脱敏号码，不见明文」：无 pii.contact_phone.view 的读端一律看掩码。
+    // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式——避免脱敏值污染幂等缓存后
+    // 被有权限者重放读到掩码。
 
+    private boolean canViewPhonePlaintext() {
+        return authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+    }
 
+    private MerchantRecord maskPhonesForUnauthorized(MerchantRecord merchant) {
+        return canViewPhonePlaintext() || merchant == null ? merchant : merchant.withMaskedPhones();
+    }
+
+    private PageResponse<MerchantRecord> maskPhonesForUnauthorized(PageResponse<MerchantRecord> page) {
+        if (canViewPhonePlaintext()) {
+            return page;
+        }
+        return new PageResponse<>(page.items().stream().map(MerchantRecord::withMaskedPhones).toList(),
+                page.page(), page.pageSize(), page.total());
+    }
 }

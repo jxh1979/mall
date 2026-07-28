@@ -3,6 +3,7 @@ package com.complex.platform.facility;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,10 +30,15 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    // P0-A/GAP-07：施工进场报备联系人手机号 PII 落库加密（V339）。与商户/供应商/招商/费用通知同批，
+    // 实读时发现同属"外部人员联系电话明文入库"同一缺陷面，一并纳入。
+    private final PiiCipher piiCipher;
 
-    JdbcSiteEntryReportRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcSiteEntryReportRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
+            PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.piiCipher = piiCipher;
     }
 
     @Override
@@ -104,7 +110,8 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
                 .addValue("id", r.id()).addValue("project_id", r.projectId()).addValue("space_id", r.spaceId())
                 .addValue("work_scope", r.workScope()).addValue("planned_start_date", r.plannedStartDate())
                 .addValue("planned_end_date", r.plannedEndDate()).addValue("crew_count", r.crewCount())
-                .addValue("contact_name", r.contactName()).addValue("contact_phone", r.contactPhone())
+                .addValue("contact_name", r.contactName())
+                .addValue("contact_phone", piiCipher.encrypt(r.contactPhone()))
                 .addValue("vendor_user_id", r.vendorUserId()).addValue("status", r.status())
                 .addValue("review_comment", r.reviewComment())
                 .addValue("acceptance_comment", r.acceptanceComment()).addValue("created_by", r.createdBy())
@@ -120,7 +127,8 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
         return new SiteEntryReportRecord(
                 rs.getString("id"), rs.getString("project_id"), rs.getString("space_id"),
                 rs.getString("work_scope"), localDate(rs, "planned_start_date"), localDate(rs, "planned_end_date"),
-                rs.getInt("crew_count"), rs.getString("contact_name"), rs.getString("contact_phone"),
+                rs.getInt("crew_count"), rs.getString("contact_name"),
+                piiCipher.decrypt(rs.getString("contact_phone")),
                 rs.getString("vendor_user_id"), rs.getString("status"), rs.getString("review_comment"),
                 rs.getString("acceptance_comment"), rs.getString("created_by"), nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "updated_at"), readListString(rs.getString("completion_attachment_ids")),

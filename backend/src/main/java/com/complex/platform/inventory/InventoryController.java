@@ -2,6 +2,7 @@ package com.complex.platform.inventory;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -355,6 +356,23 @@ public class InventoryController {
     }
 
     // I-2(V296)：无 inventory.cost.view 权限的调用方，库存流水响应成本列脱敏置 null（店员端/终端不可见）。
+    // ── P0-A/GAP-07 供应商联系人手机号展示脱敏（V339）。同上 cost 脱敏范式，放 controller 层。 ──
+    private InventorySupplierRecord maskSupplierPhoneForUnauthorized(InventorySupplierRecord record) {
+        if (record == null || authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return record;
+        }
+        return record.withMaskedPhone();
+    }
+
+    private PageResponse<InventorySupplierRecord> maskSupplierPhonesForUnauthorized(
+            PageResponse<InventorySupplierRecord> page) {
+        if (authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return page;
+        }
+        return new PageResponse<>(page.items().stream().map(InventorySupplierRecord::withMaskedPhone).toList(),
+                page.page(), page.pageSize(), page.total());
+    }
+
     private StockMovementRecord maskCostForUnauthorized(StockMovementRecord record) {
         if (record == null || authorizationService.currentActorHasPermission("inventory.cost.view")) {
             return record;
@@ -384,14 +402,14 @@ public class InventoryController {
     @GetMapping("/suppliers")
     public ApiResponse<PageResponse<InventorySupplierRecord>> listInventorySuppliers() {
         authorizationService.requirePermission("inventory.supplier.view");
-        return ApiResponse.ok(service.listInventorySuppliers());
+        return ApiResponse.ok(maskSupplierPhonesForUnauthorized(service.listInventorySuppliers()));
     }
 
     @PostMapping("/suppliers")
     public ApiResponse<InventorySupplierRecord> createInventorySupplier(@RequestBody @jakarta.validation.Valid InventorySupplierRequest request) {
         authorizationService.requirePermission("inventory.supplier.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createInventorySupplier(request));
+        return ApiResponse.ok(maskSupplierPhoneForUnauthorized(service.createInventorySupplier(request)));
     }
 
     // ── V277 跨主体流转:供货主体 + 流转单 ──

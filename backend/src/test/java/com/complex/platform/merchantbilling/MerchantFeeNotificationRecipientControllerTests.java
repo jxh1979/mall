@@ -129,7 +129,8 @@ class MerchantFeeNotificationRecipientControllerTests {
     }
 
     @Test
-    void listRequiresManagePermissionAndReturnsPage() throws Exception {
+    void listRequiresManagePermissionAndMasksPhoneWithoutPiiPermission() throws Exception {
+        // P0-A/GAP-07（V339）：无 pii.contact_phone.view 的读端只见掩码，不见明文。
         when(service.list("merchant_1")).thenReturn(new PageResponse<>(List.of(recipient("active")), 1, 200, 1));
 
         mockMvc.perform(get("/api/v1/merchant-billing/fee-notification-recipients")
@@ -137,9 +138,22 @@ class MerchantFeeNotificationRecipientControllerTests {
                         .with(user("finance").roles("P0_SMOKE")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].id").value("mfnr_1"))
-                .andExpect(jsonPath("$.data.items[0].recipient_phone").value("15577000001"));
+                .andExpect(jsonPath("$.data.items[0].recipient_phone").value("155****0001"));
 
         verify(authorizationService).requirePermission("merchant.billing.manage");
+    }
+
+    @Test
+    void listReturnsPlaintextPhoneWithPiiPermission() throws Exception {
+        // P0-A/GAP-07（V339）：有 pii.contact_phone.view 才见明文。
+        when(authorizationService.currentActorHasPermission("pii.contact_phone.view")).thenReturn(true);
+        when(service.list("merchant_1")).thenReturn(new PageResponse<>(List.of(recipient("active")), 1, 200, 1));
+
+        mockMvc.perform(get("/api/v1/merchant-billing/fee-notification-recipients")
+                        .queryParam("merchant_id", "merchant_1")
+                        .with(user("finance").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].recipient_phone").value("15577000001"));
     }
 
     @Test

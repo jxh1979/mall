@@ -346,6 +346,60 @@ class PlatformJdbcIntegrationTests {
                 """, String.class);
     }
 
+    // ── P0-A / ★GAP-07 / SEC-04（V339）：多主体联系电话 PII 落库加密 ──────────────────
+    @Test
+    void merchantContactPhonesArePersistedAsCiphertextAndReadBackAsPlaintext() {
+        Instant t = Instant.now();
+        repository.saveBusinessEntity(new BusinessEntityRecord(
+                "be_pii", "PII Entity", "operation", null, null, null, null, "active", t, t));
+        repository.saveMerchant(new MerchantRecord("mch_pii_1", "PII 商户", "other", "be_pii", "be_pii", "be_pii",
+                "第一联系人", "18800000021", "负责人", "1F-P", new BigDecimal("10.00"), new BigDecimal("9.00"),
+                "第二联系人", "18800000022", new BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
+
+        Map<String, Object> raw = jdbcTemplate.queryForMap(
+                "SELECT contact_phone, secondary_contact_phone FROM merchants WHERE id = 'mch_pii_1'");
+        // 库里是 AES-GCM 信封密文，不是明文
+        assertThat((String) raw.get("contact_phone")).startsWith("enc:v1:").doesNotContain("18800000021");
+        assertThat((String) raw.get("secondary_contact_phone")).startsWith("enc:v1:").doesNotContain("18800000022");
+
+        // 读回业务层仍是明文
+        MerchantRecord loaded = repository.findMerchantById("mch_pii_1").orElseThrow();
+        assertThat(loaded.contactPhone()).isEqualTo("18800000021");
+        assertThat(loaded.secondaryContactPhone()).isEqualTo("18800000022");
+    }
+
+    @Test
+    void merchantPhoneReSaveDoesNotDoubleEncrypt() {
+        // 防二次加密：把读回来的（明文）记录原样再存一次，落库仍是可解密的单层密文。
+        Instant t = Instant.now();
+        repository.saveBusinessEntity(new BusinessEntityRecord(
+                "be_pii2", "PII Entity 2", "operation", null, null, null, null, "active", t, t));
+        repository.saveMerchant(new MerchantRecord("mch_pii_2", "PII 商户2", "other", "be_pii2", "be_pii2", "be_pii2",
+                "联系人", "18800000023", "负责人", "1F-Q", new BigDecimal("10.00"), new BigDecimal("9.00"),
+                null, null, new BigDecimal("1.00"), "fixed_rent_plus_commission", "draft", t, t));
+        repository.saveMerchant(repository.findMerchantById("mch_pii_2").orElseThrow());
+
+        assertThat(repository.findMerchantById("mch_pii_2").orElseThrow().contactPhone()).isEqualTo("18800000023");
+    }
+
+    @Test
+    void plaintextPhoneWriteIsRejectedByDatabaseConstraint() {
+        // DB 级边界（V249 思路）：任何绕开仓库的手写 SQL / 批量导入写明文，数据库直接拒。
+        Instant t = Instant.now();
+        repository.saveBusinessEntity(new BusinessEntityRecord(
+                "be_pii3", "PII Entity 3", "operation", null, null, null, null, "active", t, t));
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO merchants (id, merchant_name, merchant_type, contact_phone, status, created_at, updated_at) "
+                        + "VALUES ('mch_pii_plain', 'X', 'other', '18800000024', 'draft', now(), now())"))
+                .hasMessageContaining("chk_merchants_contact_phone_pii");
+    }
+
+    @Test
+    void v339SeedsContactPhonePlaintextViewPermission() {
+        assertThat(permissionCodes()).contains("pii.contact_phone.view");
+        assertThat(platformAdminPermissionCodes()).contains("pii.contact_phone.view");
+    }
+
     private List<String> platformAdminPermissionCodes() {
         return jdbcTemplate.queryForList("""
                 SELECT permission_code

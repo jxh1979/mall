@@ -2,6 +2,7 @@ package com.complex.platform.governance;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
 import com.complex.platform.governance.review.SupervisorReviewRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -30,10 +31,14 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    // P0-A/GAP-07：商户联系人手机号 PII 落库加密（V339）。范式同 customers.phone(V188)/ticket_orders.buyer_phone(V247)：
+    // 仓库层写时 encrypt、读时 decrypt，业务层始终拿明文；展示脱敏在 controller 按权限做。
+    private final PiiCipher piiCipher;
 
-    JdbcPlatformRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcPlatformRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper, PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.piiCipher = piiCipher;
     }
 
     @Override
@@ -500,13 +505,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("contract_entity_id", merchant.contractEntityId())
                 .addValue("settlement_entity_id", merchant.settlementEntityId())
                 .addValue("contact_name", merchant.contactName())
-                .addValue("contact_phone", merchant.contactPhone())
+                .addValue("contact_phone", piiCipher.encrypt(merchant.contactPhone()))
                 .addValue("owner_person", merchant.ownerPerson())
                 .addValue("mall_block_code", merchant.mallBlockCode())
                 .addValue("area_square_meter", merchant.areaSquareMeter())
                 .addValue("leased_area_square_meter", merchant.leasedAreaSquareMeter())
                 .addValue("secondary_contact_name", merchant.secondaryContactName())
-                .addValue("secondary_contact_phone", merchant.secondaryContactPhone())
+                .addValue("secondary_contact_phone", piiCipher.encrypt(merchant.secondaryContactPhone()))
                 .addValue("rent_per_square_meter", merchant.rentPerSquareMeter())
                 .addValue("cooperation_form", merchant.cooperationForm())
                 .addValue("status", merchant.status())
@@ -590,13 +595,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("contract_entity_id"),
                 resultSet.getString("settlement_entity_id"),
                 resultSet.getString("contact_name"),
-                resultSet.getString("contact_phone"),
+                piiCipher.decrypt(resultSet.getString("contact_phone")),
                 resultSet.getString("owner_person"),
                 resultSet.getString("mall_block_code"),
                 resultSet.getBigDecimal("area_square_meter"),
                 resultSet.getBigDecimal("leased_area_square_meter"),
                 resultSet.getString("secondary_contact_name"),
-                resultSet.getString("secondary_contact_phone"),
+                piiCipher.decrypt(resultSet.getString("secondary_contact_phone")),
                 resultSet.getBigDecimal("rent_per_square_meter"),
                 resultSet.getString("cooperation_form"),
                 resultSet.getString("status"),

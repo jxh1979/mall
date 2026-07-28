@@ -3,6 +3,7 @@ package com.complex.platform.merchantbilling;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -17,9 +18,13 @@ import org.springframework.stereotype.Repository;
 class JdbcMerchantFeeNotificationRecipientRepository implements MerchantFeeNotificationRecipientRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    // P0-A/GAP-07：费用通知接收人手机号 PII 落库加密（V339）。写时 encrypt、读时 decrypt；
+    // 下游短信发送（MerchantFeeNotificationRecipientResolver）拿到的仍是明文，触达链路不变。
+    private final PiiCipher piiCipher;
 
-    JdbcMerchantFeeNotificationRecipientRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    JdbcMerchantFeeNotificationRecipientRepository(NamedParameterJdbcTemplate jdbcTemplate, PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
+        this.piiCipher = piiCipher;
     }
 
     @Override
@@ -123,7 +128,7 @@ class JdbcMerchantFeeNotificationRecipientRepository implements MerchantFeeNotif
                 rs.getString("merchant_id"),
                 rs.getString("fee_event"),
                 rs.getString("recipient_name"),
-                rs.getString("recipient_phone"),
+                piiCipher.decrypt(rs.getString("recipient_phone")),
                 rs.getString("status"),
                 rs.getString("created_by"),
                 nullableInstant(rs, "created_at"),
@@ -138,7 +143,7 @@ class JdbcMerchantFeeNotificationRecipientRepository implements MerchantFeeNotif
                 .addValue("merchant_id", record.merchantId())
                 .addValue("fee_event", record.feeEvent())
                 .addValue("recipient_name", record.recipientName())
-                .addValue("recipient_phone", record.recipientPhone())
+                .addValue("recipient_phone", piiCipher.encrypt(record.recipientPhone()))
                 .addValue("status", record.status())
                 .addValue("created_by", record.createdBy())
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
