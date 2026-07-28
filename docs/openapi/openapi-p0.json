@@ -35238,6 +35238,281 @@
           }
         }
       }
+    },
+    "/api/v1/settlement/invoice-items": {
+      "get": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "listSettlementInvoiceItems",
+        "summary": "开票清单列表",
+        "description": "按结算单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。系统只生成清单交财务,不自建开票引擎。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.invoice.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "settlement.invoice.list",
+        "x-audit-event-failure": "settlement.invoice.list_failed",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "按项目公司过滤。"
+          },
+          {
+            "name": "periodStart",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "结算月起日(YYYY-MM-DD)。"
+          },
+          {
+            "name": "subjectEntityId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "按开票主体过滤。"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "开票状态:pending/issuing/issued/reversed/voided/failed。"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "页码,默认 1。"
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "每页条数,默认 50、上限 200。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/settlement/invoice-items/summary": {
+      "get": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "settlementInvoiceSummary",
+        "summary": "开票清单按主体汇总",
+        "description": "按开票主体分组的金额/税额/文建费汇总 + 开票主体与税目映射规则 + 已超开告警(已开>应开须先红冲再重开)。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.invoice.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "settlement.invoice.summary",
+        "x-audit-event-failure": "settlement.invoice.summary_failed",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "按项目公司过滤。"
+          },
+          {
+            "name": "periodStart",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "结算月起日(YYYY-MM-DD)。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/settlement/invoice-items/generate": {
+      "post": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "generateSettlementInvoiceItems",
+        "summary": "按结算单生成开票清单",
+        "description": "把已确认/已结算的月度结算单拆成开票清单条目(门票综合服务费归娱乐平台公司、可分配池分账归各酒吧商户)。幂等:本次可开额 = 应开额 − 已开额,≤0 不生成;内部成本转付与营销成本规则不进对外清单。返回本次新增条目数。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.invoice.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "settlement.invoice.generated",
+        "x-audit-event-failure": "settlement.invoice.generate_failed",
+        "parameters": [
+          {
+            "name": "billId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "结算单编号 settlement_bills.id。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/settlement/invoice-items/{id}/status": {
+      "post": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "changeSettlementInvoiceItemStatus",
+        "summary": "流转开票状态",
+        "description": "登记第三方税务/电子发票平台回传的开票结果,或对已开票条目红冲/对未开出条目作废。状态机:待开票→开票中/已开票/开票失败/已作废;开票中→已开票/开票失败/已作废;已开票→已红冲;开票失败→待开票/已作废;已红冲、已作废为终态。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.invoice.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "settlement.invoice.status_changed",
+        "x-audit-event-failure": "settlement.invoice.status_change_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "开票清单条目 id。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "description": "目标开票状态:issuing 开票中 / issued 已开票 / reversed 已红冲 / voided 已作废 / failed 开票失败 / pending 待开票(失败后重试)。",
+                    "maxLength": 24
+                  },
+                  "invoice_no": {
+                    "type": "string",
+                    "description": "税务/电子发票平台开出的发票号;本系统不生成发票号,仅回填留痕。",
+                    "maxLength": 64
+                  },
+                  "remark": {
+                    "type": "string",
+                    "description": "红冲/作废理由等备注。",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {

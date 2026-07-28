@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V366**，发现 **165** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V366**，发现 **167** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -157,6 +157,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `inventory_suppliers` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_trace_codes` | `merchant_id` | direct | V128 | `V128__inventory_trace_codes.sql` |
 | `inventory_trace_handovers` | `merchant_id` | direct | V139 | `V139__inventory_trace_handover_merchant_id.sql` |
+| `invoice_subject_rules` | `project_id` | direct | V362 | `V362__settlement_invoice_list.sql` |
 | `issued_entitlements` | `merchant_id` + `venue_id` | direct | V006 | `V006__p0_ticketing_verification.sql` |
 | `leasing_brands` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
 | `leasing_follow_ups` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
@@ -185,6 +186,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `service_orders` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `service_responsibility_records` | `merchant_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
 | `settlement_bills` | `project_id` | direct | V224 | `V224__settlement_bills_batch2.sql` |
+| `settlement_invoice_items` | `project_id` | direct | V362 | `V362__settlement_invoice_list.sql` |
 | `settlement_items` | `merchant_id` | direct | V224 | `V224__settlement_bills_batch2.sql` |
 | `settlement_tax_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `settlement_transactions` | `merchant_id` + `project_id` | direct | V222 | `V222__settlement_transactions_batch1.sql` |
