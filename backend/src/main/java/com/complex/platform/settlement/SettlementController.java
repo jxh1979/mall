@@ -58,13 +58,16 @@ public class SettlementController {
 
     /**
      * D7 超池特批出口:把某<b>超池 draft</b> 结算单填特批引用并置 confirmed(可再走 postBill 过账)。
-     * 仅超池 draft 单可特批(非超池 draft/已 confirmed/settled 由服务层 409 BILL_NOT_OVERPOOL_DRAFT 拒);
-     * 复用 postBill 同权限 settlement.bill.post + 平台域(不新建权限、零迁移)。返回落库的特批引用。
+     * 仅超池 draft 单可特批(非超池 draft/已 confirmed/settled 由服务层 409 BILL_NOT_OVERPOOL_DRAFT 拒)。
+     *
+     * <p>v7 审计 R-2(V357):改用<b>专属权限点</b> settlement.bill.special_approve(高敏·仅授平台负责人)
+     * + 平台域——与常规过账 settlement.bill.post 分权:过账可下放财务运营,超池特批只能平台负责人本人批。
+     * 返回特批引用 + 本次特批的到期日(S9 短期激励期限,到期自动失效)。
      */
     @PostMapping("/bills/{id}/special-approval")
-    public ApiResponse<String> specialApprove(@PathVariable("id") String billId,
-                                              @RequestBody SpecialApprovalRequest request) {
-        authorizationService.requirePermission("settlement.bill.post");
+    public ApiResponse<SettlementPostingService.SpecialApprovalResult> specialApprove(
+            @PathVariable("id") String billId, @RequestBody SpecialApprovalRequest request) {
+        authorizationService.requirePermission("settlement.bill.special_approve");
         authorizationService.requirePlatformScope();
         return ApiResponse.ok(postingService.specialApprove(billId,
                 request == null ? null : request.specialApprovalRef()));
