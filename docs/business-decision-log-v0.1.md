@@ -417,3 +417,16 @@
 
 | 2026-07-21 商户专区平台全量伪分页收尾（AUD-005 收尾·#187 复核残留） | 改 | `merchantportal/MerchantPortalService`（listMyContracts/listMySettlements）+ `MerchantPortalController` + `contract/ContractRepository`/`JdbcContractRepository`（新增 listAllSettlementsPaged） | 批D 只修了招商/合同/治理/员工四域，商户专区（商户专区一期 3.18）在四域之外被漏掉：**平台管理员**在商户专区看「全量合同/结算」时，合同回退分支走 `listContracts()`（SQL 固定 `LIMIT 500`）且服务层返回 `total=当前页条数`＝**伪分页**（第 501+ 条静默不可达、total 撒谎）；结算回退分支同样 `total=items.size()` 且无 LIMIT／OFFSET（无界全量装载、page/size 形同虚设）。改**真分页**：service 保留原无参签名（委派 page=1/size=500）+ 新增 page/size 重载；controller 接受受限 `page/size`（默认 page=1、size=500＝合同既有 LIMIT 上限，保留前端一次拉取契约不破反序列化）；平台全量合同走既有 `listContractsPaged`、结算走新增 `listAllSettlementsPaged`（同 scope 谓词的 `SELECT COUNT(*)` 取真 total + `LIMIT/OFFSET` 任意页可达 + 稳定排序 `created_at DESC, id`）。**商户自 scope 路径（listContractsByMerchant/listSettlementsByMerchant，无 LIMIT、谓词隔离）保持不变**，仅在服务层对其结果做内存切片（单商户天然有界）。范式沿用批D／finance getPaged。新增 `MerchantPortalJdbcIntegrationTests`（平台全量结算真 total＋第二页可达＋商户 scope 仍隔离），`MerchantPortalServiceTests` 平台分支桩改指 `listContractsPaged`；无迁移。 | 2026-07-19 #187 复核发现批D 遗漏商户专区平台全量分支（P2）：伪分页致平台侧历史合同/结算在商户专区不可达、total 少算 |
 | 2026-07-22 IR 提取轮补充口径 | 增/改 | §38 / 基准 D15 / 三份业务 HTML（10 处） / bar-design §5.2.2 / 8 处派生文档 | IR 铁律提取轮用户拍板 8 项：金额精度+分账尾差归平台、并发以先成功为准、考勤按所在位置当地时间（改"服务器时间"）、留痕永久+手动删入口、导出脱敏分级、导出加密码算法派生、金额变动短信提醒、最低消费绝对不按人数（删"原则上"）。同步三份最终解释权 HTML（sys 5+gov 4+enum 1）+ 基准 D15 + 8 处派生文档 sed 去"原则上" + bar-design `by_headcount` 扩展点废弃标注 | 用户 2026-07-22 IR 提取轮逐条拍板 |
+
+## BAR-VOID-A1（2026-07-27）高价值已出品退酒审批时机
+
+- **状态**：已确认（文档口径；编码未改）
+- **决策**：
+  1. 采用方案 **A1**：低价值可即时生效；高价值先审后行。
+  2. **仅已出品**（`return` / delivered）进入高价值先审判定；出品前 `cancel` 不因本决策强制先审后行。
+  3. 高价值阈值默认 **超过 5000 元**（`bar.void.high_value_threshold_cent`，默认 `500000` 分，可按项目/门店配置）。
+  4. 高价值须双证据（原因码 + 附件）且主管审批（申请人不可自批）；通过前不得改库存/账单/明细 voided。
+- **权威对齐**：平台治理高危资金/退款类先审再生效（`PGM-0089` 方向一致）；酒吧细则以本决策 + `bar-business-operations-product-prd-v0.1.md` §10.2.1 为准。
+- **实现**：当前 `BarOrderService` 仍可能“先生效后审批”，记为实现残余风险；**本轮只改文档，不动编码**。
+- **来源**：用户 2026-07-27 确认（审计 P1 附录漂移处置）。
+
