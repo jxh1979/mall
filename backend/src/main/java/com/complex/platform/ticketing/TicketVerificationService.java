@@ -55,6 +55,9 @@ public class TicketVerificationService {
     // @Lazy 破除潜在初始化环（ticketing→amusement→TicketingAmusementEntitlementGateway→TicketingRepository 本无环，
     // @Lazy 仅为稳妥）。
     private final AmusementVerificationPort amusementVerificationPort;
+    // S5：赠送权益内部结算价的唯一解析口径（预扣与兑付同源）。由 repository 直接构造——它无状态、无外部依赖，
+    // 各兼容构造点无须逐个补参，且永不为 null（免掉一层空判分支）。
+    private final InternalSettlementPriceResolver priceResolver;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketVerificationService(
@@ -64,6 +67,7 @@ public class TicketVerificationService {
             AuthorizationService authorizationService,
             TicketCredentialSigner credentialSigner,
             @org.springframework.context.annotation.Lazy AmusementVerificationPort amusementVerificationPort) {
+        this.priceResolver = new InternalSettlementPriceResolver(repository);
         this.repository = repository;
         this.eventPublisher = eventPublisher;
         this.mdmService = mdmService;
@@ -339,7 +343,9 @@ public class TicketVerificationService {
         boolean giftDrink = reversedEntitlement != null
                 && GIFT_DRINK_ENTITLEMENT_TYPE.equals(reversedEntitlement.entitlementType());
         if (giftDrink) {
-            eventPublisher.publishEvent(new GiftReversedEvent(original.id()));
+            // S5：把原核销当时固化的内部结算价带下去，冲正按「当时那个价」逐分对冲，
+            // 不再回头重查目录（业务 HTML §内部结算价目录「已发生的不可改」）。
+            eventPublisher.publishEvent(new GiftReversedEvent(original.id(), original.settlementPriceCent()));
         }
         // 发 VerificationReversedEvent，作为 ticketing 域"核销已冲正"权威信号。现有消费者（同步、同事务）：
         //   - customer 域 LoyaltyPointsConsumer（F-TXN-03 裁决#3）：全额冲减该订单已 confirmed 积分（与"核销→confirm"对称，
@@ -472,6 +478,8 @@ public class TicketVerificationService {
         // P0-2 越权修复：在线核销主链此前未做商户归属校验，A 商户核销端可凭票号/权益码核销 B 商户客人的票
         // （跨租户烧票 IDOR）。消费权益前按调用者商户范围校验归属（与 refresh/reverse 同范式；平台 scope 放行）。
         enforceMerchantScope(entitlement.merchantId());
+        // S5 K16：业务不变量——赠送权益只能在提供它的那家商户核销。读快拒，置于消费权益/落任何记录之前。
+        enforceProviderMerchantMatch(entitlement, request);
         Instant now = Instant.now();
         // P1 清单#19：动态二维码 window_valid 真实计算——非动态凭证（直接凭权益码）无刷新窗口概念，window_valid=null。
         Boolean windowValid = credential == null ? null : isCredentialWindowValid(credential, now);
@@ -672,8 +680,7 @@ public class TicketVerificationService {
         // AUD-015：同步发布且与本核销同事务——赠饮履约缺配置/缺库存时消费者抛异常，会回滚整笔核销(fail-closed)、
         // 票权益保留可用；严禁在消费者里 try/catch 吞异常放行（否则权益已消费却无出品/无扣库/无结算，重犯 AUD-015）。
         if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(updated.entitlementType())) {
-            // R5 已落地#2：赠饮→吧台 SKU 映射来源——权益模板(entitlement_template).bar_item_ref。
-            // 已配置则下游对该 item 走 redeem_consume 扣减；为空（未配置）则下游跳过扣减并标注（向后兼容）。
+            // S5：itemRef 语义定死 = bar_products.id（建模板时已校验存在且属本提供方）。
             String barItemRef = repository.findEntitlementTemplateById(updated.entitlementTemplateId())
                     .map(EntitlementTemplateRecord::barItemRef)
                     .orElse(null);
@@ -681,9 +688,13 @@ public class TicketVerificationService {
                     updated.id(),
                     verification.id(),
                     barItemRef,
-                    updated.pointId(),
+                    // S5：出品吧台 = 提供方商户（K16 已保证本次核销就发生在这家）。此前误用 point_id，
+                    // 而赠饮权益的 point_id 多为空 → 赠饮履约恒报「无吧台归属」。
+                    providerMerchantId(updated),
                     null,
-                    updated.merchantId()
+                    updated.merchantId(),
+                    // S5：本次内部结算价随事件带下游，兑付与预扣同源、不再由 bar 域另查一遍（口径不可能漂）。
+                    settlementPriceCent
             ));
         }
         return new VerificationResponse(verification.id(), verification.verificationNo(), verification.status(), verification.resultReason());
@@ -815,8 +826,7 @@ public class TicketVerificationService {
         return null;
     }
 
-    // 结算重构批3-1(PRD §6.1)：结算类别常量。
-    private static final String KIND_PHYSICAL = "physical";
+    // 结算重构批3-1(PRD §6.1)：结算类别常量。physical 的判定已收进 InternalSettlementPriceResolver（S5 统一口径）。
     private static final String KIND_VIRTUAL = "virtual";
 
     // 结算重构批3-2(PRD §6.2)：入场资格消耗单位——按场次核销(入过场当场次持续进出不重复消耗、过场作废)。
@@ -969,30 +979,71 @@ public class TicketVerificationService {
     }
 
     /**
-     * 结算重构批3-1(PRD §6.1)：核销时判定该次结算价（分，NULL 安全回退）。
+     * S5：该权益的提供方商户——发放时定格的值，票面上写着「这杯酒是哪家吧请的」。
+     * 单店票出票会把酒吧写进 bar_id，通票走模板归属商户；两者按 AUD-076/绑定校验本就一致，取先有的那个。
+     */
+    private static String providerMerchantId(IssuedEntitlementRecord entitlement) {
+        return entitlement.barId() != null ? entitlement.barId() : entitlement.merchantId();
+    }
+
+    /**
+     * S5 K16 跨提供方核销守卫（业务不变量，<b>不是</b>权限）：
+     * 「A 酒吧的赠酒只能在 A 酒吧核销，不能拿到其他酒吧核销」（业务 HTML §通票赠酒按酒吧分配）。
+     *
+     * <p>为什么必须与角色无关：这条是给酒吧店长看的账——B 吧的机器核掉了 A 吧的赠酒，月底 A 吧的成本
+     * 记在 B 吧头上，两家都对不平。平台管理员用平台账号核也一样错，所以平台 scope 同样受约束
+     * （{@code enforceMerchantScope} 对空 scope 放行，那是权限层，管不了这件事）。
+     *
+     * <p>核销上下文 = 核销设备绑定的商户。设备没绑商户就说不清这杯酒是在哪家核的 → 一律拒绝（fail-closed），
+     * 让运营先去把设备归属配好，而不是先记一笔说不清的账。离线同步旁路复用本方法
+     * （device_code 已在 {@code createSyncTask} 里解析成设备 id），无须另写。
+     */
+    private void enforceProviderMerchantMatch(IssuedEntitlementRecord entitlement, VerificationRequest request) {
+        if (!InternalSettlementPriceResolver.providerRedeemed(
+                entitlement.entitlementType(), entitlement.entitlementKind(), entitlement.exclusiveMerchantId())) {
+            return; // 入场/游乐等非「到提供方兑付」类权益不受此约束。
+        }
+        String provider = providerMerchantId(entitlement);
+        if (provider == null) {
+            throw ApiException.conflict("ENTITLEMENT_PROVIDER_UNRESOLVED",
+                    "该赠送权益未绑定提供方商户，无法核销");
+        }
+        String context = repository
+                .findTerminalDeviceMerchantId(trimToNull(request == null ? null : request.deviceId()))
+                .orElse(null);
+        if (context == null) {
+            throw ApiException.conflict("VERIFY_DEVICE_MERCHANT_UNRESOLVED",
+                    "核销设备未绑定商户，无法判定本次核销发生在哪家门店");
+        }
+        if (!provider.equals(context)) {
+            throw ApiException.conflict("ENTITLEMENT_PROVIDER_MISMATCH",
+                    "该权益只能在发放它的商户核销");
+        }
+    }
+
+    /**
+     * 核销时判定该次结算价（分）。S5 起分两条口径，<b>各按各的性质取值，绝不互相回退</b>：
      * <ul>
-     *   <li><b>physical(实物)</b>：经 模板.bar_item_ref → bar_products.internal_settlement_price_cent(V152 内部结算价)；
-     *       查不到商品/内部价为 NULL → 回退 value_amount_cent。</li>
-     *   <li><b>virtual(虚拟)</b>：取 agreement_price_cent(签约单价)；NULL → 回退 value_amount_cent。</li>
-     *   <li><b>kind 为 NULL(旧数据)</b>：回退 value_amount_cent。</li>
+     *   <li><b>提供方兑付类（逐项赠送权益）</b>：成本一律走 {@link InternalSettlementPriceResolver}
+     *       （提供方商品内部结算价 → 模板签约内部结算价）；取不到就 <b>fail-closed</b> 拒绝核销，
+     *       不再静默回退票面价——业务 HTML 明写「票面原价与内部结算价两者不可混用」，回退会让预扣基数
+     *       悄悄用成售价，账面平、钱全错。</li>
+     *   <li><b>其余（入场/游乐等）</b>：票面价即分账基准、本就不是成本口径，维持现状（虚拟取签约单价、
+     *       否则回退 value_amount_cent），逐分不变。</li>
      * </ul>
-     * 回退基准 value_amount_cent 本身可空（返回 null，下游对账/分账按缺价处理）。
      */
     private Long resolveSettlementPrice(IssuedEntitlementRecord entitlement) {
-        String kind = entitlement.entitlementKind();
-        if (KIND_PHYSICAL.equals(kind)) {
+        if (InternalSettlementPriceResolver.providerRedeemed(
+                entitlement.entitlementType(), entitlement.entitlementKind(), entitlement.exclusiveMerchantId())) {
             String barItemRef = repository.findEntitlementTemplateById(entitlement.entitlementTemplateId())
                     .map(EntitlementTemplateRecord::barItemRef)
                     .orElse(null);
-            Long internalPrice = barItemRef == null ? null
-                    : repository.findBarProductInternalPrice(barItemRef).orElse(null);
-            return internalPrice != null ? internalPrice : entitlement.valueAmountCent();
+            return priceResolver.require(
+                    barItemRef, providerMerchantId(entitlement), entitlement.agreementPriceCent());
         }
-        if (KIND_VIRTUAL.equals(kind)) {
-            return entitlement.agreementPriceCent() != null
-                    ? entitlement.agreementPriceCent() : entitlement.valueAmountCent();
+        if (KIND_VIRTUAL.equals(entitlement.entitlementKind()) && entitlement.agreementPriceCent() != null) {
+            return entitlement.agreementPriceCent();
         }
-        // kind 为 NULL(旧数据)：回退 value_amount。
         return entitlement.valueAmountCent();
     }
 

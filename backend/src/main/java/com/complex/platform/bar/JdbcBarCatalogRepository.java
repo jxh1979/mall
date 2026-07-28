@@ -434,19 +434,6 @@ final class JdbcBarCatalogRepository {
                 """, Map.of("id", id), rowMapper::mapProduct).stream().findFirst();
     }
 
-    public Optional<BarProductRecord> findProductByInventoryItem(String barId, String inventoryItemId) {
-        // F-TXN-03 piece③b：按 (bar_id, inventory_item_id) 取吧台商品，active 优先、最近创建，取一条。
-        return jdbcTemplate.query("""
-                SELECT *
-                  FROM bar_products
-                 WHERE bar_id = :bar_id
-                   AND inventory_item_id = :inventory_item_id
-                 ORDER BY (status = 'active') DESC, created_at DESC, id
-                 LIMIT 1
-                """, Map.of("bar_id", barId, "inventory_item_id", inventoryItemId),
-                rowMapper::mapProduct).stream().findFirst();
-    }
-
     public void setReservationArchiveReason(String id, String reason) {
         jdbcTemplate.update("UPDATE bar_reservations SET archive_reason = :reason WHERE id = :id",
                 new MapSqlParameterSource("reason", reason).addValue("id", id));

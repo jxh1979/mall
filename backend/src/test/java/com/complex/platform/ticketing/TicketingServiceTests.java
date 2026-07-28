@@ -236,6 +236,68 @@ class TicketingServiceTests {
                 "s6-pub-3", "publish", "ready", List.of())).status()).isEqualTo("published");
     }
 
+    /** K17 用例夹具：某家酒吧的入场 + 可选赠酒，绑到同一张票上。 */
+    private void bindBarEntitlements(String ticketTypeId, String barMerchantId, String tag, int giftCups) {
+        ticketingRepository.merchantTypes.put(barMerchantId, "bar");
+        EntitlementTemplateRecord entry = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "k17-tpl-entry-" + tag, "entry", List.of(), tag + " 入场", "admission", 1, 5000L, "active",
+                null, barMerchantId, null, null));
+        service.bindTicketTypeEntitlement(ticketTypeId, new TicketTypeEntitlementRequest(
+                "k17-bind-entry-" + tag, "bind", List.of(), entry.id(), 1, 1, 5000L, "default", 1, 5000L));
+        if (giftCups > 0) {
+            ticketingRepository.barProducts.put("k17-prod-" + tag,
+                    new BarProductRefRecord("k17-prod-" + tag, barMerchantId, 4200L, null, false, "active"));
+            EntitlementTemplateRecord gift = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                    "k17-tpl-gift-" + tag, "gift", List.of(), tag + " 赠酒", "gift_drink", 1, 0L, "active",
+                    "k17-prod-" + tag, barMerchantId, null, null));
+            service.bindTicketTypeEntitlement(ticketTypeId, new TicketTypeEntitlementRequest(
+                    "k17-bind-gift-" + tag, "bind", List.of(), gift.id(), giftCups, 1, 0L, "default", 1, 0L));
+        }
+    }
+
+    @Test
+    void publishBlocksPassWhereSomeCoveredBarHasNoGiftDrink() {
+        // K17（业务 HTML §通票赠酒按酒吧分配）：票已经给 A 吧配了赠酒，却让客人也能进 B 吧、B 吧一杯没有 →
+        // 客人到了 B 吧要么白跑一趟、要么 B 吧店长自掏腰包，事后没法补（票面已印）。发布前点名报出来。
+        TicketTypeRecord pass = createTicketType("k17-pass");
+        bindBarEntitlements(pass.id(), "mch_bar_a", "A", 1);
+        bindBarEntitlements(pass.id(), "mch_bar_b", "B", 0);
+
+        assertThatThrownBy(() -> service.publishTicketType(pass.id(),
+                new StatusChangeRequest("k17-pub-1", "publish", "ready", List.of())))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PASS_BAR_GIFT_COVERAGE_INSUFFICIENT"));
+    }
+
+    @Test
+    void publishAllowsPassWhenEveryCoveredBarHasAtLeastOneGiftDrink() {
+        TicketTypeRecord pass = createTicketType("k17-pass-ok");
+        bindBarEntitlements(pass.id(), "mch_bar_c", "C", 1);
+        bindBarEntitlements(pass.id(), "mch_bar_d", "D", 2);
+
+        assertThat(service.publishTicketType(pass.id(),
+                new StatusChangeRequest("k17-pub-2", "publish", "ready", List.of())).status())
+                .isEqualTo("published");
+
+        // 票面按吧分组：各吧分别赠几杯，与发布校验取的是同一份数据。
+        List<TicketTypeGiftCoverageRow> coverage = service.listGiftCoverage(pass.id()).items();
+        assertThat(coverage).extracting(TicketTypeGiftCoverageRow::barId, TicketTypeGiftCoverageRow::barTotalCups)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("mch_bar_c", 1),
+                        org.assertj.core.groups.Tuple.tuple("mch_bar_d", 2));
+    }
+
+    @Test
+    void publishDoesNotRequireGiftDrinksOnAnOrdinaryTicketWithoutAnyGift() {
+        // 普通门票本来就不含赠酒，卡它只会让运营连普通票都发不出去 → 本条不适用。
+        TicketTypeRecord ticket = createTicketType("k17-plain");
+        bindBarEntitlements(ticket.id(), "mch_bar_e", "E", 0);
+
+        assertThat(service.publishTicketType(ticket.id(),
+                new StatusChangeRequest("k17-pub-3", "publish", "ready", List.of())).status())
+                .isEqualTo("published");
+    }
+
     @Test
     void createEntitlementTemplateIsIdempotent() {
         EntitlementTemplateRequest request = new EntitlementTemplateRequest(
@@ -2916,6 +2978,9 @@ class TicketingServiceTests {
     // #3 配置入口：创建 template 带 bar_item_ref / merchant/venue/point 透传落库。
     @Test
     void createEntitlementTemplatePassesThroughBarItemRefAndOwnership() {
+        // S5：bar_item_ref 必须指向真实存在、且属于本提供方商户的商品。
+        ticketingRepository.barProducts.put("bar_sku_42",
+                new BarProductRefRecord("bar_sku_42", "mch_x", 4200L, null, false, "active"));
         EntitlementTemplateRecord template = service.createEntitlementTemplate(new EntitlementTemplateRequest(
                 "cfg-template", "create", List.of(), "Gift Drink", "gift_drink", 1, 0L, "active",
                 "bar_sku_42", "mch_x", "venue_x", "point_x"));
@@ -2923,6 +2988,40 @@ class TicketingServiceTests {
         assertThat(template.merchantId()).isEqualTo("mch_x");
         assertThat(template.venueId()).isEqualTo("venue_x");
         assertThat(template.pointId()).isEqualTo("point_x");
+    }
+
+    @Test
+    void createEntitlementTemplateRejectsUnknownProviderProduct() {
+        // S5：选了个不存在的商品 → 当场拒，别留到客人站在吧台前才炸。
+        assertThatThrownBy(() -> service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cfg-tpl-missing", "create", List.of(), "Gift Drink", "gift_drink", 1, 0L, "active",
+                "no_such_product", "mch_x", null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("GIFT_TEMPLATE_ITEM_NOT_FOUND"));
+    }
+
+    @Test
+    void createEntitlementTemplateRejectsProductOfAnotherMerchant() {
+        // S5：A 吧的权益绑到 B 吧的商品 → 成本记给谁全凭巧合，拒。
+        ticketingRepository.barProducts.put("prod_of_b",
+                new BarProductRefRecord("prod_of_b", "mch_b", 4200L, null, false, "active"));
+        assertThatThrownBy(() -> service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cfg-tpl-cross", "create", List.of(), "Gift Drink", "gift_drink", 1, 0L, "active",
+                "prod_of_b", "mch_x", null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("GIFT_TEMPLATE_ITEM_MERCHANT_MISMATCH"));
+    }
+
+    @Test
+    void createEntitlementTemplateRejectsStockManagedProductWithoutInventoryItem() {
+        // S5：要扣库存却没绑库存物料 → 核销时扣不动库，建模板阶段就拒。
+        ticketingRepository.barProducts.put("prod_nostock",
+                new BarProductRefRecord("prod_nostock", "mch_x", 4200L, null, true, "active"));
+        assertThatThrownBy(() -> service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cfg-tpl-nostock", "create", List.of(), "Gift Drink", "gift_drink", 1, 0L, "active",
+                "prod_nostock", "mch_x", null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("GIFT_TEMPLATE_ITEM_STOCK_UNMAPPED"));
     }
 
     @Test
@@ -3646,6 +3745,30 @@ class TicketingServiceTests {
         int qrRefreshIntervalSeconds = 15;
         @Override public int findQrRefreshIntervalSeconds() { return qrRefreshIntervalSeconds; }
         @Override public void upsertQrRefreshIntervalSeconds(int seconds, String updatedBy, java.time.Instant now) { this.qrRefreshIntervalSeconds = seconds; }
+        // S5：提供方商品目录（bar_item_ref = bar_products.id）与设备归属（K16 判定核销门店）。
+        final Map<String, BarProductRefRecord> barProducts = new LinkedHashMap<>();
+        final Map<String, String> deviceMerchants = new LinkedHashMap<>();
+        @Override public java.util.Optional<BarProductRefRecord> findBarProductRef(String id) {
+            return java.util.Optional.ofNullable(barProducts.get(id));
+        }
+        @Override public java.util.Optional<String> findTerminalDeviceMerchantId(String deviceId) {
+            return java.util.Optional.ofNullable(deviceMerchants.get(deviceId));
+        }
+        /** 商户业态（V348 五值）。K17「每吧至少一杯」按业态挑出酒吧。 */
+        final Map<String, String> merchantTypes = new LinkedHashMap<>();
+        @Override public List<TicketTypeProviderEntitlementRow> listTicketTypeProviderEntitlements(String ticketTypeId) {
+            return ticketTypeEntitlements.values().stream()
+                    .filter(binding -> ticketTypeId.equals(binding.ticketTypeId()))
+                    .map(binding -> {
+                        EntitlementTemplateRecord template = entitlementTemplates.get(binding.entitlementTemplateId());
+                        return template == null ? null : new TicketTypeProviderEntitlementRow(
+                                template.id(), template.name(), template.entitlementType(), template.merchantId(),
+                                template.merchantId(), merchantTypes.get(template.merchantId()),
+                                binding.quantity(), binding.numPeople());
+                    })
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        }
         private final Map<String, TicketTypeRecord> ticketTypes = new LinkedHashMap<>();
         private final Map<String, EntitlementTemplateRecord> entitlementTemplates = new LinkedHashMap<>();
         private final Map<String, TicketTypeEntitlementRecord> ticketTypeEntitlements = new LinkedHashMap<>();

@@ -110,11 +110,30 @@ public interface TicketingRepository {
     }
 
     /**
-     * 结算重构批3-1(PRD §6.1)：按 bar_products.id 取实物权益的酒吧内部结算价(V152 internal_settlement_price_cent)。
-     * 无此商品或内部价为空 → 空(判定层回退 value_amount)。default 返回空兼容既有测试假实现。
+     * S5：按 bar_products.id 取提供方商品投影（内部结算价 + 提供方归属 + 扣库前置）。
+     * bar_item_ref 语义已定死为 bar_products.id，本方法是票务侧唯一的商品解析入口
+     * （取价走 {@link InternalSettlementPriceResolver}，建模板校验走 TicketCatalogService）。
+     * 无此商品 → 空 → 调用方 fail-closed。default 返回空兼容既有测试假实现。
      */
-    default Optional<Long> findBarProductInternalPrice(String barProductId) {
+    default Optional<BarProductRefRecord> findBarProductRef(String barProductId) {
         return Optional.empty();
+    }
+
+    /**
+     * S5 K16 跨提供方核销守卫：按核销设备定位「本次核销发生在哪家商户」（terminal_devices.merchant_id，V007）。
+     * 设备未绑商户 → 空 → 调用方 fail-closed（说不清这杯酒在哪家核销的，就不能核销）。
+     * default 返回空：内存测试替身若要跑提供方兑付类权益的核销，须自行覆写并绑好设备归属。
+     */
+    default Optional<String> findTerminalDeviceMerchantId(String deviceId) {
+        return Optional.empty();
+    }
+
+    /**
+     * S5：该票种绑定的权益 + 各自提供方商户（含商户业态）。K17 发布校验与票面按吧分组投影共用一份数据。
+     * default 返回空列表兼容既有测试假实现。
+     */
+    default List<TicketTypeProviderEntitlementRow> listTicketTypeProviderEntitlements(String ticketTypeId) {
+        return List.of();
     }
 
     /**

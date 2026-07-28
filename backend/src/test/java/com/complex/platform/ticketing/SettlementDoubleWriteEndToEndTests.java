@@ -149,7 +149,7 @@ class SettlementDoubleWriteEndToEndTests {
         //   核销 1 次 → verified_amount_cent = 3000×1 = 3000，全额归 rest_a(exclusive_merchant_id)，不因 allocated 缺失被跳过。
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         String suffix = Long.toString(System.nanoTime());
-        seedDevice(suffix);
+        seedDevice(suffix, "rest_a");
         String code = seedDiningEntitlement(suffix, 2, null, "rest_a", 3000L);
 
         var response = ticketingService.createVerification(new VerificationRequest(
@@ -175,7 +175,7 @@ class SettlementDoubleWriteEndToEndTests {
         // 纯兑换：面值(value_amount)=0，但内部结算价=2500 → 餐厅仍按内部价 2500 结算(证「价格可为0+内部结算价」口径)。
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         String suffix = Long.toString(System.nanoTime());
-        seedDevice(suffix);
+        seedDevice(suffix, "rest_b");
         String code = seedDiningEntitlement(suffix, 1, 0L, "rest_b", 2500L);
 
         var response = ticketingService.createVerification(new VerificationRequest(
@@ -223,14 +223,19 @@ class SettlementDoubleWriteEndToEndTests {
     }
 
     private void seedDevice(String suffix) {
+        seedDevice(suffix, null);
+    }
+
+    /** S5 K16：提供方兑付类权益（餐饮/赠酒）核销时要判定门店，设备须绑到提供方商户。 */
+    private void seedDevice(String suffix, String merchantId) {
         deviceCode = "device_st_" + suffix;
         Instant now = Instant.now();
         java.sql.Timestamp ts = java.sql.Timestamp.from(now);
         jdbcTemplate.update("""
                 INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
-                    status, created_at, updated_at)
-                VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', ?, ?)
-                """, deviceCode, "dev-" + deviceCode, "DC-" + deviceCode, ts, ts);
+                    status, merchant_id, created_at, updated_at)
+                VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', ?, ?, ?)
+                """, deviceCode, "dev-" + deviceCode, "DC-" + deviceCode, merchantId, ts, ts);
     }
 
     /** 普通(非赠饮)商户权益：merchantId 有值、allocatedRevenueCent 可空(null=direct 跳过)。 */

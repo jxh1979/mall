@@ -24,8 +24,13 @@ import org.junit.jupiter.api.Test;
 class BarGiftConsumerTests {
 
     private static final String BAR_ID = "bar_1";
-    private static final String ITEM_REF = "sku_beer";
+    /** S5：bar_item_ref 语义定死 = bar_products.id（不再是库存物料 id）。 */
+    private static final String PRODUCT_ID = "prod_beer";
+    /** 该商品绑定的库存物料——只有商品标了「需扣库存」时才用得上。 */
+    private static final String INVENTORY_ITEM_ID = "sku_beer";
     private static final String LOCATION = "default";
+    /** 票务侧统一解析器算出并随事件下发的内部结算价。 */
+    private static final long PRICE_CENT = 4200L;
 
     private CapturingBarRepository repository;
     private BarGiftConsumer consumer;
@@ -35,16 +40,28 @@ class BarGiftConsumerTests {
         repository = new CapturingBarRepository();
         // 吧台落 FK 用台位
         repository.saveTable(table("table_1", BAR_ID));
-        // SKU 映射存在时的库存余额
+        // 默认：需扣库存的商品 + 库存余额 10
+        repository.giftDrinkProduct = product(BAR_ID, "merchant_1", INVENTORY_ITEM_ID, true);
         repository.saveStockBalance(new StockBalanceSnapshot(
-                "balance_1", ITEM_REF, LOCATION, 10, 0, 10, Instant.now()));
+                "balance_1", INVENTORY_ITEM_ID, LOCATION, 10, 0, 10, Instant.now()));
         consumer = new BarGiftConsumer(repository);
+    }
+
+    private static BarProductRecord product(String barId, String merchantId, String inventoryItemId,
+            boolean stockDeductionRequired) {
+        return new BarProductRecord(
+                PRODUCT_ID, barId, merchantId, "House Beer", "beer", 3800L, "CNY",
+                inventoryItemId, LOCATION, stockDeductionRequired, "active", Instant.now(), Instant.now(),
+                null, null, null, false, null, null, PRICE_CENT);
+    }
+
+    private static GiftVerifiedEvent verified(String entitlementId, String verificationId, String merchantId) {
+        return new GiftVerifiedEvent(entitlementId, verificationId, PRODUCT_ID, BAR_ID, null, merchantId, PRICE_CENT);
     }
 
     @Test
     void giftVerifiedWithItemRefCreatesZeroAmountOrderDeductsStockAndBackfillsMovementId() {
-        consumer.onGiftVerified(new GiftVerifiedEvent(
-                "ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1"));
+        consumer.onGiftVerified(verified("ent_1", "ver_1", "merchant_1"));
 
         // 0 元赠饮单（order_type=gift, amount=0）已落、状态 delivered。
         List<BarOrderRecord> orders = repository.listOrders(Optional.empty());
@@ -54,8 +71,8 @@ class BarGiftConsumerTests {
         assertThat(order.totalAmountCent()).isZero();
         assertThat(order.status()).isEqualTo("delivered");
 
-        // 库存按 redeem_consume 扣减 1。
-        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
+        // S5：库存按商品绑定的库存物料扣减 1（不是按 bar_item_ref 本身）。
+        assertThat(repository.findStockBalance(INVENTORY_ITEM_ID, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
         assertThat(repository.stockMovements).hasSize(1);
         assertThat(repository.stockMovements.getFirst().movementType()).isEqualTo("redeem_consume");
         String movementId = repository.stockMovements.getFirst().id();
@@ -70,98 +87,122 @@ class BarGiftConsumerTests {
         assertThat(redemption.status()).isEqualTo("delivered");
         assertThat(redemption.barOrderId()).isEqualTo(order.id());
         assertThat(redemption.inventoryMovementId()).isEqualTo(movementId);
+        // S5：桥表存的是提供方商品 id。
+        assertThat(redemption.itemRef()).isEqualTo(PRODUCT_ID);
     }
 
     @Test
-    void giftVerifiedAndReversedSettlesAndReversesPlatformBarPayable() {
+    void giftVerifiedAndReversedSettlesAndReversesPlatformBarPayableAtEventPrice() {
         CapturingLedger ledger = new CapturingLedger();
         BarGiftConsumer settlingConsumer = new BarGiftConsumer(repository, ledger);
-        // 该免费酒水对应吧台商品（内部结算价 4200），经 itemRef（库存物料）桥接。
-        repository.giftDrinkProduct = new BarProductRecord(
-                "prod_beer", BAR_ID, "merchant_1", "House Beer", "beer", 3800L, "CNY",
-                ITEM_REF, LOCATION, false, "active", Instant.now(), Instant.now(),
-                null, null, null, false, null, null, 4200L);
 
-        settlingConsumer.onGiftVerified(new GiftVerifiedEvent("ent_s", "ver_s", ITEM_REF, BAR_ID, null, "merchant_1"));
-        // 平台→酒吧结算应付按内部价 4200 生成。
+        settlingConsumer.onGiftVerified(verified("ent_s", "ver_s", "merchant_1"));
+        // S5：应付金额 = 票务侧固化的内部结算价，逐分相等；本域不再自查一遍。
         assertThat(ledger.settledVerificationId).isEqualTo("ver_s");
         assertThat(ledger.settledMerchantId).isEqualTo("merchant_1");
-        assertThat(ledger.settledAmount).isEqualTo(4200L);
+        assertThat(ledger.settledAmount).isEqualTo(PRICE_CENT);
 
-        settlingConsumer.onGiftReversed(new GiftReversedEvent("ver_s"));
-        // 赠饮冲正 → 冲销结算应付。
+        settlingConsumer.onGiftReversed(new GiftReversedEvent("ver_s", PRICE_CENT));
+        // 冲正按「当时那个价」逐分对冲，净额归零。
         assertThat(ledger.reversedVerificationId).isEqualTo("ver_s");
+        assertThat(ledger.reversedAmount).isEqualTo(PRICE_CENT);
     }
 
     @Test
-    void giftMerchantBarWithoutInternalPriceThrowsFailClosed() {
-        // AUD-015：商户吧赠饮但吧台商品无内部结算价 → 平台无从挂应付（商户白送/零补偿=资金漏），必须 fail-closed 抛错。
+    void giftWithoutInternalPriceThrowsFailClosed() {
+        // S5：没有内部结算价 → 平台无从挂应付（商户白送/零补偿=资金漏），fail-closed 抛错。
         CapturingLedger ledger = new CapturingLedger();
         BarGiftConsumer settlingConsumer = new BarGiftConsumer(repository, ledger);
-        repository.giftDrinkProduct = new BarProductRecord(
-                "prod_beer", BAR_ID, "merchant_1", "House Beer", "beer", 3800L, "CNY",
-                ITEM_REF, LOCATION, false, "active", Instant.now(), Instant.now(),
-                null, null, null, false, null, null, null);
         assertThatThrownBy(() -> settlingConsumer.onGiftVerified(
-                new GiftVerifiedEvent("ent_n", "ver_n", ITEM_REF, BAR_ID, null, "merchant_1")))
+                new GiftVerifiedEvent("ent_n", "ver_n", PRODUCT_ID, BAR_ID, null, "merchant_1", null)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("内部结算价");
         assertThat(ledger.settledVerificationId).isNull();
+        assertThat(repository.findGiftRedemptionByVerification("ver_n")).isEmpty();
     }
 
     @Test
-    void giftPlatformBarSkipsSettlementWithoutThrow() {
-        // 平台自营吧（merchantId null）→ 无商户结算，正常交付、跳过结算，不抛错。
+    void giftPlatformOperatedBarStillRequiresPriceButSkipsPayable() {
+        // S5「自营吧不再豁免」：自营吧（merchantId null）同样必须有内部结算价——没有就抛错，成本口径不留黑洞；
+        // 有价则正常交付，只是没有商户对手方 → 不挂应付，并在 note 记明原因。
         CapturingLedger ledger = new CapturingLedger();
         BarGiftConsumer settlingConsumer = new BarGiftConsumer(repository, ledger);
-        repository.giftDrinkProduct = new BarProductRecord(
-                "prod_beer2", BAR_ID, null, "House Beer", "beer", 3800L, "CNY",
-                ITEM_REF, LOCATION, false, "active", Instant.now(), Instant.now(),
-                null, null, null, false, null, null, 4200L);
-        settlingConsumer.onGiftVerified(new GiftVerifiedEvent("ent_p", "ver_p", ITEM_REF, BAR_ID, null, null));
+        repository.giftDrinkProduct = product(BAR_ID, null, INVENTORY_ITEM_ID, true);
+
+        assertThatThrownBy(() -> settlingConsumer.onGiftVerified(
+                new GiftVerifiedEvent("ent_p0", "ver_p0", PRODUCT_ID, BAR_ID, null, null, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("内部结算价");
+
+        settlingConsumer.onGiftVerified(
+                new GiftVerifiedEvent("ent_p", "ver_p", PRODUCT_ID, BAR_ID, null, null, PRICE_CENT));
         assertThat(ledger.settledVerificationId).isNull();
-        assertThat(repository.findGiftRedemptionByVerification("ver_p").orElseThrow().status())
-                .isEqualTo("delivered");
+        BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification("ver_p").orElseThrow();
+        assertThat(redemption.status()).isEqualTo("delivered");
+        assertThat(redemption.note()).contains("cost borne by platform");
+    }
+
+    @Test
+    void giftProductNotBelongingToTheProvidingBarIsRejected() {
+        // S5：A 吧的权益绑到 B 吧的商品 → 成本记给谁全凭巧合，直接拒。
+        repository.giftDrinkProduct = product("bar_other", "merchant_1", INVENTORY_ITEM_ID, true);
+        assertThatThrownBy(() -> consumer.onGiftVerified(verified("ent_x", "ver_x", "merchant_1")))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("不属于该酒吧");
+        assertThat(repository.listOrders(Optional.empty())).isEmpty();
+    }
+
+    @Test
+    void giftProductNotRequiringStockDeductionDeliversWithoutTouchingStock() {
+        // S5：不需扣库的赠品（现调/外采直供）本就没有库存物料，以前一律硬扣、物料为空就崩。
+        repository.giftDrinkProduct = product(BAR_ID, "merchant_1", null, false);
+        consumer.onGiftVerified(verified("ent_ns", "ver_ns", "merchant_1"));
+
+        BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification("ver_ns").orElseThrow();
+        assertThat(redemption.status()).isEqualTo("delivered");
+        assertThat(redemption.inventoryMovementId()).isNull();
+        assertThat(repository.stockMovements).isEmpty();
+        assertThat(repository.findStockBalance(INVENTORY_ITEM_ID, LOCATION).orElseThrow().availableQuantity()).isEqualTo(10);
     }
 
     @Test
     void giftVerifiedIsIdempotentAcrossRepeatedEvents() {
-        GiftVerifiedEvent event = new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1");
+        GiftVerifiedEvent event = verified("ent_1", "ver_1", "merchant_1");
         consumer.onGiftVerified(event);
         consumer.onGiftVerified(event); // 重复核销事件
 
         assertThat(repository.listOrders(Optional.empty())).hasSize(1); // 幂等：只一单
         assertThat(repository.stockMovements).hasSize(1);               // 只扣一次
-        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
+        assertThat(repository.findStockBalance(INVENTORY_ITEM_ID, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
     }
 
     @Test
     void giftReversedRestoresStockAndMarksRedemptionReversed() {
-        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1"));
-        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
+        consumer.onGiftVerified(verified("ent_1", "ver_1", "merchant_1"));
+        assertThat(repository.findStockBalance(INVENTORY_ITEM_ID, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
 
-        consumer.onGiftReversed(new GiftReversedEvent("ver_1"));
+        consumer.onGiftReversed(new GiftReversedEvent("ver_1", PRICE_CENT));
 
         BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification("ver_1").orElseThrow();
         assertThat(redemption.status()).isEqualTo("reversed");
         // 库存回补到 10。
-        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(10);
+        assertThat(repository.findStockBalance(INVENTORY_ITEM_ID, LOCATION).orElseThrow().availableQuantity()).isEqualTo(10);
     }
 
     @Test
     void giftReversedIsIdempotent() {
-        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1"));
-        consumer.onGiftReversed(new GiftReversedEvent("ver_1"));
-        consumer.onGiftReversed(new GiftReversedEvent("ver_1")); // 重复冲正
+        consumer.onGiftVerified(verified("ent_1", "ver_1", "merchant_1"));
+        consumer.onGiftReversed(new GiftReversedEvent("ver_1", PRICE_CENT));
+        consumer.onGiftReversed(new GiftReversedEvent("ver_1", PRICE_CENT)); // 重复冲正
 
-        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(10);
+        assertThat(repository.findStockBalance(INVENTORY_ITEM_ID, LOCATION).orElseThrow().availableQuantity()).isEqualTo(10);
     }
 
     @Test
     void giftVerifiedWithoutItemRefThrowsAndDoesNotDeliver() {
-        // AUD-015：无 SKU 映射(bar_item_ref) → fail-closed 抛错，绝不落单/标记 delivered（生产同事务回滚保权益可用）。
+        // AUD-015：无提供方商品映射 → fail-closed 抛错，绝不落单/标记 delivered（生产同事务回滚保权益可用）。
         assertThatThrownBy(() -> consumer.onGiftVerified(
-                new GiftVerifiedEvent("ent_1", "ver_1", null, BAR_ID, null, "merchant_1")))
+                new GiftVerifiedEvent("ent_1", "ver_1", null, BAR_ID, null, "merchant_1", PRICE_CENT)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("bar_item_ref");
         assertThat(repository.listOrders(Optional.empty())).isEmpty();
@@ -173,9 +214,8 @@ class BarGiftConsumerTests {
     void giftVerifiedWithInsufficientStockThrowsAndDoesNotDeliver() {
         // AUD-015：库存不足（含并发抢到最后一件的失败方）→ fail-closed 抛错，绝不标记 delivered。
         repository.saveStockBalance(new StockBalanceSnapshot(
-                "balance_1", ITEM_REF, LOCATION, 0, 0, 0, Instant.now()));
-        assertThatThrownBy(() -> consumer.onGiftVerified(
-                new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1")))
+                "balance_1", INVENTORY_ITEM_ID, LOCATION, 0, 0, 0, Instant.now()));
+        assertThatThrownBy(() -> consumer.onGiftVerified(verified("ent_1", "ver_1", "merchant_1")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("库存不足");
         assertThat(repository.findGiftRedemptionByVerification("ver_1")).isEmpty();
@@ -185,13 +225,12 @@ class BarGiftConsumerTests {
     void giftVerifiedSucceedsAfterStockReplenished() {
         // AUD-015 人工修复闭环：补足库存后，新的核销事件可正常交付（fail-closed 不留坏状态）。
         repository.saveStockBalance(new StockBalanceSnapshot(
-                "balance_1", ITEM_REF, LOCATION, 0, 0, 0, Instant.now()));
-        assertThatThrownBy(() -> consumer.onGiftVerified(
-                new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1")))
+                "balance_1", INVENTORY_ITEM_ID, LOCATION, 0, 0, 0, Instant.now()));
+        assertThatThrownBy(() -> consumer.onGiftVerified(verified("ent_1", "ver_1", "merchant_1")))
                 .isInstanceOf(ApiException.class);
         repository.saveStockBalance(new StockBalanceSnapshot(
-                "balance_1", ITEM_REF, LOCATION, 5, 0, 5, Instant.now()));
-        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_2", ITEM_REF, BAR_ID, null, "merchant_1"));
+                "balance_1", INVENTORY_ITEM_ID, LOCATION, 5, 0, 5, Instant.now()));
+        consumer.onGiftVerified(verified("ent_1", "ver_2", "merchant_1"));
         assertThat(repository.findGiftRedemptionByVerification("ver_2").orElseThrow().status())
                 .isEqualTo("delivered");
     }
@@ -199,8 +238,9 @@ class BarGiftConsumerTests {
     @Test
     void giftVerifiedWithoutResolvableTableThrowsAndDoesNotDeliver() {
         // AUD-015：吧台无可用台位 → fail-closed 抛错，不落单。
+        repository.giftDrinkProduct = product("bar_unknown", "merchant_1", INVENTORY_ITEM_ID, true);
         assertThatThrownBy(() -> consumer.onGiftVerified(
-                new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, "bar_unknown", null, "merchant_1")))
+                new GiftVerifiedEvent("ent_1", "ver_1", PRODUCT_ID, "bar_unknown", null, "merchant_1", PRICE_CENT)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("台位");
         assertThat(repository.listOrders(Optional.empty())).isEmpty();
@@ -219,6 +259,7 @@ class BarGiftConsumerTests {
         String settledMerchantId;
         long settledAmount;
         String reversedVerificationId;
+        long reversedAmount;
 
         @Override
         public boolean isBusinessDayLocked(java.time.LocalDate businessDate) {
@@ -259,6 +300,7 @@ class BarGiftConsumerTests {
         @Override
         public String reverseGiftSettlementPayable(String verificationId, String merchantId, long internalPriceCent) {
             reversedVerificationId = verificationId;
+            reversedAmount = internalPriceCent;
             return "arap_rev_" + verificationId;
         }
     }
@@ -285,15 +327,6 @@ class BarGiftConsumerTests {
         public BarTableRecord saveTable(BarTableRecord table) {
             tables.put(table.id(), table);
             return table;
-        }
-
-        @Override
-        public Optional<BarProductRecord> findProductByInventoryItem(String barId, String inventoryItemId) {
-            if (giftDrinkProduct != null && barId.equals(giftDrinkProduct.barId())
-                    && inventoryItemId.equals(giftDrinkProduct.inventoryItemId())) {
-                return Optional.of(giftDrinkProduct);
-            }
-            return Optional.empty();
         }
 
         @Override
@@ -406,7 +439,10 @@ class BarGiftConsumerTests {
         @Override public BarTableGuestCheckinRecord saveGuestCheckin(BarTableGuestCheckinRecord checkin) { return checkin; }
         @Override public BarProductRecord saveProduct(BarProductRecord product) { return product; }
         @Override public List<BarProductRecord> listProducts(Optional<String> merchantScope) { return List.of(); }
-        @Override public Optional<BarProductRecord> findProductById(String id) { return Optional.empty(); }
+        @Override public Optional<BarProductRecord> findProductById(String id) {
+            return giftDrinkProduct != null && giftDrinkProduct.id().equals(id)
+                    ? Optional.of(giftDrinkProduct) : Optional.empty();
+        }
         @Override public Optional<BarOrderRecord> findOrderById(String id) { return Optional.ofNullable(orders.get(id)); }
         @Override public BarOrderItemRecord saveOrderItem(BarOrderItemRecord item) { return item; }
         @Override public List<BarOrderItemRecord> listOrderItems(String orderId) { return List.of(); }

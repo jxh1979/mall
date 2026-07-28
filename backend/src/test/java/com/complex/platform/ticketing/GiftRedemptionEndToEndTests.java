@@ -78,19 +78,21 @@ class GiftRedemptionEndToEndTests {
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void giftDrinkVerificationWithoutBarItemRefIsRejectedFailClosed() {
-        // AUD-015：赠饮模板未配 bar_item_ref → 无法扣库/结算 → 核销 fail-closed 抛错回滚整笔核销，票权益不被消费，绝不静默 delivered。
+        // S5：赠饮权益没绑提供方商品 → 取不到内部结算价 → fail-closed 抛错回滚整笔核销，
+        // 票权益不被消费；绝不静默回退票面价（票面原价与内部结算价不可混用）。
         String suffix = Long.toString(System.nanoTime());
         String barId = "bar_t15_" + suffix;
         seedBarTable(barId);
+        String deviceId = seedDeviceForBar(barId);
         String code = "gift-code-" + suffix;
         seedGiftEntitlement(code, barId); // 无 bar_item_ref
 
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
                 tx.executeWithoutResult(status -> verificationService.createVerification(new VerificationRequest(
-                        "req-" + suffix, "qr", code, "device_t15", barId, Map.of("source", "test")))))
+                        "req-" + suffix, "qr", code, deviceId, barId, Map.of("source", "test")))))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
-                        e -> assertThat(e.code()).isEqualTo("GIFT_ITEM_UNMAPPED"));
+                        e -> assertThat(e.code()).isEqualTo("ENTITLEMENT_PRICE_UNRESOLVED"));
 
         // 核销事务已回滚 → issued entitlement 的 used_times 仍为 0（权益未被消费，可再次核销）。
         Integer usedTimes = jdbcTemplate.queryForObject(
@@ -107,17 +109,25 @@ class GiftRedemptionEndToEndTests {
         seedBarTable(barId);
         String itemId = "item_" + suffix;
         seedStockItem(itemId, 5);
+        String productId = "barprod_" + suffix;
+        seedBarProduct(productId, barId, itemId, 4200L);
+        String deviceId = seedDeviceForBar(barId);
         String code = "gift-code-" + suffix;
-        seedGiftEntitlement(code, barId, 1, itemId);
+        seedGiftEntitlement(code, barId, 1, productId);
 
         var response = verificationService.createVerification(new VerificationRequest(
-                "req-" + suffix, "qr", code, "device_t15", barId, Map.of("source", "test")));
+                "req-" + suffix, "qr", code, deviceId, barId, Map.of("source", "test")));
         assertThat(response.status()).isEqualTo("success");
+
+        // S5「本刀不产生金额」：内部结算价只固化在核销记录上，逐分等于该商品的内部结算价。
+        Long settlementPrice = jdbcTemplate.queryForObject(
+                "SELECT settlement_price_cent FROM ticket_verifications WHERE id = ?", Long.class, response.id());
+        assertThat(settlementPrice).isEqualTo(4200L);
 
         BarGiftRedemptionRecord redemption =
                 barRepository.findGiftRedemptionByVerification(response.id()).orElseThrow();
-        // 模板配了 bar_item_ref → itemRef 透传、实际扣减、movement 回填、note 标注扣减成功。
-        assertThat(redemption.itemRef()).isEqualTo(itemId);
+        // S5：itemRef 是提供方商品 id；库存扣的是该商品绑定的库存物料。
+        assertThat(redemption.itemRef()).isEqualTo(productId);
         assertThat(redemption.inventoryMovementId()).isNotNull();
         assertThat(redemption.note()).contains("stock decreased via redeem_consume");
 
@@ -141,13 +151,16 @@ class GiftRedemptionEndToEndTests {
         seedBarTable(barId);
         String itemId = "item_" + suffix;
         seedStockItem(itemId, 5);
+        String productId = "barprod_" + suffix;
+        seedBarProduct(productId, barId, itemId, 4200L);
+        String deviceId = seedDeviceForBar(barId);
         String code = "gift-code-" + suffix;
-        seedGiftEntitlement(code, barId, 2, itemId);
+        seedGiftEntitlement(code, barId, 2, productId);
 
         var first = verificationService.createVerification(new VerificationRequest(
-                "req-a-" + suffix, "qr", code, "device_t15", barId, Map.of()));
+                "req-a-" + suffix, "qr", code, deviceId, barId, Map.of()));
         var second = verificationService.createVerification(new VerificationRequest(
-                "req-b-" + suffix, "qr", code, "device_t15", barId, Map.of()));
+                "req-b-" + suffix, "qr", code, deviceId, barId, Map.of()));
 
         // 两次核销 → 两条不同 verification_id → 各自一单（每次核销幂等到一单）。
         assertThat(barRepository.findGiftRedemptionByVerification(first.id())).isPresent();
@@ -162,11 +175,14 @@ class GiftRedemptionEndToEndTests {
         seedBarTable(barId);
         String itemId = "item_" + suffix;
         seedStockItem(itemId, 5);
+        String productId = "barprod_" + suffix;
+        seedBarProduct(productId, barId, itemId, 4200L);
+        String deviceId = seedDeviceForBar(barId);
         String code = "gift-code-" + suffix;
-        seedGiftEntitlement(code, barId, 1, itemId);
+        seedGiftEntitlement(code, barId, 1, productId);
 
         var response = verificationService.createVerification(new VerificationRequest(
-                "req-" + suffix, "qr", code, "device_t15", barId, Map.of()));
+                "req-" + suffix, "qr", code, deviceId, barId, Map.of()));
         assertThat(barRepository.findGiftRedemptionByVerification(response.id()).orElseThrow().status())
                 .isEqualTo("delivered");
 
@@ -201,6 +217,79 @@ class GiftRedemptionEndToEndTests {
         }
     }
 
+    /**
+     * S5 K16：A 吧的赠酒拿到 B 吧核销 → 拒。与角色无关（本用例用平台管理员，权限层本来放行）。
+     * 「只拒不改钱」：被拒后权益未消费、核销记录/结算流水/往来项一条都不落。
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void giftRedeemedAtAnotherBarIsRejectedAndWritesNoMoney() {
+        String suffix = Long.toString(System.nanoTime());
+        String providerBar = "bar_a_" + suffix;
+        String otherBar = "bar_b_" + suffix;
+        seedBarTable(providerBar);
+        String itemId = "item_" + suffix;
+        seedStockItem(itemId, 5);
+        String productId = "barprod_" + suffix;
+        seedBarProduct(productId, providerBar, itemId, 4200L);
+        String otherBarDevice = seedDeviceForBar(otherBar); // 设备绑的是 B 吧
+        String code = "gift-code-k16-" + suffix;
+        seedGiftEntitlement(code, providerBar, 1, productId); // 权益是 A 吧请的
+
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                tx.executeWithoutResult(status -> verificationService.createVerification(new VerificationRequest(
+                        "req-k16-" + suffix, "qr", code, otherBarDevice, otherBar, Map.of()))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("ENTITLEMENT_PROVIDER_MISMATCH"));
+
+        // 只拒不改钱：权益未消费、核销记录/结算流水/往来项都没有。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, "ent_" + code)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ticket_verifications WHERE entitlement_id = ?", Integer.class, "ent_" + code))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?", Integer.class, "ent_" + code))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ar_ap_items WHERE source_type = 'pass_drink_settlement' AND source_id LIKE ?",
+                Integer.class, "%" + suffix + "%")).isZero();
+    }
+
+    /** S5 K16：离线同步旁路走同一入口，同样拦得住（不能靠离线补单绕过跨吧核销）。 */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void giftRedeemedAtAnotherBarIsAlsoRejectedOnOfflineSyncPath() {
+        String suffix = Long.toString(System.nanoTime());
+        String providerBar = "bar_a_off_" + suffix;
+        String otherBar = "bar_b_off_" + suffix;
+        seedBarTable(providerBar);
+        String itemId = "item_off_" + suffix;
+        seedStockItem(itemId, 5);
+        String productId = "barprod_off_" + suffix;
+        seedBarProduct(productId, providerBar, itemId, 4200L);
+        String otherBarDevice = seedDeviceForBar(otherBar);
+        String deviceCode = jdbcTemplate.queryForObject(
+                "SELECT device_code FROM terminal_devices WHERE id = ?", String.class, otherBarDevice);
+        String code = "gift-code-k16off-" + suffix;
+        seedGiftEntitlement(code, providerBar, 1, productId);
+
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                tx.executeWithoutResult(status -> verificationService.syncTerminalTasks(
+                        new com.complex.platform.ticketing.dto.TerminalSyncTasksRequest(
+                                "idem-k16-" + suffix, null, java.util.List.of(), deviceCode, "staff_1",
+                                java.util.List.of(new com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest(
+                                        "task-k16-" + suffix, "offline_verification", "2026-06-18T10:00:00Z",
+                                        Map.of("entitlementCode", code, "pointId", otherBar)))))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("ENTITLEMENT_PROVIDER_MISMATCH"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, "ent_" + code)).isZero();
+    }
+
     private void seedGiftEntitlementForMerchant(String code, String barId, String merchantId) {
         Instant now = Instant.now();
         java.sql.Timestamp ts = java.sql.Timestamp.from(now);
@@ -225,6 +314,35 @@ class GiftRedemptionEndToEndTests {
                 merchantId, null, barId, 1, 0, 0L, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
                 null, null));
+    }
+
+    /**
+     * S5 K16：核销设备必须绑定商户，否则说不清这杯酒在哪家核的 → 一律拒绝。
+     * 每个用例一台绑到本吧的设备（用例间 barId 唯一，互不串味）。
+     */
+    private String seedDeviceForBar(String barId) {
+        String deviceId = "dev_" + barId;
+        Instant now = Instant.now();
+        java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        jdbcTemplate.update("""
+                INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
+                    status, merchant_id, created_at, updated_at)
+                VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET merchant_id = EXCLUDED.merchant_id
+                """, deviceId, "d-" + deviceId, "DC-" + deviceId, barId, ts, ts);
+        return deviceId;
+    }
+
+    /** S5：提供方商品（bar_item_ref = bar_products.id），带内部结算价与库存物料。 */
+    private void seedBarProduct(String productId, String barId, String inventoryItemId, Long internalPriceCent) {
+        Instant now = Instant.now();
+        java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        jdbcTemplate.update("""
+                INSERT INTO bar_products (id, bar_id, product_name, product_type, price_cent, currency,
+                    inventory_item_id, stock_location_id, stock_deduction_required, status,
+                    internal_settlement_price_cent, created_at, updated_at)
+                VALUES (?, ?, 'Gift Drink', 'beverage', 3800, 'CNY', ?, 'default', ?, 'active', ?, ?, ?)
+                """, productId, barId, inventoryItemId, inventoryItemId != null, internalPriceCent, ts, ts);
     }
 
     private void seedBarTable(String barId) {
@@ -286,7 +404,7 @@ class GiftRedemptionEndToEndTests {
                 "order_" + code,      // orderId（V159 起有 FK → ticket_orders）
                 templateId,           // entitlementTemplateId
                 "gift_drink",         // entitlementType
-                null,                 // merchantId
+                barId,                // merchantId（S5：提供方商户＝这家吧，客人须到这家核销、成本按这家的内部价计）
                 null,                 // venueId
                 barId,                // pointId（赠饮所属吧台来源）
                 totalTimes,           // totalTimes

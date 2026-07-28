@@ -254,6 +254,14 @@ public class TicketingController {
         return ApiResponse.ok(service.createEntitlementTemplate(request));
     }
 
+    /** S5 票面赠酒清单：该票种各酒吧分别赠几杯（售票时要写明票面，业务 HTML §通票赠酒按酒吧分配）。 */
+    @GetMapping("/ticketing/ticket-types/{id}/gift-coverage")
+    public ApiResponse<PageResponse<TicketTypeGiftCoverageRow>> listTicketTypeGiftCoverage(
+            @PathVariable("id") String id) {
+        authorizationService.requirePermission("ticket.product.view");
+        return ApiResponse.ok(service.listGiftCoverage(id));
+    }
+
     @PostMapping("/ticketing/ticket-types/{id}/entitlements")
     public ApiResponse<TicketTypeEntitlementRecord> bindTicketTypeEntitlement(
             @PathVariable String id,

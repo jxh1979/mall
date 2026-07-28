@@ -8209,6 +8209,33 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/ticketing/ticket-types/{id}/gift-coverage:
+    get:
+      tags:
+        - ticketing
+      operationId: listTicketTypeGiftCoverage
+      summary: 票面赠酒清单（按酒吧分组）
+      description: 返回该票种各酒吧分别赠几杯，售票时写明票面。一张通票覆盖的每个酒吧至少赠一杯，客人只能到发放该赠酒的酒吧核销。
+      x-permission: ticket.product.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: ticket_product.viewed
+      x-audit-event-failure: ticket_product.view_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/ticketing/ticket-types/{id}/entitlements:
     post:
       tags:

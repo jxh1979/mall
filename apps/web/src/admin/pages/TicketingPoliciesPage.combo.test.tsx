@@ -8,6 +8,8 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 const TICKETS = [{ id: "tt-1", ticketName: "夏日通票", weekdayPriceCent: 10000, weekendPriceCent: 12000, holidayPriceCent: 15000, status: "active", stockQuantity: null }];
 const MERCHANTS = [{ id: "mch-1", merchantName: "一号酒吧", merchantType: "bar" }];
 const PROJECTS = [{ id: "pj-1", projectName: "旋转木马" }];
+// S5：酒水兑换要指明赠送的是哪件商品（下拉数据源＝该酒吧自己的商品）。
+const BAR_PRODUCTS = [{ id: "prod-1", barId: "mch-1", productName: "精酿一杯" }];
 
 // api.get/post 都记账，供断言编排调用次数。
 function makeApi(postSpy: ReturnType<typeof vi.fn>): AdminApiClient {
@@ -15,6 +17,7 @@ function makeApi(postSpy: ReturnType<typeof vi.fn>): AdminApiClient {
     get: vi.fn(async (path: string) => {
       if (path.includes("/ticketing/ticket-types")) return { items: TICKETS } as unknown;
       if (path.includes("/platform/merchants")) return { items: MERCHANTS } as unknown;
+      if (path.includes("/bar/catalog/products")) return { items: BAR_PRODUCTS } as unknown;
       if (path.includes("/amusement/projects")) return { items: PROJECTS } as unknown;
       return { items: [] } as unknown;
     }),
@@ -52,6 +55,9 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
     // 加一条酒吧权益行（默认第一个商户），确认下拉已带出商户。
     fireEvent.click(screen.getByTestId("combo-add-bar"));
     await waitFor(() => expect(screen.getByTestId("combo-bar-line-0")).toBeTruthy());
+    // S5：酒水兑换选赠送的商品（成本按该商品内部结算价与这家吧结算）。
+    await waitFor(() => expect(screen.getByTestId("combo-bar-product-0").querySelectorAll("option").length).toBe(2));
+    fireEvent.change(screen.getByTestId("combo-bar-product-0"), { target: { value: "prod-1" } });
 
     // 勾选游乐设施 + 选游乐权益归属商户（否则 400 前置校验会拦下）。
     fireEvent.click(screen.getByTestId("combo-project-pj-1").querySelector("input")!);
@@ -73,6 +79,22 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
       const body = call[1] as Record<string, unknown>;
       expect(body.merchant_id).toBeTruthy();
     }
+    // S5 回归守卫：酒水兑换模板必须带 bar_item_ref（此前前端根本不发，赠饮模板在后台建不出来）。
+    const giftCall = templateCalls.find((c) => (c[1] as Record<string, unknown>).entitlement_type === "gift_drink");
+    expect((giftCall?.[1] as Record<string, unknown>).bar_item_ref).toBe("prod-1");
+  });
+
+  it("酒水兑换没选赠送商品：拦下报错，不发任何编排请求", async () => {
+    // S5：不指明是哪件商品就没法按内部结算价与这家吧结账，配置阶段直接拦。
+    const postSpy = vi.fn(async () => ({}) as unknown);
+    renderPage(postSpy);
+    await waitFor(() => expect(screen.getByTestId("combo-ticket-select")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
+    fireEvent.click(screen.getByTestId("combo-add-bar"));
+    await waitFor(() => expect(screen.getByTestId("combo-bar-line-0")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("combo-submit"));
+    await waitFor(() => expect(screen.getByTestId("combo-error").textContent).toContain("请选择赠送的商品"));
+    expect(postSpy).not.toHaveBeenCalled();
   });
 
   it("勾了游乐但没选归属商户：拦下报错，不发任何编排请求", async () => {

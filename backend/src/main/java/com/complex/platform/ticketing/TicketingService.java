@@ -114,6 +114,15 @@ public class TicketingService {
         );
     }
 
+    /** S5 票面赠酒清单：该票种各酒吧分别赠几杯（售票时写明票面）。与 K17 发布校验同一份数据。 */
+    public PageResponse<TicketTypeGiftCoverageRow> listGiftCoverage(String ticketTypeId) {
+        String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        return operations.readPage(
+                TicketingReadOperation.LIST_TICKET_TYPES,
+                () -> catalogService.listGiftCoverage(id)
+        );
+    }
+
     public PageResponse<TicketPriceRuleRecord> listTicketPriceRules() {
         return listTicketPriceRules(false);
     }
