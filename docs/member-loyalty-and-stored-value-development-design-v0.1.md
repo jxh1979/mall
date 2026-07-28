@@ -1,6 +1,10 @@
 # 会员忠诚度 · 储值 · 付费会员 开发设计（V0.1）
 
 > 生成日期：2026-06-24。性质：**据现有实现回填（source-driven）**——会员忠诚度/储值/付费会员后端已在 `customer` 域完整落地（`LoyaltyService`/`MembershipService`/`StoredValueService` + 迁移 V025/V060/V089/V090/V100/V151），但此前无 PRD/开发设计承载，本文按代码实证补齐设计口径。业务口径以业务系统地图 #ticketing 会员规则、业务枚举速查表 §二（会员与积分）为最终解释权；本文与之对齐。
+
+> **[A2 / 业务口径覆盖 2026-07-28]** 储值**业务规则**以 MAIN `member-loyalty-and-stored-value-product-prd-v0.1.md` **§7** 与裁决 `DEC-SV-*` 为准，**覆盖**本文 2026-06-24 代码回填中的单一余额叙述。
+> 本文 §6 仍描述**当时实现结构**，实现迁移前不得用旧单科目模型对抗 MAIN。积分主规则见 `member-points-tier-and-clearing-prd-v1.0.md`。
+
 >
 > 字段/方法以 `backend/src/main/java/com/complex/platform/customer/` 与迁移为准；本文不冻结 OpenAPI（端点见 `docs/openapi/openapi-p0.yaml` `customer/*`、`loyalty/*` 段）。
 
@@ -100,3 +104,22 @@
 - 实现切片与差距矩阵：`docs/superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`
 - 产品主 PRD：`docs/member-points-tier-and-clearing-prd-v1.0.md`
 - 注意：等级倍率乘算、batch 过期、账户级冻结等现网语义需按切片迁移，不得与新 PRD 长期双轨并行。
+
+
+## 6A. 储值本金/赠送金（MAIN 覆盖，2026-07-28）
+
+> 实现切片未完成前，**产品与验收以本节约定 + 会员忠诚度 PRD §7 为准**。
+
+| 裁决 | 要求 |
+|---|---|
+| DEC-SV-LEDGER-001 | 充值拆 **本金 + 赠送金**；赠送额度可配 |
+| DEC-SV-SPEND-ORDER-001 | 扣款顺序可配；**默认先本金后赠送金** |
+| DEC-SV-REFUND-001 | 默认**仅本金可退现金**；赠送金默认不退现 |
+| DEC-SV-CLOSE-001 | 注销：退剩余本金；赠送金默认清零 |
+| DEC-SV-NO-MIGRATE-001 | **禁止**余额迁移 |
+
+实现缺口（相对 MAIN，不在本文假装已落地）：
+- 账户/流水需能拆本金与赠送金科目及活动来源；
+- `topup`/`consume`/`refund` 需按双科目与默认扣款/退现顺序改造；
+- 禁止账户间迁移 API/后台入口。
+

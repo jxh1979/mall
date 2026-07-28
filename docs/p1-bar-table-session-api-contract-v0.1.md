@@ -1,8 +1,13 @@
 # P1 酒吧卡座会话调整 API 契约 V0.1
 
+> **[A2 修订 2026-07-28]** 与 MAIN `bar-business-operations-product-prd-v0.1.md` §7.3A / `DEC-SEAT-NO-RENEW-001` 对齐：
+> **产品不做「续卡/续时」**。下文原 `renew` 接口与字段整节废止，不得再作为实现/验收依据。
+> 转台/并台业务规则以 MAIN §7.3A 为准（转台低消进度结转多不退少补；并台低消加总；销售提成与服务员提成规则见 PRD）。
+
 ## 1. 文档定位
 
-本文档是 P1-BAR-01「卡座转卡、卡座合并、续卡」的接口契约补充，不替代 P0 API Contract Pack。P0 仍保持最小营业闭环；本 P1 契约只覆盖卡座资源在营业中发生调整时的后端接口、权限、幂等、留痕和验收边界。
+本文档是 P1-BAR-01「卡座**转台**、卡座**并台**」的接口契约补充，不替代 P0 API Contract Pack。P0 仍保持最小营业闭环；本 P1 契约只覆盖卡座资源在营业中发生调整时的后端接口、权限、幂等、留痕和验收边界。
+
 
 运行时 OpenAPI 由 Spring Boot 4.x + springdoc 从控制器自动生成；本文档作为开发、测试、前端和平板/员工端调用的人工契约说明。
 
@@ -13,7 +18,7 @@
 | 开卡座会话 | 支持基于卡座、酒吧、商户、营业日创建开放会话 | 不做完整预订资源日历 |
 | 转卡 | 同一酒吧内从原卡座转到目标卡座，保留调整记录 | 不允许跨酒吧转卡 |
 | 合并 | 同一酒吧、同一商户、同一营业日内将副会话并入主会话 | 不做复杂账单合并、拆单、挂账 |
-| 续卡 | 对开放会话追加续卡时间和额外低消/押金/服务费记录 | 不自动改写已生成账单 |
+| ~~续卡~~ | **不做**（DEC-SEAT-NO-RENEW-001） | 需要继续消费：当前会话加单或关台后重开 |
 | 留痕 | 每次调整写入 `bar_table_session_adjustments` 并记录审计事件 | 不接第三方 POS 高级账单能力 |
 
 ## 3. 接口清单
@@ -24,7 +29,7 @@
 | POST | `/api/v1/bar/table-sessions` | `bar.table_session.create` | 是 | 创建卡座会话 |
 | POST | `/api/v1/bar/table-sessions/{session_id}/transfer` | `bar.table_session.transfer` | 是 | 转卡 |
 | POST | `/api/v1/bar/table-sessions/{session_id}/merge` | `bar.table_session.merge` | 是 | 合并卡座会话 |
-| POST | `/api/v1/bar/table-sessions/{session_id}/renew` | `bar.table_session.renew` | 是 | 续卡 |
+| ~~POST~~ | ~~`/api/v1/bar/table-sessions/{session_id}/renew`~~ | ~~`bar.table_session.renew`~~ | — | **废止：续卡** |
 
 所有写接口必须提供请求体内 `idempotencyKey`，接口层会拒绝空幂等键。
 
@@ -80,29 +85,21 @@
 
 合并只允许同一酒吧、同一商户、同一营业日内执行。成功后主会话版本加 1，副会话状态置为 `merged`，副会话 `sourceSessionId` 指向主会话，副卡座置为 `pending_clear`。
 
-### 4.4 续卡
+### 4.4 续卡（废止）
 
-`BarTableRenewRequest`：
+> **整节废止（2026-07-28 / DEC-SEAT-NO-RENEW-001）。**
+>
+> - 不得实现 `POST .../renew` 为成功路径；若路由仍残留，必须返回业务拒绝（建议 `FEATURE_NOT_AVAILABLE` / `VALIDATION_FAILED`）并留痕。
+> - 不得在权限模板默认授予 `bar.table_session.renew` / `bar.table.renew`。
+> - 历史已落库的 `adjustment_type=renew` 记录只读保留，不作新能力入口。
+> - 业务替代：当前已开台会话内正常加单；或关台后重新开台（新开台不继承已关台低消进度，除非走转台/并台）。
 
-| 字段 | 必填 | 说明 |
-|---|---:|---|
-| `idempotencyKey` | 是 | 幂等键 |
-| `renewedUntil` | 是 | 续卡到期时间，必须晚于当前时间 |
-| `additionalMinConsumptionCent` | 否 | 追加低消金额，分 |
-| `additionalDepositAmountCent` | 否 | 追加押金金额，分 |
-| `additionalServiceFeeCent` | 否 | 追加服务费，分 |
-| `reason` | 是 | 续卡原因 |
-| `requestedByUserId` | 是 | 操作人 |
-| `sessionVersion` | 是 | 会话版本 |
-| `evidenceAttachmentIds` | 否 | 证据附件 |
-
-续卡成功后会话版本加 1，并新增 `renew` 类型调整记录；本次不自动改写已生成账单。
 
 ## 5. 错误码
 
 | 错误码 | 场景 |
 |---|---|
-| `VALIDATION_FAILED` | 必填字段缺失、金额为负、续卡时间不合法 |
+| `VALIDATION_FAILED` | 必填字段缺失、金额为负、非法调整类型（含废止的续卡） |
 | `BAR_TABLE_NOT_FOUND` | 卡座不存在 |
 | `BAR_TABLE_SESSION_NOT_FOUND` | 卡座会话不存在 |
 | `BAR_TABLE_SESSION_NOT_ACTIVE` | 会话不是开放状态 |
@@ -121,7 +118,7 @@
 | 创建会话 | 不写调整记录 | `bar.table_session.created` |
 | 转卡 | `adjustment_type=transfer` | `bar.table.transferred` / `bar.table.transfer_failed` |
 | 合并 | `adjustment_type=merge` | `bar.table.merged` / `bar.table.merge_failed` |
-| 续卡 | `adjustment_type=renew` | `bar.table.renewed` / `bar.table.renew_failed` |
+| ~~续卡~~ | ~~`adjustment_type=renew`~~ | **废止；禁止新发成功事件** |
 
 自动化验收以 160 机器为准：
 
@@ -138,3 +135,6 @@ mvn -Dtest=BarServiceTests,BarControllerTests,BarJdbcIntegrationTests test
 | `BarControllerTests` | 路径、权限点、幂等键校验 |
 | `BarJdbcIntegrationTests` | Flyway 019、表结构、权限种子、JDBC 保存和查询 |
 
+## 变更日志
+
+| 2026-07-28 | A2 | 废止续卡整节与 renew 接口；对齐 MAIN §7.3A / DEC-SEAT-NO-RENEW-001 |
