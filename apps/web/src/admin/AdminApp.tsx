@@ -93,6 +93,7 @@ const StaffProfilesPage = React.lazy(() => import("./pages/StaffProfilesPage").t
 const AiThresholdsPage = React.lazy(() => import("./pages/AiThresholdsPage").then((m) => ({ default: m.AiThresholdsPage })));
 const NotificationWindowsPage = React.lazy(() => import("./pages/NotificationWindowsPage").then((m) => ({ default: m.NotificationWindowsPage })));
 const SpaceTypesPage = React.lazy(() => import("./pages/SpaceTypesPage").then((m) => ({ default: m.SpaceTypesPage })));
+const VenueBusinessHoursPage = React.lazy(() => import("./pages/VenueBusinessHoursPage").then((m) => ({ default: m.VenueBusinessHoursPage })));
 const VendorSubordinatesPage = React.lazy(() => import("./pages/VendorSubordinatesPage").then((m) => ({ default: m.VendorSubordinatesPage })));
 const SmsNotificationSwitchesPage = React.lazy(() => import("./pages/SmsNotificationSwitchesPage").then((m) => ({ default: m.SmsNotificationSwitchesPage })));
 const LeasingRentalStatusPage = React.lazy(() => import("./pages/LeasingRentalStatusPage").then((m) => ({ default: m.LeasingRentalStatusPage })));
@@ -317,6 +318,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AbandonedEntitlementRevenuePage {...props} />;
     case "ADM-GOV-007":
       return <SpaceTypesPage {...props} />;
+    case "ADM-GOV-008":
+      return <VenueBusinessHoursPage {...props} />;
     case "ADM-VND-004":
       return <VendorSubordinatesPage {...props} />;
     case "ADM-INT-004":

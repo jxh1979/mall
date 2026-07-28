@@ -306,6 +306,18 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public java.util.Set<String> listTicketTypeIdsRequiringFacePhoto() {
+        // V359：一条 SQL 拿全量「要脸照的票种」，客人端购票页据此决定问不问客人要照片。
+        //   票种可绑多个权益模板，任一模板 require_face_photo=TRUE 即整张票要拍（发放时逐张按模板判定不受影响）。
+        return java.util.Set.copyOf(jdbcTemplate.queryForList("""
+                SELECT DISTINCT tte.ticket_type_id
+                  FROM ticket_type_entitlements tte
+                  JOIN entitlement_templates et ON et.id = tte.entitlement_template_id
+                 WHERE et.require_face_photo = TRUE
+                """, Map.of(), String.class));
+    }
+
+    @Override
     public IssuedEntitlementRecord saveIssuedEntitlement(IssuedEntitlementRecord entitlement) {
         jdbcTemplate.update("""
                 INSERT INTO issued_entitlements (

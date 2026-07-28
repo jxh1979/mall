@@ -48,6 +48,8 @@ export class CustomerService {
     buyerNote?: string;
     // AUD-076 单店票挂酒吧：单店票必填该票所属酒吧 id（通票不传）；请求体自动 snake_case 为 bar_id。
     barId?: string;
+    // V359：需拍照的票种带上每张票的入场人脸照（base64，不含 data URI 前缀）；其余票种不传。
+    facePhotos?: string[];
   }): Promise<TicketOrder> {
     return this.api.post<TicketOrder>("/api/v1/customer/ticket-orders", payload);
   }

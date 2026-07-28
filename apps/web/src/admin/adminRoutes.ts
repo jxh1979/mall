@@ -45,6 +45,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-MER-002", label: "商户授权工作台", module: "商户门户", group: "governance", route: "/admin/merchant-portal/scope", requiredPermissions: ["merchant.service_work_order.view", "merchant.billing.view"] },
   { pageId: "ADM-VND-001", label: "外包维保工单", module: "外包工作台", group: "vendor", route: "/admin/vendor/work-orders", requiredPermissions: ["facility.work_order.view_assigned"], accountForms: ["vendor"] },
   { pageId: "ADM-GOV-007", label: "空间类型字典", module: "治理", group: "governance", route: "/admin/governance/space-types", requiredPermissions: ["governance.space.view"] },
+  { pageId: "ADM-GOV-008", label: "场地营业时间", module: "治理", group: "governance", route: "/admin/governance/venue-business-hours", requiredPermissions: ["governance.space.view"] },
   { pageId: "ADM-VND-004", label: "外包下属账号", module: "外包工作台", group: "vendor", route: "/admin/vendor/subordinates", requiredPermissions: ["partner.subordinate.view"], accountForms: ["vendor"] },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", module: "终端", group: "integration", route: "/admin/terminals/switch-matrix", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-CUS-001", label: "客人账号管理", module: "客人", group: "governance", route: "/admin/customers/accounts", requiredPermissions: ["customer.account.manage"] },

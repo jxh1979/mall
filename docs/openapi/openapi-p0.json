@@ -8773,6 +8773,70 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/platform/venue-business-hours": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "listVenueBusinessHours",
+        "summary": "查询场地营业时间",
+        "description": "按场地和星期几查询开业、歇业时刻。场次按此表自动划分（开业开场、歇业关场），入场资格与当天无限权益的核销都依赖它。",
+        "x-permission": "governance.space.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "venue_business_hours.viewed",
+        "x-audit-event-failure": "venue_business_hours.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "saveVenueBusinessHours",
+        "summary": "配置场地营业时间",
+        "description": "按场地和星期几配置开业、歇业时刻，保存即刻生效。歇业时刻早于开业时刻表示营业到次日凌晨。停用表示该日不营业，配置行保留可随时恢复。",
+        "x-permission": "governance.space.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "venue_business_hours.updated",
+        "x-audit-event-failure": "venue_business_hours.update_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/VenueBusinessHoursRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/system/health": {
       "get": {
         "tags": [
@@ -9889,6 +9953,45 @@
             "$ref": "#/components/responses/Page"
           },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo": {
+      "get": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "getIssuedEntitlementFacePhoto",
+        "summary": "取购票人脸照（核销比对本人）",
+        "description": "核销员在核销预检后按需调取该权益购票时留存的人脸照，肉眼比对是否本人（防转票）。照片为个人敏感信息：加密存库、限核销/运营权限、每次调取写审计；到留存期由清理作业硬删。",
+        "x-permission": "verification.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "ticket_face_photo.viewed",
+        "x-audit-event-failure": "ticket_face_photo.view_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EntitlementId",
+            "description": "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -35114,6 +35217,16 @@
         },
         "description": "OrderId 路径参数；必须引用当前数据范围内存在且允许访问的记录。"
       },
+      "EntitlementId": {
+        "name": "entitlement_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "description": "EntitlementId 路径参数；必须引用当前数据范围内存在且允许访问的记录。"
+      },
       "TicketId": {
         "name": "ticket_id",
         "in": "path",
@@ -35683,6 +35796,23 @@
               "visit_date": "2026-06-20",
               "contact_phone": "13800138000",
               "buyer_note": "周末双人票"
+            }
+          }
+        }
+      },
+      "VenueBusinessHoursRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/VenueBusinessHoursRequest"
+            },
+            "example": {
+              "venue_id": "sp_bar_main_hall",
+              "day_of_week": 5,
+              "open_time": "20:00",
+              "close_time": "02:00",
+              "disabled": false
             }
           }
         }
@@ -40111,6 +40241,62 @@
             "type": "string",
             "description": "酒吧唯一标识；单店票必填、通票必空；服务端据票种校验并快照。",
             "maxLength": 64
+          },
+          "face_photos": {
+            "type": "array",
+            "description": "购票人入场人脸照（base64 图串），每张票一张，仅要求拍照的票种需要；照片加密暂存到本单，出票时转绑到已发权益。",
+            "maxItems": 20,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "VenueBusinessHoursRequest": {
+        "type": "object",
+        "description": "请求载荷 `VenueBusinessHoursRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
+        "additionalProperties": false,
+        "required": [
+          "venue_id",
+          "day_of_week",
+          "open_time",
+          "close_time"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+            "maxLength": 128
+          },
+          "venue_id": {
+            "type": "string",
+            "description": "场地唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
+            "maxLength": 64
+          },
+          "day_of_week": {
+            "type": "integer",
+            "description": "星期几；0 表示周日，6 表示周六，与场次判定口径一致。",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "open_time": {
+            "type": "string",
+            "description": "`open_time` 开业时刻；使用 HH:mm 24 小时制墙钟时间。",
+            "maxLength": 5
+          },
+          "close_time": {
+            "type": "string",
+            "description": "`close_time` 歇业时刻；使用 HH:mm 24 小时制墙钟时间，早于开业时刻表示营业到次日凌晨。",
+            "maxLength": 5
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "该日是否停用；停用表示本日不营业、不参与场次判定，配置行保留可随时恢复。"
+          },
+          "effective_from": {
+            "type": "string",
+            "description": "`effective_from` 日期字段；使用 YYYY-MM-DD。",
+            "format": "date"
           }
         }
       },

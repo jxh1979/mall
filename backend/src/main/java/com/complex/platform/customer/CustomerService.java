@@ -216,12 +216,19 @@ public class CustomerService {
                 "customer.ticket_products_view_failed",
                 "public",
                 "ticket_product",
-                () -> ticketingService.listTicketTypes().items().stream()
-                        // AUD-015：公开列表只认已发布（过了权益绑定发布闸）的票种；历史 active 行由 V293 一次性归位。
-                        .filter(ticketType -> "published".equals(ticketType.status()))
-                        .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
-                        .map(this::toTicketProduct)
-                        .toList()
+                () -> {
+                    // V359：一次查出「要拍脸照的票种」，客人端只对这些票才弹拍照（其余票种一律不问客人要生物识别信息）。
+                    java.util.Set<String> facePhotoTypes = ticketingService.ticketTypeIdsRequiringFacePhoto();
+                    // 留存天数取当前生效配置，随客人端一起下发——告知的期限必须是真的那个数。
+                    Integer retentionDays = facePhotoTypes.isEmpty() ? null : ticketingService.facePhotoRetentionDays();
+                    return ticketingService.listTicketTypes().items().stream()
+                            // AUD-015：公开列表只认已发布（过了权益绑定发布闸）的票种；历史 active 行由 V293 一次性归位。
+                            .filter(ticketType -> "published".equals(ticketType.status()))
+                            .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
+                            .map(ticketType -> toTicketProduct(
+                                    ticketType, facePhotoTypes.contains(ticketType.id()), retentionDays))
+                            .toList();
+                }
         );
     }
 
@@ -256,7 +263,9 @@ public class CustomerService {
                         customer.id(),
                         java.util.Map.of(),
                         // AUD-076：把客人选中的酒吧透传给服务端校验+快照（单店票必填、通票必空）。
-                        actual.barId()
+                        actual.barId(),
+                        // V359：客人在 H5 上拍的入场人脸照，加密暂存到本单，后台出票时转绑到已发权益。
+                        actual.facePhotos() == null ? List.of() : actual.facePhotos()
                 ))
         );
     }
@@ -1093,7 +1102,8 @@ public class CustomerService {
         }
     }
 
-    private CustomerTicketProductResponse toTicketProduct(TicketTypeRecord ticketType) {
+    private CustomerTicketProductResponse toTicketProduct(
+            TicketTypeRecord ticketType, boolean requireFacePhoto, Integer facePhotoRetentionDays) {
         return new CustomerTicketProductResponse(
                 ticketType.id(),
                 ticketType.ticketName(),
@@ -1104,7 +1114,10 @@ public class CustomerService {
                 ticketType.status(),
                 // AUD-076 单店票挂酒吧：结构化 bar_id + 实时解析酒吧名（null=综合体通票）。
                 ticketType.barId(),
-                ticketingService.resolveBarName(ticketType.barId())
+                ticketingService.resolveBarName(ticketType.barId()),
+                // V359：该票是否要求购票人拍入场人脸照（游乐票默认要）+ 当前生效的留存天数（供如实告知）。
+                requireFacePhoto,
+                requireFacePhoto ? facePhotoRetentionDays : null
         );
     }
 

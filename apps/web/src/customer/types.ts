@@ -11,6 +11,9 @@ export type TicketProduct = {
   // AUD-076 单店票挂酒吧：所属酒吧 id 与实时名称（null=综合体通票，展示“综合体通用”）。
   barId?: string | null;
   barName?: string | null;
+  // V359：本票是否要求购票人拍入场人脸照（游乐票默认要）+ 当前生效的照片留存天数（用于如实告知客人）。
+  requireFacePhoto?: boolean;
+  facePhotoRetentionDays?: number | null;
 };
 
 // 1.8 我的票：订单内票实例安全投影（后端 CustomerTicketResponse）。

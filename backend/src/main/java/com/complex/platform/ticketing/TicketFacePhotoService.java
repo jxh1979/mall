@@ -9,7 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,9 @@ import org.springframework.stereotype.Service;
  *
  * <p><b>保留期</b>：purge_after = 票 valid_to + 留存天数(后台可配，默认 30 天；PIPL 越短越安全)；
  * 到期由 {@link TicketFacePhotoPurgeJob} 硬删。
+ *
+ * <p><b>订单暂存位(V359)</b>：客人端 H5 下单时自己拍的脸照先按订单暂存(加密同一套)，后台出票时
+ * {@link TicketOrderService} 取出转绑到已发权益并删暂存。暂存 purge_after=下单日+留存天数，不出票也会被清理 job 删。
  */
 @Service
 public class TicketFacePhotoService {
@@ -36,6 +41,10 @@ public class TicketFacePhotoService {
 
     // 取照查看权限：复用既有核销查看权限码(核销/运营角色持有)，无权 403。
     private static final String VIEW_PERMISSION = "verification.view";
+
+    // 单张脸照 base64 上限(字符数)：~4MB base64 ≈ 3MB 原图，正常自拍(640x480 JPEG)只有几十 KB。
+    //   客人端可任意构造 payload，这是信任边界，必须有硬上限——否则一次下单能把整个库塞满。
+    private static final int MAX_PHOTO_BASE64_CHARS = 4_000_000;
 
     private final TicketFacePhotoRepository repository;
     private final PiiCipher piiCipher;
@@ -70,11 +79,7 @@ public class TicketFacePhotoService {
      * 由 {@link TicketOrderService} 在 require_face_photo=TRUE 的权益发放后调用；photoBase64 缺失应在调用前已拒。
      */
     void capture(String entitlementId, String photoBase64, String contentType, Instant capturedAt, Instant validTo) {
-        String payload = photoBase64 == null ? null : photoBase64.trim();
-        if (payload == null || payload.isEmpty()) {
-            // 防御：正常路径由 TicketOrderService 先拒 FACE_PHOTO_REQUIRED，不应到这。
-            throw ApiException.badRequest("FACE_PHOTO_REQUIRED", "face photo payload is required for this entitlement");
-        }
+        String payload = requireValidPhoto(photoBase64);
         // 复用 PiiCipher(AES-GCM)：base64 图串 → 信封串 → UTF-8 字节存 BYTEA（禁明文存）。
         byte[] ciphertext = piiCipher.encrypt(payload).getBytes(StandardCharsets.UTF_8);
         LocalDate purgeAfter = (validTo == null ? Instant.now() : validTo)
@@ -82,6 +87,46 @@ public class TicketFacePhotoService {
         repository.save("tfp_" + UUID.randomUUID().toString().replace("-", ""),
                 entitlementId, ciphertext, contentType == null ? "image/jpeg" : contentType,
                 capturedAt == null ? Instant.now() : capturedAt, purgeAfter);
+    }
+
+    /**
+     * V359 客人端下单暂存：把 H5 拍的脸照按订单加密暂存，等后台出票时转绑到已发权益。
+     * 张数上限=订单票数(一张票一张脸)，超出直接拒——客人端可任意构造 payload，这里是信任边界。
+     */
+    void stageForOrder(String orderId, List<String> photosBase64, int quantity) {
+        if (photosBase64 == null || photosBase64.isEmpty()) {
+            return;
+        }
+        if (photosBase64.size() > Math.max(1, quantity)) {
+            throw ApiException.badRequest("FACE_PHOTO_COUNT_EXCEEDED",
+                    "face photo count must not exceed ticket quantity");
+        }
+        LocalDate purgeAfter = LocalDate.now(ZoneOffset.UTC).plusDays(retentionDays());
+        Instant now = Instant.now();
+        for (int slot = 0; slot < photosBase64.size(); slot++) {
+            String payload = requireValidPhoto(photosBase64.get(slot));
+            byte[] ciphertext = piiCipher.encrypt(payload).getBytes(StandardCharsets.UTF_8);
+            repository.saveStaged("tfp_" + UUID.randomUUID().toString().replace("-", ""),
+                    orderId, slot, ciphertext, "image/jpeg", now, purgeAfter);
+        }
+    }
+
+    /**
+     * V359 出票取用：取某订单的暂存照(解密回 base64，按拍摄顺序)。出票链把它们当作 facePhotos 逐张消费。
+     * 无暂存返回空表(=该单没拍照，走既有 FACE_PHOTO_REQUIRED 判定)。
+     */
+    List<String> stagedForOrder(String orderId) {
+        List<byte[]> rows = repository.listStagedCiphertexts(orderId);
+        List<String> photos = new ArrayList<>(rows.size());
+        for (byte[] ciphertext : rows) {
+            photos.add(piiCipher.decrypt(new String(ciphertext, StandardCharsets.UTF_8)));
+        }
+        return photos;
+    }
+
+    /** V359：出票转绑完成即删暂存（生物识别数据不多留一秒）。 */
+    void discardStagedForOrder(String orderId) {
+        repository.deleteStaged(orderId);
     }
 
     /**
@@ -106,6 +151,27 @@ public class TicketFacePhotoService {
         // 防御：确保返回值是合法 base64（PiiCipher 解密失败会先 GCM 抛错，这里只兜格式）。
         Base64.getDecoder().decode(base64);
         return new FacePhotoView(entitlementId, base64, row.contentType());
+    }
+
+    /**
+     * 入库前的唯一校验闸：非空 + 合法 base64 + 大小封顶。发放捕获与下单暂存都走这里，
+     * 免得哪条路径漏校验就成了任意字节写入口。
+     */
+    private String requireValidPhoto(String photoBase64) {
+        String payload = photoBase64 == null ? null : photoBase64.trim();
+        if (payload == null || payload.isEmpty()) {
+            // 防御：正常路径由 TicketOrderService 先拒 FACE_PHOTO_REQUIRED，不应到这。
+            throw ApiException.badRequest("FACE_PHOTO_REQUIRED", "face photo payload is required for this entitlement");
+        }
+        if (payload.length() > MAX_PHOTO_BASE64_CHARS) {
+            throw ApiException.badRequest("FACE_PHOTO_TOO_LARGE", "face photo payload exceeds the allowed size");
+        }
+        try {
+            Base64.getDecoder().decode(payload);
+        } catch (IllegalArgumentException exception) {
+            throw ApiException.badRequest("FACE_PHOTO_INVALID", "face photo payload must be base64 encoded image data");
+        }
+        return payload;
     }
 
     /** 核销显示端点返回体：base64 图串 + content_type，前端拼 data URI 显示。 */

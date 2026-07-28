@@ -26,10 +26,14 @@ public class PlatformController {
 
     private final PlatformService service;
     private final AuthorizationService authorizationService;
+    // D1：场地营业时间配置（V226 建表后一直无界面，场次划分全靠它）。
+    private final VenueBusinessHoursService venueBusinessHoursService;
 
-    public PlatformController(PlatformService service, AuthorizationService authorizationService) {
+    public PlatformController(PlatformService service, AuthorizationService authorizationService,
+                              VenueBusinessHoursService venueBusinessHoursService) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.venueBusinessHoursService = venueBusinessHoursService;
     }
 
     @GetMapping("/business-entities")
@@ -154,6 +158,23 @@ public class PlatformController {
         authorizationService.requirePermission("governance.space.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createSpace(request));
+    }
+
+    // D1 场地营业时间：V226 的 venue_business_hours 此前只有核销侧读、没有任何配置入口（只能改库）。
+    //   入场资格/当天无限权益的场次全按这张表划，配错=整个场地当天核销被拒，必须有后台配置面。
+    @GetMapping("/venue-business-hours")
+    public ApiResponse<PageResponse<VenueBusinessHoursRecord>> listVenueBusinessHours() {
+        authorizationService.requirePermission("governance.space.view");
+        return ApiResponse.ok(PageResponse.of(venueBusinessHoursService.list(), 1, 500));
+    }
+
+    @PostMapping("/venue-business-hours")
+    public ApiResponse<VenueBusinessHoursRecord> saveVenueBusinessHours(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.VenueBusinessHoursRequest request) {
+        authorizationService.requirePermission("governance.space.manage");
+        authorizationService.requirePlatformScope();
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(venueBusinessHoursService.save(request));
     }
 
     @GetMapping("/business-entity-bindings")

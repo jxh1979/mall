@@ -85,10 +85,17 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 
 ### C. 游乐票人脸照配套前端（后端 V229 已落）
 
+> ⚠️ **实读复核纠正（2026-07-28，V359）**：C1 原写「base64 入出票请求 `facePhotos`」不成立——
+> 本仓出票只有后台一条路（`POST /ticketing/orders/{order_id}/issue`，权限 `ticket.ticket.issue`），
+> 客人端根本调不到；客人买票时权益还没发放，脸照也无处可挂（V229 的存档表按 `entitlement_id` 唯一）。
+> 因此 C1 不是纯前端活。落法：客人在 H5 拍照 → 照片随下单请求上来 → 加密**暂存到订单**
+> （V359 给 `ticket_face_photos` 加订单位 `order_id`+`slot_index`，同一张表同一套加密与清理作业）→
+> 后台出票时自动取用、转绑到已发权益、立刻删暂存。出票请求自带照片（柜台现场拍）仍优先，口径不变。
+
 | 项 | 内容 | 状态 |
 |---|---|---|
-| C1 H5 购票拍照 | 游乐票下单页调摄像头拍脸照，base64 入出票请求 `facePhotos`。后端 `TicketIssueRequest.facePhotos` 已就绪在等前端 | ⬜ 真缺口（有代理在做） |
-| C2 后台核销页显示脸照 | 核销扫到权益调 `GET /ticketing/issued-entitlements/{id}/face-photo`，data URI 显示供核销员比对。后端端点已就绪 | ⬜ 真缺口（有代理在做） |
+| C1 H5 购票拍照 | 客人端购票页对「要拍照的票种」告知用途与留存天数、取得同意后调摄像头逐张拍；base64 随下单请求上来加密暂存到订单，后台出票时转绑到已发权益并删暂存 | ✅ 已落地（V359） |
+| C2 后台核销页显示脸照 | 核销预检扫到权益即调 `GET /ticketing/issued-entitlements/{id}/face-photo`，以背景图方式显示供核销员比对（不落前端存储、不进操作结果、看完可一键清除） | ✅ 已落地 |
 | C3 模板编辑勾选 `require_face_photo` | 同批 5 尾项①，**归批 5 一并做，不单列** | ⬜ 见批 5 尾项① |
 | C4（可选）核销完成即提前清照 | 现状仍是 `TicketFacePhotoService:80` purge_after = valid_to + N 天，`TicketFacePhotoPurgeJob` 每日硬删。**V353（2026-07-28）已把 N 从硬编码 30 改成后台可配**（落 `notification_windows`，ADM-ANA-011 可改，加了 3650 天上界）。「核销即清」这个更激进的方案仍未做 | ⏸ 可选优化（底层已改善） |
 
@@ -96,7 +103,7 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 
 | 项 | 内容 | 状态 |
 |---|---|---|
-| D1 营业时间配置页 | `venue_business_hours` 只在 `JdbcTicketingRepository:1063` 被裸 SQL 查询，**无 Controller 端点、无后台页、前端零命中**——**运营改不了营业时间** | ⬜ 真缺口（有代理在做） |
+| D1 营业时间配置页 | ✅ 后台「场地营业时间」页（ADM-GOV-008，`/admin/governance/venue-business-hours`）按场地×星期几配开业/歇业时刻、保存即生效；配套 `GET/POST /api/v1/platform/venue-business-hours`（读 `governance.space.view`、写 `governance.space.manage`，每次改动写审计）。「本日不营业」= 停用该日配置（复用 `is_draft` 列），配置行保留可随时恢复，不物理删 | ✅ 已落地（2026-07-28） |
 | D2（可选）歇业精确关场 job | ⏸ **确认未做，且是有意为之**：`TicketVerificationService:839` 注释直书「惰性开场——核销时按营业时间表判…**不做后台定时开歇场 job**」。属设计取舍，不是欠账 | ⏸ 消项（设计取舍） |
 | D3（可选）多时区 | ⏸ **确认未做，升级路径已写在代码里**：`JdbcTicketingRepository:1026-1027` 用 `ZoneId.systemDefault()`，注释「若日后要按各 venue 独立时区，营业表加 zone_id 列在此换算，接口不变」。单城市场景无需求 | ⏸ 消项（等需求） |
 

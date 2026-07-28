@@ -62,6 +62,14 @@ public interface TicketingRepository {
 
     List<TicketTypeEntitlementRecord> listTicketTypeEntitlements(String ticketTypeId);
 
+    /**
+     * V359：绑了 require_face_photo=TRUE 权益模板的票种 id 集合。客人端购票页据此才向购票人要人脸照，
+     * 不需要的票种一律不问（生物识别信息最小必要）。default 返回空集=都不要照，既有假实现零改动；Jdbc 覆写。
+     */
+    default java.util.Set<String> listTicketTypeIdsRequiringFacePhoto() {
+        return java.util.Set.of();
+    }
+
     IssuedEntitlementRecord saveIssuedEntitlement(IssuedEntitlementRecord entitlement);
 
     Optional<IssuedEntitlementRecord> findIssuedEntitlementByCode(String entitlementCode);

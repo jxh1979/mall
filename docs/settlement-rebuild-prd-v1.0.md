@@ -346,6 +346,10 @@
 - 新建 `venue_sessions`(场次/营业周期)+ `entitlement_entry_records`(入场记录);核销校验按场次状态机。
 - **场次自动触发(2026-07-04 定)**:系统按各酒吧**营业时间表**(新增 `venue_business_hours` 配置)自动划场次——开业开场、歇业关场;入场资格权益随场次结束自动作废,无需人工开关。
 
+> ✅ **配置面已落地(2026-07-28)**:营业时间表原先只有 DB 表、无任何界面(只能改库),现有后台
+> 「场地营业时间」页(ADM-GOV-008)按场地×星期几配开业/歇业时刻,保存即生效;跨零点(歇业早于开业)
+> 与「本日不营业」(停用,配置保留可恢复)均在页面上说清楚。改动经 `governance.space.manage` 并写审计。
+
 > ✅ **已落地(批3-2,V226,main=98a7c50)**:新引入 `consumption_window`(per_use/per_session/per_day/unlimited_in_day)判别位,`per_session`=入场资格;建 `venue_business_hours`(营业时间表)+`venue_sessions`(场次实例)+`entitlement_entry_records`(入场记录);核销惰性开场(按营业时间表判当前是否营业·跨零点延续归同场次·非营业时段拒 `VENUE_NOT_IN_SESSION`);同场次二次核销放行不消耗、跨场次已入过场 `ENTRY_PASS_PAST_SESSION_VOID` 作废、唯一键防并发重扣。
 
 ### 6.3 游乐——当天无限 + 票种规则(用户口径 5,2026-07-04 扩)
@@ -655,7 +659,7 @@
 | 批 0 | ✅ 完成 | 术语表 `terminology-canonical-v1.0` + 本 PRD v1.0 定稿 |
 | 批 1(按核销结算地基) | ✅ 完成 | **V222**(`settlement_transactions` + 对账表)、核销双写(`SettlementSettledEvent`/Consumer,AFTER_COMMIT 不影响核销主流程、金额三段 verified+unverified=allocated 幂等)、`SettlementReconciliationJob` 新旧对账、`SettlementExpiryJob` 未核销归项目(`allocated×未核销次数/总次数`);旧 `allocated_revenue_cent` 保留双写观察、不切口径;测试全绿 |
 | 批 2(分账引擎) | ✅ 完成 | **V223**(6 配置表)、**V224**(`settlement_bills`+`settlement_items`)、月度分账引擎 `settleMonth`(算池/留存/三方式分配/超额待特批)、批 2-4 过账 `ar_ap_items`(`SettlementPostingService`·幂等键 SHA-256 前 20 hex 防明细撞·批2-5 逐家真断言证伪)、批 2-5 端到端全绿;**丢账 bug 已修 main=c6f3623** |
-| 批 3(权益细则 §6.1-6.4+人脸照) | ✅ 完成 | **3-1** 结算价判定(V225·实物内部价/虚拟签约价/回退)、**3-2** 场次入场(V226·consumption_window+营业时间表+场次+入场记录·惰性开场·过场作废)、**3-3** 当天无限(V227·按自然日激活·单人跨日作废/多次跨日保留靠 total_times)、**3-4** 专属不分摊(V228·exclusive_merchant_id 全额直付不进池)、**3-6** 游乐票人脸拍照存档(V229·PiiCipher 加密·授权+审计取照·30 天自清);每片自带证伪测试+回归全绿;main=a545261。**票种细分(单人/多人/多次/新人/学生)→ 批 4** |
+| 批 3(权益细则 §6.1-6.4+人脸照) | ✅ 完成 | **3-1** 结算价判定(V225·实物内部价/虚拟签约价/回退)、**3-2** 场次入场(V226·consumption_window+营业时间表+场次+入场记录·惰性开场·过场作废)、**3-3** 当天无限(V227·按自然日激活·单人跨日作废/多次跨日保留靠 total_times)、**3-4** 专属不分摊(V228·exclusive_merchant_id 全额直付不进池)、**3-6** 游乐票人脸拍照存档(V229·PiiCipher 加密·授权+审计取照·留存天数后台可配 V353·前端两头 2026-07-28 补齐:客人端购票拍照+同意告知、后台核销页取照比对;V359 加订单暂存位打通「客人拍→后台出票转绑」,因客人端调不到出票端点);每片自带证伪测试+回归全绿;main=a545261。**票种细分(单人/多人/多次/新人/学生)→ 批 4** |
 | 批 4(票种分类·收缩后小尾巴) | ✅ 完成 | **V230**(`ticket_types` 加 `ticket_category` 资格/定价档标签:standard/new_person/student,仅供后台分类/报表,不碰定价/消耗/作废逻辑;新人票/学生票=完全同酒吧通票靠独立 ticket_type+定价;结构型单人/多人/多次由 num_people+total_times 派生不入本字段);仅加列+回填可独立回滚;4f6eb96。**批 4 原计划的综合服务费/单独门票/套票折扣/退款手续费预扣仍未做,归入批 5 配置中心 + 各票种规则后续实现** |
 | 前端配套(可点击/行明细/中文化/时间戳) | ✅ 完成 | 全链可点击下钻(引用字段 merchant/contract/order/project/space/处理人/审计对象全站可点·统一 `<TraceLink>`)、KPI 数字可点、全站 ~60 表页整行→右侧明细抽屉(`RowDetailDrawer`)、全站零英文(枚举/状态/时间 cnDate/CSV 导出)、原生日期控件→自研 `CnDatePicker`;**下单业务记支付时间 `paid_at`(V231)**、**物流配送到位时间 `bar_order_items.delivered_at`+游乐核销场次展示(V232)**;全部已 push origin/main(tip=7502a08) |
 | 迁移号 | — | V222–V232(结算重构)已用;**V268**(综合服务费 + 套票折扣归属配置);**V323/V324**(状态机加固:结算账本不可变 + 退款终态);全仓下一空闲号见 migration 目录 |
