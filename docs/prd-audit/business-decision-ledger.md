@@ -731,3 +731,16 @@
 
 承接：`docs/member-loyalty-and-stored-value-product-prd-v0.1.md` §7。
 仅文档；编码另开。
+
+
+## DEC-SEAT-TRANSFER-001 / DEC-SEAT-MERGE-001 / DEC-SEAT-NO-RENEW-001（2026-07-28）
+
+闭合 **ADV-TX-007**。
+
+| ID | 裁决 |
+|---|---|
+| DEC-SEAT-TRANSFER-001 | 转台：原低消进度转新台；按新台规则匹配，**多不退少要补**；销售提成不变；服务员提成跟新台 |
+| DEC-SEAT-MERGE-001 | 并台：低消**加总**；销售归属不变；服务员提成**各记** |
+| DEC-SEAT-NO-RENEW-001 | **无**续卡/续时产品规则 |
+
+承接：`docs/bar-business-operations-product-prd-v0.1.md` §7.3A。

@@ -334,7 +334,7 @@ BSM-0056,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定�
 BSM-0057,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0058,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0059,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P2,TX-BSM-0059-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
-BSM-0060,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0060,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0061,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0062,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0063,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -366,7 +366,7 @@ BSM-0088,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,
 BSM-0089,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0090,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0091,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0092,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0092,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0093,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0094,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0095,docs/business-decision-log-v0.1.md,36. R6 业务输入与确认决议（14 项已全部业务确认 2026-06-19）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -384,7 +384,7 @@ BSM-0106,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,
 BSM-0107,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0108,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0109,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0110,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0110,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0111,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0112,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0113,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
@@ -393,7 +393,7 @@ BSM-0115,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-tra
 BSM-0116,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0117,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0118,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0119,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0119,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0120,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0121,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0122,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
@@ -407,7 +407,7 @@ BSM-0129,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,
 BSM-0130,docs/terminal-page-product-prd-v0.1.md,§11.1 / 一体机定位,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
 BSM-0131,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,4. P0 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0132,docs/terminal-page-product-prd-v0.1.md,§11.1 / 售票型一体机售卖范围,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
-BSM-0133,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0133,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0134,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0135,docs/terminal-page-product-prd-v0.1.md,§11.1 / 支付引导,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
 BSM-0136,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,04-transaction-member-ticket-bar
@@ -431,9 +431,9 @@ BSM-0158,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,
 BSM-0159,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0160,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0161,docs/bar-business-operations-product-prd-v0.1.md,7.2 赠饮权益核销,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0162,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
-BSM-0163,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
-BSM-0164,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0162,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
+BSM-0163,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
+BSM-0164,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0165,docs/customer-app-miniapp-product-prd-v0.1.md,3. 主要功能,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0166,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0167,docs/bar-business-operations-product-prd-v0.1.md,6. 账单状态,FULL,,,,,,04-transaction-member-ticket-bar
@@ -452,10 +452,10 @@ BSM-0179,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FU
 BSM-0180,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0181,docs/bar-business-operations-product-prd-v0.1.md,10.2.1 退菜/退酒（出品后撤单）升 P0 `R6-D14`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0182,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0183,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0183,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0184,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0185,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0186,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0186,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0187,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0188,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0189,docs/bar-business-operations-product-prd-v0.1.md,10.1 成熟 POS 深度缺口规划（对照成熟酒吧/餐饮 POS）,FULL,,,,,,04-transaction-member-ticket-bar
