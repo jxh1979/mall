@@ -129,12 +129,27 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 硬规则：
 
 1. `amount_unpaid = amount_total - amount_paid + approved_adjustments`，不得由前端手工输入。
-2. 已锁定日结关联的台账不得直接改金额，只能走 `ar_ap_adjustments`。
+2. 已锁定日结关联的台账不得直接改金额，只能走 `ar_ap_adjustments`；**审批通过也不改原行**，一律红冲（原行不动 + 冲正行 + 重述行，见下方 P0-B）。
 3. 缺少 `business_entity_binding_id`、`settlement_subject_id`、`due_date`、`amount_total` 时不得进入确认态。
 4. 同一 `source_type + source_id + direction` 默认不得重复生成，重复必须走调整或冲正。
 
 > **✅ 已实现修复（F-OPS-01 / F-OPS-09，2026-06-22，已在 .160 编译通过）**：
 > - **F-OPS-01 运行期权威台账 append-only（`delete_only` 口径）**：`ar_ap_items` 纳入 append-only 保护，但口径为 **`delete_only`——仅禁物理 `DELETE`，保留合法 `UPDATE`** 供 `amount_paid`/`amount_unpaid`/`status` 等收付款回写（与硬规则 1 的余额公式、§5 状态机流转一致）。**金额修正一律走冲正分录**（`ar_ap_adjustments`，§4.3 `reversal`/`manual_correction`），不得物理删除原行重建。即：台账行只增不删、状态/已收付金额可合法 UPDATE 回写、金额修正走调整冲正。
+> **✅ 已实现修复（P0-B 资金台账 append-only 破防 · 红冲，2026-07-28，迁移 V344）**：**锁定后补录审批通过不再改写原行金额**，改为红字冲销三行制——
+> ① 原行**永久不动**（金额与其所属封账经营日都留在原样，事后可逐笔复核）；
+> ② 追加一条**冲正行**：原行 `amount_cent` / `paid_amount_cent` / `unpaid_amount_cent` 三列的**严格取反**，状态 `reversed`（已红冲）；
+> ③ 追加一条**重述行**：金额 = 原额 + 补录额，已收付部分原样承接，未收付部分随之重算。
+> 两条派生行经新增列 `origin_item_id`（回指原行）+ `adjustment_id`（回指补录工单）溯源，并刻意沿用原行的收付方向 / 往来对象 /
+> 来源单据 / 到期日 / 会计期间 / 商户与项目归属——**按任一维度聚合时三行天然净成补录后的金额**，下游报表零改动即正确；
+> 单据号 = 原单据号 + `-CZ-`（冲正）/ `-BL-`（重述）+ 工单 id，工单 id 全局唯一故单据号天然不撞。
+> 派生行**不继承** `locked_day_close_id`（它们是当期新增的更正凭证，可继续正常收付，不再被原封账锁冻结）。
+> DB 侧同步硬化：金额符号约束改为「符号自洽」——负额行**必须**挂 `origin_item_id`，否则拒写（杜绝绕过补录审批凭空红字）；
+> 账平恒等 `paid + unpaid = amount` 保持不变、对正负两侧同时成立，故三行相加逐列守恒、无舍入漂移。
+> 唯一索引 `uq_ar_ap_items_direction_source` 加 `origin_item_id IS NULL` 条件（派生行不是新的来源单据，幂等改由确定性主键
+> `arap_rev_` / `arap_res_` + 工单 id 与审批状态机承担），否则沿用原来源单据的红冲行根本落不下去。
+> **同时修掉一个真库从未跑通的缺陷**：改造前 `updateArApItemLedger` 的 `SET` 列表根本不含 `amount_cent`，只写 `paid` / `unpaid` / `status`，
+> 实跑会落出 `paid + unpaid <> amount` 的行、被 `chk_ar_ap_items_amount_balance` 直接拒绝（单测用内存假仓、假仓把 `amount` 一起改了，故长期绿灯掩盖）。
+>
 > - **F-OPS-09 日结判锁加 merchant scope 过滤**：日结判锁 `lockedDailyCloseExistsForDate` 加 **merchant scope 过滤**——`finance_daily_closes` 以 `scope_type`/`scope_id` 表达封账归属，**仅 `scope_type='merchant'` 才约束该商户**，与锁定落账 `lockArApItemsForDailyClose` 口径一致：仅商户级封账冻结该商户台账，**非 merchant scope（如平台/门店级）封账不跨冻**该商户。消除"任意 scope 的当日封账都冻结全部台账"的过冻。
 
 ## 6. 生成流程

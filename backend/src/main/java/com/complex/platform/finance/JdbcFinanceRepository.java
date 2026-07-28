@@ -34,12 +34,14 @@ class JdbcFinanceRepository implements FinanceRepository {
                 INSERT INTO ar_ap_items (
                     id, item_no, direction, counterparty_id, source_type, source_id,
                     amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                    accounting_period, status, created_at, updated_at, merchant_id, project_id
+                    accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                    origin_item_id, adjustment_id
                 )
                 VALUES (
                     :id, :item_no, :direction, :counterparty_id, :source_type, :source_id,
                     :amount_cent, :paid_amount_cent, :unpaid_amount_cent, :currency, :due_date,
-                    :accounting_period, :status, :created_at, :updated_at, :merchant_id, :project_id
+                    :accounting_period, :status, :created_at, :updated_at, :merchant_id, :project_id,
+                    :origin_item_id, :adjustment_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     item_no = EXCLUDED.item_no,
@@ -55,6 +57,28 @@ class JdbcFinanceRepository implements FinanceRepository {
                     accounting_period = EXCLUDED.accounting_period,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
+                """, arApItemParameters(item));
+        return item;
+    }
+
+    @Override
+    public ArApItemRecord appendArApItem(ArApItemRecord item) {
+        // P0-B（V344）红冲专用纯追加写入：与 saveArApItem 的 upsert 不同，命中既有 id 一律 DO NOTHING，
+        // 保证冲正行/重述行一经落表就再也不会被同 id 重放改写（append-only 语义在写入侧也不留口子）。
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (
+                    id, item_no, direction, counterparty_id, source_type, source_id,
+                    amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
+                    accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                    origin_item_id, adjustment_id
+                )
+                VALUES (
+                    :id, :item_no, :direction, :counterparty_id, :source_type, :source_id,
+                    :amount_cent, :paid_amount_cent, :unpaid_amount_cent, :currency, :due_date,
+                    :accounting_period, :status, :created_at, :updated_at, :merchant_id, :project_id,
+                    :origin_item_id, :adjustment_id
+                )
+                ON CONFLICT (id) DO NOTHING
                 """, arApItemParameters(item));
         return item;
     }
@@ -82,7 +106,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                       origin_item_id, adjustment_id
                   FROM ar_ap_items
                  ORDER BY created_at DESC, id
                 """, this::mapArApItem);
@@ -93,7 +118,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                       origin_item_id, adjustment_id
                   FROM ar_ap_items
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -121,7 +147,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         List<ArApItemRecord> items = jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                       origin_item_id, adjustment_id
                   FROM ar_ap_items
                 """ + where + """
                  ORDER BY created_at DESC, id
@@ -154,7 +181,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         List<ArApItemRecord> items = jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                       origin_item_id, adjustment_id
                   FROM ar_ap_items
                 """ + where + """
                  ORDER BY created_at DESC, id
@@ -169,7 +197,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                       origin_item_id, adjustment_id
                   FROM ar_ap_items
                  WHERE id = :id
                 """, Map.of("id", id), this::mapArApItem).stream().findFirst();
@@ -180,7 +209,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                       origin_item_id, adjustment_id
                   FROM ar_ap_items
                  WHERE id = :id
                    FOR UPDATE
@@ -206,7 +236,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id
+                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                       origin_item_id, adjustment_id
                   FROM ar_ap_items
                  WHERE direction = 'payable'
                    AND source_type = 'dividend_reserve_withheld'
@@ -1328,7 +1359,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("created_at", timestampWithTimeZone(item.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(item.updatedAt()))
                 .addValue("merchant_id", item.merchantId())
-                .addValue("project_id", item.projectId());
+                .addValue("project_id", item.projectId())
+                .addValue("origin_item_id", item.originItemId())
+                .addValue("adjustment_id", item.adjustmentId());
     }
 
     private MapSqlParameterSource arApItemSourceParameters(ArApItemSourceRecord source) {
@@ -1447,7 +1480,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
                 resultSet.getString("merchant_id"),
-                resultSet.getString("project_id")
+                resultSet.getString("project_id"),
+                resultSet.getString("origin_item_id"),
+                resultSet.getString("adjustment_id")
         );
     }
 

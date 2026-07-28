@@ -76,7 +76,9 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             "receivable", "应收", "payable", "应付", "internal_accounting", "内部核算");
     private static final Map<String, String> AR_AP_STATUS_LABELS = Map.of(
             "pending_collection", "待收款", "pending_payment", "待付款",
-            "partial_paid", "部分收付", "settled", "已结清");
+            "partial_paid", "部分收付", "settled", "已结清",
+            // P0-B（V344）锁定后补录红冲：冲正行状态（原行金额的严格取反凭证，不参与收付）。
+            "reversed", "已红冲");
     private static final Map<String, String> AR_AP_SOURCE_TYPE_LABELS = Map.ofEntries(
             Map.entry("contract", "合同"), Map.entry("order", "订单"), Map.entry("refund", "退款"),
             Map.entry("manual", "手工录入"), Map.entry("settlement", "结算"), Map.entry("bar_bill", "酒吧账单"),
@@ -934,35 +936,25 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         }
 
         if (approve) {
-            // 审批通过：真正写入金额变动（带符号），同步刷新 paid/unpaid/status，并留痕。
-            long newAmountCent = item.amountCent() + adjustment.adjustmentAmountCent();
-            if (newAmountCent < 0) {
+            // P0-B（V344）红冲：审批通过不再改写原行，改为「原行不动 + 追加一条严格取反的冲正行
+            // + 追加一条重述行（原额 + 补录额）」。三行相加恒等于补录后的应有金额（守恒），
+            // 且原行的金额与其所属封账经营日永久留痕、事后可逐笔复核。
+            // （改造前是直接 UPDATE 原行；且那条 UPDATE 的 SET 列表不含 amount_cent，
+            //   真库会落出 paid+unpaid<>amount 从而被 V159 账平 CHECK 拒绝——该路径在真库从未跑通。）
+            long restatedAmountCent = item.amountCent() + adjustment.adjustmentAmountCent();
+            if (restatedAmountCent <= 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "adjustment would drive amount negative");
             }
-            long unpaidAmountCent = newAmountCent - item.paidAmountCent();
-            if (unpaidAmountCent < 0) {
+            long restatedUnpaidCent = restatedAmountCent - item.paidAmountCent();
+            if (restatedUnpaidCent < 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "adjustment would drive unpaid amount negative");
             }
-            String status = unpaidAmountCent == 0
-                    ? "settled"
-                    : ("receivable".equals(item.direction()) ? "pending_collection" : "pending_payment");
-            repository.updateArApItemLedger(new ArApItemRecord(
-                    item.id(),
-                    item.itemNo(),
-                    item.direction(),
-                    item.counterpartyId(),
-                    item.sourceType(),
-                    item.sourceId(),
-                    newAmountCent,
-                    item.paidAmountCent(),
-                    unpaidAmountCent,
-                    item.currency(),
-                    item.dueDate(),
-                    item.accountingPeriod(),
-                    status,
-                    item.createdAt(),
-                    now,
-                    item.merchantId()));
+            // ① 冲正行：原行三个金额列的严格取反（DB 侧 chk_ar_ap_items_amount_balance 对正负两侧同样成立）。
+            repository.appendArApItem(correctionItem(item, adjustment, now, true,
+                    -item.amountCent(), -item.paidAmountCent(), -item.unpaidAmountCent()));
+            // ② 重述行：补录后的应有金额；已收付部分原样承接，未收付部分随之重算。
+            repository.appendArApItem(correctionItem(item, adjustment, now, false,
+                    restatedAmountCent, item.paidAmountCent(), restatedUnpaidCent));
         }
         // reject：不改账，只标状态。
         return repository.updateArApAdjustment(new ArApAdjustmentRecord(
@@ -976,6 +968,49 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 adjustment.reason(),
                 adjustment.createdAt(),
                 now));
+    }
+
+    /**
+     * P0-B（V344）红冲派生行构造：冲正行（reversal=true，金额取反）与重述行（reversal=false，补录后金额）。
+     * 两行都刻意沿用原行的收付方向 / 往来对象 / 来源单据 / 到期日 / 会计期间 / 商户与项目归属——
+     * 这样按任一维度聚合时「原行 + 冲正行 + 重述行」天然净成补录后的金额，下游报表零改动即正确；
+     * 唯一识别靠 origin_item_id（回指原行）与 adjustment_id（回指补录工单）。
+     * 派生行不继承 locked_day_close_id：它们是当期新增的更正凭证，可继续正常收付，不再被原封账锁冻结。
+     */
+    private ArApItemRecord correctionItem(ArApItemRecord origin, ArApAdjustmentRecord adjustment, Instant now,
+                                          boolean reversal, long amountCent, long paidCent, long unpaidCent) {
+        String status = reversal
+                ? "reversed"
+                : (unpaidCent == 0
+                        ? "settled"
+                        : ("receivable".equals(origin.direction()) ? "pending_collection" : "pending_payment"));
+        return new ArApItemRecord(
+                (reversal ? "arap_rev_" : "arap_res_") + adjustment.id(),
+                correctionItemNo(origin.itemNo(), reversal ? "-CZ-" : "-BL-", adjustment.id()),
+                origin.direction(),
+                origin.counterpartyId(),
+                origin.sourceType(),
+                origin.sourceId(),
+                amountCent,
+                paidCent,
+                unpaidCent,
+                origin.currency(),
+                origin.dueDate(),
+                origin.accountingPeriod(),
+                status,
+                now,
+                now,
+                origin.merchantId(),
+                origin.projectId(),
+                origin.id(),
+                adjustment.id());
+    }
+
+    /** 派生行单据号 = 原单据号 + 红冲/重述标记 + 工单 id（工单 id 全局唯一 → 单据号天然不撞）；超长退化为不带原单据号的短式。 */
+    private String correctionItemNo(String originItemNo, String marker, String adjustmentId) {
+        String candidate = (originItemNo == null || originItemNo.isBlank() ? "ARAP" : originItemNo)
+                + marker + adjustmentId;
+        return candidate.length() <= 128 ? candidate : ("ARAP" + marker + adjustmentId);
     }
 
     private void requireNotLocked(String arApItemId) {

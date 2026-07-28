@@ -1251,7 +1251,32 @@ class FinanceServiceTests {
         ArApAdjustmentRecord approved = service.approveAdjustment(requested.id(),
                 new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-1", "ok", List.of(), "approve"));
         assertThat(approved.approvalStatus()).isEqualTo("approved");
-        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(105000L);
+        // P0-B（V344）红冲：原行金额分文未动。
+        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(100000L);
+        // 追加一条严格取反的冲正行（原行三个金额列全部取反）。
+        ArApItemRecord reversal = financeRepository.findArApItemById("arap_rev_" + requested.id()).orElseThrow();
+        assertThat(reversal.originItemId()).isEqualTo(item.id());
+        assertThat(reversal.adjustmentId()).isEqualTo(requested.id());
+        assertThat(reversal.status()).isEqualTo("reversed");
+        assertThat(reversal.amountCent()).isEqualTo(-item.amountCent());
+        assertThat(reversal.paidAmountCent()).isEqualTo(-item.paidAmountCent());
+        assertThat(reversal.unpaidAmountCent()).isEqualTo(-item.unpaidAmountCent());
+        // 追加一条重述行（原额 + 补录额），承接原行的收付方向/往来对象/来源单据/到期日/归属。
+        ArApItemRecord restated = financeRepository.findArApItemById("arap_res_" + requested.id()).orElseThrow();
+        assertThat(restated.originItemId()).isEqualTo(item.id());
+        assertThat(restated.amountCent()).isEqualTo(105000L);
+        assertThat(restated.paidAmountCent()).isEqualTo(item.paidAmountCent());
+        assertThat(restated.direction()).isEqualTo(item.direction());
+        assertThat(restated.counterpartyId()).isEqualTo(item.counterpartyId());
+        assertThat(restated.dueDate()).isEqualTo(item.dueDate());
+        // 守恒：原行 + 冲正行 + 重述行三行相加 = 补录后应有金额，且账平恒等（已付 + 未付 = 总额）逐行成立。
+        ArApItemRecord origin = financeRepository.findArApItemById(item.id()).orElseThrow();
+        assertThat(origin.amountCent() + reversal.amountCent() + restated.amountCent()).isEqualTo(105000L);
+        assertThat(origin.paidAmountCent() + reversal.paidAmountCent() + restated.paidAmountCent())
+                .isEqualTo(item.paidAmountCent());
+        for (ArApItemRecord row : List.of(origin, reversal, restated)) {
+            assertThat(row.paidAmountCent() + row.unpaidAmountCent()).isEqualTo(row.amountCent());
+        }
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
                 .contains("finance.locked_backfill_requested", "finance.locked_backfill_approved");
     }

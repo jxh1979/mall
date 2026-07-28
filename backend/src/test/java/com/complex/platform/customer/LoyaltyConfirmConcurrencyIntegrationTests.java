@@ -61,10 +61,14 @@ class LoyaltyConfirmConcurrencyIntegrationTests {
         return new Seed(customerId, sourceDocId, awarded);
     }
 
+    /**
+     * P0-B（V344）积分台账改追加：已确认份额的权威口径 = 该会员 confirm 分录的净额和
+     * （正=确认、负=冲正），不再读 earn 行被就地改写的 confirmed_amount。
+     */
     private long confirmedSum(String customerId) {
         Long sum = jdbcTemplate.queryForObject(
-                "SELECT COALESCE(SUM(confirmed_amount),0) FROM customer_points_ledger "
-                        + "WHERE customer_id = ? AND change_type = 'earn'", Long.class, customerId);
+                "SELECT COALESCE(SUM(points_delta),0) FROM customer_points_ledger "
+                        + "WHERE customer_id = ? AND change_type = 'confirm'", Long.class, customerId);
         return sum == null ? 0 : sum;
     }
 
@@ -88,7 +92,7 @@ class LoyaltyConfirmConcurrencyIntegrationTests {
     @Test
     void concurrentConfirmAndReversalKeepBalanceEqualToConfirmed() throws Exception {
         Seed seed = seedPendingEarn();
-        // 确认(1/1)与冲正(0/1)并发：无论谁先，末态余额恒 = earn.confirmed_amount（0 或 awarded），账实不分叉。
+        // 确认(1/1)与冲正(0/1)并发：无论谁先，末态余额恒 = confirm 分录净额和（0 或 awarded），账实不分叉。
         runConcurrently(
                 () -> loyaltyService.confirmPoints("ticket_order", seed.sourceDocId(), 1, 1),
                 () -> loyaltyService.confirmPoints("ticket_order", seed.sourceDocId(), 0, 1));

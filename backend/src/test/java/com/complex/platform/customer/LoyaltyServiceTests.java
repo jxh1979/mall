@@ -523,7 +523,10 @@ class LoyaltyServiceTests {
         @Override
         public CustomerPointsLedgerRecord savePointsLedger(CustomerPointsLedgerRecord ledger) {
             // 模拟 V100 幂等唯一索引 (source_doc_type, source_doc_id, change_type)：重复落账抛冲突。
+            // P0-B（V344）：confirm 分录改为可反复追加（部分核销逐次落一行、冲正落负行），
+            // 唯一索引已按 change_type <> 'confirm' 放行，此处同步放行以保持与真库一致。
             if (ledger.sourceDocType() != null && ledger.sourceDocId() != null
+                    && !CustomerPointsLedgerRecord.CHANGE_CONFIRM.equals(ledger.changeType())
                     && findPointsLedgerBySourceDoc(ledger.sourceDocType(), ledger.sourceDocId(), ledger.changeType())
                             .isPresent()) {
                 throw new IllegalStateException("duplicate ledger for source doc (unique index)");
@@ -566,11 +569,12 @@ class LoyaltyServiceTests {
         }
 
         @Override
-        public void updatePointsLedgerConfirmation(String ledgerId, long confirmedAmount, String status, Long remainingPoints) {
+        public void updatePointsLedgerLifecycle(String ledgerId, String status, Long remainingPoints) {
+            // P0-B（V344）：已确认份额改由追加 confirm 分录承载，此处只同步 earn 行的生命周期列。
             replace(ledgerId, l -> new CustomerPointsLedgerRecord(l.id(), l.customerId(), l.pointsDelta(),
                     l.balanceAfter(), l.sourceType(), l.sourceId(), l.description(), l.expireAt(),
                     remainingPoints == null ? l.remainingPoints() : remainingPoints, l.expired(), l.createdAt(),
-                    l.changeType(), status, l.sourceDocType(), l.sourceDocId(), confirmedAmount));
+                    l.changeType(), status, l.sourceDocType(), l.sourceDocId(), l.confirmedAmount()));
         }
 
         @Override

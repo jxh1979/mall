@@ -187,6 +187,8 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
     @Override
     public boolean insertReceivableForOrder(String orderId, long amountCent, Instant now) {
         // P1 收款对账:复用 ar_ap_items 应收台账。source 唯一索引保证一单一条(幂等)。
+        // V344(P0-B 红冲):该部分唯一索引的谓词加了 origin_item_id IS NULL(排除补录派生的冲正/重述行),
+        //   ON CONFLICT 推断须与索引谓词逐字一致,否则 PG 报"no unique or exclusion constraint matching"。
         // 公司代收即时到账 -> paid=amount、unpaid=0(满足账平 CHECK);counterparty='company'。
         int rows = jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
@@ -195,7 +197,8 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 VALUES (:id, :item_no, 'receivable', 'company', 'service_order', :order_id,
                         :amount, :amount, 0, 'CNY', :due_date,
                         :period, 'paid', :now, :now)
-                ON CONFLICT (direction, source_type, source_id) WHERE source_id IS NOT NULL DO NOTHING
+                ON CONFLICT (direction, source_type, source_id)
+                        WHERE source_id IS NOT NULL AND origin_item_id IS NULL DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", "arap_svo_" + orderId)
                 .addValue("item_no", "SVO-" + orderId)

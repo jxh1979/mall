@@ -93,7 +93,7 @@ class SettlementMonthlyJobPostingTests {
         // 窗口内 null 口径结算单 id 恒为 sb_default_2009-XX(仅本用例产出),先清明细再清单。
         jdbcTemplate.update("DELETE FROM settlement_items WHERE bill_id LIKE 'sb_default_2009-%'");
         jdbcTemplate.update("DELETE FROM settlement_bills WHERE id LIKE 'sb_default_2009-%'");
-        jdbcTemplate.update("DELETE FROM settlement_transactions WHERE project_id = ?", seedProject);
+        com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", seedProject);
         // ar_ap_items 为不可变台账(DB 触发器禁 DELETE),source_id=唯一明细 id 不与后续用例冲突,不清。
         TestSecurityActors.clear();
     }
