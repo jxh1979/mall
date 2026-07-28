@@ -74,6 +74,7 @@ const AuditEventsPage = React.lazy(() => import("./pages/AuditEventsPage").then(
 const BusinessAnalyticsPage = React.lazy(() => import("./pages/BusinessAnalyticsPage").then((m) => ({ default: m.BusinessAnalyticsPage })));
 const GroupOverviewPage = React.lazy(() => import("./pages/GroupOverviewPage").then((m) => ({ default: m.GroupOverviewPage })));
 const InventoryLedgerPage = React.lazy(() => import("./pages/InventoryLedgerPage").then((m) => ({ default: m.InventoryLedgerPage })));
+const InventoryTransferWorkbenchPage = React.lazy(() => import("./pages/InventoryTransferWorkbenchPage").then((m) => ({ default: m.InventoryTransferWorkbenchPage })));
 const BarOrdersPage = React.lazy(() => import("./pages/BarOrdersPage").then((m) => ({ default: m.BarOrdersPage })));
 const StoredWinePage = React.lazy(() => import("./pages/StoredWinePage").then((m) => ({ default: m.StoredWinePage })));
 const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage").then((m) => ({ default: m.BarCommissionsPage })));
@@ -220,6 +221,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <BarCombosPage {...props} />;
     case "ADM-INV-001":
       return <InventoryLedgerPage {...props} />;
+    case "ADM-INV-002":
+      return <InventoryTransferWorkbenchPage {...props} />;
     case "ADM-FIN-002":
       return <ReconciliationPage {...props} />;
     case "ADM-TER-001":
