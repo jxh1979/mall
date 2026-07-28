@@ -1,15 +1,16 @@
-# 通票分账 HTML 口径修订 2026-07-28
+# 通票分账 HTML 口径修订 2026-07-28（含澄清）
 
-## 用户确认瀑布
+## 瀑布（用户确认 + 澄清）
 1. 渠道抽成（可配）
-2. 综合服务费 -> 项目公司（可配）
-3. 酒水预估成本 -> 娱乐平台公司（可配）
-4. 剩余可分配池 -> 项目留存可配 -> 酒吧总池
+2. 酒水预估成本 → 娱乐平台公司（可配）
+3. 门票综合服务费 = 项目公司留存（**同一项，只扣一次**，可配）
+4. 剩余 = **可分配池，仅酒吧可分**
 5. 酒吧整月排名/客数月结（方式可配）
 6. 全部数值可配、禁止写死
-7. 其它（核销顺序/游乐/退租等）维持 main
 
 ## 哈希
-| business-enum-quick-reference-v0.1.html | `0263bcf9da6c591f616a52bce2cd148bd34008bb2e9891852974c3db8de6a889` |
-| business-system-map-for-operations-v0.1.html | `bf60d75df9977ec9cadb51e0d8a75d8a9cf1d0d66bf56d5322cf08a1dee3b89a` |
-| platform-governance-map-for-operations-v0.1.html | `a18cfff21c9cfbaf68d48ec6a0d68eeaa9afd3ae462dff76093c0a56dc31572b` (unchanged) |
+| 文件 | SHA-256 |
+|---|---|
+| enum | `bdcc6ace93d1e8c6bd2b6a6cabe250143e61be307e0d36987b807184a39797ed` |
+| system map | `dc8805aa53c3c2e9efdd94feba3b3e6190e2a77bb5ecb397b04d503cec87e63c` |
+| governance | `a18cfff21c9cfbaf68d48ec6a0d68eeaa9afd3ae462dff76093c0a56dc31572b` (未改) |
