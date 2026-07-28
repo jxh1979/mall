@@ -7,7 +7,9 @@ import java.time.LocalDate;
  *
  * <p>两块纯逻辑，供纯单测覆盖、服务/定时作业共用：
  * <ul>
- *   <li>{@link #releasableCent}：释放额 = 留存额 × 释放比例（万分比，整除链截断，与薪资/分红同口径）。
+ *   <li>{@link #releasableCent}：释放额 = 留存额 × 释放比例（万分比，整除截断）。
+ *       <b>刻意保持截断</b>：向下取整使「Σ各次释放 ≤ 原留存额」恒成立（分期释放才不会超额返还）；
+ *       当前服务层恒以 {@link #FULL_RATIO_BPS}=10000 全额调用，无舍入发生，本口径不影响任何现行金额。
  *       默认 {@link #FULL_RATIO_BPS}=10000 全额释放（口径：暂扣待释放<b>返还</b>，非平台白拿，全额还给主理人；
  *       金额=原留存额，不多不少）。比例参数为未来分期释放预留（当前服务层以全额释放调用）。</li>
  *   <li>{@link #isDue}：按方案释放时点判定某计算单的留存是否到期可自动释放（manual 永不自动；
@@ -23,7 +25,8 @@ public final class DividendReserveReleaseMath {
     }
 
     /**
-     * 释放额 = 留存额 × ratioBps / 10000（long 整除截断）。ratioBps=10000 → 全额（=留存额，不多不少）。
+     * 释放额 = 留存额 × ratioBps / 10000（long 整除截断，见类注释「刻意保持截断」）。
+     * ratioBps=10000 → 全额（=留存额，不多不少）。
      *
      * @param reserveWithheldCent 原留存额（分，非负）
      * @param ratioBps            释放比例（万分比，0~10000）

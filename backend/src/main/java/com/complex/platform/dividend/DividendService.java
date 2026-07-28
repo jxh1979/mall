@@ -4,6 +4,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
 import com.complex.platform.dividend.DividendRecords.DividendComputeSkipRecord;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
@@ -44,7 +45,7 @@ import static com.complex.platform.common.Strings.requireText;
  * − 期间销货成本（V296 sumOutboundCost 同谓词，可配开关）
  * − 期间费用（V297 费用归集台账净额，计入类别可配）
  * = 净利润 → 按方案比例劈分（余数归主理人） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
- * 整除链截断与薪资税表同口径） → 净发放额。
+ * 平台分成/风险准备金四舍五入、代扣个税整除截断对齐税局——2026-07-28 用户拍板） → 净发放额。
  *
  * <p>时窗：BusinessDayResolver 平台全局经营日切分（与 V296 成本汇总/营业额租金同口径）——三来源同窗才能恒等；
  * 费用侧为 V297 的月份桶粒度（台账本身按月归集）。
@@ -492,13 +493,14 @@ public class DividendService {
                             + "，结转至下期 " + dist.carryAfterCent() + " 分", now);
         }
         addLine(lines, statementId, merchantId, seq, "platform_share", dist.platformShareCent(),
-                "平台分成（" + plan.platformShareBps() + " 万分比，整除链截断）", now);
+                "平台分成（" + plan.platformShareBps() + " 万分比，四舍五入到分）", now);
         addLine(lines, statementId, merchantId, seq, "principal_gross", dist.principalGrossCent(),
                 "主理人应得（可分配额 − 平台分成，余数归主理人）", now);
         addLine(lines, statementId, merchantId, seq, "tax_withheld", -dist.taxCent(),
                 isCompany
                         ? "公司股东不代扣个税，按约定全额发放（代扣 0 分）"
-                        : "代扣股息红利个税（个人真实股东口径，税率 " + effectiveTaxBps + " 万分比，整除链截断）", now);
+                        : "代扣股息红利个税（个人真实股东口径，税率 " + effectiveTaxBps
+                                + " 万分比，整除截断·对齐税局申报口径）", now);
         addLine(lines, statementId, merchantId, seq, "principal_net", dist.principalNetCent(),
                 "税后应得 = 主理人应得 − 代扣税", now);
         if (plan.arrearsOffsetEnabled() && dist.arrearsOffsetCent() > 0) {
@@ -563,8 +565,14 @@ public class DividendService {
     }
 
     /**
-     * V309 自定义扣除项原始扣除额（分，未封顶）：fixed 取固定额；ratio 取基数（净利润/营收）× 比例，
+     * V309 自定义扣除项原始扣除额（分，未封顶）：fixed 取固定额；ratio 取<b>四舍五入</b>(基数（净利润/营收）× 比例)，
      * 基数按 max(figure,0) 取（亏损/负基数不倒扣）。封顶（不透支税后余额）由 {@link DividendMath#clampDeductions} 处理。
+     *
+     * <p>R-7（2026-07-28 裁决口径「分红改、个税不改」——自定义扣除在分红域、非代扣税，落在「改」的一侧）：
+     * 旧 {@code basis * ratioBps / 10000} 整除截断使扣除方恒少扣、差额白留主理人且不留痕，改
+     * {@link MoneyRounding#bpsOf} HALF_UP。<b>不影响守恒</b>：本值只决定「扣多少」的大小，
+     * 链条结构不变（{@code afterCustom := afterArrears − custom} 仍取补数），
+     * 故 {@code 平台分成 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 ≡ 可分配额} 依旧逐分成立。
      */
     private static long resolveDeductionRaw(
             DividendRecords.DividendCustomDeductionRecord item, long netProfit, long revenue) {
@@ -572,7 +580,7 @@ public class DividendService {
             return Math.max(item.amountCent(), 0L);
         }
         long basis = "revenue".equals(item.ratioBasis()) ? revenue : netProfit;
-        return Math.max(basis, 0L) * item.ratioBps() / DividendMath.BPS_DENOMINATOR;
+        return MoneyRounding.bpsOf(Math.max(basis, 0L), item.ratioBps());
     }
 
     /** 自定义扣除项来源的中文口径说明（供算式明细行 detail 留痕）。 */
@@ -581,7 +589,7 @@ public class DividendService {
             return "固定额 " + item.amountCent() + " 分";
         }
         String basis = "revenue".equals(item.ratioBasis()) ? "营收" : "净利润";
-        return "比例 " + item.ratioBps() + " 万分比 × " + basis;
+        return "比例 " + item.ratioBps() + " 万分比 × " + basis + "（四舍五入到分）";
     }
 
     // ── 查询 ──────────────────────────────────────────────────

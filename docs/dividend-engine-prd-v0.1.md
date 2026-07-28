@@ -80,13 +80,28 @@
             覆盖 contract_rent 合同租金 + turnover_rent 营业额抽成两条出账路径）
 = 净利润 net_profit_cent
 可分配额 distributable = max(净利润, 0)          （亏损期不倒扣主理人现金）
-平台分成 platform_share = distributable × platform_share_bps / 10000   （整除链截断）
-主理人应得 principal_gross = distributable − platform_share            （余数归主理人，不丢分）
+平台分成 platform_share = 四舍五入(distributable × platform_share_bps / 10000)  （HALF_UP，2026-07-28 拍板）
+主理人应得 principal_gross = distributable − platform_share            （取补数，两侧和恒 = 可分配额，不丢分）
 生效税率 eff_tax_rate = 主理人类型=company ? 0 : tax_rate_bps        （V308 #28：公司股东不代扣，快照 eff 于 tax_rate_bps 列）
-代扣个税 tax = principal_gross × eff_tax_rate / 10000                  （整除链截断，与薪资税表 V217 同口径）
+代扣个税 tax = principal_gross × eff_tax_rate / 10000                  （**整除截断·刻意保留**，对齐税局申报口径，与薪资税表 V217 同口径）
 净发放额 principal_net = principal_gross − tax
 ```
 
+- **取整口径（2026-07-28 用户拍板 · R-7/D15.1 收尾 · 两种口径刻意混用）**：
+  - **改四舍五入（HALF_UP，走公共入口 `MoneyRounding.bpsOf`）**：**平台分成**、**风险准备金留存**（发放保护线比例额）、
+    **自定义扣除项按比例算的原始额**（`sourceType=ratio`，基数 net_profit/revenue —— 在分红域、非代扣税，落在「改」的一侧）。
+    旧整除截断使平台/扣除方恒少收少扣、差额白留主理人且不留痕，与「金额一律四舍五入到分」的全局口径不符。
+  - **保持整除截断（不得改）**：**代扣股息红利个税**，以及薪资域个税税表整除链（`JdbcStaffRepository` V217）。
+    理由：**与税局申报口径对齐**，改成四舍五入会使代扣申报对不上。
+  - **混用不破坏守恒**：链上每一步的另一半均取**补数**定义（`principal_gross := distributable − platform_share`、
+    `principal_net := principal_gross − tax`、`payout := after_custom − reserve`），故
+    `平台分成 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 ≡ 可分配额` 逐分严格相等。
+    自定义扣除改口径同理只改「扣多少」的**大小**、不改链条结构（`after_custom := after_arrears − custom` 仍取补数），
+    故守恒不受影响（`DividendServiceTests#customDeductionHalfUpKeepsFullChainConservation` 端到端断言）。
+  - **分红链尾差恒为 0**，故**不设**尾差单列列（与通票分账不同——那边各家份额各自独立按比例算才产生尾差，
+    落 `settlement_bills.rounding_residual_cent`/V343）。已按 R-7 既有尾差范式用 `MoneyRounding.residual` 实算断言为 0。
+  - **风险准备金「释放」额**（`DividendReserveReleaseMath.releasableCent`）**保持向下取整**：
+    使「Σ各次释放 ≤ 原留存额」恒成立（分期释放不超额返还）；当前恒以全额比例 10000 调用，无舍入发生。
 - 五条恒等式落 `dividend_statements` DB CHECK（净利恒等/可分配额/劈分守恒/净发放/税额边界），
   不恒等的单**无法落库**。**公司股东单** `principal_type='company'` 时 `chk_ds_company_no_tax` 硬保证 `tax_cent=0`
   （V308 #28）。

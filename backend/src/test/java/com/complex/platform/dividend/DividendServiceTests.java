@@ -1164,6 +1164,104 @@ class DividendServiceTests {
         assertThat(lines).noneMatch(l -> l.lineType().equals("custom_deduction") && l.detail().contains("停用项"));
     }
 
+    /**
+     * R-7（2026-07-28 裁决口径）：<b>自定义扣除项按比例算的原始额改四舍五入</b>（旧整除截断，
+     * 扣除方恒少扣、差额白留主理人且不留痕）。本例取恰好 .5 的边界证明进位。
+     *
+     * <p>净利 1000 分、平台 0%、税 0% → 税后应得 1000（隔离出扣除这一步单独验）；
+     * 比例 12.55% × 净利 1000 = <b>125.5 分</b> → 旧整除截断 125，新四舍五入 <b>126</b>；实发 874（旧 875）。
+     */
+    @Test
+    void customDeductionRatioRoundsHalfUpAtExactHalfBoundary() {
+        service.createPlan(new DividendPlanRequest("cd-halfup", MERCHANT, "usr_principal", null,
+                0, 0, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                List.of(new DividendPlanRequest.CustomDeductionItem(
+                        "比例扣除", "ratio", null, 1255, "net_profit", true))));
+        repository.barRevenue.put(MERCHANT, 1000L);
+        DividendStatementRecord s = computeOfficialQuarter();
+
+        assertThat(s.netProfitCent()).isEqualTo(1000L);
+        assertThat(s.principalNetCent()).isEqualTo(1000L);          // 平台 0%、税 0%
+        assertThat(1000L * 1255L / 10000L).isEqualTo(125L);          // 证伪:旧整除截断给 125
+        assertThat(s.customDeductionCent()).isEqualTo(126L);         // 新:四舍五入给 126
+        assertThat(s.payoutCent()).isEqualTo(874L);
+        assertConserved(s);
+    }
+
+    /** R-7：比例基数取「营收」的分支同样四舍五入，且确实按营收（非净利）取基数。 */
+    @Test
+    void customDeductionRatioOnRevenueBasisAlsoRoundsHalfUp() {
+        service.createPlan(new DividendPlanRequest("cd-halfup-rev", MERCHANT, "usr_principal", null,
+                0, 0, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                List.of(new DividendPlanRequest.CustomDeductionItem(
+                        "营收比例扣除", "ratio", null, 1255, "revenue", true))));
+        repository.barRevenue.put(MERCHANT, 3000L);
+        repository.expenses.put(MERCHANT, List.of(new ExpenseTypeSumRecord("labor", 2000L)));
+        DividendStatementRecord s = computeOfficialQuarter();
+
+        assertThat(s.revenueCent()).isEqualTo(3000L);
+        assertThat(s.netProfitCent()).isEqualTo(1000L);              // 营收 3000 − 费用 2000
+        // 基数=营收 3000 × 12.55% = 376.5 分 → 四舍五入 377（旧整除截断 376）；
+        // 若误按净利取基数会是 125.5→126，本断言同时锁住「基数确实是营收」。
+        assertThat(3000L * 1255L / 10000L).isEqualTo(376L);          // 证伪:旧整除截断给 376
+        assertThat(s.customDeductionCent()).isEqualTo(377L);
+        assertThat(s.payoutCent()).isEqualTo(623L);                  // 1000 − 377
+        assertConserved(s);
+    }
+
+    /** R-7：非 .5 边界（除得尽）时新旧同值——改口径对既有配置零行为变更。 */
+    @Test
+    void customDeductionRatioUnchangedWhenDivisionIsExact() {
+        service.createPlan(new DividendPlanRequest("cd-exact", MERCHANT, "usr_principal", null,
+                0, 0, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                List.of(new DividendPlanRequest.CustomDeductionItem(
+                        "整除比例", "ratio", null, 1000, "net_profit", true))));
+        repository.barRevenue.put(MERCHANT, 1000L);
+        DividendStatementRecord s = computeOfficialQuarter();
+
+        assertThat(1000L * 1000L / 10000L).isEqualTo(100L);          // 旧
+        assertThat(s.customDeductionCent()).isEqualTo(100L);          // 新:同值
+        assertThat(s.payoutCent()).isEqualTo(900L);
+        assertConserved(s);
+    }
+
+    /**
+     * R-7 守恒（自定义扣除改口径后仍必须成立）：
+     * {@code 平台分成 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 ≡ 可分配额}，逐分严格相等。
+     *
+     * <p>成立原因：自定义扣除只改「扣多少」的<b>大小</b>，不改链条结构——
+     * {@code afterCustom := afterArrears − custom} 仍是补数，故扣除额用什么取整口径都不影响总额恒等。
+     */
+    @Test
+    void customDeductionHalfUpKeepsFullChainConservation() {
+        service.createPlan(new DividendPlanRequest("cd-conserve", MERCHANT, "usr_principal", null,
+                8000, 1255, null, null, null, null, null, null, null,
+                null, null, true, 1255, 0L, null, null, null,
+                List.of(
+                        new DividendPlanRequest.CustomDeductionItem("比例扣除", "ratio", null, 1255, "net_profit", true),
+                        new DividendPlanRequest.CustomDeductionItem("固定扣除", "fixed", 7L, null, null, true))));
+        repository.barRevenue.put(MERCHANT, 12_345L);
+        DividendStatementRecord s = computeOfficialQuarter();
+        assertConserved(s);
+        // 各方非负 + V299 两条 DB CHECK 恒等式（平台分成/自定义扣除改 HALF_UP 后仍成立）
+        assertThat(s.platformShareCent() + s.principalGrossCent()).isEqualTo(s.distributableCent());
+        assertThat(s.principalNetCent()).isEqualTo(s.principalGrossCent() - s.taxCent());
+        assertThat(s.customDeductionCent()).isGreaterThanOrEqualTo(0L);
+        assertThat(s.payoutCent()).isGreaterThanOrEqualTo(0L);
+    }
+
+    /** 全链守恒断言：各方相加 ≡ 可分配额（尾差恒 0，补数式拆分不产生尾差）。 */
+    private static void assertConserved(DividendStatementRecord s) {
+        long sum = s.platformShareCent() + s.taxCent() + s.arrearsOffsetCent()
+                + s.customDeductionCent() + s.reserveWithheldCent() + s.payoutCent();
+        assertThat(sum)
+                .as("平台分成 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 必须 ≡ 可分配额")
+                .isEqualTo(s.distributableCent());
+    }
+
     /** #35 自定义扣除封顶不透支：合计超过税后余额时逐项封顶，实发不为负。 */
     @Test
     void customDeductionsClampToAvailableAndNeverNegativePayout() {
