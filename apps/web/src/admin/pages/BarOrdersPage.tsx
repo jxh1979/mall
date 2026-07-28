@@ -6,7 +6,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
-import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
+import type { AdminPageProps, BarBillRow, BarOrderItemVoidRow, BarOrderRow } from "../types";
 import { isSalesOrder } from "./barSalesRole";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
@@ -61,6 +61,7 @@ const TEXT = {
   deliverNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u54c1",
   settleNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u7ed3\u7b97",
   focusClear: "\u6e05\u9664\u7b5b\u9009\uff0c\u8fd4\u56de\u5168\u90e8",
+  voidNote: "\u540e\u53f0\u53d1\u8d77\u9000\u83dc\u9000\u9152\u7533\u8bf7",
 };
 
 // KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u8ba2\u5355\u8868\u5e76\u6309\u5b50\u96c6\u8fc7\u6ee4\u3002
@@ -100,6 +101,26 @@ function firstBillId(order: BarOrderRow | undefined) {
   return firstBill(order)?.id ?? "";
 }
 
+// V345（BAR-VOID-A1）退酒审批闸：先审后行 = 审批通过前不动库存/账单；即时生效 = 发起即生效、审批为事后抽检。
+const VOID_APPROVAL_MODE_LABEL: Record<string, string> = {
+  approval_first: "先审后行",
+  immediate: "即时生效",
+};
+const VOID_STATUS_LABEL: Record<string, string> = {
+  pending: "待审批",
+  approved: "已通过",
+  rejected: "已驳回",
+  applied: "已生效",
+};
+const VOID_TYPE_LABEL: Record<string, string> = {
+  cancel: "出品前撤单",
+  return: "出品后退品",
+};
+function voidLabel(map: Record<string, string>, value: string | undefined) {
+  if (!value) return "—";
+  return map[value] ?? value;
+}
+
 export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
@@ -114,6 +135,14 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const [posTransactionNo, setPosTransactionNo] = React.useState("");
   // 行明细抽屉：整行可点 → 该订单完整字段（状态/提成口径中文·金额¥·下单/支付时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // V345（BAR-VOID-A1）退酒申请 + 待审队列。
+  const [voidQueue, setVoidQueue] = React.useState<BarOrderItemVoidRow[]>([]);
+  const [voidOrderItemId, setVoidOrderItemId] = React.useState("");
+  const [voidReason, setVoidReason] = React.useState("");
+  const [voidReasonCode, setVoidReasonCode] = React.useState("");
+  const [voidEvidenceIds, setVoidEvidenceIds] = React.useState("");
+  const [voidReturnToStock, setVoidReturnToStock] = React.useState(false);
+  const [voidReviewReason, setVoidReviewReason] = React.useState("");
 
   function openOrderDetail(order: BarOrderRow) {
     const bill = firstBill(order);
@@ -159,6 +188,12 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
     async () => {
       const rows = await api.get<BarOrderRow[]>("/api/v1/bar/orders");
       setOrders(rows);
+      // 待审退酒队列与订单列表同批加载；无权限/接口不可用不阻断本页主流程（队列显示为空）。
+      try {
+        setVoidQueue(await api.get<BarOrderItemVoidRow[]>("/api/v1/bar/order-item-voids?status=pending"));
+      } catch {
+        setVoidQueue([]);
+      }
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -248,6 +283,60 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
     }));
   }
 
+  // ==== V345（BAR-VOID-A1）退酒申请 / 审批 ====
+  function validateVoidRequest() {
+    if (!selectedOrder) {
+      setFormError(TEXT.noOrder);
+      return false;
+    }
+    if (!voidOrderItemId.trim()) {
+      setFormError("请填写要退的订单明细 ID。");
+      return false;
+    }
+    if (!voidReason.trim()) {
+      setFormError("退菜退酒必须填写原因，进入审计留痕。");
+      return false;
+    }
+    return true;
+  }
+
+  async function submitVoidRequest() {
+    const evidence = voidEvidenceIds.split(",").map((id) => id.trim()).filter((id) => id !== "");
+    await runOrderAction("bar_order_item_void_requested", () => api.post(
+      `/api/v1/bar/orders/${selectedOrder!.id}/void-item`,
+      {
+        orderItemId: voidOrderItemId.trim(),
+        reason: voidReason.trim(),
+        reasonCode: voidReasonCode.trim() || undefined,
+        evidenceAttachmentIds: evidence,
+        returnToStock: voidReturnToStock,
+        billId: firstBillId(selectedOrder) || undefined,
+        operatorNote: TEXT.voidNote,
+      },
+    ));
+  }
+
+  // 审批动作不依赖「选中订单」：主管从待审队列直接决策（队列行自带订单/明细上下文）。
+  async function decideVoid(voidId: string, decision: "approved" | "rejected") {
+    const action = `bar_order_item_void_${decision}`;
+    setBusyAction(action);
+    setFormError("");
+    setGlobalError(null);
+    try {
+      const result = await api.post(`/api/v1/bar/order-item-voids/${voidId}/decision`,
+        { decision, reason: voidReviewReason.trim() || undefined });
+      setActionResult({ action, voidId, result });
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : TEXT.actionFailed;
+      setFormError(message);
+      setGlobalError(message);
+      setActionResult({ action, voidId, status: "failed", message });
+    } finally {
+      setBusyAction("");
+    }
+  }
+
   return (
     <section data-testid="bar-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -333,6 +422,64 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
             </tbody>
           </table>
             <TablePager testid="bar-orders-pager" page={pagedOrders.page} pageCount={pagedOrders.pageCount} total={pagedOrders.total} onPrev={pagedOrders.prev} onNext={pagedOrders.next} />
+        </div>
+
+        <div className="admin-section-title">退菜退酒申请</div>
+        <p className="admin-muted-action" data-testid="bar-void-rule-hint">
+          已出品且金额超过后台阈值的高价值退酒为「先审后行」：申请后账单与库存不动，须主管审批通过才生效，且必须同时提供结构化原因码与证据附件（双证据）。低于阈值或出品前撤单即时生效。阈值在「结算配置中心」维护，不写死在代码里。
+        </p>
+        <div className="admin-form-grid" data-testid="bar-void-request-form">
+          <label>订单明细 ID<input data-testid="bar-void-order-item-id" value={voidOrderItemId} onChange={(e) => setVoidOrderItemId(e.target.value)} placeholder="要退的明细 ID" /></label>
+          <label>退品原因<input data-testid="bar-void-reason" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="例如：客人反馈变质" /></label>
+          <label>结构化原因码<input data-testid="bar-void-reason-code" value={voidReasonCode} onChange={(e) => setVoidReasonCode(e.target.value)} placeholder="高价值退酒必填，如 quality_defect" /></label>
+          <label>证据附件 ID<input data-testid="bar-void-evidence" value={voidEvidenceIds} onChange={(e) => setVoidEvidenceIds(e.target.value)} placeholder="高价值退酒必填，多个用英文逗号分隔" /></label>
+          <label>未动可回库<input type="checkbox" data-testid="bar-void-return-to-stock" checked={voidReturnToStock} onChange={(e) => setVoidReturnToStock(e.target.checked)} /></label>
+        </div>
+        <div className="admin-form-row" data-testid="bar-void-actions">
+          <HighRiskConfirm
+            label="发起退菜退酒"
+            impact="高价值已出品退酒将进入待审队列，审批通过前不动账单与库存；低价值或出品前撤单立即生效并写入资金/库存留痕。"
+            disabled={busyAction !== ""}
+            precheck={validateVoidRequest}
+            onConfirm={() => void submitVoidRequest()}
+            permissionsState={effectivePermissions}
+            permissions={["bar.order_item.void"]}
+            data-testid="bar-void-submit"
+          />
+          <label>审批意见<input data-testid="bar-void-review-reason" value={voidReviewReason} onChange={(e) => setVoidReviewReason(e.target.value)} placeholder="通过/驳回的说明" /></label>
+        </div>
+
+        <div className="admin-section-title">退酒待审队列</div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="bar-void-queue-table">
+            <thead>
+              <tr>
+                <th>申请号</th><th>订单</th><th>类型</th><th>金额</th><th>审批闸</th><th>阈值</th><th>原因码</th><th>证据附件</th><th>是否已生效</th><th>状态</th><th>审批</th>
+              </tr>
+            </thead>
+            <tbody>
+              {voidQueue.length === 0 ? (
+                <tr><td colSpan={11} data-testid="bar-void-queue-empty">当前没有待审批的退菜退酒申请。</td></tr>
+              ) : voidQueue.map((row) => (
+                <tr key={row.id} data-testid={`bar-void-row-${row.id}`}>
+                  <td>{row.id}</td>
+                  <td>{row.orderId ?? "—"}</td>
+                  <td>{voidLabel(VOID_TYPE_LABEL, row.voidType)}</td>
+                  <td>{formatAmount(row.amountCent)}</td>
+                  <td data-testid={`bar-void-mode-${row.id}`}>{voidLabel(VOID_APPROVAL_MODE_LABEL, row.approvalMode)}</td>
+                  <td>{row.highValueThresholdCent == null ? "—" : formatAmount(row.highValueThresholdCent)}</td>
+                  <td>{row.reasonCode ?? "—"}</td>
+                  <td>{(row.evidenceAttachmentIds ?? []).join("、") || "—"}</td>
+                  <td data-testid={`bar-void-applied-${row.id}`}>{row.effectsAppliedAt ? `已生效 · ${cnDate(row.effectsAppliedAt)}` : "未生效"}</td>
+                  <td>{voidLabel(VOID_STATUS_LABEL, row.status)}</td>
+                  <td>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order_item.void_decide"]} data-testid={`bar-void-approve-${row.id}`} disabled={busyAction !== ""} onClick={() => void decideVoid(row.id, "approved")}>通过</PermissionButton>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order_item.void_decide"]} data-testid={`bar-void-reject-${row.id}`} disabled={busyAction !== ""} onClick={() => void decideVoid(row.id, "rejected")}>驳回</PermissionButton>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />

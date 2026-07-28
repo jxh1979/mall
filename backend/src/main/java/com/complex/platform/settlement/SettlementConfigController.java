@@ -3,6 +3,7 @@ package com.complex.platform.settlement;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.BarVoidThresholdRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ChannelFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscountRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
@@ -102,6 +103,13 @@ public class SettlementConfigController {
     @PostMapping("/points-accrual-rate")
     public ApiResponse<Void> savePointsAccrualRate(@RequestBody PointsAccrualRateRequest request) {
         writeService.savePointsAccrualRate(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    /** V345（P0-C/FLOW-07·BAR-VOID-A1）：高价值退酒审批阈值（项目 × 商户，单位分）落草案。 */
+    @PostMapping("/bar-void-threshold")
+    public ApiResponse<Void> saveBarVoidThreshold(@RequestBody BarVoidThresholdRequest request) {
+        writeService.saveBarVoidThreshold(request, requireManageActor());
         return ApiResponse.ok(null);
     }
 

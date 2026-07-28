@@ -32,6 +32,15 @@ public record BarOrderItemVoidRecord(
         // V115：审批回写留痕。status=approved/rejected 时填充审批人/时点/理由；pending/applied 态为空。
         String reviewedByUserId,
         Instant reviewedAt,
-        String reviewReason
+        String reviewReason,
+        // V345（P0-C/FLOW-07·BAR-VOID-A1）审批闸留痕：
+        /** 审批闸模式：immediate=即时生效（未出品/低价值）；approval_first=先审后行（已出品高价值）。 */
+        String approvalMode,
+        /** 双证据之一：结构化原因码（approval_first 必填；immediate 可空）。另一证据为 evidenceAttachmentIds。 */
+        String reasonCode,
+        /** 判定当刻的高价值阈值快照（分）。阈值后台可配会变，留快照才能事后举证「当时按什么口径判的」。 */
+        Long highValueThresholdCent,
+        /** 库存/账单副作用真正落地时点：immediate=发起时刻；approval_first=审批通过时刻；未落地=null。 */
+        Instant effectsAppliedAt
 ) {
 }

@@ -250,7 +250,13 @@ final class JdbcBarParameterSource {
                 .addValue("created_at", timestampWithTimeZone(voidRecord.createdAt()))
                 .addValue("reviewed_by_user_id", voidRecord.reviewedByUserId())
                 .addValue("reviewed_at", timestampWithTimeZone(voidRecord.reviewedAt()))
-                .addValue("review_reason", voidRecord.reviewReason());
+                .addValue("review_reason", voidRecord.reviewReason())
+                // V345（BAR-VOID-A1）：审批闸模式 / 结构化原因码 / 阈值快照 / 副作用落地时点。
+                .addValue("approval_mode", voidRecord.approvalMode() == null
+                        ? BarOrderService.VOID_MODE_IMMEDIATE : voidRecord.approvalMode())
+                .addValue("reason_code", voidRecord.reasonCode())
+                .addValue("high_value_threshold_cent", voidRecord.highValueThresholdCent())
+                .addValue("effects_applied_at", timestampWithTimeZone(voidRecord.effectsAppliedAt()));
     }
 
     MapSqlParameterSource productionTicketParameters(BarProductionTicketRecord ticket) {

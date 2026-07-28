@@ -208,6 +208,11 @@ class JdbcBarRepository implements BarRepository {
         return orderRepository.listOrderItemVoids(orderId);
     }
 
+    @Override
+    public List<BarOrderItemVoidRecord> listOrderItemVoidsByStatus(Optional<String> merchantScope, String status) {
+        return orderRepository.listOrderItemVoidsByStatus(merchantScope, status);
+    }
+
     // 修复预存接线缺口：facade 此前未委派，导致生产环境 BarRepository 默认返回 Optional.empty()，
     // 审批决策(decideOrderItemVoid)实际查不到 void 流水。改为委派 JDBC 实现，并让 ForUpdate 行锁真正生效。
     @Override

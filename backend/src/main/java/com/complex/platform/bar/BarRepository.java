@@ -123,6 +123,11 @@ public interface BarRepository {
         return List.of();
     }
 
+    /** V345 退酒审批待审队列：按状态列出申请（商户 scope 非空则只看本商户）。 */
+    default List<BarOrderItemVoidRecord> listOrderItemVoidsByStatus(Optional<String> merchantScope, String status) {
+        return List.of();
+    }
+
     /** V115：按 id 取单条退菜退酒流水（审批决策回写时定位待审记录）。 */
     default Optional<BarOrderItemVoidRecord> findOrderItemVoidById(String id) {
         return Optional.empty();

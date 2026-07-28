@@ -290,6 +290,33 @@ export type BarOrderRow = {
   bills?: BarBillRow[];
 };
 
+/**
+ * V345（BAR-VOID-A1）退菜退酒申请流水（后端 BarOrderItemVoidRecord）。
+ * approvalMode=approval_first 表示「先审后行」：审批通过前账单与库存一律未动（effectsAppliedAt 为空）；
+ * immediate 表示低价值/出品前撤单的即时生效路径，审批为事后抽检、驳回才对称冲销。
+ */
+export type BarOrderItemVoidRow = {
+  id: string;
+  orderId?: string;
+  orderItemId?: string;
+  voidType?: string;
+  quantity?: number;
+  amountCent?: number;
+  wasDelivered?: boolean;
+  returnToStock?: boolean;
+  reason?: string;
+  status?: string;
+  evidenceAttachmentIds?: string[];
+  createdAt?: string;
+  reviewedByUserId?: string;
+  reviewedAt?: string;
+  reviewReason?: string;
+  approvalMode?: string;
+  reasonCode?: string;
+  highValueThresholdCent?: number;
+  effectsAppliedAt?: string;
+};
+
 export type BarProductRow = {
   id: string;
   barId?: string;
