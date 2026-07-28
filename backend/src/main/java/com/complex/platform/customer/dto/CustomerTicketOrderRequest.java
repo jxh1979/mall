@@ -15,14 +15,18 @@ public record CustomerTicketOrderRequest(
         String barId,
         // V359 客人端下单拍脸照：需拍脸照的票种（require_face_photo，游乐票默认开）在 H5 下单时逐张拍，
         //   base64 随下单请求上来，加密暂存到订单，后台出票时转绑到已发权益。其余票种为空、零影响。
-        List<String> facePhotos
+        List<String> facePhotos,
+        // V368 人脸照同意留痕：客人在拍照前那块告知上勾的「我已阅读并同意」。带照片就必须为 true，
+        //   服务端据此往同意台账(customer_consents)落一条留痕，并把留痕 id 挂到照片上；
+        //   没勾同意直接拒（FACE_PHOTO_CONSENT_REQUIRED）——没有同意就不该有照片。
+        Boolean faceConsent
 ) {
     // ponytail: V359 前带 barId 但不带 facePhotos 的调用点 → 空表(=不拍脸照)。
     public CustomerTicketOrderRequest(
             String idempotencyKey, String ticketTypeId, String priceRuleId, Integer quantity,
             LocalDate visitDate, String contactPhone, String buyerNote, String barId) {
         this(idempotencyKey, ticketTypeId, priceRuleId, quantity, visitDate, contactPhone, buyerNote, barId,
-                List.of());
+                List.of(), null);
     }
 
     // AUD-076 7 参兼容构造（无 barId）→ barId=null（既有测试调用点零改动）。

@@ -70,17 +70,19 @@ class TicketFacePhotoRepository {
      * purgeAfter=下单日+留存天数，订单一直不出票也会被既有清理 job 硬删。
      */
     void saveStaged(String id, String orderId, int slotIndex, byte[] ciphertext, String contentType,
-                    Instant capturedAt, LocalDate purgeAfter) {
+                    Instant capturedAt, LocalDate purgeAfter, String consentId) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_face_photos (
-                    id, order_id, slot_index, photo_ciphertext, content_type, captured_at, purge_after
+                    id, order_id, slot_index, photo_ciphertext, content_type, captured_at, purge_after, consent_id
                 )
-                VALUES (:id, :order_id, :slot_index, :photo_ciphertext, :content_type, :captured_at, :purge_after)
+                VALUES (:id, :order_id, :slot_index, :photo_ciphertext, :content_type, :captured_at, :purge_after,
+                        :consent_id)
                 ON CONFLICT (order_id, slot_index) DO UPDATE SET
                     photo_ciphertext = EXCLUDED.photo_ciphertext,
                     content_type = EXCLUDED.content_type,
                     captured_at = EXCLUDED.captured_at,
-                    purge_after = EXCLUDED.purge_after
+                    purge_after = EXCLUDED.purge_after,
+                    consent_id = EXCLUDED.consent_id
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("order_id", orderId)
@@ -88,7 +90,9 @@ class TicketFacePhotoRepository {
                 .addValue("photo_ciphertext", ciphertext)
                 .addValue("content_type", contentType)
                 .addValue("captured_at", capturedAt == null ? null : capturedAt.atOffset(ZoneOffset.UTC))
-                .addValue("purge_after", purgeAfter));
+                .addValue("purge_after", purgeAfter)
+                // V368：这张脸照对应的同意留痕 id(customer_consents.id)。空值会被库上 chk_tfp_consent_present 拒。
+                .addValue("consent_id", consentId));
     }
 
     /** V359：取某订单的全部暂存照密文，按 slot_index 升序(=出票时的发放顺序)。 */

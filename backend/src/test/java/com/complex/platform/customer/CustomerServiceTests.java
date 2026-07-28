@@ -367,6 +367,79 @@ class CustomerServiceTests {
                 .contains("customer.ticket_order.created");
     }
 
+    /**
+     * V368 人脸照同意留痕（用户 2026-07-28 裁决「要，落到同意台账」）。
+     *
+     * <p>客人在拍照告知上勾了同意 → 同意台账（customer_consents）必须多出一条：谁、什么时候、
+     * 同意了哪一版告知；并且这张照片挂着这条留痕的 id。将来被问「这位客人同意过吗、同意的是什么」，
+     * 答案就在这一条上，不再是浏览器里一个转瞬即逝的勾。
+     */
+    @Test
+    void facePhotoOrderRecordsConsentTraceableToCustomerAndNoticeVersion() {
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        when(ticketingService.facePhotoNoticeVersion()).thenReturn("face_photo_notice_v1@retention_30d");
+        when(ticketingService.createTicketOrder(any(TicketOrderRequest.class))).thenReturn(faceOrderRecord(login));
+
+        service.createTicketOrder(login.customerToken(), "face-order-1", new CustomerTicketOrderRequest(
+                "face-order-1", "ticket_type_1", null, 1, LocalDate.parse("2026-06-20"),
+                "13800138000", null, null, List.of("Zm9v"), true));
+
+        // ① 同意台账里确实多了一条，且能定位到人、时间、告知版本。
+        CustomerConsentRecord consent = customerRepository.consents.values().stream()
+                .filter(c -> "ticket_face_photo".equals(c.consentType()))
+                .findFirst().orElseThrow();
+        assertThat(consent.customerId()).isEqualTo(login.customerId());
+        assertThat(consent.accepted()).isTrue();
+        assertThat(consent.version()).isEqualTo("face_photo_notice_v1@retention_30d");
+        assertThat(consent.acceptedAt()).isNotNull();
+        assertThat(consent.sourceTerminal()).isEqualTo("miniapp");
+
+        // ② 照片带着这条留痕的 id 下去——照片与同意是同一次业务动作，查得到彼此。
+        ArgumentCaptor<TicketOrderRequest> captor = ArgumentCaptor.forClass(TicketOrderRequest.class);
+        verify(ticketingService).createTicketOrder(captor.capture());
+        assertThat(captor.getValue().faceConsentId()).isEqualTo(consent.id());
+        assertThat(captor.getValue().facePhotos()).containsExactly("Zm9v");
+    }
+
+    /** V368：没有同意就不该有照片——没勾同意直接拒，订单不建、同意台账不落、照片一个字节都进不去。 */
+    @Test
+    void facePhotoOrderWithoutConsentIsRejectedAndNothingIsPersisted() {
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+
+        assertThatThrownBy(() -> service.createTicketOrder(login.customerToken(), "face-order-2",
+                new CustomerTicketOrderRequest("face-order-2", "ticket_type_1", null, 1,
+                        LocalDate.parse("2026-06-20"), "13800138000", null, null, List.of("Zm9v"), null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).code()).isEqualTo("FACE_PHOTO_CONSENT_REQUIRED"));
+
+        assertThat(customerRepository.consents.values()).noneMatch(c -> "ticket_face_photo".equals(c.consentType()));
+        verify(ticketingService, never()).createTicketOrder(any(TicketOrderRequest.class));
+    }
+
+    /** 不需要脸照的票种一律不问同意（PIPL 最小必要）：没拍照就不该有同意留痕。 */
+    @Test
+    void orderWithoutFacePhotoRecordsNoFaceConsent() {
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        when(ticketingService.createTicketOrder(any(TicketOrderRequest.class))).thenReturn(faceOrderRecord(login));
+
+        service.createTicketOrder(login.customerToken(), "plain-order-1", new CustomerTicketOrderRequest(
+                "plain-order-1", "ticket_type_1", null, 1, LocalDate.parse("2026-06-20"),
+                "13800138000", null));
+
+        assertThat(customerRepository.consents.values()).noneMatch(c -> "ticket_face_photo".equals(c.consentType()));
+        ArgumentCaptor<TicketOrderRequest> captor = ArgumentCaptor.forClass(TicketOrderRequest.class);
+        verify(ticketingService).createTicketOrder(captor.capture());
+        assertThat(captor.getValue().faceConsentId()).isNull();
+    }
+
+    private TicketOrderRecord faceOrderRecord(CustomerLoginResponse login) {
+        return new TicketOrderRecord(
+                "ticket_order_face", "TO20260614000009", login.customerId(), "ticket_type_1", null, 1,
+                LocalDate.parse("2026-06-20"), "miniapp", "13800138000", 9900L, "CNY", "unpaid",
+                "not_issued", "created", Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z"));
+    }
+
     @Test
     void customerOrdersAndQrAreScopedToCustomerToken() {
         CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));

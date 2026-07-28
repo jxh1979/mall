@@ -20,11 +20,14 @@ public final class SettlementConfigWriteRequests {
     }
 
     /**
-     * ticket_distribution_configs:分配方式 ∈{by_venue_per_guest,by_rank_tier,by_fixed_amount} + S9 超池特批有效期(月)。
-     * specialApprovalTermMonths 留空 = 沿用出厂默认 3 个月(业务口径「短期激励,默认不超过 3 个月」)。
+     * ticket_distribution_configs:分配方式 ∈{by_venue_per_guest,by_rank_tier,by_fixed_amount} + S9 超池特批有效期。
+     *
+     * <p>V368(用户 2026-07-28 纠正「不是指校验大于等于一个月,也可以三天」):有效期 = 数值 + 单位,
+     * specialApprovalTermUnit ∈{day,month};两项都留空 = 出厂默认 3 个月(业务口径「期限可配,默认不超过 3 个月」)。
+     * 下限只到「1 个单位」(1 天/1 个月),没有上限。
      */
     public record DistributionMethodRequest(String idempotencyKey, String projectId, String methodType,
-                                            Integer specialApprovalTermMonths) {
+                                            Integer specialApprovalTermValue, String specialApprovalTermUnit) {
     }
 
     /** ticket_distribution_merchant_rates:某商户每客单价/固定额(分),两额至少配一、各≥0。 */

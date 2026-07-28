@@ -42,6 +42,9 @@ public class TicketFacePhotoService {
     // 取照查看权限：复用既有核销查看权限码(核销/运营角色持有)，无权 403。
     private static final String VIEW_PERMISSION = "verification.view";
 
+    // V368 拍照告知的模板版本：客人端那块告知(用途/保存方式/留存天数/不拍的后果)每改一次字就 +1。
+    private static final String NOTICE_TEMPLATE_VERSION = "face_photo_notice_v1";
+
     // 单张脸照 base64 上限(字符数)：~4MB base64 ≈ 3MB 原图，正常自拍(640x480 JPEG)只有几十 KB。
     //   客人端可任意构造 payload，这是信任边界，必须有硬上限——否则一次下单能把整个库塞满。
     private static final int MAX_PHOTO_BASE64_CHARS = 4_000_000;
@@ -75,6 +78,20 @@ public class TicketFacePhotoService {
     }
 
     /**
+     * V368 拍照告知的版本号：落进同意台账的 version 列，将来被问「这位客人同意的是哪一版告知」时靠它定位。
+     *
+     * <p>模板版本(NOTICE_TEMPLATE_VERSION) + 当时那一版实际告知的留存天数。留存天数是后台可配的，
+     * 今天告知 30 天、明天运营改成 60 天，那两批客人同意的不是同一件事——所以天数进版本号，不能只记模板号。
+     *
+     * <p><b>改告知文案必须 bump {@link #NOTICE_TEMPLATE_VERSION}</b>：文案正文在客人端
+     * apps/web/src/customer/pages/BuyTicketPage.tsx 的「本票需要入场人脸照」告知块，
+     * 改了那段字而不改这里，留痕就会指向一版并不存在的告知。
+     */
+    String noticeVersion() {
+        return NOTICE_TEMPLATE_VERSION + "@retention_" + retentionDays() + "d";
+    }
+
+    /**
      * 购买捕获：把发放请求带来的人脸照 base64 加密后存 ticket_face_photos，purge_after=valid_to+留存天数(后台可配)。
      * 由 {@link TicketOrderService} 在 require_face_photo=TRUE 的权益发放后调用；photoBase64 缺失应在调用前已拒。
      */
@@ -92,10 +109,18 @@ public class TicketFacePhotoService {
     /**
      * V359 客人端下单暂存：把 H5 拍的脸照按订单加密暂存，等后台出票时转绑到已发权益。
      * 张数上限=订单票数(一张票一张脸)，超出直接拒——客人端可任意构造 payload，这里是信任边界。
+     *
+     * <p>V368 同意闸：这是「客人自己的脸」进系统的唯一一格，所以「没有同意就不该有照片」也钉在这里——
+     * consentId 空一律拒，任何调用方(客人端下单/将来别的入口)都绕不过。consentId 由 CustomerService
+     * 在同一个事务里往同意台账(customer_consents)落一条留痕后给出，库上 chk_tfp_consent_present 再兜一道。
      */
-    void stageForOrder(String orderId, List<String> photosBase64, int quantity) {
+    void stageForOrder(String orderId, List<String> photosBase64, int quantity, String consentId) {
         if (photosBase64 == null || photosBase64.isEmpty()) {
             return;
+        }
+        if (consentId == null || consentId.isBlank()) {
+            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED",
+                    "face photo requires a recorded customer consent");
         }
         if (photosBase64.size() > Math.max(1, quantity)) {
             throw ApiException.badRequest("FACE_PHOTO_COUNT_EXCEEDED",
@@ -107,7 +132,7 @@ public class TicketFacePhotoService {
             String payload = requireValidPhoto(photosBase64.get(slot));
             byte[] ciphertext = piiCipher.encrypt(payload).getBytes(StandardCharsets.UTF_8);
             repository.saveStaged("tfp_" + UUID.randomUUID().toString().replace("-", ""),
-                    orderId, slot, ciphertext, "image/jpeg", now, purgeAfter);
+                    orderId, slot, ciphertext, "image/jpeg", now, purgeAfter, consentId);
         }
     }
 

@@ -95,6 +95,7 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 | 项 | 内容 | 状态 |
 |---|---|---|
 | C1 H5 购票拍照 | 客人端购票页对「要拍照的票种」告知用途与留存天数、取得同意后调摄像头逐张拍；base64 随下单请求上来加密暂存到订单，后台出票时转绑到已发权益并删暂存 | ✅ 已落地（V359） |
+| C1b 拍照同意落库留痕 | **V368（用户 2026-07-28 裁决「要，落到同意台账」）**：V359 的同意只在前端勾一下、库里不存，被问「客人同意过吗」拿不出证据。落法：下单时往**既有**同意台账 `customer_consents` 落一条（`consent_type='ticket_face_photo'`、`version=告知模板版本@当时告知的留存天数`、`accepted_at`、`source_terminal='miniapp'`），**不新建第二套台账**；照片行 `ticket_face_photos.consent_id` 挂这条留痕。「没有同意就不该有照片」三道闸：客人端不勾不让提交 → `TicketFacePhotoService.stageForOrder` 无同意 id 即拒（`FACE_PHOTO_CONSENT_REQUIRED`）→ 库上 `chk_tfp_consent_present`（订单暂存位必须有 `consent_id`，绕过服务直接 INSERT 也写不进）。告知文案改动必须同步 bump `TicketFacePhotoService.NOTICE_TEMPLATE_VERSION`（客人端告知块已加提示注释） | ✅ 已落地（V368） |
 | C2 后台核销页显示脸照 | 核销预检扫到权益即调 `GET /ticketing/issued-entitlements/{id}/face-photo`，以背景图方式显示供核销员比对（不落前端存储、不进操作结果、看完可一键清除） | ✅ 已落地 |
 | C3 模板编辑勾选 `require_face_photo` | ✅ **已落地**（PR #274）：开关已进权益模板**新建**表单 + 列表/详情展示。**既有模板**改此开关仍需批 5 主体的模板编辑页 | 🔶 新建路径已通，编辑路径待批 5 主体 |
 | C4（可选）核销完成即提前清照 | 现状仍是 `TicketFacePhotoService:80` purge_after = valid_to + N 天，`TicketFacePhotoPurgeJob` 每日硬删。**V353（2026-07-28）已把 N 从硬编码 30 改成后台可配**（落 `notification_windows`，ADM-ANA-011 可改，加了 3650 天上界）。「核销即清」这个更激进的方案仍未做 | ⏸ 可选优化（底层已改善） |

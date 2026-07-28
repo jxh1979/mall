@@ -92,10 +92,12 @@ public class SettlementPostingService {
                     "only over-pool draft bills can be special-approved; status=" + ctx.status()
                             + ", overPool=" + ctx.overPool());
         }
-        // S9：期限后台可配(ticket_distribution_configs.special_approval_term_months·出厂默认 3 个月),
-        //   到期日在 DB 侧按 CURRENT_DATE + N 月算,与到期判定同一时钟。
-        int termMonths = repository.findSpecialApprovalTermMonths(ctx.projectId());
-        LocalDate validUntil = repository.markBillSpecialApproved(billId, ref, termMonths);
+        // S9：期限后台可配(ticket_distribution_configs.special_approval_term_value/_unit·出厂默认 3 个月),
+        //   到期日在 DB 侧按 CURRENT_DATE + N 天/月算,与到期判定同一时钟。
+        //   V368：单位可选「天」——三天的短期激励也批得出来(用户 2026-07-28 纠正)。
+        JdbcSettlementBillRepository.SpecialApprovalTerm term =
+                repository.findSpecialApprovalTerm(ctx.projectId());
+        LocalDate validUntil = repository.markBillSpecialApproved(billId, ref, term);
         if (validUntil == null) {
             // 并发下状态已被改（另一次特批/过账）→ 与上同义，再抛一次防竞态。
             throw com.complex.platform.common.api.ApiException.conflict(
@@ -109,7 +111,7 @@ public class SettlementPostingService {
                 java.util.Map.of("special_approval_ref", ref,
                         "spv_pool_cent", ctx.spvPoolCent(),
                         "pooled_distributed_cent", ctx.pooledDistributedCent(),
-                        "term_months", termMonths,
+                        "term", term.label(),
                         "valid_until", validUntil.toString()));
         return new SpecialApprovalResult(ref, validUntil);
     }

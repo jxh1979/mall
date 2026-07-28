@@ -159,8 +159,9 @@ public class TicketOrderService {
         // V359：客人端 H5 下单时拍的人脸照按订单加密暂存(每张票一张)，后台出票时转绑到已发权益。
         //   客人永远调不到出票端点(ticket.ticket.issue)，这一格是「客人自己拍的脸」进系统的唯一路径。
         //   facePhotoService 为 null(旧构造/无 PiiCipher 的单测)时不暂存；空表=该票种不要照，零影响。
+        //   V368：同意闸在 stageForOrder 里（consentId 空即拒），有照没同意进不了库。
         if (facePhotoService != null) {
-            facePhotoService.stageForOrder(saved.id(), actual.facePhotos(), quantity);
+            facePhotoService.stageForOrder(saved.id(), actual.facePhotos(), quantity, actual.faceConsentId());
         }
         return saved;
     }
@@ -365,6 +366,11 @@ public class TicketOrderService {
     /** V359：当前生效的人脸照留存天数（后台可配，缺配置/无脸照服务回落 30），供客人端如实告知留存期限。 */
     int facePhotoRetentionDays() {
         return facePhotoService == null ? 30 : facePhotoService.retentionDays();
+    }
+
+    /** V368：当前这一版拍照告知的版本号，落进同意台账的 version 列。 */
+    String facePhotoNoticeVersion() {
+        return facePhotoService == null ? "face_photo_notice_v1@retention_30d" : facePhotoService.noticeVersion();
     }
 
     /**

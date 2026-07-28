@@ -80,19 +80,25 @@ public class JdbcSettlementBillRepository {
     }
 
     /**
-     * S9 超池特批有效期（月）：项目特例优先，否则全局默认（建表默认 3 = 业务口径「短期激励，默认不超过 3 个月」）。
+     * S9 超池特批有效期：项目特例优先，否则全局默认（建表默认 3 个月 = 业务口径「期限可配，默认不超过 3 个月」）。
      * 与分配方式同表同维度——超池特批就是该分配方式的溢出出口，同一业务对象同一处配。
+     *
+     * <p>V368（用户 2026-07-28 纠正）：期限不再只能按月。三天的短期激励也要配得出来，
+     * 所以读回「数值 + 单位」，单位 day/month。
      */
-    public int findSpecialApprovalTermMonths(String projectId) {
-        Integer months = jdbcTemplate.query("""
-                SELECT special_approval_term_months FROM ticket_distribution_configs
+    public SpecialApprovalTerm findSpecialApprovalTerm(String projectId) {
+        SpecialApprovalTerm term = jdbcTemplate.query("""
+                SELECT special_approval_term_value, special_approval_term_unit FROM ticket_distribution_configs
                  WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
                  LIMIT 1
                 """, new MapSqlParameterSource().addValue("project_id", projectId),
-                rs -> rs.next() ? rs.getInt("special_approval_term_months") : null);
-        return requireConfigured(months, "ticket_distribution_configs.special_approval_term_months", projectId);
+                rs -> rs.next()
+                        ? new SpecialApprovalTerm(rs.getInt("special_approval_term_value"),
+                                rs.getString("special_approval_term_unit"))
+                        : null);
+        return requireConfigured(term, "ticket_distribution_configs.special_approval_term_value", projectId);
     }
 
     /** by_rank_tier 排名档位：项目特例整套优先，无项目档位则回退全局默认档位。 */
@@ -639,16 +645,21 @@ public class JdbcSettlementBillRepository {
      *
      * @return 落库的到期日；null = 未更新任何行（非 draft，调用方据此判 409）
      */
-    public java.time.LocalDate markBillSpecialApproved(String billId, String specialApprovalRef, int termMonths) {
+    public java.time.LocalDate markBillSpecialApproved(String billId, String specialApprovalRef,
+                                                       SpecialApprovalTerm term) {
         return jdbcTemplate.query("""
                 UPDATE settlement_bills
                    SET special_approval_ref = :ref,
-                       special_approval_valid_until = (CURRENT_DATE + make_interval(months => :months))::date,
+                       special_approval_valid_until =
+                           (CURRENT_DATE + make_interval(months => :months, days => :days))::date,
                        status = 'confirmed', updated_at = now()
                  WHERE id = :id AND status = 'draft'
                 RETURNING special_approval_valid_until
                 """, new MapSqlParameterSource()
-                .addValue("id", billId).addValue("ref", specialApprovalRef).addValue("months", termMonths),
+                .addValue("id", billId).addValue("ref", specialApprovalRef)
+                // V368：一次 make_interval 同时收两种单位——配「月」走月历(1月31日+3月=4月30日)、
+                //   配「天」走自然日，另一格为 0。到期日仍在 DB 侧算，与到期判定同一时钟。
+                .addValue("months", term.months()).addValue("days", term.days()),
                 rs -> rs.next() ? rs.getObject("special_approval_valid_until", java.time.LocalDate.class) : null);
     }
 
@@ -664,6 +675,30 @@ public class JdbcSettlementBillRepository {
     }
 
     // ---- 读投影 ----
+
+    /**
+     * S9/V368 超池特批有效期读投影：数值 + 单位(day/month)。
+     * 用户 2026-07-28 纠正「不是指校验大于等于一个月，也可以三天」——三天的短期激励必须配得出来。
+     */
+    public record SpecialApprovalTerm(int value, String unit) {
+
+        public boolean byDay() {
+            return "day".equals(unit);
+        }
+
+        int months() {
+            return byDay() ? 0 : value;
+        }
+
+        int days() {
+            return byDay() ? value : 0;
+        }
+
+        /** 给人看的写法：「3 天」/「3 个月」。总览页、草案摘要、审计留痕都用它，全站一个说法。 */
+        public String label() {
+            return value + (byDay() ? " 天" : " 个月");
+        }
+    }
 
     /** V268 套票折扣归属配置读投影(§7.4)。splitPlatformBps 仅 split_by_ratio 用。 */
     public record ComboDiscountConfig(String discountBearer, int splitPlatformBps) {
