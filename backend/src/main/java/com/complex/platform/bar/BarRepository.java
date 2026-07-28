@@ -173,6 +173,9 @@ public interface BarRepository {
     // 2c-2：按 bill_id 查已有提成计算（计提查重守卫）。
     Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId);
 
+    // G/V349：订单列表批量带出已落库提成（费率/金额），供后台提成页与订单页显示【真实落库值】而非页面写死的百分比。
+    List<BarCommissionCalculationRecord> listCommissionsByBillIds(List<String> billIds);
+
     // 2c-3 reopen 冲正：把账单现有结算流水标 reversed（聚合排除，防反结→重结双计）。返回受影响行数。
     int markBillSettlementsReversed(String billId);
 

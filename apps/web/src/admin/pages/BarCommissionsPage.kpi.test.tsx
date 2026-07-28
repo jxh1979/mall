@@ -7,8 +7,9 @@ import type { AdminApiClient, AdminPageProps, BarOrderRow, EffectivePermissionsS
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 const ORDERS: BarOrderRow[] = [
-  { id: "b-1", tableId: "T-1", status: "billed", totalAmount: 8800, salesStaffId: "staff_sales_1" },
-  { id: "b-2", tableId: "T-2", status: "billed", totalAmount: 6000 },
+  // G/V349：销售/非销售档一律看账单上快照的 salesRoleType（员工岗位判定的结果），不看有没有 salesStaffId。
+  { id: "b-1", tableId: "T-1", status: "billed", totalAmount: 8800, salesStaffId: "staff_sales_1", bills: [{ id: "bill-1", status: "settled", salesRoleType: "sales", commissionRateBp: 2000, commissionAmountCent: 1760 }] },
+  { id: "b-2", tableId: "T-2", status: "billed", totalAmount: 6000, bills: [{ id: "bill-2", status: "settled", salesRoleType: "non_sales", commissionRateBp: 1000, commissionAmountCent: 600 }] },
 ];
 
 function makeApi(): AdminApiClient {
@@ -38,7 +39,7 @@ describe("BarCommissionsPage KPI 聚焦视图 + 英文全清", () => {
     window.history.replaceState({}, "", "/admin/bar/commissions");
   });
 
-  it("点“销售人员”KPI → ?kpi=sales，表内只剩 15% 口径订单，KPI 卡与操作隐藏", async () => {
+  it("点“销售人员”KPI → ?kpi=sales，表内只剩销售岗归属订单，KPI 卡与操作隐藏", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("bar-commissions-kpi-sales")).toBeTruthy());
     fireEvent.click(screen.getByTestId("bar-commissions-kpi-sales"));

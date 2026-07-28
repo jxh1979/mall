@@ -268,6 +268,33 @@ public class StaffService {
         return saved;
     }
 
+    /**
+     * V349 销售岗维护：人事在「员工档案」页给员工设/撤销「销售岗」标识——卡座提成按岗位判档的唯一依据
+     * （销售岗按销售人员费率、其余按非销售人员费率；费率仍在「结算配置中心 → 提成与积分」配，见 V340）。
+     *
+     * <p>沿用 staff.profile.review（高敏·需审批）而不新增权限点：审员工注册与定这人是不是销售岗同属人事权，
+     * 拆两个权限只会多一处要分配、少一处对得上。改动必留审计（改前/改后 + 事由），提成对账时可回溯是谁哪天改的。
+     *
+     * <p>只改档案标识，<b>不回算任何既有账单/提成</b>：账单在开单时已把角色档快照进 bar_bills.sales_role_type，
+     * 今天改岗位只影响此后新开的账单——否则改一次岗位就悄悄改写历史提成，谁都对不上账。
+     */
+    @GuardedAction(permission = "staff.profile.review")
+    @org.springframework.transaction.annotation.Transactional
+    public StaffProfileRecord setSalesPosition(String id,
+            com.complex.platform.access.staff.dto.StaffSalesPositionRequest request) {
+        StaffProfileRecord profile = requireProfileInScope(id);
+        if (request == null || request.salesPosition() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "sales_position is required");
+        }
+        boolean salesPosition = request.salesPosition();
+        String reason = requireText(request.reason(), "reason");
+        StaffProfileRecord saved = repository.saveProfile(profile.withSalesPosition(salesPosition, Instant.now()));
+        auditEventService.recordSuccess("staff.profile.sales_position_changed", "staff.profile.review",
+                "staff_profile", id, null, null,
+                Map.of("before", profile.salesPosition(), "after", salesPosition, "reason", reason));
+        return saved;
+    }
+
     @GuardedAction(permission = "staff.profile.review")
     @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord requestDeleteProfile(String id,
@@ -724,7 +751,9 @@ public class StaffService {
                 current.phoneHash(), current.idDocHash(), current.staffLevelId(), current.registrationStatus(),
                 current.approvedBy(), current.approvedAt(), current.rejectReason(), current.status(),
                 current.createdAt(), now, current.archivedAt(), current.archivedBy(), current.deleteStatus(),
-                current.deleteRequestedBy(), current.deleteRequestedAt(), current.deleteReason());
+                current.deleteRequestedBy(), current.deleteRequestedAt(), current.deleteReason(),
+                // V349：员工自助只能改姓名，销售岗原样带过——员工不能自己把自己设成销售岗给自己提档提成。
+                current.salesPosition());
         StaffProfileRecord saved = repository.saveProfile(updated);
         auditEventService.recordSuccess("staff.profile.self_updated", "staff.profile.self",
                 "staff_profile", saved.id(), null, request.idempotencyKey(),

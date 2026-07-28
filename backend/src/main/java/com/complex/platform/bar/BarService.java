@@ -54,13 +54,27 @@ public class BarService {
                         return List.of();
                     }
                     // 一次批量取回这些订单的账单并按订单分组为摘要（最新在前），避免 N+1；供前端账单列/结算/提成定位账单。
-                    Map<String, List<BarBillSummary>> billsByOrder = repository
-                            .listBillsByOrderIds(orders.stream().map(BarOrderRecord::id).toList())
+                    List<BarBillRecord> bills = repository
+                            .listBillsByOrderIds(orders.stream().map(BarOrderRecord::id).toList());
+                    // G/V349：再一次批量取回这些账单的提成台账，把【真实落库费率/提成额】随摘要带出——
+                    // 后台提成页/订单页此前把 15%/10% 写死在页面文案里，配置中心改成 20% 后页面仍显示 15%，
+                    // 对账时页面与台账对不上。改为页面只显示台账里真有的那个数（没计提就显示未计提）。
+                    Map<String, BarCommissionCalculationRecord> commissionByBill = repository
+                            .listCommissionsByBillIds(bills.stream().map(BarBillRecord::id).toList())
                             .stream()
+                            .collect(Collectors.toMap(BarCommissionCalculationRecord::billId, c -> c, (first, dup) -> first));
+                    Map<String, List<BarBillSummary>> billsByOrder = bills.stream()
                             .collect(Collectors.groupingBy(
                                     BarBillRecord::orderId,
                                     Collectors.mapping(
-                                            bill -> new BarBillSummary(bill.id(), bill.billNo(), bill.paymentStatus()),
+                                            bill -> {
+                                                BarCommissionCalculationRecord commission = commissionByBill.get(bill.id());
+                                                return new BarBillSummary(
+                                                        bill.id(), bill.billNo(), bill.paymentStatus(),
+                                                        bill.salesRoleType(),
+                                                        commission == null ? null : commission.commissionRateBp(),
+                                                        commission == null ? null : commission.commissionAmountCent());
+                                            },
                                             Collectors.toList())));
                     return orders.stream()
                             .map(order -> BarOrderView.of(order, billsByOrder.getOrDefault(order.id(), List.of())))

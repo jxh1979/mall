@@ -272,13 +272,19 @@ export type BarBillRow = {
   paidAmount?: number;
   totalAmount?: number;
   paidAt?: string;
+  // 后端 BarBillSummary（G/V349）：开单时按员工岗位快照的提成角色档 + 提成台账真实落库费率/金额。
+  // 页面显示提成比例一律读 commissionRateBp，不写死 15%/10%（配置中心改费率后页面须跟着变，否则对账对不上）。
+  salesRoleType?: "sales" | "non_sales";
+  commissionRateBp?: number | null;
+  commissionAmountCent?: number | null;
 };
 
 export type BarOrderRow = {
   id: string;
   tableId?: string;
-  // 后端 BarOrderRecord.sales_staff_id（adminClient 已 snake->camel）：有=销售归属(提成 15%)，无=非销售(10%)。
-  // 销售/非销售拆分统计据此推导；曾用的 sellerRole/commissionRate 是后端从不返回的幽灵字段，已删。
+  // 后端 BarOrderRecord.sales_staff_id（adminClient 已 snake->camel）= 这单的销售归属人（员工 user_id）。
+  // 注意：有归属人 ≠ 按销售人员费率计提——费率档看的是该员工在员工档案里有没有「销售岗」标识（G/V349），
+  // 拆分统计一律读 bills[0].salesRoleType，不要拿本字段的有无当销售档判据（旧口径正是这么错的）。
   salesStaffId?: string;
   status?: string;
   /** 列表接口实际返回字段（BarOrderRecord.totalAmountCent，分）；totalAmount 为旧字段兼容保留。 */

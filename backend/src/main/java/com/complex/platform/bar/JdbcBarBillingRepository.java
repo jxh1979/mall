@@ -145,6 +145,20 @@ final class JdbcBarBillingRepository {
                 """, Map.of("bill_id", billId), rowMapper::mapCommission).stream().findFirst();
     }
 
+    // G/V349：订单列表批量带出提成（避免逐单 N+1）。同一账单至多一条（计提防重），故不做去重。
+    List<BarCommissionCalculationRecord> listCommissionsByBillIds(List<String> billIds) {
+        if (billIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT id, bill_id, sales_staff_id, sales_role_type, commission_base_cent,
+                       commission_rate_bp, commission_amount_cent, status, created_at
+                  FROM bar_commission_calculations
+                 WHERE bill_id IN (:bill_ids)
+                 ORDER BY created_at ASC, id
+                """, Map.of("bill_ids", billIds), rowMapper::mapCommission);
+    }
+
     // 2c-3 reopen 冲正：把账单现有结算流水标 reversed（聚合侧排除），避免反结→重结被双计。
     public int markBillSettlementsReversed(String billId) {
         return jdbcTemplate.update("""

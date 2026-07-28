@@ -420,6 +420,7 @@ class BarGiftConsumerTests {
         @Override public List<BarBillRecord> listBillsByOrderIds(List<String> orderIds) { return List.of(); }
         @Override public Optional<BarBillRecord> findBillByIdForUpdate(String id) { return Optional.empty(); }
         @Override public Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId) { return Optional.empty(); }
+        @Override public List<BarCommissionCalculationRecord> listCommissionsByBillIds(List<String> billIds) { return List.of(); }
         @Override public int markBillSettlementsReversed(String billId) { return 0; }
         @Override public BarBillAdjustmentRecord saveBillAdjustment(BarBillAdjustmentRecord adjustment) { return adjustment; }
         @Override public List<BarBillAdjustmentRecord> listBillAdjustments(String billId) { return List.of(); }

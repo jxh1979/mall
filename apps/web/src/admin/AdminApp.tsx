@@ -88,6 +88,7 @@ const StoredValueRulesPage = React.lazy(() => import("./pages/StoredValueRulesPa
 const RefundAuthorityPage = React.lazy(() => import("./pages/RefundAuthorityPage").then((m) => ({ default: m.RefundAuthorityPage })));
 const OperatingParamsPage = React.lazy(() => import("./pages/OperatingParamsPage").then((m) => ({ default: m.OperatingParamsPage })));
 const PayrollTaxBracketsPage = React.lazy(() => import("./pages/PayrollTaxBracketsPage").then((m) => ({ default: m.PayrollTaxBracketsPage })));
+const StaffProfilesPage = React.lazy(() => import("./pages/StaffProfilesPage").then((m) => ({ default: m.StaffProfilesPage })));
 const AiThresholdsPage = React.lazy(() => import("./pages/AiThresholdsPage").then((m) => ({ default: m.AiThresholdsPage })));
 const NotificationWindowsPage = React.lazy(() => import("./pages/NotificationWindowsPage").then((m) => ({ default: m.NotificationWindowsPage })));
 const SpaceTypesPage = React.lazy(() => import("./pages/SpaceTypesPage").then((m) => ({ default: m.SpaceTypesPage })));
@@ -301,6 +302,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <OperatingParamsPage {...props} />;
     case "ADM-STF-003":
       return <PayrollTaxBracketsPage {...props} />;
+    case "ADM-STF-004":
+      return <StaffProfilesPage {...props} />;
     case "ADM-ANA-010":
       return <AiThresholdsPage {...props} />;
     case "ADM-ANA-011":

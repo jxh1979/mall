@@ -9064,6 +9064,45 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/staff/profiles/{id}/sales-position:
+    post:
+      tags:
+        - access
+      operationId: setStaffSalesPosition
+      summary: 设置员工销售岗标识
+      description: 在员工档案上设/撤销「销售岗」标识：设了销售岗的员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率（两档费率在结算配置中心维护）。改动必填事由并落审计；只影响此后新开的卡座账单，不回算已开账单的历史提成。
+      x-permission: staff.profile.review
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: staff.profile.sales_position_changed
+      x-audit-event-failure: staff.profile.sales_position_change_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 员工档案 id。
+      requestBody:
+        $ref: "#/components/requestBodies/StaffSalesPositionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/staff/device-credentials:
     post:
       tags:
@@ -24829,6 +24868,15 @@ components:
         maxLength: 64
       description: ProjectId 路径参数；必须引用当前数据范围内存在且归属本商户的游乐项目。
   requestBodies:
+    StaffSalesPositionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StaffSalesPositionRequest"
+          example:
+            sales_position: true
+            reason: 转岗销售，2026-07 起承接卡座销售
     StatusChange:
       required: true
       content:
@@ -26346,6 +26394,21 @@ components:
             meta:
               server_time: 2026-06-12T12:00:00Z
   schemas:
+    StaffSalesPositionRequest:
+      type: object
+      description: 员工「销售岗」标识维护请求体。sales_position=是否销售岗（true=该员工卖出的卡座按销售人员费率计提提成，false=按非销售人员费率）；reason=改动事由（必填，直接影响提成计提档，须留审计可回溯）。
+      additionalProperties: false
+      required:
+        - sales_position
+        - reason
+      properties:
+        sales_position:
+          type: boolean
+          description: 是否销售岗。true=按销售人员费率计提卡座提成；false=按非销售人员费率。
+        reason:
+          type: string
+          description: 改动事由（必填）。
+          maxLength: 1000
     SuccessResponse:
       type: object
       required:

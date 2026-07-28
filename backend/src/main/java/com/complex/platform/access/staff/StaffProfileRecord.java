@@ -30,10 +30,13 @@ public record StaffProfileRecord(
         String deleteStatus,
         String deleteRequestedBy,
         Instant deleteRequestedAt,
-        String deleteReason
+        String deleteReason,
+        // V349 销售岗标识：卡座提成按员工岗位判档的唯一依据（TRUE=销售人员费率，FALSE=非销售人员费率）。
+        // 出厂 FALSE——资金口径不就高不就低；由人事在「员工档案」页显式勾选，不按单次是否指派销售人员临时判。
+        boolean salesPosition
 ) {
 
-    /** 向后兼容构造器（V264 存档/删除前签名）：既有调用方零改动，默认未存档 + delete_status=none。 */
+    /** 向后兼容构造器（V264 存档/删除前签名）：既有调用方零改动，默认未存档 + delete_status=none + 非销售岗。 */
     public StaffProfileRecord(
             String id,
             String projectId,
@@ -53,20 +56,30 @@ public record StaffProfileRecord(
     ) {
         this(id, projectId, merchantId, userId, name, phoneHash, idDocHash, staffLevelId, registrationStatus,
                 approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt,
-                null, null, "none", null, null, null);
+                null, null, "none", null, null, null, false);
     }
 
     // --- V264 存档/删除范式：不可变 record 的字段更新辅助。 ---
     public StaffProfileRecord withArchive(Instant archivedAt, String archivedBy, Instant updatedAt) {
         return new StaffProfileRecord(id, projectId, merchantId, userId, name, phoneHash, idDocHash, staffLevelId,
                 registrationStatus, approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                salesPosition);
     }
 
     public StaffProfileRecord withDelete(String deleteStatus, String deleteRequestedBy,
             Instant deleteRequestedAt, String deleteReason, Instant updatedAt) {
         return new StaffProfileRecord(id, projectId, merchantId, userId, name, phoneHash, idDocHash, staffLevelId,
                 registrationStatus, approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                salesPosition);
+    }
+
+    /** V349：设/撤销销售岗（人事在员工档案页维护，落审计）。 */
+    public StaffProfileRecord withSalesPosition(boolean salesPosition, Instant updatedAt) {
+        return new StaffProfileRecord(id, projectId, merchantId, userId, name, phoneHash, idDocHash, staffLevelId,
+                registrationStatus, approvedBy, approvedAt, rejectReason, status, createdAt, updatedAt,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                salesPosition);
     }
 }

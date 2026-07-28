@@ -350,9 +350,9 @@
 |---|---|
 | 功能点 | 建立员工档案、私人手机 App 注册审批、设备凭证绑定、建立岗位、分配岗位、设置职级、创建班次、绑定责任区、上岗/离岗、异常班次记录 |
 | 使用角色 | 平台运营、现场主管、商户管理员、系统管理员 |
-| 关键字段 | 员工姓名、工号、手机号、所属组织、所属商户、岗位、职级、薪资口径摘要、设备凭证（设备公钥/不可逆设备指纹 device_key_fingerprint）、设备凭证绑定状态、Root 检测状态、同意凭据（consent_version/consent_time/consent_scope 或 employee_notice_id）、责任区域、班次时间、直属主管、审批状态、员工状态 |
+| 关键字段 | 员工姓名、工号、手机号、所属组织、所属商户、岗位、**销售岗标识（是否销售岗，V349 `staff_profiles.is_sales_position`；决定该员工卖出的卡座按销售人员费率还是非销售人员费率计提提成）**、职级、薪资口径摘要、设备凭证（设备公钥/不可逆设备指纹 device_key_fingerprint）、设备凭证绑定状态、Root 检测状态、同意凭据（consent_version/consent_time/consent_scope 或 employee_notice_id）、责任区域、班次时间、直属主管、审批状态、员工状态 |
 | 状态 | 员工状态：待入职、在职、试岗、停岗、离职；班次状态：未排班、已排班、进行中、已结束、异常 |
-| 验收标准 | 员工必须绑定组织或商户；员工注册必须审核；设备凭证、私人手机和公司工作手机可建立对应关系；员工注册审批须记录员工数据处理与监控的同意凭据，且该凭据以 `staff_profiles.employee_notice_id` 指向 foundation §6B.3 `employee_notices`（注册审批环节展示告知→员工签署→写 employee_notices status=signed 后回填 employee_notice_id，见 §15 与 `platform-governance-product-spec-v0.2.md`，C4/C10）；员工岗位和职级决定默认权限；员工班次可绑定设备领用；离职或停岗员工不可继续操作 |
+| 验收标准 | 员工必须绑定组织或商户；员工注册必须审核；设备凭证、私人手机和公司工作手机可建立对应关系；员工注册审批须记录员工数据处理与监控的同意凭据，且该凭据以 `staff_profiles.employee_notice_id` 指向 foundation §6B.3 `employee_notices`（注册审批环节展示告知→员工签署→写 employee_notices status=signed 后回填 employee_notice_id，见 §15 与 `platform-governance-product-spec-v0.2.md`，C4/C10）；员工岗位和职级决定默认权限；**销售岗标识在员工档案页（ADM-STF-004「人事 → 员工档案」）维护，改动必填事由并落审计（`staff.profile.sales_position_changed`），需 `staff.profile.review` 权限；员工自助改档案不得改本人销售岗；改岗只影响此后新开的卡座账单，不回算已开账单的历史提成**；员工班次可绑定设备领用；离职或停岗员工不可继续操作 |
 | > 修订说明（2026-06-07 收口） | "NFC 标识/NFC 绑定"按 D8/A6 改为"设备凭证（设备公钥/不可逆设备指纹）/设备凭证绑定"；补"同意凭据"字段承接合规 C4"员工注册审批页记录同意凭据（版本、时间、范围）"要求。依据 finding decision-land-1/compliance-land-8、D8 条 |
 | > 修订说明（2026-06-08 三轮收口） | 明确 staff_profiles 同意凭据指向：以 `employee_notice_id`（外键指向 foundation §6B.3 `employee_notices`）为同意凭据落点，consent_version/consent_time/consent_scope 三字段为冗余摘要；注册审批环节按 flow-diagrams §8.4 新增的"告知→签署→写 employee_notices"节点写入并回填，避免 employee_notices 表建而无写入方。依据 finding compliance-wired-6、合规 C4/C10 |
 
@@ -568,3 +568,4 @@ P0 阶段的重点是把“谁、在哪、凭什么、谁能操作、谁负责�
 | 2026-06-10 | 增/改 | §6.10 / §7.8 / §12 | 补权限模板机制：基础模板、临时模板、复制模板、有效期、单次有效、最终权限计算和显式拒绝优先 | 用户确认权限模板颗粒度方案；对齐 `p0-operation-permission-matrix-v0.1.md` |
 | 2026-06-18 | 改 | §12 第 8、9 条 | 准入审计/放行落点由 `admission_audits`/`contract_admission_rules` 收口为 `supervisor_review`（`supervisor_review_decisions`，V057）；删去"admission_audits 须补 approval_level 字段"滞后表述，改为审批层级以 `staff_levels.level_rank` 为基准、落 `supervisor_review_decisions`；补"准入闸口须在票务/酒吧/游乐/结算业务动作前内嵌校验（本期 P0）"现状/目标 | R5、2026-06-18 业务裁决、对齐 `platform-governance-product-spec-v0.2.md` 顶部 R5 标注 |
 | 2026-06-18 | 增 | §12 第 8 条 | D2 逐域细化：补"准入校验逐域切入点（P0）"，逐域写明强制校验插入位置——票务下单前+出票前、酒吧开台前+点酒/结算前、游乐入场核销前、结算日结/结算依据生成前；统一"校验不通过→阻断并写留痕→按 `staff_levels.level_rank` 升级审批→放行落 `supervisor_review_decisions`"，与 D2 收口（统一走 supervisor_review、作废 admission_audits/contract_admission_rules）一致，不重新引入旧表 | 2026-06-18 业务确认（准入业务动作前内嵌校验需逐域细化）、D2 收口 |
+| 2026-07-28 | 增 | §7.6 员工/岗位/班次管理 | 员工档案增「销售岗标识」（V349 `staff_profiles.is_sales_position`）与其维护页 ADM-STF-004「人事 → 员工档案」：卡座销售提成改按员工岗位判档（设销售岗按销售人员费率、其余按非销售人员费率，费率仍在结算配置中心维护），此前「销售岗」在库里根本不存在、引擎按「账单挂没挂销售归属人」判且方向相反。改动必填事由 + 审计、需 staff.profile.review、员工自助不得自改 | 业务 HTML 真源 2026-07-28 定稿；bar PRD §5b 同批同步 |
