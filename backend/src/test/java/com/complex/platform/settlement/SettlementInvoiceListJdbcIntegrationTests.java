@@ -150,7 +150,7 @@ class SettlementInvoiceListJdbcIntegrationTests {
         service.changeStatus(ticketItemId, "issued", "INV-0001", null, "tester");
 
         // 退款后月结重跑把综合服务费下调到 4000(已开 10000 > 应开 4000)
-        jdbcTemplate.update("UPDATE settlement_bills SET comp_service_fee_cent = 4000 WHERE id = ?", BILL);
+        jdbcTemplate.update("UPDATE settlement_bills SET comp_service_fee_exclusive_cent = 4000 WHERE id = ?", BILL);
 
         assertThat(service.generateForBill(BILL, "tester")).isZero();   // 绝不再多开
         var over = service.summarize(PROJECT, PERIOD_START).overIssued();
@@ -166,7 +166,7 @@ class SettlementInvoiceListJdbcIntegrationTests {
         service.generateForBill(BILL, "tester");
         String ticketItemId = ticketItemId();
         service.changeStatus(ticketItemId, "issued", "INV-0001", null, "tester");
-        jdbcTemplate.update("UPDATE settlement_bills SET comp_service_fee_cent = 4000 WHERE id = ?", BILL);
+        jdbcTemplate.update("UPDATE settlement_bills SET comp_service_fee_exclusive_cent = 4000 WHERE id = ?", BILL);
 
         // 先红冲(释放已开额度)
         service.changeStatus(ticketItemId, "reversed", null, "退款后红冲", "tester");
@@ -230,7 +230,7 @@ class SettlementInvoiceListJdbcIntegrationTests {
                 "rsa_inv_it", PROJECT, "ticket_service_fee", ENT_PLATFORM, "active", "tester", Instant.now()));
 
         jdbcTemplate.update("""
-                INSERT INTO settlement_bills (id, project_id, period_start, period_end, comp_service_fee_cent,
+                INSERT INTO settlement_bills (id, project_id, period_start, period_end, comp_service_fee_exclusive_cent,
                         distribution_method, status)
                 VALUES (?, ?, ?, ?, ?, 'by_rank_tier', 'confirmed')
                 """, BILL, PROJECT, PERIOD_START, PERIOD_END, COMP_SERVICE_FEE);

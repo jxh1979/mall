@@ -27,8 +27,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * ③ 超额 C 口径——超池 bill 过账时对池明细两段拆（池内→ticket_distribution、超额→platform_incentive_subsidy），
  *    专属直付不拆，未超池零行为变更，两前缀各自幂等。
  *
- * <p>造超池：<b>项目级</b> by_fixed_amount 配置 + 商户固定额（更隔离，不碰全局默认）。spvPool=800、两家池分配
- * a=600+400=1000&gt;800 → overPool。retention 用全局默认 20%（同 SettlementComboDiscountTests 口径）。
+ * <p>造超池：<b>项目级</b> by_fixed_amount 配置 + 商户固定额（更隔离，不碰全局默认）。可分配池=800、两家池分配
+ * a=600+400=1000&gt;800 → overPool。S4:每笔核销带 20% 池链综合服务费(等价保值口径),池 = 收入 − 费。
  *
  * <p><b>S9 短期激励期限（V357）</b>四件套：④ 期限后台可配（项目配 2 月 → 到期日 = 特批日 + 2 月）；
  * ⑤ 到期回收·过账闸——过期特批的超池单过账 409 {@code SPECIAL_APPROVAL_EXPIRED} 且零应付落地；
@@ -77,13 +77,13 @@ class SettlementOverPoolSpecialApprovalTests {
 
     @Test
     void overPoolDraftSpecialApprovalFillsRefAndConfirms() {
-        String pid = overPoolProject(); // spvPool=800、池分配 600+400=1000 → overPool draft
+        String pid = overPoolProject(); // 可分配池=800、池分配 600+400=1000 → overPool draft
         String bill = settlementService.settleMonth(pid, MONTH);
 
-        // 越池 → draft、ref 空、spvPool=800（前置）。
+        // 越池 → draft、ref 空、可分配池=800（前置）。
         assertThat(billStatus(bill)).isEqualTo("draft");
         assertThat(specialRef(bill)).isNull();
-        assertThat(num(bill(pid), "spv_pool_cent")).isEqualTo(800L);
+        assertThat(num(bill(pid), "available_pool_cent")).isEqualTo(800L);
 
         var returned = postingService.specialApprove(bill, "SA-2026-04-001");
 
@@ -138,12 +138,12 @@ class SettlementOverPoolSpecialApprovalTests {
         int posted = postingService.postBill(bill);
         assertThat(posted).isEqualTo(3); // m1 + m2 + barX 三条明细
 
-        long spvPool = 800L;
+        long availablePool = 800L;
         long poolDistributed = 1000L;
 
         // m1 a=600 → pool=600*800/1000=480、excess=120。
         String m1Item = poolItem(pid, "m1");
-        long m1Pool = 600L * spvPool / poolDistributed;
+        long m1Pool = 600L * availablePool / poolDistributed;
         long m1Excess = 600L - m1Pool;
         assertThat(m1Pool).isEqualTo(480L);
         assertThat(m1Excess).isEqualTo(120L);
@@ -153,7 +153,7 @@ class SettlementOverPoolSpecialApprovalTests {
 
         // m2 a=400 → pool=320、excess=80。
         String m2Item = poolItem(pid, "m2");
-        long m2Pool = 400L * spvPool / poolDistributed;
+        long m2Pool = 400L * availablePool / poolDistributed;
         long m2Excess = 400L - m2Pool;
         assertThat(m2Pool).isEqualTo(320L);
         assertThat(m2Excess).isEqualTo(80L);
@@ -161,11 +161,11 @@ class SettlementOverPoolSpecialApprovalTests {
         assertPayable(m2Item, "platform_incentive_subsidy", "m2", m2Excess);
         assertThat(m2Pool + m2Excess).isEqualTo(400L);
 
-        // Σpool ≤ spvPool；Σexcess = poolDistributed − Σpool。
+        // Σpool ≤ 可分配池；Σexcess = poolDistributed − Σpool。
         long sumPool = m1Pool + m2Pool;
         long sumExcess = m1Excess + m2Excess;
         assertThat(sumPool).isEqualTo(800L);
-        assertThat(sumPool).isLessThanOrEqualTo(spvPool);
+        assertThat(sumPool).isLessThanOrEqualTo(availablePool);
         assertThat(sumExcess).isEqualTo(poolDistributed - sumPool);
         assertThat(sumExcess).isEqualTo(200L);
 
@@ -221,21 +221,21 @@ class SettlementOverPoolSpecialApprovalTests {
 
     // ─── 对抗复核回归锁：溢出安全 / 特批冻结 / 补贴出项目域 ───────────────────────
 
-    /** Fix1 溢出(risk1):a×spvPool 超 long 上限时 BigInteger 中间乘保 pool+excess=a 且 pool≥0(long 直乘会反转成负应付)。 */
+    /** Fix1 溢出(risk1):a×可分配池 超 long 上限时 BigInteger 中间乘保 pool+excess=a 且 pool≥0(long 直乘会反转成负应付)。 */
     @Test
     void overflowSafeSplitPreservesConservation() {
-        String pid = hugeOverPoolProject(); // 固定额 5e9×2、营收 1e10 → spvPool 8e9、poolDistributed 1e10（超池）
+        String pid = hugeOverPoolProject(); // 固定额 5e9×2、营收 1e10 → 可分配池 8e9、poolDistributed 1e10（超池）
         String bill = settlementService.settleMonth(pid, MONTH);
         postingService.specialApprove(bill, "SA-HUGE");
         postingService.postBill(bill);
 
-        long a = 5_000_000_000L, spvPool = 8_000_000_000L, poolDistributed = 10_000_000_000L;
-        long poolI = java.math.BigInteger.valueOf(a).multiply(java.math.BigInteger.valueOf(spvPool))
+        long a = 5_000_000_000L, availablePool = 8_000_000_000L, poolDistributed = 10_000_000_000L;
+        long poolI = java.math.BigInteger.valueOf(a).multiply(java.math.BigInteger.valueOf(availablePool))
                 .divide(java.math.BigInteger.valueOf(poolDistributed)).longValueExact(); // 4e9
         long excessI = a - poolI; // 1e9
-        // 佐证溢出：a×spvPool=4e19>Long.MAX(9.22e18) → long 直乘回绕(此处成正 3.1e18≠真积)，
-        // 老口径 poolI=(a*spvPool)/poolDistributed 会算成 ≈3.1e8（偏小、补贴虚高）→ 与 BigInteger 真 poolI 不等。
-        long oldWrappedPoolI = (a * spvPool) / poolDistributed;
+        // 佐证溢出：a×池=4e19>Long.MAX(9.22e18) → long 直乘回绕(此处成正 3.1e18≠真积)，
+        // 老口径 poolI=(a*池)/poolDistributed 会算成 ≈3.1e8（偏小、补贴虚高）→ 与 BigInteger 真 poolI 不等。
+        long oldWrappedPoolI = (a * availablePool) / poolDistributed;
         assertThat(oldWrappedPoolI).isNotEqualTo(poolI);
         String m1Item = poolItem(pid, "m1");
         assertPayable(m1Item, "ticket_distribution", "m1", poolI);
@@ -349,11 +349,11 @@ class SettlementOverPoolSpecialApprovalTests {
         expireApproval(bill);
 
         // 特批有效期内重跑会被冻结（见 specialApprovedBillFrozenAgainstNewTransactions）；过期后照常重算。
-        seedPooled(pid, "m1", 1, 1, 100L); // 收入 1100 → 池 1100 − 留存 220 = 880 < 固定额分配 1000（仍超池）
+        seedPooled(pid, "m1", 1, 1, 100L); // 收入 1100 → 池 1100 − 池链服务费 220 = 880 < 固定额分配 1000（仍超池）
         String again = settlementService.settleMonth(pid, MONTH);
 
         assertThat(again).isEqualTo(bill);
-        assertThat(num(bill(pid), "spv_pool_cent")).isEqualTo(880L); // 800→880：确实重算了，不是被冻结
+        assertThat(num(bill(pid), "available_pool_cent")).isEqualTo(880L); // 800→880：确实重算了，不是被冻结
         assertThat(billStatus(bill)).isEqualTo("draft"); // 仍超池 → 打回待特批 = 回收后不再允许超池
         assertThat(specialRef(bill)).isEqualTo("SA-OLD"); // 过期引用留痕不清空
 
@@ -375,9 +375,10 @@ class SettlementOverPoolSpecialApprovalTests {
         String billLong = settlementService.settleMonth(pidLong, MONTH);
 
         // ① 金额列逐分一致（期限只管特批出口，不进任何金额公式）。
-        for (String col : List.of("ticket_revenue_cent", "channel_fee_cent", "giveaway_cost_cent",
-                "available_pool_cent", "retention_cent", "spv_pool_cent", "distributed_cent",
-                "comp_service_fee_cent", "combo_discount_cent", "rounding_residual_cent")) {
+        for (String col : List.of("ticket_revenue_cent", "channel_fee_cent",
+                "available_pool_cent", "distributed_cent",
+                "comp_service_fee_pooled_cent", "comp_service_fee_exclusive_cent",
+                "combo_discount_cent", "rounding_residual_cent")) {
             assertThat(num(bill(pidShort), col)).as(col).isEqualTo(num(bill(pidLong), col));
         }
         // ② 无特批 → 无生效期（列留空，CHECK 只在有特批引用时要求非空）。
@@ -392,7 +393,7 @@ class SettlementOverPoolSpecialApprovalTests {
 
     // ─── 造数据 ───────────────────────────────────────────────────────────────
 
-    /** 溢出用超池项目：固定额 5e9×2、营收 5e9×2=1e10 → spvPool=8e9、poolDistributed=1e10（a×spvPool 越 long 上限）。 */
+    /** 溢出用超池项目：固定额 5e9×2、营收 5e9×2=1e10、池链服务费 2e9 → 可分配池=8e9、poolDistributed=1e10（a×池 越 long 上限）。 */
     private String hugeOverPoolProject() {
         String pid = newProject();
         setProjectFixedMethod(pid);
@@ -409,7 +410,7 @@ class SettlementOverPoolSpecialApprovalTests {
         return s == null ? 0L : s;
     }
 
-    /** 越池项目：by_fixed_amount + m1 固定 600 / m2 固定 400，核销收入 600+400=1000 → spvPool=800 < poolDistributed=1000。 */
+    /** 越池项目：by_fixed_amount + m1 固定 600 / m2 固定 400，核销收入 1000、池链服务费 200 → 可分配池=800 < poolDistributed=1000。 */
     private String overPoolProject() {
         String pid = newProject();
         setProjectFixedMethod(pid);
@@ -420,7 +421,7 @@ class SettlementOverPoolSpecialApprovalTests {
         return pid;
     }
 
-    /** 未越池项目：by_fixed_amount + m1 固定 300 / m2 固定 200 → poolDistributed=500 ≤ spvPool=800。 */
+    /** 未越池项目：by_fixed_amount + m1 固定 300 / m2 固定 200 → poolDistributed=500 ≤ 可分配池=800。 */
     private String nonOverPoolProject() {
         String pid = newProject();
         setProjectFixedMethod(pid);
@@ -452,19 +453,20 @@ class SettlementOverPoolSpecialApprovalTests {
                 """, "tdmr_d7_" + projectId + "_" + merchantId, projectId, merchantId, fixedCent);
     }
 
-    /** 非专属（进池）核销行。 */
+    /** 非专属（进池）核销行。S4:每笔带 20% 池链综合服务费(等价保值口径)。 */
     private void seedPooled(String projectId, String merchantId, int verifiedCount, int numPeople, long verifiedCent) {
-        insert(projectId, merchantId, "entry", verifiedCount, numPeople, verifiedCent, null);
+        insert(projectId, merchantId, "entry", verifiedCount, numPeople, verifiedCent, null, verifiedCent / 5);
     }
 
-    /** 专属核销行（exclusive_merchant_id=该商户）。 */
+    /** 专属核销行（exclusive_merchant_id=该商户;该商户专属费率 0 → 费恒 0）。 */
     private void seedExclusive(String projectId, String exclusiveMerchantId, int verifiedCount, int numPeople,
                                long verifiedCent) {
-        insert(projectId, exclusiveMerchantId, "bar_drink", verifiedCount, numPeople, verifiedCent, exclusiveMerchantId);
+        insert(projectId, exclusiveMerchantId, "bar_drink", verifiedCount, numPeople, verifiedCent,
+                exclusiveMerchantId, 0L);
     }
 
     private void insert(String projectId, String merchantId, String entType, int verifiedCount, int numPeople,
-                        long verifiedCent, String exclusiveMerchantId) {
+                        long verifiedCent, String exclusiveMerchantId, long compServiceFeeCent) {
         Instant businessAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(businessAt);
         String id = "st_d7_" + System.nanoTime();
@@ -473,12 +475,12 @@ class SettlementOverPoolSpecialApprovalTests {
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
                     exclusive_merchant_id, verification_id, settlement_status, entitlement_valid_to, created_at, updated_at,
-                    business_at, discount_amount_cent)
-                VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, ?, 'draft', ?, ?, ?, ?, 0)
+                    business_at, discount_amount_cent, comp_service_fee_cent)
+                VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, ?, 'draft', ?, ?, ?, ?, 0, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, exclusiveMerchantId, "vf_" + id, ts, ts, ts, ts);
+                merchantId, projectId, exclusiveMerchantId, "vf_" + id, ts, ts, ts, ts, compServiceFeeCent);
     }
 
     // ─── 断言/读取 helpers ─────────────────────────────────────────────────────

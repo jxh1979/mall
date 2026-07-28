@@ -20,10 +20,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>三条核心断言：
  * <ol>
- *   <li><b>四舍五入而非整除截断</b>：按排名档位分池时各家金额 = round_half_up(总池 × share_bps / 10000)；
- *       旧 {@code spvPool * shareBps / 10000} 在同一算例上少给（用例给出旧值以证伪）。</li>
- *   <li><b>项目留存也四舍五入</b>：retention = round_half_up(池 × retention_bps / 10000)，
- *       旧整除截断使项目恒少留、差额悄悄进各酒吧池。</li>
+ *   <li><b>四舍五入而非整除截断</b>：按排名档位分池时各家金额 = round_half_up(池 × share_bps / 10000)；
+ *       旧 {@code pool * shareBps / 10000} 在同一算例上少给（用例给出旧值以证伪）。</li>
+ *   <li><b>池链综合服务费线性求和</b>(S4 合并留存后)：池 = 收入 − Σ每笔计提费,
+ *       费的四舍五入发生在每笔核销计提时(ComprehensiveServiceFee),月结只做线性求和。</li>
  *   <li><b>尾差单列留痕并归平台</b>：各家舍入后与应分总额的差额落
  *       {@code settlement_bills.rounding_residual_cent}（V343），且守恒
  *       {@code Σ池分账明细 + 尾差 ≡ 应分总额} 逐分成立，不并进任一商户、不静默吞掉。</li>
@@ -58,7 +58,6 @@ class SettlementRoundingResidualTests {
             jdbcTemplate.update("DELETE FROM ticket_distribution_configs WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM ticket_distribution_rank_tiers WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM ticket_distribution_merchant_rates WHERE project_id = ?", pid);
-            jdbcTemplate.update("DELETE FROM platform_retention_rules WHERE project_id = ?", pid);
         }
     }
 
@@ -67,8 +66,7 @@ class SettlementRoundingResidualTests {
     @Test
     void rankTierShareRoundsHalfUpInsteadOfTruncating() {
         String pid = newProject();
-        setRetentionBps(pid, 0);                 // 留存 0 → 总池 = 收入,算例干净
-        setRankTier(pid, 1, 9, 3333);            // 每家 33.33%
+        setRankTier(pid, 1, 9, 3333);            // 每家 33.33%(费实况 0 → 池 = 收入,算例干净)
         // 收入 1000 分 → 总池 1000;每家精确 333.3 分。
         // 旧整除:1000×3333/10000 = 333(截断);新四舍五入:333.3 → 333(本例同值,见下一例的进位算例)。
         seedVerified(pid, "r1", 3, 1, 400L);
@@ -77,7 +75,7 @@ class SettlementRoundingResidualTests {
 
         service.settleMonth(pid, MONTH);
 
-        assertThat(num(bill(pid), "spv_pool_cent")).isEqualTo(1000L);
+        assertThat(num(bill(pid), "available_pool_cent")).isEqualTo(1000L);
         assertThat(itemAmount(pid, "r1")).isEqualTo(333L);
         // 应分总额 = round(333.3×3) = round(999.9) = 1000;Σ已舍入 = 999 → 尾差 +1 归平台。
         assertThat(num(bill(pid), "rounding_residual_cent")).isEqualTo(1L);
@@ -87,13 +85,12 @@ class SettlementRoundingResidualTests {
     @Test
     void rankTierShareCarriesUpWhereTruncationWouldLose() {
         String pid = newProject();
-        setRetentionBps(pid, 0);
         setRankTier(pid, 1, 9, 1255);             // 12.55%
         seedVerified(pid, "c1", 3, 1, 100L);      // 总池 100 分
         // 精确 = 100 × 12.55% = 12.55 分。旧整除截断 = 12(少给 1 分);新四舍五入 = 13。
         service.settleMonth(pid, MONTH);
 
-        assertThat(num(bill(pid), "spv_pool_cent")).isEqualTo(100L);
+        assertThat(num(bill(pid), "available_pool_cent")).isEqualTo(100L);
         assertThat(100L * 1255L / 10000L).isEqualTo(12L);   // 证伪:旧整除截断给 12
         assertThat(itemAmount(pid, "c1")).isEqualTo(13L);   // 新:四舍五入给 13
         // 应分总额 = round(12.55) = 13;Σ已舍入 = 13 → 尾差 0。
@@ -101,25 +98,22 @@ class SettlementRoundingResidualTests {
         assertConserved(pid, 13L);     // 应分总额 = round(12.55) = 13
     }
 
-    // ---- ② 项目留存也四舍五入(旧截断使项目少留) ----
+    // ---- ② 池链综合服务费线性求和(S4 合并留存:原「留存四舍五入」随留存链删除) ----
 
     @Test
-    void projectRetentionRoundsHalfUpInsteadOfTruncating() {
+    void pooledServiceFeeReducesPoolByExactPerVerificationSum() {
         String pid = newProject();
-        setRetentionBps(pid, 2055);                // 20.55%
-        setRankTier(pid, 1, 9, 0);                 // 不分账,只看池链
-        seedVerified(pid, "t1", 1, 1, 1001L);      // 池 1001 分
-        // 精确留存 = 1001 × 20.55% = 205.7055 分。旧整除截断 = 205(项目少留 1 分,差额悄悄进酒吧池);
-        // 新四舍五入 = 206。总池 = 1001 − 206 = 795。
+        setRankTier(pid, 1, 9, 0);                       // 不分账,只看池链
+        // 每笔核销计提的费在核销时已按 HALF_UP 落库(如 1001 × 20.55% → 206),月结只做线性求和。
+        seedVerifiedWithFee(pid, "t1", 1, 1, 1001L, 206L);
         service.settleMonth(pid, MONTH);
 
         Map<String, Object> b = bill(pid);
-        assertThat(1001L * 2055L / 10000L).isEqualTo(205L);   // 证伪:旧整除截断给 205
-        assertThat(num(b, "retention_cent")).isEqualTo(206L);  // 新:四舍五入给 206
-        assertThat(num(b, "spv_pool_cent")).isEqualTo(795L);
-        // 池链守恒:可分配池 = 留存 + 总池
-        assertThat(num(b, "retention_cent") + num(b, "spv_pool_cent"))
-                .isEqualTo(num(b, "available_pool_cent"));
+        assertThat(num(b, "comp_service_fee_pooled_cent")).isEqualTo(206L);
+        assertThat(num(b, "available_pool_cent")).isEqualTo(795L); // 1001 − 206
+        // 拆份额链守恒:收入 = 费 + 池(渠道费 0)
+        assertThat(num(b, "comp_service_fee_pooled_cent") + num(b, "available_pool_cent"))
+                .isEqualTo(num(b, "ticket_revenue_cent"));
     }
 
     // ---- ③ 尾差单列留痕 + 守恒(核心) ----
@@ -127,7 +121,6 @@ class SettlementRoundingResidualTests {
     @Test
     void roundingResidualIsRecordedSeparatelyAndConserves() {
         String pid = newProject();
-        setRetentionBps(pid, 0);
         setRankTier(pid, 1, 9, 3333);              // 三家各 33.33%
         seedVerified(pid, "s1", 3, 1, 5000L);
         seedVerified(pid, "s2", 2, 1, 3000L);
@@ -144,7 +137,6 @@ class SettlementRoundingResidualTests {
     @Test
     void residualIsNegativeWhenEveryShareCarriesUp() {
         String pid = newProject();
-        setRetentionBps(pid, 0);
         setRankTier(pid, 1, 9, 5050);              // 两家各 50.5%
         seedVerified(pid, "n1", 2, 1, 60L);
         seedVerified(pid, "n2", 1, 1, 40L);        // 总池 100 分
@@ -209,6 +201,11 @@ class SettlementRoundingResidualTests {
 
     private void seedVerified(String projectId, String merchantId, int verifiedCount, int numPeople,
                               long verifiedCent) {
+        seedVerifiedWithFee(projectId, merchantId, verifiedCount, numPeople, verifiedCent, 0L);
+    }
+
+    private void seedVerifiedWithFee(String projectId, String merchantId, int verifiedCount, int numPeople,
+                                     long verifiedCent, long compServiceFeeCent) {
         Instant createdAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(createdAt);
         String id = "st_r7_" + System.nanoTime();
@@ -216,20 +213,14 @@ class SettlementRoundingResidualTests {
                 INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
-                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at)
+                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at,
+                    comp_service_fee_cent)
                 VALUES (?, ?, 'verification_settled', ?, 'entry', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
-                    'draft', ?, ?, ?)
+                    'draft', ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, "vf_" + id, ts, ts, ts);
-    }
-
-    private void setRetentionBps(String projectId, int bps) {
-        jdbcTemplate.update("""
-                INSERT INTO platform_retention_rules (id, project_id, retention_bps, status, is_draft)
-                VALUES (?, ?, ?, 'active', FALSE)
-                """, "prr_" + projectId, projectId, bps);
+                merchantId, projectId, "vf_" + id, ts, ts, ts, compServiceFeeCent);
     }
 
     private void setRankTier(String projectId, int rankFrom, int rankTo, int shareBps) {

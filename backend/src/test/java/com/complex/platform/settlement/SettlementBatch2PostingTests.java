@@ -117,6 +117,24 @@ class SettlementBatch2PostingTests {
         assertThat(billStatus(billId)).isEqualTo("draft"); // 单不变
     }
 
+    /** S4/R-3 负额守卫:冲正月分账明细为负(向商户追回)时,负额过账口径未启用 → fail-loud 拒绝,防负行被静默跳过丢账。 */
+    @Test
+    void billWithNegativeItemsIsRejectedFailLoud() {
+        String billId = seedBill("confirmed");
+        String pos = seedItem(billId, "m1", 5000L);
+        String neg = seedItem(billId, "m2", -3000L); // 冲正月:向 m2 追回 30 元
+
+        assertThatThrownBy(() -> service.postBill(billId))
+                .hasMessageContaining("负额");
+
+        // fail-loud 在挂账前:两条明细都还是 draft、无 ar_ap、单不动(钱一分没动也一分没丢)。
+        assertThat(itemStatus(pos)).isEqualTo("draft");
+        assertThat(itemStatus(neg)).isEqualTo("draft");
+        assertThat(arApCountBySource(pos)).isZero();
+        assertThat(arApCountBySource(neg)).isZero();
+        assertThat(billStatus(billId)).isEqualTo("confirmed");
+    }
+
     // ---- helpers ----
 
     private String seedBill(String status) {
@@ -124,9 +142,9 @@ class SettlementBatch2PostingTests {
         billIds.add(billId);
         jdbcTemplate.update(
                 "INSERT INTO settlement_bills (id, project_id, period_start, period_end,"
-                + " ticket_revenue_cent, available_pool_cent, spv_pool_cent, distributed_cent,"
+                + " ticket_revenue_cent, available_pool_cent, distributed_cent,"
                 + " distribution_method, status)"
-                + " VALUES (?, ?, DATE '2013-05-01', DATE '2013-05-31', 100000, 80000, 80000, 22400,"
+                + " VALUES (?, ?, DATE '2013-05-01', DATE '2013-05-31', 100000, 80000, 22400,"
                 + " 'by_rank_tier', ?)",
                 billId, "proj_b2p_" + System.nanoTime(), status);
         return billId;

@@ -115,8 +115,9 @@ class SettlementComboDiscountTests {
     void platformAbsorbInflatesPoolBaseAndRecordsComboDiscount() {
         String pid = newProject();
         // 默认 bearer=platform_absorb。两家非专属核销：净额 60000+40000=100000，折扣 12000+8000=20000。
-        seedPooled(pid, "m1", "entry", 5, 3, 60000L, 12000L);
-        seedPooled(pid, "m2", "entry", 4, 2, 40000L, 8000L);
+        // S4:每笔综合服务费按满额毛额 20% 计提(消费者口径)——m1 (60000+12000)/5=14400、m2 (40000+8000)/5=9600。
+        seedPooled(pid, "m1", "entry", 5, 3, 60000L, 12000L, 14400L);
+        seedPooled(pid, "m2", "entry", 4, 2, 40000L, 8000L, 9600L);
 
         service.settleMonth(pid, MONTH);
 
@@ -124,17 +125,17 @@ class SettlementComboDiscountTests {
         // 项目承担折扣 → 池基数=净额 100000 + 折扣 20000 = 120000（商户按满额分）。
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(120000L);
         assertThat(num(bill, "combo_discount_cent")).isEqualTo(20000L);
-        assertThat(num(bill, "available_pool_cent")).isEqualTo(120000L);
-        assertThat(num(bill, "retention_cent")).isEqualTo(24000L);   // 120000 × 20%
-        assertThat(num(bill, "spv_pool_cent")).isEqualTo(96000L);
+        assertThat(num(bill, "comp_service_fee_pooled_cent")).isEqualTo(24000L); // 120000 × 20%
+        assertThat(num(bill, "available_pool_cent")).isEqualTo(96000L);          // 120000 − 24000
     }
 
     @Test
     void merchantAbsorbLeavesPoolOnNetAndZeroComboDiscount() {
         String pid = newProject();
         setComboDiscount(pid, "merchant_absorb", 0);
-        seedPooled(pid, "m1", "entry", 5, 3, 60000L, 12000L);
-        seedPooled(pid, "m2", "entry", 4, 2, 40000L, 8000L);
+        // 商户自担折扣 → 费按净额毛额计提:m1 12000、m2 8000。
+        seedPooled(pid, "m1", "entry", 5, 3, 60000L, 12000L, 12000L);
+        seedPooled(pid, "m2", "entry", 4, 2, 40000L, 8000L, 8000L);
 
         service.settleMonth(pid, MONTH);
 
@@ -142,15 +143,16 @@ class SettlementComboDiscountTests {
         // 商户自担折扣 → 池基数=净额 100000（现状），折扣不入账。
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(100000L);
         assertThat(num(bill, "combo_discount_cent")).isZero();
-        assertThat(num(bill, "spv_pool_cent")).isEqualTo(80000L);
+        assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
     }
 
     @Test
     void splitByRatioAddsOnlyPlatformShareToPool() {
         String pid = newProject();
         setComboDiscount(pid, "split_by_ratio", 5000); // 平台承担 50%
-        seedPooled(pid, "m1", "entry", 5, 3, 60000L, 12000L);
-        seedPooled(pid, "m2", "entry", 4, 2, 40000L, 8000L);
+        // 费按「净额+平台承担份额」毛额计提:m1 (60000+6000)/5=13200、m2 (40000+4000)/5=8800。
+        seedPooled(pid, "m1", "entry", 5, 3, 60000L, 12000L, 13200L);
+        seedPooled(pid, "m2", "entry", 4, 2, 40000L, 8000L, 8800L);
 
         service.settleMonth(pid, MONTH);
 
@@ -158,7 +160,7 @@ class SettlementComboDiscountTests {
         // 平台承担折扣 20000×50%=10000 加进基数 → 110000；折扣入账 10000。
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(110000L);
         assertThat(num(bill, "combo_discount_cent")).isEqualTo(10000L);
-        assertThat(num(bill, "spv_pool_cent")).isEqualTo(88000L);    // 110000 × 80%
+        assertThat(num(bill, "available_pool_cent")).isEqualTo(88000L);    // 110000 − 22000
     }
 
     // ─── ② bearer 归属应用（专属直付线）────────────────────────────────────────
@@ -166,7 +168,7 @@ class SettlementComboDiscountTests {
     @Test
     void platformAbsorbGivesExclusiveMerchantFullAmount() {
         String pid = newProject();
-        // 默认 platform_absorb；专属核销净额 80000、折扣 10000 → 商户拿满额 90000（综合服务费默认 0）。
+        // 默认 platform_absorb；专属核销净额 80000、折扣 10000 → 商户拿满额 90000（该商户专属费率 0）。
         seedExclusive(pid, "barX", "bar_drink", 12, 9, 80000L, 10000L);
 
         service.settleMonth(pid, MONTH);
@@ -193,15 +195,16 @@ class SettlementComboDiscountTests {
     @Test
     void reversalNetsDiscountToZeroInSameMonth() {
         String pid = newProject();
-        // 同月一笔核销（净额 1000、折扣 200）+ 一笔冲正（负向取反）→ 净额与折扣皆净为 0。
-        seedPooled(pid, "m1", "entry", 1, 1, 1000L, 200L);
-        seedReversal(pid, "m1", "entry", 1, 1, 1000L, 200L);
+        // 同月一笔核销（净额 1000、折扣 200、费 240）+ 一笔冲正（负向取反）→ 净额/折扣/费皆净为 0。
+        seedPooled(pid, "m1", "entry", 1, 1, 1000L, 200L, 240L);
+        seedReversal(pid, "m1", "entry", 1, 1, 1000L, 200L, 240L);
 
         service.settleMonth(pid, MONTH);
 
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "ticket_revenue_cent")).isZero();
         assertThat(num(bill, "combo_discount_cent")).isZero();
+        assertThat(num(bill, "comp_service_fee_pooled_cent")).isZero(); // 费同样冲正净掉
     }
 
     /**
@@ -212,10 +215,10 @@ class SettlementComboDiscountTests {
     @Test
     void crossMonthReversalClawsBackPlatformBorneDiscount() {
         String pid = newProject();
-        // 本月一笔红冲（原销售在已过账的上月）：净额 −1000、折扣 −200（platform_absorb 默认承担）。
-        seedReversal(pid, "m1", "entry", 1, 1, 1000L, 200L);
-        // 本月另有一笔普通非折扣销售：净额 +50000、折扣 0（托住 ticket_revenue>0，隔离折扣钳0）。
-        seedPooled(pid, "m2", "entry", 3, 2, 50000L, 0L);
+        // 本月一笔红冲（原销售在已过账的上月）：净额 −1000、折扣 −200、费 −240（取原行之反追回）。
+        seedReversal(pid, "m1", "entry", 1, 1, 1000L, 200L, 240L);
+        // 本月另有一笔普通非折扣销售：净额 +50000、折扣 0、费 10000。
+        seedPooled(pid, "m2", "entry", 3, 2, 50000L, 0L, 10000L);
 
         service.settleMonth(pid, MONTH);
 
@@ -224,6 +227,8 @@ class SettlementComboDiscountTests {
         assertThat(num(bill, "combo_discount_cent")).isEqualTo(-200L);
         // 池基数 = 净额(50000−1000) + 折扣(−200) = 48800（收入侧与折扣侧对称跨月净掉）。
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(48800L);
+        // S4:综合服务费同样带符号跨月净掉:10000 − 240 = 9760。
+        assertThat(num(bill, "comp_service_fee_pooled_cent")).isEqualTo(9760L);
     }
 
     /**
@@ -234,8 +239,8 @@ class SettlementComboDiscountTests {
     void crossMonthReversalClawsBackSplitByRatioShare() {
         String pid = newProject();
         setComboDiscount(pid, "split_by_ratio", 5000); // 平台承担 50%
-        seedReversal(pid, "m1", "entry", 1, 1, 1000L, 200L); // 折扣 −200
-        seedPooled(pid, "m2", "entry", 3, 2, 50000L, 0L);    // 托住池基数为正
+        seedReversal(pid, "m1", "entry", 1, 1, 1000L, 200L, 220L); // 折扣 −200、费 −220((1000+100)/5 取反)
+        seedPooled(pid, "m2", "entry", 3, 2, 50000L, 0L, 10000L);  // 托住池基数为正
 
         service.settleMonth(pid, MONTH);
 
@@ -247,17 +252,17 @@ class SettlementComboDiscountTests {
     @Test
     void noDiscountRowsBehaveExactlyAsBefore() {
         String pid = newProject();
-        // 无折扣（discount=0），默认 platform_absorb。池/留存/总池须与 D6 前逐分一致。
-        seedPooled(pid, "top", "entry", 10, 0, 50000L, 0L);
-        seedPooled(pid, "mid", "entry", 6, 0, 30000L, 0L);
-        seedPooled(pid, "low", "entry", 2, 0, 20000L, 0L);
+        // 无折扣（discount=0），默认 platform_absorb。池与各家分账须与改造前逐分一致(K9 口径)。
+        seedPooled(pid, "top", "entry", 10, 0, 50000L, 0L, 10000L);
+        seedPooled(pid, "mid", "entry", 6, 0, 30000L, 0L, 6000L);
+        seedPooled(pid, "low", "entry", 2, 0, 20000L, 0L, 4000L);
 
         service.settleMonth(pid, MONTH);
 
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(100000L);
         assertThat(num(bill, "combo_discount_cent")).isZero();
-        assertThat(num(bill, "spv_pool_cent")).isEqualTo(80000L);
+        assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
         // by_rank_tier 默认 16/12/9/6：rank1=12800，rank2/3 各 9600。
         assertThat(itemAmount(pid, "top")).isEqualTo(12800L);
         assertThat(itemAmount(pid, "mid")).isEqualTo(9600L);
@@ -278,30 +283,40 @@ class SettlementComboDiscountTests {
         return ent;
     }
 
-    /** 非专属（进池）核销行，带折扣额。 */
+    /** 非专属（进池）核销行，带折扣额;S4 可带每笔计提的池链综合服务费。 */
     private void seedPooled(String projectId, String merchantId, String entType,
                             int verifiedCount, int numPeople, long verifiedCent, long discountCent) {
-        insert(projectId, merchantId, entType, "verification_settled",
-                verifiedCount, numPeople, verifiedCent, discountCent, null);
+        seedPooled(projectId, merchantId, entType, verifiedCount, numPeople, verifiedCent, discountCent, 0L);
     }
 
-    /** 冲正（负向）行：金额/次数/折扣皆取反（CHECK 要求 <=0）。 */
+    private void seedPooled(String projectId, String merchantId, String entType, int verifiedCount,
+                            int numPeople, long verifiedCent, long discountCent, long compServiceFeeCent) {
+        insert(projectId, merchantId, entType, "verification_settled",
+                verifiedCount, numPeople, verifiedCent, discountCent, null, compServiceFeeCent);
+    }
+
+    /** 冲正（负向）行：金额/次数/折扣/费皆取反（严格取原行之反）。 */
     private void seedReversal(String projectId, String merchantId, String entType,
                               int verifiedCount, int numPeople, long verifiedCent, long discountCent) {
-        insert(projectId, merchantId, entType, "verification_reversed",
-                -verifiedCount, -numPeople, -verifiedCent, -discountCent, null);
+        seedReversal(projectId, merchantId, entType, verifiedCount, numPeople, verifiedCent, discountCent, 0L);
     }
 
-    /** 专属核销行（exclusive_merchant_id=该商户），带折扣额。 */
+    private void seedReversal(String projectId, String merchantId, String entType, int verifiedCount,
+                              int numPeople, long verifiedCent, long discountCent, long compServiceFeeCent) {
+        insert(projectId, merchantId, entType, "verification_reversed",
+                -verifiedCount, -numPeople, -verifiedCent, -discountCent, null, -compServiceFeeCent);
+    }
+
+    /** 专属核销行（exclusive_merchant_id=该商户），带折扣额(该商户专属费率 0 → 费恒 0)。 */
     private void seedExclusive(String projectId, String exclusiveMerchantId, String entType,
                                int verifiedCount, int numPeople, long verifiedCent, long discountCent) {
         insert(projectId, exclusiveMerchantId, entType, "verification_settled",
-                verifiedCount, numPeople, verifiedCent, discountCent, exclusiveMerchantId);
+                verifiedCount, numPeople, verifiedCent, discountCent, exclusiveMerchantId, 0L);
     }
 
     private void insert(String projectId, String merchantId, String entType, String type,
                         int verifiedCount, int numPeople, long verifiedCent, long discountCent,
-                        String exclusiveMerchantId) {
+                        String exclusiveMerchantId, long compServiceFeeCent) {
         Instant businessAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(businessAt);
         String id = "st_cd_" + System.nanoTime();
@@ -310,12 +325,13 @@ class SettlementComboDiscountTests {
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
                     exclusive_merchant_id, verification_id, settlement_status, entitlement_valid_to, created_at, updated_at,
-                    business_at, discount_amount_cent)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)
+                    business_at, discount_amount_cent, comp_service_fee_cent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, type, "ent_" + id, entType, verifiedCount,
                 Math.max(Math.abs(verifiedCount), 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, exclusiveMerchantId, "vf_" + id, ts, ts, ts, ts, discountCent);
+                merchantId, projectId, exclusiveMerchantId, "vf_" + id, ts, ts, ts, ts, discountCent,
+                compServiceFeeCent);
     }
 
     private void setComboDiscount(String projectId, String bearer, int splitPlatformBps) {
