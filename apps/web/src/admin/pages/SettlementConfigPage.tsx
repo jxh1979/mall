@@ -76,6 +76,12 @@ const METHOD_OPTIONS: [string, string][] = [
   ["by_rank_tier", "按销售排名档位"],
   ["by_fixed_amount", "按固定额"],
 ];
+// V368：超池特批有效期的单位。运营配「三天的短期激励」和「三个月的短期激励」是同一个动作——
+//   同一个输入框填数值，旁边选单位，不用心算 90 天。
+const TERM_UNIT_OPTIONS: [string, string][] = [
+  ["day", "天"],
+  ["month", "月"],
+];
 const BEARER_OPTIONS: [string, string][] = [
   ["platform_absorb", "平台承担"],
   ["merchant_absorb", "商户承担"],
@@ -148,7 +154,8 @@ type Form = {
   projectId: string;
   retentionBps: string;
   methodType: string;
-  specialApprovalTermMonths: string;
+  specialApprovalTermValue: string;
+  specialApprovalTermUnit: string;
   merchantId: string;
   perGuestCent: string;
   fixedAmountCent: string;
@@ -165,7 +172,8 @@ type Form = {
   amountCentPerPoint: string;
 };
 const EMPTY_FORM: Form = {
-  projectId: "", retentionBps: "", methodType: "by_venue_per_guest", specialApprovalTermMonths: "3", merchantId: "",
+  projectId: "", retentionBps: "", methodType: "by_venue_per_guest",
+  specialApprovalTermValue: "3", specialApprovalTermUnit: "month", merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", revenueStream: "all_pass_ticket", managementEntityId: "",
   beneficiaryKind: "entity",
@@ -524,9 +532,15 @@ function editSteps(
             {METHOD_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
-        <label>超池特批有效期（月，默认 3）
-          <input data-testid="settlement-config-field-specialApprovalTermMonths" type="number" min={1}
-                 value={form.specialApprovalTermMonths} onChange={setField("specialApprovalTermMonths")} />
+        <label>超池特批有效期（默认 3 个月；短期激励可配到天，如 3 天）
+          <input data-testid="settlement-config-field-specialApprovalTermValue" type="number" min={1}
+                 value={form.specialApprovalTermValue} onChange={setField("specialApprovalTermValue")} />
+        </label>
+        <label>有效期单位
+          <select data-testid="settlement-config-field-specialApprovalTermUnit"
+                  value={form.specialApprovalTermUnit} onChange={setField("specialApprovalTermUnit")}>
+            {TERM_UNIT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
         </label></>);
       break;
     case "merchant_rate":
@@ -655,7 +669,7 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: Ti
   };
   switch (key) {
     case "retention": return [scope, { label: "留存万分比", value: form.retentionBps || "—" }];
-    case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期（月）", value: form.specialApprovalTermMonths || "3" }];
+    case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期", value: `${form.specialApprovalTermValue || "3"} ${form.specialApprovalTermUnit === "day" ? "天" : "个月"}` }];
     case "merchant_rate": return [scope, { label: "商户", value: form.merchantId || "—" }, { label: "每客单价（分）", value: form.perGuestCent || "—" }, { label: "固定额（分）", value: form.fixedAmountCent || "—" }];
     case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
     case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }];
@@ -673,9 +687,10 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
     case "retention":
       return isIntInRange(form.retentionBps, 0, 10000) ? null : "留存万分比需为 0~10000 的整数。";
     case "distribution_method":
-      // S9：超池特批有效期（月）——业务口径「短期激励，默认不超过 3 个月」，留空按 3 落库。
-      return isIntInRange(form.specialApprovalTermMonths || "3", 1, Number.MAX_SAFE_INTEGER)
-        ? null : "超池特批有效期需为不小于 1 的整数（月）。";
+      // S9/V368：超池特批有效期 = 数值 + 单位（天/月）。业务口径「期限可配，默认不超过 3 个月」，
+      //   留空按 3 个月落库；配 3 天这种短期激励是合法的，下限只到 1（个单位），没有上限。
+      return isIntInRange(form.specialApprovalTermValue || "3", 1, Number.MAX_SAFE_INTEGER)
+        ? null : "超池特批有效期需为不小于 1 的整数（按所选单位计，天或月）。";
     case "merchant_rate":
       if (orUndef(form.merchantId) === undefined) return "商户 id 必填。";
       if (orUndef(form.perGuestCent) === undefined && orUndef(form.fixedAmountCent) === undefined) return "每客单价与固定额至少填一项。";
@@ -720,7 +735,8 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
     case "distribution_method":
       return {
         idempotencyKey, projectId: project, methodType: form.methodType,
-        specialApprovalTermMonths: Number(form.specialApprovalTermMonths || "3"),
+        specialApprovalTermValue: Number(form.specialApprovalTermValue || "3"),
+        specialApprovalTermUnit: form.specialApprovalTermUnit || "month",
       };
     case "merchant_rate":
       return {

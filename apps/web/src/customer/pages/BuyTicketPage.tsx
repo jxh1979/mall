@@ -143,6 +143,8 @@ export function BuyTicketPage({ service }: { service: CustomerService }): React.
         contactPhone: values.contactPhone,
         barId: product?.barId ?? undefined,
         facePhotos: product?.requireFacePhoto ? facePhotos.slice(0, values.quantity) : undefined,
+        // V368：把「已阅读并同意」一并交给服务端存进同意台账（谁·何时·同意了哪一版告知）。
+        faceConsent: product?.requireFacePhoto ? faceConsent : undefined,
       });
       setOrder(created);
       // 照片已经交给后端加密保存，本页内存里不再留着。
@@ -239,6 +241,9 @@ export function BuyTicketPage({ service }: { service: CustomerService }): React.
                 style={{ marginBottom: 12 }}
                 message="本票需要入场人脸照"
                 description={
+                  // 【改这段告知文案 = 改客人同意的内容】必须同步 bump 后端
+                  // TicketFacePhotoService.NOTICE_TEMPLATE_VERSION，否则同意台账里记下的版本号
+                  // 会指向一版并不存在的告知，将来查「客人当时看到的是什么」就查不出来了。
                   <div data-testid="buy-ticket-face-notice">
                     <p>为什么要拍：入场核销时工作人员会拿这张照片和您本人比对，确认用票的就是买票的人，防止门票被转给他人使用。</p>
                     <p>怎么保存：照片加密保存，只有核销和运营人员在核销这张票时才能查看，每一次查看都会留下记录。</p>

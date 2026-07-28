@@ -50,6 +50,9 @@ export class CustomerService {
     barId?: string;
     // V359：需拍照的票种带上每张票的入场人脸照（base64，不含 data URI 前缀）；其余票种不传。
     facePhotos?: string[];
+    // V368：拍照前那块告知上勾的同意。带照片就必须为 true——服务端据此往同意台账落一条留痕，
+    //   没勾同意直接拒（没有同意就不该有照片）。
+    faceConsent?: boolean;
   }): Promise<TicketOrder> {
     return this.api.post<TicketOrder>("/api/v1/customer/ticket-orders", payload);
   }

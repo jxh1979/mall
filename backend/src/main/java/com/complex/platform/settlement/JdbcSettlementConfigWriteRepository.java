@@ -96,21 +96,23 @@ public class JdbcSettlementConfigWriteRepository {
     }
 
     public String upsertDistributionMethodDraft(String id, String projectId, String methodType,
-                                                int specialApprovalTermMonths, String updatedBy) {
+                                                int specialApprovalTermValue, String specialApprovalTermUnit,
+                                                String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO ticket_distribution_configs
-                    (id, project_id, method_type, special_approval_term_months, status, is_draft,
-                     updated_by, updated_at)
-                VALUES (:id, :project_id, :method_type, :term_months, 'active', TRUE, :updated_by, now())
+                    (id, project_id, method_type, special_approval_term_value, special_approval_term_unit,
+                     status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :method_type, :term_value, :term_unit, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     method_type = EXCLUDED.method_type,
-                    special_approval_term_months = EXCLUDED.special_approval_term_months,
+                    special_approval_term_value = EXCLUDED.special_approval_term_value,
+                    special_approval_term_unit = EXCLUDED.special_approval_term_unit,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("method_type", methodType)
-                .addValue("term_months", specialApprovalTermMonths)
+                .addValue("term_value", specialApprovalTermValue).addValue("term_unit", specialApprovalTermUnit)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
@@ -434,7 +436,8 @@ public class JdbcSettlementConfigWriteRepository {
                     UNION ALL
                     SELECT id, 'distribution_method',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 分配方式 ' || method_type
-                               || ' 超池特批有效期 ' || special_approval_term_months || ' 个月',
+                               || ' 超池特批有效期 ' || special_approval_term_value
+                               || CASE special_approval_term_unit WHEN 'day' THEN ' 天' ELSE ' 个月' END,
                            updated_at
                       FROM ticket_distribution_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

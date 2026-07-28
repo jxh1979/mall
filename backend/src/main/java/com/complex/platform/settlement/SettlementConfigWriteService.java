@@ -81,17 +81,21 @@ public class SettlementConfigWriteService {
         rejectSentinel(req.projectId(), "project_id");
         String method = requireOneOf(req.methodType(), "method_type",
                 "by_venue_per_guest", "by_rank_tier", "by_fixed_amount");
-        // S9：超池特批有效期(月)。留空 = 出厂默认 3(业务口径「短期激励，默认不超过 3 个月」)；须 ≥1 个月。
-        int termMonths = req.specialApprovalTermMonths() == null ? 3 : req.specialApprovalTermMonths();
-        if (termMonths < 1) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "special_approval_term_months must be >= 1");
+        // S9/V368：超池特批有效期 = 数值 + 单位。两项留空 = 出厂默认 3 个月(业务口径「期限可配，默认不超过 3 个月」)。
+        //   下限只到「1 个单位」——配 3 天的短期激励是合法的(用户 2026-07-28 纠正「也可以三天」)；没有上限。
+        int termValue = req.specialApprovalTermValue() == null ? 3 : req.specialApprovalTermValue();
+        String termUnit = req.specialApprovalTermUnit() == null || req.specialApprovalTermUnit().isBlank()
+                ? "month"
+                : requireOneOf(req.specialApprovalTermUnit(), "special_approval_term_unit", "day", "month");
+        if (termValue < 1) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "special_approval_term_value must be >= 1");
         }
         String scopeKey = defaultScope(req.projectId());
         String landedId = writeRepository.upsertDistributionMethodDraft(draftId("tdc_d_", scopeKey, idem),
-                req.projectId(), method, termMonths, actorId);
+                req.projectId(), method, termValue, termUnit, actorId);
         audit("settlement.config.ticket_distribution_configs.updated", "ticket_distribution_configs", landedId, idem,
                 Map.of("project_scope", scopeKey, "method_type", method,
-                        "special_approval_term_months", String.valueOf(termMonths)));
+                        "special_approval_term", termValue + ("day".equals(termUnit) ? " 天" : " 个月")));
     }
 
     public void saveMerchantRate(MerchantRateRequest request, String actorId) {

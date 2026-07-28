@@ -134,7 +134,8 @@
 - **超池硬约束**:各酒吧分配总额**不得超过**可分配池;确需超出**仅限平台负责人特批的短期激励(≤3 个月)**,到期收回。系统对分配总额做校验,超出非特批则拒绝。**特批出口 + 超额 C 口径已落地(D7·甲标签法):① 特批出口——端点 `POST /settlement/bills/{id}/special-approval`(复用 `settlement.bill.post` 权限 + 平台域·`SettlementPostingService.specialApprove`),仅**超池 draft** 单可填 `special_approval_ref` 并置 confirmed(非超池/已推进态拒 `BILL_NOT_OVERPOOL_DRAFT`),confirmed 后走既有 `postBill` 过账;② 超额 C 口径——`postBill` 对超池单的池明细两段拆:池内额 `pool_i = a_i×spvPool/poolDistributed`(整除截断)过 `ticket_distribution`(项目公司承担)、超额 `excess_i = a_i − pool_i` 过 `platform_incentive_subsidy`(L3 娱乐平台公司承担·独立幂等前缀 `settle-pis-`),不变式 `pool_i+excess_i=a_i`、`Σpool≤spvPool`、`Σexcess=poolDistributed−Σpool`;专属直付(`exclusive_full`)不拆、全额 `ticket_distribution`,未超池单零行为变更;③ 防覆盖——`upsertBill` 的 ON CONFLICT 对已特批单 `COALESCE` 保 `special_approval_ref`、`CASE` 锁 `status` 不被月结重跑打回 draft;④ **冻结**——`settleMonth` 对「已特批 confirmed」单直接返回原单 id、**不重算明细**(特批锁定的是「该次超池特定金额」,此后新增核销普通重跑会把明细抬高与已批总额脱节);⑤ **溢出护栏**——两段拆 `pool_i` 用 `BigInteger` 中间乘(`a_i×spvPool` 大场馆高营业月可越 `long` 上限回绕、致 `pool_i` 偏小补贴虚高);⑥ **红线 b 隔离**——补贴应付 `project_id=NULL`(平台主体域,不进任一项目公司聚合),特批出口 `recordSuccess` 留痕(billId/ref/超池额)。**零迁移**(`ar_ap_items.source_type` 自由 VARCHAR 无 CHECK,复用现有权限)。**
   **S9 短期激励期限已落地(V357·2026-07-28)**:业务 HTML 原文「期限可配,默认不超过 3 个月」+「所有金额、比例、封顶、档位、期限均后台可配,禁止写死」逐字落地,并同批关闭 v7 审计 **R-2**。
   ⑦ **生效期(强制字段)**——`settlement_bills.special_approval_valid_until DATE` + CHECK `chk_sb_special_approval_term`(有 `special_approval_ref` 就必须有到期日,禁止无限期特批);特批时到期日 = **特批当日 + 配置期限**,在 DB 侧按 `CURRENT_DATE + make_interval` 算(与到期判定同一时钟);特批端点回执带 `validUntil`,业务方直接看到「这次短期激励批到哪天为止」。
-  ⑧ **期限后台可配**——`ticket_distribution_configs.special_approval_term_months`(出厂默认 **3**、CHECK ≥1),挂在既有「各酒吧分配方式」配置块上(同项目维度、同草案 + 双人复核转正闸、同 ADM-STL 前端块),**不新建配置表**;总览页新增「超池特批有效期(月)」当前生效值。
+  ⑧ **期限后台可配**——`ticket_distribution_configs.special_approval_term_value` + `special_approval_term_unit`(单位 `day`/`month`,出厂默认 **3 个月**、CHECK 数值 ≥1、无上限),挂在既有「各酒吧分配方式」配置块上(同项目维度、同草案 + 双人复核转正闸、同 ADM-STL 前端块),**不新建配置表**;总览页新增「超池特批有效期」当前生效值(带单位,如「3 个月」/「3 天」)。
+  **V368(用户 2026-07-28 纠正「不是指校验大于等于一个月,也可以三天」)**:V357 把期限做成「月」为单位 + 下限 1 个月,运营配不出三天的短期激励活动;改成数值 + 单位两列,下限只到「1 个单位」。默认值一字未动(仍 3 个月),业务 HTML 的「默认不超过 3 个月」是默认值不是上限。
   ⑨ **到期回收 = 惰性判定(不建定时作业)**——到期日一到,两个出口同时 fail-closed:**(a)** `postBill` 对超池单要求「特批仍在有效期内」,否则 409 `SPECIAL_APPROVAL_EXPIRED`(超池部分一分不落台账);**(b)** `settleMonth` 的冻结改判「仅冻结有效期内的特批单」,过期单照常按引擎新算态覆盖 → 仍超池即**打回 draft**,须平台负责人按当期金额**重新特批**(新有效期从重新特批当日起算)。过期的 `special_approval_ref` **不清空**(留痕保全),失效靠有效期判定而非删数据。
   > **为何不做定时作业**:回收要影响的只有「过账」与「月结重跑冻结」两条读路径,两处本就已加载该单;定时作业反而要去改已 confirmed 的资金单状态(无人复核的资金级变更),还多一份「作业没跑到 → 过期特批仍放行」的时间窗。惰性判定零moving parts、无时钟竞态,且到期后金额一定按当期重算而不是沿用旧快照。
   ⑩ **专属权限点(v7 审计 R-2)**——超池特批从复用 `settlement.bill.post` 改为 `settlement.bill.special_approve`(高敏 `requires_approval`·**仅授 `role_platform_admin` 平台负责人**),与常规过账分权:过账可下放财务运营,超池特批只能平台负责人本人批;审计事件 `settlement.bill.special_approved` 的留痕扩到 billId/ref/超池额/期限/到期日。
@@ -520,14 +521,19 @@
 >   **全平台默认种子禁下线**(`DEFAULT_SEED_NOT_ARCHIVABLE`,下线即全平台无默认口径可用),只能改数值。
 
 > **2026-07-28 S9 实现修订(超池特批期限进配置中心)**:
-> - 落地:**V357** 给既有「各酒吧分配方式」配置表 `ticket_distribution_configs` 加一列
->   `special_approval_term_months`(出厂默认 **3**、CHECK ≥1)——业务 HTML「期限可配,默认不超过 3 个月」
->   与「所有金额、比例、封顶、档位、**期限**均后台可配,禁止写死」的落点。
+> - 落地:**V357** 给既有「各酒吧分配方式」配置表 `ticket_distribution_configs` 加期限列——业务 HTML
+>   「期限可配,默认不超过 3 个月」与「所有金额、比例、封顶、档位、**期限**均后台可配,禁止写死」的落点。
+>   **V368 纠正**:期限 = `special_approval_term_value` + `special_approval_term_unit`(`day`/`month`),
+>   出厂默认 **3 + month**,CHECK 只要求数值 ≥1、单位二选一,**没有上限**。V357 原来的「月为单位 + CHECK ≥1 个月」
+>   把「三天的短期激励」挡在门外(用户 2026-07-28 原话:「不是指校验大于等于一个月,也可以三天」)。
 > - **不新建配置表**:超池特批本就是该表所配分配方式的溢出出口,同一业务对象放同一处配——运营在
 >   ADM-STL-001「各酒吧分配方式」块里一屏看到「怎么分」和「分超了批多久」,不必去第二个地方找。
 >   写入面沿用 `POST /api/v1/settlement/config/distribution-method`(同草案 + 差人复核转正 + 软删),
->   总控页当前生效值新增「超池特批有效期(月)」,草案队列摘要带该期限。
-> - 读侧 `findSpecialApprovalTermMonths`(项目特例 > 全局默认 > 缺配置 fail-loud),引擎内零硬编码期限。
+>   总控页当前生效值新增「超池特批有效期」(带单位显示),草案队列摘要带该期限(如「6 天」/「3 个月」)。
+>   配置页是一个数值输入框 + 一个单位下拉(天/月)——运营配「三天」和配「三个月」是同一个动作,不用心算 90 天。
+> - 读侧 `findSpecialApprovalTerm`(项目特例 > 全局默认 > 缺配置 fail-loud),引擎内零硬编码期限;
+>   到期日仍在 DB 侧一次 `CURRENT_DATE + make_interval(months=>, days=>)` 算出(与到期判定同一时钟)——
+>   配「月」走月历(1月31日+3月=4月30日),配「天」走自然日,两种单位互不干扰。
 
 > **2026-07-28 P0-C/FLOW-07 实现修订(高价值判定阈值进配置中心草案闸)**:
 > - 落地:**V345** 新建阈值配置表,收进 `SingleRowConfig`,同走「改→落草案→差人复核转正」;

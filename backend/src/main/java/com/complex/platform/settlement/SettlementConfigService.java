@@ -38,8 +38,9 @@ public class SettlementConfigService {
         defaults.add(new ConfigItem("通票分账", "distribution_method", "各酒吧分配方式",
                 configRepository.findDistributionMethod(null)));
         // S9:超池特批(平台负责人短期激励)有效期,到期自动失效不再允许超池过账。
-        defaults.add(new ConfigItem("通票分账", "special_approval_term_months", "超池特批有效期(月)",
-                String.valueOf(configRepository.findSpecialApprovalTermMonths(null))));
+        //   V368:期限带单位(3 天 / 3 个月),总览直接显示带单位的写法,免得看的人还要猜单位。
+        defaults.add(new ConfigItem("通票分账", "special_approval_term", "超池特批有效期",
+                configRepository.findSpecialApprovalTerm(null).label()));
         var svcFee = configRepository.findComprehensiveServiceFee(null, null, null);
         defaults.add(new ConfigItem("门票综合服务费", "comprehensive_service_fee", "综合服务费(比例或固定额)",
                 svcFee.fixedAmountCent() != null ? "固定额 " + svcFee.fixedAmountCent() + " 分" : svcFee.feeBps() + " 万分比"));

@@ -292,6 +292,35 @@ class SettlementOverPoolSpecialApprovalTests {
         assertThat(validUntil(bill)).isEqualTo(LocalDate.now().plusMonths(2));
     }
 
+    /**
+     * V368（用户 2026-07-28 纠正「不是指校验大于等于一个月，也可以三天」）：
+     * 期限配 3 天 → 到期日 = 特批当日 + 3 天。三天的短期激励活动必须真的批得出三天，
+     * 而不是被「至少一个月」的下限顶成一个月。
+     */
+    @Test
+    void specialApprovalTermCanBeConfiguredInDays() {
+        String pid = overPoolProject();
+        setProjectSpecialApprovalTerm(pid, 3, "day");
+        String bill = settlementService.settleMonth(pid, MONTH);
+
+        var result = postingService.specialApprove(bill, "SA-TERM-3D");
+
+        assertThat(result.validUntil()).isEqualTo(LocalDate.now().plusDays(3));
+        assertThat(validUntil(bill)).isEqualTo(LocalDate.now().plusDays(3));
+    }
+
+    /** 默认没动：不配任何项目特例 → 仍是出厂默认 3 个月（业务口径「期限可配，默认不超过 3 个月」）。 */
+    @Test
+    void specialApprovalTermDefaultsToThreeMonths() {
+        String pid = overPoolProject();
+        String bill = settlementService.settleMonth(pid, MONTH);
+
+        var result = postingService.specialApprove(bill, "SA-TERM-DEFAULT");
+
+        assertThat(result.validUntil()).isEqualTo(LocalDate.now().plusMonths(3));
+        assertThat(validUntil(bill)).isEqualTo(LocalDate.now().plusMonths(3));
+    }
+
     /** 到期回收①：特批过期后超池单不可过账（fail-closed），且一分钱没落台账。 */
     @Test
     void expiredSpecialApprovalBlocksOverPoolPosting() {
@@ -474,11 +503,18 @@ class SettlementOverPoolSpecialApprovalTests {
                 "UPDATE settlement_bills SET special_approval_valid_until = CURRENT_DATE - 1 WHERE id = ?", billId);
     }
 
-    /** 项目级超池特批有效期（月）；不配则回落全局默认 3。 */
+    /** 项目级超池特批有效期（月）；不配则回落全局默认 3 个月。 */
     private void setProjectSpecialApprovalTermMonths(String projectId, int months) {
+        setProjectSpecialApprovalTerm(projectId, months, "month");
+    }
+
+    /** V368：项目级超池特批有效期 = 数值 + 单位（day/month）。 */
+    private void setProjectSpecialApprovalTerm(String projectId, int value, String unit) {
         jdbcTemplate.update(
-                "UPDATE ticket_distribution_configs SET special_approval_term_months = ? WHERE project_id = ?",
-                months, projectId);
+                "UPDATE ticket_distribution_configs"
+                        + " SET special_approval_term_value = ?, special_approval_term_unit = ?"
+                        + " WHERE project_id = ?",
+                value, unit, projectId);
     }
 
     private Map<String, Object> bill(String projectId) {

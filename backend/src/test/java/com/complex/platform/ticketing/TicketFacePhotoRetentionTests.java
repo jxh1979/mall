@@ -55,4 +55,25 @@ class TicketFacePhotoRetentionTests {
         // 无库/未配置：NotificationWindowConfig 空构造一律回落调用方默认 → 与 V353 前行为一致。
         assertThat(capturePurgeAfter(new NotificationWindowConfig())).isEqualTo(LocalDate.of(2026, 8, 31));
     }
+
+    /**
+     * V368 告知版本号跟着留存天数走：客人拍照前被告知的「留多久」是后台可配的，
+     * 今天告知 30 天、明天运营改成 60 天，这两批客人同意的不是同一件事——版本号必须能区分，
+     * 否则同意台账里只剩一个「同意过」的空壳，答不出「同意的是哪一版告知」。
+     */
+    @Test
+    void noticeVersionCarriesTheRetentionDaysActuallyToldToTheCustomer() {
+        NotificationWindowConfig windowConfig = mock(NotificationWindowConfig.class);
+        when(windowConfig.days(eq("ticketing.face_photo_retention"), eq(30))).thenReturn(60);
+        TicketFacePhotoService service = new TicketFacePhotoService(
+                mock(TicketFacePhotoRepository.class), mock(PiiCipher.class),
+                mock(AuthorizationService.class), mock(AuditEventService.class), windowConfig);
+
+        assertThat(service.noticeVersion()).isEqualTo("face_photo_notice_v1@retention_60d");
+
+        TicketFacePhotoService unconfigured = new TicketFacePhotoService(
+                mock(TicketFacePhotoRepository.class), mock(PiiCipher.class),
+                mock(AuthorizationService.class), mock(AuditEventService.class), new NotificationWindowConfig());
+        assertThat(unconfigured.noticeVersion()).isEqualTo("face_photo_notice_v1@retention_30d");
+    }
 }

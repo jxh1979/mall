@@ -137,6 +137,14 @@ public class TicketingService {
         return orderService.facePhotoRetentionDays();
     }
 
+    /**
+     * V368：当前这一版拍照告知的版本号（模板版本 + 当时告知的留存天数）。
+     * 客人勾同意时把它写进同意台账，将来才答得出「这位客人同意的是哪一版告知」。
+     */
+    public String facePhotoNoticeVersion() {
+        return orderService.facePhotoNoticeVersion();
+    }
+
     public PageResponse<TicketPriceRuleRecord> listTicketPriceRules() {
         return listTicketPriceRules(false);
     }
