@@ -478,8 +478,11 @@ public class JdbcSettlementConfigWriteRepository {
                       FROM ticket_distribution_rank_tiers WHERE is_draft = TRUE AND status = 'active'
                       GROUP BY project_id
                     UNION ALL
+                    -- V355:per_merchant 归属主体列为空,直接 || NULL 会把整条 summary 变成 NULL(草案队列显示空白)。
                     SELECT id, 'revenue_stream_attribution',
-                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' ' || revenue_stream || ' → ' || management_entity_id,
+                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' ' || revenue_stream || ' → '
+                           || CASE WHEN beneficiary_kind = 'per_merchant' THEN '各商户自己'
+                                   ELSE COALESCE(management_entity_id, '(未指定主体)') END,
                            updated_at
                       FROM revenue_stream_attribution WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

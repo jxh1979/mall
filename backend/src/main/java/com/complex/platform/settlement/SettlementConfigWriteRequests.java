@@ -55,9 +55,13 @@ public final class SettlementConfigWriteRequests {
     public record RankTierInput(Integer rankFrom, Integer rankTo, Integer shareBps) {
     }
 
-    /** revenue_stream_attribution:六业态收入流 → L3 管理公司/业态主体。 */
+    /**
+     * revenue_stream_attribution:业态收入流 → 收款方。
+     * beneficiaryKind 留空视同 {@code entity}(归某个经营主体,managementEntityId 必填);
+     * {@code per_merchant}=归产生该笔收入的各商户自己(订台低消/二次消费/额外酒水、非散台服务费),此时不得填主体。
+     */
     public record RevenueStreamAttributionRequest(String idempotencyKey, String projectId, String revenueStream,
-                                                  String managementEntityId) {
+                                                  String managementEntityId, String beneficiaryKind) {
     }
 
     /**

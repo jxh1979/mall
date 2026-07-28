@@ -90,7 +90,9 @@ public class SettlementReversedConsumer {
                 // P6：综合服务费取原 ST-VS 行【实收】之反(<=0),config_id 沿用原行 → 本冲正行进「商户×规则」月累计=
                 //   天然释放封顶额度;Σ(核销+冲正)对跨月红冲精确对冲(固定额/封顶/比例三模式全守恒)。原行 fee 缺失(遗留)→ 0。
                 -original.compServiceFeeCent(),
-                original.compServiceFeeConfigId()));
+                original.compServiceFeeConfigId(),
+                // V355(B-7):原行归某主体时,冲正行必须原样带上主体 id,否则撞 chk_st_beneficiary 直接落不下。
+                original.beneficiaryEntityId()));
     }
 
     /** 原核销所属月已过账 → 红冲落当月(now)；否则落原月(原核销时刻)由该月重算净掉。 */

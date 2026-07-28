@@ -37,6 +37,10 @@ public record SettlementTransactionRecord(
         //   settleMonth 线性求和替代月末重算 → 固定额/封顶/比例三模式跨月红冲全守恒(每笔实收精确对冲)。
         long compServiceFeeCent,
         // P6 本笔 fee 解析到的综合服务费费率规则 id;供增量封顶按「商户×规则」查月内累计。无 fee=null。
-        String compServiceFeeConfigId
+        String compServiceFeeConfigId,
+        // V355(B-7)beneficiary_type='entity' 时的收款主体 business_entities.id
+        //   (未核销权益款归娱乐平台公司 / 游乐通票未核销款归游乐公司);merchant/project 时为 null。
+        //   DB CHECK chk_st_beneficiary 强制:type=entity ⇒ 本列非空。
+        String beneficiaryEntityId
 ) {
 }
