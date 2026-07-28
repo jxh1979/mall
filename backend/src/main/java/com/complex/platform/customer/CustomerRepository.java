@@ -195,11 +195,23 @@ public interface CustomerRepository {
     }
 
     /**
-     * F-TXN-03 按核销张数：把某条 earn 行的已确认份额对齐 confirmedAmount（target），同步 status；
-     * remainingPoints 非空时同步可过期余额（=已确认份额，使过期口径与实际入余额一致），为空则不动该列。
+     * P0-B（V344）积分台账改追加：某业务单据「已确认份额」的权威口径 = 该单 confirm 分录的净额和
+     * （Σ points_delta，正=确认、负=冲正）。取代改造前直接读 earn 行被就地改写的 confirmed_amount。
+     * 存量单由 V344 逐单补建一条等额 confirm 分录，故派生值与改造前逐单严格相等（零行为改变）。
      */
-    default void updatePointsLedgerConfirmation(String ledgerId, long confirmedAmount, String status, Long remainingPoints) {
-        throw new UnsupportedOperationException("updatePointsLedgerConfirmation not supported by this repository");
+    default long sumConfirmedPointsBySourceDoc(String sourceDocType, String sourceDocId) {
+        return listPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_CONFIRM)
+                .stream().mapToLong(CustomerPointsLedgerRecord::pointsDelta).sum();
+    }
+
+    /**
+     * F-TXN-03 按核销张数：确认份额变动后同步 earn 行的生命周期列——status 与可过期批次余额
+     * remainingPoints（非空时令其 = 已确认份额，使过期口径与实际入余额一致；为空则不动该列）。
+     * P0-B（V344）：已确认份额本身<b>不再</b>就地回写 earn 行（confirmed_amount 已被 DB 触发器冻结），
+     * 改为追加 confirm 分录；本方法只动 FIFO 批次运行态，与 ar_ap_items.paid/unpaid 可变口径同源。
+     */
+    default void updatePointsLedgerLifecycle(String ledgerId, String status, Long remainingPoints) {
+        throw new UnsupportedOperationException("updatePointsLedgerLifecycle not supported by this repository");
     }
 
     // ---- 会员忠诚度 第2部分（V090）：储值 / 付费会员 / 积分转赠 ----

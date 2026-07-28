@@ -42,7 +42,7 @@ class SettlementServiceFeeConservationTests {
     @AfterEach
     void cleanup() {
         for (String m : merchants) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE exclusive_merchant_id = ?", m);
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE exclusive_merchant_id = ?", m);
         }
         for (String c : configIds) {
             jdbcTemplate.update("DELETE FROM comprehensive_service_fee_configs WHERE id = ?", c);

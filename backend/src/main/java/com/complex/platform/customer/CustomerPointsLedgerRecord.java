@@ -38,6 +38,12 @@ public record CustomerPointsLedgerRecord(
     /** 变动类型常量（入账引擎用）。 */
     public static final String CHANGE_EARN = "earn";
     public static final String CHANGE_DEDUCT = "deduct";
+    /**
+     * P0-B（V344）积分台账改追加：履约确认 / 确认冲正的<b>追加分录</b>。
+     * pointsDelta 带符号（正=本次新确认份额，负=本次冲正回滚份额），sourceId 指向原 earn 行。
+     * 某单「已确认份额」= 该单全部 confirm 分录的 pointsDelta 之和，不再就地改写 earn 行。
+     */
+    public static final String CHANGE_CONFIRM = "confirm";
 
     /**
      * 向后兼容构造器（原 11 字段）。新字段默认：
@@ -63,8 +69,8 @@ public record CustomerPointsLedgerRecord(
 
     /**
      * 兼容构造器（V100 的 15 字段，confirmed_amount 缺省 0）。
-     * 新写入的 pending earn 行 confirmed_amount=0（尚未确认）；确认份额由 confirmPoints 经
-     * {@code updatePointsLedgerConfirmation} 回写，不走构造器。
+     * 新写入的 pending earn 行 confirmed_amount=0（尚未确认）；P0-B（V344）起该列被 DB 触发器冻结、
+     * 永不回写，确认份额由 confirmPoints 追加 {@link #CHANGE_CONFIRM} 分录表达。
      */
     public CustomerPointsLedgerRecord(
             String id,

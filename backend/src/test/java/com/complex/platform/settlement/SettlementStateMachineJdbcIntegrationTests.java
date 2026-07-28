@@ -43,19 +43,19 @@ class SettlementStateMachineJdbcIntegrationTests {
     @AfterEach
     void cleanup() {
         for (String v : verIds) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE transaction_no IN (?, ?)",
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE transaction_no IN (?, ?)",
                     "ST-VS-" + v, "ST-VR-" + v);
             jdbcTemplate.update("DELETE FROM ticket_verifications WHERE id = ?", v);
         }
         for (String e : entIds) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE entitlement_id = ?", e);
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE entitlement_id = ?", e);
             jdbcTemplate.update("DELETE FROM ticket_verifications WHERE entitlement_id = ?", e);
             jdbcTemplate.update("DELETE FROM ticket_instances WHERE id = ?", "inst_" + e);
             jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id = ?", e);
             jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_" + e);
         }
         for (String p : projects) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE project_id = ?", p);
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", p);
             jdbcTemplate.update("DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)", p);
             jdbcTemplate.update("DELETE FROM settlement_bills WHERE project_id = ?", p);
         }

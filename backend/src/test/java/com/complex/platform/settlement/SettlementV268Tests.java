@@ -57,7 +57,7 @@ class SettlementV268Tests {
     void cleanup() {
         TestSecurityActors.clear();
         for (String pid : projectIds) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE project_id = ?", pid);
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", pid);
             jdbcTemplate.update(
                     "DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)",
                     pid);
@@ -287,7 +287,7 @@ class SettlementV268Tests {
                 }
                 cfgId = cfg.id();
             }
-            jdbcTemplate.update(
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate,
                     "UPDATE settlement_transactions SET comp_service_fee_cent = ?, comp_service_fee_config_id = ?"
                             + " WHERE id = ?", fee, cfgId, r.get("id"));
         }

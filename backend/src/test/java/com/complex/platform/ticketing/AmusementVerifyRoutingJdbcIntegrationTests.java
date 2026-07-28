@@ -75,7 +75,7 @@ class AmusementVerifyRoutingJdbcIntegrationTests {
                     project.replace("project_", "template_"));
         }
         for (String code : seededCodes) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE entitlement_id = ?", "ent_" + code);
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE entitlement_id = ?", "ent_" + code);
             jdbcTemplate.update("DELETE FROM ticket_verifications WHERE entitlement_id = ?", "ent_" + code);
             jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id = ?", "ent_" + code);
             jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_" + code);
