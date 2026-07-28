@@ -1,6 +1,7 @@
 package com.complex.platform.customer;
 
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.OfflinePaymentConfirmationRecord;
@@ -411,7 +412,8 @@ public class StoredValueService {
                 throw ApiException.conflict("STORED_VALUE_REFUND_NOT_ALLOWED",
                         "merchant card refund is not allowed by the issuing merchant");
             }
-            payoutCent = amountCent * rule.refundRatioBps() / 10000L;
+            // R-7:退卡实退额按比例四舍五入到分(旧整除截断,客户恒少退、商户多留且不留痕)。
+            payoutCent = MoneyRounding.bpsOf(amountCent, rule.refundRatioBps());
         }
         long balanceAfter = account.balanceCent() - amountCent;
         String newStatus = closeAccount && balanceAfter == 0 ? "closed" : account.status();

@@ -1,6 +1,7 @@
 package com.complex.platform.settlement;
 import org.springframework.beans.factory.annotation.Value;
 
+import com.complex.platform.common.money.MoneyRounding;
 import java.time.Clock;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,8 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 的权益,把未核销那部分金额直接归项目公司(beneficiary_type=project,settlement_status=confirmed 直接确认)。
  *
  * <p><b>金额切分</b>(整数分,verified+unverified=allocated 无漂移):
- * unverified = allocated × (total−used) / total(整数除,余数留给 verified);
- * verified = allocated − unverified;verified_count = used。
+ * unverified = <b>四舍五入到分</b>(allocated × (total−used) / total)(R-7/D15.1,旧为整除截断向零、
+ * 未核销归项目那部分恒少算);verified = allocated − unverified(取补数,两侧相加恒 = allocated,不产生尾差);
+ * verified_count = used。
  * allocated==null(direct 出票无分摊快照)→ 仓库查询已 WHERE allocated IS NOT NULL 排除,不会到这。
  *
  * <p><b>幂等/可重入</b>:transaction_no='ST-UE-'+entitlementId 唯一(uq_st_transaction_no)→
@@ -74,7 +76,7 @@ public class SettlementExpiryJob {
             int used = row.usedTimes();
             long allocated = row.allocatedRevenueCent();
             // total>used 由查询保证;total<=0 防御(理论不发生),置全额未核销。
-            long unverified = total <= 0 ? allocated : allocated * (total - used) / total;
+            long unverified = total <= 0 ? allocated : MoneyRounding.prorate(allocated, total - used, total);
             unverified = Math.max(0L, Math.min(allocated, unverified));
             long verified = allocated - unverified;
 

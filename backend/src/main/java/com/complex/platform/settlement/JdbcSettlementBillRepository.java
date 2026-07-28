@@ -308,19 +308,20 @@ public class JdbcSettlementBillRepository {
                 .addValue("special_approval_ref", bill.specialApprovalRef())
                 .addValue("status", bill.status())
                 .addValue("attributed_entity_id", bill.attributedEntityId())
-                .addValue("combo_discount_cent", bill.comboDiscountCent());
+                .addValue("combo_discount_cent", bill.comboDiscountCent())
+                .addValue("rounding_residual_cent", bill.roundingResidualCent());
         jdbcTemplate.update("""
                 INSERT INTO settlement_bills (
                     id, project_id, period_start, period_end, ticket_revenue_cent, channel_fee_cent,
                     giveaway_cost_cent, available_pool_cent, retention_bps, retention_cent, spv_pool_cent,
                     distributed_cent, comp_service_fee_cent, distribution_method, special_approval_ref, status,
-                    attributed_entity_id, combo_discount_cent, updated_at
+                    attributed_entity_id, combo_discount_cent, rounding_residual_cent, updated_at
                 )
                 VALUES (
                     :id, :project_id, :period_start, :period_end, :ticket_revenue_cent, :channel_fee_cent,
                     :giveaway_cost_cent, :available_pool_cent, :retention_bps, :retention_cent, :spv_pool_cent,
                     :distributed_cent, :comp_service_fee_cent, :distribution_method, :special_approval_ref, :status,
-                    :attributed_entity_id, :combo_discount_cent, now()
+                    :attributed_entity_id, :combo_discount_cent, :rounding_residual_cent, now()
                 )
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), period_start, period_end) DO UPDATE SET
                     ticket_revenue_cent = EXCLUDED.ticket_revenue_cent,
@@ -340,6 +341,7 @@ public class JdbcSettlementBillRepository {
                                                THEN settlement_bills.status ELSE EXCLUDED.status END,
                     attributed_entity_id = EXCLUDED.attributed_entity_id,
                     combo_discount_cent = EXCLUDED.combo_discount_cent,
+                    rounding_residual_cent = EXCLUDED.rounding_residual_cent,
                     updated_at          = now()
                 """, params);
     }

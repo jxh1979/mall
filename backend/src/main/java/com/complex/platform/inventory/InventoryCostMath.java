@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.complex.platform.common.money.MoneyRounding;
 import java.time.Instant;
 
 /**
@@ -106,11 +107,12 @@ final class InventoryCostMath {
         if (onHandQuantity <= 0) {
             return 0L;
         }
-        return Math.round((double) totalCostCent * qty / onHandQuantity);
+        // R-7:改走公共入口 BigDecimal HALF_UP,取代 double 近似(大额成本会失精);正数域逐分等价。
+        return MoneyRounding.prorate(totalCostCent, qty, onHandQuantity);
     }
 
     private static Long perUnit(long rowTotal, long qty) {
-        return qty <= 0 ? 0L : Math.round((double) rowTotal / qty);
+        return qty <= 0 ? 0L : MoneyRounding.prorate(rowTotal, 1L, qty);
     }
 
     private static InventoryItemCostStateRecord withRolled(
@@ -122,7 +124,7 @@ final class InventoryCostMath {
             boolean hasCostBasis,
             Instant now
     ) {
-        long avg = onHandQuantity > 0 ? Math.round((double) totalCostCent / onHandQuantity) : 0L;
+        long avg = onHandQuantity > 0 ? MoneyRounding.prorate(totalCostCent, 1L, onHandQuantity) : 0L;
         return new InventoryItemCostStateRecord(
                 state.itemId(), state.merchantId(), onHandQuantity, totalCostCent, avg,
                 cumulativeIn, cumulativeOut, state.costMethod(), hasCostBasis, now);

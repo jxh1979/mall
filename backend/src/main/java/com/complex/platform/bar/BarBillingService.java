@@ -5,6 +5,7 @@ import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.PaymentChannelPolicy;
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -560,7 +561,8 @@ public class BarBillingService {
                         .orElse(0L))
                 .sum();
         long base = Math.max(0L, bill.subtotalAmountCent() - bill.discountAmountCent() - commissionExcluded - giftDeduction);
-        long amount = base * rateBp / 10_000L;
+        // R-7(D15.1「提成」明列):提成额四舍五入到分,旧 `base * rateBp / 10_000` 整除截断使员工恒少拿。
+        long amount = MoneyRounding.bpsOf(base, rateBp);
         BarCommissionCalculationRecord saved = repository.saveCommissionCalculation(new BarCommissionCalculationRecord(
                 "commission_" + billSlug(actual.idempotencyKey()),
                 bill.id(),
@@ -664,7 +666,8 @@ public class BarBillingService {
             if (ratioBps <= 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "tip_ratio_bps must be positive");
             }
-            tip = bill.payableAmountCent() * ratioBps / 10_000L;
+            // R-7:按比例小费四舍五入到分(旧整除截断)。
+            tip = MoneyRounding.bpsOf(bill.payableAmountCent(), ratioBps);
             if (tip <= 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "computed tip must be positive");
             }

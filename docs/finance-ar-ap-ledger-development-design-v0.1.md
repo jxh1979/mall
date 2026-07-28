@@ -342,7 +342,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | `contract_id` | uuid | 否 | 关联合同 |
 | `alloc_basis` | enum | 是 | `lease_area` 建筑面积 / `agreed_ratio` 约定比例，默认 `lease_area` |
 | `alloc_weight_bp` | int | 是 | 该商户分摊权重（基点 bp） |
-| `allocated_amount_cent` | bigint | 是 | 分摊额=费用池×权重（系统算，尾差挂最大分摊方） |
+| `allocated_amount_cent` | bigint | 是 | 分摊额=四舍五入到分(费用池×权重)（系统算；**尾差归项目公司/平台并单列留痕，不挂任一分摊方**——2026-07-22 D15.1 拍板，原「挂最大分摊方」口径作废） |
 | `is_prepaid` | boolean | 是 | 是否周期预收（P1=true） |
 | `trueup_year` | int | 否 | 年度 true-up 归属年（P2 使用） |
 | `trueup_diff_cent` | bigint | 否 | true-up 差额（多退为负/少补为正，P2） |

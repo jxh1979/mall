@@ -4,6 +4,7 @@ import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.entry.FaceVerificationPort;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.ticketing.dto.VerificationRequest;
@@ -122,7 +123,8 @@ public class BarEntryService {
         }
         if ("min_consumption_ratio".equals(rule.mode())) {
             int ratioBps = rule.ratioBps() == null ? 0 : rule.ratioBps();
-            return Math.max(0L, table.minConsumptionCent() * ratioBps / 10_000L);
+            // R-7:定金按低消比例取额四舍五入到分(旧整除截断,定金恒少收;与 CustomerService 同口径)。
+            return Math.max(0L, MoneyRounding.bpsOf(table.minConsumptionCent(), ratioBps));
         }
         return 0L;
     }

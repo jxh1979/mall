@@ -3,6 +3,7 @@ package com.complex.platform.serviceorder;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
 import java.util.List;
@@ -296,7 +297,8 @@ public class ServiceOrderService {
         }
         final long feeValueFinal = feeValue;
         long mgmtFee = switch (feeMode) {
-            case "percent" -> current.priceCent() * feeValueFinal / 10000;
+            // R-7:管理费按比例取额四舍五入到分(旧整除截断,平台恒少收);dancerShare 取补数 → 两侧和恒 = 价,无尾差。
+            case "percent" -> MoneyRounding.bpsOf(current.priceCent(), feeValueFinal);
             case "fixed" -> Math.min(feeValueFinal, current.priceCent());
             default -> 0L;
         };
