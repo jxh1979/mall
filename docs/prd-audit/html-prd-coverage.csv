@@ -301,23 +301,23 @@ BEQ-0109,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权�
 BEQ-0110,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
 BEQ-0111,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
 BEQ-0112,docs/platform-governance-prd-v0.1.md,§6.7-§7.8 员工、设备与权限,FULL,,,,,,03-governance-and-common
-BSM-0027,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0027,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0028,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0029,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0029,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0030,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0031,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0032,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
-BSM-0033,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0032,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0033,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0034,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0035,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0036,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0037,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0038,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0039,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,承接时点已按 POINTS-VOUCHER-ACCRUAL-001 落地文档；待补净积分计价与商户退出结清,POINTS-VOUCHER-ACCRUAL-001,04-transaction-member-ticket-bar
+BSM-0039,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,FULL,P0,ADV-TX-004,,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0040,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0041,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0041,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0042,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,PARTIAL,P2,TX-BSM-0042-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
-BSM-0043,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0043,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0044,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0045,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P2,TX-BSM-0045-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
 BSM-0046,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -343,15 +343,15 @@ BSM-0065,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条
 BSM-0066,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0067,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0068,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0069,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,承接时点已按 POINTS-VOUCHER-ACCRUAL-001 落地文档；待补净积分计价与商户退出结清,POINTS-VOUCHER-ACCRUAL-001,04-transaction-member-ticket-bar
+BSM-0069,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,FULL,P0,ADV-TX-004,,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0070,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,4. P0 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0071,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,承接时点已按 POINTS-VOUCHER-ACCRUAL-001 落地文档；待补净积分计价与商户退出结清,POINTS-VOUCHER-ACCRUAL-001,04-transaction-member-ticket-bar
+BSM-0071,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,FULL,P0,ADV-TX-004,,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0072,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0073,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0074,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0075,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0076,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0077,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,5. 积分兑换（虚拟券模型，2026-07-18 现行）,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0077,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0078,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0079,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0080,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
@@ -368,7 +368,7 @@ BSM-0090,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条
 BSM-0091,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0092,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0093,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0094,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,10. 后台运营配置入口（追溯，不改上文口径）,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0094,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0095,docs/business-decision-log-v0.1.md,36. R6 业务输入与确认决议（14 项已全部业务确认 2026-06-19）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0096,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0097,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
@@ -404,16 +404,16 @@ BSM-0126,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,
 BSM-0127,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0128,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0129,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0130,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0130-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0130,docs/terminal-page-product-prd-v0.1.md,§11.1 / 一体机定位,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
 BSM-0131,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,4. P0 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0132,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0132-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0132,docs/terminal-page-product-prd-v0.1.md,§11.1 / 售票型一体机售卖范围,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
 BSM-0133,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0134,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0135,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0135-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0135,docs/terminal-page-product-prd-v0.1.md,§11.1 / 支付引导,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
 BSM-0136,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0140,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,1. 文档定位,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0141,docs/bar-business-operations-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0142,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0142-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0142,docs/terminal-page-product-prd-v0.1.md,§11.1 / 权益扫码领取,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
 BSM-0144,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0146,docs/bar-business-operations-product-prd-v0.1.md,4. 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0147,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -425,8 +425,8 @@ BSM-0152,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FU
 BSM-0153,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0154,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0155,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0156,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
-BSM-0157,docs/bar-business-operations-product-prd-v0.1.md,7.2 赠饮权益核销,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0156,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
+BSM-0157,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0158,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0159,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0160,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -532,8 +532,8 @@ BSM-0425,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台�
 BSM-0426,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0427,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0428,docs/finance-settlement-product-prd-v0.1.md,15. 持股分红引擎（V299，指针）,FULL,,,,,,04-transaction-member-ticket-bar
-PGM-0075,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-PGM-0075-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
-PGM-0077,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-PGM-0077-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+PGM-0075,docs/terminal-page-product-prd-v0.1.md,§11.1 / 工作手机职责,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
+PGM-0077,docs/terminal-page-product-prd-v0.1.md,§11.1 / 平板职责,FULL,P1,CLOSED-DOCS-B1,,,HTML-TERMINAL-BIND-001,04-transaction-member-ticket-bar
 PGM-0078,docs/product-requirements-v0.1.md,7. 基础对象模型,FULL,,,,,,04-transaction-member-ticket-bar
 PGM-0168,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 PGM-0169,docs/bar-business-operations-product-prd-v0.1.md,11. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
