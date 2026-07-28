@@ -3,6 +3,7 @@ package com.complex.platform.finance;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -59,7 +60,6 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     // P2#④ 退款方向统一维度（与 V118 chk_finance_refunds_direction 一致）。默认 original。
     private static final Set<String> REFUND_DIRECTIONS = Set.of("original", "cash", "third_party", "mixed");
     private static final String DEFAULT_REFUND_DIRECTION = "original";
-    private static final int BPS_DENOMINATOR = 10000;
     private static final Set<String> DAILY_CLOSE_SCOPES = Set.of("project", "merchant", "bar", "ticketing", "amusement");
     private static final Set<String> OFFLINE_PAYMENT_METHODS = Set.of("cash", "bank_transfer", "pos", "other");
     // R5 T7：六源（与 finance_daily_close_summaries.chk_fdcs_source 一致）。
@@ -1722,9 +1722,14 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 java.time.YearMonth.from(periodStart).toString());
     }
 
-    /** rent = clamp(turnover × rateBps / 10000, min, max)。min/max 为 null 时不夹。 */
+    /**
+     * rent = clamp(round_half_up(turnover × rateBps / 10000), min, max)。min/max 为 null 时不夹。
+     *
+     * <p>R-7(D15.1「提成」明列):旧 {@code Math.floorDiv(turnover*rateBps, 10000)} 是向下取整,
+     * 营业额抽成租金恒少收且余数无留痕;改公共入口 HALF_UP。
+     */
     private long clampRent(long turnover, int rateBps, Long minAmountCent, Long maxAmountCent) {
-        long rent = Math.floorDiv(turnover * (long) rateBps, BPS_DENOMINATOR);
+        long rent = MoneyRounding.bpsOf(turnover, rateBps);
         if (minAmountCent != null && rent < minAmountCent) {
             rent = minAmountCent;
         }

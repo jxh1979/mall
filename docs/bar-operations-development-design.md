@@ -727,7 +727,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `sales_staff_position_type_snapshot` | varchar | 岗位快照：`sales_person` 或其他岗位 |
 | `commission_base_amount` | bigint | 可计提消费额，单位分 |
 | `commission_rate` | numeric | 提成率：销售人员 `0.15`，非销售人员 `0.10`（**出厂默认**；实际取值来自 V340 `bar_commission_rate_configs`，按项目公司 × 商户 × 角色档后台可配，见下方「提成率取数」）|
-| `commission_amount` | bigint | 提成金额，单位分；按分四舍五入或财务配置舍入 |
+| `commission_amount` | bigint | 提成金额，单位分；= 四舍五入到分(提成基数 × 档位费率)，走公共入口 `MoneyRounding.bpsOf`（R-7/D15.1；原整除截断使员工恒少拿已修） |
 | `excluded_amount_snapshot` | jsonb | 排除金额快照：通票、票务权益、赠酒、退款、免单、抹零、不可计提调整等 |
 | `status` | varchar | `pending_review/confirmed/adjusted/reversed/cancelled` |
 | `reviewed_by` | uuid | 复核人 |

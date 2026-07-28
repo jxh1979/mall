@@ -1,5 +1,7 @@
 package com.complex.platform.finance;
 
+import com.complex.platform.common.money.MoneyRounding;
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -11,14 +13,18 @@ import java.util.List;
  */
 public final class TurnoverRentMath {
 
-    private static final int BPS_DENOMINATOR = 10000;
-
     private TurnoverRentMath() {
     }
 
-    /** 阶梯超额累进提成（分）。tiers 为空时返回 0（调用方可回退单一费率旧算法）。 */
+    /**
+     * 阶梯超额累进提成（分）。tiers 为空时返回 0（调用方可回退单一费率旧算法）。
+     *
+     * <p>R-7（D15.1「提成」明列）：各档先累<b>精确</b>份额、末尾<b>只四舍五入一次</b>到分。
+     * 旧写法逐档 {@code Math.floorDiv(seg*rateBps, 10000)} 既向下取整、又逐档累积误差
+     * （N 档最多少收 N 分），项目公司恒少收且余数无留痕。
+     */
     public static long tieredRent(long turnover, List<TurnoverRentRuleTierRecord> tiers, Long minAmountCent) {
-        long rent = 0L;
+        BigDecimal exact = BigDecimal.ZERO;
         long lower = 0L;
         if (turnover > 0 && tiers != null) {
             for (TurnoverRentRuleTierRecord tier : tiers) {
@@ -29,7 +35,7 @@ public final class TurnoverRentMath {
                 long upper = topTier ? Long.MAX_VALUE : tier.upperBoundCent();
                 long seg = Math.min(turnover, upper) - lower;
                 if (seg > 0) {
-                    rent += Math.floorDiv(seg * (long) tier.rateBps(), BPS_DENOMINATOR);
+                    exact = exact.add(MoneyRounding.exactBps(seg, tier.rateBps()));
                 }
                 if (topTier) {
                     break;
@@ -37,6 +43,7 @@ public final class TurnoverRentMath {
                 lower = upper;
             }
         }
+        long rent = MoneyRounding.toCent(exact);
         if (minAmountCent != null && rent < minAmountCent) {
             rent = minAmountCent;
         }

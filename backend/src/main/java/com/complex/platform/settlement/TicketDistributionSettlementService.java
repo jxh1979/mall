@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+import com.complex.platform.common.money.MoneyRounding;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -19,8 +21,16 @@ import org.springframework.transaction.annotation.Transactional;
  * （批1 双写时 created_at 已填=核销记录创建≈核销日，语义正确；confirmed_at 是结算确认时间、
  * 双写时本应 NULL 故不用作月窗）。
  *
- * <p><b>金额整数分无漂移</b>：所有比例乘除用 long 整数运算；分配后余数（因整除截断）保留在
- * 「各酒吧总池 − Σ分账」里，不强行补给某家（余数天然沉淀为项目未分配，符合「Σ分账≤总池」校验）。
+ * <p><b>金额精度与尾差（R-7 / D15.1，2026-07-22 用户拍板）</b>：一切按比例拆分一律
+ * {@link MoneyRounding} <b>四舍五入到分（HALF_UP）</b>，不再用 {@code a*bps/10000} 整除截断
+ * （旧写法系统性少给收费方且与「四舍五入」字面口径不符）。各家分别舍入后与「应分总额」的差额=<b>尾差</b>，
+ * 归项目公司/平台兜底并<b>单列</b>落 {@code settlement_bills.rounding_residual_cent}（V343）留痕，
+ * 绝不悄悄并进某一家、也不静默沉淀。守恒恒等式（{@link #verifyConservation} 运行期自检 + 集成测试断言）：
+ * <ul>
+ *   <li>{@code 通票收入 = 渠道费 + 项目留存 + 各酒吧总池}（池链无泄漏）</li>
+ *   <li>{@code Σ池分账明细 + 尾差 = 应分总额}（分账链尾差单列后严格相等）</li>
+ * </ul>
+ * HALF_UP 对 0 对称（{@code f(-x) = -f(x)}），故跨月红冲取原行之反仍逐分对消，守恒不被舍入破坏。
  */
 @Service
 public class TicketDistributionSettlementService {
@@ -98,14 +108,16 @@ public class TicketDistributionSettlementService {
         //    实扣 = 率 × 第三方渠道实际交易额;渠道交易额数据源属批6(第三方对接),现无 → channelRevenue=0 → 实扣仍 0(保值,迁移前后生效值不变)。
         int channelFeeBps = repository.findChannelFeeBps(projectId);
         long channelRevenueCent = 0L; // TODO(批6): 第三方渠道流水接入后填该项目当月实际经第三方渠道成交额
-        long channelFee = channelRevenueCent * channelFeeBps / 10000L;
+        // R-7:四舍五入到分(旧整除截断少扣渠道费)。收入侧取补数 → 无尾差(收入 = 渠道费 + 池)。
+        long channelFee = MoneyRounding.bpsOf(channelRevenueCent, channelFeeBps);
 
         // ④ 可分配池 = 收入 − 渠道费(下限 0)。赠酒成本不在此扣(见 ②)。
         long availablePool = Math.max(0L, ticketRevenue - channelFee);
 
-        // ⑤ 项目留存 = 池 × retention_bps / 10000(整数分);各酒吧总池 = 池 − 留存
+        // ⑤ 项目留存 = round_half_up(池 × retention_bps / 10000);各酒吧总池 = 池 − 留存(取补数 → 无尾差)。
+        //    R-7:旧 `availablePool * retentionBps / 10000` 整除截断,留存恒少收、差额悄悄进各酒吧池。
         int retentionBps = repository.findRetentionBps(projectId);
-        long retention = availablePool * retentionBps / 10000;
+        long retention = MoneyRounding.bpsOf(availablePool, retentionBps);
         long spvPool = availablePool - retention;
 
         // ⑥ 各酒吧当月统计(核销数降序)
@@ -114,7 +126,8 @@ public class TicketDistributionSettlementService {
 
         // ⑦ 按 method 分账（仅非专属进池；池基/排名/客数聚合已在仓储层排除专属）
         String method = repository.findDistributionMethod(projectId);
-        List<ItemCalc> items = distribute(projectId, method, spvPool, stats);
+        PooledDistribution pooled = distribute(projectId, method, spvPool, stats);
+        List<ItemCalc> items = new ArrayList<>(pooled.items());
 
         // ⑦b 批3-4(§6.4)：专属某商户「不分摊」→ 每个专属商户一条全额直付明细（method=exclusive_full，
         //     不扣留存、不进 spvPool、不参与他家分池排名/客数聚合）。金额=该商户专属核销 Σverified 全额。
@@ -168,7 +181,17 @@ public class TicketDistributionSettlementService {
         long pooledDistributed = items.stream()
                 .filter(i -> !METHOD_EXCLUSIVE_FULL.equals(i.method()))
                 .mapToLong(ItemCalc::amount).sum();
-        boolean overPool = pooledDistributed > spvPool;
+        // R-7 尾差:应分总额(对各家精确份额合计只舍入一次) − Σ各家已舍入分账额。归项目公司/平台兜底,
+        //   单列落 bill.rounding_residual_cent 留痕(V343),不并进任何一家、也不静默沉淀在「总池 − Σ分账」里。
+        //   专属直付(exclusive_full)明细是「毛额 − 每笔实收服务费」的整数补数,不产生舍入 → 不进尾差口径。
+        long roundingResidual = MoneyRounding.residual(pooled.exactTotal(), pooledDistributed);
+        verifyConservation(availablePool, retention, spvPool,
+                pooled.exactTotal(), pooledDistributed, roundingResidual, pooled.items().size());
+        // 越池判定按【应分总额】(= Σ已舍入 + 尾差)而非 Σ已舍入:特批闸管的是「业务上分超了池」,
+        //   不该被 ±n/2 分的舍入尾差触发(尾差本就由平台兜底,不需要为几分钱把整月单打回待特批)。
+        //   无舍入(按客数/固定额/比例整除得尽)时应分总额 ≡ Σ已舍入 → 与改造前逐分同判(零行为变更)。
+        long designedPooledTotal = pooledDistributed + roundingResidual;
+        boolean overPool = designedPooledTotal > spvPool;
         String status = overPool ? STATUS_DRAFT : STATUS_CONFIRMED;
         String specialApprovalRef = null; // 越池时留 null 待人工填;未越池时也 null(无需特批)
 
@@ -182,7 +205,8 @@ public class TicketDistributionSettlementService {
                 billId, projectId, periodStart, periodEnd,
                 ticketRevenue, channelFee, 0L, availablePool,   // giveaway_cost_cent 恒 0:赠酒补偿走 bar 域内部结算价应付、不占分账池(D5)
                 retentionBps, retention, spvPool, distributed, compServiceFee,
-                method, specialApprovalRef, status, attributedEntityId, comboDiscountCent));
+                method, specialApprovalRef, status, attributedEntityId, comboDiscountCent,
+                roundingResidual));
 
         // 幂等重跑:先清旧明细再写(明细集合随当月核销变化,覆盖式最简)
         String actualBillId = repository.findBillId(projectId, periodStart, periodEnd);
@@ -201,10 +225,17 @@ public class TicketDistributionSettlementService {
         return actualBillId;
     }
 
-    /** 按分配方式算各酒吧分账（整数分）。 */
-    private List<ItemCalc> distribute(String projectId, String method, long spvPool,
-                                      List<JdbcSettlementBillRepository.MerchantMonthlyStat> stats) {
+    /**
+     * 按分配方式算各酒吧分账（整数分，四舍五入到分）。
+     *
+     * <p>R-7：同时累计各家<b>精确（未舍入）份额</b>之和 {@link PooledDistribution#exactTotal()}，
+     * 供上层算尾差 = round_half_up(Σ精确份额) − Σ已舍入份额。按客数/固定额两方式是整数乘法、
+     * 精确值 ≡ 舍入值 → 尾差恒 0（零行为变更）；只有按排名档位（比例分池）才可能产生尾差。
+     */
+    private PooledDistribution distribute(String projectId, String method, long spvPool,
+                                          List<JdbcSettlementBillRepository.MerchantMonthlyStat> stats) {
         List<ItemCalc> out = new ArrayList<>();
+        BigDecimal exactTotal = BigDecimal.ZERO;
         switch (method) {
             case METHOD_BY_RANK_TIER -> {
                 List<JdbcSettlementBillRepository.RankTier> tiers = repository.findRankTiers(projectId);
@@ -213,7 +244,9 @@ public class TicketDistributionSettlementService {
                 for (var s : stats) {
                     rank++;
                     int shareBps = shareBpsForRank(tiers, rank);
-                    long amount = spvPool * shareBps / 10000;
+                    // R-7:旧 `spvPool * shareBps / 10000` 整除截断,各家恒少拿、差额悄悄沉淀在池里不留痕。
+                    long amount = MoneyRounding.bpsOf(spvPool, shareBps);
+                    exactTotal = exactTotal.add(MoneyRounding.exactBps(spvPool, shareBps));
                     out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), rank, amount, method));
                 }
             }
@@ -221,7 +254,8 @@ public class TicketDistributionSettlementService {
                 for (var s : stats) {
                     var rate = repository.findMerchantRate(projectId, s.merchantId());
                     long perGuest = rate != null && rate.perGuestCent() != null ? rate.perGuestCent() : 0L;
-                    long amount = (long) s.guestCount() * perGuest;
+                    long amount = (long) s.guestCount() * perGuest;   // 整数乘法,无舍入
+                    exactTotal = exactTotal.add(BigDecimal.valueOf(amount));
                     out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, amount, method));
                 }
             }
@@ -229,6 +263,7 @@ public class TicketDistributionSettlementService {
                 for (var s : stats) {
                     var rate = repository.findMerchantRate(projectId, s.merchantId());
                     long fixed = rate != null && rate.fixedAmountCent() != null ? rate.fixedAmountCent() : 0L;
+                    exactTotal = exactTotal.add(BigDecimal.valueOf(fixed));   // 固定额,无舍入
                     out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, fixed, method));
                 }
             }
@@ -236,7 +271,37 @@ public class TicketDistributionSettlementService {
                 // 未知方式:不分账(全沉淀总池),防御性兜底
             }
         }
-        return out;
+        return new PooledDistribution(out, exactTotal);
+    }
+
+    /**
+     * R-7 资金守恒运行期自检（fail-loud，宁可拒绝出账也不出一张不守恒的结算单）。
+     *
+     * <p>① 池链无泄漏：{@code 可分配池 = 项目留存 + 各酒吧总池}（两者互为补数，逐分相等；池本身 =
+     *    max(0, 收入 − 渠道费)，钳 0 是既有设计，跨月红冲致收入为负时池归 0，不纳入本恒等式）。
+     * ② 分账链尾差单列后严格相等：{@code Σ池分账 + 尾差 = 应分总额}。
+     * ③ 尾差量级合理：|尾差| ≤ 参与分账商户数（每家最多贡献 0.5 分的舍入差，n 家上界 n/2，取 n 更宽松）；
+     *    越界说明分配算法本身出错（而非舍入），必须响亮失败而不是把差额记成「尾差」蒙混过关。
+     */
+    private void verifyConservation(long availablePool, long retention, long spvPool,
+                                    BigDecimal exactPooledTotal, long pooledDistributed,
+                                    long roundingResidual, int itemCount) {
+        if (retention + spvPool != availablePool) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
+                    "结算资金守恒校验失败(池链):可分配池 " + availablePool + " ≠ 项目留存 " + retention
+                            + " + 各酒吧总池 " + spvPool);
+        }
+        long designedTotal = MoneyRounding.toCent(exactPooledTotal);
+        if (pooledDistributed + roundingResidual != designedTotal) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
+                    "结算资金守恒校验失败(分账链):Σ池分账 " + pooledDistributed + " + 尾差 " + roundingResidual
+                            + " ≠ 应分总额 " + designedTotal);
+        }
+        if (Math.abs(roundingResidual) > Math.max(1L, itemCount)) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
+                    "结算尾差异常(疑分配算法错而非舍入):尾差 " + roundingResidual
+                            + " 超出参与分账商户数 " + itemCount + " 的合理上界");
+        }
     }
 
     /** 命中排名档位区间 [rank_from, rank_to] → share_bps;无命中 → 0（该家不分）。 */
@@ -261,12 +326,13 @@ public class TicketDistributionSettlementService {
      * <p>🔴 <b>带符号(不钳0)</b>:核销为正(平台吸收折扣、商户按满额分),该核销在<b>后续已过账月</b>被冲正时为负
      * (平台<b>追回</b>先前吸收的折扣)——与收入侧 verified_amount_cent 带符号跨月净掉<b>一致</b>(V335 放开 combo_discount ≥0)。
      * 旧「discountCent&lt;=0 钳0」会丢弃跨月负向追回 → 收入 -R 追回了、折扣 -D 没追回,项目多付(套票真上线前必修)。
-     * Java 整除截断向零使 {@code f(-x)=-f(x)},split_by_ratio 的正负份额精确对消;折扣=0 → 0(无折扣零行为变更)。
+     * R-7 改 HALF_UP 后仍<b>对 0 对称</b>({@code f(-x)=-f(x)},HALF_UP 远离零进位),split_by_ratio 的正负份额
+     * 依旧逐分精确对消;折扣=0 → 0(无折扣零行为变更)。
      */
     private long platformBorneDiscount(JdbcSettlementBillRepository.ComboDiscountConfig cfg, long discountCent) {
         return switch (cfg.discountBearer()) {
             case "platform_absorb" -> discountCent;
-            case "split_by_ratio" -> discountCent * cfg.splitPlatformBps() / 10000;
+            case "split_by_ratio" -> MoneyRounding.bpsOf(discountCent, cfg.splitPlatformBps());
             default -> 0L; // merchant_absorb（及未知值防御）：项目不承担
         };
     }
@@ -274,5 +340,12 @@ public class TicketDistributionSettlementService {
     /** 分账中间结果（method：池分账=当月分配方式，专属直付=exclusive_full）。 */
     private record ItemCalc(String merchantId, int verifiedCount, int guestCount, Integer rankNo, long amount,
                             String method) {
+    }
+
+    /**
+     * 池分账结果 + 各家<b>精确（未舍入）份额之和</b>：R-7 尾差 = round_half_up(exactTotal) − Σ items.amount。
+     * exactTotal 只用于算尾差，绝不直接落库。
+     */
+    private record PooledDistribution(List<ItemCalc> items, BigDecimal exactTotal) {
     }
 }

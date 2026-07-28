@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+import com.complex.platform.common.money.MoneyRounding;
+
 /**
  * 结算状态机重构(AUD-012/017)：核销结算金额的<b>不可变增量</b>公式（单一真相，消费者与重建任务共用）。
  *
@@ -26,7 +28,10 @@ final class SettlementAmounts {
         if (totalTimes <= 0) {
             return Math.max(0L, allocated); // 防御:发票时至少 1 次,理论不达。
         }
-        long v = Math.round((double) allocated * x / totalTimes);
+        // R-7:改走公共入口 BigDecimal HALF_UP,取代 Math.round((double)…)——
+        //   ① double 尾数 53 位,大额 allocated×x 会失精;② Math.round 对负数不对称(round(-0.5)=0),
+        //   HALF_UP 对 0 对称,f(-x)=-f(x) 使冲正逐分对消。正数域取值与旧写法逐分一致(零行为变更)。
+        long v = MoneyRounding.prorate(allocated, x, totalTimes);
         return Math.max(0L, Math.min(allocated, v));
     }
 
