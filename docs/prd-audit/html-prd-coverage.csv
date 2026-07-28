@@ -313,7 +313,7 @@ BSM-0035,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-tra
 BSM-0036,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0037,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0038,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0039,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,补齐积分全生命周期与跨主体清算、商户退出结清,,04-transaction-member-ticket-bar
+BSM-0039,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,承接时点已按 POINTS-VOUCHER-ACCRUAL-001 落地文档；待补净积分计价与商户退出结清,POINTS-VOUCHER-ACCRUAL-001,04-transaction-member-ticket-bar
 BSM-0040,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0041,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0042,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,PARTIAL,P2,TX-BSM-0042-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
@@ -343,9 +343,9 @@ BSM-0065,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条
 BSM-0066,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0067,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0068,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0069,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,补齐积分全生命周期与跨主体清算、商户退出结清,,04-transaction-member-ticket-bar
+BSM-0069,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,承接时点已按 POINTS-VOUCHER-ACCRUAL-001 落地文档；待补净积分计价与商户退出结清,POINTS-VOUCHER-ACCRUAL-001,04-transaction-member-ticket-bar
 BSM-0070,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,4. P0 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0071,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,补齐积分全生命周期与跨主体清算、商户退出结清,,04-transaction-member-ticket-bar
+BSM-0071,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P0,ADV-TX-004,积分冻结/确认/兑换/退款/过期/商户退出/跨主体清算 => GAP: 缺清算; 缺商户退出; ,承接时点已按 POINTS-VOUCHER-ACCRUAL-001 落地文档；待补净积分计价与商户退出结清,POINTS-VOUCHER-ACCRUAL-001,04-transaction-member-ticket-bar
 BSM-0072,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0073,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0074,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,4. 积分获取,FULL,,,,,,04-transaction-member-ticket-bar
