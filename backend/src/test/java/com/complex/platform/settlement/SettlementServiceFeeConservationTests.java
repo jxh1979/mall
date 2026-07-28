@@ -59,12 +59,12 @@ class SettlementServiceFeeConservationTests {
         String merchant = uniqueMerchant();
         String vid = "vclamp_" + Long.toHexString(System.nanoTime());
         Instant m = Instant.parse("2010-08-15T10:00:00Z");
-        seedFee(merchant, "entry", 0, 800L, null); // 全局商户级固定额 800/张,无封顶
+        seedFee(merchant, 0, 800L, null); // 全局商户级固定额 800/张(票种留空=该商户所有票种通用),无封顶
 
         // ① 核销(专属·毛额 500)→ 真消费者算触顶实收 fee = min(800,500) = 500。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 vid, m, "ent_" + vid, "ord_x", "tt_x", "entry", merchant, 1, 1, 1, 500L,
-                m.plusSeconds(3600), merchant, null, null));
+                m.plusSeconds(3600), merchant, null, null, null));
         assertThat(feeOf("ST-VS-" + vid)).isEqualTo(500L); // 触顶实收 500(非 800)
 
         // ② 原月标记已过账 → 红冲跨月落当月(now)。
@@ -89,15 +89,15 @@ class SettlementServiceFeeConservationTests {
         String v1 = "vcap1_" + Long.toHexString(System.nanoTime());
         String v2 = "vcap2_" + Long.toHexString(System.nanoTime());
         Instant m = Instant.parse("2010-09-15T10:00:00Z");
-        seedFee(merchant, "entry", 0, 300L, 400L); // 固定额 300/张 + 封顶 400
+        seedFee(merchant, 0, 300L, 400L); // 固定额 300/张 + 封顶 400(票种留空=该商户所有票种通用)
 
         // ① 两笔核销(同月同商户同规则)→ 增量封顶:v1=300、v2=min(300,剩余100)=100。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 v1, m, "ent_" + v1, "ord_x", "tt_x", "entry", merchant, 1, 1, 1, 1000L,
-                m.plusSeconds(3600), merchant, null, null));
+                m.plusSeconds(3600), merchant, null, null, null));
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 v2, m.plusSeconds(60), "ent_" + v2, "ord_x", "tt_x", "entry", merchant, 1, 1, 1, 1000L,
-                m.plusSeconds(3660), merchant, null, null));
+                m.plusSeconds(3660), merchant, null, null, null));
         assertThat(feeOf("ST-VS-" + v1)).isEqualTo(300L);
         assertThat(feeOf("ST-VS-" + v2)).isEqualTo(100L); // 增量封顶:剩余额度 100
         assertThat(feeOf("ST-VS-" + v1) + feeOf("ST-VS-" + v2)).isEqualTo(400L); // 当月合计=封顶
@@ -125,15 +125,18 @@ class SettlementServiceFeeConservationTests {
         return m;
     }
 
-    /** 全局(project_id NULL)商户级综合服务费费率(消费者按 project=null 平台口径解析,与生产 settleMonth(null) 一致)。 */
-    private void seedFee(String merchant, String entType, int feeBps, Long fixedAmountCent, Long capCent) {
+    /**
+     * 全局(project_id NULL)商户级综合服务费费率(消费者按 project=null 平台口径解析,与生产 settleMonth(null) 一致)。
+     * S2:票种维度留空 = 该商户所有票种通用 —— 本测试证的是跨月红冲守恒,与费率作用域怎么切无关。
+     */
+    private void seedFee(String merchant, int feeBps, Long fixedAmountCent, Long capCent) {
         String id = "csfc_cons_" + Long.toHexString(System.nanoTime());
         configIds.add(id);
         jdbcTemplate.update(
-                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, ticket_type_id,"
                         + " fee_bps, fixed_amount_cent, monthly_cap_amount_cent, status, is_draft)"
-                        + " VALUES (?, NULL, ?, ?, ?, ?, ?, 'active', FALSE)",
-                id, merchant, entType, feeBps, fixedAmountCent, capCent);
+                        + " VALUES (?, NULL, ?, NULL, ?, ?, ?, 'active', FALSE)",
+                id, merchant, feeBps, fixedAmountCent, capCent);
     }
 
     /** 平台口径(project NULL)某月已过账账单 → 令冲正消费者判「原月已过账」把红冲落当月(now)。 */

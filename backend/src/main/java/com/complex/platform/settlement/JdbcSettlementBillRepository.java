@@ -215,6 +215,12 @@ public class JdbcSettlementBillRepository {
      * P6 增量封顶:某专属商户×费率规则 在 [monthStart,nextMonthStart) 内【已落】的实收综合服务费累计
      * (核销正 + 冲正负 → 冲正天然释放封顶额度)。核销时算本笔前先查此累计,remaining = max(0, cap - mtd)。
      * business_at 落月窗(与聚合口径一致);不含本笔(本笔尚未 insert)。
+     *
+     * <p><b>S2 覆盖面扩到「所有门票」后</b>:非专属(进池)核销也计提,这类行 exclusive_merchant_id 为 NULL,
+     * 原 {@code = :merchant_id} 对 NULL 恒不成立 → 进池那部分的封顶会形同虚设(月内可无限累计)。
+     * 故补 NULL 对 NULL 配对:进池的归该规则的「进池」这一桶,各专属商户各自一桶 —— 专属侧逐分不变,
+     * 用户 2026-07-21 拍板 A「按费率规则各自封、全局规则各商户各自封顶」不受影响。
+     * 两个分支都走 {@code idx_st_svcfee_mtd}(等值 / IS NULL 都可索引),不改索引。
      */
     public long sumMonthToDateServiceFee(String exclusiveMerchantId, String configId,
                                          Instant monthStart, Instant nextMonthStart) {
@@ -222,7 +228,8 @@ public class JdbcSettlementBillRepository {
                 SELECT COALESCE(SUM(comp_service_fee_cent), 0)
                   FROM settlement_transactions
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
-                   AND exclusive_merchant_id = :merchant_id
+                   AND (exclusive_merchant_id = :merchant_id
+                        OR (:merchant_id::text IS NULL AND exclusive_merchant_id IS NULL))
                    AND comp_service_fee_config_id = :config_id
                    AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
                 """, new MapSqlParameterSource()
@@ -241,25 +248,33 @@ public class JdbcSettlementBillRepository {
     }
 
     /**
-     * V268 综合服务费(§7.2 口径8+"所有门票都抽")万分比:项目x商户x票种范围可配,默认 0(不抽)。
-     * 查询精度:商户+票种特例 > 商户特例 > 票种特例 > 项目默认(COALESCE 归一 NULL,ORDER 让更具体的优先)。
-     * 无任何配置行 -> 回退 0(禁硬编码,与建表默认一致) -> 该笔专属直付零扣费,商户拿全额,零行为变更。
+     * 门票综合服务费费率规则(= 娱乐平台公司留存 / 项目管理费):按【项目 × 商户 × 票种】范围可配,默认 0(不抽)。
+     * 查询精度:商户+票种特例 &gt; 商户特例 &gt; 票种特例 &gt; 项目默认(留空=该层通用,ORDER 让更具体的优先)。
+     * 无任何配置行 -&gt; {@link #requireConfigured} 响亮停(禁硬编码回退)。
+     *
+     * <p><b>S2(2026-07-28,V365)第三维换成票种</b>:原来是权益类型(bar/amusement/…),与 HTML
+     * 「可按（项目 × 商户 × 票种）范围……」不符。业务上按票种谈费率、按票种对账,一张通票里两类权益
+     * 按两套费率各抽一道时,业务人员在结算单上回答不了「这张票收了多少综合服务费」。
+     *
+     * <p><b>项目维度改用 {@code (project_id IS NULL OR project_id = :project_id)}</b>:原 COALESCE 哨兵写法
+     * 会把真实 project_id 恰为 '__DEFAULT__' 的行对所有项目可见(跨租户读);S2 起调用处开始传真实 project scope,
+     * 该风险不再是理论问题。同 {@code JdbcCommissionPointsConfigRepository} 2026-07-28 修 verify:tenant-isolation F1 的口径。
      */
-    public ServiceFeeConfig findComprehensiveServiceFee(String projectId, String merchantId, String entitlementType) {
+    public ServiceFeeConfig findComprehensiveServiceFee(String projectId, String merchantId, String ticketTypeId) {
         ServiceFeeConfig cfg = jdbcTemplate.query("""
                 SELECT id, fee_bps, fixed_amount_cent, monthly_cap_amount_cent FROM comprehensive_service_fee_configs
                  WHERE status = 'active' AND is_draft = FALSE
-                   AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
+                   AND (project_id IS NULL OR project_id = :project_id)
                    AND (merchant_id IS NULL OR merchant_id = :merchant_id)
-                   AND (entitlement_type IS NULL OR entitlement_type = :entitlement_type)
+                   AND (ticket_type_id IS NULL OR ticket_type_id = :ticket_type_id)
                  ORDER BY (project_id IS NOT NULL) DESC,
                           (merchant_id IS NOT NULL) DESC,
-                          (entitlement_type IS NOT NULL) DESC
+                          (ticket_type_id IS NOT NULL) DESC
                  LIMIT 1
                 """, new MapSqlParameterSource()
                 .addValue("project_id", projectId)
                 .addValue("merchant_id", merchantId)
-                .addValue("entitlement_type", entitlementType),
+                .addValue("ticket_type_id", ticketTypeId),
                 rs -> rs.next()
                         ? new ServiceFeeConfig(rs.getString("id"), rs.getInt("fee_bps"),
                                 rs.getObject("fixed_amount_cent") == null ? null : rs.getLong("fixed_amount_cent"),

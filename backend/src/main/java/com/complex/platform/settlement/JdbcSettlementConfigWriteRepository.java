@@ -28,8 +28,9 @@ public class JdbcSettlementConfigWriteRepository {
         RETENTION("platform_retention_rules", "retention", List.of("project_id")),
         DISTRIBUTION_METHOD("ticket_distribution_configs", "distribution_method", List.of("project_id")),
         MERCHANT_RATE("ticket_distribution_merchant_rates", "merchant_rate", List.of("project_id", "merchant_id")),
+        // S2(V365):第三维换成票种(原权益类型)——业务人员按票种谈费率、按票种对账。
         COMPREHENSIVE_SERVICE_FEE("comprehensive_service_fee_configs", "comprehensive_service_fee",
-                List.of("project_id", "merchant_id", "entitlement_type")),
+                List.of("project_id", "merchant_id", "ticket_type_id")),
         COMBO_DISCOUNT("ticket_combo_discount_configs", "combo_discount", List.of("project_id")),
         CHANNEL_FEE("channel_fee_configs", "channel_fee", List.of("project_id", "channel")),
         // V340（P0-D/CFG-01）：提成费率按 项目 × 商户 × 角色档；积分累计率按 项目 × 商户。同 Path 2 草案/转正范式。
@@ -132,16 +133,16 @@ public class JdbcSettlementConfigWriteRepository {
     }
 
     public String upsertComprehensiveServiceFeeDraft(String id, String projectId, String merchantId,
-                                                     String entitlementType, int feeBps, Long fixedAmountCent,
+                                                     String ticketTypeId, int feeBps, Long fixedAmountCent,
                                                      Long monthlyCapAmountCent, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO comprehensive_service_fee_configs
-                    (id, project_id, merchant_id, entitlement_type, fee_bps, fixed_amount_cent,
+                    (id, project_id, merchant_id, ticket_type_id, fee_bps, fixed_amount_cent,
                      monthly_cap_amount_cent, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :merchant_id, :entitlement_type, :fee_bps, :fixed_amount_cent,
+                VALUES (:id, :project_id, :merchant_id, :ticket_type_id, :fee_bps, :fixed_amount_cent,
                         :monthly_cap_amount_cent, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
-                             COALESCE(entitlement_type, '__ANY__'), is_draft) WHERE status = 'active' DO UPDATE SET
+                             COALESCE(ticket_type_id, '__ANY__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     fee_bps = EXCLUDED.fee_bps,
                     fixed_amount_cent = EXCLUDED.fixed_amount_cent,
                     monthly_cap_amount_cent = EXCLUDED.monthly_cap_amount_cent,
@@ -150,10 +151,18 @@ public class JdbcSettlementConfigWriteRepository {
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
-                .addValue("entitlement_type", entitlementType).addValue("fee_bps", feeBps)
+                .addValue("ticket_type_id", ticketTypeId).addValue("fee_bps", feeBps)
                 .addValue("fixed_amount_cent", fixedAmountCent)
                 .addValue("monthly_cap_amount_cent", monthlyCapAmountCent)
                 .addValue("updated_by", updatedBy), String.class);
+    }
+
+    /** S2:票种存在性(供综合服务费费率规则写入前校验,把坏 id 拦成中文 400 而不是撞 FK 抛 500)。 */
+    public boolean ticketTypeExists(String ticketTypeId) {
+        Integer hit = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ticket_types WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", ticketTypeId), Integer.class);
+        return hit != null && hit > 0;
     }
 
     public String upsertComboDiscountDraft(String id, String projectId, String discountBearer,
@@ -435,13 +444,16 @@ public class JdbcSettlementConfigWriteRepository {
                            updated_at
                       FROM ticket_distribution_merchant_rates WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
-                    SELECT id, 'comprehensive_service_fee',
-                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || COALESCE(merchant_id, '__ANY__')
-                               || ' 票种=' || COALESCE(entitlement_type, '__ANY__')
-                               || ' 费=' || CASE WHEN fixed_amount_cent IS NULL THEN fee_bps || 'bps' ELSE fixed_amount_cent || '分' END
-                               || CASE WHEN monthly_cap_amount_cent IS NULL THEN '' ELSE ' 封顶' || monthly_cap_amount_cent || '分' END,
-                           updated_at
-                      FROM comprehensive_service_fee_configs WHERE is_draft = TRUE AND status = 'active'
+                    -- S2:票种维度。复核人要判断「这条费率影响哪个票」,故 join 出票种名而不是给一串 id。
+                    SELECT c.id, 'comprehensive_service_fee',
+                           'project=' || COALESCE(c.project_id, '__DEFAULT__') || ' 商户=' || COALESCE(c.merchant_id, '__ANY__')
+                               || ' 票种=' || COALESCE(tt.ticket_name, '__ANY__')
+                               || ' 费=' || CASE WHEN c.fixed_amount_cent IS NULL THEN c.fee_bps || 'bps' ELSE c.fixed_amount_cent || '分' END
+                               || CASE WHEN c.monthly_cap_amount_cent IS NULL THEN '' ELSE ' 封顶' || c.monthly_cap_amount_cent || '分' END,
+                           c.updated_at
+                      FROM comprehensive_service_fee_configs c
+                      LEFT JOIN ticket_types tt ON tt.id = c.ticket_type_id
+                     WHERE c.is_draft = TRUE AND c.status = 'active'
                     UNION ALL
                     SELECT id, 'combo_discount',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 折扣归属 ' || discount_bearer,
