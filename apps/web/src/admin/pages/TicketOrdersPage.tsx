@@ -21,7 +21,7 @@ import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailE
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
   description: "\u805a\u5408\u7968\u52a1\u8ba2\u5355\u3001\u652f\u4ed8\u72b6\u6001\u3001\u51fa\u7968\u72b6\u6001\u3001\u6743\u76ca\u548c\u6838\u9500\u9884\u68c0\uff0c\u7528\u4e8e\u5b9a\u4f4d\u672a\u51fa\u7968\u548c\u5f02\u5e38\u6838\u9500\u3002",
-  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/orders\uff1b\u8bfb\u53d6 /api/v1/ticketing/issued-entitlements\uff1b\u8bfb\u53d6 /api/v1/ticketing/verifications\uff1b\u51fa\u7968 POST /api/v1/ticketing/orders/{order_id}/issue\uff1b\u6838\u9500\u9884\u68c0 POST /api/v1/ticketing/verifications/preview\u3002",
+  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/orders\uff1b\u8bfb\u53d6 /api/v1/ticketing/issued-entitlements\uff1b\u8bfb\u53d6 /api/v1/ticketing/verifications\uff1b\u51fa\u7968 POST /api/v1/ticketing/orders/{order_id}/issue\uff1b\u6838\u9500\u9884\u68c0 POST /api/v1/ticketing/verifications/preview\uff1b\u53d6\u8d2d\u7968\u4eba\u8138\u7167 GET /api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo\u3002",
   loadFailed: "\u7968\u52a1\u8ba2\u5355\u8ffd\u8e2a\u6570\u636e\u8bfb\u53d6\u5931\u8d25",
   actionFailed: "\u7968\u52a1\u8ba2\u5355\u64cd\u4f5c\u5931\u8d25",
   noOrder: "\u5f53\u524d\u6ca1\u6709\u53ef\u51fa\u7968\u8ba2\u5355\u3002",
@@ -57,12 +57,23 @@ const TEXT = {
   verificationsHelp: "\u6838\u9500\u8bb0\u5f55",
   selectedOrderHelp: "\u5f53\u524d\u9009\u4e2d",
   focusClear: "\u6e05\u9664\u7b5b\u9009\uff0c\u8fd4\u56de\u5168\u90e8",
+  // C2 \u8d2d\u7968\u4eba\u8138\u7167\u6bd4\u5bf9\uff08\u540e\u7aef V229 \u5b58\u6863\u3001V353 \u7559\u5b58\u5929\u6570\u540e\u53f0\u53ef\u914d\uff09\u3002
+  facePhotoTitle: "\u8d2d\u7968\u4eba\u8138\u7167\uff08\u6bd4\u5bf9\u672c\u4eba\uff09",
+  facePhotoHint: "\u6838\u9500\u524d\u8bf7\u8089\u773c\u6bd4\u5bf9\u773c\u524d\u7684\u4eba\u4e0e\u8fd9\u5f20\u8d2d\u7968\u65f6\u7559\u5b58\u7684\u7167\u7247\u662f\u5426\u4e3a\u540c\u4e00\u4eba\uff1b\u4e0d\u4e00\u81f4\u8bf7\u62d2\u7edd\u6838\u9500\u5e76\u6309\u73b0\u573a\u89c4\u5b9a\u5904\u7406\u3002\u7167\u7247\u5c5e\u4e2a\u4eba\u654f\u611f\u4fe1\u606f\uff0c\u4ec5\u4f9b\u672c\u6b21\u6bd4\u5bf9\uff0c\u770b\u5b8c\u8bf7\u70b9\u300c\u6e05\u9664\u7167\u7247\u300d\uff0c\u7981\u6b62\u7ffb\u62cd\u3001\u4e0b\u8f7d\u6216\u8f6c\u53d1\u3002",
+  facePhotoMissing: "\u672c\u7968\u6ca1\u6709\u7559\u5b58\u8d2d\u7968\u4eba\u8138\u7167\uff08\u8be5\u7968\u79cd\u672a\u8981\u6c42\u62cd\u7167\uff0c\u6216\u7167\u7247\u5df2\u8fc7\u7559\u5b58\u671f\u81ea\u52a8\u9500\u6bc1\uff09\uff0c\u6309\u5e38\u89c4\u6d41\u7a0b\u6838\u9500\u3002",
+  facePhotoClear: "\u6e05\u9664\u7167\u7247",
 };
 
 // KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u8ba2\u5355\u8868\u5e76\u6309\u5b50\u96c6\u8fc7\u6ee4\u3002
 // \u26a0\ufe0f\u4e0e\u5df2\u6709\u7684 ?focus=<\u8ba2\u5355\u5b9a\u4f4d>\uff08P1-B\uff09\u8bfb\u4e0d\u540c\u53c2\u6570\uff0c\u4e92\u4e0d\u5e72\u6270\uff1akpi \u805a\u7126\u8bfb ?kpi\uff0c\u8ba2\u5355\u5b9a\u4f4d\u8bfb focusObjectId\u3002
 type KpiTarget = "orders" | "paid" | "not_issued";
 type KpiFocus = { target: KpiTarget };
+
+// C2：核销预检返回体里带的权益（拿它的 id 去取脸照）+ 取照端点返回体。
+type VerificationPreviewResult = { entitlement?: { id?: string } };
+type FacePhotoResult = { photoBase64?: string; contentType?: string };
+// 脸照只在内存里存这一份：要么是可显示的 data URI，要么是一句「本票无照」的说明。
+type FacePhotoState = { dataUri?: string; notice?: string };
 
 function readKpiFocusFromUrl(): KpiFocus | null {
   if (typeof window === "undefined") return null;
@@ -99,6 +110,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该订单完整字段（金额¥·枚举中文·下单/支付时间中文），与既有单选/下钻并存。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // C2 购票人脸照：只活在这个 state 里，离开页面即随组件卸载消失，不写 localStorage/sessionStorage。
+  const [facePhoto, setFacePhoto] = React.useState<FacePhotoState | null>(null);
 
   // 浏览器后退/前进也能进出聚焦视图。AdminApp 的 popstate 只重建 route/focus，本页 ?kpi= 参数自理，互不干扰。
   React.useEffect(() => {
@@ -215,10 +228,38 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
       setFormError(TEXT.entitlementRequired);
       return;
     }
-    await runAction("ticket_verification_previewed", () => api.post("/api/v1/ticketing/verifications/preview", {
-      entitlementCode,
-      operatorNote: TEXT.previewNote,
-    }), false);
+    // 换一张票就先把上一张脸照从内存里扔掉，不让上一位客人的照片留在屏幕上。
+    clearFacePhoto();
+    await runAction("ticket_verification_previewed", async () => {
+      const preview = await api.post<VerificationPreviewResult>("/api/v1/ticketing/verifications/preview", {
+        entitlementCode,
+        operatorNote: TEXT.previewNote,
+      });
+      await loadFacePhoto(preview?.entitlement?.id);
+      return preview;
+    }, false);
+  }
+
+  // C2 购票人脸照比对：核销预检扫到权益后按需取这张票的存档照，核销员肉眼比对是不是本人（防转票）。
+  //   ① 只在预检时取，不随列表批量拉；② 只放 React 内存，不写任何浏览器存储、不进 setActionResult（那是会被记录/展示的操作结果）；
+  //   ③ 每次取照后端都写审计（谁·何时·看了哪张票的脸照），前端不重复留痕。
+  async function loadFacePhoto(entitlementId?: string) {
+    if (!entitlementId) return;
+    try {
+      const photo = await api.get<FacePhotoResult>(`/api/v1/ticketing/issued-entitlements/${encodeURIComponent(entitlementId)}/face-photo`);
+      if (photo?.photoBase64) {
+        setFacePhoto({ dataUri: `data:${photo.contentType || "image/jpeg"};base64,${photo.photoBase64}` });
+        return;
+      }
+      setFacePhoto({ notice: TEXT.facePhotoMissing });
+    } catch {
+      // 无照/无权限都不该打断核销主链：本票就是没要求拍照的普通票时，这里 404 是正常情况。
+      setFacePhoto({ notice: TEXT.facePhotoMissing });
+    }
+  }
+
+  function clearFacePhoto() {
+    setFacePhoto(null);
   }
 
   function openOrderDetail(order: TicketOrderRow) {
@@ -282,6 +323,38 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
           <span className="admin-muted-action" data-testid="ticket-order-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="ticket-orders-error" className="admin-inline-error">{formError}</div> : null}
+        {facePhoto ? (
+          <div className="admin-state" data-testid="ticket-face-photo-panel">
+            <strong>{TEXT.facePhotoTitle}</strong>
+            {facePhoto.dataUri ? (
+              <>
+                <p>{TEXT.facePhotoHint}</p>
+                {/* 用背景图而不是 <img>：右键没有「图片另存为」，拖拽也带不走，降低随手翻拍留存的可能。
+                    这是防手滑不是防技术手段——能开开发者工具的人照样拿得到，真正的闸在后端授权+每次取照写审计。 */}
+                <div
+                  data-testid="ticket-face-photo-image"
+                  role="img"
+                  aria-label="购票人脸照"
+                  onContextMenu={(event) => event.preventDefault()}
+                  onDragStart={(event) => event.preventDefault()}
+                  style={{
+                    width: 220,
+                    height: 220,
+                    backgroundImage: `url("${facePhoto.dataUri}")`,
+                    backgroundSize: "contain",
+                    backgroundPosition: "center",
+                    backgroundRepeat: "no-repeat",
+                    border: "1px solid #ccc",
+                    userSelect: "none",
+                  }}
+                />
+                <button type="button" data-testid="ticket-face-photo-clear" onClick={clearFacePhoto}>{TEXT.facePhotoClear}</button>
+              </>
+            ) : (
+              <p data-testid="ticket-face-photo-missing">{facePhoto.notice}</p>
+            )}
+          </div>
+        ) : null}
         </>
         )}
 

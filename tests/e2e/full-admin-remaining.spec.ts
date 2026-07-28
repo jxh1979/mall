@@ -29,6 +29,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
   { pageId: "ADM-GOV-007", label: "空间类型字典", route: "/admin/governance/space-types" },
+  { pageId: "ADM-GOV-008", label: "场地营业时间", route: "/admin/governance/venue-business-hours" },
   { pageId: "ADM-CUS-001", label: "客人账号管理", route: "/admin/customers/accounts" },
   { pageId: "ADM-CUS-002", label: "券台账管理", route: "/admin/customers/vouchers" },
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", route: "/admin/customers/loyalty-config" },

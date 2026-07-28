@@ -129,7 +129,7 @@ public class TicketOrderService {
         long finalAmount = dynamicPrice.finalUnitPriceCent() * quantity;
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
-        return repository.saveTicketOrder(new TicketOrderRecord(
+        TicketOrderRecord saved = repository.saveTicketOrder(new TicketOrderRecord(
                 "ticket_order_" + slug,
                 "TO" + now.toEpochMilli() + slug.substring(0, Math.min(6, slug.length())).toUpperCase(Locale.ROOT),
                 trimToNull(actual.customerId()),
@@ -156,6 +156,13 @@ public class TicketOrderService {
                 // AUD-076：快照酒吧归属（取自票种，服务端真值；通票为 null）。
                 orderBarId
         ));
+        // V359：客人端 H5 下单时拍的人脸照按订单加密暂存(每张票一张)，后台出票时转绑到已发权益。
+        //   客人永远调不到出票端点(ticket.ticket.issue)，这一格是「客人自己拍的脸」进系统的唯一路径。
+        //   facePhotoService 为 null(旧构造/无 PiiCipher 的单测)时不暂存；空表=该票种不要照，零影响。
+        if (facePhotoService != null) {
+            facePhotoService.stageForOrder(saved.id(), actual.facePhotos(), quantity);
+        }
+        return saved;
     }
 
     // 行级隔离（V135）：订单列表按调用方 scope 过滤——平台（scope 空）看全部，商户仅看自身受理的订单。
@@ -314,7 +321,9 @@ public class TicketOrderService {
                 order.salesChannel(),
                 List.of("dynamic_qr"),
                 // 批3-6：出票请求带来的人脸照转发进发放链，供 require_face_photo 权益捕获存档。
-                request.facePhotos()
+                // V359：出票请求自己没带照片时，取客人下单时拍的暂存照——线上买票的客人不在柜台，
+                //   出票的运营人员手上没有客人的脸，唯一来源就是客人自己拍的那张。
+                resolveIssueFacePhotos(order.id(), request.facePhotos())
         ));
         Instant issuedAt = Instant.now();
         repository.updateTicketOrder(new TicketOrderRecord(
@@ -343,10 +352,30 @@ public class TicketOrderService {
                 // AUD-076：保留酒吧归属快照。
                 order.barId()
         ));
+        // V359：脸照已转绑到已发权益，订单暂存位立即删——生物识别数据不多留一份、不多留一秒。
+        if (facePhotoService != null) {
+            facePhotoService.discardStagedForOrder(order.id());
+        }
         // P0 清单#2：支付成功（订单转 paid）→ 发积分入账事件，customer 域写 pending（幂等 source_doc=ticket_order/orderId）。
         // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额按后台可配的积分累计率折算（出厂默认每元 1 分，V340）。
         publishPointsEarnRequested(order);
         return issued;
+    }
+
+    /** V359：当前生效的人脸照留存天数（后台可配，缺配置/无脸照服务回落 30），供客人端如实告知留存期限。 */
+    int facePhotoRetentionDays() {
+        return facePhotoService == null ? 30 : facePhotoService.retentionDays();
+    }
+
+    /**
+     * V359 出票取照：出票请求自带照片(柜台现场拍)优先；没带则取客人下单时的暂存照。
+     * 两者都没有 → 空表，由发放链按 require_face_photo 决定放行还是拒 FACE_PHOTO_REQUIRED（判定口径不变）。
+     */
+    private List<String> resolveIssueFacePhotos(String orderId, List<String> requestPhotos) {
+        if (requestPhotos != null && !requestPhotos.isEmpty()) {
+            return requestPhotos;
+        }
+        return facePhotoService == null ? List.of() : facePhotoService.stagedForOrder(orderId);
     }
 
     /**

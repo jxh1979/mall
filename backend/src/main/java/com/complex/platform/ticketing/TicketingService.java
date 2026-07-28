@@ -123,6 +123,19 @@ public class TicketingService {
         );
     }
 
+    /** V359：要求购票人拍入场人脸照的票种 id 集合（供客人端购票页判定是否弹拍照）。 */
+    public java.util.Set<String> ticketTypeIdsRequiringFacePhoto() {
+        return repository.listTicketTypeIdsRequiringFacePhoto();
+    }
+
+    /**
+     * V359：当前生效的人脸照留存天数（后台 ADM-ANA-011 可改，缺配置 30）。
+     * 客人端拍照前要把「照片留多久」如实告诉客人，写死数字会在运营改配置后变成假告知。
+     */
+    public int facePhotoRetentionDays() {
+        return orderService.facePhotoRetentionDays();
+    }
+
     public PageResponse<TicketPriceRuleRecord> listTicketPriceRules() {
         return listTicketPriceRules(false);
     }

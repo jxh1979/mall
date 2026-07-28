@@ -317,6 +317,12 @@ class PlatformControllerTests {
             return Mockito.mock(PlatformService.class);
         }
 
+        // D1：PlatformController 现在还注入场地营业时间服务（本切片测试不测它，给个 mock 让上下文起得来）。
+        @Bean
+        VenueBusinessHoursService venueBusinessHoursService() {
+            return Mockito.mock(VenueBusinessHoursService.class);
+        }
+
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
