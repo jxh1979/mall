@@ -3,7 +3,8 @@
 > **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
 > R5 横幅原标注的"终端开关后端拒绝铁律未实现/scope 收窄"已在本会话 P0 实现并落库（V068 + 切面 + 全景埋点），以下上修；事件名漂移与三层留痕接线保持开放。
 > - **✅ 终端开关后端拒绝铁律（§5.4）已落地（V068）**：新增 `ActionGateAspect`（`@Order(10)`，早于业务事务）在带 `@GuardedAction(capability=...)` 的业务方法执行前由 `TerminalSwitchGuard` 校验开关、关闭/读取失败发 `terminal.access_rejected`(reason=disabled|switch_fetch_failed) 并拒绝，**finance/bar/ticketing/amusement/inventory 共 94 处 `@GuardedAction` 全景埋点**，不再可绕过。准入闸 `AdmissionGuard` + `supervisor_review_policies`(V068) 同切面串联（T3 合同准入）。
-> - **✅ scope 7 维已落地（V068）**：`TerminalSwitchGuard.resolveEffectiveSwitch` 解析优先级 device > version > module > business_system > merchant > project > global（默认开启 opt-out，fail-closed）；`terminal_capability_switches.scope_type` 加 7 维 CHECK，不再收窄到 global/device。
+> - **✅ scope 7 维已落地（V068）**：`TerminalSwitchGuard.resolveEffectiveSwitch` 层级 device > version > module > business_system > merchant > project > global（默认开启 opt-out，fail-closed）；`terminal_capability_switches.scope_type` 加 7 维 CHECK，不再收窄到 global/device。
+> - **✅ 求值改「取最严」+ 新增灰度层（2026-07-22 用户裁决 R-10，V342）**：V068 起的实现是"命中最具体的显式行即胜出"，**低层打开会压过高层关闭**（global=关 + device=开 → 放行），安全方向反了，v7 审计定 P0。现改为**任一层关闭即最终关闭**（返回最高层的关闭行做审计口径），并新增**灰度层**作为独立的最细粒度级别（白名单试点，只能收窄不能放宽）接入求值链。口径见 §5.5 / §5.7，数据对象见 §6.3A。
 > - **（2026-07-20 安全修复 AUD-010 · 完整设计）终端/设备身份服务端派生 + 每请求设备凭证验签 + 分级强制**：堵死「攻击者不带设备凭证、直接自报 `X-Terminal-Type` 即绕过资金/切换/入场闸」的伪造向量。
 >   - **验签机制**：对**设备绑定型终端类型**（`staff_work_phone`/`tablet`/`kiosk`）的**写**请求，要求携带 `X-Device-Id` + `X-Device-Timestamp` + `X-Device-Nonce` + `X-Device-Signature`；签名量=`deviceId\n timestamp\n nonce\n METHOD\n path`，以**设备注册公钥**验签（复用既有员工 Android Keystore 设备凭证 `staff_device_credentials.device_public_key`，经 认证员工→员工档案→active 凭证 解析；EC SHA256withECDSA / RSA SHA256withRSA）。并核对 `terminal_devices` 登记（存在 + `status=bound` + 登记类型与声明一致）。通过则以**设备登记类型**为可信终端类型。
 >   - **服务端派生注入**：`DeviceCredentialInterceptor`（`/api/**`，排在总开关拦截器之前）把派生结果存入 `TerminalIdentityHolder`（请求属性）；`GateRequestContext.terminalType()/deviceId()`（终端开关 + 入场闸读取源）与 ServiceOrderController 资金四路（下单/确认收款/完成/出示收款码）统一改读**服务端派生身份**，不再各自信任自报头。
@@ -478,13 +479,30 @@ flowchart TD
 | 设备关闭 | 指定设备不能继续使用，进入设备异常或停用状态 | 该 device_id 的业务接口拒绝并写 `terminal.access_rejected`（scope_type=device） |
 | 版本关闭（端版本） | 旧版本提示升级，不能继续执行业务动作 | 携带被禁用 app/设备版本的请求拒绝并写 `terminal.access_rejected`（scope_type=version） |
 
-### 5.5 灰度开关的 scope_type 处置（修订说明 2026-06-07 新增，switch-3）
+### 5.5 灰度层：独立的最细粒度级别（2026-07-22 用户裁决 R-10 重裁，取代 2026-06-07 switch-3 旧口径）
 
-5.3 节"开关层级"列出了"灰度开关（仅开放给指定商户、岗位、员工、设备或点位）"，但 6.3 节 `terminal_capability_switches.scope_type` 枚举只有 `global、project、merchant、business_system、module、device、version`，灰度无独立落点。本版裁决（P0）：
+> **⛔ 旧口径已作废（2026-06-07 switch-3）**：原裁决为"P0 灰度仅借 `merchant`/`device`/`version` 三个 scope_type 表达，不新增独立落点"。
+> 2026-07-22 用户就 v7 审计 R-10 重新拍板：**灰度是独立的一档，作为求值链最细粒度级别接入**；业务 HTML「终端开关」节与《业务名词速查》已按新口径改毕
+> （"可以按全局、综合体项目、商户、业务系统、模块、版本/设备、灰度开关（灰度是最细的一档：只对少数试点对象——比如几台设备、某一个试点商户——先开放，确认没问题再逐步全面放开）"）。本节按新口径重写。
 
-- **P0 灰度仅通过既有 `merchant` / `device` / `version` 三个 scope_type 表达**（按商户灰度、按设备灰度、按版本灰度），不新增独立 `gray` scope_type；按"岗位/员工/点位"的更细灰度后置 P1，避免 P0 把开关表做成复杂的人群定向引擎。
-- 若业务确需 P0 即支持按岗位/员工/点位灰度，则需改本条并在 6.3 节 `scope_type` 枚举补 `gray`，同时补 `gray_dimension`（merchant/role/staff/device/point）与 `gray_target_ids` 字段；在未补字段前，编码不得臆造 `gray` 取值。
-- 依据 finding switch-3。
+**灰度层的语义（按「取最严」母口径推导，见 §5.7）**
+
+母口径是"任一层关闭即最终关闭"。灰度既然是层级里的一档，就必须服从同一条铁律，因此灰度**只能收窄、不能放宽**——它不可能把上层已经关掉的能力重新打开。由此推出灰度的唯一自洽用法是"白名单收窄"：
+
+| 灰度状态 | 求值行为 |
+|---|---|
+| 该「端 × 能力」**没有**生效中的灰度试点 | 灰度层**弃权**，行为与不做灰度时完全一致（这是默认态，V342 上线零行为变化） |
+| 有生效中的灰度试点，且请求上下文命中白名单 | 灰度层**不关闭**（但上面任一层关闭仍然关闭） |
+| 有生效中的灰度试点，但请求上下文一个白名单条目都没命中 | 灰度层**关闭**，写 `terminal.access_rejected(reason=canary_not_whitelisted, scope_type=canary)` |
+| 有生效中的灰度试点，但白名单为空 | 视同"没命中"，**全关**——绝不因为忘配白名单而全放 |
+
+即"灰度 = 在所有上层都开的前提下，再收窄到试点对象"，而**不是**"灰度能独立开启一个上层已关的能力"。运营的实际用法是：新能力上线时上层保持打开、用灰度把放行面收到几台设备/一个试点商户，验证通过后关闭灰度试点即全量放开。
+
+**试点对象维度**：`project / merchant / business_system / module / version / device`（复用既有 scope 维度，逐字对齐 §5.7 的层级名）。**不含 `global`**——把 global 放进白名单等于全量放开，灰度就失去意义，V342 已用 CHECK 约束禁掉。按"岗位/员工/点位"的人群定向灰度仍后置 P1，不在本期把开关表做成人群定向引擎。
+
+**维护与留痕**：后台「终端开关矩阵」页新增"灰度试点（最细一档）"区块，可开/关试点、增删白名单条目，权限复用 `terminal.switch.view` / `terminal.switch.manage` 且写口限平台级主体。开/关试点、加白名单、移出白名单全部写审计（`terminal_canary.rollout_changed` / `target_added` / `target_archived`），对齐业务 HTML「终端开关启用、停用、灰度开放和被拒绝访问」都要留痕。移出白名单遵守**删除=软删除**铁律：填存档理由、行保留、可恢复（注意方向：移出白名单是**收紧**，该对象随即被灰度关闭）。
+
+- 依据 finding switch-3（旧）+ v7 审计 R-10 用户裁决（现行）。落地见 §6.3A、迁移 V342。
 
 ### 5.6 开关拉取失败的兜底策略（fail-closed，修订说明 2026-06-07 新增，switch-5）
 
@@ -513,6 +531,17 @@ flowchart TD
 5. 模块开关（module）
 6. 端版本开关（version）/ 设备开关（device）
 7. 灰度命中（见 5.5）
+
+> **✅ 2026-07-22 R-10 收口（用户裁决 · 已落地）**：本条"高层级关闭一律压倒低层级打开"此前**只写在文档里、代码是反的**——
+> `resolveEffectiveSwitch` 按 device→…→global 逐级查询、**命中第一条显式行即返回**，于是"global=关 + device=开"返回 device 行而**放行**，
+> 低层打开压过高层关闭（安全方向反了，v7 审计 R-10 定 P0）。本次改为**取最严**：
+> - 一次取回本请求各层的显式行，**任一层 `enabled=false` → 最终关闭**；返回其中**最高层**的关闭行作为审计口径（告诉运营是哪一层把它关了）。
+> - 全部命中层都为开 → 仍返回**最具体**的那条开启行（保留调用方"默认值兜底"语义）。
+> - 无任何显式行 → 默认开启（opt-out，§5.6 的 fail-closed 只针对读取异常）。
+> - **同一层内**"专端行 > 跨端通配 `*` 行"的既有口径**保持不变**：通配/专端是另一坐标轴，不是"层级"，不纳入取最严
+>   （否则运营关了 `*` 之后就再也无法为单个端单独放开，与"分端停用/分端启用"的运营诉求冲突）。
+> - 第 7 档"灰度"按 §5.5 作为**独立最细级别**串在最后求值，同样只能收窄不能放宽。
+> - 组合矩阵证据：`TerminalSwitchStrictestAndCanaryMatrixTests` 用真实库跑满 8 层 × 开/关 = **256** 种组合，断言"任一层关闭 ⇔ 最终关闭"。
 
 裁决口径：
 
@@ -581,6 +610,45 @@ flowchart TD
 | updated_at | 更新时间 |
 
 > 修订说明（2026-06-07 收口）：`terminal_type` 为《统一口径基准》D5"10 端权威表"的唯一落点。本版**直接把表体取值替换为 D5 的 10 个权威码**（`app/miniapp/web/tablet/staff_work_phone/staff_private_phone/merchant_portal/merchant_app/kiosk/mobile_admin`），删除上一版"`guest_app/mini_program/web_frontend/staff_tablet/staff_private_app` 作别名兜底"的写法——权威字段不得携带非权威码；如确需保留历史别名，应另列独立映射表，不在本字段取值集中混入。`foundation-database §6.9`、`platform-governance 字段字典 §3.1`、`java-backend`、`terminal-display-layer` 三处须与本表逐字一致。依据 finding baseline-conf-3、structural-2、annotation-3、switch-1/2、govfam-3、D5。
+
+### 6.3A 终端开关灰度层（V342，R-10）
+
+灰度是求值链**最细的一档**，落在独立两张表（不塞进 `terminal_capability_switches.scope_type`——灰度需要表达"白名单外一律关"，而开关表"无行=默认开"的 opt-out 语义表达不了这件事）。语义见 §5.5。
+
+**terminal_capability_canary_rollouts 灰度试点**
+
+| 字段 | 说明 |
+|---|---|
+| id | 试点 ID |
+| terminal_type | 端（取值集与 `terminal_capability_switches.terminal_type` 逐字一致，含跨端通配 `*`） |
+| capability_code | 能力码 |
+| active | 试点是否生效；`false` = 灰度层弃权（不做灰度） |
+| reason | 开/关试点的理由（必填） |
+| created_at / updated_at | 时间戳 |
+
+唯一键 `(terminal_type, capability_code)`——一个「端 × 能力」最多一条试点，重复提交即覆盖（天然幂等）。
+
+**terminal_capability_canary_targets 试点白名单**
+
+| 字段 | 说明 |
+|---|---|
+| id | 白名单条目 ID |
+| rollout_id | 所属试点 |
+| target_type | 试点维度：project、merchant、business_system、module、version、device（**不含 global**） |
+| target_id | 试点对象 ID，与该维度在请求上下文中的取值逐字比较 |
+| reason | 加入白名单的理由（必填） |
+| created_at / updated_at | 时间戳 |
+| archived_at / archive_reason / archived_by | 软删除三列（移出白名单=存档，行保留可恢复；**删除=软删除铁律**） |
+
+唯一键 `(rollout_id, target_type, target_id)`；求值与后台列表只认 `archived_at IS NULL` 的条目。
+
+**接口**：`GET /api/v1/terminals/canary-rollouts`（`terminal.switch.view`）、`PUT /api/v1/terminals/canary-rollouts`、
+`POST /api/v1/terminals/canary-rollouts/{id}/targets`、`POST /api/v1/terminals/canary-targets/{id}/archive`
+（后三者 `terminal.switch.manage` + 平台级主体，与 §终端开关写口同一 F-CROSS-01 收口）。
+
+**新增事件**：`terminal_canary.viewed` / `terminal_canary.rollout_changed`（metadata 带 `active` 与 `action=canary_opened|canary_closed`）/ `terminal_canary.target_added` / `terminal_canary.target_archived`，
+失败面 `terminal_canary.view_failed` / `terminal_canary.rollout_change_failed` / `terminal_canary.target_add_failed` / `terminal_canary.target_archive_failed`；
+灰度判定关闭时复用 `terminal.access_rejected`，payload `reason=canary_not_whitelisted`、`scope_type=canary`、`scope_id=<rollout_id>`；读取异常为 `reason=canary_fetch_failed`（fail-closed，与 §5.6 一致）。
 
 ### 6.4 business_process_instances 业务过程实例
 
@@ -722,6 +790,9 @@ flowchart TD
 | 2026-06-07 | 增 | §5.5 灰度处置 | 裁决 P0 灰度仅用 merchant/device/version 表达，不新增 gray scope_type（或声明改本条补 gray 字段） | finding switch-3 |
 | 2026-06-07 | 增 | §5.6 fail-closed 兜底 | 开关拉取失败时一律兜底关闭（写操作 fail-closed），不得默认放行 | finding switch-5 |
 | 2026-06-07 | 增 | §5.7 优先级裁决 | 给出开关优先级序，裁决商户"全开放"=授权范围内全开放、不绕过上层开关 | finding switch-6 |
+| 2026-07-22 R-10 | 改 | §5.7 / 顶部横幅 | 求值从"最具体显式行胜出"改为**取最严**（任一层关闭即最终关闭，返回最高层关闭行做审计口径）；同层内"专端 > 通配 `*`"保持不变并说明理由 | v7 审计 R-10 用户裁决；业务 HTML「高层级关闭压倒低层级打开」 |
+| 2026-07-22 R-10 | 改 | §5.5 灰度处置 | 作废 2026-06-07「灰度仅借 merchant/device/version 表达、不新增落点」旧口径，改为**灰度＝独立的最细粒度级别（白名单试点）**，按取最严母口径推导为"只能收窄不能放宽" | v7 审计 R-10 用户裁决；业务 HTML/名词速查已改 |
+| 2026-07-22 R-10 | 增 | §6.3A 灰度层数据对象 | 新增 `terminal_capability_canary_rollouts` / `terminal_capability_canary_targets`（V342）、接口清单、`terminal_canary.*` 事件、`canary_not_whitelisted`/`canary_fetch_failed` 拒绝原因 | 同上 |
 | 2026-06-07 | 改 | §6.3 终端能力开关 | terminal_type 标注为 D5 10 端权威落点、含 mobile_admin，并给出与 D5 code 的别名对应 | 《统一口径基准》D5；finding switch-1/2、govfam-3 |
 | 2026-06-07 | 增 | §4.1 标准事件类型 | 补登各业务域本轮新增但未登记的事件：供应链 13 条（supplier.blacklisted/supply_contract.approved/purchase.ordered/inventory.* 等）、酒吧订台域（reservation.created/reservation.deposit_settled/bar.bill_settled/bar.saved_bottle_picked_up/bar.gift_redeemed 等）、票务核销退款域（ticket.refunded/ticket.changed/ticket.inventory_locked/released/verification.succeeded/failed）、会员合规容量域（points.earned/deducted/redeemed/expired、consent.recorded/withdrawn、venue.over_capacity），各给 event_category 与载荷要点 | finding broken-ref-2/3/4、baseline-conf-5、annotation-1、D4 |
 | 2026-06-10 产品审计 V0.6 | 增/改 | §4.1.3 | 明确事件中心 `event_name` 只写标准名；票务预检补 `verification.previewed`，签名失败/疑似变造/离线冲突等细分语义进入 `reason_code`/`event_subtype`，不再作为旧事件名消费 | 本轮 PM Critic V0.6 事件名漂移修复 |

@@ -53,6 +53,7 @@ bar_bills,direct,merchant_id,merchant_id column on bar_bills,ready for project/m
 bar_combo_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 bar_combos,direct,merchant_id,merchant_id column on bar_combos,ready for project/merchant scoped query enforcement,covered
 bar_commission_calculations,inherited,bill_id,bill_id -> bar_bills -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,covered
+bar_commission_rate_configs,direct,project_id,project_id column on bar_commission_rate_configs,ready for project/merchant scoped query enforcement,covered
 bar_deposit_rules,direct,merchant_id,merchant_id column on bar_deposit_rules,ready for project/merchant scoped query enforcement,covered
 bar_gift_redemptions,direct,merchant_id,merchant_id column on bar_gift_redemptions,ready for project/merchant scoped query enforcement,covered
 bar_order_item_voids,direct,merchant_id,merchant_id column on bar_order_item_voids,ready for project/merchant scoped query enforcement,covered
@@ -212,6 +213,7 @@ permission_templates,single_complex_default,P0_SINGLE_COMPLEX,single-complex def
 permissions,global_reference,global_reference,global reference/configuration table,safe as global reference; tenant-specific overrides require separate scoped table,covered
 platform_migration_baseline,global_reference,global_reference,global reference/configuration table,safe as global reference; tenant-specific overrides require separate scoped table,covered
 platform_retention_rules,direct,project_id,project_id column on platform_retention_rules,ready for project/merchant scoped query enforcement,covered
+points_accrual_rate_configs,direct,project_id,project_id column on points_accrual_rate_configs,ready for project/merchant scoped query enforcement,covered
 position_role_templates,direct,organization_id,organization_id column on position_role_templates,ready for project/merchant scoped query enforcement,covered
 production_readiness_check_blockers,inherited,owner/blocker code,owner/blocker code -> production evidence scope,must join through scope path before multi-complex rollout,covered
 production_readiness_checks,inherited,owner/blocker code,owner/blocker code -> production evidence scope,must join through scope path before multi-complex rollout,covered
@@ -265,6 +267,8 @@ supplier_settlement_methods,direct,merchant_id,merchant_id column on supplier_se
 supply_contracts,direct,project_id,project_id column on supply_contracts,ready for project/merchant scoped query enforcement,covered
 supply_entities,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 temporary_permission_grants,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+terminal_capability_canary_rollouts,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
+terminal_capability_canary_targets,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
 terminal_capability_switches,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
 terminal_device_credentials,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered
 terminal_device_nonces,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,covered

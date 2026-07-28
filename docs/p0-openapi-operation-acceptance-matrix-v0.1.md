@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 682 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 686 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -229,6 +229,10 @@
 | platform | `POST` | `/api/v1/platform/spaces` | `createSpace` | 创建场馆、区域、点位 | `SpaceRequest` | `governance.space.manage` | `staff-token` | `project` | web | 是 | `space.updated` | `space.update_failed` |
 | system | `GET` | `/api/v1/system/health` | `getSystemHealth` | 健康检查 | `-` | `public` | `public` | `none` | web, mobile_admin<br>channel: monitoring | 否 | `system.health_checked` | `system.health_check_failed` |
 | system | `GET` | `/api/v1/system/version` | `getSystemVersion` | 版本和构建信息 | `-` | `system.version.view` | `staff-token` | `project` | web, mobile_admin | 否 | `system.version_viewed` | `system.version_view_failed` |
+| terminals | `GET` | `/api/v1/terminals/canary-rollouts` | `listTerminalCanaryRollouts` | 查询终端开关灰度试点 | `-` | `terminal.switch.view` | `staff-token` | `project-device` | web | 否 | `terminal_canary.viewed` | `terminal_canary.view_failed` |
+| terminals | `PUT` | `/api/v1/terminals/canary-rollouts` | `upsertTerminalCanaryRollout` | 开启或结束灰度试点 | `CanaryRolloutRequest` | `terminal.switch.manage` | `staff-token` | `project-device` | web | 否 | `terminal_canary.rollout_changed` | `terminal_canary.rollout_change_failed` |
+| terminals | `POST` | `/api/v1/terminals/canary-rollouts/{id}/targets` | `addTerminalCanaryTarget` | 加入灰度白名单 | `CanaryTargetRequest` | `terminal.switch.manage` | `staff-token` | `project-device` | web | 否 | `terminal_canary.target_added` | `terminal_canary.target_add_failed` |
+| terminals | `POST` | `/api/v1/terminals/canary-targets/{id}/archive` | `archiveTerminalCanaryTarget` | 移出灰度白名单（软删除） | `CanaryTargetRequest` | `terminal.switch.manage` | `staff-token` | `project-device` | web | 否 | `terminal_canary.target_archived` | `terminal_canary.target_archive_failed` |
 | terminals | `GET` | `/api/v1/terminals/capability-switches` | `listCapabilitySwitches` | 查询端能力开关 | `-` | `terminal.switch.view` | `staff-token` | `project-device` | web | 否 | `terminal_switch.viewed` | `terminal_switch.view_failed` |
 | terminal | `GET` | `/api/v1/terminals/capability-switches/effective` | `listEffectiveDisabledTerminalSwitches` | 当前终端的已关闭开关行（前端菜单 gating 数据源） | `-` | `not_applicable` | `staff-token` | `platform` | web, miniapp, app, kiosk, tablet, staff_work_phone, staff_private_phone, merchant_portal, merchant_app, mobile_admin | 否 | `terminal_switch.effective_viewed` | `terminal_switch.effective_view_failed` |
 | terminals | `PUT` | `/api/v1/terminals/capability-switches/{id}` | `updateCapabilitySwitch` | 修改端能力开关 | `CapabilitySwitchRequest` | `terminal.switch.manage` | `staff-token` | `project-device` | web | 是 | `terminal_switch.changed` | `terminal_switch.change_failed` |
@@ -770,5 +774,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 682 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 686 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |
