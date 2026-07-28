@@ -142,6 +142,8 @@ const ARCHIVABLE = new Set([
 ]);
 
 type TierRow = { rankFrom: string; rankTo: string; shareBps: string };
+// S2：票种下拉项（/api/v1/ticketing/ticket-types 分页信封的 items 元素，本页只用 id + 票名）。
+type TicketTypeOption = { id: string; ticketName?: string; status?: string };
 type Form = {
   projectId: string;
   retentionBps: string;
@@ -151,7 +153,7 @@ type Form = {
   perGuestCent: string;
   fixedAmountCent: string;
   monthlyCapAmountCent: string;
-  entitlementType: string;
+  ticketTypeId: string;
   feeBps: string;
   discountBearer: string;
   splitPlatformBps: string;
@@ -164,7 +166,7 @@ type Form = {
 };
 const EMPTY_FORM: Form = {
   projectId: "", retentionBps: "", methodType: "by_venue_per_guest", specialApprovalTermMonths: "3", merchantId: "",
-  perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", entitlementType: "", feeBps: "",
+  perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", revenueStream: "all_pass_ticket", managementEntityId: "",
   beneficiaryKind: "entity",
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
@@ -231,6 +233,11 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
 
+  // S2：综合服务费费率按【票种】配置，票种下拉数据源。该端点要 ticket.product.view（与本页 settlement.config.manage
+  // 是两个权限），缺权限就别请求（403 会污染整页），降级成手填票种 id —— 同上面主体下拉的处理。
+  const [ticketTypes, setTicketTypes] = React.useState<TicketTypeOption[]>([]);
+  const canTicketTypeView = hasPermissions(effectivePermissions, ["ticket.product.view"]);
+
   const reload = React.useCallback(() => {
     setLoading(true);
     setError(null);
@@ -247,6 +254,12 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
       .then((rows) => setEntities(Array.isArray(rows) ? rows.filter((r) => r.status !== "inactive") : []))
       .catch(() => setEntities([]));  // 主体列表拿不到不阻断配置页，回落手填
   }, [api, canEntityView]);
+  React.useEffect(() => {
+    if (!canTicketTypeView) return;
+    api.get<{ items?: TicketTypeOption[] }>("/api/v1/ticketing/ticket-types?includeArchived=false")
+      .then((page) => setTicketTypes(Array.isArray(page?.items) ? page.items : []))
+      .catch(() => setTicketTypes([]));  // 票种列表拿不到不阻断配置页，回落手填
+  }, [api, canTicketTypeView]);
 
   function openEdit(key: EditKey) {
     setForm(EMPTY_FORM);
@@ -471,8 +484,8 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
           error={formError || undefined}
           onClose={() => setEditing(null)}
           onSubmit={() => void submitEdit()}
-          steps={editSteps(editing, form, setField, tiers, setTiers, entities, canEntityView)}
-          summary={editSummary(editing, form, tiers)}
+          steps={editSteps(editing, form, setField, tiers, setTiers, entities, canEntityView, ticketTypes, canTicketTypeView)}
+          summary={editSummary(editing, form, tiers, ticketTypes)}
         />
       ) : null}
     </section>
@@ -488,6 +501,8 @@ function editSteps(
   setTiers: React.Dispatch<React.SetStateAction<TierRow[]>>,
   entities: BusinessEntityRow[],
   canEntityView: boolean,
+  ticketTypes: TicketTypeOption[],
+  canTicketTypeView: boolean,
 ): GuidedStep[] {
   const projectField = (
     <label>项目（留空 = 全平台默认）
@@ -523,7 +538,20 @@ function editSteps(
     case "comprehensive_service_fee":
       content = (<>{projectField}
         <label>商户 id（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
-        <label>票种（留空 = 通用）<input data-testid="settlement-config-field-entitlementType" value={form.entitlementType} onChange={setField("entitlementType")} /></label>
+        {canTicketTypeView ? (
+          <label>票种（留空 = 该范围内所有票种通用）
+            <select data-testid="settlement-config-field-ticketTypeId" value={form.ticketTypeId} onChange={setField("ticketTypeId")}>
+              <option value="">全部票种通用</option>
+              {ticketTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.ticketName ?? t.id}</option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label>票种 id（无票种查看权限，暂按 id 手填；留空 = 全部票种通用）
+            <input data-testid="settlement-config-field-ticketTypeId" value={form.ticketTypeId} onChange={setField("ticketTypeId")} />
+          </label>
+        )}
         <label>费率万分比（0~10000，配固定额时须 0）<input data-testid="settlement-config-field-feeBps" type="number" min={0} max={10000} value={form.feeBps} onChange={setField("feeBps")} /></label>
         <label>固定额（分，可留空；与费率二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label>
         <label>月度封顶（分，可留空 = 不封顶；比例/固定额都受此上限）<input data-testid="settlement-config-field-monthlyCapAmountCent" type="number" min={0} value={form.monthlyCapAmountCent} onChange={setField("monthlyCapAmountCent")} /></label></>);
@@ -617,13 +645,19 @@ function editSteps(
   return [{ title: "配置内容", validate: () => validate(key, form, tiers), content }];
 }
 
-function editSummary(key: EditKey, form: Form, tiers: TierRow[]): GuidedSummaryItem[] {
+function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: TicketTypeOption[]): GuidedSummaryItem[] {
   const scope: GuidedSummaryItem = { label: "项目", value: form.projectId.trim() || "全平台默认" };
+  // 确认页给票名而不是 id —— 复核的人要看得出这条费率影响的是哪个票。
+  const ticketTypeLabel = (id: string) => {
+    const t = id.trim();
+    if (t === "") return "全部票种通用";
+    return ticketTypes.find((x) => x.id === t)?.ticketName ?? t;
+  };
   switch (key) {
     case "retention": return [scope, { label: "留存万分比", value: form.retentionBps || "—" }];
     case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期（月）", value: form.specialApprovalTermMonths || "3" }];
     case "merchant_rate": return [scope, { label: "商户", value: form.merchantId || "—" }, { label: "每客单价（分）", value: form.perGuestCent || "—" }, { label: "固定额（分）", value: form.fixedAmountCent || "—" }];
-    case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: form.entitlementType.trim() || "通用" }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
+    case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
     case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }];
     case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }];
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "收款方类型", value: BENEFICIARY_KIND_OPTIONS.find(([v]) => v === form.beneficiaryKind)?.[1] ?? form.beneficiaryKind }, { label: "收款主体", value: form.beneficiaryKind === "per_merchant" ? "各商户自己" : (form.managementEntityId || "—") }];
@@ -696,7 +730,7 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
       };
     case "comprehensive_service_fee":
       return {
-        idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), entitlementType: orUndef(form.entitlementType),
+        idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), ticketTypeId: orUndef(form.ticketTypeId),
         feeBps: form.feeBps.trim() === "" ? 0 : Number(form.feeBps),
         fixedAmountCent: orUndef(form.fixedAmountCent) === undefined ? null : Number(form.fixedAmountCent),
         monthlyCapAmountCent: orUndef(form.monthlyCapAmountCent) === undefined ? null : Number(form.monthlyCapAmountCent),

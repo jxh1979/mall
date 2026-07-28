@@ -29,6 +29,11 @@ import java.time.Instant;
  *                             为空或非专属时消费者仍按 allocated 分摊(现状,与旧口径对账)。
  * @param fullPriceCent        D6 该权益满额份额(分,可空)。消费者用与 allocated 同一增量公式算 verifiedFull,折扣增量=max(0,verifiedFull−verified)；
  *                             为空(component_price 全空/direct 出票)→折扣恒 0(零行为变更)。
+ * @param projectId            S2：本次核销所属项目公司（综合体）scope。取自核销人 token 派生的项目归属
+ *                             （{@code AuthorizationService.currentProjectScopeQuietly()}，与提成费率/高价值阈值同一取数口径），
+ *                             平台级操作者=null=平台默认口径。<b>消费者用它同时做两件事</b>：解析综合服务费费率规则的项目维度、
+ *                             写入 {@code settlement_transactions.project_id}——两处同一个值,不再各写各的常量,
+ *                             项目级费率特例这才有可能命中（原先调用处硬编码 null，项目级规则永远解析不到）。
  */
 public record SettlementSettledEvent(
         String verificationId,
@@ -45,6 +50,7 @@ public record SettlementSettledEvent(
         Instant validTo,
         String exclusiveMerchantId,
         Long settlementPriceCent,
-        Long fullPriceCent
+        Long fullPriceCent,
+        String projectId
 ) {
 }

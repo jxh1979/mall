@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
+import static com.complex.platform.common.Strings.trimToNull;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.requireText;
 
@@ -122,7 +123,13 @@ public class SettlementConfigWriteService {
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
         rejectSentinel(req.projectId(), "project_id");
         rejectSentinel(req.merchantId(), "merchant_id");
-        rejectSentinel(req.entitlementType(), "entitlement_type");
+        rejectSentinel(req.ticketTypeId(), "ticket_type_id");
+        // S2:票种须真实存在。不校验的话坏 id 会撞 V365 的 fk_csfc_ticket_type 抛 500,
+        //   业务人员只看到「系统错误」,不知道是票种填错了;这里先拦成中文 400。
+        String ticketTypeId = trimToNull(req.ticketTypeId());
+        if (ticketTypeId != null && !writeRepository.ticketTypeExists(ticketTypeId)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "票种不存在,请从票种下拉中选择:" + ticketTypeId);
+        }
         int feeBps = requireBps(req.feeBps(), "fee_bps");
         Long fixed = req.fixedAmountCent();
         // 二选一(对齐 V328 chk_csfc_fee_mode):配固定额则 fee_bps 必 0;固定额 ≥0。
@@ -139,12 +146,15 @@ public class SettlementConfigWriteService {
             requireNonNegative(cap, "monthly_cap_amount_cent");
         }
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId())
-                + "|" + anyScope(req.entitlementType());
+                + "|" + anyScope(ticketTypeId);
         String landedId = writeRepository.upsertComprehensiveServiceFeeDraft(draftId("csfc_d_", scopeKey, idem),
-                req.projectId(), req.merchantId(), req.entitlementType(), feeBps, fixed, cap, actorId);
+                req.projectId(), req.merchantId(), ticketTypeId, feeBps, fixed, cap, actorId);
         audit("settlement.config.comprehensive_service_fee_configs.updated",
                 "comprehensive_service_fee_configs", landedId, idem,
-                Map.of("project_scope", defaultScope(req.projectId()), "fee_bps", String.valueOf(feeBps),
+                Map.of("project_scope", defaultScope(req.projectId()),
+                        "merchant_scope", anyScope(req.merchantId()),
+                        "ticket_type_scope", anyScope(ticketTypeId),
+                        "fee_bps", String.valueOf(feeBps),
                         "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed),
                         "monthly_cap_amount_cent", cap == null ? "-" : String.valueOf(cap)));
     }

@@ -47,6 +47,7 @@ class SettlementV268Tests {
     private final List<String> projectIds = new ArrayList<>();
     private final List<String> feeConfigIds = new ArrayList<>();
     private final List<String> discountConfigIds = new ArrayList<>();
+    private final java.util.Set<String> ticketTypeIds = new java.util.LinkedHashSet<>();
 
     @BeforeEach
     void setUp() {
@@ -69,6 +70,11 @@ class SettlementV268Tests {
         for (String id : discountConfigIds) {
             jdbcTemplate.update("DELETE FROM ticket_combo_discount_configs WHERE id = ?", id);
         }
+        // 票种必须在费率规则之后删(fk_csfc_ticket_type)。
+        for (String id : ticketTypeIds) {
+            jdbcTemplate.update("DELETE FROM ticket_types WHERE id = ?", id);
+        }
+        ticketTypeIds.clear();
     }
 
     /** 默认无费率配置 → 专属商户拿全额(零行为变更);bill.comp_service_fee_cent=0。 */
@@ -127,10 +133,10 @@ class SettlementV268Tests {
     /**
      * 费率按票种范围精确命中:barA 有 ticket 专属(配 10%)+ amusement 专属(未配 → 0%),
      * 两票种净额合并成一条明细 = (ticket 100000×90%) + (amusement 40000×100%) = 90000 + 40000 = 130000。
-     * 证明按 entitlement_type 拆聚合命中不同费率是对的。
+     * S2:证明费率按【票种】精确命中 —— 原来按权益类型,与「可按（项目 × 商户 × 票种）范围配置」的业务口径不符。
      */
     @Test
-    void feeScopedByEntitlementType_mergedIntoOneMerchantItem() {
+    void feeScopedByTicketType_mergedIntoOneMerchantItem() {
         String pid = newProject();
         seedExclusive(pid, "barA", "ticket", 10, 5, 100000L);
         seedExclusive(pid, "barA", "amusement", 4, 2, 40000L);
@@ -219,12 +225,12 @@ class SettlementV268Tests {
     }
 
     /**
-     * V336 封顶按「商户×规则」聚合(用户 A 口径核心):同一商户多票种落【同一条商户级规则】(entitlement_type 留空)时,
+     * V336 封顶按「商户×规则」聚合(用户 A 口径核心):同一商户多票种落【同一条商户级规则】(ticket_type_id 留空)时,
      * 封顶压的是该商户在该规则下当月<b>合计</b>费,而非逐票种各压一次(逐票种各压=N×封顶,违背「商户级规则=该商户当月封顶」)。
      * barA 两票种各原始费 10%×100000=10000,合计 20000;商户级封顶 15000 → 压到 15000(非各压后的 20000)。
      */
     @Test
-    void capAggregatesPerMerchantRuleAcrossEntitlementTypes() {
+    void capAggregatesPerMerchantRuleAcrossTicketTypes() {
         String pid = newProject();
         seedExclusive(pid, "barA", "ticket", 5, 3, 100000L);
         seedExclusive(pid, "barA", "amusement", 4, 2, 100000L);
@@ -262,7 +268,7 @@ class SettlementV268Tests {
      */
     private void applyFees(String projectId) {
         var rows = jdbcTemplate.queryForList(
-                "SELECT id, exclusive_merchant_id, entitlement_type, verified_amount_cent, verified_count,"
+                "SELECT id, exclusive_merchant_id, ticket_type_id, verified_amount_cent, verified_count,"
                         + " discount_amount_cent FROM settlement_transactions"
                         + " WHERE project_id = ? AND transaction_type = 'verification_settled'"
                         + " AND exclusive_merchant_id IS NOT NULL AND comp_service_fee_cent = 0 ORDER BY id",
@@ -271,11 +277,11 @@ class SettlementV268Tests {
         Instant me = MONTH.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
         for (var r : rows) {
             String merchant = (String) r.get("exclusive_merchant_id");
-            String type = (String) r.get("entitlement_type");
+            String ticketTypeId = (String) r.get("ticket_type_id");
             long verified = ((Number) r.get("verified_amount_cent")).longValue();
             int count = ((Number) r.get("verified_count")).intValue();
             long discount = ((Number) r.get("discount_amount_cent")).longValue();
-            var cfg = billRepository.findComprehensiveServiceFee(projectId, merchant, type);
+            var cfg = billRepository.findComprehensiveServiceFee(projectId, merchant, ticketTypeId);
             long platformBorne = ComprehensiveServiceFee.platformBorneCent(
                     billRepository.findComboDiscountConfig(projectId), discount);
             long fee = ComprehensiveServiceFee.perTicketCent(cfg, verified + platformBorne, count);
@@ -305,62 +311,81 @@ class SettlementV268Tests {
         return pid;
     }
 
-    private void seedFee(String projectId, String merchantId, String entType, int feeBps) {
+    private void seedFee(String projectId, String merchantId, String label, int feeBps) {
         String id = "csfc_test_" + Long.toHexString(System.nanoTime());
         feeConfigIds.add(id);
         jdbcTemplate.update(
-                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, ticket_type_id,"
                         + " fee_bps, is_draft) VALUES (?, ?, ?, ?, ?, FALSE)",
-                id, projectId, merchantId, entType, feeBps);
+                id, projectId, merchantId, ticketType(label), feeBps);
     }
 
     /** 固定额综合服务费(fee_bps=0 + fixed_amount_cent,满足 V328 chk_csfc_fee_mode 二选一)。 */
-    private void seedFixedFee(String projectId, String merchantId, String entType, long fixedAmountCent) {
+    private void seedFixedFee(String projectId, String merchantId, String label, long fixedAmountCent) {
         String id = "csfc_fx_" + Long.toHexString(System.nanoTime());
         feeConfigIds.add(id);
         jdbcTemplate.update(
-                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, ticket_type_id,"
                         + " fee_bps, fixed_amount_cent, is_draft) VALUES (?, ?, ?, ?, 0, ?, FALSE)",
-                id, projectId, merchantId, entType, fixedAmountCent);
+                id, projectId, merchantId, ticketType(label), fixedAmountCent);
     }
 
     /** V336 比例费 + 月度封顶(fee_bps>0 + monthly_cap_amount_cent)。 */
-    private void seedRatioFeeWithCap(String projectId, String merchantId, String entType, int feeBps, long capCent) {
+    private void seedRatioFeeWithCap(String projectId, String merchantId, String label, int feeBps, long capCent) {
         String id = "csfc_rc_" + Long.toHexString(System.nanoTime());
         feeConfigIds.add(id);
         jdbcTemplate.update(
-                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, ticket_type_id,"
                         + " fee_bps, monthly_cap_amount_cent, is_draft) VALUES (?, ?, ?, ?, ?, ?, FALSE)",
-                id, projectId, merchantId, entType, feeBps, capCent);
+                id, projectId, merchantId, ticketType(label), feeBps, capCent);
     }
 
     /** V336 固定额费 + 月度封顶(fee_bps=0 + fixed_amount_cent + monthly_cap_amount_cent)。 */
-    private void seedFixedFeeWithCap(String projectId, String merchantId, String entType,
+    private void seedFixedFeeWithCap(String projectId, String merchantId, String label,
                                      long fixedAmountCent, long capCent) {
         String id = "csfc_fc_" + Long.toHexString(System.nanoTime());
         feeConfigIds.add(id);
         jdbcTemplate.update(
-                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, entitlement_type,"
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, ticket_type_id,"
                         + " fee_bps, fixed_amount_cent, monthly_cap_amount_cent, is_draft) VALUES (?, ?, ?, ?, 0, ?, ?, FALSE)",
-                id, projectId, merchantId, entType, fixedAmountCent, capCent);
+                id, projectId, merchantId, ticketType(label), fixedAmountCent, capCent);
     }
 
-    private void seedExclusive(String projectId, String exclusiveMerchantId, String entType,
+    private void seedExclusive(String projectId, String exclusiveMerchantId, String label,
                               int verifiedCount, int numPeople, long verifiedCent) {
         Instant createdAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(createdAt);
         String id = "st_v268_" + System.nanoTime();
         jdbcTemplate.update(
                 "INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,"
-                        + " entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,"
+                        + " entitlement_type, ticket_type_id, verified_count, total_times, num_people, allocated_revenue_cent,"
                         + " verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,"
                         + " settlement_status, entitlement_valid_to, exclusive_merchant_id, verification_id,"
                         + " created_at, updated_at)"
-                        + " VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?,"
+                        + " VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?,"
                         + " 'draft', ?, ?, ?, ?, ?)",
-                id, "TN-" + id, "ent_" + id, entType, verifiedCount,
+                id, "TN-" + id, "ent_" + id, label, ticketType(label), verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
                 exclusiveMerchantId, projectId, ts, exclusiveMerchantId, "vf_" + id, ts, ts);
+    }
+
+    /**
+     * S2:票种维度 —— 按标签惰性建一个真票种(V365 的 fk_csfc_ticket_type 要求费率规则引用真实票种)。
+     * 同一标签复用同一 id,故「同票种」的费率规则与核销流水能对上;不同标签=不同票种,用来证费率按票种精确命中。
+     */
+    private String ticketType(String label) {
+        if (label == null) {
+            return null; // 票种留空 = 该(项目 × 商户)范围内所有票种通用
+        }
+        String id = "tt_v268_" + label;
+        if (ticketTypeIds.add(id)) {
+            jdbcTemplate.update(
+                    "INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status,"
+                            + " created_at, updated_at) VALUES (?, ?, 'fixed_price', FALSE, 'active', now(), now())"
+                            + " ON CONFLICT (id) DO NOTHING",
+                    id, "V268测试票种-" + label);
+        }
+        return id;
     }
 
     private Map<String, Object> bill(String projectId) {

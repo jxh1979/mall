@@ -32,9 +32,15 @@ public final class SettlementConfigWriteRequests {
                                       Long perGuestCent, Long fixedAmountCent) {
     }
 
-    /** comprehensive_service_fee_configs:综合服务费。二选一:配固定额则 feeBps 必 0(对齐 V328 chk_csfc_fee_mode)。 */
+    /**
+     * comprehensive_service_fee_configs:门票综合服务费。范围=项目 × 商户 × 票种(留空=该层通用)。
+     * 二选一:配固定额则 feeBps 必 0(对齐 V328 chk_csfc_fee_mode);monthlyCapAmountCent 留空=不封顶。
+     *
+     * <p>S2(V365):第三维由 entitlementType(权益类型)换成 ticketTypeId(票种),对齐 HTML
+     * 「可按（项目 × 商户 × 票种）范围另设每月封顶金额」——业务人员按票种谈费率、按票种对账。
+     */
     public record ComprehensiveServiceFeeRequest(String idempotencyKey, String projectId, String merchantId,
-                                                 String entitlementType, Integer feeBps, Long fixedAmountCent,
+                                                 String ticketTypeId, Integer feeBps, Long fixedAmountCent,
                                                  Long monthlyCapAmountCent) {
     }
 

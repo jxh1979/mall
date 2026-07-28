@@ -132,13 +132,16 @@ public class TicketDistributionSettlementService {
 
         // ⑦b 批3-4(§6.4)：专属某商户「不分摊」→ 每个专属商户一条全额直付明细（method=exclusive_full，
         //     不扣留存、不进 spvPool、不参与他家分池排名/客数聚合）。金额=该商户专属核销 Σverified 全额。
-        // V268 综合服务费(§7.2 口径8+"所有门票都抽"):单独/专属门票直付前,项目公司先抽综合服务费(项目x商户x票种范围可配),
-        //   商户拿【净额=收入-服务费】,服务费归项目(记入 bill.comp_service_fee_cent)。默认费率 0 -> 净额=全额 -> 零行为变更。
-        //   聚合已按 (merchant,entitlement_type) 拆,故费率能按票种范围精确命中;同一商户多票种的净额合并成一条明细。
+        // 综合服务费:专属门户直付前先抽综合服务费,商户拿【净额=收入-服务费】(记入 bill.comp_service_fee_cent)。
+        //   默认费率 0 -> 净额=全额 -> 零行为变更。
+        //   S2(V365):费率规则的范围改成【项目 × 商户 × 票种】,且【每笔核销时】按票种解析并落库(P6 起本引擎只做线性求和,
+        //   不再月末重算),故此处按 entitlement_type 分组只是聚合口径遗留、与费率命中无关(下面 merchantAgg 又按商户合并回去)。
+        //   ⚠️ 本处仍只读【专属】那部分 fee;非专属(进池)那部分虽已在 S2 落进 settlement_transactions,
+        //   但进主链扣减(F_pool)是 S4 —— 本刀不动引擎数值公式。
         List<JdbcSettlementBillRepository.ExclusiveMerchantRevenue> exclusives =
                 repository.aggregateExclusiveRevenue(projectId, windowStart, windowEnd);
         // V336 综合服务费月度封顶(用户 2026-07-21 拍板 A「按费率规则各自封」):费率规则可跨票种(商户级规则
-        //   entitlement_type=NULL)或跨商户(全局默认 merchant_id=NULL),故封顶【不能】逐 (商户×票种) 聚合行各自压——
+        //   ticket_type_id=NULL)或跨商户(全局默认 merchant_id=NULL),故封顶【不能】逐 (商户×票种) 聚合行各自压——
         //   否则同商户多票种落同一条规则时会被压 N 次=N×封顶,违背「商户级规则=该商户当月封顶」。改为按【商户 × 解析到的规则 id】
         //   把封顶前原始费聚合后再压:商户级规则=该商户当月封顶、票种级规则=该票种当月封顶、全局规则=各商户各自当月封顶(不跨商户合并)。
         //   两趟:①逐聚合行累计 商户毛额 + (商户,规则)原始费/cap ②各组封顶 → 商户净额一条 exclusive_full 明细。

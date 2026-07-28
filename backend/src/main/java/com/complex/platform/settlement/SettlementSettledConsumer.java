@@ -31,7 +31,7 @@ public class SettlementSettledConsumer {
     private static final String STATUS_DRAFT = "draft";
 
     private final JdbcSettlementTransactionRepository repository;
-    // P6:算每笔实收综合服务费需读费率/折扣配置 + 增量封顶月累计(平台口径 project=null,与 settleMonth 同源)。
+    // P6:算每笔实收综合服务费需读费率/折扣配置 + 增量封顶月累计(项目 scope 取事件带下来的真值,与 settleMonth 同源)。
     private final JdbcSettlementBillRepository billRepository;
 
     public SettlementSettledConsumer(JdbcSettlementTransactionRepository repository,
@@ -67,19 +67,31 @@ public class SettlementSettledConsumer {
             discountIncrement = SettlementAmounts.incrementalVerified(discountTotal, total, used, false, null);
         }
 
-        // P6 综合服务费实收(每笔·增量封顶):仅【专属】核销抽(非专属进池不抽);毛额=净收入+项目承担折扣(与 settleMonth 同口径),
+        // 综合服务费实收(每笔·增量封顶)。毛额=净收入+项目承担折扣(与 settleMonth 同口径),
         //   固定额/比例算本笔费,再按「商户×规则」当月增量封顶(月内 Σfee≤cap),落库作不可变实收事实供冲正精确取反。
+        //
+        // S2(2026-07-28)本刀改三处,业务口径出自 system-map §「门票综合服务费」:
+        //   ①【覆盖面】原来只有【专属】核销才抽,非专属(含通票本身)一分不抽 —— 与「所有门票项目都要收一道
+        //      综合服务费」直接相反。去闸:只要本笔有已核销金额就计提。
+        //   ②【维度】费率按【票种】解析(event.ticketTypeId()),不再按权益类型。业务人员跟商户谈的是票种费率,
+        //      一张通票里酒水/游乐两类权益按两套费率各抽一道,对账时根本对不上「这张票收了多少」。
+        //   ③【项目】projectId 传事件带下来的真值(核销人 token 派生),不再硬编码 null —— 原先项目级费率特例
+        //      永远解析不到,后台配了也不生效。同一个值同时用于解析费率与写 project_id 列,两处不再各写各的。
+        //   ⚠️ 本刀【不动引擎数值公式】:非专属那部分 fee 只落 settlement_transactions 作事实,
+        //      settleMonth 仍只从专属聚合读 fee(F 进主链是 S4)。费率种子仍为 0 → 每笔费恒 0 → 分账逐分不变。
         long compServiceFeeCent = 0L;
         String compServiceFeeConfigId = null;
-        if (event.exclusiveMerchantId() != null && verified > 0L) {
+        if (verified > 0L) {
             var svcFee = billRepository.findComprehensiveServiceFee(
-                    null, event.exclusiveMerchantId(), event.entitlementType());
+                    event.projectId(), event.exclusiveMerchantId(), event.ticketTypeId());
             long platformBorne = ComprehensiveServiceFee.platformBorneCent(
-                    billRepository.findComboDiscountConfig(null), discountIncrement);
+                    billRepository.findComboDiscountConfig(event.projectId()), discountIncrement);
             long perTicket = ComprehensiveServiceFee.perTicketCent(svcFee, verified + platformBorne, 1);
             if (perTicket > 0L) {
                 if (svcFee.monthlyCapAmountCent() != null) {
                     // 增量封顶:查月内同「商户×规则」已落 fee 累计(含冲正负→已释放额度),本笔 fee=min(perTicket, 剩余额度)。
+                    //   非专属核销无专属商户 → 归入该规则的「进池」这一桶(仓储层 NULL 对 NULL 配对),
+                    //   专属商户各自的桶逐分不变(用户 2026-07-21 拍板 A「按费率规则各自封、全局规则各商户各自封顶」不变)。
                     YearMonth m = YearMonth.from(event.verifiedAt().atZone(ZoneOffset.UTC));
                     long mtd = billRepository.sumMonthToDateServiceFee(
                             event.exclusiveMerchantId(), svcFee.id(),
@@ -109,7 +121,7 @@ public class SettlementSettledConsumer {
                 0L,                      // unverified_amount_cent：增量行恒 0（未核销到期归项目是独立事实）
                 BENEFICIARY_MERCHANT,
                 event.merchantId(),
-                null, // project_id：暂留 NULL（平台默认口径）
+                event.projectId(), // S2：项目 scope 传真值（与上面解析费率用的是同一个值；平台级操作者=null=平台默认口径）
                 STATUS_DRAFT,
                 event.validTo(),
                 event.exclusiveMerchantId(),

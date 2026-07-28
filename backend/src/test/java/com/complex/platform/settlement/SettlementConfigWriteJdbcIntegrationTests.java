@@ -47,6 +47,8 @@ class SettlementConfigWriteJdbcIntegrationTests {
     private static final String APPROVER = "approver_scw";
     private static final String PROJECT = "proj_scw_it";
     private static final String MERCHANT = "merch_scw_it";
+    // S2:综合服务费第三维=票种(V365)。费率规则有 FK → ticket_types,故用例里得有一个真票种。
+    private static final String TICKET_TYPE = "tt_scw_it";
 
     @Autowired
     private SettlementConfigWriteService writeService;
@@ -70,6 +72,12 @@ class SettlementConfigWriteJdbcIntegrationTests {
     void setUp() {
         TestSecurityActors.asPlatformAdmin();
         cleanupProjectRows();
+        // @Transactional 用例结束回滚,无需清理。
+        jdbcTemplate.update(
+                "INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status,"
+                        + " created_at, updated_at) VALUES (?, '结算配置写入面测试票种', 'fixed_price', FALSE, 'active',"
+                        + " now(), now()) ON CONFLICT (id) DO NOTHING",
+                TICKET_TYPE);
     }
 
     @AfterEach
@@ -142,15 +150,48 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void comprehensiveServiceFeeMonthlyCapDraftThenActivate() {
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("cap1", PROJECT, MERCHANT, "ticket", 1000, null, 5000L), DRAFTER);
+                new ComprehensiveServiceFeeRequest("cap1", PROJECT, MERCHANT, TICKET_TYPE, 1000, null, 5000L), DRAFTER);
         // 草案期读侧仍回退全局默认(无封顶、费 0),保值
-        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, "ticket").monthlyCapAmountCent())
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, TICKET_TYPE).monthlyCapAmountCent())
                 .isNull();
         writeService.activateDraft("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
-        var cfg = billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, "ticket");
+        var cfg = billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, TICKET_TYPE);
         assertThat(cfg.feeBps()).isEqualTo(1000);
         assertThat(cfg.monthlyCapAmountCent()).isEqualTo(5000L); // 封顶值落库并生效
+    }
+
+    /**
+     * S2(V365)换维往返:按「项目 × 商户 × 票种」写草案 → 转正 → 读侧按票种精确命中;
+     * 换个票种查同一商户 → 落不到这条规则(回落全局默认 0),证明第三维真的是票种而不是「配了就全都收」。
+     */
+    @Test
+    void comprehensiveServiceFeeScopedByTicketType_roundTrip() {
+        String otherTicketType = "tt_scw_it_other";
+        jdbcTemplate.update(
+                "INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status,"
+                        + " created_at, updated_at) VALUES (?, '另一个票种', 'fixed_price', FALSE, 'active', now(), now())"
+                        + " ON CONFLICT (id) DO NOTHING",
+                otherTicketType);
+
+        writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("tt1", PROJECT, MERCHANT, TICKET_TYPE, 1500, null, null), DRAFTER);
+        writeService.activateDraft("comprehensive_service_fee",
+                draftRowId("comprehensive_service_fee_configs"), APPROVER);
+
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, TICKET_TYPE).feeBps()).isEqualTo(1500);
+        // 同项目同商户、换个票种 → 命中不到该规则,回落全局默认(0)。
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, otherTicketType).feeBps()).isZero();
+    }
+
+    /** S2:票种填了个不存在的 id → 中文 400(不让它撞 FK 变成 500,业务人员看得懂哪里填错了)。 */
+    @Test
+    void comprehensiveServiceFeeRejectsUnknownTicketType() {
+        assertThatThrownBy(() -> writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("bad1", PROJECT, MERCHANT, "tt_not_exist", 1000, null, null),
+                DRAFTER))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("票种不存在");
     }
 
     /** merchant-rate:草案期 finder 返 null(项目未生效);转正后返配置值。 */

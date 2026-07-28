@@ -667,7 +667,12 @@ public class TicketVerificationService {
                 // 餐饮结算(用户2026-07-06)：本次核销结算价随事件带下游；专属餐饮权益按此价×核销数直付餐厅(内部结算价)，非专属仍按 allocated。
                 settlementPriceCent,
                 // D6：本权益满额份额随事件带下游，消费者算折扣增量；为空=无折扣。
-                updated.componentFullPriceCent()
+                updated.componentFullPriceCent(),
+                // S2：本次核销所属项目公司（综合体）scope，由核销人 token 派生（不取请求体）。
+                //   下游用它解析综合服务费费率规则的项目维度 + 落 settlement_transactions.project_id——
+                //   原先消费者两处各写死 null，后台配的项目级费率特例永远命中不了。
+                //   平台级操作者返回空 → null → 平台默认口径（与提成费率 / 高价值阈值同一取数范式）。
+                authorizationService == null ? null : authorizationService.currentProjectScopeQuietly().orElse(null)
         ));
         if (credential != null) {
             // AUD-012 凭证消费 CAS(仅 active→consumed):0 行=该凭证已被并发撤销(转赠领取撤销原持有人旧码)
@@ -805,7 +810,9 @@ public class TicketVerificationService {
                 // 游乐核销结算价沿用 value_amount(D6)；随事件带下游（游乐当前非专属，消费者仍按 allocated 分摊）。
                 settlementPriceCent,
                 // D6：游乐权益满额份额随事件带下游（游乐通常无分项满额价=null=无折扣）。
-                consumed.componentFullPriceCent()
+                consumed.componentFullPriceCent(),
+                // S2：项目 scope 同通用成功路径（由核销人 token 派生，不取请求体）。
+                authorizationService == null ? null : authorizationService.currentProjectScopeQuietly().orElse(null)
         ));
         return new VerificationResponse(verification.id(), verification.verificationNo(),
                 verification.status(), verification.resultReason());
