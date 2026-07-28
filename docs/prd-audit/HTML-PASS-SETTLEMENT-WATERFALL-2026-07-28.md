@@ -63,7 +63,7 @@
 3. 赠酒按吧配额（每吧至少一杯、杯数写票面）与**跨吧核销拒绝**校验——**未实现**
 4. 门票综合服务费模型（按票种收、**归娱乐平台公司**）——**未实现**（v7 审计 R-3 大项）
 5. 赠送权益兑付成本**按商户业态分记**——**未实现**
-6. 代码/迁移/测试中残留的「娱乐运营平台」字样（`FinanceService`、`SettlementBillRecord`、`TicketDistributionSettlementService`、`SettlementPostingService`、`V319__revenue_stream_attribution.sql`、`RevenueStreamAttributionJdbcIntegrationTests`）——本轮为文档同步批次，**未改代码**
+6. ~~代码/迁移/测试中残留的「娱乐运营平台」字样~~ —— **已消项（2026-07-28 复核实读）**：后端 Java 全域 grep「娱乐运营平台」**零命中**（`FinanceService` / `SettlementBillRecord` / `TicketDistributionSettlementService` / `SettlementPostingService` / `RevenueStreamAttributionJdbcIntegrationTests` 均已改名）；`settlement_bills.attributed_entity_id` 的列注释由 **V347** 覆盖为「娱乐平台公司」。仅 `V319__revenue_stream_attribution.sql` 的 `--` 文件注释保留旧称，属**已落库冻结历史**（回改破 Flyway 校验和致启动失败，且 `--` 注释不落库、不影响任何对象），按 V347 抬头说明**有意不动**。
 
 ## 六、HTML 哈希（第一轮 `f19ea732` 同步时点）
 
