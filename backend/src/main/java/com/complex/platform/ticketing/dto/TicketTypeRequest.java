@@ -25,10 +25,36 @@ public record TicketTypeRequest(
         // AUD-004 有效期天数（可空=默认1天）：日/周/月/年票据此出票计算 valid_to；必须为正。
         Integer validityDays,
         // AUD-004/2026-07-18 拍板：动态码刷新秒数（可空=默认15）：仅允许 10/15/30/60。
-        Integer refreshIntervalSeconds
+        Integer refreshIntervalSeconds,
+        // V369 综合／联合通票售价自动算：票种折扣（百分数 0~100，100=不打折）。可空=100 不打折。
+        // 系统算出售价 = Σ(各权益票面原价 × 份数) × 本折扣 ÷ 100，运营填的售价与它的差额不得超过后台可配的允许误差。
+        java.math.BigDecimal comboDiscountRate
 ) {
     // 2026-07-18 拍板：entitlementTemplateIds 死字段删除（权益统一走独立绑定端点 bindTicketTypeEntitlement）。
     // 以下兼容构造器保留旧签名（含 List<String> 参数，忽略其值），使既有调用点零改动编译。
+
+    /** V369 前的 16 参全签名（无 comboDiscountRate）→ null=不打折。 */
+    public TicketTypeRequest(
+            String idempotencyKey,
+            String operatorNote,
+            List<String> evidenceAttachmentIds,
+            String ticketName,
+            String baseCalendarPriceMode,
+            Long weekdayPriceCent,
+            Long weekendPriceCent,
+            Long holidayPriceCent,
+            Boolean stockRequired,
+            String status,
+            Integer stockQuantity,
+            String ticketCategory,
+            Boolean refundable,
+            String barId,
+            Integer validityDays,
+            Integer refreshIntervalSeconds) {
+        this(idempotencyKey, operatorNote, evidenceAttachmentIds, ticketName, baseCalendarPriceMode,
+                weekdayPriceCent, weekendPriceCent, holidayPriceCent, stockRequired,
+                status, stockQuantity, ticketCategory, refundable, barId, validityDays, refreshIntervalSeconds, null);
+    }
 
     /** 2026-07-18 前的 17 参全签名（含 entitlementTemplateIds）→ 忽略该参数。 */
     public TicketTypeRequest(

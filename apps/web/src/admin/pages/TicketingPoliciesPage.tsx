@@ -111,6 +111,19 @@ function yuan(cent: number | null): string {
   return cent == null ? "—" : (cent / 100).toFixed(2);
 }
 
+// V369 票种定价核算（后端 GET /ticketing/ticket-types/{id}/price-check，adminClient 已 snake→camel）。
+type PriceCheckRow = {
+  ticketTypeId: string;
+  componentTotalCent: number;
+  comboDiscountRate: number | string;
+  computedPriceCent: number;
+  filledPriceCent: number | null;
+  diffCent: number | null;
+  toleranceCent: number;
+  withinTolerance: boolean;
+  roundingSuggested: number;
+};
+
 export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo }: AdminPageProps) {
   const [tickets, setTickets] = React.useState<TicketTypeRow[]>([]);
   const [templates, setTemplates] = React.useState<EntitlementTemplateRow[]>([]);
@@ -136,6 +149,17 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [barId, setBarId] = React.useState("");
   // AUD-015：建票=草稿→绑权益→带理由发布，一个向导内完成；createKey 固定一次，失败重试幂等复用同一草稿。
   const [createTemplateId, setCreateTemplateId] = React.useState("");
+  // V369 建票时的票种折扣（百分数，100=不打折）。系统按「各业态票面原价合计 × 折扣」算出售价。
+  const [createDiscount, setCreateDiscount] = React.useState("100");
+  // V369 组合配置页的定价核算：系统算出售价 vs 运营填的售价，差多少、超没超。
+  const [priceCheck, setPriceCheck] = React.useState<PriceCheckRow | null>(null);
+  const [pricingDiscount, setPricingDiscount] = React.useState("100");
+  const [pricingWeekday, setPricingWeekday] = React.useState("");
+  const [pricingWeekend, setPricingWeekend] = React.useState("");
+  const [pricingHoliday, setPricingHoliday] = React.useState("");
+  const [pricingReason, setPricingReason] = React.useState("");
+  const [pricingError, setPricingError] = React.useState("");
+  const [pricingBusy, setPricingBusy] = React.useState(false);
   const [publishReason, setPublishReason] = React.useState("");
   const [createKey, setCreateKey] = React.useState("");
   const [error, setError] = React.useState("");
@@ -381,6 +405,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         weekend_price_cent: Math.round(prices.周末价 * 100),
         holiday_price_cent: Math.round(prices.节假日价 * 100),
         stock_quantity: stock.trim() ? Number(stock) : null,
+        // V369 票种折扣：系统按「各业态票面原价合计 × 折扣」算出售价，运营填的价与它差太多不许开卖。
+        combo_discount_rate: Number(createDiscount || "100"),
         validity_days: Number(validityDays) || 1,
         refundable,
         bar_id: barId || null,
@@ -515,6 +541,56 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       .catch(() => ({ items: [] }));
     setGiftCoverage(toRows<GiftCoverageRow>(rows));
   }, [api]);
+
+  // V369 定价核算：选中通票后拉一次，配完权益/改完价再刷新。运营看到的和发布闸判的是同一份计算。
+  const loadPriceCheck = React.useCallback(async (ticketTypeId: string) => {
+    if (!ticketTypeId) { setPriceCheck(null); return; }
+    const row = await api
+      .get<PriceCheckRow>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(ticketTypeId)}/price-check`)
+      .catch(() => null);
+    setPriceCheck(row);
+    if (row) {
+      setPricingDiscount(String(row.comboDiscountRate ?? 100));
+      setPricingWeekday(row.filledPriceCent == null ? "" : (row.filledPriceCent / 100).toFixed(2));
+    }
+  }, [api]);
+
+  // 运营边填边看：填的这个数离系统算出的售价差多少、超没超允许误差（提交前就知道，不用等报错）。
+  const pricingLiveDiffCent = React.useMemo(() => {
+    if (!priceCheck || pricingWeekday.trim() === "") return null;
+    const filled = Math.round(Number(pricingWeekday) * 100);
+    if (!Number.isFinite(filled)) return null;
+    const rate = Number(pricingDiscount);
+    const computed = Number.isFinite(rate)
+      ? Math.round(priceCheck.componentTotalCent * rate / 100)
+      : priceCheck.computedPriceCent;
+    return { filled, computed, diff: filled - computed };
+  }, [priceCheck, pricingWeekday, pricingDiscount]);
+
+  // V369 改售价／折扣：保存当场比对允许误差，超出后端直接拒（前端提示与后端同一口径）。
+  async function savePricing() {
+    if (!comboTicketId) { setPricingError("请先选择要配置的通票。"); return; }
+    if (!pricingReason.trim()) { setPricingError("改价理由必填（事后要能查是谁为什么改成这个数）。"); return; }
+    setPricingError("");
+    setPricingBusy(true);
+    try {
+      await api.put(`/api/v1/ticketing/ticket-types/${encodeURIComponent(comboTicketId)}/pricing`, {
+        idempotency_key: crypto.randomUUID(),
+        reason: pricingReason.trim(),
+        combo_discount_rate: Number(pricingDiscount || "100"),
+        weekday_price_cent: pricingWeekday.trim() ? Math.round(Number(pricingWeekday) * 100) : null,
+        weekend_price_cent: pricingWeekend.trim() ? Math.round(Number(pricingWeekend) * 100) : null,
+        holiday_price_cent: pricingHoliday.trim() ? Math.round(Number(pricingHoliday) * 100) : null,
+      });
+      setActionResult({ action: "ticket_type_pricing_updated", ticketTypeId: comboTicketId });
+      await loadPriceCheck(comboTicketId);
+      reload();
+    } catch (err) {
+      setPricingError(err instanceof Error ? err.message : "改售价失败");
+    } finally {
+      setPricingBusy(false);
+    }
+  }
 
   function updateBarLine(index: number, patch: Partial<BarLine>) {
     setBarLines(barLines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
@@ -651,11 +727,14 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         bars: barLines.length,
         amusementProjects: chosenProjects.length,
         dining: diningLines.length,
+        // V369：改了票的组成，这张票会退回草稿——售价要按新的业态构成重新核对再发布。
+        note: "已上架的票改了组成会退回草稿，请在下方「定价核算」核对售价后重新发布。",
       });
       setBarLines([]);
       setSelectedProjects({});
       setDiningLines([]);
       void loadGiftCoverage(comboTicketId);
+      void loadPriceCheck(comboTicketId);
       reload();
     } catch (composeError) {
       setComboError(composeError instanceof Error ? composeError.message : "组合配置失败");
@@ -793,6 +872,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <label>平日价（元）<input data-testid="ticket-weekday-price" type="number" min={0} step="0.01" value={weekday} onChange={(event) => setWeekday(event.target.value)} placeholder="平日价" /></label>
                 <label>周末价（元）<input data-testid="ticket-weekend-price" type="number" min={0} step="0.01" value={weekend} onChange={(event) => setWeekend(event.target.value)} placeholder="周末价" /></label>
                 <label>节假日价（元）<input data-testid="ticket-holiday-price" type="number" min={0} step="0.01" value={holiday} onChange={(event) => setHoliday(event.target.value)} placeholder="节假日价" /></label>
+                <label>票种折扣（%，100=不打折）<input data-testid="ticket-combo-discount" type="number" min={0} max={100} step="0.01" value={createDiscount} onChange={(event) => setCreateDiscount(event.target.value)} placeholder="100" aria-label="票种折扣" /></label>
                 <label>限量<input data-testid="ticket-stock" type="number" min={0} value={stock} onChange={(event) => setStock(event.target.value)} placeholder="限量（可空=不限）" aria-label="限量" /></label>
                 <label>有效期（天）
                   <select data-testid="ticket-validity-days" aria-label="有效期（天）" value={validityDays} onChange={(event) => setValidityDays(event.target.value)}>
@@ -872,13 +952,75 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施、加餐饮项（餐厅/价格/折扣/内部结算价），点「组合配置到通票」一次性写入。
       </div>
       <div className="admin-inline-form" data-testid="pass-combo-form">
-        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => { setComboTicketId(event.target.value); void loadGiftCoverage(event.target.value); }}>
+        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => { setComboTicketId(event.target.value); void loadGiftCoverage(event.target.value); void loadPriceCheck(event.target.value); }}>
           <option value="">选择要配置的通票</option>
           {tickets.map((t) => (
             <option key={t.id} value={t.id}>{t.ticketName}</option>
           ))}
         </select>
       </div>
+
+      <h4>定价核算（系统算出售价 vs 你填的售价）</h4>
+      <div className="admin-preview">
+        通票的售价不用自己拍脑袋：各业态票面原价加起来、再按票种折扣打一下，系统就算出该卖多少。
+        你可以在这个数上下调一点凑个好卖的整数（尾数 8/9/0），但差得太多就是填错了——超过后台配的允许误差，这张票不许开卖。
+        免费权益（票面原价 0）不计入价值。允许误差在「结算配置中心 → 通票分账」维护。
+      </div>
+      {!comboTicketId ? (
+        <div className="admin-preview" data-testid="combo-price-check-empty">请先选择要配置的通票。</div>
+      ) : !priceCheck ? (
+        <div className="admin-preview" data-testid="combo-price-check-empty">定价核算读取中或暂不可用。</div>
+      ) : (
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="combo-price-check-table">
+            <tbody>
+              <tr><th>各业态票面原价合计</th><td data-testid="price-check-component-total">¥{yuan(priceCheck.componentTotalCent)}</td></tr>
+              <tr><th>票种折扣</th><td data-testid="price-check-discount">{String(priceCheck.comboDiscountRate ?? 100)}%</td></tr>
+              <tr><th>系统算出售价</th><td data-testid="price-check-computed">¥{yuan(priceCheck.computedPriceCent)}</td></tr>
+              <tr><th>当前填的售价（平日价）</th><td data-testid="price-check-filled">{priceCheck.filledPriceCent == null ? "还没填" : `¥${yuan(priceCheck.filledPriceCent)}`}</td></tr>
+              <tr><th>允许误差</th><td data-testid="price-check-tolerance">¥{yuan(priceCheck.toleranceCent)}</td></tr>
+              <tr><th>凑整建议</th><td data-testid="price-check-suggested">¥{yuan(priceCheck.roundingSuggested)}（整元、尾数 8/9/0）</td></tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="admin-inline-form" data-testid="combo-pricing-form">
+        <label>票种折扣（%，100=不打折）
+          <input aria-label="票种折扣" data-testid="combo-pricing-discount" type="number" min={0} max={100} step="0.01"
+            value={pricingDiscount} onChange={(event) => setPricingDiscount(event.target.value)} />
+        </label>
+        <label>平日售价（元，凑整后的近似售价）
+          <input aria-label="平日售价" data-testid="combo-pricing-weekday" type="number" min={0} step="0.01"
+            value={pricingWeekday} onChange={(event) => setPricingWeekday(event.target.value)} />
+        </label>
+        <label>周末售价（元，可空）
+          <input aria-label="周末售价" data-testid="combo-pricing-weekend" type="number" min={0} step="0.01"
+            value={pricingWeekend} onChange={(event) => setPricingWeekend(event.target.value)} />
+        </label>
+        <label>节假日售价（元，可空）
+          <input aria-label="节假日售价" data-testid="combo-pricing-holiday" type="number" min={0} step="0.01"
+            value={pricingHoliday} onChange={(event) => setPricingHoliday(event.target.value)} />
+        </label>
+        <label>改价理由
+          <input aria-label="改价理由" data-testid="combo-pricing-reason" value={pricingReason}
+            onChange={(event) => setPricingReason(event.target.value)} placeholder="例如：按新的业态构成重新定价" />
+        </label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="combo-pricing-save"
+          disabled={pricingBusy} onClick={() => void savePricing()}>保存售价</PermissionButton>
+      </div>
+      {priceCheck && pricingLiveDiffCent ? (
+        <div className="admin-preview" data-testid="combo-pricing-live-hint">
+          {Math.abs(pricingLiveDiffCent.diff) <= priceCheck.toleranceCent
+            ? `没问题：系统算出 ¥${yuan(pricingLiveDiffCent.computed)}，你填 ¥${yuan(pricingLiveDiffCent.filled)}，`
+              + `${pricingLiveDiffCent.diff >= 0 ? "上调" : "下调"} ¥${yuan(Math.abs(pricingLiveDiffCent.diff))}，`
+              + `在允许误差 ¥${yuan(priceCheck.toleranceCent)} 之内。`
+            : `超了：系统算出 ¥${yuan(pricingLiveDiffCent.computed)}，你填 ¥${yuan(pricingLiveDiffCent.filled)}，`
+              + `${pricingLiveDiffCent.diff >= 0 ? "上调" : "下调"} ¥${yuan(Math.abs(pricingLiveDiffCent.diff))}，`
+              + `超出允许误差 ¥${yuan(priceCheck.toleranceCent)} 达 ¥${yuan(Math.abs(pricingLiveDiffCent.diff) - priceCheck.toleranceCent)}，`
+              + `这张票发不出去。凑整可填 ¥${yuan(priceCheck.roundingSuggested)}。`}
+        </div>
+      ) : null}
+      {pricingError ? <div className="admin-error" data-testid="combo-pricing-error">{pricingError}</div> : null}
 
       <h4>酒吧权益（多选）</h4>
       <div className="admin-table-scroll">

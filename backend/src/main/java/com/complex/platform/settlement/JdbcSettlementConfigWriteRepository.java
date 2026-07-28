@@ -167,21 +167,27 @@ public class JdbcSettlementConfigWriteRepository {
         return hit != null && hit > 0;
     }
 
+    /** V369:同一行再带「凑整允许误差」(分)——凑整差额走的就是这条折扣承担口径,运营只在一处维护。 */
     public String upsertComboDiscountDraft(String id, String projectId, String discountBearer,
-                                           int splitPlatformBps, String updatedBy) {
+                                           int splitPlatformBps, long roundingToleranceCent, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO ticket_combo_discount_configs
-                    (id, project_id, discount_bearer, split_platform_bps, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :discount_bearer, :split_platform_bps, 'active', TRUE, :updated_by, now())
+                    (id, project_id, discount_bearer, split_platform_bps, rounding_tolerance_cent,
+                     status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :discount_bearer, :split_platform_bps, :rounding_tolerance_cent,
+                     'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     discount_bearer = EXCLUDED.discount_bearer,
                     split_platform_bps = EXCLUDED.split_platform_bps,
+                    rounding_tolerance_cent = EXCLUDED.rounding_tolerance_cent,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("discount_bearer", discountBearer)
-                .addValue("split_platform_bps", splitPlatformBps).addValue("updated_by", updatedBy), String.class);
+                .addValue("split_platform_bps", splitPlatformBps)
+                .addValue("rounding_tolerance_cent", roundingToleranceCent)
+                .addValue("updated_by", updatedBy), String.class);
     }
 
     public String upsertChannelFeeDraft(String id, String projectId, String channel, int feeBps, String updatedBy) {
@@ -459,7 +465,8 @@ public class JdbcSettlementConfigWriteRepository {
                      WHERE c.is_draft = TRUE AND c.status = 'active'
                     UNION ALL
                     SELECT id, 'combo_discount',
-                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 折扣归属 ' || discount_bearer,
+                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 折扣归属 ' || discount_bearer
+                               || ' 凑整允许误差 ' || rounding_tolerance_cent || '分',
                            updated_at
                       FROM ticket_combo_discount_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

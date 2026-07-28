@@ -65,6 +65,22 @@ class TicketingServiceTests {
     // 积分累计率配置端口测试双子：默认 100 分/分 = 出厂种子 = 改造前写死的「每元 1 分」。
     private StubPointsAccrualRateConfigPort pointsRateStub;
 
+    // V369：票种目录服务（凑整误差闸测试要往它上挂允许误差端口测试双子）。
+    private TicketCatalogService catalogService;
+    // V369 凑整允许误差配置端口测试双子。默认不挂到服务上——既有用例不受误差闸影响；
+    //   要测误差闸的用例自己 catalogService.comboPriceToleranceConfigPort = toleranceStub。
+    private StubComboPriceToleranceConfigPort toleranceStub;
+
+    /** V369 凑整允许误差配置端口测试双子（出厂种子 500 分 = 5 元）。 */
+    private static final class StubComboPriceToleranceConfigPort implements ComboPriceToleranceConfigPort {
+        private long toleranceCent = 500L;
+
+        @Override
+        public long findRoundingToleranceCent(String projectId) {
+            return toleranceCent;
+        }
+    }
+
     /** P0-D/CFG-01（V340）积分累计率配置端口测试双子。 */
     private static final class StubPointsAccrualRateConfigPort implements PointsAccrualRateConfigPort {
         private long amountCentPerPoint = 100L;
@@ -93,7 +109,7 @@ class TicketingServiceTests {
         BarMerchantDirectory barDirectory = id -> java.util.Optional.ofNullable(bars.get(id));
         service = new TicketingService(
                 ticketingRepository,
-                new TicketCatalogService(ticketingRepository, barDirectory),
+                catalogService = new TicketCatalogService(ticketingRepository, barDirectory),
                 pricingService,
                 orderService = new TicketOrderService(ticketingRepository, pricingService, authorizationService, orderEvents::add, null, barDirectory),
                 new TicketRefundService(ticketingRepository, event -> { }),
@@ -107,6 +123,7 @@ class TicketingServiceTests {
         // 令既有出票/支付用例行为一字不变 = 本次改造【零行为改变】的单测侧证据。
         pointsRateStub = new StubPointsAccrualRateConfigPort();
         orderService.pointsAccrualRateConfigPort = pointsRateStub;
+        toleranceStub = new StubComboPriceToleranceConfigPort();
         // 🔴 用例隔离(2026-07-28 修):本类此前【没有】统一的登录主体准备,靠「先跑的用例里 TestSecurityActors.asMerchantUser(...)
         // 未清理、后跑的用例捡漏」跑通——JUnit 方法顺序一变(例如本类新增/删除任一 @Test)就整片 "Api authentication is required"。
         // 现改为每例前置平台管理员、每例后清理:各用例要特定主体的自己覆盖(既有用例本就显式调 asMerchantUser),
@@ -4547,6 +4564,211 @@ class TicketingServiceTests {
             records.put(record.operationId() + ":" + record.idempotencyKey(), record);
             return record;
         }
+    }
+
+
+    // ================= V369 综合／联合通票售价自动算 + 凑整误差闸（业务 HTML:741） =================
+
+    /** 建一张「游乐 + 酒吧 + 免费赠品」的联合通票，三档价一律填 priceYuanCent，票种折扣 discountRate。 */
+    private TicketTypeRecord seedComboPass(String key, long priceCent, java.math.BigDecimal discountRate) {
+        TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
+                key, "create", List.of(), "联合通票 " + key, "weekday_weekend_holiday",
+                priceCent, priceCent, priceCent, Boolean.FALSE, null, null, null, Boolean.TRUE,
+                null, null, null, discountRate));
+        EntitlementTemplateRecord ride = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                key + "-tpl-ride", "ride", List.of(), "游乐 " + key, "amusement_ride", 1, 8000L, "active",
+                null, "mch_" + key + "_ride", null, null));
+        EntitlementTemplateRecord bar = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                key + "-tpl-bar", "bar", List.of(), "酒吧 " + key, "bar_drink", 1, 12500L, "active",
+                null, "mch_" + key + "_bar", null, null));
+        EntitlementTemplateRecord free = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                key + "-tpl-free", "free", List.of(), "免费小食 " + key, "dining", 1, 0L, "active",
+                null, "mch_" + key + "_dining", null, null));
+        // 游乐 80 元 + 酒吧 125 元 = 205 元；免费小食票面原价 0（HTML:741「免费的（价格为 0）不计入价值」）。
+        service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                key + "-bind-ride", "bind", List.of(), ride.id(), 1, 1, 8000L, "default", 1, 8000L));
+        service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                key + "-bind-bar", "bind", List.of(), bar.id(), 1, 1, 12500L, "default", 1, 12500L));
+        service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                key + "-bind-free", "bind", List.of(), free.id(), 1, 1, 0L, "default", 1, 0L));
+        return ticketingRepository.findTicketTypeById(tt.id()).orElseThrow();
+    }
+
+    private void publish(String ticketTypeId, String key) {
+        service.publishTicketType(ticketTypeId, new StatusChangeRequest(key, "p", "上架", List.of()));
+    }
+
+    @Test
+    void comboPassSellingPriceIsComputedFromFormatFacePricesTimesDiscount() {
+        // HTML:741「售价由各业态价格相加后统一打折得出……由系统自动算出售价」。
+        // 游乐 80 + 酒吧 125 = 205 元（免费小食 0 不计入）；八五折 → 174.25 元。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        TicketTypeRecord pass = seedComboPass("v369-calc", 17800L, new java.math.BigDecimal("85"));
+
+        TicketTypePriceCheck check = service.ticketTypePriceCheck(pass.id());
+
+        assertThat(check.componentTotalCent()).isEqualTo(20500L);   // 免费权益不计入价值
+        assertThat(check.computedPriceCent()).isEqualTo(17425L);    // 205 × 85% = 174.25 元
+        assertThat(check.toleranceCent()).isEqualTo(500L);
+        assertThat(check.filledPriceCent()).isEqualTo(17800L);
+        assertThat(check.diffCent()).isEqualTo(375L);               // 上调 3.75 元凑成 178
+        assertThat(check.withinTolerance()).isTrue();
+        assertThat(check.roundingSuggested()).isEqualTo(17800L);    // 整元且尾数 8
+    }
+
+    @Test
+    void roundingWithinToleranceIsPublishableEitherWayUpOrDown() {
+        // HTML:741「上调下调均可」：只要没超出允许误差（5 元），凑整成好卖的整数就放行。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        TicketTypeRecord up = seedComboPass("v369-up", 17800L, new java.math.BigDecimal("85"));   // 算出 174.25 → 上调到 178
+        TicketTypeRecord down = seedComboPass("v369-down", 17000L, new java.math.BigDecimal("85")); // 下调到 170
+
+        assertThat(service.publishTicketType(up.id(), new StatusChangeRequest(
+                "v369-up-pub", "p", "上架", List.of())).status()).isEqualTo("published");
+        assertThat(service.publishTicketType(down.id(), new StatusChangeRequest(
+                "v369-down-pub", "p", "上架", List.of())).status()).isEqualTo("published");
+    }
+
+    @Test
+    void publishRejectsPriceBeyondToleranceBothDirectionsWithChineseNumbers() {
+        // HTML:741「与系统算出的售价之间的差额不得超过后台配置的允许误差，超出即拒绝发布」。
+        // 这就是本刀要堵的洞：运营想填 178 手滑填成 160，以前票照样上架、少收的钱被当成套票折扣由项目公司吃掉。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        TicketTypeRecord tooHigh = seedComboPass("v369-high", 18000L, new java.math.BigDecimal("85")); // 算出 174.25，上调 5.75
+        TicketTypeRecord tooLow = seedComboPass("v369-low", 16000L, new java.math.BigDecimal("85"));   // 下调 14.25
+
+        assertThatThrownBy(() -> publish(tooHigh.id(), "v369-high-pub"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TICKET_PRICE_OUT_OF_TOLERANCE"))
+                // 报文要让运营当场看懂：算出多少、填了多少、差多少、超了多少、凑整该填哪个数。
+                .hasMessageContaining("174.25")
+                .hasMessageContaining("180.00")
+                .hasMessageContaining("上调")
+                .hasMessageContaining("178.00");
+
+        assertThatThrownBy(() -> publish(tooLow.id(), "v369-low-pub"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TICKET_PRICE_OUT_OF_TOLERANCE"))
+                .hasMessageContaining("下调")
+                .hasMessageContaining("14.25");
+    }
+
+    @Test
+    void toleranceIsBackofficeConfigurableAndBehaviourFollowsIt() {
+        // HTML:741「允许误差后台可配」：同一张票，误差调宽就能发、调窄就发不了——不是写死在代码里的数。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        TicketTypeRecord pass = seedComboPass("v369-cfg", 18000L, new java.math.BigDecimal("85")); // 差 5.75 元
+
+        toleranceStub.toleranceCent = 500L;   // 5 元：拦
+        assertThatThrownBy(() -> publish(pass.id(), "v369-cfg-pub1"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TICKET_PRICE_OUT_OF_TOLERANCE"));
+
+        toleranceStub.toleranceCent = 1000L;  // 10 元：放行
+        assertThat(service.publishTicketType(pass.id(), new StatusChangeRequest(
+                "v369-cfg-pub2", "p", "上架", List.of())).status()).isEqualTo("published");
+        assertThat(service.ticketTypePriceCheck(pass.id()).toleranceCent()).isEqualTo(1000L);
+    }
+
+    @Test
+    void freeEntitlementsDoNotCountIntoTheComputedPrice() {
+        // HTML:741「免费的（价格为 0）不计入价值」：再加两条免费权益，算出售价一分不变。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        TicketTypeRecord pass = seedComboPass("v369-free", 17800L, new java.math.BigDecimal("85"));
+        long before = service.ticketTypePriceCheck(pass.id()).computedPriceCent();
+
+        EntitlementTemplateRecord gift = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "v369-free-tpl2", "gift", List.of(), "加赠小食", "dining", 1, 0L, "active",
+                null, "mch_v369_free_2", null, null));
+        service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
+                "v369-free-bind2", "bind", List.of(), gift.id(), 3, 1, 0L, "default", 1, 0L));
+
+        TicketTypePriceCheck after = service.ticketTypePriceCheck(pass.id());
+        assertThat(after.componentTotalCent()).isEqualTo(20500L);
+        assertThat(after.computedPriceCent()).isEqualTo(before);
+        assertThat(service.publishTicketType(pass.id(), new StatusChangeRequest(
+                "v369-free-pub", "p", "上架", List.of())).status()).isEqualTo("published");
+    }
+
+    @Test
+    void changingEntitlementsOnPublishedPassSendsItBackToDraftForRePublish() {
+        // 已上架的票被改了组成，它原来的售价就不再是「按现在这些业态算出来的」——退回草稿，逼它重过一次发布闸。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        TicketTypeRecord pass = seedComboPass("v369-redraft", 17800L, new java.math.BigDecimal("85"));
+        publish(pass.id(), "v369-redraft-pub");
+        assertThat(ticketingRepository.findTicketTypeById(pass.id()).orElseThrow().status()).isEqualTo("published");
+
+        EntitlementTemplateRecord extra = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "v369-redraft-tpl", "extra", List.of(), "加的游乐", "amusement_ride", 1, 6000L, "active",
+                null, "mch_v369_redraft_extra", null, null));
+        service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
+                "v369-redraft-bind", "bind", List.of(), extra.id(), 1, 1, 6000L, "default", 1, 6000L));
+
+        assertThat(ticketingRepository.findTicketTypeById(pass.id()).orElseThrow().status()).isEqualTo("draft");
+        // 加了 60 元的游乐，算出售价变成 (205+60)×85% = 225.25 元，原来的 178 就发不出去了。
+        assertThat(service.ticketTypePriceCheck(pass.id()).computedPriceCent()).isEqualTo(22525L);
+        assertThatThrownBy(() -> publish(pass.id(), "v369-redraft-pub2"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TICKET_PRICE_OUT_OF_TOLERANCE"));
+    }
+
+    @Test
+    void updatePricingRejectsOutOfToleranceAtSaveTimeAndAcceptsRoundedPrice() {
+        // 改价这一步就比对：让运营先存下一个明知超限的价、等到发布才报错，等于让他白填一遍。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        TicketTypeRecord pass = seedComboPass("v369-save", 17800L, new java.math.BigDecimal("85"));
+
+        assertThatThrownBy(() -> service.updateTicketTypePricing(pass.id(),
+                new com.complex.platform.ticketing.dto.TicketTypePricingRequest(
+                        "v369-save-bad", "改价", new java.math.BigDecimal("85"), 16000L, 16000L, 16000L)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TICKET_PRICE_OUT_OF_TOLERANCE"));
+
+        TicketTypeRecord saved = service.updateTicketTypePricing(pass.id(),
+                new com.complex.platform.ticketing.dto.TicketTypePricingRequest(
+                        "v369-save-ok", "改价", new java.math.BigDecimal("85"), 17800L, 19800L, 19800L));
+        assertThat(saved.weekdayPriceCent()).isEqualTo(17800L);
+        // 周末/节假日加价按日历规则走，不在误差闸内（否则运营只能把误差调到几十元，那道闸就等于没有了）。
+        assertThat(saved.weekendPriceCent()).isEqualTo(19800L);
+    }
+
+    @Test
+    void roundingDifferenceFlowsIntoTheExistingComboDiscountAccounting() {
+        // HTML:741「凑整产生的差额按既有折扣承担口径处理」：不新建口径。
+        //   出票时每张权益照旧记「满额份额=票面原价」与「实付份额」，两者之差就是折扣，
+        //   由结算配置中心那条 combo_discount_bearer 决定谁承担——凑整多出/少收的那点钱自然走同一条路。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        TicketTypeRecord pass = seedComboPass("v369-discount", 17800L, new java.math.BigDecimal("85"));
+        publish(pass.id(), "v369-discount-pub");
+
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "v369-discount-order", "c", List.of(), pass.id(), null, 1,
+                LocalDate.parse("2026-06-22"), "admin", "13800138000", "cust_v369"));
+        IssuedTicketResponse issued = service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "v369-discount-issue", "i", "已收款", List.of()));
+
+        long fullSum = 0L;
+        long allocatedSum = 0L;
+        for (var one : issued.issuedEntitlements()) {
+            IssuedEntitlementRecord ent = ticketingRepository
+                    .findIssuedEntitlementByCode(one.entitlementCode()).orElseThrow();
+            fullSum += ent.componentFullPriceCent() == null ? 0L : ent.componentFullPriceCent();
+            allocatedSum += ent.allocatedRevenueCent() == null ? 0L : ent.allocatedRevenueCent();
+        }
+        assertThat(order.amountCent()).isEqualTo(17800L);   // 客人实付=凑整后的售价
+        assertThat(allocatedSum).isEqualTo(17800L);         // 实付逐分拆到各权益，不丢分
+        assertThat(fullSum).isEqualTo(20500L);              // 满额=各业态票面原价合计（不受凑整影响）
+        assertThat(fullSum - allocatedSum).isEqualTo(2700L); // 折扣=满额−净额（含 8.5 折 + 凑整那 3.75 元）
+    }
+
+    @Test
+    void niceEndingSuggestionPicksTheNearestEightNineOrZero() {
+        // 凑整建议只是给运营的一个数（尾数 8/9/0），不强制——真正拒绝发布的只有「超出允许误差」这一条。
+        assertThat(TicketCatalogService.roundToNiceEnding(17425L)).isEqualTo(17800L);
+        assertThat(TicketCatalogService.roundToNiceEnding(19100L)).isEqualTo(19000L);
+        assertThat(TicketCatalogService.roundToNiceEnding(19300L)).isEqualTo(19000L);
+        assertThat(TicketCatalogService.roundToNiceEnding(19600L)).isEqualTo(19800L);
+        assertThat(TicketCatalogService.roundToNiceEnding(0L)).isEqualTo(0L);
     }
 
     private static final class InMemoryAuditEventRepository implements AuditEventRepository {

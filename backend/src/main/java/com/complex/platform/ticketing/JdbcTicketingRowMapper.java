@@ -52,7 +52,9 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "delete_requested_at"),
                 resultSet.getString("delete_reason"),
                 resultSet.getBoolean("refundable"),
-                resultSet.getString("bar_id")
+                resultSet.getString("bar_id"),
+                // V369：票种折扣（百分数，100=不打折）。NOT NULL DEFAULT 100，取不到列时按不打折。
+                resultSet.getBigDecimal("combo_discount_rate")
         );
     }
 

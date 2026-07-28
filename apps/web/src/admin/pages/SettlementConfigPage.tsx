@@ -43,7 +43,7 @@ const BLOCKS: BlockDef[] = [
   { key: "rank_tiers", title: "排名档位分账梯子", endpoint: "rank-tiers", note: "按销售排名分档分账；当前生效梯子按项目维护，改动落草案、复核转正后生效。" },
   { key: "merchant_rate", title: "商户每客单价 / 固定额", endpoint: "merchant-rate", note: "按「项目 × 商户」配置，改动落草案；可对草案「下线」。" },
   { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。" },
-  { key: "combo_discount", title: "套票折扣归属", defaultKey: "combo_discount_bearer", endpoint: "combo-discount" },
+  { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态票面原价×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
   { key: "channel_fee", title: "渠道抽成费率", endpoint: "channel-fee", note: "按项目配置通用渠道抽成率（万分比），改动落草案。" },
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
 ];
@@ -164,6 +164,8 @@ type Form = {
   feeBps: string;
   discountBearer: string;
   splitPlatformBps: string;
+  // V369：综合／联合通票凑整允许误差（元，提交时换算成分）。
+  roundingToleranceYuan: string;
   revenueStream: string;
   managementEntityId: string;
   beneficiaryKind: string;
@@ -175,7 +177,7 @@ const EMPTY_FORM: Form = {
   projectId: "", retentionBps: "", methodType: "by_venue_per_guest",
   specialApprovalTermValue: "3", specialApprovalTermUnit: "month", merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeBps: "",
-  discountBearer: "platform_absorb", splitPlatformBps: "0", revenueStream: "all_pass_ticket", managementEntityId: "",
+  discountBearer: "platform_absorb", splitPlatformBps: "0", roundingToleranceYuan: "5", revenueStream: "all_pass_ticket", managementEntityId: "",
   beneficiaryKind: "entity",
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
 };
@@ -577,7 +579,12 @@ function editSteps(
             {BEARER_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
-        <label>平台分摊万分比（0~10000，仅按比例分摊时有意义）<input data-testid="settlement-config-field-splitPlatformBps" type="number" min={0} max={10000} value={form.splitPlatformBps} onChange={setField("splitPlatformBps")} /></label></>);
+        <label>平台分摊万分比（0~10000，仅按比例分摊时有意义）<input data-testid="settlement-config-field-splitPlatformBps" type="number" min={0} max={10000} value={form.splitPlatformBps} onChange={setField("splitPlatformBps")} /></label>
+        <label>通票凑整允许误差（元）<input data-testid="settlement-config-field-roundingToleranceYuan" type="number" min={0} step="0.01" value={form.roundingToleranceYuan} onChange={setField("roundingToleranceYuan")} /></label>
+        <div style={{ fontSize: 12 }} data-testid="settlement-config-rounding-tolerance-hint">
+          运营为了好卖会把系统算出的 197.50 填成 199（上调下调都行），这属于凑整；填成 179 就是填错了。
+          这个数就是「差多少还算凑整」的界线，超出的票直接拒绝发布。填 5 元够凑到最近的尾数 8/9/0，又拦得住一次真正的填错。
+        </div></>);
       break;
     case "channel_fee":
       content = (<>{projectField}
@@ -672,7 +679,7 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: Ti
     case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期", value: `${form.specialApprovalTermValue || "3"} ${form.specialApprovalTermUnit === "day" ? "天" : "个月"}` }];
     case "merchant_rate": return [scope, { label: "商户", value: form.merchantId || "—" }, { label: "每客单价（分）", value: form.perGuestCent || "—" }, { label: "固定额（分）", value: form.fixedAmountCent || "—" }];
     case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
-    case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }];
+    case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }, { label: "通票凑整允许误差", value: `${form.roundingToleranceYuan || "0"} 元` }];
     case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }];
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "收款方类型", value: BENEFICIARY_KIND_OPTIONS.find(([v]) => v === form.beneficiaryKind)?.[1] ?? form.beneficiaryKind }, { label: "收款主体", value: form.beneficiaryKind === "per_merchant" ? "各商户自己" : (form.managementEntityId || "—") }];
     case "rank_tiers": return [scope, { label: "档位数", value: String(tiers.length) }, { label: "区间校验", value: rankTierHint(tiers).msg }];
@@ -707,7 +714,9 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
       return null;
     }
     case "combo_discount":
-      return isIntInRange(form.splitPlatformBps || "0", 0, 10000) ? null : "平台分摊万分比需为 0~10000 的整数。";
+      if (!isIntInRange(form.splitPlatformBps || "0", 0, 10000)) return "平台分摊万分比需为 0~10000 的整数。";
+      return Number(form.roundingToleranceYuan) >= 0 && Number.isFinite(Number(form.roundingToleranceYuan))
+        ? null : "通票凑整允许误差需为不小于 0 的金额（元）。";
     case "channel_fee":
       return isIntInRange(form.feeBps, 0, 10000) ? null : "渠道抽成万分比需为 0~10000 的整数。";
     case "revenue_stream_attribution":
@@ -752,7 +761,8 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
         monthlyCapAmountCent: orUndef(form.monthlyCapAmountCent) === undefined ? null : Number(form.monthlyCapAmountCent),
       };
     case "combo_discount":
-      return { idempotencyKey, projectId: project, discountBearer: form.discountBearer, splitPlatformBps: Number(form.splitPlatformBps || "0") };
+      return { idempotencyKey, projectId: project, discountBearer: form.discountBearer, splitPlatformBps: Number(form.splitPlatformBps || "0"),
+        roundingToleranceCent: Math.round(Number(form.roundingToleranceYuan || "0") * 100) };
     case "channel_fee":
       return { idempotencyKey, projectId: project, channel: null, feeBps: Number(form.feeBps) };
     case "revenue_stream_attribution":
