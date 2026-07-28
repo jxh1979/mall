@@ -169,6 +169,16 @@ public class BarController {
         return ApiResponse.ok(service.voidOrderItem(orderId, request));
     }
 
+    /** V345（BAR-VOID-A1）退酒审批待审队列：默认 status=pending；order_id 非空则只看该订单的申请。 */
+    @GetMapping("/order-item-voids")
+    public ApiResponse<PageResponse<BarOrderItemVoidRecord>> listOrderItemVoids(
+            @RequestParam(value = "order_id", required = false) String orderId,
+            @RequestParam(value = "status", required = false) String status
+    ) {
+        authorizationService.requirePermission("bar.order_item.void");
+        return ApiResponse.ok(service.listOrderItemVoids(orderId, status));
+    }
+
     @PostMapping("/order-item-voids/{void_id}/decision")
     public ApiResponse<BarOrderItemVoidRecord> decideOrderItemVoid(
             @PathVariable("void_id") String voidId,

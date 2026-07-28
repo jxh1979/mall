@@ -138,6 +138,26 @@ public class BarService {
         );
     }
 
+    /**
+     * V345（BAR-VOID-A1）退酒审批队列：按状态列出退菜退酒申请；orderId 非空则只看该订单。
+     * 商户 scope 由仓储层下沉为 SQL 谓词（跨商户不可见）。
+     */
+    public PageResponse<BarOrderItemVoidRecord> listOrderItemVoids(String orderId, String status) {
+        String normalizedStatus = status == null || status.isBlank() ? "pending" : status.trim();
+        String normalizedOrderId = orderId == null || orderId.isBlank() ? null : orderId.trim();
+        return operations.readPage(
+                BarReadOperation.LIST_ORDER_ITEM_VOIDS,
+                () -> normalizedOrderId == null
+                        ? repository.listOrderItemVoidsByStatus(
+                                authorizationService.currentMerchantScope(), normalizedStatus)
+                        : repository.listOrderItemVoids(normalizedOrderId).stream()
+                                .filter(v -> normalizedStatus.equals(v.status()))
+                                .filter(v -> authorizationService.currentMerchantScope()
+                                        .map(scope -> scope.equals(v.merchantId())).orElse(true))
+                                .toList()
+        );
+    }
+
     public PageResponse<BarProductionTicketRecord> listProductionTickets() {
         return operations.readPage(
                 BarReadOperation.LIST_PRODUCTION_TICKETS,

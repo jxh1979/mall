@@ -262,7 +262,13 @@ final class JdbcBarRowMapper {
                 nullableInstant(resultSet, "created_at"),
                 resultSet.getString("reviewed_by_user_id"),
                 nullableInstant(resultSet, "reviewed_at"),
-                resultSet.getString("review_reason")
+                resultSet.getString("review_reason"),
+                // V345（BAR-VOID-A1）审批闸留痕：模式 / 结构化原因码 / 阈值快照 / 副作用落地时点。
+                resultSet.getString("approval_mode"),
+                resultSet.getString("reason_code"),
+                nullableLong(resultSet, "high_value_threshold_cent"),
+                // ↑ V345 前的历史行该列为 NULL，须还原为 null 而非 0（0 会被误读成「阈值 0=全部高价值」）。
+                nullableInstant(resultSet, "effects_applied_at")
         );
     }
 
@@ -462,6 +468,12 @@ final class JdbcBarRowMapper {
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at")
         );
+    }
+
+    /** 可空 BIGINT 列：SQL NULL 还原为 Java null（getLong 会把 NULL 读成 0，语义会被歪曲）。 */
+    private Long nullableLong(ResultSet resultSet, String column) throws SQLException {
+        long value = resultSet.getLong(column);
+        return resultSet.wasNull() ? null : value;
     }
 
     private List<String> readStringList(String value) {

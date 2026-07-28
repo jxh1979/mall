@@ -144,14 +144,16 @@ final class JdbcBarOrderRepository {
                     amount_cent, was_delivered, return_to_stock, inventory_movement_id,
                     bill_id, bill_adjustment_id, reason, requested_by_user_id, approval_required,
                     status, idempotency_key, evidence_attachment_ids, created_at,
-                    reviewed_by_user_id, reviewed_at, review_reason
+                    reviewed_by_user_id, reviewed_at, review_reason,
+                    approval_mode, reason_code, high_value_threshold_cent, effects_applied_at
                 )
                 VALUES (
                     :id, :order_item_id, :order_id, :bar_id, :merchant_id, :void_type, :quantity,
                     :amount_cent, :was_delivered, :return_to_stock, :inventory_movement_id,
                     :bill_id, :bill_adjustment_id, :reason, :requested_by_user_id, :approval_required,
                     :status, :idempotency_key, CAST(:evidence_attachment_ids AS jsonb), :created_at,
-                    :reviewed_by_user_id, :reviewed_at, :review_reason
+                    :reviewed_by_user_id, :reviewed_at, :review_reason,
+                    :approval_mode, :reason_code, :high_value_threshold_cent, :effects_applied_at
                 )
                 ON CONFLICT (order_item_id, idempotency_key) DO UPDATE SET
                     void_type = EXCLUDED.void_type,
@@ -167,7 +169,11 @@ final class JdbcBarOrderRepository {
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
                     reviewed_by_user_id = EXCLUDED.reviewed_by_user_id,
                     reviewed_at = EXCLUDED.reviewed_at,
-                    review_reason = EXCLUDED.review_reason
+                    review_reason = EXCLUDED.review_reason,
+                    approval_mode = EXCLUDED.approval_mode,
+                    reason_code = EXCLUDED.reason_code,
+                    high_value_threshold_cent = EXCLUDED.high_value_threshold_cent,
+                    effects_applied_at = EXCLUDED.effects_applied_at
                 """, parameterSource.orderItemVoidParameters(voidRecord));
         return voidRecord;
     }
@@ -190,6 +196,25 @@ final class JdbcBarOrderRepository {
         return jdbcTemplate.query("""
                 SELECT * FROM bar_order_item_voids WHERE order_id = :order_id ORDER BY created_at, id
                 """, Map.of("order_id", orderId), rowMapper::mapOrderItemVoid);
+    }
+
+    /**
+     * V345 退酒审批待审队列：按状态取申请，商户 scope 非空时下沉为 SQL 谓词（AC-ISO-1 租户隔离），
+     * 平台域调用方（无商户 scope）看全域——与 {@link #listProductionTickets} 同形。
+     */
+    public List<BarOrderItemVoidRecord> listOrderItemVoidsByStatus(Optional<String> merchantScope, String status) {
+        if (merchantScope.isEmpty()) {
+            return jdbcTemplate.query("""
+                    SELECT * FROM bar_order_item_voids
+                     WHERE status = :status
+                     ORDER BY created_at DESC, id
+                    """, Map.of("status", status), rowMapper::mapOrderItemVoid);
+        }
+        return jdbcTemplate.query("""
+                SELECT * FROM bar_order_item_voids
+                 WHERE status = :status AND merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("status", status, "merchant_id", merchantScope.get()), rowMapper::mapOrderItemVoid);
     }
 
     public BarProductionTicketRecord saveProductionTicket(BarProductionTicketRecord ticket) {

@@ -34505,6 +34505,129 @@
           }
         }
       }
+    },
+    "/api/v1/bar/order-item-voids": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "listBarOrderItemVoids",
+        "summary": "退酒审批待审队列",
+        "description": "V345（BAR-VOID-A1）：按状态列出退菜退酒申请，缺省 status=pending（待审队列）；order_id 非空则只看该订单。商户 scope 非空时只可见本商户申请。",
+        "x-auth-context": "staff-token",
+        "x-permission": "bar.order_item.void",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "tablet",
+          "web"
+        ],
+        "x-audit-event-success": "bar.order_item_void.viewed",
+        "x-audit-event-failure": "bar.order_item_void.view_failed",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "订单 ID；非空则只列该订单的退菜退酒申请。"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "applied"
+              ]
+            },
+            "description": "申请状态；缺省 pending（待审队列）。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/settlement/config/bar-void-threshold": {
+      "post": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "settlementConfigUpsertBarVoidThreshold",
+        "summary": "维护高价值退酒审批阈值(草案)",
+        "description": "结算配置中心 V345(P0-C/FLOW-07·BAR-VOID-A1):按 项目公司 × 商户 配置「高价值退酒阈值(分)」,单笔已出品退品金额超过本值即须先审后行 + 双证据;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.config.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "settlement.config.bar_void_approval_configs.updated",
+        "x-audit-event-failure": "settlement.config.bar_void_approval_configs.update_failed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "merchant_id": {
+                    "type": "string"
+                  },
+                  "high_value_threshold_cent": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "high_value_threshold_cent"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -44736,6 +44859,11 @@
           "bill_id": {
             "type": "string",
             "description": "关联账单 ID；提供时资金回退（未结=减应付/已结=退款冲正）。",
+            "maxLength": 64
+          },
+          "reason_code": {
+            "type": "string",
+            "description": "结构化原因码（双证据之一）；已出品且金额超过后台可配阈值的高价值退酒必填，须与非空证据附件同时具备，否则拒收。",
             "maxLength": 64
           }
         }
