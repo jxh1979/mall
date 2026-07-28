@@ -355,7 +355,7 @@ BSM-0077,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 +
 BSM-0078,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0079,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0080,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0081,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0081,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
 BSM-0082,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0083,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0084,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -510,7 +510,7 @@ BSM-0403,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,
 BSM-0404,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0405,docs/finance-settlement-product-prd-v0.1.md,6A.2 开票状态（税务 / 电子发票平台回传，中英映射 D7）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0406,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0407,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0407,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
 BSM-0408,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0409,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0410,docs/settlement-rebuild-prd-v1.0.md,"C. 税务配置(→ 税务配置表 `tax_config`,**全部后台可配** —— 2026-07-04 用户裁定)",FULL,,,,,,04-transaction-member-ticket-bar
@@ -518,7 +518,7 @@ BSM-0411,docs/dividend-engine-prd-v0.1.md,1. 业务背景与目标,PARTIAL,P2,TX
 BSM-0412,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0413,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0414,docs/dividend-engine-prd-v0.1.md,2. 已拍板口径（2026-07-18 终稿）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0415,docs/dividend-engine-prd-v0.1.md,9. 边界与后续迭代（如实留档）,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0415,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
 BSM-0416,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0417,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0418,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -595,7 +595,7 @@ BEQ-0114,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-tr
 BEQ-0115,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0116,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0117,docs/dividend-engine-prd-v0.1.md,3. 分红方案（配置层，`dividend_plans`）,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0118,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BEQ-0118,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INVOICE-LINK,FULL,P1,ADV-TX-008,,,DEC-TAX-CN-REFUND-001,04-transaction-member-ticket-bar
 BEQ-0119,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0120,docs/dividend-engine-prd-v0.1.md,9. 边界与后续迭代（如实留档）,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0121,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar

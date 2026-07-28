@@ -767,3 +767,16 @@
 - 无定义空值不默默当 0；阈值可配。
 
 承接：`data-analysis-layer-spec-v0.2.md` §F；游乐 PRD 指针 §8.1A。
+
+## DEC-BIZDAY-001 / DEC-TAX-CN-REFUND-001（2026-07-28，用户确认）
+
+闭合 **ADV-TX-008** / **XD-006**。
+
+| ID | 裁决 |
+|---|---|
+| DEC-BIZDAY-001 | 运营营业日 = 项目时区 + 可配切日时刻（建议默认 06:00，不写死） |
+| DEC-TAX-CN-REFUND-001 | 退款税会 = **T-INVOICE-LINK**：有原票→红冲/归属跟原票与红字流程；无票→按退款成功时点适用规则；营业日仅经营分析，不替代税法/开票归属 |
+
+用户路径：先要求考虑中国税法 → 确认 T-INVOICE-LINK（非自动闭合）。  
+承接：`finance-settlement-product-prd-v0.1.md` §4A。  
+不构成税务法律意见。
