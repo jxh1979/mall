@@ -512,3 +512,11 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 - `docs/partial-requirement-mock-coverage-latest.json`: machine-readable snapshot for partial requirement count, mock/sandbox acceptance readiness, production blockers and linked files.
 - Verify: `npm run verify:partial-requirement-mock-coverage`.
 - Boundary: MOCK_IS_NOT_PRODUCTION_EVIDENCE. Mock, adapter, page, backend test and E2E evidence can support integration/business acceptance, but cannot replace production evidence manifest.
+
+
+## 会员积分重构入口（2026-07-28）
+
+- 主 PRD：`docs/member-points-tier-and-clearing-prd-v1.0.md`
+- 决策索引：业务决策日志中 DEC-VALIDITY-001 等 R3 P0 裁决
+- 旧会员 PRD 积分/等级冲突条款让位上述主 PRD；储值章节仍有效
+
