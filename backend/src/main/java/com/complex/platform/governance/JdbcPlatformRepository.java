@@ -375,11 +375,14 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
 
     @Override
     public com.complex.platform.common.api.PageResponse<MerchantRecord> listMerchantsPaged(
-            boolean includeArchived, int page, int size) {
+            boolean includeArchived, String businessFormat, int page, int size) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 500 : Math.min(size, 500);
-        MapSqlParameterSource params = new MapSqlParameterSource().addValue("include_archived", includeArchived);
-        String where = " WHERE (:include_archived OR archived_at IS NULL) AND delete_status <> 'approved'";
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("include_archived", includeArchived)
+                .addValue("business_format", businessFormat);
+        // V348 按业态查询：business_format 为空＝不筛（走 idx_merchants_business_format）。
+        String where = " WHERE (:include_archived OR archived_at IS NULL) AND delete_status <> 'approved'"
+                + " AND (CAST(:business_format AS VARCHAR) IS NULL OR merchant_type = :business_format)";
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM merchants" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<MerchantRecord> items = jdbcTemplate.query("SELECT id, merchant_name, merchant_type, business_entity_id, "

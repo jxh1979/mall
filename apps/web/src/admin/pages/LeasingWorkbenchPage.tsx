@@ -74,7 +74,9 @@ const SOURCE_LABELS: Record<string, string> = { outbound: "外拓", online_inqui
 const LEAD_STATUS_LABELS: Record<string, string> = { pending_follow_up: "待跟进", following_up: "跟进中", converted_to_intent: "已转意向", negotiating: "谈判中", signed: "已签约", lost: "流失", on_hold: "暂缓" };
 const STAGE_LABELS: Record<string, string> = { requirement_confirmed: "需求确认", proposal_quoted: "方案报价", negotiation: "商务谈判", pending_signing: "待签约" };
 const BRAND_TYPE_LABELS: Record<string, string> = { intentional: "意向品牌", prospective: "潜在品牌", partner: "合作品牌", blacklist: "黑名单" };
-const BUSINESS_TYPE_LABELS: Record<string, string> = { retail: "零售", catering: "餐饮", entertainment: "娱乐", service: "服务", bar: "酒吧" };
+// V348 业态五值（真源 HTML §商户管理）：线索意向业态签约时直接带入商户业态，故与商户业态同一词表。
+const BUSINESS_TYPES = ["bar", "catering", "retail", "amusement", "other"];
+const BUSINESS_TYPE_LABELS: Record<string, string> = { bar: "酒吧", catering: "餐饮", retail: "零售", amusement: "游乐", other: "其他" };
 const METHOD_LABELS: Record<string, string> = { phone: "电话", visit: "拜访", wechat: "微信" };
 const REF_TYPE_LABELS: Record<string, string> = { lead: "线索", intent: "意向" };
 function label(map: Record<string, string>, code: string | null | undefined): string {
@@ -602,7 +604,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             content: (
               <>
                 <label>来源<select data-testid="leasing-lead-source" value={source} onChange={(e) => setSource(e.target.value)}><option value="outbound">外拓</option><option value="online_inquiry">线上咨询</option><option value="referral">转介绍</option><option value="exhibition">展会</option></select></label>
-                <label>意向业态<input data-testid="leasing-lead-business-type" value={intendedBusinessType} onChange={(e) => setIntendedBusinessType(e.target.value)} /></label>
+                <label>意向业态<select data-testid="leasing-lead-business-type" value={intendedBusinessType} onChange={(e) => setIntendedBusinessType(e.target.value)}>{BUSINESS_TYPES.map((t) => <option key={t} value={t}>{BUSINESS_TYPE_LABELS[t]}</option>)}</select></label>
                 <label>意向空间<select data-testid="leasing-lead-space" value={intendedSpaceId} onChange={(e) => setIntendedSpaceId(e.target.value)}><option value="">请选择空间（可空）</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               </>
             ),
@@ -636,7 +638,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <>
                 <label>品牌名称<input data-testid="leasing-brand-name" value={brandName} onChange={(e) => setBrandName(e.target.value)} /></label>
                 <label>品牌类型<select data-testid="leasing-brand-type" value={brandType} onChange={(e) => setBrandType(e.target.value)}><option value="intentional">意向品牌</option><option value="prospective">潜在品牌</option><option value="partner">合作品牌</option></select></label>
-                <label>业态<select data-testid="leasing-brand-business" value={brandBusinessType} onChange={(e) => setBrandBusinessType(e.target.value)}><option value="bar">酒吧</option><option value="catering">餐饮</option><option value="retail">零售</option><option value="entertainment">娱乐</option><option value="service">服务</option></select></label>
+                <label>业态<select data-testid="leasing-brand-business" value={brandBusinessType} onChange={(e) => setBrandBusinessType(e.target.value)}>{BUSINESS_TYPES.map((t) => <option key={t} value={t}>{BUSINESS_TYPE_LABELS[t]}</option>)}</select></label>
               </>
             ),
           },

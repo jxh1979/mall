@@ -32,7 +32,7 @@
 - **无外键**指向自身层级；四层关系目前靠 `entity_role` 文本 + 绑定表表达，不是硬外键树。
 
 ### 2.2 `merchants`（V005 + V042 + V147）
-- 主档：`id` PK / `merchant_name` / `merchant_type`（无 CHECK）/ `status` / `owner_person`（负责人，V147）/ `contact_*`+`secondary_contact_*`（第一/第二联系人）。
+- 主档：`id` PK / `merchant_name` / **`merchant_type`＝业态权威字段（V348：NOT NULL + CHECK `chk_merchants_business_format` 限五值 `bar`/`catering`/`retail`/`amusement`/`other`，索引 `idx_merchants_business_format` 供按业态查询；通票分账按业态拆份额与分流结算的依据）** / `status` / `owner_person`（负责人，V147）/ `contact_*`+`secondary_contact_*`（第一/第二联系人）。
 - **主体快照列**：`business_entity_id`（经营主体，隔离 scope 依据）、`contract_entity_id`（合同主体）、`settlement_entity_id`（结算主体）——均为 `VARCHAR(64)`，**无 DB 外键约束**指向 `business_entities`。
 - 租赁快照：`mall_block_code`、`area_square_meter`、`leased_area_square_meter`、`rent_per_square_meter`、`cooperation_form`（合作模式，无 CHECK）。
 - ⚠️ 这三列是**档案快照**；四类主体的**权威、可变更历史**在 `business_entity_bindings`（§2.3）。

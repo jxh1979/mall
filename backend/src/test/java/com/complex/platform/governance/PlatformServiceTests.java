@@ -103,6 +103,35 @@ class PlatformServiceTests {
                 null, null, null, null, null, null, null, null, "active"));
     }
 
+    // V348 商户业态标准字段：五值之外的业态一律拒收（业态错＝通票分账份额拆给错的业态）。
+    @Test
+    void createMerchantRejectsBusinessFormatOutsideFiveValues() {
+        assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
+                "bad-format", "seed", List.of(), "业态错的商户", "tenant", "be_1",
+                null, null, "Jane", "18800000011",
+                null, null, null, null, null, null, null, null, "active")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_BUSINESS_FORMAT_INVALID"));
+    }
+
+    // V348 按业态查询（分账按业态拆份额要用）：只返回该业态的商户。
+    @Test
+    void listMerchantsFiltersByBusinessFormat() {
+        service.createMerchant(new MerchantProfileRequest(
+                "seed-bar", "seed", List.of(), "话梅酒馆", "bar", "be_1",
+                null, null, "Jane", "18800000011",
+                null, null, null, null, null, null, null, null, "active"));
+        MerchantRecord other = seedMerchant("seed-other");
+
+        assertThat(service.listMerchants(true, "bar", 1, 50).items())
+                .extracting(MerchantRecord::merchantName).containsExactly("话梅酒馆");
+        assertThat(service.listMerchants(true, "bar", 1, 50).items())
+                .noneMatch(m -> m.id().equals(other.id()));
+        assertThatThrownBy(() -> service.listMerchants(true, "tenant", 1, 50))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("MERCHANT_BUSINESS_FORMAT_INVALID"));
+    }
+
     @Test
     void archiveMerchantHidesItFromDefaultListingAndKeepsWithIncludeArchived() {
         MerchantRecord merchant = seedMerchant("seed-archive");

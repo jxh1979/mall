@@ -281,7 +281,9 @@ public class LeasingService {
                 "lease-sign-merchant-" + intent.id(),
                 "auto-created on leasing sign", List.of(),
                 contactName != null ? contactName : ("招商签约商户-" + intent.id()),
-                businessType != null ? businessType : "retail",
+                // V348 业态必填：线索意向业态直接带入（同五值词表）；线索阶段还没定业态的落「其他」，
+                // 由招商在商户档案里改正——不猜成「零售」，猜错＝通票分账把份额拆给错的业态。
+                businessType != null ? businessType : "other",
                 contractSubjectId, contractSubjectId, contractSubjectId,
                 contactName, contactPhone, contactName,
                 spaceCode, area, area,

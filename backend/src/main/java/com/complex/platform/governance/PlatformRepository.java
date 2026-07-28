@@ -96,9 +96,13 @@ public interface PlatformRepository {
         return com.complex.platform.common.api.PageResponse.of(listBusinessEntities(), page, size);
     }
 
+    /** V348 businessFormat 非空＝只列该业态的商户（分账按业态拆份额要用）。 */
     default com.complex.platform.common.api.PageResponse<MerchantRecord> listMerchantsPaged(
-            boolean includeArchived, int page, int size) {
-        return com.complex.platform.common.api.PageResponse.of(listMerchants(includeArchived), page, size);
+            boolean includeArchived, String businessFormat, int page, int size) {
+        List<MerchantRecord> rows = listMerchants(includeArchived).stream()
+                .filter(m -> businessFormat == null || businessFormat.equals(m.merchantType()))
+                .toList();
+        return com.complex.platform.common.api.PageResponse.of(rows, page, size);
     }
 
     default com.complex.platform.common.api.PageResponse<ProjectRecord> listProjectsPaged(int page, int size) {
