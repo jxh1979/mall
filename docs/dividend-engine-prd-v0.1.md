@@ -56,6 +56,18 @@
   重跑，**不存在「处理太晚 / 跨季度」的报错**。对账触发节奏是运维触发面（何时 POST compute），与会计期间窗口
   完全解耦。
 
+
+## 4A. 跨周期维度补充（P2，2026-07-28）
+
+闭合 BSM-0411 `cross_period`（与 §4 期间作业一致，明示验收）：
+
+1. **正式周期 vs 预览**：默认季度正式 + 月度预览；切换为月度正式时，预览规则按方案配置，不得两套正式单重叠同一官方期间。  
+2. **跨季/跨月重算**：已 `approved/paid` 的正式单不因后期费用调整自动重算；需冲销/作废后按权限重开期间作业。  
+3. **关账锁**：正式非 preview 作业锁定费用侧期间后，跨周期补录费用不得无声进入已锁定分红基数；须走解锁/冲销策略（见既有 period-lock）。  
+4. **比例/税改配置**：改方案只影响新期间；历史单按单内快照。  
+5. **权限/证据**：跨期冲销、重算、解锁须最高权限或配置权限 + 全链路审计。
+
+
 ## 5. 算式与三来源对账（恒等式 DB CHECK 硬保证）
 
 ```
@@ -197,3 +209,5 @@ pending_review → rejected（驳回，理由必填）→ 修正数据后重算�
 | 2026-07-19 | 增 | **#28 按主理人类型区分代扣个税**（V308）：方案增 `principal_type`（individual/company），公司股东生效税率强制 0、全额发放；计算单快照 `principal_type` + `chk_ds_company_no_tax`（公司单 tax_cent=0 硬保证）；税额行 detail 按类型分流。见 §2.2 / §5。 | 2026-07-19 用户拍板 #28 |
 | 2026-07-19 | 增 | **#35 自定义扣除项**（V309）：新 `dividend_deduction_items` 子表（name/source_type[fixed/ratio]/amount_cent/ratio_bps/ratio_basis[net_profit/revenue]/enabled/sort_order），经方案请求 `customDeductions` 整表替换；`DividendMath.compute` 增 `clampDeductions` 逐项封顶（欠款抵扣后、留存前，对 (税后−抵扣) 余额扣减不透支）+ `customDeductionCent`；计算单增 `custom_deduction_cent` 列，`chk_ds_payout_identity` 重写含自定义扣除、新增 `chk_ds_custom_deduction_range`；明细行增 `custom_deduction` 留痕。DividendMathTests +4 / DividendServiceTests +5 / JDBC +5。见 §5A。 | 2026-07-19 用户拍板 #35 |
 | 2026-07-19 核查 | — | **#34 分红周期真可配置**：核查结论**现状已支持、无需改码**——会计期间由 `period_type`+期间标签定义为固定自然日窗口，三来源按交易时间戳归期（非运行日），`compute` 接受任意历史期间、任意时点、幂等重跑，**无跨季度/迟处理报错**；对账触发节奏与会计窗口解耦。见 §4。 | 2026-07-19 用户 #34 先核查 |
+
+| 2026-07-28 | 增 | §4A | 跨周期维度明示（P2 BSM-0411） |

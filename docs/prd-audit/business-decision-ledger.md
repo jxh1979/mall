@@ -795,3 +795,14 @@
 - 废止附录中的续卡现行能力（契约/Admin/矩阵）
 - 储值开发设计挂接 DEC-SV-* / PRD §7
 - 编码实现不在本裁决范围
+
+
+## P2-DIM-CLOSE-001（2026-07-28）
+
+闭合剩余 8 条 P2 PARTIAL（缺 cross_period / expiry_exit 维度）：
+- 票务/通票/服务费：ticketing §12B
+- 券三类：member-loyalty §5.1
+- 招商到期退出：leasing §6A
+- 分红跨周期：dividend §4A
+
+不改 HTML；不改代码。

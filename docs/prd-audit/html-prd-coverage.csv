@@ -316,10 +316,10 @@ BSM-0038,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条
 BSM-0039,docs/member-points-tier-and-clearing-prd-v1.0.md,§8.3 ACCRUAL-002 + §10.3 退出 + §10.3A,FULL,P0,ADV-TX-004,,,POINTS-VOUCHER-ACCRUAL-002,04-transaction-member-ticket-bar
 BSM-0040,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0041,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
-BSM-0042,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,票务/通票/权益/核销产品 PRD V0.1,PARTIAL,P2,TX-BSM-0042-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
+BSM-0042,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BSM-0043,docs/bar-business-operations-product-prd-v0.1.md,§10.2.1 BAR-VOID-A1 + §10.2.1A 守恒,FULL,P0,ADV-TX-010,,编码实现另开，不在文档审计范围,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0044,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0045,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P2,TX-BSM-0045-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
+BSM-0045,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B.5 服务费封顶跨月,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BSM-0046,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0047,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0048,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
@@ -333,7 +333,7 @@ BSM-0055,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,5. 票务策略,
 BSM-0056,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0057,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0058,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0059,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P2,TX-BSM-0059-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
+BSM-0059,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B.6 联合通票,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BSM-0060,docs/bar-business-operations-product-prd-v0.1.md,§7.3A 转台/并台,FULL,P1,ADV-TX-007,,,DEC-SEAT-TRANSFER-001,04-transaction-member-ticket-bar
 BSM-0061,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0062,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -514,7 +514,7 @@ BSM-0407,docs/finance-settlement-product-prd-v0.1.md,§4A DEC-BIZDAY-001 + T-INV
 BSM-0408,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0409,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0410,docs/settlement-rebuild-prd-v1.0.md,"C. 税务配置(→ 税务配置表 `tax_config`,**全部后台可配** —— 2026-07-04 用户裁定)",FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0411,docs/dividend-engine-prd-v0.1.md,1. 业务背景与目标,PARTIAL,P2,TX-BSM-0411-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
+BSM-0411,docs/dividend-engine-prd-v0.1.md,§4A 跨周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BSM-0412,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0413,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0414,docs/dividend-engine-prd-v0.1.md,2. 已拍板口径（2026-07-18 终稿）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -551,10 +551,10 @@ BEQ-0010,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条
 BEQ-0011,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0012,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,14. 变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0013,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0014,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P2,TX-BEQ-0014-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
+BEQ-0014,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BEQ-0015,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,14. 变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0016,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0017,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,PARTIAL,P2,TX-BEQ-0017-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
+BEQ-0017,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,§12B 跨结算周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BEQ-0018,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0019,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0020,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -564,7 +564,7 @@ BEQ-0023,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合�
 BEQ-0024,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0025,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0026,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0027,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,PARTIAL,P2,TX-BEQ-0027-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
+BEQ-0027,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,§5.1 券跨周期,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,04-transaction-member-ticket-bar
 BEQ-0028,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0029,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,§7.2–7.6 DEC-SV-*,FULL,P0,ADV-TX-003,,,DEC-SV-LEDGER-001,04-transaction-member-ticket-bar
 BEQ-0030,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -633,7 +633,7 @@ BSM-0229,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和�
 BSM-0230,docs/supply-chain-inventory-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0256,docs/merchant-space-contract-model-v0.1.md,2.2 `merchants`（V005 + V042 + V147）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0263,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0267,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,PARTIAL,P2,RE-BSM-0267-DIM,部分承接，缺少: expiry_exit,补齐缺失维度,,05-realestate-leasing-building-supply
+BSM-0267,docs/leasing-acquisition-prd-v1.0.md,§6A 到期退出,FULL,P2,P2-DIM-CLOSE-001,,,P2-DIM-CLOSE-001,05-realestate-leasing-building-supply
 BSM-0268,docs/leasing-acquisition-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §10，重建须逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0269,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
 BSM-0270,docs/leasing-acquisition-prd-v1.0.md,7. 权限点（最小颗粒，复用现有权限体系）,FULL,,,,,,05-realestate-leasing-building-supply
