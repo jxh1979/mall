@@ -744,3 +744,15 @@
 | DEC-SEAT-NO-RENEW-001 | **无**续卡/续时产品规则 |
 
 承接：`docs/bar-business-operations-product-prd-v0.1.md` §7.3A。
+
+
+## DEC-ADM-PRIORITY-001（2026-07-28）
+
+闭合 **ADV-ED-003**。用户选 **2 = ADM-PRIORITY-CHAIN**：
+
+- 固定（可配）优先级链逐项校验；
+- **只报第一条失败**并拒绝；
+- 链含安全告知、身高、年龄、健康、监护；
+- 阈值可配；默认不做主管豁免。
+
+承接：`amusement-business-operations-product-prd-v0.1.md` §7.2A。
