@@ -111,7 +111,7 @@ describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
     fireEvent.click(screen.getByTestId("combo-pricing-save"));
 
     await waitFor(() => expect(putSpy).toHaveBeenCalled());
-    const [path, body] = putSpy.mock.calls[0] as [string, Record<string, unknown>];
+    const [path, body] = putSpy.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(path).toContain("/ticketing/ticket-types/tt-1/pricing");
     expect(body.combo_discount_rate).toBe(85);
     expect(body.weekday_price_cent).toBe(17800);
