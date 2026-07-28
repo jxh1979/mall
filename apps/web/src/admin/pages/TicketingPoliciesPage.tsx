@@ -148,7 +148,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
   const [priceForm, setPriceForm] = React.useState({ templateId: "", priceYuan: "", reason: "" });
   // 区3 通票组装（票种绑权益）
-  const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1" });
+  const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "" });
   // 区4 派生价规则
   const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "0.8", fixedYuan: "" });
   // 批3 第三方券:把权益模板配成第三方券 + 对账文件核销回流导入。
@@ -195,6 +195,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   // 游乐权益也必须归属商户（后端 createEntitlementTemplate 强制 merchant_id 非空，否则结算成孤儿）。
   // /amusement/projects 不返回项目所属商户（merchantId 被 @JsonIgnore），故此处让运营选一个归属商户，全部游乐权益用它。
   const [amusementMerchantId, setAmusementMerchantId] = React.useState("");
+  // S11：游乐权益的票面原价（元）。整票的钱按各业态票面原价占比拆，游乐没填价就分不到钱。
+  const [amusementPriceYuan, setAmusementPriceYuan] = React.useState("");
   const [comboBusy, setComboBusy] = React.useState(false);
   const [comboError, setComboError] = React.useState("");
 
@@ -392,6 +394,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         quantity: 1,
         total_times: 1,
         num_people: 1,
+        // S11 票面原价：这张票只有这一条权益，它的票面原价就是这张票的平日价（占比 100%，钱全归这条权益的业态）。
+        component_price_cent: Math.round(prices.平日价 * 100),
       });
       const published = await api.post(`/api/v1/ticketing/ticket-types/${ticketId}/publish`, {
         idempotency_key: `${createKey}-publish`,
@@ -456,6 +460,11 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       quantity: Number(bindForm.quantity) || 1,
       total_times: Number(bindForm.totalTimes) || 1,
       num_people: Number(bindForm.numPeople) || 1,
+      // S11：票面原价（元→分）。这份权益按票面值多少钱，决定客人这笔钱有多少分给它所属的业态。
+      //   免费的填 0（0=免费=不分钱）；留空=还没定价，票种发布时会被拦下不许开卖。
+      component_price_cent: bindForm.componentPriceYuan.trim() === ""
+        ? null
+        : Math.round(Number(bindForm.componentPriceYuan) * 100),
     });
     setActionResult({ action: "ticket_entitlement_bound", ticketTypeId: bindForm.ticketTypeId });
     reload();
@@ -533,6 +542,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     exclusiveMerchantId?: string | null;
     // 酒水兑换：提供方商品（成本按该商品的内部结算价与这家酒吧结算）。
     barItemRef?: string | null;
+    // S11 票面原价（分）：这份权益在票面上值多少钱，决定客人这笔钱按什么比例分给它所属的业态。
+    //   免费/赠送填 0（不分钱，成本另按内部结算价与提供方结算）。与内部结算价是两条价线，不可互相顶替。
+    componentPriceCent: number;
   }, ticketTypeId: string) {
     const tpl = await api.post<{ id: string }>("/api/v1/ticketing/entitlement-templates", {
       idempotency_key: crypto.randomUUID(),
@@ -552,6 +564,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       quantity: 1,
       total_times: payload.totalTimes,
       num_people: 1,
+      component_price_cent: payload.componentPriceCent,
     });
   }
 
@@ -590,6 +603,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           valueCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : null,
           merchantId: line.merchantId,
           barItemRef: line.kind === "gift_drink" ? line.barItemRef : null,
+          // 票面原价 = 这一行填的价格；赠送/免费的留空即 0（不参与分钱）。
+          componentPriceCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
         }, comboTicketId);
       }
       // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。归属商户用统一选择的 amusementMerchantId。
@@ -600,6 +615,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           totalTimes: Number(projectTimes) || 1,
           valueCent: null,
           merchantId: amusementMerchantId,
+          // 游乐票面原价：游乐份额就是按它在整票里的占比分给游乐公司的，留空即 0=不分。
+          componentPriceCent: amusementPriceYuan.trim() ? Math.round(Number(amusementPriceYuan) * 100) : 0,
         }, comboTicketId);
         // 项目↔权益类型绑定（V082）：配置后该项目核销收紧为「仅接受 amusement 类权益」。
         await api.post(`/api/v1/amusement/projects/${project.id}/entitlements`, {
@@ -624,6 +641,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           agreementPriceCent: line.internalYuan.trim() ? Math.round(Number(line.internalYuan) * 100) : null,
           // 专属餐厅商户：使核销结算全额归该餐厅、不进池分摊。
           exclusiveMerchantId: line.merchantId,
+          // 票面原价 = 这一行填的价格（0=纯赠送，不参与分钱）。内部结算价是另一条线，不能拿来当票面原价。
+          componentPriceCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
         }, comboTicketId);
       }
       setActionResult({
@@ -936,6 +955,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           </label>
         ))}
         <input aria-label="游乐次数" type="number" min={1} value={projectTimes} onChange={(event) => setProjectTimes(event.target.value)} placeholder="游乐次数（每设施）" />
+        <input aria-label="游乐票面原价（元）" type="number" min={0} step="0.01" value={amusementPriceYuan} data-testid="combo-amusement-price" onChange={(event) => setAmusementPriceYuan(event.target.value)} placeholder="游乐票面原价（元，每设施）" />
         <select aria-label="游乐权益归属商户" data-testid="combo-amusement-merchant" value={amusementMerchantId} onChange={(event) => setAmusementMerchantId(event.target.value)}>
           <option value="">游乐权益归属商户</option>
           {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
@@ -1116,6 +1136,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <input aria-label="份数" type="number" min={1} value={bindForm.quantity} onChange={(event) => setBindForm({ ...bindForm, quantity: event.target.value })} placeholder="份数" />
         <input aria-label="每份次数" type="number" min={1} value={bindForm.totalTimes} onChange={(event) => setBindForm({ ...bindForm, totalTimes: event.target.value })} placeholder="每份次数" />
         <input aria-label="每份核销人数" type="number" min={1} value={bindForm.numPeople} onChange={(event) => setBindForm({ ...bindForm, numPeople: event.target.value })} placeholder="每份人数（多人票>1）" />
+        <input aria-label="票面原价（元）" type="number" min={0} step="0.01" value={bindForm.componentPriceYuan} onChange={(event) => setBindForm({ ...bindForm, componentPriceYuan: event.target.value })} placeholder="票面原价（元，免费填0）" data-testid="ticket-bind-component-price" />
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-bind-submit" onClick={() => void bindEntitlement()}>
           绑定权益
         </PermissionButton>

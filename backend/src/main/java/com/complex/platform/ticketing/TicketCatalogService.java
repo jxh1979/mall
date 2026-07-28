@@ -479,7 +479,7 @@ public class TicketCatalogService {
             throw ApiException.conflict("TICKET_TYPE_ENTITLEMENT_REQUIRED",
                     "ticket type must have at least one entitlement binding before publish");
         }
-        requireComponentPricesForMultiBusinessPass(current.id());
+        requireComponentPrices(current.id());
         requireBarGiftCoverage(current.id());
         Instant now = Instant.now();
         return repository.saveTicketType(new TicketTypeRecord(
@@ -591,27 +591,27 @@ public class TicketCatalogService {
     }
 
     /**
-     * S6(2026-07-02 拍板⑤):联合通票(权益横跨多业态,如酒吧+游乐)按分项单价比例拆分订单实付;
-     * 分项单价没填全时发布直接拦(400),不许均摊兜底——逐绑定行校验,不按模板聚合放水。
+     * S11③ 票面原价必须配全才能发布（原 S6 只卡「横跨多种权益类型」的票，现收紧到<b>每一条权益绑定</b>）。
+     *
+     * <p><b>为什么必须卡在发布这一步</b>：这张票卖出去以后，客人付的这笔钱要按各权益的<b>票面原价占比</b>
+     * 拆给游乐公司、餐厅、零售商户和酒吧。少配一条价，这一条就分不到钱、别人凭空多分——
+     * 而且票已经卖了、钱已经收了，事后只能一张张翻单子人工调账。所以票没配全价就不许开卖。
+     *
+     * <p><b>免费的怎么办</b>：免费权益把票面原价<b>填 0</b>（0 = 免费 = 不参与分钱），
+     * 不是留空。留空的意思是「还没想好这份值多少钱」，那就还不能卖。
      */
-    private void requireComponentPricesForMultiBusinessPass(String ticketTypeId) {
+    private void requireComponentPrices(String ticketTypeId) {
         java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketTypeId);
-        java.util.Set<String> businessTypes = new java.util.HashSet<>();
-        for (TicketTypeEntitlementRecord binding : bindings) {
-            repository.findEntitlementTemplateById(binding.entitlementTemplateId())
-                    .map(EntitlementTemplateRecord::entitlementType)
-                    .ifPresent(businessTypes::add);
-        }
-        if (businessTypes.size() <= 1) {
-            return;
-        }
         java.util.List<String> missing = bindings.stream()
                 .filter(binding -> binding.componentPriceCent() == null)
-                .map(TicketTypeEntitlementRecord::id)
+                .map(binding -> repository.findEntitlementTemplateById(binding.entitlementTemplateId())
+                        .map(EntitlementTemplateRecord::name)
+                        .orElse(binding.entitlementTemplateId()))
+                .sorted()
                 .toList();
         if (!missing.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED",
-                    "multi-business pass requires component_price_cent on every entitlement binding; missing: " + missing);
+            throw ApiException.badRequest("TICKET_COMPONENT_PRICE_REQUIRED",
+                    "这些权益还没填票面原价，票不能开卖（免费的请填 0）：" + String.join("、", missing));
         }
     }
 

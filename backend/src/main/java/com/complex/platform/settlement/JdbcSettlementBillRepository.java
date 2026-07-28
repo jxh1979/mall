@@ -42,15 +42,26 @@ public class JdbcSettlementBillRepository {
         return requireConfigured(bps, "platform_retention_rules.retention_bps", projectId);
     }
 
-    /** 第三方渠道抽成万分比：项目特例优先，否则全局默认，否则建表默认 0（不抽）。批1 只取通用率（channel IS NULL），per-channel 批6 用。 */
+    /** 第三方渠道抽成万分比（通用率，channel 未知/无订单时用）。 */
     public int findChannelFeeBps(String projectId) {
+        return findChannelFeeBps(projectId, null);
+    }
+
+    /**
+     * S11②：某<b>销售渠道</b>的抽成万分比。优先级：项目特例 &gt; 全局默认；同级下 该渠道专属率 &gt; 通用率。
+     * 渠道无专属配置 → 落回通用率（默认种子 0 = 官方直销不抽，逐分不变）。
+     */
+    public int findChannelFeeBps(String projectId, String channel) {
         Integer bps = jdbcTemplate.query("""
                 SELECT fee_bps FROM channel_fee_configs
-                 WHERE status = 'active' AND is_draft = FALSE AND channel IS NULL
+                 WHERE status = 'active' AND is_draft = FALSE
+                   AND (channel IS NULL OR channel = :channel)
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
-                 ORDER BY (project_id IS NOT NULL) DESC
+                 ORDER BY (project_id IS NOT NULL) DESC, (channel IS NOT NULL) DESC
                  LIMIT 1
-                """, new MapSqlParameterSource().addValue("project_id", projectId),
+                """, new MapSqlParameterSource()
+                        .addValue("project_id", projectId)
+                        .addValue("channel", channel),
                 rs -> rs.next() ? rs.getInt("fee_bps") : null);
         return requireConfigured(bps, "channel_fee_configs.fee_bps", projectId);
     }
@@ -143,22 +154,82 @@ public class JdbcSettlementBillRepository {
         return sum == null ? 0L : sum;
     }
 
-    /** 当月各酒吧统计：按 merchant_id 聚合 核销数(Σverified_count) + 客数(Σnum_people)。仅归属商户的核销。 */
+    /**
+     * S11①：当月<b>进池</b>核销按【业态】汇总（毛额侧 Σverified、折扣侧 Σdiscount）。
+     *
+     * <p>业态取自<b>提供该权益的商户</b>的业态（{@code merchants.merchant_type}，V348 五值封口）——
+     * 谁把这份东西给了客人，这份钱就算谁那个业态的。与 {@link #aggregateMerchantStats} 的业态条件同一套，
+     * 保证「排名/客数只算酒吧」和「份额只把酒吧那份进池」说的是同一批核销。
+     *
+     * <p>业态是招商录入商户时的必填主数据、且商户只软删不硬删 → 线上恒能解析到。
+     * ponytail: 解析不到（测试夹具直插流水、未建商户行）按酒吧计＝改造前口径，不静默丢钱；
+     * 真要 fail-loud 需先把各处测试夹具补齐商户行，届时把 COALESCE 去掉即可。
+     */
+    public List<FormatRevenue> aggregateFormatRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return jdbcTemplate.query("""
+                SELECT COALESCE(m.merchant_type, 'bar')            AS business_format,
+                       COALESCE(SUM(st.verified_amount_cent), 0)   AS revenue_cent,
+                       COALESCE(SUM(st.discount_amount_cent), 0)   AS discount_cent
+                  FROM settlement_transactions st
+                  LEFT JOIN merchants m ON m.id = st.merchant_id
+                 WHERE st.transaction_type IN ('verification_settled','verification_reversed')
+                   AND st.verification_id IS NOT NULL
+                   AND st.exclusive_merchant_id IS NULL
+                   AND COALESCE(st.business_at, st.created_at) >= :start
+                   AND COALESCE(st.business_at, st.created_at) < :end
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                 GROUP BY 1
+                 ORDER BY 1
+                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                new FormatRevenue(rs.getString("business_format"),
+                        rs.getLong("revenue_cent"), rs.getLong("discount_cent")));
+    }
+
+    /**
+     * S11②：当月<b>进池</b>核销按【销售渠道】汇总实付额（渠道抽成整单前移的计费基数）。
+     * 渠道取自出票订单 {@code ticket_orders.sales_channel}；direct 出票无订单 → 空串（落通用率）。
+     */
+    public List<ChannelRevenue> aggregateChannelRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return jdbcTemplate.query("""
+                SELECT COALESCE(o.sales_channel, '')              AS sales_channel,
+                       COALESCE(SUM(st.verified_amount_cent), 0)  AS revenue_cent
+                  FROM settlement_transactions st
+                  LEFT JOIN ticket_orders o ON o.id = st.order_id
+                 WHERE st.transaction_type IN ('verification_settled','verification_reversed')
+                   AND st.verification_id IS NOT NULL
+                   AND st.exclusive_merchant_id IS NULL
+                   AND COALESCE(st.business_at, st.created_at) >= :start
+                   AND COALESCE(st.business_at, st.created_at) < :end
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                 GROUP BY 1
+                 ORDER BY 1
+                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                new ChannelRevenue(rs.getString("sales_channel"), rs.getLong("revenue_cent")));
+    }
+
+    /**
+     * 当月各酒吧统计：按 merchant_id 聚合 核销数(Σverified_count) + 客数(Σnum_people)。仅归属商户的核销。
+     * S11①：<b>只算酒吧业态</b>——游乐/餐饮/零售的份额不进酒吧池，自然也不该参与酒吧的排名与客数聚合，
+     * 否则一家餐厅会因为核销了几张餐券而占掉某个酒吧的分池名次。业态条件与 {@link #aggregateFormatRevenue} 同源。
+     */
     public List<MerchantMonthlyStat> aggregateMerchantStats(String projectId, Instant monthStart, Instant nextMonthStart) {
         return jdbcTemplate.query("""
-                SELECT merchant_id,
-                       COALESCE(SUM(verified_count), 0) AS verified_count,
-                       COALESCE(SUM(num_people), 0)     AS guest_count
-                  FROM settlement_transactions
-                 WHERE transaction_type IN ('verification_settled','verification_reversed')
-                   AND verification_id IS NOT NULL
-                   AND beneficiary_type = 'merchant'
-                   AND merchant_id IS NOT NULL
-                   AND exclusive_merchant_id IS NULL
-                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
-                   AND (:project_id::text IS NULL OR project_id = :project_id)
-                 GROUP BY merchant_id
-                 ORDER BY verified_count DESC, merchant_id
+                SELECT st.merchant_id,
+                       COALESCE(SUM(st.verified_count), 0) AS verified_count,
+                       COALESCE(SUM(st.num_people), 0)     AS guest_count
+                  FROM settlement_transactions st
+                  LEFT JOIN merchants m ON m.id = st.merchant_id
+                 WHERE st.transaction_type IN ('verification_settled','verification_reversed')
+                   AND st.verification_id IS NOT NULL
+                   AND st.beneficiary_type = 'merchant'
+                   AND st.merchant_id IS NOT NULL
+                   AND st.exclusive_merchant_id IS NULL
+                   AND COALESCE(m.merchant_type, 'bar') = 'bar'
+                   AND COALESCE(st.business_at, st.created_at) >= :start
+                   AND COALESCE(st.business_at, st.created_at) < :end
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                 GROUP BY st.merchant_id
+                 ORDER BY verified_count DESC, st.merchant_id
                 """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
                 new MerchantMonthlyStat(rs.getString("merchant_id"),
                         rs.getInt("verified_count"), rs.getInt("guest_count")));
@@ -191,24 +262,6 @@ public class JdbcSettlementBillRepository {
                         rs.getLong("revenue_cent"), rs.getLong("discount_cent"),
                         rs.getInt("verified_count"), rs.getInt("guest_count"),
                         rs.getLong("comp_service_fee_cent")));
-    }
-
-    /**
-     * D6 当月<b>非专属</b>（进池）核销的套票折扣额合计 = Σ discount_amount_cent（核销正 + 冲正负，配对净掉）。
-     * 供分账引擎在 platform_absorb/split_by_ratio 时把项目承担的折扣加进池基数（池按满额分）。
-     * merchant_absorb 时引擎不加此项 → 商户自担折扣（池按净额分）=现状。为空/无折扣 → 0（零行为变更）。
-     */
-    public long sumComboDiscountCent(String projectId, Instant monthStart, Instant nextMonthStart) {
-        Long sum = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(discount_amount_cent), 0)
-                  FROM settlement_transactions
-                 WHERE transaction_type IN ('verification_settled','verification_reversed')
-                   AND verification_id IS NOT NULL
-                   AND exclusive_merchant_id IS NULL
-                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
-                   AND (:project_id::text IS NULL OR project_id = :project_id)
-                """, monthWindow(projectId, monthStart, nextMonthStart), Long.class);
-        return sum == null ? 0L : sum;
     }
 
     /**
@@ -397,6 +450,39 @@ public class JdbcSettlementBillRepository {
     public void deleteItemsByBill(String billId) {
         jdbcTemplate.update("DELETE FROM settlement_items WHERE bill_id = :bill_id",
                 new MapSqlParameterSource().addValue("bill_id", billId));
+    }
+
+    /** S11：清本单业态份额留痕（幂等重跑先清后写，与明细同范式）。 */
+    public void deleteFormatSharesByBill(String billId) {
+        jdbcTemplate.update("DELETE FROM settlement_bill_format_shares WHERE bill_id = :bill_id",
+                new MapSqlParameterSource().addValue("bill_id", billId));
+    }
+
+    /** S11：写一行结算单 × 业态份额留痕（V366）。 */
+    public void upsertFormatShare(SettlementBillFormatShareRecord share) {
+        jdbcTemplate.update("""
+                INSERT INTO settlement_bill_format_shares (
+                    bill_id, business_format, gross_revenue_cent, platform_borne_discount_cent,
+                    channel_fee_cent, net_revenue_cent, beneficiary_kind, beneficiary_entity_id)
+                VALUES (:bill_id, :business_format, :gross, :discount, :channel_fee, :net,
+                        :beneficiary_kind, :beneficiary_entity_id)
+                ON CONFLICT (bill_id, business_format) DO UPDATE SET
+                    gross_revenue_cent           = EXCLUDED.gross_revenue_cent,
+                    platform_borne_discount_cent = EXCLUDED.platform_borne_discount_cent,
+                    channel_fee_cent             = EXCLUDED.channel_fee_cent,
+                    net_revenue_cent             = EXCLUDED.net_revenue_cent,
+                    beneficiary_kind             = EXCLUDED.beneficiary_kind,
+                    beneficiary_entity_id        = EXCLUDED.beneficiary_entity_id,
+                    updated_at                   = now()
+                """, new MapSqlParameterSource()
+                .addValue("bill_id", share.billId())
+                .addValue("business_format", share.businessFormat())
+                .addValue("gross", share.grossRevenueCent())
+                .addValue("discount", share.platformBorneDiscountCent())
+                .addValue("channel_fee", share.channelFeeCent())
+                .addValue("net", share.netRevenueCent())
+                .addValue("beneficiary_kind", share.beneficiaryKind())
+                .addValue("beneficiary_entity_id", share.beneficiaryEntityId()));
     }
 
     /** upsert settlement_items（bill+merchant 唯一）。 */
@@ -604,5 +690,13 @@ public class JdbcSettlementBillRepository {
     public record ExclusiveMerchantRevenue(String merchantId, String entitlementType, long revenueCent,
                                            long discountCent, int verifiedCount, int guestCount,
                                            long compServiceFeeCent) {
+    }
+
+    /** S11① 当月某业态的进池核销汇总：净额（客人实付拆到本业态的部分）+ 套票折扣额（供按承担方补回满额）。 */
+    public record FormatRevenue(String businessFormat, long revenueCent, long discountCent) {
+    }
+
+    /** S11② 当月某销售渠道的进池核销实付额（渠道抽成整单前移的计费基数）。 */
+    public record ChannelRevenue(String salesChannel, long revenueCent) {
     }
 }
