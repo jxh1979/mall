@@ -47,7 +47,7 @@ class SettlementBatch1P345Tests {
     @AfterEach
     void cleanup() {
         for (String ent : entIds) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE entitlement_id = ?", ent);
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE entitlement_id = ?", ent);
             jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id = ?", ent);
             jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_" + ent);
         }

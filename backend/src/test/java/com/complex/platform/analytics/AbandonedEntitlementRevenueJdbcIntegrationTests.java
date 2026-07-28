@@ -61,7 +61,7 @@ class AbandonedEntitlementRevenueJdbcIntegrationTests {
     }
 
     private void cleanup() {
-        jdbcTemplate.update("DELETE FROM settlement_transactions WHERE entitlement_id LIKE 'ent_b2rep_%'");
+        com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE entitlement_id LIKE 'ent_b2rep_%'");
         jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id LIKE 'ent_b2rep_%'");
         jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", ORDER_ID);
         jdbcTemplate.update("DELETE FROM entitlement_templates WHERE id = ?", TEMPLATE);

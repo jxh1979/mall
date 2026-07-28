@@ -368,18 +368,35 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
-    public void updatePointsLedgerConfirmation(String ledgerId, long confirmedAmount, String status, Long remainingPoints) {
-        // F-TXN-03 按核销张数：把该 earn 行已确认份额对齐 target（confirmed_amount），同步 status 与可过期余额。
-        // remainingPoints 为 null 时不动该列（无有效期批次）；非 null 时令其 = 已确认份额（过期口径与实际入余额一致）。
+    public long sumConfirmedPointsBySourceDoc(String sourceDocType, String sourceDocId) {
+        // P0-B（V344）：已确认份额 = 该单 confirm 分录净额和（正=确认、负=冲正）。
+        // 调用方已先对 earn 行 FOR UPDATE（AUD-014 锁序 earn→account），故本次求和与后续追加天然串行化。
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(points_delta), 0)
+                  FROM customer_points_ledger
+                 WHERE source_doc_type = :source_doc_type
+                   AND source_doc_id = :source_doc_id
+                   AND change_type = :change_type
+                """, Map.of(
+                "source_doc_type", sourceDocType,
+                "source_doc_id", sourceDocId,
+                "change_type", CustomerPointsLedgerRecord.CHANGE_CONFIRM), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    @Override
+    public void updatePointsLedgerLifecycle(String ledgerId, String status, Long remainingPoints) {
+        // F-TXN-03 按核销张数：确认份额变动后同步 earn 行生命周期列。
+        // P0-B（V344）：confirmed_amount 已被 trg_points_ledger_freeze_facts 冻结，此处只动
+        // status 与 remaining_points（FIFO 批次运行态）；已确认份额靠追加 confirm 分录表达。
+        // remainingPoints 为 null 时不动该列（无有效期批次）；非 null 时令其 = 已确认份额。
         jdbcTemplate.update("""
                 UPDATE customer_points_ledger
-                   SET confirmed_amount = :confirmed_amount,
-                       status = :status,
+                   SET status = :status,
                        remaining_points = COALESCE(:remaining_points, remaining_points)
                  WHERE id = :id
                 """, new MapSqlParameterSource()
                 .addValue("id", ledgerId)
-                .addValue("confirmed_amount", confirmedAmount)
                 .addValue("status", status)
                 .addValue("remaining_points", remainingPoints));
     }

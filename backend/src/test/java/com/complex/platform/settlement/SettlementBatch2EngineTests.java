@@ -45,7 +45,7 @@ class SettlementBatch2EngineTests {
     @AfterEach
     void cleanup() {
         for (String pid : projectIds) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE project_id = ?", pid);
+            com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", pid);
             jdbcTemplate.update(
                     "DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)",
                     pid);

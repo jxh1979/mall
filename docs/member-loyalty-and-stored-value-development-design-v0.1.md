@@ -35,7 +35,19 @@
 
 落 `customer_points_ledger`（V100/V025，幂等 `uq_customer_points_ledger_source_doc`）+ `customer_points_rules`（V060 规则）：
 - `earnPoints` / `earnPointsPending`：获取/挂起（pending）；按消费金额或按核销张数等规则。
-- `confirmPoints(sourceDoc, verifiedUnits, totalUnits)`：**按已核销张数比例确认**（V151 `confirmed_amount`）；退款按已确认份额冲减（reversed）。 **AUD-014（2026-07-20）：算 delta 前对 earn 行加 `FOR UPDATE` 行锁（锁序 earn→account），串行化同一订单的并发确认/冲正 → 后到事务读到已提交 confirmed_amount，delta=0 幂等，杜绝两事务基于同一旧值重复给账户加钱（余额>明细的账实分叉）。**
+- `confirmPoints(sourceDoc, verifiedUnits, totalUnits)`：**按已核销张数比例确认**；退款按已确认份额冲减（reversed）。 **AUD-014（2026-07-20）：算 delta 前对 earn 行加 `FOR UPDATE` 行锁（锁序 earn→account），串行化同一订单的并发确认/冲正 → 后到事务读到已提交的已确认份额，delta=0 幂等，杜绝两事务基于同一旧值重复给账户加钱（余额>明细的账实分叉）。**
+  - **✅ P0-B 积分台账改追加（2026-07-28，迁移 V344）**：确认份额**不再就地改写 earn 行的 `confirmed_amount`**（旧值被覆盖、变动无痕，属资金台账 append-only 破防）。
+    新口径：每次确认/冲正**追加一条 `change_type='confirm'` 分录**，`points_delta` 带符号（正 = 本次新确认份额，负 = 本次冲正回滚份额），
+    `source_id` 指向原 earn 行、`source_doc_type`/`source_doc_id` 指向业务单据；某单「已确认份额」= **该单全部 confirm 分录的 `points_delta` 之和**。
+    `confirmPoints` 与 `deductPoints` 都改读这个派生值。earn 行只再同步**生命周期列**（`status`、以及 FIFO 批次的 `remaining_points`），
+    与 `ar_ap_items.paid`/`unpaid` 可变口径同源。
+  - DB 侧硬化：新增触发器 `trg_points_ledger_freeze_facts` **冻结事实列**（`customer_id`/`points_delta`/`balance_after`/`change_type`/
+    `source_type`/`source_id`/`source_doc_type`/`source_doc_id`/`confirmed_amount`/`expire_at`/`created_at`），改这些列一律抛
+    `COMPLEX_APPEND_ONLY_VIOLATION`；放行 `remaining_points`/`expired`/`status`/`description`。
+    刻意用**冻结清单（deny-list）**而非允许清单——后续给该表加的新列默认可改，不会被写死的列名堵死迭代。
+  - 唯一索引 `uq_customer_points_ledger_source_doc` 加 `change_type <> 'confirm'` 条件（同一单据要能反复追加 confirm 分录：部分核销 1/3 → 2/3 → 3/3 各落一行、冲正落负行）。
+  - 存量迁移：每条 `confirmed_amount > 0` 的历史 earn 行**补建一条等额 confirm 分录**（`lcbf_` + md5(earn id)），令派生值与原就地值**逐单严格相等**——零行为改变，
+    且避免存量单派生值突然归零导致再来一次核销事件把整份积分二次入账。
 - `deductPoints`：兑换消耗扣 `balance`。
 - `change_type`：获取/扣减/兑换消耗/过期/调整（速查表 §二明细类型），每笔关联触发单据。
 - **过期清零** `expirePoints(now)` / `expirePointsForCustomer`：`customer_points_ledger` 的 `expire_at`/`remaining_points`/`expired`，按自然年或后台配置天数清减**成长积分**。
@@ -82,7 +94,7 @@
 |---|---|---|
 | `customer_points_accounts`（+V089 扩列） | V009/V089 | 两本账（balance 可用 / keep_threshold_progress 成长）+ 冻结 + 保级周期 + 签到 |
 | `customer_member_levels` | V089 | 等级配置（升级/保级门槛/周期/宽限/倍率） |
-| `customer_points_ledger` | V025/V100/V151 | 积分流水（获取/确认/扣减/过期，幂等，confirmed_amount） |
+| `customer_points_ledger` | V025/V100/V151/**V344** | 积分流水（获取/确认/扣减/过期，幂等）。**V344 起改追加**：已确认份额 = `change_type='confirm'` 分录的 `points_delta` 之和；事实列被触发器冻结，`confirmed_amount` 仅作历史列不再回写 |
 | `customer_points_rules` | V060 | 积分获取规则 |
 | `customer_check_ins`（+ tiers） | V089 | 连续签到 + 阶梯 |
 | `customer_birthday_rules` / `customers.birth_date` | V089 | 生日加倍 |
