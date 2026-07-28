@@ -715,3 +715,19 @@
 - 本批闭合：终端 6 MISSING、BAR-VOID-A1 相关 10 PARTIAL、积分 ADV-TX-004 相关 3 PARTIAL（改挂 ACCRUAL-002）。
 - 仍 OPEN（待业务拍板后补 PRD）：ADV-TX-003 储值混退；ADV-TX-007 卡座转并续；ADV-TX-008/XD-006 营业日；ADV-ED-003 准入冲突；ADV-ED-008 数据新鲜度（及对抗表 ADV-ED-007 指标口径）。
 - 仅文档；不改代码；不改三份权威 HTML。
+
+
+## DEC-SV-LEDGER-001 / DEC-SV-SPEND-ORDER-001 / DEC-SV-REFUND-001 / DEC-SV-CLOSE-001 / DEC-SV-NO-MIGRATE-001（2026-07-28）
+
+闭合 **ADV-TX-003**（储值本金与赠送金）。
+
+| ID | 裁决 |
+|---|---|
+| DEC-SV-LEDGER-001 | 充值拆 **本金 + 赠送金**；赠送多少可配 |
+| DEC-SV-SPEND-ORDER-001 | 扣款顺序可配；**默认先本金后赠送金** |
+| DEC-SV-REFUND-001 | **默认仅本金可退现金**；赠送金默认不退现，未用按活动作废/收回（可配）。用户未另选比例分摊/赠送金退现前按此 |
+| DEC-SV-CLOSE-001 | 注销：先解占用/冻结；退剩余本金；赠送金默认清零 |
+| DEC-SV-NO-MIGRATE-001 | **禁止**余额迁移 |
+
+承接：`docs/member-loyalty-and-stored-value-product-prd-v0.1.md` §7。
+仅文档；编码另开。
