@@ -1,0 +1,7 @@
+id,topic,result,severity,note,decision_id
+XD-001,金额单位/精度,COVERED,P1,多文档使用分/元；以 HTML 与产品总纲金额规则为准,
+XD-002,项目/商户隔离,COVERED,P0,项目归属与商户范围在治理/地产/积分文档均有要求,
+XD-003,终端关闭 fail-closed,COVERED,P0,终端开关关闭后后端拒绝,
+XD-004,积分双账本与兑换边界,COVERED,P0,以 member-points-tier-and-clearing-prd-v1.0 与 ACCRUAL-002/O-BAN 为准,POINTS-VOUCHER-ACCRUAL-002
+XD-005,审批/职责分离,COVERED,P0,治理 phase3 已强化；各域需继续沿用,
+XD-006,营业日/时区,PARTIAL,P1,仍有跨营业日统一切日点文档债（phase4 DEFERRED ADV-TX-008）,DEFERRED-DOCS-FOLLOWUP

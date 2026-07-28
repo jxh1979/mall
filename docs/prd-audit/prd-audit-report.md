@@ -1,52 +1,89 @@
 # 综合体管理系统 PRD 全量审计报告
 
-状态：进行中，尚不可作为最终审计结论。
+状态：**文档审计完成（phase1–7）**  
+完成日：2026-07-28  
+基线提交：`31f262c5`  
+范围：现行 PRD 及相关业务文档（B+3 MAIN/APPENDIX 分层）；**不含代码实现审计**
 
-## 当前进度
+## 1. 审计结论与可用性边界
 
-- 阶段 1：完成。
-- 阶段 2：完成。
-- 阶段 3：完成。
-- 范围 B+3 返工与 phase3 附录交叉复核：完成（产物见 `method-b3-scope-and-tracks.md`、`document-scope-manifest.csv`、`phases/01b-scope-rework-b3.md`、`phases/03b-appendix-crosscheck.md`、`rounds/2026-07-27-b3-scope-crosscheck-report.md`）。
-- 阶段 4：**完成（文档审计）**（coverage+对抗场景已归档；积分域见 main 会员积分主 PRD / ACCRUAL-002；详见 phases/04-… 收口节）。
-- 阶段 5–7：未开始。
+### 结论（审计推导 + HTML 明确要求 + 用户裁决）
+1. 三份业务 HTML 为业务最终解释权；PRD 须向其对齐。  
+2. 规则账本共 **844** 条，覆盖矩阵已 **100% 挂接**最终状态。  
+3. 治理域（phase3）已完成并曾落地修订；交易/地产/边缘域完成文档覆盖与对抗登记。  
+4. 会员积分/等级/清算已通过独立重构 PRD + P0/P1 决策收口（见主 PRD）。  
+5. 仍存在 **文档债**（PARTIAL/MISSING 与 DEFERRED 项），不阻塞“文档审计完成”标签，但阻塞“可宣称业务 PRD 零缺口”。  
 
-## 权威事实源
+### 可用性边界
+- 可用于：文档缺口定位、对抗场景清单、后续补 PRD 优先级。  
+- **不可用于**：替代测试/代码审计/上线放行唯一依据。  
 
-三个现行业务 HTML 共同拥有最终业务解释权。当前基线和哈希记录在 `phases/01-baseline-and-backup.md`。
+## 2. 权威 HTML 哈希与提交范围
 
-## 当前已确认结论
+| file | sha256 |
+|---|---|
+| business-system-map-for-operations-v0.1.html | `0492b9112fec7ac03366f8c69a7a948f7706e9483b70370396359197f2ca087e` |
+| platform-governance-map-for-operations-v0.1.html | `a18cfff21c9cfbaf68d48ec6a0d68eeaa9afd3ae462dff76093c0a56dc31572b` |
+| business-enum-quick-reference-v0.1.html | `3e2071d8b740aea43df8a4685871c307a4185591ced4f1ced279ffa202e39648` |
 
-1. 正式审计主轨（MAIN）限定为现行 PRD及直接相关业务文档；OpenAPI/设计/ops/交付等纳入 APPENDIX 附录轨（B+3）。
-2. 开发设计、OpenAPI、运维文档等进入 APPENDIX（登记+漂移/冲突），不做与 PRD 同级原子规则全量覆盖；代码/数据库/测试/运行证据仍非本轮正式审计对象。
-3. 历史备份可提供分析线索和用户裁决，但不是当前事实源。
-4. 备份快照中的业务枚举 HTML 已变化，必须按当前版本重新解析。
-5. 当前三个 HTML 共提取 `844` 条可定位原子规则：业务系统地图 `530` 条、平台治理地图 `192` 条、业务枚举速查 `122` 条。
-6. 当前 HTML 内没有未确认的显式问题块；历史裁决仍保留两个未被 HTML 唯一回答的积分清算问题。
-7. 阶段 3 审计 `302` 条治理、组织、身份、权限、证据、通用规则和治理型终端规则；最终状态为 `FULL 300`、`NOT_APPLICABLE 2`。
-8. 阶段 3 识别并修复 `7` 组确定性漂移：权威来源层级、合同审批与合作模式、高危授权审批、存档/删除、岗位或组织变化后的权限残留、十类终端拆分、四项全局通用规则。
-9. 阶段 3 对抗性复核覆盖显式拒绝优先、临时授权到期/单次消耗、自审自批、外包越界、审计人员只读与敏感访问留痕、组织变化残留权限、终端关闭后端拒绝和 canonical term 漂移；修订后未保留未裁决治理问题。
+- 审计过程约定：不修改上述 HTML。  
+- 变更范围：仅 `docs/prd-audit/**` 及必要索引指针。  
 
+## 3. 文档范围统计
+- MAIN 业务 PRD/规格/术语/决策：见 `document-scope-manifest.csv`（B+3）  
+- APPENDIX：OpenAPI/设计/ops 等仅附录  
+- 本报告阶段产物：phases/01–07、coverage、adversarial CSVs  
 
-10. 2026-07-27：酒吧高价值已出品退酒审批文档收口为 A1（阈值默认超过5000元可配；仅已出品；低价值可即时生效）。编码未改。见 BAR-VOID-A1 / bar PRD §10.2.1。
+## 4. 规则覆盖统计
 
-12. 阶段4初评：对抗场景与覆盖已产出；积分清算未决 ADV-TX-004。见 phases/04-transaction-member-ticket-bar.md。
+| status | count |
+|---|---:|
+| FULL | 788 |
+| PARTIAL | 48 |
+| MISSING | 6 |
+| NOT_APPLICABLE | 2 |
 
+**合计：844 = ledger 844**
 
-13. 2026-07-28：确认 POINTS-VOUCHER-ACCRUAL-002——积分兑商户虚拟券**不**先冻结至核销；兑换时点扣减并计承接。净积分计价仍开。
+## 5. 分阶段
+| 阶段 | phase 标签 | 行数 |
+|---|---|---:|
+| 治理 | 03-governance-and-common | 302 |
+| 交易权益 | 04-transaction-member-ticket-bar | 299 |
+| 地产供应链 | 05-realestate-leasing-building-supply | 132 |
+| 边缘域 | 06-amusement-terminal-thirdparty-data | 111 |
 
-14. 2026-07-28：PR #218 phase4 审计文档收口；积分承接以 ACCRUAL-002 为准；本审计仅文档。
+## 6. P0–P3 与残余风险
+- 高严重度未 FULL：46（均已挂 decision_id）  
+- 用户接受的剩余风险类型：`DEFERRED-DOCS-FOLLOWUP`（后续补 PRD，不在本审计线程改代码）  
+- 积分域关键裁决：ACCRUAL-002、O-BAN、V-12、T-6-STRICT、P-DUAL、R-SYM、CFG-ALL-NUMERIC 等  
 
-15. 2026-07-28：一次性完成 phase4+phase5 文档审计；详见 `PHASE4-5-CLOSEOUT.md`。剩余规则约 111 条进 phase6/7。
+## 7. 已修订问题（摘要）
+- Phase3：治理 PRD 多项漂移已修并合并历史 PR  
+- 会员积分：主 PRD v1.0 + P1 参数表已合并 main  
+- Phase4–7：覆盖与对抗文档化完成  
 
-## 最终报告保留章节
+## 8. 未决 / 后续文档债
+- 储值混退细则、卡座转并续、跨营业日统一切日等 DEFERRED  
+- PARTIAL/MISSING 行见 coverage 与 phase*-issue-rows.csv  
+- 实现切片见 `docs/superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`（**编码需另许可**）  
 
-阶段 7 将补齐：
+## 9. 阶段 PR（主要）
+- #217 B+3 范围  
+- #218/#222 phase4/5  
+- #219 会员积分 PRD  
+- #220 实现切片  
+- #221 P1 参数表  
+- （本 PR）phase6+7 收口  
 
-- 文档与规则覆盖统计；
-- P0–P3 问题和证据；
-- 已完成修订；
-- 用户接受的剩余风险；
-- 未决业务事项；
-- 各阶段 PR 与合并提交；
-- 最终验证结果。
+## 10. 最终验证结果
+- `COVERAGE_STATUS_PASS`  
+- `HIGH_SEVERITY_ACCOUNTED_PASS`  
+- 权威 HTML 哈希未变  
+- **无代码变更**  
+
+---
+
+## 当前进度（归档）
+- 阶段 1–7：完成（文档审计）  
+- 代码实现审计：不在范围  

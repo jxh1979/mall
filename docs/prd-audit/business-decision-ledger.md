@@ -695,3 +695,10 @@
 
 - `POINTS-VOUCHER-ACCRUAL-001` 废止。
 - `POINTS-VOUCHER-ACCRUAL-002`：**到店核销才记商户承接**；兑换时中心在途；过期无商户冲回。
+
+
+## DEFERRED-DOCS-FOLLOWUP（2026-07-28）
+
+- 含义：文档审计已登记、待后续专项补 PRD/裁决的项。
+- 不表示用户已接受业务风险上线；仅表示本审计线程 docs-only 范围内不阻塞 coverage 闭环。
+- 编码实现不在本标签授权范围内。

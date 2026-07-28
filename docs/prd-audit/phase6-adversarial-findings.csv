@@ -1,0 +1,10 @@
+id,scenario,severity,result,gap,recommend,decision_id,evidence
+ADV-ED-001,游乐开放前巡检缺项、严重项未关闭、异常关闭后越权重开,P0,COVERED,,,,巡检 | 开放 | 严重 | 关闭 | 阻断
+ADV-ED-002,团体或包场越界占用空间、超人数、无主管审批,P1,COVERED,,,,团体 | 包场 | 人数 | 审批 | 占用
+ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突,P1,PARTIAL,缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,身高 | 年龄 | 健康 | 告知
+ADV-ED-004,终端模式错误、配置拉取失败、离线与开关关闭后的安全默认值,P0,COVERED,,,,终端 | 开关 | 离线 | 拉取 | 默认 | 拒绝
+ADV-ED-005,第三方回调重复、乱序、失败、超时和供应商不可用,P0,COVERED,,,,回调 | 重复 | 超时 | 失败 | 重试 | 幂等
+ADV-ED-006,第三方人工录入数据冒充系统自动来源,P0,COVERED,,,,人工 | 自动 | 来源 | 录入 | mock
+ADV-ED-007,指标口径分子、分母、时间窗、去重规则或主体不同,P0,PARTIAL,缺去重;时间窗,指标注册表强制口径字段,DEFERRED-DOCS-FOLLOWUP,分子 | 分母 | 口径 | 指标
+ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值,P1,PARTIAL,缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,实时 | 延迟
+ADV-ED-009,通知开关层级冲突或重要通知无责任主体,P1,COVERED,,,,通知 | 开关 | 责任 | 层级

@@ -334,7 +334,7 @@ BSM-0056,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定�
 BSM-0057,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0058,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0059,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P2,TX-BSM-0059-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
-BSM-0060,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
+BSM-0060,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0061,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0062,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0063,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -355,7 +355,7 @@ BSM-0077,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,5. 积分兑�
 BSM-0078,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0079,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0080,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12A.2 动态定价与会员价：由「P1 未做」移除并据实补小节 `文档goalP1(2026-06-20)`,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0081,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,,04-transaction-member-ticket-bar
+BSM-0081,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0082,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0083,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0084,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -366,7 +366,7 @@ BSM-0088,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,
 BSM-0089,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0090,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0091,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0092,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
+BSM-0092,docs/customer-app-miniapp-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0093,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,12. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0094,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,10. 后台运营配置入口（追溯，不改上文口径）,PARTIAL,P0,ADV-TX-010,酒吧出品/库存/退单/赠酒不守恒 => PARTIAL: 实现仍可能先生效后审(代码未改); ,文档已定A1；编码另开。补出品-库存-赠酒-退单守恒式与对账抽检,BAR-VOID-A1,04-transaction-member-ticket-bar
 BSM-0095,docs/business-decision-log-v0.1.md,36. R6 业务输入与确认决议（14 项已全部业务确认 2026-06-19）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -384,7 +384,7 @@ BSM-0106,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,
 BSM-0107,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0108,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0109,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0110,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
+BSM-0110,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0111,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0112,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0113,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
@@ -393,7 +393,7 @@ BSM-0115,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-tra
 BSM-0116,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0117,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0118,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0119,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
+BSM-0119,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0120,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0121,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0122,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
@@ -404,16 +404,16 @@ BSM-0126,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,
 BSM-0127,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0128,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0129,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0130,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0130-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,,04-transaction-member-ticket-bar
+BSM-0130,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0130-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0131,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,4. P0 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0132,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0132-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,,04-transaction-member-ticket-bar
-BSM-0133,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
+BSM-0132,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0132-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0133,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0134,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0135,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0135-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,,04-transaction-member-ticket-bar
+BSM-0135,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0135-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0136,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0140,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,1. 文档定位,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0141,docs/bar-business-operations-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0142,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0142-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,,04-transaction-member-ticket-bar
+BSM-0142,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-BSM-0142-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0144,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0146,docs/bar-business-operations-product-prd-v0.1.md,4. 业务对象,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0147,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
@@ -431,9 +431,9 @@ BSM-0158,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,
 BSM-0159,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0160,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0161,docs/bar-business-operations-product-prd-v0.1.md,7.2 赠饮权益核销,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0162,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
-BSM-0163,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
-BSM-0164,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
+BSM-0162,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0163,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BSM-0164,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0165,docs/customer-app-miniapp-product-prd-v0.1.md,3. 主要功能,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0166,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0167,docs/bar-business-operations-product-prd-v0.1.md,6. 账单状态,FULL,,,,,,04-transaction-member-ticket-bar
@@ -452,10 +452,10 @@ BSM-0179,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FU
 BSM-0180,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0181,docs/bar-business-operations-product-prd-v0.1.md,10.2.1 退菜/退酒（出品后撤单）升 P0 `R6-D14`,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0182,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0183,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
+BSM-0183,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0184,docs/bar-business-operations-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0185,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0186,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,,04-transaction-member-ticket-bar
+BSM-0186,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,PARTIAL,P1,ADV-TX-007,卡座转卡/合并/续卡后的低消/名额/销售归属/提成 => GAP: 缺转卡; 缺合并; 缺续卡; ,固定转卡合并续卡后的低消继承、名额重算、销售与提成归属,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0187,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0188,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0189,docs/bar-business-operations-product-prd-v0.1.md,10.1 成熟 POS 深度缺口规划（对照成熟酒吧/餐饮 POS）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -510,7 +510,7 @@ BSM-0403,docs/finance-settlement-product-prd-v0.1.md,全文/综合条款,FULL,,,
 BSM-0404,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0405,docs/finance-settlement-product-prd-v0.1.md,6A.2 开票状态（税务 / 电子发票平台回传，中英映射 D7）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0406,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0407,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,,04-transaction-member-ticket-bar
+BSM-0407,docs/finance-settlement-product-prd-v0.1.md,财务经营、日结与结算产品 PRD V0.1,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0408,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0409,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0410,docs/settlement-rebuild-prd-v1.0.md,"C. 税务配置(→ 税务配置表 `tax_config`,**全部后台可配** —— 2026-07-04 用户裁定)",FULL,,,,,,04-transaction-member-ticket-bar
@@ -518,7 +518,7 @@ BSM-0411,docs/dividend-engine-prd-v0.1.md,1. 业务背景与目标,PARTIAL,P2,TX
 BSM-0412,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0413,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0414,docs/dividend-engine-prd-v0.1.md,2. 已拍板口径（2026-07-18 终稿）,FULL,,,,,,04-transaction-member-ticket-bar
-BSM-0415,docs/dividend-engine-prd-v0.1.md,9. 边界与后续迭代（如实留档）,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,,04-transaction-member-ticket-bar
+BSM-0415,docs/dividend-engine-prd-v0.1.md,9. 边界与后续迭代（如实留档）,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BSM-0416,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0417,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0418,docs/dividend-engine-prd-v0.1.md,5A. 自定义扣除项（V309，2026-07-19 拍板 #35）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -532,8 +532,8 @@ BSM-0425,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台�
 BSM-0426,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0427,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BSM-0428,docs/finance-settlement-product-prd-v0.1.md,15. 持股分红引擎（V299，指针）,FULL,,,,,,04-transaction-member-ticket-bar
-PGM-0075,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-PGM-0075-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,,04-transaction-member-ticket-bar
-PGM-0077,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-PGM-0077-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,,04-transaction-member-ticket-bar
+PGM-0075,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-PGM-0075-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+PGM-0077,docs/product-requirements-v0.1.md,需人工定位,MISSING,P1,TX-PGM-0077-MISS,MAIN PRD 中未检索到足够承接表述,在对应领域 PRD 补写该权威规则的正向/逆向/权限/证据条款,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 PGM-0078,docs/product-requirements-v0.1.md,7. 基础对象模型,FULL,,,,,,04-transaction-member-ticket-bar
 PGM-0168,docs/ticketing-entitlement-checkin-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 PGM-0169,docs/bar-business-operations-product-prd-v0.1.md,11. 已确认规则和后续细化事项,FULL,,,,,,04-transaction-member-ticket-bar
@@ -566,7 +566,7 @@ BEQ-0025,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合�
 BEQ-0026,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0027,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,PARTIAL,P2,TX-BEQ-0027-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
 BEQ-0028,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0029,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,会员忠诚度与储值产品 PRD V0.1,PARTIAL,P0,ADV-TX-003,储值本金与赠送金混退、账户注销和余额迁移 => GAP: 本金/赠送金区分不足; 混退顺序与赠送金可否退未明确; ,固定退款顺序、赠送金是否可退、注销/迁移时本金赠金处理,,04-transaction-member-ticket-bar
+BEQ-0029,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,会员忠诚度与储值产品 PRD V0.1,PARTIAL,P0,ADV-TX-003,储值本金与赠送金混退、账户注销和余额迁移 => GAP: 本金/赠送金区分不足; 混退顺序与赠送金可否退未明确; ,固定退款顺序、赠送金是否可退、注销/迁移时本金赠金处理,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BEQ-0030,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0031,docs/bar-business-operations-product-prd-v0.1.md,6. 账单状态,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0032,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
@@ -595,7 +595,7 @@ BEQ-0114,docs/settlement-rebuild-prd-v1.0.md,全文/综合条款,FULL,,,,,,04-tr
 BEQ-0115,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0116,docs/finance-settlement-product-prd-v0.1.md,变更日志,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0117,docs/dividend-engine-prd-v0.1.md,3. 分红方案（配置层，`dividend_plans`）,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0118,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,,04-transaction-member-ticket-bar
+BEQ-0118,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,PARTIAL,P1,ADV-TX-008,订单跨营业日/跨月/跨结算周期 => PARTIAL: 缺营业日; ,统一营业日切日点、跨日订单归属、跨月退款进入哪期结算,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
 BEQ-0119,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0120,docs/dividend-engine-prd-v0.1.md,9. 边界与后续迭代（如实留档）,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0121,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
@@ -732,3 +732,114 @@ BEQ-0104,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗计量,FULL,,,,
 BEQ-0105,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗计量,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0106,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0107,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0137,docs/terminal-page-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0138,docs/terminal-page-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0139,docs/terminal-page-product-prd-v0.1.md,2. 终端分层,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0143,docs/terminal-page-product-prd-v0.1.md,2. 终端分层,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0145,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0191,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0192,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0195,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0197,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0231,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0232,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0233,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0234,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0235,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0236,docs/amusement-business-operations-product-prd-v0.1.md,11A.1 游乐超容（over_capacity）软/硬阈值放行策略（权威：spec §7，V104）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0237,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0238,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0239,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0240,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0241,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0242,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0243,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0244,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0245,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0246,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0247,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0248,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0249,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0250,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0251,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0252,docs/amusement-p0-safety-inspection-spec-v0.1.md,5.2 项目/场次/设备状态影响,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0253,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0254,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0260,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0264,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0266,docs/product-requirements-v0.1.md,14. 已确认业务规则,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0316,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0317,docs/third-party-business-access-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0318,docs/third-party-business-access-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0319,docs/third-party-business-access-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0320,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0321,docs/third-party-business-access-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0322,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0323,docs/third-party-business-access-product-prd-v0.1.md,11. 已确认规则和后续供应商依赖,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0324,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0325,docs/third-party-business-access-product-prd-v0.1.md,9. P0 验收标准,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0326,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0327,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0328,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0329,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0330,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0331,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0332,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0333,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0334,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0335,docs/third-party-business-access-product-prd-v0.1.md,11. 已确认规则和后续供应商依赖,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0336,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0337,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0429,docs/business-dashboard-metrics-product-prd-v0.1.md,1. 文档定位,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0430,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0431,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0432,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0433,docs/data-analysis-layer-spec-v0.2.md,6. 业务专项指标,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0434,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0435,docs/business-dashboard-metrics-product-prd-v0.1.md,2. 指标分类（8 类，HTML 授权口径）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0436,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0437,docs/business-dashboard-metrics-product-prd-v0.1.md,2. 指标分类（8 类，HTML 授权口径）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0438,docs/data-analysis-layer-spec-v0.2.md,2. 合并来源,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0439,docs/business-dashboard-metrics-product-prd-v0.1.md,2. 指标分类（8 类，HTML 授权口径）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0440,docs/business-dashboard-metrics-product-prd-v0.1.md,2. 指标分类（8 类，HTML 授权口径）,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0441,docs/data-analysis-layer-spec-v0.2.md,2. 合并来源,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0442,docs/business-dashboard-metrics-product-prd-v0.1.md,7. 经营异常处置流转（2026-07-19 现行）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0443,docs/business-dashboard-metrics-product-prd-v0.1.md,7. 经营异常处置流转（2026-07-19 现行）,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0444,docs/business-dashboard-metrics-product-prd-v0.1.md,7. 经营异常处置流转（2026-07-19 现行）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0445,docs/data-analysis-layer-spec-v0.2.md,2. 合并来源,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0446,docs/business-dashboard-metrics-product-prd-v0.1.md,4. 口径与落地承接,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0447,docs/business-dashboard-metrics-product-prd-v0.1.md,8.1 P0 经营总览卡片可下钻对账（现行）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0448,docs/data-analysis-layer-spec-v0.2.md,2. 合并来源,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0449,docs/data-analysis-layer-spec-v0.2.md,6. 页面范围,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0450,docs/data-analysis-layer-spec-v0.2.md,6. 页面范围,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0451,docs/data-analysis-layer-spec-v0.2.md,6. 页面范围,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0452,docs/data-analysis-layer-spec-v0.2.md,6. 页面范围,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0453,docs/business-dashboard-metrics-product-prd-v0.1.md,3. 谁会看（按权限与数据范围）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-0454,docs/business-dashboard-metrics-product-prd-v0.1.md,8.2 KPI 可见性分层（建设中，待上线定稿）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0070,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0071,docs/terminal-page-product-prd-v0.1.md,2. 终端分层,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0072,docs/terminal-page-product-prd-v0.1.md,15A.1 设备生命周期状态机（权威：spec §10，V107）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0073,docs/terminal-page-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0074,docs/terminal-page-product-prd-v0.1.md,2. 终端分层,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0076,docs/terminal-page-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0119,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0120,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0121,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0122,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0123,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0124,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0125,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0126,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0170,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+PGM-0173,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0042,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0043,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0044,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0045,docs/amusement-p0-safety-inspection-spec-v0.1.md,5.2 项目/场次/设备状态影响,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0046,docs/amusement-p0-safety-inspection-spec-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0047,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0048,docs/amusement-business-operations-product-prd-v0.1.md,11A.3 团体/包场：由「未做」更正为「已落地」`文档goalP1(2026-06-20)`,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0065,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流方向（第三方 → 平台）,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0066,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0067,docs/third-party-business-access-product-prd-v0.1.md,5. 接入状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BEQ-0068,docs/third-party-business-access-product-prd-v0.1.md,6. 回流记录状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
