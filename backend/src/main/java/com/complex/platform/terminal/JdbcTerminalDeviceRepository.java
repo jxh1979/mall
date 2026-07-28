@@ -234,35 +234,81 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
     @Override
     public Optional<TerminalCapabilitySwitchRecord> resolveEffectiveSwitch(
             String terminalType, String capabilityCode, Map<String, String> orderedScopes) {
-        // 按最具体在前的顺序逐级查询；命中第一条显式行即胜出。
-        // terminal_type 同时匹配请求端与跨端通配 '*'。
+        // R-10（2026-07-22 用户裁决）取最严：任一层显式关闭即最终关闭，低层"打开"不再压过高层"关闭"。
+        // 旧实现按 device→…→global 顺序命中第一条显式行即返回，导致 global=关 + device=开 时返回 device 行
+        // 而放行（安全方向反了，P0）。新实现一次取回全部命中层，按"高层优先"给出关闭行；
+        // 全部为开时仍返回最具体的那条开启行（保留既有 map(enabled).orElse(default) 调用方语义）。
+        // terminal_type 同时匹配请求端与跨端通配 '*'（同一层内仍是"专端行优先于通配行"，
+        // 通配/专端属另一坐标轴，不是「层级」，故不纳入取最严——见 PRD §5.7 口径说明）。
+        Map<String, TerminalCapabilitySwitchRecord> hits =
+                loadSwitchRowsByScope(terminalType, capabilityCode, orderedScopes);
+        if (hits.isEmpty()) {
+            return Optional.empty();
+        }
+        // orderedScopes 由细到粗（device…global）；反向遍历 = 由粗到细，先命中的关闭行即"最高层关闭"，
+        // 用它做审计口径（告诉运营"是哪一层把它关了"最有价值的是最高那层）。
+        List<String> coarseToFine = new java.util.ArrayList<>(orderedScopes.keySet());
+        java.util.Collections.reverse(coarseToFine);
+        for (String scopeType : coarseToFine) {
+            TerminalCapabilitySwitchRecord hit = hits.get(scopeType);
+            if (hit != null && !hit.enabled()) {
+                return Optional.of(hit);
+            }
+        }
+        // 无任何关闭层 → 返回最具体的显式开启行。
+        for (String scopeType : orderedScopes.keySet()) {
+            TerminalCapabilitySwitchRecord hit = hits.get(scopeType);
+            if (hit != null) {
+                return Optional.of(hit);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * 一次查询取回该 (terminal_type, capability_code) 在本次请求各 scope 维度上的显式开关行。
+     * 返回 scope_type → 该层胜出行（同层内 专端行 &gt; 通配 '*' 行，再按 updated_at DESC, id）。
+     * 相比旧实现的逐层 N 次查询，本方法是 1 次查询，取最严需看全部层也不会更慢。
+     */
+    private Map<String, TerminalCapabilitySwitchRecord> loadSwitchRowsByScope(
+            String terminalType, String capabilityCode, Map<String, String> orderedScopes) {
+        StringBuilder scopePredicate = new StringBuilder();
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("terminal_type", terminalType == null ? "" : terminalType)
+                .addValue("capability_code", capabilityCode);
+        int index = 0;
         for (Map.Entry<String, String> scope : orderedScopes.entrySet()) {
-            String scopeType = scope.getKey();
             String scopeId = scope.getValue();
             if (scopeId == null || scopeId.isBlank()) {
                 continue;
             }
-            Optional<TerminalCapabilitySwitchRecord> hit = jdbcTemplate.query("""
-                    SELECT id, terminal_type, capability_code, scope_type, scope_id, enabled,
-                           reason, created_at, updated_at
-                      FROM terminal_capability_switches
-                     WHERE terminal_type IN (:terminal_type, '*')
-                       AND capability_code = :capability_code
-                       AND scope_type = :scope_type
-                       AND scope_id = :scope_id
-                     ORDER BY CASE WHEN terminal_type = '*' THEN 1 ELSE 0 END, updated_at DESC, id
-                     LIMIT 1
-                    """, Map.of(
-                    "terminal_type", terminalType == null ? "" : terminalType,
-                    "capability_code", capabilityCode,
-                    "scope_type", scopeType,
-                    "scope_id", scopeId
-            ), this::mapCapabilitySwitch).stream().findFirst();
-            if (hit.isPresent()) {
-                return hit;
+            if (index > 0) {
+                scopePredicate.append(" OR ");
             }
+            scopePredicate.append("(scope_type = :scope_type_").append(index)
+                    .append(" AND scope_id = :scope_id_").append(index).append(')');
+            parameters.addValue("scope_type_" + index, scope.getKey());
+            parameters.addValue("scope_id_" + index, scopeId);
+            index++;
         }
-        return Optional.empty();
+        if (index == 0) {
+            return Map.of();
+        }
+        List<TerminalCapabilitySwitchRecord> rows = jdbcTemplate.query("""
+                SELECT id, terminal_type, capability_code, scope_type, scope_id, enabled,
+                       reason, created_at, updated_at
+                  FROM terminal_capability_switches
+                 WHERE terminal_type IN (:terminal_type, '*')
+                   AND capability_code = :capability_code
+                   AND (%s)
+                 ORDER BY CASE WHEN terminal_type = '*' THEN 1 ELSE 0 END, updated_at DESC, id
+                """.formatted(scopePredicate), parameters, this::mapCapabilitySwitch);
+        // ORDER BY 已把同层内的胜出行排在前面，故 putIfAbsent 保留第一条。
+        Map<String, TerminalCapabilitySwitchRecord> byScope = new java.util.LinkedHashMap<>();
+        for (TerminalCapabilitySwitchRecord row : rows) {
+            byScope.putIfAbsent(row.scopeType(), row);
+        }
+        return byScope;
     }
 
     @Override

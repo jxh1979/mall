@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V339**，发现 **162** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V342**，发现 **164** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -90,6 +90,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_bill_settlements` | `merchant_id` | direct | V062 | `V062__bar_bill_settlement_channel.sql` |
 | `bar_bills` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
 | `bar_combos` | `merchant_id` | direct | V257 | `V257__bar_combo.sql` |
+| `bar_commission_rate_configs` | `merchant_id` + `project_id` | direct | V340 | `V340__commission_and_points_rate_configs.sql` |
 | `bar_deposit_rules` | `merchant_id` | direct | V073 | `V073__bar_reservation_deposit.sql` |
 | `bar_gift_redemptions` | `merchant_id` | direct | V072 | `V072__bar_gift_redemption.sql` |
 | `bar_order_item_voids` | `merchant_id` | direct | V091 | `V091__bar_pos_depth.sql` |
@@ -169,6 +170,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
 | `platform_retention_rules` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `points_accrual_rate_configs` | `merchant_id` + `project_id` | direct | V340 | `V340__commission_and_points_rate_configs.sql` |
 | `position_role_templates` | `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
 | `projects` | `merchant_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
 | `property_fee_bills` | `merchant_id` + `project_id` | direct | V150 | `V150__property_fee_fixed_billing.sql` |

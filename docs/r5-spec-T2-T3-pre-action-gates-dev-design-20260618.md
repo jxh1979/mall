@@ -58,17 +58,28 @@ ALTER TABLE terminal_capability_switches
 ```
 （`terminal_type='*'` 表示跨端能力；既有 UNIQUE(terminal_type,capability_code,scope_type,scope_id) 保留。）
 
-### 1.2 解析优先级（最具体者胜，default-open，fail-closed）
-对一次请求按 (terminal_type, capability_code) 取候选开关行，scope 优先级从高到低：
-`device > version > module > business_system > merchant > project > global`
-- **命中最具体的显式行**，以其 `enabled` 为准。
+### 1.2 求值口径（取最严，default-open，fail-closed）
+
+> **⚠️ 2026-07-22 R-10 改口径（用户裁决）**：本节原写"**最具体者胜**"，实现照此落地后出现
+> "global=关 + device=开 → 放行"，即**低层打开压过高层关闭**，安全方向反了（v7 审计定 P0）。
+> 现改为**取最严**。下文为现行口径，旧的"最具体者胜"仅在"没有任何层关闭"时残留生效。
+
+对一次请求按 (terminal_type, capability_code) 取候选开关行，层级从粗到细：
+`global > project > merchant > business_system > module > version/device > 灰度`
+（代码里的 `orderedScopes` 仍按"最细在前"排列：`device > version > module > business_system > merchant > project > global`，只是遍历方向不同。）
+
+- **任一层显式 `enabled=false` → 最终关闭**（高层关闭压倒低层打开）；返回其中**最高层**的关闭行，作为 `terminal.access_rejected` 的 `scope_type/scope_id` 审计口径。
+- 命中层**全部为开** → 返回**最具体**的那条开启行（保留调用方 `map(enabled).orElse(default)` 语义）。
 - 无任何行 → **默认开启**（开关为 opt-out 关停语义）。
-- 开关服务/DB 读取异常 → **fail-closed 拒绝**（§5.6 兜底），写 `terminal.access_rejected(reason=switch_fetch_failed)`。
+- **同层内**：`terminal_type` 专端行优先于跨端通配 `'*'` 行（通配/专端是另一坐标轴、不是层级，**不**纳入取最严；否则关掉 `'*'` 后就无法为单端单独放开）。
+- **灰度层（V342）**是独立的最细一档，串在七层之后求值，只能收窄不能放宽：无 active 试点=弃权；有 active 试点时白名单内不关、**白名单外一律关**（`reason=canary_not_whitelisted`，`scope_type=canary`）。
+- 开关服务/DB 读取异常 → **fail-closed 拒绝**（§5.6 兜底），写 `terminal.access_rejected(reason=switch_fetch_failed)`；灰度读取异常同理（`reason=canary_fetch_failed`）。
 - scope_id 取值：project=project_id、merchant=merchant_id、device=device_id、module/business_system=模块码、version=客户端版本号（均来自鉴权上下文/请求头）。
+- 查询实现：由"逐层最多 7 次查询、命中即返回"改为**一次查询取回本请求各层的显式行**再在内存里定序判定（看全部层也不会更慢）。
 
 ### 1.3 拦截器/Guard
 `TerminalSwitchGuard.check(capabilityCode)`：从 `SecurityContext` 取 terminal_type + scope 上下文 → `repository.resolveEffectiveSwitch(...)`（新增方法，按优先级查询）→ 关闭则 `throw ApiException.forbidden("TERMINAL_DISABLED", ...)` 并发事件。
-- 复用既有 `findCapabilitySwitch`，新增 `resolveEffectiveSwitch` 按 1.2 优先级返回最具体行。
+- 复用既有 `findCapabilitySwitch`，新增 `resolveEffectiveSwitch` 按 1.2 取最严返回生效行；灰度层由 `TerminalCanaryRepository.evaluate(...)` 在其后串联（R-10，V342）。
 - 被拒留痕：`audit_events` 写 `terminal.access_rejected`，payload 含 terminal_type/capability/scope/reason（修正现状——不再只在 kiosk 凭证失败时触发）。
 
 ### 1.4 埋点（业务接口加注解）
@@ -141,7 +152,7 @@ CREATE TABLE IF NOT EXISTS supervisor_review_policies (
 
 ## 四、测试计划
 - 迁移：`MigrationVersions.latest()` 动态断言；CHECK 拒绝非法 scope_type/terminal_type/outcome。
-- T2：优先级解析（device 胜 global）、默认开启、fail-closed、被拒发事件；5 域接口埋点回归。
+- T2：层级求值（**R-10 后：任一层关闭即关闭**，含灰度层的 8 层 × 开/关 = 256 组合矩阵，见 `TerminalSwitchStrictestAndCanaryMatrixTests`）、默认开启、fail-closed、被拒发事件；5 域接口埋点回归。
 - T3：block→pending→approve→放行全链、warn 留痕、空策略放行、rank=0 回退；事件名 admission.* 命中。
 - 闸口链顺序：开关→准入→权限三道任一失败即拒，且顺序正确（开关在最前避免泄露准入信息）。
 - `verify:matrix-vs-migration` / `verify:p0-contract` / `verify:openapi` 绿；后端测试全绿。

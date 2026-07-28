@@ -46,11 +46,24 @@ public interface TerminalDeviceRepository {
     Optional<TerminalCapabilitySwitchRecord> findCapabilitySwitch(String terminalType, String capabilityCode, String scopeId);
 
     /**
-     * R5 T2：按 scope 优先级解析最具体的显式开关行。
+     * R5 T2 + R-10：按 scope 层级解析生效开关行，语义为「取最严」。
      * {@code orderedScopes} 为 (scope_type -&gt; scope_id) 的有序映射，最具体在前
      * （device &gt; version &gt; module &gt; business_system &gt; merchant &gt; project &gt; global）。
-     * 命中第一条显式行即返回；无任何行返回空（调用方按"默认开启"处理）。
-     * terminal_type 同时匹配请求端与跨端通配 '*'。
+     *
+     * <p>求值口径（2026-07-22 用户裁决，业务 HTML「开关优先级：全局 &gt; 综合体 &gt; 商户 &gt; 业务系统
+     * &gt; 模块 &gt; 版本/设备 &gt; 灰度，高层级关闭压倒低层级打开」）：
+     * <ul>
+     *   <li><b>任一层显式 enabled=false → 最终关闭</b>；返回其中<b>最高层</b>的关闭行（审计口径：
+     *       告诉运营是哪一层把它关了）。低层"打开"不再压过高层"关闭"。</li>
+     *   <li>全部命中层均为 enabled=true → 返回<b>最具体</b>的那条开启行。</li>
+     *   <li>无任何显式行 → 返回空（调用方按各自默认值处理；终端开关闸口按"默认开启"opt-out）。</li>
+     * </ul>
+     * terminal_type 同时匹配请求端与跨端通配 '*'；同一层内仍是「专端行优先于通配行」
+     * （通配/专端是另一坐标轴，非层级，不纳入取最严）。
+     *
+     * <p>注意：本方法只覆盖 {@code terminal_capability_switches} 的七个层级。最细一档的
+     * <b>灰度层</b>（白名单试点，V342）落在 {@link TerminalCanaryRepository}，由
+     * {@code TerminalSwitchGuard} 在本方法之后串联求值，同样只能收窄不能放宽。
      */
     Optional<TerminalCapabilitySwitchRecord> resolveEffectiveSwitch(
             String terminalType, String capabilityCode, Map<String, String> orderedScopes);

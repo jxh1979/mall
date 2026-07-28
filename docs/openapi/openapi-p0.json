@@ -8837,6 +8837,158 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/terminals/canary-rollouts": {
+      "get": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "listTerminalCanaryRollouts",
+        "summary": "查询终端开关灰度试点",
+        "description": "R-10 灰度层（V342）：灰度是终端开关求值链最细的一档，只能收窄不能放宽。返回各「端 × 能力」的灰度试点及其未存档的白名单条目。",
+        "x-permission": "terminal.switch.view",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "terminal_canary.viewed",
+        "x-audit-event-failure": "terminal_canary.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "upsertTerminalCanaryRollout",
+        "summary": "开启或结束灰度试点",
+        "description": "开启后该「端 × 能力」进入试点期：白名单内的对象照常，白名单外一律关闭；上面任一层开关关闭仍然压倒灰度白名单。按 (terminal_type, capability_code) 唯一，重复提交即覆盖（天然幂等，不需幂等键）。写口限平台级主体。",
+        "x-permission": "terminal.switch.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "terminal_canary.rollout_changed",
+        "x-audit-event-failure": "terminal_canary.rollout_change_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CanaryRolloutRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/terminals/canary-rollouts/{id}/targets": {
+      "post": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "addTerminalCanaryTarget",
+        "summary": "加入灰度白名单",
+        "description": "把一个试点对象（综合体项目/商户/业务系统/模块/端版本/设备）加进该灰度试点的白名单；按 (试点, 维度, 对象) 唯一，重复提交即覆盖。",
+        "x-permission": "terminal.switch.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "terminal_canary.target_added",
+        "x-audit-event-failure": "terminal_canary.target_add_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CanaryTargetRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/terminals/canary-targets/{id}/archive": {
+      "post": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "archiveTerminalCanaryTarget",
+        "summary": "移出灰度白名单（软删除）",
+        "description": "把一个试点对象移出白名单。删除=软删除铁律：行保留、填存档理由、可恢复（重新加回即复活）。注意方向：移出白名单是收紧，该对象随即被灰度关闭。",
+        "x-permission": "terminal.switch.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "terminal_canary.target_archived",
+        "x-audit-event-failure": "terminal_canary.target_archive_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CanaryTargetRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/terminals/capability-switches": {
       "get": {
         "tags": [
@@ -36759,6 +36911,26 @@
             }
           }
         }
+      },
+      "CanaryRolloutRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CanaryRolloutRequest"
+            }
+          }
+        }
+      },
+      "CanaryTargetRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CanaryTargetRequest"
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -48042,6 +48214,70 @@
             "type": "string",
             "maxLength": 500,
             "description": "核销备注（选填）。"
+          }
+        }
+      },
+      "CanaryRolloutRequest": {
+        "type": "object",
+        "description": "请求载荷 `CanaryRolloutRequest`；开/关某「端 × 能力」的灰度试点（按 端×能力 唯一，重复提交即覆盖）。",
+        "additionalProperties": false,
+        "required": [
+          "terminal_type",
+          "capability_code",
+          "active",
+          "reason"
+        ],
+        "properties": {
+          "terminal_type": {
+            "type": "string",
+            "description": "调用终端类型；只能使用统一口径 D5 的终端码，或跨端通配 `*`。",
+            "maxLength": 64
+          },
+          "capability_code": {
+            "type": "string",
+            "description": "受灰度控制的能力码；与 terminal_capability_switches.capability_code 同一取值面。",
+            "maxLength": 128
+          },
+          "active": {
+            "type": "boolean",
+            "description": "灰度试点是否生效；true=进入试点期（白名单外一律关闭），false=不做灰度（灰度层弃权）。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "开/关灰度试点的理由；必填，进入审计留痕。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "CanaryTargetRequest": {
+        "type": "object",
+        "description": "请求载荷 `CanaryTargetRequest`；加入灰度白名单（target_type+target_id+reason）或移出白名单（仅 reason，软删除存档理由）。",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "description": "试点维度；不含 global（放 global 等于全量放开）。",
+            "enum": [
+              "project",
+              "merchant",
+              "business_system",
+              "module",
+              "version",
+              "device"
+            ]
+          },
+          "target_id": {
+            "type": "string",
+            "description": "试点对象唯一标识；与该维度在请求上下文中的取值逐字比较。",
+            "maxLength": 64
+          },
+          "reason": {
+            "type": "string",
+            "description": "加入或移出白名单的理由；必填，进入审计留痕。",
+            "maxLength": 1000
           }
         }
       }
