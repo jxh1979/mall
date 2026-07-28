@@ -330,6 +330,17 @@
 > - **软删白名单扩**:`commission_rate` / `points_accrual_rate` 的**商户级特例条目**可下线(回落项目/全平台默认口径);
 >   **全平台默认种子禁下线**(`DEFAULT_SEED_NOT_ARCHIVABLE`,下线即全平台无默认口径可用),只能改数值。
 
+> **2026-07-28 P0-C/FLOW-07 实现修订(高价值退酒审批阈值进配置中心草案闸)**:
+> - 落地:**V345** 新建 `bar_void_approval_configs`(高价值已出品退酒「先审后行」的判定阈值,项目公司 × 商户,
+>   种子 `bvac_default`=500000 分 = 5000 元),收进 `SingleRowConfig`,同走「改→落草案→差人复核转正」;读取侧缺配置
+>   **fail-loud**(`BAR_VOID_THRESHOLD_CONFIG_UNAVAILABLE`),`BarOrderService` 内无硬编码阈值。退酒业务口径本身以
+>   `bar-business-operations-product-prd-v0.1.md` §10.2.1 + 决策 `BAR-VOID-A1` 为准,本节只记配置中心侧。
+> - **草案队列 + 软删白名单**:`listPendingConfigDrafts` 增 `bar_void_threshold` 分组,总控页 **ADM-STL-001**
+>   待复核队列**已展示中文标签「高价值退酒审批阈值」、可直接复核转正与下线**(前端 `GROUP_LABELS` / `ARCHIVABLE`
+>   已与后端白名单对齐);商户级特例条目可下线回落项目/全平台默认,全平台默认种子禁下线(`DEFAULT_SEED_NOT_ARCHIVABLE`)。
+> - **待补**:写入面 `POST /api/v1/settlement/config/bar-void-threshold` 已就绪,但总控页尚无对应配置块(目前只能经
+>   API 落草案),补块另行排期——不影响已落草案在总控页的复核转正/下线。
+
 > **2026-07-28 P0-E 实现修订(营业额抽成规则进配置中心草案闸)**:
 > - 背景:v7 综合审计 P0-E —— `turnover_rent_rules`(营业额抽成规则:阶梯扣率 + 保底)**单人一次提交即进结算**,
 >   建规则落库就是 `status='active'`、读侧 `findActiveTurnoverRentRuleByContract` 立刻读到,
