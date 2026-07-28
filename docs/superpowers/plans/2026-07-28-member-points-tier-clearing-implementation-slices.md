@@ -80,3 +80,7 @@
 ## 附录：P1 运营参数表
 
 - `docs/member-points-p1-ops-parameter-tables-v0.1.md`
+
+## 更新（2026-07-28）
+
+- 承接时点改为 **POINTS-VOUCHER-ACCRUAL-002：到店核销才记商户承接**（废止兑换即记）。

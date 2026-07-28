@@ -691,3 +691,7 @@
 - `DEC-POINTS-001` 结构裁决见 `DEC-POINTS-PRICE-001`：**P-DUAL**（发行单价与兑换结算价分离，金额可后配）。
 - `DEC-POINTS-002` 已由 `POINTS-VOUCHER-ACCRUAL-001` 否决“核销前冻结才计承接”。
 
+## 更新（2026-07-28）兑券承接时点
+
+- `POINTS-VOUCHER-ACCRUAL-001` 废止。
+- `POINTS-VOUCHER-ACCRUAL-002`：**到店核销才记商户承接**；兑换时中心在途；过期无商户冲回。
