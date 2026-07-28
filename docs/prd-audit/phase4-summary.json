@@ -94,5 +94,7 @@
     "accrual": "POINTS-VOUCHER-ACCRUAL-002",
     "code_changes": false,
     "note": "Merged with main member-points PRD/P1; ACCRUAL-001 superseded"
-  }
+  },
+  "status": "COMPLETE_DOCS",
+  "completed_at": "2026-07-28"
 }

@@ -1,0 +1,2 @@
+rule_id,prd_path,prd_anchor_or_line,coverage_status,severity,finding_id,conflict_summary,recommended_change,decision_id,phase,_domain,_score
+BSM-0267,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,PARTIAL,P2,RE-BSM-0267-DIM,部分承接，缺少: expiry_exit,补齐缺失维度,,05-realestate-leasing-building-supply,leasing,3

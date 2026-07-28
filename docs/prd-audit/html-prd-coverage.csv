@@ -600,3 +600,135 @@ BEQ-0119,docs/dividend-engine-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-trans
 BEQ-0120,docs/dividend-engine-prd-v0.1.md,9. 边界与后续迭代（如实留档）,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0121,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0122,docs/finance-settlement-product-prd-v0.1.md,14. 商户费用归集台账（分红净利润费用侧，V297）,FULL,,,,,,04-transaction-member-ticket-bar
+BSM-0200,docs/supply-chain-inventory-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0201,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0202,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0203,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0204,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0205,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0206,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0207,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0208,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0209,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0210,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0211,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0212,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0213,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0214,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0215,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0216,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0217,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0218,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0219,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0220,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0221,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0222,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0223,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0224,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0225,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0226,docs/supply-chain-inventory-product-prd-v0.1.md,12. 变更日志,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0227,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0228,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0229,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0230,docs/supply-chain-inventory-product-prd-v0.1.md,2. P0 目标,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0256,docs/merchant-space-contract-model-v0.1.md,2.2 `merchants`（V005 + V042 + V147）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0263,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0267,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,PARTIAL,P2,RE-BSM-0267-DIM,部分承接，缺少: expiry_exit,补齐缺失维度,,05-realestate-leasing-building-supply
+BSM-0268,docs/leasing-acquisition-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §10，重建须逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0269,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0270,docs/leasing-acquisition-prd-v1.0.md,7. 权限点（最小颗粒，复用现有权限体系）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0271,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0272,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0273,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0274,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0275,docs/leasing-acquisition-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0276,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0277,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0278,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0279,docs/building-operations-prd-v1.0.md,0. 定位与边界,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0280,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0281,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0282,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0283,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0284,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0285,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0286,docs/building-operations-prd-v1.0.md,3. 维保工单（V166）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0287,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0288,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0289,docs/requirement-traceability-matrix-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0290,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0291,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0292,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0293,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0294,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0295,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0296,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0297,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+BSM-0298,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0026,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0027,docs/product-requirements-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0028,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0029,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0030,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0031,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0032,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0033,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0046,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0047,docs/leasing-acquisition-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0048,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0049,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0050,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0051,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0052,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0055,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0057,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0058,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0059,docs/leasing-acquisition-prd-v1.0.md,招商获客业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0127,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0128,docs/building-operations-prd-v1.0.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0129,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0130,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0131,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0132,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0133,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0134,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0135,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0136,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0137,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0138,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0139,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0140,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0141,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0142,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0143,docs/building-operations-prd-v1.0.md,0. 定位与边界,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0144,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0145,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0146,docs/building-operations-prd-v1.0.md,楼宇运营业务域 PRD（V1.0·据需求重建）,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0171,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+PGM-0174,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0049,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0050,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0051,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0052,docs/supply-chain-inventory-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0053,docs/supply-chain-inventory-product-prd-v0.1.md,10. 已确认规则和后续细化事项,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0087,docs/leasing-acquisition-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §10，重建须逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0088,docs/real-estate-full-chain-domain-prd-v0.1.md,1. 招商获客,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0089,docs/real-estate-full-chain-domain-prd-v0.1.md,1. 招商获客,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0090,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0091,docs/finance-settlement-product-prd-v0.1.md,13.2 保证金 / 押金专项台账,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0092,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0093,docs/real-estate-full-chain-domain-prd-v0.1.md,全文/综合条款,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0094,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0095,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0096,docs/real-estate-full-chain-domain-prd-v0.1.md,2. 租赁全生命周期,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0097,docs/real-estate-full-chain-domain-prd-v0.1.md,3. 物业服务工单,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0098,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0099,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0100,docs/real-estate-full-chain-domain-prd-v0.1.md,3. 物业服务工单,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0101,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0102,docs/real-estate-full-chain-domain-prd-v0.1.md,地产全链业务域 PRD（V0.1 授权基线）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0103,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗计量,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0104,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗计量,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0105,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗计量,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0106,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
+BEQ-0107,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
