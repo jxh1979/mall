@@ -33,11 +33,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_items (
                     id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                    min_quantity, status, created_at, updated_at, merchant_id, high_value_threshold_cents
+                    min_quantity, status, created_at, updated_at, merchant_id, manual_high_value
                 )
                 VALUES (
                     :id, :sku_code, :item_name, :item_type, :unit, :barcode, :trace_required,
-                    :min_quantity, :status, :created_at, :updated_at, :merchant_id, :high_value_threshold_cents
+                    :min_quantity, :status, :created_at, :updated_at, :merchant_id, :manual_high_value
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     sku_code = EXCLUDED.sku_code,
@@ -49,7 +49,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                     min_quantity = EXCLUDED.min_quantity,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at,
-                    high_value_threshold_cents = EXCLUDED.high_value_threshold_cents
+                    manual_high_value = EXCLUDED.manual_high_value
                 """, itemParameters(item));
         return item;
     }
@@ -58,7 +58,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryItemRecord> listInventoryItems() {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id, high_value_threshold_cents
+                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value
                   FROM inventory_items
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapInventoryItem);
@@ -68,7 +68,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<InventoryItemRecord> findInventoryItemById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id, high_value_threshold_cents
+                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value
                   FROM inventory_items
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapInventoryItem).stream().findFirst();
@@ -506,6 +506,27 @@ class JdbcInventoryRepository implements InventoryRepository {
                   FROM inventory_item_cost_state
                  WHERE item_id = :item_id
                  FOR UPDATE
+                """, Map.of("item_id", itemId), (rs, i) -> new InventoryItemCostStateRecord(
+                        rs.getString("item_id"),
+                        rs.getString("merchant_id"),
+                        rs.getLong("on_hand_quantity"),
+                        rs.getLong("total_cost_cent"),
+                        rs.getLong("avg_unit_cost_cent"),
+                        rs.getLong("cumulative_in_cost_cent"),
+                        rs.getLong("cumulative_out_cost_cent"),
+                        rs.getString("cost_method"),
+                        rs.getBoolean("has_cost_basis"),
+                        rs.getTimestamp("updated_at").toInstant())).stream().findFirst();
+    }
+
+    /** V350 高价值判定用：不加锁读成本状态行（进货价来源）。判定是只读旁路，不能拿行锁卡住出入库写路径。 */
+    @Override
+    public Optional<InventoryItemCostStateRecord> findCostState(String itemId) {
+        return jdbcTemplate.query("""
+                SELECT item_id, merchant_id, on_hand_quantity, total_cost_cent, avg_unit_cost_cent,
+                       cumulative_in_cost_cent, cumulative_out_cost_cent, cost_method, has_cost_basis, updated_at
+                  FROM inventory_item_cost_state
+                 WHERE item_id = :item_id
                 """, Map.of("item_id", itemId), (rs, i) -> new InventoryItemCostStateRecord(
                         rs.getString("item_id"),
                         rs.getString("merchant_id"),
@@ -1022,7 +1043,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryItemRecord> listInventoryItemsByMerchant(String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id, high_value_threshold_cents
+                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value
                   FROM inventory_items
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -1169,7 +1190,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("created_at", offset(item.createdAt()))
                 .addValue("updated_at", offset(item.updatedAt()))
                 .addValue("merchant_id", item.merchantId())
-                .addValue("high_value_threshold_cents", item.highValueThresholdCents());
+                .addValue("manual_high_value", item.manualHighValue());
     }
 
     private MapSqlParameterSource supplierParameters(InventorySupplierRecord supplier) {

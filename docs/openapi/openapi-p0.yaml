@@ -32,6 +32,221 @@ tags:
   - name: compliance
     description: 合规域（含 R5 T8 企微会话合规链）
 paths:
+  /api/v1/bar/void-reason-codes:
+    get:
+      tags:
+        - bar
+      operationId: listBarVoidReasonCodes
+      summary: 列退酒原因（中文下拉数据源）
+      description: 退酒原因码字典：店员退酒时从中文清单里选，不手打英文短码。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.order_item.void
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: bar.void_reason_code.viewed
+      x-audit-event-failure: bar.void_reason_code.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: include_inactive
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - bar
+      operationId: saveBarVoidReasonCode
+      summary: 新增或修改退酒原因
+      description: 按原因标识覆盖中文名与排序；已下线的原因重新保存即恢复可选。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.order_item.void_decide
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: true
+      x-audit-event-success: bar.void_reason_code.saved
+      x-audit-event-failure: bar.void_reason_code.save_failed
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                code:
+                  type: string
+                label_zh:
+                  type: string
+                sort_order:
+                  type: integer
+              required:
+                - idempotency_key
+                - code
+                - label_zh
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/void-reason-codes/{code}/archive:
+    post:
+      tags:
+        - bar
+      operationId: archiveBarVoidReasonCode
+      summary: 下线退酒原因（软删留理由）
+      description: 软删铁律：置为不可选并留下线理由，不物理删——历史退酒单仍引用该原因。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: bar.order_item.void_decide
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: true
+      x-audit-event-success: bar.void_reason_code.archived
+      x-audit-event-failure: bar.void_reason_code.archive_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                archive_reason:
+                  type: string
+              required:
+                - idempotency_key
+                - archive_reason
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/evidence/attachments/upload:
+    post:
+      tags:
+        - evidence
+      operationId: uploadEvidenceAttachment
+      summary: 上传证据照片/视频
+      description: 证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
+        深度能力不得反向扩大 P0 范围。
+      x-permission: evidence.attachment.create
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - tablet
+        - staff_work_phone
+      x-idempotency-required: false
+      x-audit-event-success: evidence.attachment_uploaded
+      x-audit-event-failure: evidence.attachment_uploaded_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: business_type
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: business_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: attachment_role
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/evidence/attachments/{attachment_id}/file:
+    get:
+      tags:
+        - evidence
+      operationId: readEvidenceAttachmentFile
+      summary: 回读证据文件
+      description: 主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      x-permission: evidence.timeline.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - tablet
+      x-idempotency-required: false
+      x-audit-event-success: evidence.attachment_file_viewed
+      x-audit-event-failure: evidence.attachment_file_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: attachment_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/settlement/config/overview:
     get:
       tags:
@@ -305,21 +520,22 @@ paths:
                 - role_type
                 - rate_bp
       responses: *a1
-  /api/v1/settlement/config/bar-void-threshold:
+  /api/v1/settlement/config/high-value-threshold:
     post:
       tags:
         - settlement
-      operationId: settlementConfigUpsertBarVoidThreshold
-      summary: 维护高价值退酒审批阈值(草案)
-      description: 结算配置中心 V345(P0-C/FLOW-07·BAR-VOID-A1):按 项目公司 × 商户 配置「高价值退酒阈值(分)」,单笔已出品退品金额超过本值即须先审后行 + 双证据;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      operationId: settlementConfigUpsertHighValueThreshold
+      summary: 维护高价值判定阈值(草案)
+      description: 结算配置中心 V350：按 项目公司 × 商户
+        配置全平台唯一的「高价值判定阈值(分)」——物品进货价高于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
       x-terminal-allowed:
         - web
       x-idempotency-required: true
-      x-audit-event-success: settlement.config.bar_void_approval_configs.updated
-      x-audit-event-failure: settlement.config.bar_void_approval_configs.update_failed
+      x-audit-event-success: settlement.config.high_value_thresholds.updated
+      x-audit-event-failure: settlement.config.high_value_thresholds.update_failed
       requestBody:
         content:
           application/json:

@@ -103,7 +103,6 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_table_session_adjustments` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_table_sessions` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_tables` | `merchant_id` + `space_id` | direct | V047, V084 | `V047__bar_security_merchant_isolation.sql`<br>`V084__object_space_mapping.sql` |
-| `bar_void_approval_configs` | `merchant_id` + `project_id` | direct | V345 | `V345__bar_void_approval_first_high_value.sql` |
 | `business_entity_bindings` | `merchant_id` | direct | V010 | `V010__p0_foundation_residual_platform_terminal_evidence.sql` |
 | `business_process_instances` | `merchant_id` + `project_id` + `venue_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
 | `business_review_locks` | `project_id` | direct | V216 | `V216__business_review_locks.sql` |
@@ -142,6 +141,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `facility_inspection_templates` | `project_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_work_orders` | `merchant_id` + `project_id` + `space_id` | direct | V166 | `V166__facility_work_orders.sql` |
 | `giveaway_cost_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `high_value_thresholds` | `merchant_id` + `project_id` | direct | V350 | `V350__high_value_threshold_unify.sql` |
 | `integration_channel_store_map` | `merchant_id` | direct | V334 | `V334__integration_order_sync_merchant_attribution.sql` |
 | `integration_order_syncs` | `merchant_id` | direct | V334 | `V334__integration_order_sync_merchant_attribution.sql` |
 | `inventory_high_value_reviews` | `merchant_id` | direct | V237 | `V237__inventory_isolation_fixes.sql` |

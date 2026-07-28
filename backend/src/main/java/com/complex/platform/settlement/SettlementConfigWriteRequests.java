@@ -73,11 +73,11 @@ public final class SettlementConfigWriteRequests {
     }
 
     /**
-     * V345（P0-C/FLOW-07·BAR-VOID-A1）bar_void_approval_configs：高价值退酒审批阈值。
+     * V350 high_value_thresholds：全平台「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用）。
      * highValueThresholdCent=单笔已出品退品金额「超过」本值即高价值（须先审后行 + 双证据），单位分，须≥0；
      * 出厂默认 500000（5000 元）；merchantId 留空=该项目通用。
      */
-    public record BarVoidThresholdRequest(String idempotencyKey, String projectId, String merchantId,
+    public record HighValueThresholdRequest(String idempotencyKey, String projectId, String merchantId,
                                           Long highValueThresholdCent) {
     }
 

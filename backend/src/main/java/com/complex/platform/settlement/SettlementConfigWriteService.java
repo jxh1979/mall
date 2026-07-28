@@ -7,7 +7,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.settlement.JdbcSettlementConfigWriteRepository.SingleRowConfig;
 import com.complex.platform.settlement.JdbcSettlementConfigWriteRepository.TierRow;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
-import com.complex.platform.settlement.SettlementConfigWriteRequests.BarVoidThresholdRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.HighValueThresholdRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ChannelFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscountRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
@@ -43,7 +43,7 @@ public class SettlementConfigWriteService {
     private static final Set<String> SCOPE_SENTINELS = Set.of("__DEFAULT__", "__ANY__", "__ALL__");
     /** V340 全局默认种子行 id(禁止软删;见 {@link #rejectDefaultSeedArchive})。 */
     private static final Set<String> DEFAULT_SEED_IDS =
-            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default", "bvac_default");
+            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default", "hvt_default");
 
     private final JdbcSettlementConfigWriteRepository writeRepository;
     private final RevenueStreamAttributionRepository attributionRepository;
@@ -215,12 +215,12 @@ public class SettlementConfigWriteService {
     }
 
     /**
-     * V345（P0-C/FLOW-07·BAR-VOID-A1）高价值退酒审批阈值落草案：项目 × 商户，单位分。
+     * V350 全平台高价值判定阈值落草案：项目 × 商户，单位分（物品进货价高于本值即高价值）。
      * 出厂种子 500000（5000 元）；此处只写草案，复核转正后酒吧退酒判定才读到。
      * 阈值 0 = 所有已出品退酒都算高价值（全部先审后行），业务上合法故放行；负数拒绝。
      */
-    public void saveBarVoidThreshold(BarVoidThresholdRequest request, String actorId) {
-        BarVoidThresholdRequest req = requireRequest(request);
+    public void saveHighValueThreshold(HighValueThresholdRequest request, String actorId) {
+        HighValueThresholdRequest req = requireRequest(request);
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
         rejectSentinel(req.projectId(), "project_id");
         rejectSentinel(req.merchantId(), "merchant_id");
@@ -229,10 +229,10 @@ public class SettlementConfigWriteService {
             throw ApiException.badRequest("VALIDATION_FAILED", "high_value_threshold_cent must be >= 0");
         }
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId());
-        String landedId = writeRepository.upsertBarVoidThresholdDraft(draftId("bvac_d_", scopeKey, idem),
+        String landedId = writeRepository.upsertHighValueThresholdDraft(draftId("hvt_d_", scopeKey, idem),
                 req.projectId(), req.merchantId(), threshold, actorId);
-        audit("settlement.config.bar_void_approval_configs.updated",
-                "bar_void_approval_configs", landedId, idem,
+        audit("settlement.config.high_value_thresholds.updated",
+                "high_value_thresholds", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()), "merchant_id", anyScope(req.merchantId()),
                         "high_value_threshold_cent", String.valueOf(threshold)));
     }
@@ -358,9 +358,9 @@ public class SettlementConfigWriteService {
                 rows = attributionRepository.softDelete(targetId, reason, actorId, now);
             }
             // V340:提成费率 / 积分累计率的商户级特例条目可下线(回落项目/全局默认);全局默认种子受守卫保护。
-            // V345:高价值退酒阈值的商户级特例条目同理可下线(回落项目/全局默认);全局默认种子受守卫保护。
+            // V350:高价值判定阈值的商户级特例条目同理可下线(回落项目/全局默认);全局默认种子受守卫保护。
             // V346(P0-E):营业额抽成规则可下线(合同终止/换规则),下线后该合同回落"无抽成规则"=不产生抽成应收。
-            case "commission_rate", "points_accrual_rate", "bar_void_threshold", "turnover_rent_rule" -> {
+            case "commission_rate", "points_accrual_rate", "high_value_threshold", "turnover_rent_rule" -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 table = cfg.table();
                 rejectDefaultSeedArchive(targetId);

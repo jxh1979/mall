@@ -470,15 +470,19 @@
 > - **软删白名单扩**:`commission_rate` / `points_accrual_rate` 的**商户级特例条目**可下线(回落项目/全平台默认口径);
 >   **全平台默认种子禁下线**(`DEFAULT_SEED_NOT_ARCHIVABLE`,下线即全平台无默认口径可用),只能改数值。
 
-> **2026-07-28 P0-C/FLOW-07 实现修订(高价值退酒审批阈值进配置中心草案闸)**:
-> - 落地:**V345** 新建 `bar_void_approval_configs`(高价值已出品退酒「先审后行」的判定阈值,项目公司 × 商户,
->   种子 `bvac_default`=500000 分 = 5000 元),收进 `SingleRowConfig`,同走「改→落草案→差人复核转正」;读取侧缺配置
->   **fail-loud**(`BAR_VOID_THRESHOLD_CONFIG_UNAVAILABLE`),`BarOrderService` 内无硬编码阈值。退酒业务口径本身以
->   `bar-business-operations-product-prd-v0.1.md` §10.2.1 + 决策 `BAR-VOID-A1` 为准,本节只记配置中心侧。
-> - **草案队列 + 软删白名单**:`listPendingConfigDrafts` 增 `bar_void_threshold` 分组,总控页 **ADM-STL-001**
->   待复核队列**已展示中文标签「高价值退酒审批阈值」、可直接复核转正与下线**(前端 `GROUP_LABELS` / `ARCHIVABLE`
+> **2026-07-28 P0-C/FLOW-07 实现修订(高价值判定阈值进配置中心草案闸)**:
+> - 落地:**V345** 新建阈值配置表,收进 `SingleRowConfig`,同走「改→落草案→差人复核转正」;
+>   **V350 升格为全平台唯一阈值并改名 `high_value_thresholds`**(种子 `hvt_default`=500000 分 = 5000 元):
+>   同一个值同时管**退酒 / 报损 / 盘点差异 / 存酒作废**——它比的是**物品进货价**,不再是账单金额。
+>   改名是必须的:运营在配置中心看到「酒吧退酒审批阈值」不会知道改一次同时改了报损与存酒作废的拦截线。
+> - **缺配置行为(V350 改)**:读取侧返回 null 而非抛错,判定侧据此**一律按高价值拦下走审批**
+>   (业务HTML「阈值未配置时一律按高价值处理、不得静默放行」)。这不是静默回落硬编码——回落 5000 元才是要根除的,
+>   返回 null 走的是从严那一侧;若在读取侧 fail-loud,退酒/报损/存酒作废入口会整个不可用,比「拦下」更糟。
+>   判定入口 `HighValueDecisionService`(inventory 域),阈值端口 `HighValueThresholdPort`,代码内零硬编码阈值。
+> - **草案队列 + 软删白名单**:`listPendingConfigDrafts` 的分组改为 `high_value_threshold`,总控页 **ADM-STL-001**
+>   待复核队列展示中文标签「高价值判定阈值(进货价)」、可直接复核转正与下线(前端 `GROUP_LABELS` / `ARCHIVABLE`
 >   已与后端白名单对齐);商户级特例条目可下线回落项目/全平台默认,全平台默认种子禁下线(`DEFAULT_SEED_NOT_ARCHIVABLE`)。
-> - **待补**:写入面 `POST /api/v1/settlement/config/bar-void-threshold` 已就绪,但总控页尚无对应配置块(目前只能经
+> - **待补**:写入面 `POST /api/v1/settlement/config/high-value-threshold` 已就绪,但总控页尚无对应配置块(目前只能经
 >   API 落草案),补块另行排期——不影响已落草案在总控页的复核转正/下线。
 
 > **2026-07-28 P0-E 实现修订(营业额抽成规则进配置中心草案闸)**:

@@ -37,7 +37,7 @@ final class JdbcInventoryRowMapper {
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at"),
                 resultSet.getString("merchant_id"),
-                resultSet.getObject("high_value_threshold_cents", Long.class)
+                resultSet.getBoolean("manual_high_value")
         );
     }
 

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 693 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 322 | 人工权限矩阵正文未覆盖 220 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1386 | 人工事件矩阵正文未覆盖 1344 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 693 | 人工任务映射正文未逐项覆盖 687 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 419 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 698 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 323 | 人工权限矩阵正文未覆盖 221 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1396 | 人工事件矩阵正文未覆盖 1354 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 698 | 人工任务映射正文未逐项覆盖 692 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 422 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -106,7 +106,8 @@
 | `bar.deposit_rule.manage` | staff-token | project-bar | 1 | createBarDepositRule | OpenAPI 补充，以本附录为准 |
 | `bar.entitlement.read` | staff-token | project-bar | 1 | listBarEntitlementRedemptions | OpenAPI 补充，以本附录为准 |
 | `bar.entitlement.redeem` | staff-token | project-bar | 1 | redeemBarDrinkEntitlement | OpenAPI 补充，以本附录为准 |
-| `bar.order_item.void` | staff-token | project-bar-table | 3 | voidBarOrderItem, decideBarOrderItemVoid, listBarOrderItemVoids | OpenAPI 补充，以本附录为准 |
+| `bar.order_item.void` | staff-token | project, project-bar-table | 4 | voidBarOrderItem, decideBarOrderItemVoid, listBarOrderItemVoids, listBarVoidReasonCodes | OpenAPI 补充，以本附录为准 |
+| `bar.order_item.void_decide` | staff-token | project | 2 | saveBarVoidReasonCode, archiveBarVoidReasonCode | OpenAPI 补充，以本附录为准 |
 | `bar.order.create` | staff-token | project, project-bar-table | 6 | createBarOrder, createBarOrderBill, deliverBarOrder, addBarOrderItem, listBarProductionTickets, placeBarScanOrder | 已在权限矩阵正文出现 |
 | `bar.order.view` | staff-token | project-bar-table | 1 | listBarOrders | 已在权限矩阵正文出现 |
 | `bar.product.manage` | staff-token | project | 3 | createBarProduct, assignBarProductCategory, uploadBarCatalogImage | OpenAPI 补充，以本附录为准 |
@@ -163,11 +164,11 @@
 | `energy.reading.manage` | staff-token | platform | 7 | listEnergyReadings, recordEnergyReading, reviewEnergyReading, getEnergyMeterDifference, settleEnergyFee, settleEnergyFeeShortcut, listAbnormalReadings | OpenAPI 补充，以本附录为准 |
 | `entity.binding.manage` | staff-token | project-merchant | 3 | createBusinessEntity, createBusinessEntityBinding, changeBusinessEntityBinding | 已在权限矩阵正文出现 |
 | `entity.binding.view` | staff-token | project-merchant | 2 | listBusinessEntities, listBusinessEntityBindings | 已在权限矩阵正文出现 |
-| `evidence.attachment.create` | staff-token | project-object | 3 | createEvidenceAttachmentUploadIntent, bindEvidenceAttachment, completeEvidenceAttachmentUpload | 已在权限矩阵正文出现 |
+| `evidence.attachment.create` | staff-token | merchant, project-object | 4 | createEvidenceAttachmentUploadIntent, bindEvidenceAttachment, completeEvidenceAttachmentUpload, uploadEvidenceAttachment | 已在权限矩阵正文出现 |
 | `evidence.event.create` | staff-token | project-device | 1 | createEvidenceEvents | 已在权限矩阵正文出现 |
 | `evidence.event.view` | staff-token | project-object | 1 | listEvidenceEvents | 已在权限矩阵正文出现 |
 | `evidence.review.create` | staff-token | project-object | 1 | createEvidenceReview | 已在权限矩阵正文出现 |
-| `evidence.timeline.view` | staff-token | project-object | 2 | getEvidenceTimeline, getTraceabilityAutoCaptureRate | 已在权限矩阵正文出现 |
+| `evidence.timeline.view` | staff-token | merchant, project-object | 3 | getEvidenceTimeline, getTraceabilityAutoCaptureRate, readEvidenceAttachmentFile | 已在权限矩阵正文出现 |
 | `facility.equipment.manage` | staff-token | platform | 6 | listFacilityEquipment, createFacilityEquipment, listFacilityMaintenanceDueEquipment, updateFacilityEquipment, changeFacilityEquipmentStatus, recordFacilityEquipmentMaintenanceDone | OpenAPI 补充，以本附录为准 |
 | `facility.inspection.manage` | staff-token | platform | 10 | listFacilityInspectionTemplates, createFacilityInspectionTemplate, listFacilityInspectionTasks, createFacilityInspectionTask, getFacilityInspectionTask, startFacilityInspectionTask, listFacilityInspectionRecords, submitFacilityInspectionRecord, recheckFacilityInspectionTask, confirmFacilityInspectionSupervisor | OpenAPI 补充，以本附录为准 |
 | `facility.inspection.report_exception_assigned` | staff-token | self | 1 | reportInspectionException | OpenAPI 补充，以本附录为准 |
@@ -745,6 +746,12 @@
 | `bar.table.opened` | success | `openBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/open` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
 | `bar.table.view_failed` | failure | `listBarTables` | `GET` | `/api/v1/bar/tables` | BAR-酒吧经营 | `bar.table.view` | 接口级事件，以本附录为准 |
 | `bar.table.viewed` | success | `listBarTables` | `GET` | `/api/v1/bar/tables` | BAR-酒吧经营 | `bar.table.view` | 接口级事件，以本附录为准 |
+| `bar.void_reason_code.archive_failed` | failure | `archiveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes/{code}/archive` | BAR-酒吧经营 | `bar.order_item.void_decide` | 接口级事件，以本附录为准 |
+| `bar.void_reason_code.archived` | success | `archiveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes/{code}/archive` | BAR-酒吧经营 | `bar.order_item.void_decide` | 接口级事件，以本附录为准 |
+| `bar.void_reason_code.save_failed` | failure | `saveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes` | BAR-酒吧经营 | `bar.order_item.void_decide` | 接口级事件，以本附录为准 |
+| `bar.void_reason_code.saved` | success | `saveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes` | BAR-酒吧经营 | `bar.order_item.void_decide` | 接口级事件，以本附录为准 |
+| `bar.void_reason_code.view_failed` | failure | `listBarVoidReasonCodes` | `GET` | `/api/v1/bar/void-reason-codes` | BAR-酒吧经营 | `bar.order_item.void` | 接口级事件，以本附录为准 |
+| `bar.void_reason_code.viewed` | success | `listBarVoidReasonCodes` | `GET` | `/api/v1/bar/void-reason-codes` | BAR-酒吧经营 | `bar.order_item.void` | 接口级事件，以本附录为准 |
 | `business_entity.change_failed` | failure | `createBusinessEntity` | `POST` | `/api/v1/platform/business-entities` | GOV-平台治理 | `entity.binding.manage` | 接口级事件，以本附录为准 |
 | `business_entity.changed` | success | `createBusinessEntity` | `POST` | `/api/v1/platform/business-entities` | GOV-平台治理 | `entity.binding.manage` | 接口级事件，以本附录为准 |
 | `business_entity.view_failed` | failure | `listBusinessEntities` | `GET` | `/api/v1/platform/business-entities` | GOV-平台治理 | `entity.binding.view` | 接口级事件，以本附录为准 |
@@ -946,6 +953,10 @@
 | `evidence.attachment_bound` | success | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
 | `evidence.attachment_complete_failed` | failure | `completeEvidenceAttachmentUpload` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/complete` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
 | `evidence.attachment_completed` | success | `completeEvidenceAttachmentUpload` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/complete` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
+| `evidence.attachment_file_view_failed` | failure | `readEvidenceAttachmentFile` | `GET` | `/api/v1/evidence/attachments/{attachment_id}/file` | EVD-事件证据 | `evidence.timeline.view` | 接口级事件，以本附录为准 |
+| `evidence.attachment_file_viewed` | success | `readEvidenceAttachmentFile` | `GET` | `/api/v1/evidence/attachments/{attachment_id}/file` | EVD-事件证据 | `evidence.timeline.view` | 接口级事件，以本附录为准 |
+| `evidence.attachment_uploaded` | success | `uploadEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/upload` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
+| `evidence.attachment_uploaded_failed` | failure | `uploadEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/upload` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
 | `evidence.event_view_failed` | failure | `listEvidenceEvents` | `GET` | `/api/v1/evidence/events` | EVD-事件证据 | `evidence.event.view` | 接口级事件，以本附录为准 |
 | `evidence.event_viewed` | success | `listEvidenceEvents` | `GET` | `/api/v1/evidence/events` | EVD-事件证据 | `evidence.event.view` | 接口级事件，以本附录为准 |
 | `evidence.events_report_failed` | failure | `createEvidenceEvents` | `POST` | `/api/v1/evidence/events` | EVD-事件证据 | `evidence.event.create` | 接口级事件，以本附录为准 |
@@ -1473,8 +1484,6 @@
 | `settlement.config.archived` | success | `settlementConfigArchive` | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.bar_commission_rate_configs.update_failed` | failure | `settlementConfigUpsertCommissionRate` | `POST` | `/api/v1/settlement/config/commission-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.bar_commission_rate_configs.updated` | success | `settlementConfigUpsertCommissionRate` | `POST` | `/api/v1/settlement/config/commission-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
-| `settlement.config.bar_void_approval_configs.update_failed` | failure | `settlementConfigUpsertBarVoidThreshold` | `POST` | `/api/v1/settlement/config/bar-void-threshold` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
-| `settlement.config.bar_void_approval_configs.updated` | success | `settlementConfigUpsertBarVoidThreshold` | `POST` | `/api/v1/settlement/config/bar-void-threshold` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.channel_fee_configs.update_failed` | failure | `settlementConfigUpsertChannelFee` | `POST` | `/api/v1/settlement/config/channel-fee` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.channel_fee_configs.updated` | success | `settlementConfigUpsertChannelFee` | `POST` | `/api/v1/settlement/config/channel-fee` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.comprehensive_service_fee_configs.update_failed` | failure | `settlementConfigUpsertComprehensiveServiceFee` | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
@@ -1485,6 +1494,8 @@
 | `settlement.config.draft.activated` | success | `settlementConfigActivateAttributionRuleAlias` | `POST` | `/api/v1/settlement/config/attribution-rules/{id}/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.draft.activated` | success | `settlementConfigActivateDraft` | `POST` | `/api/v1/settlement/config/{configType}/{id}/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.draft.activated` | success | `settlementConfigActivateRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.high_value_thresholds.update_failed` | failure | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.high_value_thresholds.updated` | success | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.overview.view_failed` | failure | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `settlement.config.overview.viewed` | success | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `settlement.config.platform_retention_rules.update_failed` | failure | `settlementConfigUpsertRetention` | `POST` | `/api/v1/settlement/config/retention` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
@@ -1902,6 +1913,7 @@
 | BAR-酒吧经营 | `addBarBillTip` | `POST` | `/api/v1/bar/bills/{bill_id}/tip` | 账单加小费 | `bar.bill.tip` | `bar.bill_tip_added` / `bar.bill_tip_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | 新增酒吧订单物品 | `bar.order.create` | `bar.order_item.created` / `bar.order_item.created_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `adjustBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/adjustments` | 对酒水账单应用调整 | `bar.bill.adjust` | `bar.bill.adjust` / `bar.bill.adjust_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `archiveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes/{code}/archive` | 下线退酒原因（软删留理由） | `bar.order_item.void_decide` | `bar.void_reason_code.archived` / `bar.void_reason_code.archive_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `assignBarProductCategory` | `POST` | `/api/v1/bar/catalog/products/{product_id}/category` | 给酒吧商品设分类 | `bar.product.manage` | `bar.product.category_assigned` / `bar.product.category_assigned_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | 卡座/桌台空间指派（回填） | `bar.table.manage` | `bar.table_space.assigned` / `bar.table_space.assign_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | 卡座销售提成计算 | `bar.table_commission.calculate` | `bar.table_commission.calculated` / `bar.table_commission.calculate_failed` | web | operation 级补充 |
@@ -1937,6 +1949,7 @@
 | BAR-酒吧经营 | `listBarTables` | `GET` | `/api/v1/bar/tables` | 查询桌台或卡座 | `bar.table.view` | `bar.table.viewed` / `bar.table.view_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | 查询酒水台位会话列表 | `bar.table_session.view` | `bar.table_session.list` / `bar.table_session.list_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | 未回填空间的卡座/桌台清单 | `bar.table.manage` | `bar.table_space_backlog.viewed` / `bar.table_space_backlog.view_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `listBarVoidReasonCodes` | `GET` | `/api/v1/bar/void-reason-codes` | 列退酒原因（中文下拉数据源） | `bar.order_item.void` | `bar.void_reason_code.viewed` / `bar.void_reason_code.view_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | 商品沽清/恢复 | `bar.product.sold_out` | `bar.product_sold_out` / `bar.product_sold_out_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `mergeBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/merge` | 合并酒水账单 | `bar.bill.split_merge` | `bar.bill.merge` / `bar.bill.merge_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | 合并酒水台位会话 | `bar.table_session.merge` | `bar.table_session.merge` / `bar.table_session.merge_failed` | tablet, web | operation 级补充 |
@@ -1950,6 +1963,7 @@
 | BAR-酒吧经营 | `revokeBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | 吊销订卡邀请函 | `bar.reservation.invitation.manage` | `bar.reservation_invitation_revoked` / `bar.reservation_invitation_revoke_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `saveBarCombo` | `POST` | `/api/v1/bar/catalog/combos` | 新增或修改酒吧套餐 | `bar.combo.manage` | `bar.combo.saved` / `bar.combo.saved_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `saveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories` | 新增或修改酒吧商品分类 | `bar.category.manage` | `bar.category.saved` / `bar.category.saved_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `saveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes` | 新增或修改退酒原因 | `bar.order_item.void_decide` | `bar.void_reason_code.saved` / `bar.void_reason_code.save_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | 账单结清 | `finance.payment.register` | `bar.bill.settled` / `bar.bill.settle_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | 拆分酒水账单 | `bar.bill.split_merge` | `bar.bill.split` / `bar.bill.split_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | 转台（台位会话转移） | `bar.table_session.transfer` | `bar.table_session.transfer` / `bar.table_session.transfer_failed` | tablet, web | operation 级补充 |
@@ -2035,10 +2049,12 @@
 | EVD-事件证据 | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | 查询风险预警详情 | `risk_alert.view` | `exception.alert_viewed` / `exception.alert_view_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `getTraceabilityAutoCaptureRate` | `GET` | `/api/v1/evidence/traceability/auto-capture-rate` | 查询业务流程追溯自动采集率 | `evidence.timeline.view` | `evidence.traceability_auto_capture_rate_viewed` / `evidence.traceability_auto_capture_rate_view_failed` | web | operation 级补充 |
 | EVD-事件证据 | `listEvidenceEvents` | `GET` | `/api/v1/evidence/events` | 事件查询 | `evidence.event.view` | `evidence.event_viewed` / `evidence.event_view_failed` | web | operation 级补充 |
+| EVD-事件证据 | `readEvidenceAttachmentFile` | `GET` | `/api/v1/evidence/attachments/{attachment_id}/file` | 回读证据文件 | `evidence.timeline.view` | `evidence.attachment_file_viewed` / `evidence.attachment_file_view_failed` | web, tablet | operation 级补充 |
 | EVD-事件证据 | `reportRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts` | 上报统一风险预警 | `risk_alert.report` | `exception.reported` / `exception.report_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `resolveEvidenceRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | 关闭风险预警（需结论） | `risk_alert.resolve` | `exception.resolved` / `exception.resolve_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | 查询风险预警列表 | `risk_alert.view` | `exception.alerts_viewed` / `exception.alerts_view_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | 转交风险预警 | `risk_alert.transfer` | `exception.transferred` / `exception.transfer_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `uploadEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/upload` | 上传证据照片/视频 | `evidence.attachment.create` | `evidence.attachment_uploaded` / `evidence.attachment_uploaded_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | FIN-财务台账 | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | 锁定后补录审批决定 | `finance.locked_backfill.approve` | `finance.locked_backfill_approved` / `finance.locked_backfill_decision_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `approveDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/approve` | 审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）；提交人不得审批自己提交的单 | `finance.dividend.manage` | `dividend.approved` / `dividend.approve_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billPropertyFee` | `POST` | `/api/v1/finance/property-fee/bills` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `finance.property_fee.manage` | `finance_property_fee.billed` / `finance_property_fee.bill_failed` | web | operation 级补充 |
@@ -2344,12 +2360,12 @@
 | P0-待归类 | `settlementConfigActivateRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | 复核转正:排名档位梯子整体换梯 | `settlement.config.manage` | `settlement.config.draft.activated` / `settlement.config.draft.activate_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigArchive` | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | 软删结算配置(status→inactive) | `settlement.config.manage` | `settlement.config.archived` / `settlement.config.archive_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | 结算配置中心总览 | `settlement.config.view` | `settlement.config.overview.viewed` / `settlement.config.overview.view_failed` | web | operation 级补充 |
-| P0-待归类 | `settlementConfigUpsertBarVoidThreshold` | `POST` | `/api/v1/settlement/config/bar-void-threshold` | 维护高价值退酒审批阈值(草案) | `settlement.config.manage` | `settlement.config.bar_void_approval_configs.updated` / `settlement.config.bar_void_approval_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertChannelFee` | `POST` | `/api/v1/settlement/config/channel-fee` | 维护第三方渠道抽成率(草案) | `settlement.config.manage` | `settlement.config.channel_fee_configs.updated` / `settlement.config.channel_fee_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertComboDiscount` | `POST` | `/api/v1/settlement/config/combo-discount` | 维护套票折扣归属(草案) | `settlement.config.manage` | `settlement.config.ticket_combo_discount_configs.updated` / `settlement.config.ticket_combo_discount_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertCommissionRate` | `POST` | `/api/v1/settlement/config/commission-rate` | 维护卡座销售提成费率(草案) | `settlement.config.manage` | `settlement.config.bar_commission_rate_configs.updated` / `settlement.config.bar_commission_rate_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertComprehensiveServiceFee` | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | 维护门票综合服务费(草案) | `settlement.config.manage` | `settlement.config.comprehensive_service_fee_configs.updated` / `settlement.config.comprehensive_service_fee_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertDistributionMethod` | `POST` | `/api/v1/settlement/config/distribution-method` | 维护通票分配方式(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_configs.updated` / `settlement.config.ticket_distribution_configs.update_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | 维护高价值判定阈值(草案) | `settlement.config.manage` | `settlement.config.high_value_thresholds.updated` / `settlement.config.high_value_thresholds.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertMerchantRate` | `POST` | `/api/v1/settlement/config/merchant-rate` | 维护每客单价/固定额(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_merchant_rates.updated` / `settlement.config.ticket_distribution_merchant_rates.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | 维护积分累计率(草案) | `settlement.config.manage` | `settlement.config.points_accrual_rate_configs.updated` / `settlement.config.points_accrual_rate_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | 维护排名档位梯子(草案·整套替换) | `settlement.config.manage` | `settlement.config.ticket_distribution_rank_tiers.updated` / `settlement.config.ticket_distribution_rank_tiers.update_failed` | web | operation 级补充 |

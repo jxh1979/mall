@@ -84,6 +84,8 @@ public class InventoryService {
     private final InventoryStockMovementService stockMovementService;
     private final TerminalSwitchGuard terminalSwitchGuard;
     private final InventoryHighValueReviewService highValueReviewService;
+    /** V350：「高价值」判定全平台唯一入口（存酒登记快照 / 存酒作废 / 报损 / 盘点差异共用）。 */
+    private final HighValueDecisionService highValueDecisionService;
     private final TraceabilityService traceabilityService;
     // P1：evidence 统一异常责任链服务。库存风险扫描命中 + 溯源交接断链异常，除写孤岛表外再接入统一
     // risk_alerts（source_domain='inventory'），让统一表真实承载本域风险数据。复刻 Wave 1 Wecom 先例。
@@ -146,7 +148,7 @@ public class InventoryService {
                 customerRepository, financeRepository, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    // 向后兼容旧 11 参构造器：未注入高价值判定器与附件校验器（二者=null）。
     public InventoryService(
             InventoryRepository repository,
             IdempotencyService idempotencyService,
@@ -160,6 +162,27 @@ public class InventoryService {
             com.complex.platform.finance.FinanceRepository financeRepository,
             com.complex.platform.common.BusinessDayResolver businessDayResolver
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService,
+                terminalSwitchGuard, traceabilityService, riskAlertService, notificationService,
+                customerRepository, financeRepository, businessDayResolver, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public InventoryService(
+            InventoryRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            TerminalSwitchGuard terminalSwitchGuard,
+            TraceabilityService traceabilityService,
+            RiskAlertService riskAlertService,
+            NotificationService notificationService,
+            CustomerRepository customerRepository,
+            com.complex.platform.finance.FinanceRepository financeRepository,
+            com.complex.platform.common.BusinessDayResolver businessDayResolver,
+            HighValueDecisionService highValueDecisionService,
+            com.complex.platform.evidence.EvidenceAttachmentValidator evidenceAttachmentValidator
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
@@ -171,11 +194,17 @@ public class InventoryService {
         this.customerRepository = customerRepository;
         this.financeRepository = financeRepository;
         this.businessDayResolver = businessDayResolver;
+        // 未经 Spring 装配（旧构造器/单测）时自建一个：其阈值端口为空 ⇒ 阈值恒「未配置」⇒ 一律判高价值。
+        // 这正是业务口径的从严侧——「没接线」绝不能被伪装成「低价值放行」。
+        this.highValueDecisionService = highValueDecisionService != null
+                ? highValueDecisionService
+                : new HighValueDecisionService(repository, authorizationService);
         this.highValueReviewService = new InventoryHighValueReviewService(
-                repository, idempotencyService, auditEventService, authorizationService);
+                repository, idempotencyService, auditEventService, authorizationService,
+                evidenceAttachmentValidator);
         this.stockMovementService = new InventoryStockMovementService(
                 repository, idempotencyService, auditEventService, authorizationService,
-                highValueReviewService);
+                highValueReviewService, this.highValueDecisionService);
     }
 
     public PageResponse<InventoryItemRecord> listInventoryItems() {
@@ -221,7 +250,7 @@ public class InventoryService {
                             now,
                             now,
                             merchantId,
-                            nonNegativeOrNull(actual.highValueThresholdCents(), "high_value_threshold_cents")
+                            Boolean.TRUE.equals(actual.manualHighValue())
                     );
                     return repository.saveInventoryItem(item);
                 }
@@ -329,6 +358,10 @@ public class InventoryService {
                     if (registrationPhotoRefs.isEmpty()) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "registration_photo_refs is required");
                     }
+                    // V350 归一：登记当刻按全平台唯一口径判一次，落库作快照（不再收前端传的布尔）。
+                    // 作废时以 cancelSavedBottle 里的实时重判为准——阈值/进货价会随运营变，快照只为事后举证。
+                    HighValueDecisionService.HighValueDecision registrationDecision =
+                            highValueDecisionService.decide(itemId, merchantId);
                     SavedBottleRecord savedBottle = repository.saveSavedBottle(new SavedBottleRecord(
                             "saved_" + slug(actual.idempotencyKey()),
                             customerId,
@@ -344,8 +377,8 @@ public class InventoryService {
                             now,
                             now,
                             merchantId,
-                            Boolean.TRUE.equals(actual.isHighValue()),
-                            actual.highValueThresholdCents(),
+                            registrationDecision.highValue(),
+                            registrationDecision.thresholdCent(),
                             bottleLabelValue,
                             nameOrNickname,
                             trimToNull(actual.customerPhone()),
@@ -732,7 +765,9 @@ public class InventoryService {
                     if (!List.of("stored", "pending_identity_review").contains(savedBottle.status())) {
                         throw ApiException.conflict("SAVED_BOTTLE_NOT_CANCELLABLE", "saved bottle is not cancellable");
                     }
-                    if (savedBottle.isHighValue()) {
+                    // V350 归一：作废当刻**重新判定**（不看登记快照，也不看前端传值）——
+                    // 阈值未配置 / 进货价未知 / 手工标记 / 进货价高于阈值，四者任一即高价值，一律拦下走复核。
+                    if (highValueDecisionService.decide(savedBottle.itemId(), savedBottle.merchantId()).highValue()) {
                         // 高价值：双证据（照片+视频各非空）→ 建 pending 复核单 + 存酒置中间态 disputed_frozen（不直接作废）。
                         highValueReviewService.createPending(
                                 actual.idempotencyKey(),

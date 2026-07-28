@@ -18,16 +18,16 @@ public class SettlementConfigService {
     private final JdbcSettlementBillRepository configRepository;
     private final JdbcSettlementConfigWriteRepository writeRepository;
     private final JdbcCommissionPointsConfigRepository commissionPointsConfigRepository;
-    private final JdbcBarVoidApprovalConfigRepository barVoidApprovalConfigRepository;
+    private final JdbcHighValueThresholdRepository highValueThresholdRepository;
 
     public SettlementConfigService(JdbcSettlementBillRepository configRepository,
                                    JdbcSettlementConfigWriteRepository writeRepository,
                                    JdbcCommissionPointsConfigRepository commissionPointsConfigRepository,
-                                   JdbcBarVoidApprovalConfigRepository barVoidApprovalConfigRepository) {
+                                   JdbcHighValueThresholdRepository highValueThresholdRepository) {
         this.configRepository = configRepository;
         this.writeRepository = writeRepository;
         this.commissionPointsConfigRepository = commissionPointsConfigRepository;
-        this.barVoidApprovalConfigRepository = barVoidApprovalConfigRepository;
+        this.highValueThresholdRepository = highValueThresholdRepository;
     }
 
     /** 平台默认口径概览 + 待复核草案队列(批1 起草案源=全部结算配置表 UNION,见 {@link JdbcSettlementConfigWriteRepository#listPendingConfigDrafts})。 */
@@ -50,10 +50,15 @@ public class SettlementConfigService {
                 String.valueOf(commissionPointsConfigRepository.findCommissionRateBp(null, null, "non_sales"))));
         defaults.add(new ConfigItem("提成与积分", "points_amount_cent_per_point", "积分累计率(每积1分所需消费·分)",
                 String.valueOf(commissionPointsConfigRepository.findAmountCentPerPoint(null, null))));
-        // V345(P0-C/FLOW-07·BAR-VOID-A1):高价值退酒审批阈值纳入总览「当前生效值」,与其它配置同源(只读生效行)。
-        defaults.add(new ConfigItem("酒吧退酒审批", "bar_void_high_value_threshold_cent",
-                "高价值退酒阈值(超过即先审后行·分)",
-                String.valueOf(barVoidApprovalConfigRepository.findVoidHighValueThresholdCent(null, null))));
+        // V350:全平台「高价值物品」判定阈值(退酒/报损/盘点差异/存酒作废共用一个值,比的是物品进货价)。
+        // 未配置时不报错、如实显示「未配置」——判定侧此时一律按高价值拦下走审批(业务HTML 口径),
+        // 概览页照常打开,运营看得见「现在是未配置状态、所有单子都在被拦」才知道要去补。
+        Long highValueThresholdCent = highValueThresholdRepository.findHighValueThresholdCent(null, null);
+        defaults.add(new ConfigItem("高价值判定", "high_value_threshold_cent",
+                "高价值判定阈值(物品进货价高于此值即高价值·分)",
+                highValueThresholdCent == null
+                        ? "未配置(一律按高价值拦下走审批)"
+                        : String.valueOf(highValueThresholdCent)));
 
         List<DraftItem> drafts = new ArrayList<>();
         for (PendingConfigDraft d : writeRepository.listPendingConfigDrafts()) {

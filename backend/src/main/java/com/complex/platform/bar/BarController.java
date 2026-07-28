@@ -24,15 +24,83 @@ public class BarController {
     private final BarService service;
     private final BarEntitlementRedemptionService entitlementRedemptionService;
     private final AuthorizationService authorizationService;
+    /** V351 退酒原因码字典（后台可增删改；下拉数据源）。单测未注入=null，端点报不可用。 */
+    private final BarVoidReasonCodeDirectory voidReasonCodeDirectory;
 
     public BarController(
             BarService service,
             BarEntitlementRedemptionService entitlementRedemptionService,
             AuthorizationService authorizationService
     ) {
+        this(service, entitlementRedemptionService, authorizationService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BarController(
+            BarService service,
+            BarEntitlementRedemptionService entitlementRedemptionService,
+            AuthorizationService authorizationService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            BarVoidReasonCodeDirectory voidReasonCodeDirectory
+    ) {
         this.service = service;
         this.entitlementRedemptionService = entitlementRedemptionService;
         this.authorizationService = authorizationService;
+        this.voidReasonCodeDirectory = voidReasonCodeDirectory;
+    }
+
+    // ==================== V351 退酒原因码字典（出厂八条，后台可增删改）====================
+
+    /** 列生效原因码（店员退酒下拉的数据源；include_inactive=true 时含已下线，后台维护用）。 */
+    @GetMapping("/void-reason-codes")
+    public ApiResponse<java.util.List<BarVoidReasonCodeRecord>> listVoidReasonCodes(
+            @RequestParam(value = "include_inactive", required = false) Boolean includeInactive
+    ) {
+        // 发起退酒的店员就要看这份下拉，故用申请权限而非审批权限。
+        authorizationService.requirePermission("bar.order_item.void");
+        return ApiResponse.ok(requireVoidReasonCodeDirectory()
+                .listReasonCodes(!Boolean.TRUE.equals(includeInactive)));
+    }
+
+    /** 新增/修改一条原因码（中文名与排序）。维护权归审批人（主管），与谁能选无关。 */
+    @PostMapping("/void-reason-codes")
+    public ApiResponse<BarVoidReasonCodeRecord> saveVoidReasonCode(
+            @RequestBody(required = false) BarVoidReasonCodeRequest request
+    ) {
+        authorizationService.requirePermission("bar.order_item.void_decide");
+        BarVoidReasonCodeRequest actual = requireVoidReasonCodeRequest(request);
+        requireIdempotencyKey(actual.idempotencyKey());
+        return ApiResponse.ok(requireVoidReasonCodeDirectory().saveReasonCode(
+                actual.code(), actual.labelZh(), actual.sortOrder(),
+                authorizationService.currentActor().id()));
+    }
+
+    /** 下线一条原因码（软删铁律：置 inactive + 必填理由，历史退酒单仍引用得到）。 */
+    @PostMapping("/void-reason-codes/{code}/archive")
+    public ApiResponse<BarVoidReasonCodeRecord> archiveVoidReasonCode(
+            @PathVariable("code") String code,
+            @RequestBody(required = false) BarVoidReasonCodeRequest request
+    ) {
+        authorizationService.requirePermission("bar.order_item.void_decide");
+        BarVoidReasonCodeRequest actual = requireVoidReasonCodeRequest(request);
+        requireIdempotencyKey(actual.idempotencyKey());
+        return ApiResponse.ok(requireVoidReasonCodeDirectory().archiveReasonCode(
+                code, actual.archiveReason(), authorizationService.currentActor().id()));
+    }
+
+    private BarVoidReasonCodeDirectory requireVoidReasonCodeDirectory() {
+        if (voidReasonCodeDirectory == null) {
+            throw ApiException.badRequest("BAR_VOID_REASON_CODE_DIRECTORY_UNAVAILABLE",
+                    "退酒原因码字典不可用");
+        }
+        return voidReasonCodeDirectory;
+    }
+
+    private BarVoidReasonCodeRequest requireVoidReasonCodeRequest(BarVoidReasonCodeRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        return request;
     }
 
     @GetMapping("/entitlement-redemptions")

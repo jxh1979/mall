@@ -49,24 +49,57 @@ class BarServiceTests {
     private BarOrderService barOrderService;
     private StubCommissionRateConfigPort commissionRateStub;
     private com.complex.platform.access.staff.StaffRepository staffRepositoryStub;
-    private StubVoidApprovalConfigPort voidThresholdStub;
+    private StubHighValueDecisionService highValueStub;
+    private com.complex.platform.evidence.EvidenceEventRepository evidenceRepositoryStub;
 
-    /**
-     * P0-C/FLOW-07（V345·BAR-VOID-A1）高价值退酒阈值配置端口测试双子：阈值可改，
-     * 用于验证「阈值改配置后判定随之改变」——阈值不是写死的常量。
-     */
-    private static final class StubVoidApprovalConfigPort implements BarVoidApprovalConfigPort {
-        private long thresholdCent;
-        private String lastMerchantId;
-
-        StubVoidApprovalConfigPort(long thresholdCent) {
-            this.thresholdCent = thresholdCent;
+    /** V351 退酒原因码字典测试双子：只有集合内的码算生效码。 */
+    private record StubVoidReasonCodeDirectory(java.util.Set<String> activeCodes)
+            implements BarVoidReasonCodeDirectory {
+        @Override
+        public boolean isActiveReasonCode(String code) {
+            return activeCodes.contains(code);
         }
 
         @Override
-        public long findVoidHighValueThresholdCent(String projectId, String merchantId) {
+        public List<BarVoidReasonCodeRecord> listReasonCodes(boolean activeOnly) {
+            return activeCodes.stream()
+                    .map(c -> new BarVoidReasonCodeRecord(c, c, 0, "active", null, null, Instant.now()))
+                    .toList();
+        }
+
+        @Override
+        public BarVoidReasonCodeRecord saveReasonCode(String code, String labelZh, Integer sortOrder, String actorId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public BarVoidReasonCodeRecord archiveReasonCode(String code, String archiveReason, String actorId) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    /**
+     * V350 高价值判定测试双子：退酒是否高价值由<b>物品进货价 vs 后台单一阈值</b>决定（不再看账单金额）。
+     * 判定逻辑本身在 {@code HighValueDecisionServiceTests} 里逐分支验；这里只驱动退酒路径的分流。
+     */
+    private static final class StubHighValueDecisionService
+            extends com.complex.platform.inventory.HighValueDecisionService {
+        private boolean highValue;
+        private Long thresholdCent = 500_000L;
+        private Long purchaseUnitCostCent = 100_000L;
+        private String lastInventoryItemId;
+        private String lastMerchantId;
+
+        StubHighValueDecisionService() {
+            super(null, null);
+        }
+
+        @Override
+        public HighValueDecision decide(String inventoryItemId, String merchantId) {
+            lastInventoryItemId = inventoryItemId;
             lastMerchantId = merchantId;
-            return thresholdCent;
+            return new HighValueDecision(highValue, thresholdCent, purchaseUnitCostCent,
+                    highValue ? BASIS_ABOVE_THRESHOLD : BASIS_BELOW_THRESHOLD);
         }
     }
 
@@ -108,10 +141,23 @@ class BarServiceTests {
         barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
                 new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
                 receivableLedgerService);
-        // P0-C/FLOW-07（V345·BAR-VOID-A1）：高价值退酒阈值改后台可配。注入「出厂种子等值」测试双子
-        // （500000 分 = 5000 元）——既有退酒用例金额均在阈值内，故一字未改仍走即时生效路径、全绿。
-        voidThresholdStub = new StubVoidApprovalConfigPort(500_000L);
-        barOrderService.voidApprovalConfigPort = voidThresholdStub;
+        // V350：退酒高价值判定改走全平台唯一入口（物品进货价 vs 后台单一阈值）。默认低价值，
+        // 需要高价值分支的用例各自把 highValueStub.highValue 置 true。
+        highValueStub = new StubHighValueDecisionService();
+        barOrderService.highValueDecisionService = highValueStub;
+        // V351 原因码字典：默认只认出厂八条里的两条，用于验「不在字典的码被拒」。
+        barOrderService.voidReasonCodeDirectory = new StubVoidReasonCodeDirectory(
+                java.util.Set.of("quality_defect", "customer_change"));
+        // 双证据闭环：附件必须真实存在。默认只有 att-void-photo 这一个「已上传」的附件。
+        evidenceRepositoryStub = mock(com.complex.platform.evidence.EvidenceEventRepository.class);
+        when(evidenceRepositoryStub.findAttachmentById(anyString())).thenReturn(java.util.Optional.empty());
+        when(evidenceRepositoryStub.findAttachmentById("att-void-photo")).thenReturn(java.util.Optional.of(
+                new com.complex.platform.evidence.EvidenceAttachmentRecord(
+                        "att-void-photo", "p.jpg", "image/jpeg", 1L, "bar_order_item_void", null,
+                        "other", "evidence-files/p.jpg", "/api/v1/evidence/attachments/att-void-photo/file",
+                        "uploaded", null, Instant.now(), Instant.now(), null)));
+        barOrderService.evidenceAttachmentValidator =
+                new com.complex.platform.evidence.EvidenceAttachmentValidator(evidenceRepositoryStub);
         billingService = new BarBillingService(
                 barRepository, receivableLedgerService, authorizationService, auditEventService);
         // P0-D/CFG-01（V340）：提成率改后台可配。单测注入「出厂种子等值」测试双子（销售 1500bp / 非销售 1000bp）——
@@ -3087,6 +3133,7 @@ class BarServiceTests {
 
     @Test
     void highValueDeliveredVoidStaysPendingWithoutTouchingStockBillOrItem() {
+        highValueStub.highValue = true;
         HighValueVoidFixture f = highValueDeliveredItem("void-highvalue-hold", 300_000L, 2);
         long payableBefore = f.bill().payableAmountCent();
         int adjustmentsBefore = barRepository.billAdjustments.size();
@@ -3114,6 +3161,7 @@ class BarServiceTests {
 
     @Test
     void highValueDeliveredVoidAppliesStockAndBillOnlyAfterApproval() {
+        highValueStub.highValue = true;
         HighValueVoidFixture f = highValueDeliveredItem("void-highvalue-approve", 300_000L, 2);
         long payableBefore = f.bill().payableAmountCent();
         BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
@@ -3139,6 +3187,7 @@ class BarServiceTests {
 
     @Test
     void highValueDeliveredVoidRejectionLeavesMoneyAndStockUntouchedWithNoReversal() {
+        highValueStub.highValue = true;
         HighValueVoidFixture f = highValueDeliveredItem("void-highvalue-reject", 300_000L, 2);
         long payableBefore = f.bill().payableAmountCent();
         BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
@@ -3180,30 +3229,35 @@ class BarServiceTests {
     }
 
     @Test
-    void voidHighValueThresholdIsConfigurableSoClassificationFollowsTheConfig() {
-        // 阈值不是写死的 5000 元：把阈值调低到 1000 元后，同样一笔 2000 元退酒改判为高价值 → 先审后行。
-        voidThresholdStub.thresholdCent = 100_000L;
-        HighValueVoidFixture f = highValueDeliveredItem("void-threshold-config", 100_000L, 2);
+    void voidHighValueFollowsItemPurchasePriceNotBillAmount() {
+        // V350 归一：判定问的是「这件物品进货价多少」，问的对象是该明细商品关联的库存物料，
+        // 不再是「本条明细账单金额 > 5000 元」——同一笔金额，判定结果只随物品口径走。
+        highValueStub.highValue = true;
+        HighValueVoidFixture f = highValueDeliveredItem("void-by-cost", 100_000L, 2);
         long payableBefore = f.bill().payableAmountCent();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
-                "void-threshold-config-1", "ops", List.of("att-void-photo"), f.orderItemId(),
-                "guest changed mind", true, f.bill().id(), "guest_request"));
+                "void-by-cost-1", "ops", List.of("att-void-photo"), f.orderItemId(),
+                "guest changed mind", true, f.bill().id(), "customer_change"));
 
         assertThat(voided.approvalMode()).isEqualTo("approval_first");
-        assertThat(voided.highValueThresholdCent()).isEqualTo(100_000L);
+        assertThat(voided.highValueThresholdCent()).isEqualTo(500_000L);
         assertThat(barRepository.bills.get(f.bill().id()).payableAmountCent()).isEqualTo(payableBefore);
-        // 阈值抬到 5 万元：同一笔金额回到低价值即时生效路径。
-        voidThresholdStub.thresholdCent = 5_000_000L;
-        HighValueVoidFixture g = highValueDeliveredItem("void-threshold-config-2", 100_000L, 2);
+        // 判定入口被问到的是该商品关联的库存物料 id（进货价的载体），而不是订单/明细金额。
+        assertThat(highValueStub.lastInventoryItemId).isEqualTo(f.inventoryItemId());
+
+        // 同样金额、同样明细：物品被判低价值 → 回到即时生效路径。
+        highValueStub.highValue = false;
+        HighValueVoidFixture g = highValueDeliveredItem("void-by-cost-2", 100_000L, 2);
         BarOrderItemVoidRecord immediate = service.voidOrderItem(g.order().id(), new BarOrderItemVoidRequest(
-                "void-threshold-config-2-1", "ops", List.of(), g.orderItemId(),
+                "void-by-cost-2-1", "ops", List.of(), g.orderItemId(),
                 "guest changed mind", true, g.bill().id(), null));
         assertThat(immediate.approvalMode()).isEqualTo("immediate");
     }
 
     @Test
     void highValueVoidWithoutStructuredReasonCodeIsRejected() {
+        highValueStub.highValue = true;
         HighValueVoidFixture f = highValueDeliveredItem("void-noreasoncode", 300_000L, 2);
 
         assertThatThrownBy(() -> service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
@@ -3216,6 +3270,7 @@ class BarServiceTests {
 
     @Test
     void highValueVoidWithoutAttachmentEvidenceIsRejected() {
+        highValueStub.highValue = true;
         HighValueVoidFixture f = highValueDeliveredItem("void-noattachment", 300_000L, 2);
 
         assertThatThrownBy(() -> service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
@@ -3230,6 +3285,7 @@ class BarServiceTests {
 
     @Test
     void duplicatePendingHighValueVoidRequestOnSameItemIsRejected() {
+        highValueStub.highValue = true;
         HighValueVoidFixture f = highValueDeliveredItem("void-duplicate-pending", 300_000L, 2);
         service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
                 "void-duplicate-pending-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
@@ -3267,17 +3323,68 @@ class BarServiceTests {
     }
 
     @Test
-    void voidIsRefusedWhenThresholdConfigPortIsUnavailable() {
-        // 零硬编码 fail-closed：阈值配置端口缺失时拒绝受理退酒，绝不静默回落 5000 元常量。
-        barOrderService.voidApprovalConfigPort = null;
+    void voidIsHeldForApprovalWhenHighValueDecisionIsUnavailable() {
+        // V350 fail-closed：判定器/阈值不可用时**按高价值拦下走审批**（业务HTML「阈值未配置一律按高价值处理、
+        // 不得静默放行」），而不是让退酒整个入口不可用——主管仍能逐单放行，补配置后自动恢复分流。
+        barOrderService.highValueDecisionService = null;
         HighValueVoidFixture f = highValueDeliveredItem("void-config-missing", 300_000L, 2);
+        long payableBefore = f.bill().payableAmountCent();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-config-missing-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect"));
+
+        assertThat(voided.approvalMode()).isEqualTo("approval_first");
+        assertThat(voided.highValueThresholdCent()).isNull(); // 阈值未配置的留痕快照
+        assertThat(voided.effectsAppliedAt()).isNull();
+        assertThat(barRepository.bills.get(f.bill().id()).payableAmountCent()).isEqualTo(payableBefore);
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isFalse();
+    }
+
+    @Test
+    void voidReasonCodeOutsideDictionaryIsRejected() {
+        // V351：原因码只认字典里的生效码。改造前只校形状，随手编的短码照样过闸，
+        // 事后按原因码聚合退酒（哪家店质量问题多）全是垃圾数据。
+        highValueStub.highValue = true;
+        HighValueVoidFixture f = highValueDeliveredItem("void-badreason", 300_000L, 2);
 
         assertThatThrownBy(() -> service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
-                "void-config-missing-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "void-badreason-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "asdf")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_VOID_REASON_CODE_UNKNOWN");
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isFalse();
+    }
+
+    @Test
+    void voidWithNonExistentAttachmentIdIsRejected() {
+        // 双证据闭环：附件 id 必须真实存在于 evidence_attachments，不能随手编字符串。
+        highValueStub.highValue = true;
+        HighValueVoidFixture f = highValueDeliveredItem("void-fakeatt", 300_000L, 2);
+
+        assertThatThrownBy(() -> service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-fakeatt-1", "quality issue", List.of("att-does-not-exist"), f.orderItemId(),
                 "bottle spoiled", true, f.bill().id(), "quality_defect")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
-                .isEqualTo("BAR_VOID_THRESHOLD_CONFIG_UNAVAILABLE");
+                .isEqualTo("EVIDENCE_ATTACHMENT_NOT_FOUND");
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isFalse();
+    }
+
+    @Test
+    void voidWithUploadedAttachmentAndDictionaryReasonCodePasses() {
+        // 正例：真上传过的附件 + 字典里的中文原因码 → 受理为先审后行申请。
+        highValueStub.highValue = true;
+        HighValueVoidFixture f = highValueDeliveredItem("void-goodevidence", 300_000L, 2);
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-goodevidence-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect"));
+
+        assertThat(voided.approvalMode()).isEqualTo("approval_first");
+        assertThat(voided.reasonCode()).isEqualTo("quality_defect");
+        assertThat(voided.evidenceAttachmentIds()).containsExactly("att-void-photo");
     }
 
     @Test

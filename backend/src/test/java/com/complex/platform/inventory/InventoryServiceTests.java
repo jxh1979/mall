@@ -86,6 +86,10 @@ class InventoryServiceTests {
                         terminalDeviceRepository, new AuditEventService(auditEventRepository));
         traceabilityRepository = new InMemoryTraceabilityRepository();
         riskAlertService = mock(com.complex.platform.evidence.RiskAlertService.class);
+        // V350：高价值判定全平台归一——测试注入可配阈值端口，默认 5000 元（500000 分）。
+        highValueDecisionService = new HighValueDecisionService(inventoryRepository, authorizationService);
+        highValueDecisionService.thresholdPort = (projectId, merchantId) -> configuredThresholdCent;
+        configuredThresholdCent = 500_000L;
         service = new InventoryService(
                 inventoryRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
@@ -93,9 +97,40 @@ class InventoryServiceTests {
                 authorizationService,
                 terminalSwitchGuard,
                 new com.complex.platform.evidence.TraceabilityService(traceabilityRepository, authorizationService),
-                riskAlertService
+                riskAlertService,
+                null,
+                null,
+                null,
+                null,
+                highValueDecisionService,
+                evidenceAttachmentValidator()
         );
     }
+
+    /**
+     * 双证据闭环：附件必须真实存在且类型对得上。桩里只有 att_photo（照片）与 att_video（视频）两个已上传附件。
+     */
+    private com.complex.platform.evidence.EvidenceAttachmentValidator evidenceAttachmentValidator() {
+        com.complex.platform.evidence.EvidenceEventRepository evidenceRepository =
+                mock(com.complex.platform.evidence.EvidenceEventRepository.class);
+        when(evidenceRepository.findAttachmentById(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Optional.empty());
+        when(evidenceRepository.findAttachmentById("att_photo")).thenReturn(Optional.of(
+                new com.complex.platform.evidence.EvidenceAttachmentRecord(
+                        "att_photo", "p.jpg", "image/jpeg", 1L, "saved_bottle_void", null, "other",
+                        "evidence-files/p.jpg", "/api/v1/evidence/attachments/att_photo/file",
+                        "uploaded", null, Instant.now(), Instant.now(), null)));
+        when(evidenceRepository.findAttachmentById("att_video")).thenReturn(Optional.of(
+                new com.complex.platform.evidence.EvidenceAttachmentRecord(
+                        "att_video", "v.mp4", "video/mp4", 1L, "saved_bottle_void", null, "other",
+                        "evidence-files/v.mp4", "/api/v1/evidence/attachments/att_video/file",
+                        "uploaded", null, Instant.now(), Instant.now(), null)));
+        return new com.complex.platform.evidence.EvidenceAttachmentValidator(evidenceRepository);
+    }
+
+    /** 当前生效阈值（分）；置 null = 「阈值未配置」，判定侧必须一律按高价值拦下。 */
+    private Long configuredThresholdCent;
+    private HighValueDecisionService highValueDecisionService;
 
     @AfterEach
     void tearDown() {
@@ -108,7 +143,7 @@ class InventoryServiceTests {
         java.time.Instant now = java.time.Instant.now();
         // C4：出库入口现校验物料存在（404），补建 item_fefo（管理员空 scope 不做归属限制）。
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
-                "item_fefo", null, "FEFO Item", "spirit", "bottle", null, false, 0, "active", now, now, null, null));
+                "item_fefo", null, "FEFO Item", "spirit", "bottle", null, false, 0, "active", now, now, null, false));
         inventoryRepository.saveStockBatch(new InventoryStockBatchRecord(
                 "fefo-A", "item_fefo", "loc_fefo", "BA", null, 5,
                 java.time.Instant.parse("2026-06-10T00:00:00Z"), "active", List.of(), now, now, null), null);
@@ -262,7 +297,7 @@ class InventoryServiceTests {
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "123456", "客人甲", null, null, null,
+                "123456", "客人甲", null,
                 List.of("reg_photo"), null
         ));
 
@@ -291,7 +326,7 @@ class InventoryServiceTests {
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Vodka", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "123456", "客人甲", null, null, null,
+                "123456", "客人甲", null,
                 List.of("reg_photo"), null
         ));
         SavedBottleClaimRequest firstClaim = new SavedBottleClaimRequest(
@@ -547,7 +582,7 @@ class InventoryServiceTests {
                 "saved-identity", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Whisky", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "LABEL-XYZ", "张三", "13800138000", true, 100000L,
+                "LABEL-XYZ", "张三", "13800138000",
                 List.of("reg_photo"), null));
 
         SavedBottleClaimRecord review = service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
@@ -568,7 +603,7 @@ class InventoryServiceTests {
                 "saved-walkin", null, List.of(), null /* 散客无 customer_id */, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "LBL-WALKIN", "散客张", "13800138000", null, null,
+                "LBL-WALKIN", "散客张", "13800138000",
                 List.of("reg_photo_1"), "前台手填"));
 
         assertThat(bottle.customerId()).isNull();
@@ -587,14 +622,14 @@ class InventoryServiceTests {
                 "saved-reg-miss", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                null, "散客张", null, null, null, List.of("reg_photo"), null)))
+                null, "散客张", null, List.of("reg_photo"), null)))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
 
         assertThatThrownBy(() -> service.createSavedBottle(new SavedBottleRequest(
                 "saved-reg-miss2", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "LBL", "散客张", null, null, null, List.of() /* 无登记照片 */, null)))
+                "LBL", "散客张", null, List.of() /* 无登记照片 */, null)))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
     }
 
@@ -606,7 +641,7 @@ class InventoryServiceTests {
                 "saved-idok", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Rum", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "LBL-OK", "李四", "13800138000", null, null, List.of("reg_photo"), null));
+                "LBL-OK", "李四", "13800138000", List.of("reg_photo"), null));
 
         SavedBottleClaimRecord ok = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
                 "claim-ok", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "x",
@@ -622,7 +657,7 @@ class InventoryServiceTests {
                 "saved-idbad", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Rum", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "LBL-OK", "李四", "13800138000", null, null, List.of("reg_photo"), null));
+                "LBL-OK", "李四", "13800138000", List.of("reg_photo"), null));
 
         SavedBottleClaimRecord review = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
                 "claim-name-bad", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "x",
@@ -639,7 +674,7 @@ class InventoryServiceTests {
                 "saved-dispute", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Brandy", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "LBL-DP", "客", null, null, null, List.of("reg_photo"), null));
+                "LBL-DP", "客", null, List.of("reg_photo"), null));
 
         SavedBottleRecord disputed = service.disputeSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "dispute-1", null, List.of(), "客人质疑酒量", List.of(), List.of()));
@@ -649,11 +684,11 @@ class InventoryServiceTests {
     // R5 T6: 高价值存酒作废缺视频（仅照片）→ 拒（双证据须分类）
     @Test
     void highValueSavedBottleCancelRejectsWhenVideoMissing() {
-        InventoryItemRecord item = createItem("hv-cancel");
+        InventoryItemRecord item = createHighValueItem("hv-cancel");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HV", "客", null, true, 500000L,
+                Instant.now().plusSeconds(3600), "LBL-HV", "客", null,
                 List.of("reg_photo"), null));
 
         // 仅照片、缺视频 → 拒。
@@ -676,11 +711,11 @@ class InventoryServiceTests {
     // R5 T6: 高价值缺照片（仅视频）→ 拒，message 含证据文案且不含 supervisor review
     @Test
     void highValueVoidRejectsWhenPhotoMissingWithEvidenceWording() {
-        InventoryItemRecord item = createItem("hv-wording");
+        InventoryItemRecord item = createHighValueItem("hv-wording");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-wording", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVW", "客", null, true, 500000L,
+                Instant.now().plusSeconds(3600), "LBL-HVW", "客", null,
                 List.of("reg_photo"), null));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -695,11 +730,11 @@ class InventoryServiceTests {
     // R5 T6: 双证据 → pending → 主管 approve 后存酒 cancelled
     @Test
     void highValueVoidApproveCancelsBottle() {
-        InventoryItemRecord item = createItem("hv-approve");
+        InventoryItemRecord item = createHighValueItem("hv-approve");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-approve", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVA", "客", null, true, 500000L,
+                Instant.now().plusSeconds(3600), "LBL-HVA", "客", null,
                 List.of("reg_photo"), null));
 
         SavedBottleRecord frozen = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -718,11 +753,11 @@ class InventoryServiceTests {
     // R5 T6: 主管 reject → 存酒保留（维持 disputed_frozen，不作废）
     @Test
     void highValueVoidRejectKeepsBottle() {
-        InventoryItemRecord item = createItem("hv-reject");
+        InventoryItemRecord item = createHighValueItem("hv-reject");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-reject", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVR", "客", null, true, 500000L,
+                Instant.now().plusSeconds(3600), "LBL-HVR", "客", null,
                 List.of("reg_photo"), null));
 
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -737,6 +772,42 @@ class InventoryServiceTests {
                 .isEqualTo("disputed_frozen");
     }
 
+    // 双证据闭环：附件 id 不存在 → 拒（改造前只校列表非空，随手编两个字符串就算「有双证据」）。
+    @Test
+    void highValueCancelRejectsNonExistentAttachmentId() {
+        InventoryItemRecord item = createHighValueItem("hv-fakeatt");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-hv-fakeatt", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), "LBL-FAKE", "客", null,
+                List.of("reg_photo"), null));
+
+        assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-fakeatt", null, List.of(), "broken",
+                List.of("att_not_uploaded"), List.of("att_video"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("EVIDENCE_ATTACHMENT_NOT_FOUND"));
+        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().status())
+                .isEqualTo("stored");
+    }
+
+    // 双证据闭环：把视频塞进照片栏 → 拒（改造前两栏各自只校非空，同一个假 id 填两栏也过）。
+    @Test
+    void highValueCancelRejectsVideoInPhotoSlot() {
+        InventoryItemRecord item = createHighValueItem("hv-kind");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-hv-kind", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), "LBL-KIND", "客", null,
+                List.of("reg_photo"), null));
+
+        assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-kind", null, List.of(), "broken",
+                List.of("att_video"), List.of("att_video"))))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("EVIDENCE_ATTACHMENT_KIND_MISMATCH"));
+    }
+
     // R5 T6: 非高价值无证据可直接作废（向后兼容回归保护）
     @Test
     void nonHighValueVoidIgnoresEvidenceRuleAndCancelsDirectly() {
@@ -744,7 +815,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-non-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "House", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-NHV", "客", null, false, 1000L,
+                Instant.now().plusSeconds(3600), "LBL-NHV", "客", null,
                 List.of("reg_photo"), null));
 
         SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -758,7 +829,7 @@ class InventoryServiceTests {
     // 高价值报损（loss）无双证据 → 拒（HIGH_VALUE_EVIDENCE_REQUIRED）。
     @Test
     void highValueDamageReportRejectsWhenEvidenceMissing() {
-        InventoryItemRecord item = createHighValueItem("hv-damage-noevid", 100_000L); // 阈值 1000 元
+        InventoryItemRecord item = createHighValueItem("hv-damage-noevid");
         seedStock(item.id(), "warehouse_1", 10);
 
         // quantity 5 × 单价 30000 分 = 150000 ≥ 100000 → 高价值，缺视频 → 拒。
@@ -777,7 +848,7 @@ class InventoryServiceTests {
     // 高价值报损双证据 → 建 pending 复核 + 调整 pending_review + 未即时扣减。
     @Test
     void highValueDamageReportCreatesPendingAndDoesNotDeductImmediately() {
-        InventoryItemRecord item = createHighValueItem("hv-damage-pending", 100_000L);
+        InventoryItemRecord item = createHighValueItem("hv-damage-pending");
         seedStock(item.id(), "warehouse_1", 10);
 
         StockAdjustmentRecord pending = service.createStockAdjustment(new StockAdjustmentRequest(
@@ -798,7 +869,7 @@ class InventoryServiceTests {
     // 高价值报损 approve → 真正扣减 + 调整 completed。
     @Test
     void highValueDamageReportApproveDeductsStock() {
-        InventoryItemRecord item = createHighValueItem("hv-damage-approve", 100_000L);
+        InventoryItemRecord item = createHighValueItem("hv-damage-approve");
         seedStock(item.id(), "warehouse_1", 10);
 
         StockAdjustmentRecord pending = service.createStockAdjustment(new StockAdjustmentRequest(
@@ -821,7 +892,7 @@ class InventoryServiceTests {
     // 高价值报损 reject → 不扣减 + 调整 rejected。
     @Test
     void highValueDamageReportRejectDoesNotDeductStock() {
-        InventoryItemRecord item = createHighValueItem("hv-damage-reject", 100_000L);
+        InventoryItemRecord item = createHighValueItem("hv-damage-reject");
         seedStock(item.id(), "warehouse_1", 10);
 
         StockAdjustmentRecord pending = service.createStockAdjustment(new StockAdjustmentRequest(
@@ -844,7 +915,7 @@ class InventoryServiceTests {
     // 高价值盘点差异（count_correction）双证据 → pending；approve → 扣减生效。
     @Test
     void highValueStockVarianceCreatesPendingThenApproveDeducts() {
-        InventoryItemRecord item = createHighValueItem("hv-variance", 100_000L);
+        InventoryItemRecord item = createHighValueItem("hv-variance");
         seedStock(item.id(), "warehouse_1", 8);
 
         StockAdjustmentRecord pending = service.createStockAdjustment(new StockAdjustmentRequest(
@@ -865,16 +936,16 @@ class InventoryServiceTests {
                 .isEqualTo(5); // 8 - 3 扣减生效
     }
 
-    // 非高价值报损（金额低于阈值）→ 即时扣减（向后兼容回归保护）。
+    // 低价值报损（物品进货价低于阈值）→ 即时扣减。
     @Test
     void belowThresholdDamageReportAdjustsImmediately() {
-        InventoryItemRecord item = createHighValueItem("below-threshold", 1_000_000L); // 阈值 1 万元
+        InventoryItemRecord item = createItem("below-threshold"); // 进货价 10 元 < 阈值 5000 元
         seedStock(item.id(), "warehouse_1", 10);
 
         StockAdjustmentRecord adjustment = service.createStockAdjustment(new StockAdjustmentRequest(
                 "below-threshold-adjust", null, List.of(), "loss",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "location_id", "warehouse_1")),
-                "小额报损", 30_000L, null, null)); // 2 × 30000 = 60000 < 1000000 → 非高价值
+                "小额报损", 30_000L, null, null)); // 进货价低于阈值 → 低价值，即时扣减
 
         assertThat(adjustment.status()).isEqualTo("completed");
         assertThat(inventoryRepository.listHighValueReviews()).isEmpty();
@@ -882,27 +953,78 @@ class InventoryServiceTests {
                 .isEqualTo(8); // 即时扣减
     }
 
-    // 物料无阈值（null）→ 报损永不触发复核，即时扣减（向后兼容）。
+    // V350：阈值未配置 → 报损一律按高价值拦下走审批，不得静默放行（业务HTML 明写）。
+    // 这条推翻了旧口径「物料没录阈值就永不触发复核」——那正是「不给物料录阈值即可绕开主管复核」的后门。
     @Test
-    void nullThresholdItemDamageReportAdjustsImmediately() {
-        InventoryItemRecord item = createItem("no-threshold-item"); // 阈值 null
+    void thresholdUnsetHoldsDamageReportForReviewInsteadOfSilentlyPassing() {
+        InventoryItemRecord item = createItem("threshold-unset-item"); // 进货价 10 元，本该是低价值
+        seedStock(item.id(), "warehouse_1", 10);
+        configuredThresholdCent = null; // 阈值未配置
+
+        StockAdjustmentRecord adjustment = service.createStockAdjustment(new StockAdjustmentRequest(
+                "threshold-unset-adjust", null, List.of(), "loss",
+                List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
+                "报损", 1_000L, List.of("att_photo"), List.of("att_video")));
+
+        assertThat(adjustment.status()).isEqualTo("pending_review");
+        assertThat(inventoryRepository.listHighValueReviews()).hasSize(1);
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(10); // 未扣减
+    }
+
+    // V350：进货价未知（成本台账无基准）→ 同样拦下。否则「不录进货价」就是绕过复核的后门。
+    @Test
+    void unknownPurchaseCostHoldsDamageReportForReview() {
+        InventoryItemRecord item = createItemWithoutCost("no-cost-item");
         seedStock(item.id(), "warehouse_1", 10);
 
         StockAdjustmentRecord adjustment = service.createStockAdjustment(new StockAdjustmentRequest(
-                "no-threshold-adjust", null, List.of(), "loss",
+                "no-cost-adjust", null, List.of(), "loss",
                 List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
-                "报损", 9_999_999L, null, null)); // 单价很高但阈值 null → 不视高价值
+                "报损", 1_000L, List.of("att_photo"), List.of("att_video")));
 
-        assertThat(adjustment.status()).isEqualTo("completed");
-        assertThat(inventoryRepository.listHighValueReviews()).isEmpty();
-        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
-                .isEqualTo(5);
+        assertThat(adjustment.status()).isEqualTo("pending_review");
+        assertThat(inventoryRepository.listHighValueReviews()).hasSize(1);
     }
 
-    private InventoryItemRecord createHighValueItem(String idempotencyKey, long thresholdCents) {
+    // V350：手工标记为高价值 → 不论进货价多低都拦下（业务HTML「或被手工标记为高价值」）。
+    @Test
+    void manuallyMarkedItemIsHighValueRegardlessOfLowPurchaseCost() {
+        InventoryItemRecord item = createManuallyMarkedItem("manual-mark-item"); // 进货价仅 10 元
+        seedStock(item.id(), "warehouse_1", 10);
+
+        StockAdjustmentRecord adjustment = service.createStockAdjustment(new StockAdjustmentRequest(
+                "manual-mark-adjust", null, List.of(), "loss",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "location_id", "warehouse_1")),
+                "报损", 1_000L, List.of("att_photo"), List.of("att_video")));
+
+        assertThat(adjustment.status()).isEqualTo("pending_review");
+        assertThat(inventoryRepository.listHighValueReviews()).hasSize(1);
+    }
+
+    /** 高价值物品：进货价 1 万元（高于默认阈值 5000 元）。 */
+    private InventoryItemRecord createHighValueItem(String idempotencyKey) {
+        InventoryItemRecord item = service.createInventoryItem(new InventoryItemRequest(
+                idempotencyKey, null, List.of(), null, null,
+                "HV " + idempotencyKey, "spirit", "bottle", 0, "active", false));
+        inventoryRepository.seedCost(item.id(), 1_000_000L);
+        return item;
+    }
+
+    /** 手工标记为高价值的物品：进货价很低（10 元），但标记压过进货价。 */
+    private InventoryItemRecord createManuallyMarkedItem(String idempotencyKey) {
+        InventoryItemRecord item = service.createInventoryItem(new InventoryItemRequest(
+                idempotencyKey, null, List.of(), null, null,
+                "MM " + idempotencyKey, "spirit", "bottle", 0, "active", true));
+        inventoryRepository.seedCost(item.id(), 1_000L);
+        return item;
+    }
+
+    /** 进货价未录（成本台账无基准）的物品：判定侧必须按「进货价未知」一律拦下。 */
+    private InventoryItemRecord createItemWithoutCost(String idempotencyKey) {
         return service.createInventoryItem(new InventoryItemRequest(
                 idempotencyKey, null, List.of(), null, null,
-                "HV " + idempotencyKey, "spirit", "bottle", 0, "active", thresholdCents));
+                "NC " + idempotencyKey, "spirit", "bottle", 0, "active", false));
     }
 
     private void seedStock(String itemId, String locationId, int quantity) {
@@ -923,7 +1045,7 @@ class InventoryServiceTests {
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "VERIFY-XYZ", "客人甲", null, null, null,
+                "VERIFY-XYZ", "客人甲", null,
                 List.of("reg_photo"), null
         ));
 
@@ -1259,7 +1381,7 @@ class InventoryServiceTests {
         // 商户 A 的物料 + 余额。
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
                 "item_ca", null, "Item CA", "spirit", "bottle", null, false, 0, "active",
-                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null));
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", false));
         inventoryRepository.saveStockBalance(new StockBalanceRecord(
                 "bal_ca", "item_ca", "loc_ca", 100, 0, 100, Instant.now(), "m_a", "wh_ca"));
 
@@ -1281,7 +1403,7 @@ class InventoryServiceTests {
     void stockInRejectsCrossMerchantItem() {
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
                 "item_cin", null, "Item CIN", "spirit", "bottle", null, false, 0, "active",
-                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null));
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", false));
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
         when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
         assertThatThrownBy(() -> service.createStockIn(new StockInRequest(
@@ -1296,7 +1418,7 @@ class InventoryServiceTests {
     void stockAdjustmentRejectsCrossMerchantItem() {
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
                 "item_cadj", null, "Item CADJ", "spirit", "bottle", null, false, 0, "active",
-                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null));
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", false));
         inventoryRepository.saveStockBalance(new StockBalanceRecord(
                 "bal_cadj", "item_cadj", "loc_cadj", 100, 0, 100, Instant.now(), "m_a", "wh_cadj"));
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
@@ -1316,7 +1438,7 @@ class InventoryServiceTests {
     void stockBatchRejectsCrossMerchantItem() {
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
                 "item_cbat", null, "Item CBAT", "spirit", "bottle", null, false, 0, "active",
-                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null));
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", false));
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
         when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
         assertThatThrownBy(() -> service.createStockBatch(new InventoryStockBatchRequest(
@@ -1342,11 +1464,11 @@ class InventoryServiceTests {
         // 商户 A 视角：建高价值存酒 → 作废（建 pending 复核，复核单归属 m_a）。
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
         when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
-        InventoryItemRecord item = createItem("hv-xm");
+        InventoryItemRecord item = createHighValueItem("hv-xm");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-xm", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVXM", "客", null, true, 500000L,
+                Instant.now().plusSeconds(3600), "LBL-HVXM", "客", null,
                 List.of("reg_photo"), null));
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-xm", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
@@ -1369,12 +1491,12 @@ class InventoryServiceTests {
         // 商户 A 的数据
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
                 "item_a", null, "Item A", "spirit", "bottle", null, false, 0, "active",
-                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", false
         ));
         // 商户 B 的数据
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
                 "item_b", null, "Item B", "spirit", "bottle", null, false, 0, "active",
-                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_b", null
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_b", false
         ));
 
         // 平台管理员看全部
@@ -1751,7 +1873,14 @@ class InventoryServiceTests {
                 .isEqualTo("TRACE_CODE_NOT_FOUND");
     }
 
+    /** 普通物品：进货价 10 元（低于默认阈值 5000 元）⇒ 归一口径下为低价值。 */
     private InventoryItemRecord createItem(String idempotencyKey) {
+        InventoryItemRecord item = createItemRaw(idempotencyKey);
+        inventoryRepository.seedCost(item.id(), 1_000L);
+        return item;
+    }
+
+    private InventoryItemRecord createItemRaw(String idempotencyKey) {
         return service.createInventoryItem(new InventoryItemRequest(
                 idempotencyKey,
                 null,
@@ -1819,6 +1948,20 @@ class InventoryServiceTests {
         final Map<String, TraceHandoverStepRecord> traceHandoverSteps = new LinkedHashMap<>();
         final Map<String, TraceHandoverExceptionRecord> traceHandoverExceptions = new LinkedHashMap<>();
         final List<Map<String, Object>> robotTaskEvents = new ArrayList<>();
+
+        // V350 高价值判定读进货价（inventory_item_cost_state.avg_unit_cost_cent）。
+        private final Map<String, InventoryItemCostStateRecord> costStates = new LinkedHashMap<>();
+
+        /** 播种某物品的进货价（分/单位），使其在高价值判定里有成本基准。 */
+        void seedCost(String itemId, long avgUnitCostCent) {
+            costStates.put(itemId, new InventoryItemCostStateRecord(
+                    itemId, null, 0L, 0L, avgUnitCostCent, 0L, 0L, "moving_average", true, Instant.now()));
+        }
+
+        @Override
+        public Optional<InventoryItemCostStateRecord> findCostState(String itemId) {
+            return Optional.ofNullable(costStates.get(itemId));
+        }
 
         @Override
         public InventoryItemRecord saveInventoryItem(InventoryItemRecord item) {

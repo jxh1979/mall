@@ -3,7 +3,7 @@ package com.complex.platform.settlement;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
-import com.complex.platform.settlement.SettlementConfigWriteRequests.BarVoidThresholdRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.HighValueThresholdRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ChannelFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscountRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
@@ -106,10 +106,10 @@ public class SettlementConfigController {
         return ApiResponse.ok(null);
     }
 
-    /** V345（P0-C/FLOW-07·BAR-VOID-A1）：高价值退酒审批阈值（项目 × 商户，单位分）落草案。 */
-    @PostMapping("/bar-void-threshold")
-    public ApiResponse<Void> saveBarVoidThreshold(@RequestBody BarVoidThresholdRequest request) {
-        writeService.saveBarVoidThreshold(request, requireManageActor());
+    /** V350：全平台高价值判定阈值（项目 × 商户，单位分；比的是物品进货价）落草案。 */
+    @PostMapping("/high-value-threshold")
+    public ApiResponse<Void> saveHighValueThreshold(@RequestBody HighValueThresholdRequest request) {
+        writeService.saveHighValueThreshold(request, requireManageActor());
         return ApiResponse.ok(null);
     }
 

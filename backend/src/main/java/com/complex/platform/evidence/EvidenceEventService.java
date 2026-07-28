@@ -36,6 +36,10 @@ public class EvidenceEventService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
 
+    /** 证据文件本地存储。字段注入免改既有构造点；单测未注入=null（上传端点报存储不可用）。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    EvidenceFileStorage fileStorage;
+
     public EvidenceEventService(
             EvidenceEventRepository repository,
             IdempotencyService idempotencyService,
@@ -88,6 +92,82 @@ public class EvidenceEventService {
             );
             throw exception;
         }
+    }
+
+    /**
+     * 真·上传：收 multipart 字节 → 落盘 → 一步写成 {@code uploaded} 态的附件行，返回可直接引用的附件 id。
+     *
+     * <p>与既有 upload-intent/bind/complete 三段式的关系：那三段是给「客户端直传对象存储」准备的，
+     * 但仓里从来没有对象存储实现（{@code upload_url} 是硬编码假串），后台也没有任何上传 UI，
+     * 结果就是「高价值报损/盘点差异/存酒作废必须照片+视频双证据」在业务人员侧无法执行、附件 id 全是假串。
+     * 本方法是业务人员真正能用的那条路：一次请求传完，服务端认字节、服务端定 content_type。
+     *
+     * <p>{@code content_type} 由扩展名在服务端判定（不信客户端自报），照片/视频的区分靠它——
+     * 否则同一个文件可以被同时当成「照片证据」和「视频证据」交上来。
+     */
+    @Transactional
+    public EvidenceAttachmentRecord uploadAttachment(
+            org.springframework.web.multipart.MultipartFile file,
+            String businessType,
+            String businessId,
+            String attachmentRole
+    ) {
+        if (fileStorage == null) {
+            throw ApiException.badRequest("EVIDENCE_FILE_STORAGE_UNAVAILABLE", "证据文件存储不可用");
+        }
+        String type = requireText(businessType, "business_type");
+        EvidenceFileStorage.StoredFile stored = fileStorage.store(file);
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        Instant now = Instant.now();
+        String id = "att_" + slug(stored.objectKey());
+        EvidenceAttachmentRecord saved = repository.saveAttachment(new EvidenceAttachmentRecord(
+                id,
+                trimToNull(file.getOriginalFilename()),
+                stored.contentType(),
+                stored.fileSize(),
+                type,
+                trimToNull(businessId),
+                trimToDefault(attachmentRole, "other"),
+                stored.objectKey(),
+                // 回读走受控端点（鉴权走既有 API 会话），不开公共静态目录。
+                "/api/v1/evidence/attachments/" + id + "/file",
+                "uploaded",
+                null,
+                now,
+                now,
+                merchantId));
+        auditEventService.recordSuccess(
+                "evidence.attachment_uploaded",
+                "evidence.attachment.create",
+                "evidence_attachment",
+                saved.id(),
+                null,
+                null,
+                java.util.Map.of("business_type", type, "content_type", stored.contentType(),
+                        "file_size", String.valueOf(stored.fileSize())));
+        return saved;
+    }
+
+    /** 回读一个附件的字节（含归属校验：有商户 scope 时只能读本商户的证据）。 */
+    public java.nio.file.Path resolveAttachmentFile(String attachmentId) {
+        EvidenceAttachmentRecord attachment = repository.findAttachmentById(requireText(attachmentId, "attachment_id"))
+                .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "证据附件不存在"));
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(attachment.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "证据附件不属于本商户");
+            }
+        });
+        if (fileStorage == null) {
+            throw ApiException.badRequest("EVIDENCE_FILE_STORAGE_UNAVAILABLE", "证据文件存储不可用");
+        }
+        return fileStorage.resolveForRead(attachment.objectKey());
+    }
+
+    /** 附件的 content_type（受控 GET 端点回包用）。 */
+    public String attachmentContentType(String attachmentId) {
+        return repository.findAttachmentById(attachmentId)
+                .map(EvidenceAttachmentRecord::contentType)
+                .orElse("application/octet-stream");
     }
 
     @Transactional

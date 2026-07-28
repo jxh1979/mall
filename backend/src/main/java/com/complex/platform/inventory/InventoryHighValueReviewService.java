@@ -57,6 +57,11 @@ public class InventoryHighValueReviewService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    /**
+     * 附件存在性/类型校验器（双证据闭环）。null = 未注入（旧构造器/单测）时退回旧行为「只校非空」。
+     * 生产由 InventoryService 构造时透传 Spring bean。
+     */
+    private final com.complex.platform.evidence.EvidenceAttachmentValidator evidenceAttachmentValidator;
 
     public InventoryHighValueReviewService(
             InventoryRepository repository,
@@ -64,10 +69,24 @@ public class InventoryHighValueReviewService {
             AuditEventService auditEventService,
             AuthorizationService authorizationService
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService, null);
+    }
+
+    // 本类同时是 Spring bean（历史遗留）与 InventoryService/PurchaseRequestService 手 new 的域内组件；
+    // 多构造器下必须显式标注注入点，否则 Spring 找默认构造器失败。
+    @org.springframework.beans.factory.annotation.Autowired
+    public InventoryHighValueReviewService(
+            InventoryRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            com.complex.platform.evidence.EvidenceAttachmentValidator evidenceAttachmentValidator
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.evidenceAttachmentValidator = evidenceAttachmentValidator;
     }
 
     public PageResponse<InventoryHighValueReviewRecord> listHighValueReviews() {
@@ -100,6 +119,12 @@ public class InventoryHighValueReviewService {
         String subject = requireText(subjectId, "subject_id");
         List<String> photos = requireNonEmptyList(photoAttachmentIds, "photo_attachment_ids");
         List<String> videos = requireNonEmptyList(videoAttachmentIds, "video_attachment_ids");
+        // 双证据闭环：附件必须**真实存在**且类型对得上（照片栏必须是照片、视频栏必须是视频）。
+        // 改造前只校两栏各自非空 —— 同一个随手编的假 id 填两栏就算「照片+视频双证据」。
+        if (evidenceAttachmentValidator != null) {
+            evidenceAttachmentValidator.requirePhotos(photos, "photo_attachment_ids");
+            evidenceAttachmentValidator.requireVideos(videos, "video_attachment_ids");
+        }
         Instant now = Instant.now();
         // C3：建单即落归属商户（当前 scope），供 reviewInternal 拒绝跨商户翻转。平台/项目管理员空 scope → null（放行）。
         String merchantId = authorizationService.currentMerchantScope().orElse(null);

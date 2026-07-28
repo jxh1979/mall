@@ -100,21 +100,21 @@ const GROUP_LABELS: Record<string, string> = {
   attribution_rule: "收入归因规则",
   commission_rate: "卡座提成费率",
   points_accrual_rate: "积分累计率",
-  // V345（P0-C/FLOW-07）：高价值已出品退酒「先审后行」的金额阈值，同走草案→差人复核转正。
-  bar_void_threshold: "高价值退酒审批阈值",
+  // V350：全平台「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用一个值，比的是物品进货价）。
+  high_value_threshold: "高价值判定阈值(进货价)",
   // V346（P0-E）：营业额抽成规则在「合同工作台」填写并落草案，在此复核转正后才对结算生效。
   turnover_rent_rule: "营业额抽成规则",
 };
 // 支持「下线」（软删）的草案类型，对齐后端 archive 白名单。
 // V340 提成/积分：商户级特例条目须可下线，否则该商户被特例永久遮挡、回落不到项目/全局默认口径。
-// V345 退酒阈值：商户级特例条目同理可下线（回落项目/全局默认），全局默认种子由后端守卫拦住。
+// V350 高价值判定阈值：商户级特例条目同理可下线（回落项目/全局默认），全局默认种子由后端守卫拦住。
 // V346 抽成规则：合同终止/换规则时须可下线，下线后该合同不再产生抽成应收。
 const ARCHIVABLE = new Set([
   "merchant_rate",
   "revenue_stream_attribution",
   "commission_rate",
   "points_accrual_rate",
-  "bar_void_threshold",
+  "high_value_threshold",
   "turnover_rent_rule",
 ]);
 

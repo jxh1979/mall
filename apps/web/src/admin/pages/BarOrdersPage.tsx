@@ -114,6 +114,15 @@ const VOID_TYPE_LABEL: Record<string, string> = {
   cancel: "出品前撤单",
   return: "出品后退品",
 };
+/** V351 退酒原因码字典项（后台可增删改；上屏一律用中文名，英文码只作统计标识）。 */
+type VoidReasonCodeRow = { code: string; labelZh: string; sortOrder?: number; status?: string };
+
+/** 队列里把原因码翻成中文；字典里查不到（已下线/历史码）就原样显示，不吞信息。 */
+function reasonLabel(codes: VoidReasonCodeRow[], code: string | undefined) {
+  if (!code) return "—";
+  return codes.find((c) => c.code === code)?.labelZh ?? code;
+}
+
 function voidLabel(map: Record<string, string>, value: string | undefined) {
   if (!value) return "—";
   return map[value] ?? value;
@@ -138,9 +147,16 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const [voidOrderItemId, setVoidOrderItemId] = React.useState("");
   const [voidReason, setVoidReason] = React.useState("");
   const [voidReasonCode, setVoidReasonCode] = React.useState("");
-  const [voidEvidenceIds, setVoidEvidenceIds] = React.useState("");
   const [voidReturnToStock, setVoidReturnToStock] = React.useState(false);
   const [voidReviewReason, setVoidReviewReason] = React.useState("");
+  // V351 退酒原因码字典：店员从中文下拉里选，不再手打英文短码。
+  const [reasonCodes, setReasonCodes] = React.useState<VoidReasonCodeRow[]>([]);
+  const [newReasonCode, setNewReasonCode] = React.useState("");
+  const [newReasonLabel, setNewReasonLabel] = React.useState("");
+  const [archiveReason, setArchiveReason] = React.useState("");
+  // 双证据闭环：证据附件由真上传产生（不再手打 ID）。这里存已上传附件的 id + 文件名。
+  const [voidEvidence, setVoidEvidence] = React.useState<{ id: string; fileName: string }[]>([]);
+  const [uploading, setUploading] = React.useState(false);
 
   function openOrderDetail(order: BarOrderRow) {
     const bill = firstBill(order);
@@ -191,6 +207,12 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         setVoidQueue(await api.get<BarOrderItemVoidRow[]>("/api/v1/bar/order-item-voids?status=pending"));
       } catch {
         setVoidQueue([]);
+      }
+      // V351 退酒原因码字典（中文下拉数据源）；不可用时下拉为空，不阻断本页主流程。
+      try {
+        setReasonCodes(await api.get<VoidReasonCodeRow[]>("/api/v1/bar/void-reason-codes"));
+      } catch {
+        setReasonCodes([]);
       }
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
@@ -299,19 +321,91 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   }
 
   async function submitVoidRequest() {
-    const evidence = voidEvidenceIds.split(",").map((id) => id.trim()).filter((id) => id !== "");
     await runOrderAction("bar_order_item_void_requested", () => api.post(
       `/api/v1/bar/orders/${selectedOrder!.id}/void-item`,
       {
         orderItemId: voidOrderItemId.trim(),
         reason: voidReason.trim(),
-        reasonCode: voidReasonCode.trim() || undefined,
-        evidenceAttachmentIds: evidence,
+        reasonCode: voidReasonCode || undefined,
+        evidenceAttachmentIds: voidEvidence.map((e) => e.id),
         returnToStock: voidReturnToStock,
         billId: firstBillId(selectedOrder) || undefined,
         operatorNote: TEXT.voidNote,
       },
     ));
+  }
+
+  /** 现场拍的照片/视频直接上传，拿回真实附件 ID —— 不再让店员手打附件 ID。 */
+  async function uploadEvidenceFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setFormError("");
+    try {
+      const uploaded: { id: string; fileName: string }[] = [];
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("business_type", "bar_order_item_void");
+        form.append("attachment_role", file.type.startsWith("video") ? "video" : "photo");
+        if (!api.postForm) throw new Error("当前客户端不支持文件上传。");
+        const saved = await api.postForm<{ id: string; fileName?: string }>(
+          "/api/v1/evidence/attachments/upload", form);
+        uploaded.push({ id: saved.id, fileName: saved.fileName ?? file.name });
+      }
+      setVoidEvidence((prev) => [...prev, ...uploaded]);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "证据上传失败。";
+      setFormError(message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  /** 原因码字典维护：新增/改中文名（增改同一入口），或下线一条（必须填理由）。 */
+  async function saveReasonCode() {
+    if (!newReasonCode.trim() || !newReasonLabel.trim()) {
+      setFormError("原因码与中文名都要填。");
+      return;
+    }
+    setBusyAction("bar_void_reason_code_saved");
+    setFormError("");
+    try {
+      await api.post("/api/v1/bar/void-reason-codes", {
+        idempotencyKey: `reason-save-${newReasonCode.trim()}-${Date.now()}`,
+        code: newReasonCode.trim(),
+        labelZh: newReasonLabel.trim(),
+        sortOrder: (reasonCodes.length + 1) * 10,
+      });
+      setReasonCodes(await api.get<VoidReasonCodeRow[]>("/api/v1/bar/void-reason-codes"));
+      setNewReasonCode("");
+      setNewReasonLabel("");
+    } catch (saveError) {
+      setFormError(saveError instanceof Error ? saveError.message : TEXT.actionFailed);
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function archiveReasonCodeEntry(code: string) {
+    if (!archiveReason.trim()) {
+      setFormError("下线原因码必须填写理由（软删留痕）。");
+      return;
+    }
+    setBusyAction("bar_void_reason_code_archived");
+    setFormError("");
+    try {
+      await api.post(`/api/v1/bar/void-reason-codes/${code}/archive`, {
+        idempotencyKey: `reason-archive-${code}-${Date.now()}`,
+        archiveReason: archiveReason.trim(),
+      });
+      setReasonCodes(await api.get<VoidReasonCodeRow[]>("/api/v1/bar/void-reason-codes"));
+      if (voidReasonCode === code) setVoidReasonCode("");
+      setArchiveReason("");
+    } catch (archiveError) {
+      setFormError(archiveError instanceof Error ? archiveError.message : TEXT.actionFailed);
+    } finally {
+      setBusyAction("");
+    }
   }
 
   // 审批动作不依赖「选中订单」：主管从待审队列直接决策（队列行自带订单/明细上下文）。
@@ -424,15 +518,30 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
 
         <div className="admin-section-title">退菜退酒申请</div>
         <p className="admin-muted-action" data-testid="bar-void-rule-hint">
-          已出品且金额超过后台阈值的高价值退酒为「先审后行」：申请后账单与库存不动，须主管审批通过才生效，且必须同时提供结构化原因码与证据附件（双证据）。低于阈值或出品前撤单即时生效。阈值在「结算配置中心」维护，不写死在代码里。
+          已出品的高价值退酒为「先审后行」：申请后账单与库存不动，须主管审批通过才生效，且必须同时选择退酒原因并上传证据（双证据）。低价值或出品前撤单即时生效。是否高价值全平台一套判定：看这瓶酒的进货价有没有高于后台配置的那一个金额阈值，或者它被手工标为高价值；阈值在「结算配置中心」维护，没配置就一律按高价值拦下走审批。
         </p>
         <div className="admin-form-grid" data-testid="bar-void-request-form">
           <label>订单明细 ID<input data-testid="bar-void-order-item-id" value={voidOrderItemId} onChange={(e) => setVoidOrderItemId(e.target.value)} placeholder="要退的明细 ID" /></label>
-          <label>退品原因<input data-testid="bar-void-reason" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="例如：客人反馈变质" /></label>
-          <label>结构化原因码<input data-testid="bar-void-reason-code" value={voidReasonCode} onChange={(e) => setVoidReasonCode(e.target.value)} placeholder="高价值退酒必填，如 quality_defect" /></label>
-          <label>证据附件 ID<input data-testid="bar-void-evidence" value={voidEvidenceIds} onChange={(e) => setVoidEvidenceIds(e.target.value)} placeholder="高价值退酒必填，多个用英文逗号分隔" /></label>
+          <label>退品说明<input data-testid="bar-void-reason" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="例如：客人反馈变质" /></label>
+          <label>退酒原因
+            <select data-testid="bar-void-reason-code" value={voidReasonCode} onChange={(e) => setVoidReasonCode(e.target.value)}>
+              <option value="">请选择（高价值退酒必选）</option>
+              {reasonCodes.map((row) => (
+                <option key={row.code} value={row.code}>{row.labelZh}</option>
+              ))}
+            </select>
+          </label>
+          <label>证据照片/视频
+            <input type="file" multiple accept="image/*,video/*" data-testid="bar-void-evidence-upload"
+                   disabled={uploading} onChange={(e) => void uploadEvidenceFiles(e.target.files)} />
+          </label>
           <label>未动可回库<input type="checkbox" data-testid="bar-void-return-to-stock" checked={voidReturnToStock} onChange={(e) => setVoidReturnToStock(e.target.checked)} /></label>
         </div>
+        <p className="admin-muted-action" data-testid="bar-void-evidence-list">
+          {uploading ? "证据上传中…" : voidEvidence.length === 0
+            ? "尚未上传证据（高价值退酒必须上传）。"
+            : `已上传证据：${voidEvidence.map((e) => e.fileName).join("、")}`}
+        </p>
         <div className="admin-form-row" data-testid="bar-void-actions">
           <HighRiskConfirm
             label="发起退菜退酒"
@@ -466,13 +575,44 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                   <td>{formatAmount(row.amountCent)}</td>
                   <td data-testid={`bar-void-mode-${row.id}`}>{voidLabel(VOID_APPROVAL_MODE_LABEL, row.approvalMode)}</td>
                   <td>{row.highValueThresholdCent == null ? "—" : formatAmount(row.highValueThresholdCent)}</td>
-                  <td>{row.reasonCode ?? "—"}</td>
+                  <td data-testid={`bar-void-reason-${row.id}`}>{reasonLabel(reasonCodes, row.reasonCode)}</td>
                   <td>{(row.evidenceAttachmentIds ?? []).join("、") || "—"}</td>
                   <td data-testid={`bar-void-applied-${row.id}`}>{row.effectsAppliedAt ? `已生效 · ${cnDate(row.effectsAppliedAt)}` : "未生效"}</td>
                   <td>{voidLabel(VOID_STATUS_LABEL, row.status)}</td>
                   <td>
                     <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order_item.void_decide"]} data-testid={`bar-void-approve-${row.id}`} disabled={busyAction !== ""} onClick={() => void decideVoid(row.id, "approved")}>通过</PermissionButton>
                     <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order_item.void_decide"]} data-testid={`bar-void-reject-${row.id}`} disabled={busyAction !== ""} onClick={() => void decideVoid(row.id, "rejected")}>驳回</PermissionButton>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="admin-section-title">退酒原因维护</div>
+        <p className="admin-muted-action" data-testid="bar-void-reason-dict-hint">
+          店员退酒时只能从这份清单里选，选不到的原因就填不上——所以这份清单要跟门店实际情况对得上。改了立刻生效；下线一条要写清楚为什么，历史单据上的原因照样看得到。
+        </p>
+        <div className="admin-form-grid" data-testid="bar-void-reason-dict-form">
+          <label>原因标识<input data-testid="bar-void-reason-new-code" value={newReasonCode} onChange={(e) => setNewReasonCode(e.target.value)} placeholder="仅小写字母/数字/下划线，用于统计口径" /></label>
+          <label>中文名称<input data-testid="bar-void-reason-new-label" value={newReasonLabel} onChange={(e) => setNewReasonLabel(e.target.value)} placeholder="店员在下拉里看到的字，如 酒品质量问题" /></label>
+          <label>下线理由<input data-testid="bar-void-reason-archive-reason" value={archiveReason} onChange={(e) => setArchiveReason(e.target.value)} placeholder="下线某条原因时必填" /></label>
+        </div>
+        <div className="admin-form-row">
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order_item.void_decide"]} data-testid="bar-void-reason-save" disabled={busyAction !== ""} onClick={() => void saveReasonCode()}>保存原因</PermissionButton>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="bar-void-reason-dict-table">
+            <thead><tr><th>中文名称</th><th>统计标识</th><th>操作</th></tr></thead>
+            <tbody>
+              {reasonCodes.length === 0 ? (
+                <tr><td colSpan={3} data-testid="bar-void-reason-dict-empty">暂无可选的退酒原因。</td></tr>
+              ) : reasonCodes.map((row) => (
+                <tr key={row.code} data-testid={`bar-void-reason-row-${row.code}`}>
+                  <td>{row.labelZh}</td>
+                  <td>{row.code}</td>
+                  <td>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order_item.void_decide"]} data-testid={`bar-void-reason-archive-${row.code}`} disabled={busyAction !== ""} onClick={() => void archiveReasonCodeEntry(row.code)}>下线</PermissionButton>
                   </td>
                 </tr>
               ))}

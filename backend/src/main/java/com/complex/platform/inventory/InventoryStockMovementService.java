@@ -42,19 +42,22 @@ final class InventoryStockMovementService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final InventoryHighValueReviewService highValueReviewService;
+    private final HighValueDecisionService highValueDecisionService;
 
     InventoryStockMovementService(
             InventoryRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             AuthorizationService authorizationService,
-            InventoryHighValueReviewService highValueReviewService
+            InventoryHighValueReviewService highValueReviewService,
+            HighValueDecisionService highValueDecisionService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.highValueReviewService = highValueReviewService;
+        this.highValueDecisionService = highValueDecisionService;
     }
 
     StockAdjustmentRecord createStockAdjustment(StockAdjustmentRequest request) {
@@ -89,12 +92,12 @@ final class InventoryStockMovementService {
                     Instant now = Instant.now();
                     String adjustmentId = "adjust_" + slug(actual.idempotencyKey());
 
-                    // R5 T6-4：报损(damage_report)/盘点差异(stock_variance)高价值入口接入域内复核。
-                    // 命中高价值（quantity × unitCostCents ≥ 物料 high_value_threshold_cents，且二者均非空）→
+                    // 报损(damage_report)/盘点差异(stock_variance)高价值入口接入域内复核。
+                    // V350 归一：命中判定（物品进货价 > 后台单一阈值 / 手工标记 / 阈值未配置 / 进货价未知）→
                     // 不直接扣减：建 pending 复核单（要求照片+视频双证据各非空）+ 调整置 pending_review（库存不变）。
                     // 主管 approve 后由 applyDecisionEffect 真正扣减并置 completed；reject 置 rejected（不扣）。
                     String subjectType = HIGH_VALUE_SUBJECT_BY_TYPE.get(adjustmentType);
-                    if (subjectType != null && isHighValue(itemId, quantity, unitCostCents)) {
+                    if (subjectType != null && isHighValue(itemId, merchantId)) {
                         StockAdjustmentRecord pending = repository.saveStockAdjustment(new StockAdjustmentRecord(
                                 adjustmentId, itemId, locationId, adjustmentType, quantity, reason,
                                 safeList(actual.evidenceAttachmentIds()), "pending_review", now, merchantId,
@@ -656,21 +659,14 @@ final class InventoryStockMovementService {
     }
 
     /**
-     * R5 T6-4 高价值判定口径：调整金额（数量 × 单价）≥ 物料阈值 high_value_threshold_cents。
+     * V350 归一：报损/盘点差异的高价值判定改走全平台唯一入口
+     * {@link HighValueDecisionService#decide}（物品进货价 vs 后台单一阈值，或手工标记）。
      *
-     * <p>阈值或单价任一为空 → 不视为高价值（向后兼容，维持即时调整）。物料缺失亦不视高价值。
+     * <p>改造前是「数量 × 申报单价 ≥ 物料自带阈值」，且**物料没录阈值就直接放行**——
+     * 等于「不给物料录阈值」就能绕开主管复核。现在阈值未配置/进货价未知一律按高价值拦下。
      */
-    private boolean isHighValue(String itemId, int quantity, Long unitCostCents) {
-        if (unitCostCents == null) {
-            return false;
-        }
-        Long threshold = repository.findInventoryItemById(itemId)
-                .map(InventoryItemRecord::highValueThresholdCents)
-                .orElse(null);
-        if (threshold == null) {
-            return false;
-        }
-        return (long) quantity * unitCostCents >= threshold;
+    private boolean isHighValue(String itemId, String merchantId) {
+        return highValueDecisionService.decide(itemId, merchantId).highValue();
     }
 
     /**
