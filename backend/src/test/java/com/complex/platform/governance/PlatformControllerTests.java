@@ -112,7 +112,7 @@ class PlatformControllerTests {
 
     @Test
     void listingMerchantsReturnsApiResponsePageShape() throws Exception {
-        when(service.listMerchants(eq(false), anyInt(), anyInt())).thenReturn(new PageResponse<>(
+        when(service.listMerchants(eq(false), any(), anyInt(), anyInt())).thenReturn(new PageResponse<>(
                 List.of(new MerchantRecord(
                         "mch_1",
                         "P0 Merchant",
@@ -161,7 +161,7 @@ class PlatformControllerTests {
     void listingMerchantsReturnsPlaintextPhoneWithPiiPermission() throws Exception {
         // P0-A/GAP-07（V339）：有 pii.contact_phone.view 的读端才见联系电话明文。
         when(authorizationService.currentActorHasPermission("pii.contact_phone.view")).thenReturn(true);
-        when(service.listMerchants(eq(false), anyInt(), anyInt())).thenReturn(new PageResponse<>(
+        when(service.listMerchants(eq(false), any(), anyInt(), anyInt())).thenReturn(new PageResponse<>(
                 List.of(new MerchantRecord(
                         "mch_1", "P0 Merchant", "other", "be_1", null, null, "Jane", "18800000011",
                         "Owner Wang", "1F-A", BigDecimal.valueOf(128.50), BigDecimal.valueOf(120.00),

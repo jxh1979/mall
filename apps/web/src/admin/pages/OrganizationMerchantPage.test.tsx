@@ -154,10 +154,13 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     await waitFor(() => expect(screen.getByTestId("organization-merchant-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("organization-merchant-create-open"));
     // 第一步：基本信息（商户类型下拉在此步）。
+    // V348 业态五值：酒吧/餐饮/零售/游乐/其他，全中文、不预选（必填）。
     const typeText = screen.getByTestId("organization-merchant-type").textContent ?? "";
-    expect(typeText).toContain("租赁商户");
+    expect(typeText).toContain("酒吧");
     expect(typeText).toContain("餐饮");
-    expect(typeText).not.toContain("tenant");
+    expect(typeText).toContain("游乐");
+    expect(typeText).toContain("其他");
+    expect(typeText).not.toContain("amusement");
     expect(typeText).not.toContain("catering");
     // 单屏模式：经营与租赁（合作形式下拉）与基本信息同屏，无需步进。
     const coopText = screen.getByTestId("organization-merchant-cooperation").textContent ?? "";
@@ -176,8 +179,12 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     fireEvent.change(screen.getByTestId("organization-merchant-name"), { target: { value: " " } });
     fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
     expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("商户名称不能为空");
-    // 补商户名但电话非法 → 命中手机号校验。
+    // 补商户名但业态未选 → 命中业态必填校验（V348：业态是通票分账拆份额的依据，不给默认值）。
     fireEvent.change(screen.getByTestId("organization-merchant-name"), { target: { value: "引导流程商户" } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("必须选择商户业态");
+    // 选业态但电话非法 → 命中手机号校验。
+    fireEvent.change(screen.getByTestId("organization-merchant-type"), { target: { value: "bar" } });
     fireEvent.change(screen.getByTestId("organization-merchant-contact-phone"), { target: { value: "12345" } });
     fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
     expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("手机号");

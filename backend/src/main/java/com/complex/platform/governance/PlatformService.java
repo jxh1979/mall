@@ -36,6 +36,13 @@ public class PlatformService {
     // AUD-005: 列表端点默认页大小(保留既有一次拉取上限, 供下拉/客户端分页); total 已取真值。
     private static final int LIST_MAX_PAGE_SIZE = 500;
 
+    /**
+     * V348 商户业态五值（真源 HTML §商户管理：酒吧/餐饮/零售/游乐/其他，每个商户必归其一、招商录入必填）。
+     * 业态＝通票分账按业态拆份额与分流结算的依据；业态主体「娱乐平台公司」即酒吧业态，不另设「娱乐」业态。
+     * 与迁移 V348 的 chk_merchants_business_format 同词表：应用层给业务人员看得懂的报错，数据库兜底封口。
+     */
+    public static final Set<String> MERCHANT_BUSINESS_FORMATS = Set.of("bar", "catering", "retail", "amusement", "other");
+
     private final PlatformRepository repository;
     private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
@@ -121,11 +128,17 @@ public class PlatformService {
     }
 
     public PageResponse<MerchantRecord> listMerchants(boolean includeArchived) {
-        return listMerchants(includeArchived, DEFAULT_PAGE, LIST_MAX_PAGE_SIZE);
+        return listMerchants(includeArchived, null, DEFAULT_PAGE, LIST_MAX_PAGE_SIZE);
     }
 
-    public PageResponse<MerchantRecord> listMerchants(boolean includeArchived, int page, int size) {
-        PageResponse<MerchantRecord> result = repository.listMerchantsPaged(includeArchived, page, size);
+    /** V348 businessFormat 非空＝只看该业态的商户（分账按业态拆份额、招商/财务按业态筛商户）。 */
+    public PageResponse<MerchantRecord> listMerchants(boolean includeArchived, String businessFormat, int page, int size) {
+        String format = trimToNull(businessFormat);
+        if (format != null && !MERCHANT_BUSINESS_FORMATS.contains(format)) {
+            throw ApiException.badRequest("MERCHANT_BUSINESS_FORMAT_INVALID",
+                    "merchant_type must be one of bar/catering/retail/amusement/other");
+        }
+        PageResponse<MerchantRecord> result = repository.listMerchantsPaged(includeArchived, format, page, size);
         auditEventService.recordSuccess(
                 "merchant.viewed",
                 "merchant.profile.view",
@@ -571,6 +584,16 @@ public class PlatformService {
 
 
 
+    /** V348 业态必填且必须是五值之一；招商自动建档与后台手工建档同一入口、同一校验。 */
+    private static String requireBusinessFormat(String raw) {
+        String value = requireText(raw, "merchant_type");
+        if (!MERCHANT_BUSINESS_FORMATS.contains(value)) {
+            throw ApiException.badRequest("MERCHANT_BUSINESS_FORMAT_INVALID",
+                    "merchant_type must be one of bar/catering/retail/amusement/other");
+        }
+        return value;
+    }
+
     private MerchantRecord saveMerchant(
             String operationId,
             String merchantId,
@@ -587,7 +610,7 @@ public class PlatformService {
                 "merchant",
                 () -> {
                     String merchantName = requireText(request == null ? null : request.merchantName(), "merchant_name");
-                    String merchantType = requireText(request == null ? null : request.merchantType(), "merchant_type");
+                    String merchantType = requireBusinessFormat(request == null ? null : request.merchantType());
                     Instant now = Instant.now();
                     return repository.saveMerchant(new MerchantRecord(
                             merchantId,

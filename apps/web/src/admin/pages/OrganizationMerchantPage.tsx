@@ -20,11 +20,14 @@ const TEXT = {
   boundary: "组织与商户档案只维护基础档案，不在本页替代四类主体绑定；运营主体、合同主体和结算主体必须在绑定和合同流程中统一留痕。",
   loadFailed: "组织与商户档案读取失败",
   merchantNameRequired: "商户名称不能为空。",
+  merchantTypeRequired: "必须选择商户业态（酒吧／餐饮／零售／游乐／其他）。",
   contactPhoneInvalid: "联系电话必须是 11 位中国大陆手机号。",
   focusClear: "清除筛选，返回全部",
 };
 
-const MERCHANT_TYPES = ["tenant", "retail", "catering", "entertainment", "service", "bar"];
+// V348 商户业态五值（真源 HTML §商户管理）：每个商户必须归入一个业态，招商录入时必填；
+// 业态是通票分账按业态拆份额与分流结算的依据。娱乐平台公司对应的即酒吧业态，不另设「娱乐」业态。
+const MERCHANT_TYPES = ["bar", "catering", "retail", "amusement", "other"];
 const COOPERATION_FORMS = ["fixed_rent_plus_commission", "revenue_share", "fixed_rent"];
 
 function display(value: unknown) {
@@ -61,7 +64,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
   const [merchantName, setMerchantName] = React.useState("二期测试商户");
-  const [merchantType, setMerchantType] = React.useState("tenant");
+  // 业态必填 → 不预选，逼招商自己选；选错＝通票分账份额拆给错的业态。
+  const [merchantType, setMerchantType] = React.useState("");
   const [contactName, setContactName] = React.useState("运营联系人");
   const [contactPhone, setContactPhone] = React.useState("13800000000");
   const [cooperationForm, setCooperationForm] = React.useState("fixed_rent_plus_commission");
@@ -73,6 +77,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // V260 存档/删除范式：显示已存档商户开关（后端按 includeArchived 过滤）。
   const [showArchived, setShowArchived] = React.useState(false);
+  // V348 按业态筛商户（后端 merchantType 过滤）：""＝全部业态。
+  const [typeFilter, setTypeFilter] = React.useState("");
 
   // 浏览器后退/前进也能进出聚焦视图：pushState 配合页面级 popstate 监听。
   // AdminApp 的 popstate 只重建 route/focus，本页的 ?kpi= 参数由本页自理，互不干扰。
@@ -112,7 +118,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
       const [nextEntities, nextMerchants, nextProjects] = await Promise.all([
         canEntityView ? api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities") : Promise.resolve([] as BusinessEntityRow[]),
-        api.get<MerchantAdmissionRow[]>(`/api/v1/platform/merchants?includeArchived=${showArchived}`),
+        api.get<MerchantAdmissionRow[]>(`/api/v1/platform/merchants?includeArchived=${showArchived}${typeFilter ? `&merchantType=${typeFilter}` : ""}`),
         api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
       ]);
       setEntities(nextEntities);
@@ -136,6 +142,10 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   async function createMerchant() {
     if (!merchantName.trim()) {
       setFormError(TEXT.merchantNameRequired);
+      return;
+    }
+    if (!merchantType) {
+      setFormError(TEXT.merchantTypeRequired);
       return;
     }
     if (!/^1[3-9]\d{9}$/.test(contactPhone.trim())) {
@@ -175,7 +185,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     }
   }
 
-  // 切换「显示已存档」后重新拉取（后端按 includeArchived 过滤），首次挂载不触发。
+  // 切换「显示已存档」/「业态」后重新拉取（后端按 includeArchived + merchantType 过滤），首次挂载不触发。
   const firstArchivedToggle = React.useRef(true);
   React.useEffect(() => {
     if (firstArchivedToggle.current) {
@@ -184,7 +194,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     }
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showArchived]);
+  }, [showArchived, typeFilter]);
 
   async function archiveMerchant(id: string, archive: boolean) {
     setGlobalError(null);
@@ -247,7 +257,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       title: `商户档案 · ${display(row.merchantName)}`,
       fields: [
         { label: "商户", value: display(row.merchantName) },
-        { label: "商户类型", value: row.merchantType ? formatBusinessStatus(row.merchantType) : "-" },
+        { label: "业态", value: row.merchantType ? formatBusinessStatus(row.merchantType) : "-" },
         { label: "联系人", value: display(row.contactName) },
         { label: "联系电话", value: display(row.contactPhone) },
         { label: "区块", value: display(row.mallBlockCode) },
@@ -314,11 +324,18 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
         显示已存档商户
       </label>
+      <label className="admin-inline-check">
+        业态
+        <select data-testid="merchant-type-filter" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+          <option value="">全部业态</option>
+          {MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}
+        </select>
+      </label>
       <div className="admin-table-scroll" data-testid="organization-merchants-section">
         <table className="admin-table" data-testid="organization-merchants-table">
           {/* 后端无“公司名/风险/留痕证据”字段（原按臆造字段读致整表“-”），列对齐真实字段：联系人/联系电话替换。 */}
-          <thead><tr><th>商户</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>存档状态</th><th>操作</th><th>详情</th></tr></thead>
-          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <thead><tr><th>商户</th><th>业态</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>存档状态</th><th>操作</th><th>详情</th></tr></thead>
+          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{row.merchantType ? formatBusinessStatus(row.merchantType) : "-"}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{formatBusinessStatus(row.cooperationForm)}</td><td>{formatBusinessStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
       </div>
     </>
@@ -408,12 +425,12 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         steps={[
           {
             title: "基本信息",
-            description: "填写商户名称与业态类型。",
-            validate: () => (merchantName.trim() ? null : TEXT.merchantNameRequired),
+            description: "填写商户名称并选择业态（业态决定通票分账时这家商户的份额归哪一类，必填）。",
+            validate: () => (!merchantName.trim() ? TEXT.merchantNameRequired : merchantType ? null : TEXT.merchantTypeRequired),
             content: (
               <>
                 <label>商户名称<input data-testid="organization-merchant-name" value={merchantName} onChange={(event) => setMerchantName(event.target.value)} /></label>
-                <label>商户类型<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}</select></label>
+                <label>业态<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}><option value="">请选择业态</option>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}</select></label>
               </>
             ),
           },
@@ -438,7 +455,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         ]}
         summary={[
           { label: "商户名称", value: merchantName },
-          { label: "商户类型", value: formatBusinessStatus(merchantType) },
+          { label: "业态", value: merchantType ? formatBusinessStatus(merchantType) : "未选择" },
           { label: "联系人", value: contactName },
           { label: "联系电话", value: contactPhone },
           { label: "合作形式", value: formatBusinessStatus(cooperationForm) },

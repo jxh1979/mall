@@ -70,13 +70,18 @@ class PlatformJdbcIntegrationTests {
                 "C2", "18800000002", "Owner", "1F-B", new java.math.BigDecimal("10.00"), new java.math.BigDecimal("9.00"),
                 null, null, new java.math.BigDecimal("1.00"), "fixed_rent_plus_commission", "draft",
                 t.plusSeconds(1), t.plusSeconds(1)));
-        var page1 = repository.listMerchantsPaged(true, 1, 1);
-        var page2 = repository.listMerchantsPaged(true, 2, 1);
+        var page1 = repository.listMerchantsPaged(true, null, 1, 1);
+        var page2 = repository.listMerchantsPaged(true, null, 2, 1);
         assertThat(page1.total()).isGreaterThanOrEqualTo(2L);
         assertThat(page1.items()).hasSize(1);
         assertThat(page2.items()).hasSize(1);
         assertThat(page2.items()).extracting(MerchantRecord::id)
                 .doesNotContainAnyElementsOf(page1.items().stream().map(MerchantRecord::id).toList());
+        // V348 按业态查询走 SQL 谓词：两个 seed 商户业态都是「其他」→ 按「酒吧」筛应为空、按「其他」筛应命中。
+        assertThat(repository.listMerchantsPaged(true, "bar", 1, 500).items())
+                .extracting(MerchantRecord::id).doesNotContain("mch_pg_1", "mch_pg_2");
+        assertThat(repository.listMerchantsPaged(true, "other", 1, 500).items())
+                .extracting(MerchantRecord::id).contains("mch_pg_1", "mch_pg_2");
     }
 
     @Test
