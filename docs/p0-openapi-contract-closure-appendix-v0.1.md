@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 699 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 702 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 323 | 人工权限矩阵正文未覆盖 221 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1398 | 人工事件矩阵正文未覆盖 1356 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 699 | 人工任务映射正文未逐项覆盖 693 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 422 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1404 | 人工事件矩阵正文未覆盖 1362 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 702 | 人工任务映射正文未逐项覆盖 696 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 423 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -207,8 +207,8 @@
 | `floor_plan.view` | staff-token | project-space | 2 | listFloorPlans, listFloorPlanShapes | OpenAPI 补充，以本附录为准 |
 | `governance.project.manage` | staff-token | project | 1 | createProject | 已在权限矩阵正文出现 |
 | `governance.project.view` | staff-token | project | 1 | listProjects | 已在权限矩阵正文出现 |
-| `governance.space.manage` | staff-token | platform, project | 2 | createSpace, createSpaceType | 已在权限矩阵正文出现 |
-| `governance.space.view` | staff-token | platform, project-merchant-space | 2 | listSpaces, listSpaceTypes | 已在权限矩阵正文出现 |
+| `governance.space.manage` | staff-token | platform, project | 3 | createSpace, saveVenueBusinessHours, createSpaceType | 已在权限矩阵正文出现 |
+| `governance.space.view` | staff-token | platform, project, project-merchant-space | 3 | listSpaces, listVenueBusinessHours, listSpaceTypes | 已在权限矩阵正文出现 |
 | `governance.supervisor_review.approve` | staff-token | project-entity | 1 | approveSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.manage` | staff-token | project-entity | 1 | evaluateSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.view` | staff-token | project-entity | 1 | listSupervisorReviewPolicies | OpenAPI 补充，以本附录为准 |
@@ -343,7 +343,7 @@
 | `ticket.verify.reverse` | staff-token | project-point | 1 | reverseTicketVerification | OpenAPI 补充，以本附录为准 |
 | `ticket.verify.view` | staff-token | project | 2 | listTicketInstances, listIssuedEntitlements | 已在权限矩阵正文出现 |
 | `verification.execute` | staff-token | project-point | 2 | createTicketVerification, previewTicketVerification | 已在权限矩阵正文出现 |
-| `verification.view` | staff-token | project-merchant | 1 | listTicketVerifications | 已在权限矩阵正文出现 |
+| `verification.view` | staff-token | project, project-merchant | 2 | getIssuedEntitlementFacePhoto, listTicketVerifications | 已在权限矩阵正文出现 |
 | `wecom.retention.manage` | staff-token | platform | 2 | listWecomRetentionPolicies, upsertWecomRetentionPolicy | OpenAPI 补充，以本附录为准 |
 | `wecom.risk_hit.review` | staff-token | - | 1 | reviewWecomRiskHit | OpenAPI 补充，以本附录为准 |
 | `wecom.risk_hit.view` | staff-token | - | 1 | listWecomRiskHits | OpenAPI 补充，以本附录为准 |
@@ -1662,6 +1662,8 @@
 | `ticket_entitlement_template.unarchived` | success | `unarchiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/unarchive` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.viewed` | success | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | TIC-票务权益 | `ticket.entitlement.view` | 接口级事件，以本附录为准 |
 | `ticket_entitlement_template.viewed_failed` | failure | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | TIC-票务权益 | `ticket.entitlement.view` | 接口级事件，以本附录为准 |
+| `ticket_face_photo.view_failed` | failure | `getIssuedEntitlementFacePhoto` | `GET` | `/api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo` | TIC-票务权益 | `verification.view` | 接口级事件，以本附录为准 |
+| `ticket_face_photo.viewed` | success | `getIssuedEntitlementFacePhoto` | `GET` | `/api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo` | TIC-票务权益 | `verification.view` | 接口级事件，以本附录为准 |
 | `ticket_instance.viewed` | success | `listTicketInstances` | `GET` | `/api/v1/ticketing/ticket-instances` | TIC-票务权益 | `ticket.verify.view` | 接口级事件，以本附录为准 |
 | `ticket_instance.viewed_failed` | failure | `listTicketInstances` | `GET` | `/api/v1/ticketing/ticket-instances` | TIC-票务权益 | `ticket.verify.view` | 接口级事件，以本附录为准 |
 | `ticket_issued_entitlement.viewed` | success | `listIssuedEntitlements` | `GET` | `/api/v1/ticketing/issued-entitlements` | TIC-票务权益 | `ticket.verify.view` | 接口级事件，以本附录为准 |
@@ -1712,6 +1714,10 @@
 | `ticket.refund_line.list_failed` | failure | `listTicketRefundLines` | `GET` | `/api/v1/ticketing/refunds/{refund_id}/lines` | TIC-票务权益 | `ticket.refund.view` | 接口级事件，以本附录为准 |
 | `ticket.verification_reverse_failed` | failure | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | TIC-票务权益 | `ticket.verify.reverse` | 接口级事件，以本附录为准 |
 | `ticket.verification_reversed` | success | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | TIC-票务权益 | `ticket.verify.reverse` | 接口级事件，以本附录为准 |
+| `venue_business_hours.update_failed` | failure | `saveVenueBusinessHours` | `POST` | `/api/v1/platform/venue-business-hours` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
+| `venue_business_hours.updated` | success | `saveVenueBusinessHours` | `POST` | `/api/v1/platform/venue-business-hours` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
+| `venue_business_hours.view_failed` | failure | `listVenueBusinessHours` | `GET` | `/api/v1/platform/venue-business-hours` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
+| `venue_business_hours.viewed` | success | `listVenueBusinessHours` | `GET` | `/api/v1/platform/venue-business-hours` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
 | `verification.failed` | failure | `createTicketVerification` | `POST` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.execute` | 已在事件矩阵正文出现 |
 | `verification.failed` | failure | `previewTicketVerification` | `POST` | `/api/v1/ticketing/verifications/preview` | TIC-票务权益 | `verification.execute` | 已在事件矩阵正文出现 |
 | `verification.previewed` | success | `previewTicketVerification` | `POST` | `/api/v1/ticketing/verifications/preview` | TIC-票务权益 | `verification.execute` | 接口级事件，以本附录为准 |
@@ -2116,6 +2122,8 @@
 | GOV-平台治理 | `listSpaces` | `GET` | `/api/v1/platform/spaces` | 查询场馆、区域、点位 | `governance.space.view` | `space.viewed` / `space.view_failed` | web, merchant_portal | operation 级补充 |
 | GOV-平台治理 | `listSpaceTypes` | `GET` | `/api/v1/platform/space-types` | 空间类型字典列表 | `governance.space.view` | `space_type.viewed` / `space_type.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | 查询主管复核与违规阻断策略 | `governance.supervisor_review.view` | `governance.supervisor_review.policies_viewed` / `governance.supervisor_review.policies_view_failed` | web | operation 级补充 |
+| GOV-平台治理 | `listVenueBusinessHours` | `GET` | `/api/v1/platform/venue-business-hours` | 查询场地营业时间 | `governance.space.view` | `venue_business_hours.viewed` / `venue_business_hours.view_failed` | web | operation 级补充 |
+| GOV-平台治理 | `saveVenueBusinessHours` | `POST` | `/api/v1/platform/venue-business-hours` | 配置场地营业时间 | `governance.space.manage` | `venue_business_hours.updated` / `venue_business_hours.update_failed` | web | operation 级补充 |
 | GOV-平台治理 | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | 修改商户 | `merchant.profile.manage` | `merchant.updated` / `merchant.update_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | 创建补偿任务 | `integration.compensation.manage` | `integration.compensation_task.created` / `integration.compensation_task.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createIntegrationReconciliationBatch` | `POST` | `/api/v1/integration/reconciliation/batches` | 创建对账批次 | `integration.reconciliation.manage` | `integration.reconciliation_batch.created` / `integration.reconciliation_batch.create_failed` | web | operation 级补充 |
@@ -2436,6 +2444,7 @@
 | TIC-票务权益 | `createTicketPriceRule` | `POST` | `/api/v1/ticketing/price-rules` | 创建平日、周末、节假日及派生价规则 | `ticket.price_variant.manage` | `ticket_price_variant.changed` / `ticket_price_variant.change_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createTicketType` | `POST` | `/api/v1/ticketing/ticket-types` | 创建票种 | `ticket.product.manage` | `ticket_product.changed` / `ticket_product.change_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createTicketVerification` | `POST` | `/api/v1/ticketing/verifications` | 正式核销 | `verification.execute` | `verification.succeeded` / `verification.failed` | staff_work_phone<br>device: verification-gate | operation 级补充 |
+| TIC-票务权益 | `getIssuedEntitlementFacePhoto` | `GET` | `/api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo` | 取购票人脸照（核销比对本人） | `verification.view` | `ticket_face_photo.viewed` / `ticket_face_photo.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `getTicketCredential` | `GET` | `/api/v1/ticketing/tickets/{ticket_id}/credential` | 获取动态二维码凭证 | `ticket.credential.view` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |
 | TIC-票务权益 | `getTicketQrRefreshConfig` | `GET` | `/api/v1/ticketing/qr-refresh-config` | 读全场统一动态码刷新间隔 | `ticket.product.view` | `ticket.qr_refresh_config.viewed` / `ticket.qr_refresh_config.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | 出票（含一体机辅助售票） | `ticket.ticket.issue` | `ticket.issued` / `ticket.issue_failed` | web, kiosk, miniapp, app | operation 级补充 |
