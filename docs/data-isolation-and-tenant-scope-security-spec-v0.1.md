@@ -296,6 +296,7 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
   - **查询/Repository**：扫描访问上述表的查询（JPA/Repository/原生 SQL），校验 scope 谓词来自**安全 token 注入**（§2 权威约定：scope 绝不取请求参数）；存在未注入 scope 的读/写查询 → 失败。
 - **失败口径（fail-closed）：** 任一"应隔离表的查询缺 scope 注入""scope 来源为请求参数""新增表未在 CSV/§3 登记"→ 闸口判失败，阻断合入。
 - **白名单例外：** 平台全局参考表（如 `staff_levels`、`roles` NULL=平台全局）须显式登记为"无 scope/平台全局"，方可豁免行级 scope 注入校验，避免误报。
+- **读路径谓词写法（2026-07-28 P0-D 教训）：** 带 scope 列的表，读路径一律写 `(<scope_col> IS NULL OR <scope_col> = :<scope_col>)`，**禁止**用 `COALESCE(<scope_col>, '__DEFAULT__') IN (...)` 哨兵比对。后者对常规数据语义等价，但 ① 机审识别不出 scoped 通道（会误报 F1）；② 依赖写面 rejectSentinel 保证「没有真 id 叫 `__DEFAULT__`」——一旦撞名，该行对**所有**调用方可见 = 真跨租户读（唯一索引只挡顶层默认槽，商户维不挡）。证据见 `SEC-P2-TENANT-ISOLATION-P0D-CONFIG-SCOPE-001`。
 - **与现有机审关系：** 现有机审基线只统计 OpenAPI auth context（验不到 DB 行级隔离），本闸口补 DB/查询级行级隔离校验，二者互补，不重复。
 
 ### 6A.2 越权 finding 台账（证据留痕）
