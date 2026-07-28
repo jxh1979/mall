@@ -35,8 +35,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li>主管释放（release override）：清零项目并发在场快照 + 落审计 override 记录（status=released）。</li>
  *   <li>并发双提交（同权益+同场次两次入场）：唯一约束只让一条成功，另一条被拒（不超扣）。</li>
  *   <li>无未释放入场即出场 → ENTITLEMENT_NO_ACTIVE_ENTRY，不误减、不写脏 exit。</li>
+ *   <li>场次/批次型席位不受释放影响：出场与主管释放都只回收并发在场（point_device/project 维），
+ *       amusement_sessions.used_capacity 恒不变（木马每轮/密室每批满了等下一场）。</li>
  * </ol>
- * 证伪：注掉出场 -N（decrementConcurrentSnapshot）→ 用例1 快照断言红；去掉部分唯一索引 → 用例4 双入场断言红。
+ * 证伪：注掉出场 -N（decrementConcurrentSnapshot）→ 用例1 快照断言红；去掉部分唯一索引 → 用例4 双入场断言红；
+ * 把 clearProjectConcurrentCapacity/releaseEntryConcurrentCapacity 的维度过滤放开到 session 维 → 用例6 断言红。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
@@ -208,6 +211,43 @@ class AmusementExitReleaseJdbcIntegrationTests {
         assertThat(exitCount(projectId)).isEqualTo(0);                 // 不写脏 exit
     }
 
+    /**
+     * 场次/批次型（木马每轮、密室每批）席位不因出场或主管释放回收——满了等下一场。
+     *
+     * <p>判定依据是【容量落在哪个维度】，不是项目上的类型开关：场次/批次席位记在
+     * amusement_sessions.used_capacity（session 维），而出场释放 releaseEntryConcurrentCapacity 与
+     * 主管释放 clearProjectConcurrentCapacity 都只动 amusement_capacity_snapshot 的
+     * point_device / project 两维 → session 维结构性不可达，无需也不会被释放。
+     */
+    @Test
+    void sessionBatchCapacityUnaffectedByExitAndSupervisorRelease() {
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        String suffix = Long.toString(System.nanoTime());
+        seedDevice(suffix);
+        String pointId = "point_sess_" + suffix;
+        String projectId = seedOpenProjectWithSession(suffix, pointId, 5);
+        String code = seedAmusementEntitlement(suffix, 2);
+
+        // 入场：并发在场 +1（自由进出维），同时场次席位 used_capacity +1（场次/批次维）。
+        var entry = verify(suffix, code, pointId);
+        assertThat(entry.status()).isEqualTo("success");
+        assertThat(projectSnapshotOccupied(projectId)).isEqualTo(1);
+        assertThat(sessionUsedCapacity(projectId)).isEqualTo(1);
+
+        // 出场：只回收并发在场，场次席位不退（该轮座位已消耗）。
+        amusementService.exitVerification(new AmusementExitRequest(
+                "exit-sess-" + suffix, code, pointId, deviceCode, "staff", List.of()));
+        assertThat(projectSnapshotOccupied(projectId)).isEqualTo(0);   // 并发在场回收
+        assertThat(sessionUsedCapacity(projectId)).isEqualTo(1);       // 场次席位不变（证伪：若误减则=0，断言红）
+
+        // 主管释放（异常清场）：同样只清并发在场快照，场次席位仍不受影响。
+        amusementService.createManualOverride(new AmusementManualOverrideRequest(
+                "sup-sess-" + suffix, "night clearance", List.of(),
+                projectId, null, "release", "异常清场核对场次席位不受影响"));
+        assertThat(projectSnapshotOccupied(projectId)).isEqualTo(0);
+        assertThat(sessionUsedCapacity(projectId)).isEqualTo(1);       // 场次席位仍不变（证伪：若清零则=0，断言红）
+    }
+
     // ===== helpers =====
 
     private VerificationResponse verify(String suffix, String code, String pointId) {
@@ -219,6 +259,14 @@ class AmusementExitReleaseJdbcIntegrationTests {
         Integer v = jdbcTemplate.queryForObject(
                 "SELECT COALESCE(SUM(occupied_count), 0) FROM amusement_capacity_snapshot "
                         + "WHERE project_id = ? AND dimension = 'project'", Integer.class, projectId);
+        return v == null ? 0 : v;
+    }
+
+    /** 场次/批次型席位占用（session 维，落在 amusement_sessions.used_capacity）。 */
+    private int sessionUsedCapacity(String projectId) {
+        Integer v = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(used_capacity), 0) FROM amusement_sessions WHERE project_id = ?",
+                Integer.class, projectId);
         return v == null ? 0 : v;
     }
 
