@@ -160,7 +160,7 @@ class TicketFacePhotoJdbcIntegrationTests {
                 templateId, "amusement-tpl", requireFacePhoto ? "amusement" : "bar_drink", 1, 5000L, "active",
                 null, null, null, null, now, now, "virtual", null, "per_use", null, requireFacePhoto));
         repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                "bind_fp_" + suffix, ticketTypeId, templateId, 1, 1, 5000L, "default", 1, null, now, now));
+                "bind_fp_" + suffix, ticketTypeId, templateId, 1, 1, 5000L, "default", 1, 5000L, now, now));
         // 一张真实订单：发放拆分基数 + 照片 purge_after 依赖 valid_to（票 validity 1 天）。
         String orderId = "ticket_order_fp_" + suffix;
         repository.saveTicketOrder(new TicketOrderRecord(

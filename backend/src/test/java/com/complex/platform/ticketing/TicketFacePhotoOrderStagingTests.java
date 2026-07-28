@@ -129,7 +129,7 @@ class TicketFacePhotoOrderStagingTests {
                 templateId, "amusement-tpl", "amusement", 1, 5000L, "active",
                 null, null, null, null, now, now, "virtual", null, "per_use", null, true));
         repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                "bind_stage_" + suffix, ticketTypeId, templateId, 1, 1, 5000L, "default", 1, null, now, now));
+                "bind_stage_" + suffix, ticketTypeId, templateId, 1, 1, 5000L, "default", 1, 5000L, now, now));
         String orderId = "ticket_order_stage_" + suffix;
         repository.saveTicketOrder(new TicketOrderRecord(
                 orderId, "TOST" + suffix, null, ticketTypeId, null, 1, LocalDate.now(), "admin", null,

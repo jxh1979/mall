@@ -237,6 +237,7 @@ service_catalog_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex de
 service_orders,direct,project_id,project_id column on service_orders,ready for project/merchant scoped query enforcement,covered
 service_pay_config,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 service_responsibility_records,direct,merchant_id,merchant_id column on service_responsibility_records,ready for project/merchant scoped query enforcement,covered
+settlement_bill_format_shares,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 settlement_bills,direct,project_id,project_id column on settlement_bills,ready for project/merchant scoped query enforcement,covered
 settlement_items,direct,merchant_id,merchant_id column on settlement_items,ready for project/merchant scoped query enforcement,covered
 settlement_reconciliation_status,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered

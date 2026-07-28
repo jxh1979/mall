@@ -554,12 +554,19 @@ public class TicketOrderService {
      *
      * <p>拆分算法（财务确认：酒吧+游乐组合票按打折比例拆分，法律双实体；也支持手动输入各分项单价）：
      * <ul>
-     *   <li>权重 = binding.componentPriceCent（分项标准单价/手动单价），每张权益按其 binding 的权重参与分配。</li>
+     *   <li>权重 = binding.componentPriceCent（该权益的<b>票面原价</b>），每张权益按其 binding 的权重参与分配。</li>
      *   <li>allocated(每张) = orderAmount × (componentPrice / Σ(componentPrice × quantity))。</li>
-     *   <li>分项单价全空 → 回退按数量均摊（orderAmount 平均分到每张权益，口径：无分项单价时各权益等额）。</li>
+     *   <li><b>S11③ NULL / 0 语义</b>：<b>0 = 免费</b>（价格设为 0 的餐饮/零售优惠、加赠的酒水小食）→ 权重 0、
+     *       不参与拆分，它的价值本就含在别的业态价格里，再分一份就是让提供方双收；
+     *       <b>NULL = 没配价</b> = 不合规，票种发布时就被拦下（{@code TicketCatalogService.requireComponentPrices}），
+     *       真漏到这里也一律按 0 处理、绝不回退「大家平均分」。</li>
      *   <li>订单实付为 null（direct 出票无订单）→ 返回 null，不拆分（向后兼容）。</li>
      * </ul>
      * 采用"逐张整数分配 + 最大余数补尾"使各张之和恰等于 orderAmount（分到分，不丢分、不重复计）。
+     *
+     * <p><b>为什么废掉「全没配价就平均分」</b>（S11③，§二十.6）：平均分会把免费权益和赠品也算成一份收入，
+     * 于是餐厅既拿到一份营收份额、又按内部结算价被兑付一次，同一份东西付两遍钱；
+     * 而且这个错不会报警——账面上每一分都「分掉了」，只是分错了人。所以宁可当场拒绝出票让运营去把价配上。
      *
      * @return 与发券顺序一致的每张权益分配收入数组；不拆分时返回 null。
      */
@@ -574,16 +581,12 @@ public class TicketOrderService {
         if (totalUnits == 0) {
             return new long[0];
         }
-        // 每张权益的权重（分项单价；全空回退均摊→权重置 1）。
+        // 每张权益的权重 = 该权益的票面原价（NULL/0 一律 0 = 不参与拆分，见方法注释）。
         long[] weights = new long[totalUnits];
         long totalWeight = 0;
-        boolean anyComponentPrice = bindings.stream().anyMatch(b -> b.componentPriceCent() != null);
         int idx = 0;
         for (TicketTypeEntitlementRecord binding : bindings) {
-            // 分项单价全空回退均摊：每张权重=1；否则取本 binding 单价（缺省 0，不参与分配）。
-            long unitWeight = anyComponentPrice
-                    ? (binding.componentPriceCent() == null ? 0L : binding.componentPriceCent())
-                    : 1L;
+            long unitWeight = binding.componentPriceCent() == null ? 0L : binding.componentPriceCent();
             for (int i = 0; i < binding.quantity(); i++) {
                 weights[idx] = unitWeight;
                 totalWeight += unitWeight;
@@ -592,8 +595,13 @@ public class TicketOrderService {
         }
         long[] allocations = new long[totalUnits];
         if (totalWeight <= 0) {
-            // 有分项单价配置但全为 0（异常配置）→ 退化为按数量均摊，保证不丢分。
-            return allocateEvenly(orderAmount, totalUnits);
+            if (orderAmount == 0L) {
+                return allocations; // 全免费票、实付也是 0：各张 0，没有钱要分。
+            }
+            // 客人付了钱，票种却一条票面原价都没配 → 无从判断这笔钱该归哪个业态。
+            // 绝不「平均分」蒙混（那会把钱分给错的商户且事后查不出来），当场拒绝出票。
+            throw ApiException.conflict("TICKET_COMPONENT_PRICE_MISSING",
+                    "该票种未配置各权益的票面原价，无法按业态拆分账，请先在票种配置里补齐票面原价");
         }
         // 逐张整数分配 + 最大余数补尾，使 Σallocations == orderAmount。
         long assigned = 0;
@@ -640,15 +648,16 @@ public class TicketOrderService {
      * D6 套票折扣落库：与 {@link #allocateRevenue}(净额)并行，算各权益「满额份额」数组（与发券顺序一致，
      * 索引同 allocationIndex）。每张=其 binding 的 componentPriceCent（分项标准单价）；核销结算时满额−净额即折扣。
      *
-     * <p><b>零行为变更保证</b>：分项单价全空（anyComponentPrice=false，allocateRevenue 回退均摊）→ 返回 null，
-     * 各权益 component_full_price_cent=null=无满额价=折扣恒 0，与 D6 前既有场景逐分一致。
+     * <p><b>S11③</b>：票面原价一律以 NULL=0 读取（发布已拦未配价）。整票没有任何票面原价（全 0 / 全没配）
+     * → 返回 null，各权益 component_full_price_cent=null=无满额价=折扣恒 0，与 D6 前既有场景逐分一致。
      *
-     * @return 每张权益满额份额（分）；无任何分项单价配置时返回 null（=无折扣）。
+     * @return 每张权益满额份额（分）；整票票面原价合计为 0 时返回 null（=无折扣）。
      */
     private long[] componentFullPrices(List<TicketTypeEntitlementRecord> bindings) {
-        boolean anyComponentPrice = bindings.stream().anyMatch(b -> b.componentPriceCent() != null);
+        boolean anyComponentPrice = bindings.stream()
+                .anyMatch(b -> b.componentPriceCent() != null && b.componentPriceCent() > 0L);
         if (!anyComponentPrice) {
-            return null; // 回退均摊场景：无满额价 → 无套票折扣（零行为变更）。
+            return null; // 整票无票面原价 → 无满额价 → 无套票折扣（零行为变更）。
         }
         int totalUnits = 0;
         for (TicketTypeEntitlementRecord binding : bindings) {
