@@ -726,7 +726,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `sales_staff_id` | uuid | 销售归属员工 |
 | `sales_staff_position_type_snapshot` | varchar | 岗位快照：`sales_person` 或其他岗位 |
 | `commission_base_amount` | bigint | 可计提消费额，单位分 |
-| `commission_rate` | numeric | 提成率：销售人员 `0.15`，非销售人员 `0.10` |
+| `commission_rate` | numeric | 提成率：销售人员 `0.15`，非销售人员 `0.10`（**出厂默认**；实际取值来自 V340 `bar_commission_rate_configs`，按项目公司 × 商户 × 角色档后台可配，见下方「提成率取数」）|
 | `commission_amount` | bigint | 提成金额，单位分；按分四舍五入或财务配置舍入 |
 | `excluded_amount_snapshot` | jsonb | 排除金额快照：通票、票务权益、赠酒、退款、免单、抹零、不可计提调整等 |
 | `status` | varchar | `pending_review/confirmed/adjusted/reversed/cancelled` |
@@ -739,13 +739,25 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 1. `commission_base_amount = 卡座账单实收可计提消费额 - excluded_amount_snapshot 合计`。
 2. 通票、票务权益、卡座预约入场名额、赠酒成本、退款、免单、抹零和不可计提调整不得进入提成基数。
-3. 销售归属员工岗位快照为 `sales_person` 时 `commission_rate = 0.15`；其他岗位归属销售时 `commission_rate = 0.10`。
+3. 销售归属员工岗位快照为 `sales_person` 时 `commission_rate = 0.15`；其他岗位归属销售时 `commission_rate = 0.10`。**这两个数字自 2026-07-28（P0-D/CFG-01，V340）起为「出厂默认」而非写死常量**——见下方「提成率取数」。
 4. 同一 `bill_id` 在同一结算周期只能生成一条主提成记录；复杂多人分摊、阶梯提成、活动倍率进入 P1。
 5. 日结锁定后提成基数或销售归属变更，只能追加调整/冲正记录，不得覆盖原记录。
 
 > 已实现修复（finding F-TXN-05，2026-06-22，已在 160 编译通过）：`calculateCommission` 的提成基数 `commission_base` 此前仅按 `subtotal − discount` 计算，未扣除免单（waiver）与退款（refund），导致已免/已退金额仍被计提。现已改为在 `subtotal − discount` 基础上**额外扣除免单与退款净额**——按 `bar_bill_adjustments` 中处于 applied 态的调整净额计算，并对 `waiver_reversal`/`refund_reversal` 反向回加，使提成基数与账单实际可计提消费额一致。这与本表"通票、票务权益、卡座预约入场名额、赠酒成本、退款、免单、抹零和不可计提调整不得进入提成基数"的口径对齐。
 >
 > 已实现（finding F-TXN-05，赠菜扣提成，2026-06-23，已在 160 编译通过）：**赠品（gift）按内部价从提成扣除**。新增 `bar_order_items.is_gift`（V153，§6.8 已登记的逻辑列之物理落地）承载随单赠送标记：下单/加菜时 `is_gift=true` 的明细对客 `amount_cent=0`（不计入账单 `subtotal`）、单价保留售价；出品/退菜撤单/撤单回滚等明细重建均透传该标记。`calculateCommission` 在 `subtotal − discount − 免退净额` 基础上**再按赠送项商品内部结算价（V152 `internal_settlement_price_cent`）× 数量扣除 `giftDeduction`**，即赠送项成本不计提成。商品未录内部价时该项不扣（`orElse 0`，向后兼容既有商品）。
+>
+> **提成率取数（P0-D/CFG-01，2026-07-28 实现）**：`calculateCommission` 不再写死 `rateBp = "sales".equals(roleType) ? 1500 : 1000`，
+> 改经 `BarCommissionRateConfigPort`（实现 `JdbcCommissionPointsConfigRepository`，结算配置中心侧）按
+> **项目公司 × 商户 × 角色档（sales/non_sales）** 读 **V340 `bar_commission_rate_configs`** 的正式生效行（`status='active' AND is_draft=FALSE`）。
+> - **作用域优先级**：项目 × 商户特例 > 项目通用 > 全平台默认；出厂种子 `bcrc_default_sales=1500` / `bcrc_default_non_sales=1000`
+>   **逐值等于改造前写死值**，故默认部署上改造前后逐笔提成金额严格相等（零行为改变）。
+> - **`projectId` 取数**：操作者的综合体 scope（`currentProjectScopeQuietly()`，平台管理员为空 = 全平台默认口径），
+>   与本域退款分级授权 AUD-008「由调用方从原账单/操作者 scope 推导」同源；`merchantId` 取**账单归属商户**（权威，不信任请求体）。
+> - **fail-closed**：配置端口不可用或配置行缺失一律响亮报错（`COMMISSION_RATE_CONFIG_UNAVAILABLE` / `SETTLEMENT_CONFIG_MISSING`），
+>   **绝不回落硬编码常量**——回落常量正是本批要根除的东西（母铁律「业务策略一律可配」+ `DEC-CFG-ALL-NUMERIC-001`）。
+> - **维护入口**：后台「结算配置中心 → 提成与积分 → 卡座销售提成费率」，改动落草案、差人复核转正后生效；
+>   商户级特例可「下线」回落默认，全平台默认种子禁下线。
 >
 > 口径澄清（经业主确认，无需代码处理）：
 > - **抹零**：经业主确认**无抹零业务**，提成基数无需处理抹零项。

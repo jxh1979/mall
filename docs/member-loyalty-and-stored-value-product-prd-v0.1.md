@@ -45,6 +45,7 @@
 
 - **有消费就给**：买票入场、订卡、酒吧消费等都计积分。
 - 计分方式（后台可配，可组合）：按消费金额 / 按核销张数（购票一次送固定值）/ 按打卡签到（一次给固定值）/ 按生日加赠 / 按活动。
+- **积分累计率（按消费金额档）后台可配**——出厂默认「每消费 1 元积 1 基础分」，可按**项目公司 × 商户**分别设定（2026-07-28 P0-D/CFG-01 落地，承载表 V340 `points_accrual_rate_configs`，字段口径为「每积 1 基础分所需的实付消费金额（分）」：100=每元 1 分、50=每元 2 分、200=每 2 元 1 分）。维护入口「结算配置中心 → 提成与积分 → 积分累计率」，改动落草案、经另一位有权限同事复核转正后生效；等级倍率与生日倍率仍在基础分之上叠加，不属本项。缺配置时**响亮报错、不静默回落默认值**，符合 `DEC-CFG-ALL-NUMERIC-001`「时间与数字一律可配、禁止写死」。
 - 获取渠道：会员关联微信/支付宝后，在场内用微信/支付宝付款自动累计积分；POS、现金等其它付款方式可现场录入会员号累计。
 - **按核销张数确认**：购票积分按实际已核销张数比例确认（核销几张算几张，未核销/过期/退款不计）；退款按已确认份额冲减。
 - 积分明细类型：获取、扣减、兑换消耗、过期、调整；每笔关联触发它的业务单据。
@@ -174,6 +175,8 @@
 | 配置项 | 后台页 | 承接端点 | 权限 |
 |---|---|---|---|
 | 积分获取方式/系数、等级累计成长积分阈值、有效期与过期策略（§3/§4） | 「积分规则配置」ADM-CUS-003 | `/api/v1/customer/points-rules`（CRUD，V060/V269） | 查看 customer.points_rule.view / 维护 customer.points_rule.manage |
+| **积分累计率（每积 1 分所需消费金额，项目公司 × 商户）（§4）** | 「结算配置中心 → 提成与积分」ADM-STL-001 | `POST /api/v1/settlement/config/points-accrual-rate`（落草案）+ `/{configType}/{id}/activate`（复核转正），V340 `points_accrual_rate_configs` | settlement.config.view / settlement.config.manage（高敏·差人复核） |
+> ⚠️ 口径边界（2026-07-28）：**引擎实际取用的积分累计率是上表最后一行的 `points_accrual_rate_configs`**；ADM-CUS-003 上的「获取系数」字段（`customer_points_rules.earn_ratio`，V060）当前**未被任何引擎读取**，两者收敛（保留其一）待另行拍板，改前请勿以 ADM-CUS-003 的系数为准。
 | 会员等级档位/升级门槛/保级/宽限/积分倍率（§3） | 「会员等级与忠诚度」ADM-CUS-004 | `/api/v1/loyalty/config/member-levels` | 查看 customer.loyalty.view / 维护 customer.loyalty.manage |
 | 连续签到阶梯奖励（§6） | 同上 | `/api/v1/loyalty/config/check-in-tiers` | 同上 |
 | 生日加倍规则（§6） | 同上 | `/api/v1/loyalty/config/birthday-rules` | 同上 |

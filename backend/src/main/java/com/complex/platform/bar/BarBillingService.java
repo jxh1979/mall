@@ -34,6 +34,11 @@ public class BarBillingService {
     // 字段注入（required=false）以免改构造点/单测；bar 依赖 customer 无构造环（StoredValueService 不依赖 bar bean）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.customer.StoredValueService storedValueService;
+    // P0-D/CFG-01（V340）：卡座提成率改后台可配（消灭 15%/10% 写死）。字段注入免改构造点（同上两例）；
+    // 生产由 Spring 恒注入 JdbcCommissionPointsConfigRepository。资金级 fail-closed：为 null 即拒绝计提
+    // （见 requireCommissionRateBp），绝不静默回落硬编码常量——回落常量正是本批要根除的东西。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarCommissionRateConfigPort commissionRateConfigPort;
 
     public BarBillingService(
             BarRepository repository,
@@ -526,7 +531,10 @@ public class BarBillingService {
             return existingCommission.get();
         }
         String roleType = trimToNull(bill.salesStaffId()) == null ? "non_sales" : "sales";
-        int rateBp = "sales".equals(roleType) ? 1500 : 1000;
+        // P0-D/CFG-01（V340）：提成率由「结算配置中心 → 卡座提成费率」按 项目公司 × 商户 × 角色档 下发，
+        // 不再写死 sales?1500:1000。出厂种子 = 原写死值（销售 1500bp / 非销售 1000bp）→ 本次改造零行为改变。
+        // 依据：bar PRD §4/§8/§11「卡座提成率后台可配（默认销售 15%/非销售 10%）」+ DEC-CFG-ALL-NUMERIC-001。
+        int rateBp = requireCommissionRateBp(bill.merchantId(), roleType);
         // 裁决#4 / 开发文档 §6.9A.2：提成基数 = 可计提消费额 − 排除项合计。
         // 排除项中"免单(waiver)/退款(refund)"已落 bar_bill_adjustments（V079），按净额扣除：
         // waiver+refund 为减项，其 V124 反向冲销 waiver_reversal/refund_reversal（退菜退酒被拒时撤销原减免）回加，
@@ -569,6 +577,22 @@ public class BarBillingService {
             receivableLedgerService.createPayableForCommission(saved);
         }
         return saved;
+    }
+
+    /**
+     * P0-D/CFG-01（V340）取提成率（万分比）。资金级 fail-closed：配置端口缺失（仅旧构造/未注入的单测，生产恒注入）
+     * 时<b>拒绝计提</b>而非回落硬编码——「零硬编码全后台可改」母铁律 + DEC-CFG-ALL-NUMERIC-001 的落地方式。
+     *
+     * <p>projectId 取操作者的综合体 scope（平台管理员为空 = 全局默认口径），与本类退款分级授权
+     * （AUD-008「由调用方从原账单/操作者 scope 推导」）取值方式一致；merchantId 取账单归属商户（权威、不来自请求体）。
+     */
+    private int requireCommissionRateBp(String merchantId, String roleType) {
+        if (commissionRateConfigPort == null) {
+            throw ApiException.badRequest("COMMISSION_RATE_CONFIG_UNAVAILABLE",
+                    "提成费率配置不可用，无法计提；请先在结算配置中心配置卡座提成费率并复核转正");
+        }
+        return commissionRateConfigPort.findCommissionRateBp(
+                authorizationService.currentProjectScopeQuietly().orElse(null), merchantId, roleType);
     }
 
     // ========================================================================

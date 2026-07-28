@@ -17,11 +17,14 @@ public class SettlementConfigService {
 
     private final JdbcSettlementBillRepository configRepository;
     private final JdbcSettlementConfigWriteRepository writeRepository;
+    private final JdbcCommissionPointsConfigRepository commissionPointsConfigRepository;
 
     public SettlementConfigService(JdbcSettlementBillRepository configRepository,
-                                   JdbcSettlementConfigWriteRepository writeRepository) {
+                                   JdbcSettlementConfigWriteRepository writeRepository,
+                                   JdbcCommissionPointsConfigRepository commissionPointsConfigRepository) {
         this.configRepository = configRepository;
         this.writeRepository = writeRepository;
+        this.commissionPointsConfigRepository = commissionPointsConfigRepository;
     }
 
     /** 平台默认口径概览 + 待复核草案队列(批1 起草案源=全部结算配置表 UNION,见 {@link JdbcSettlementConfigWriteRepository#listPendingConfigDrafts})。 */
@@ -37,6 +40,13 @@ public class SettlementConfigService {
         JdbcSettlementBillRepository.ComboDiscountConfig combo = configRepository.findComboDiscountConfig(null);
         defaults.add(new ConfigItem("通票分账", "combo_discount_bearer", "套票折扣归属",
                 combo.discountBearer()));
+        // V340(P0-D/CFG-01):提成/积分两条原写死口径纳入总览「当前生效值」,与其它配置同源(只读生效行)。
+        defaults.add(new ConfigItem("提成与积分", "commission_rate_sales", "卡座提成率·销售人员(万分比)",
+                String.valueOf(commissionPointsConfigRepository.findCommissionRateBp(null, null, "sales"))));
+        defaults.add(new ConfigItem("提成与积分", "commission_rate_non_sales", "卡座提成率·非销售人员(万分比)",
+                String.valueOf(commissionPointsConfigRepository.findCommissionRateBp(null, null, "non_sales"))));
+        defaults.add(new ConfigItem("提成与积分", "points_amount_cent_per_point", "积分累计率(每积1分所需消费·分)",
+                String.valueOf(commissionPointsConfigRepository.findAmountCentPerPoint(null, null))));
 
         List<DraftItem> drafts = new ArrayList<>();
         for (PendingConfigDraft d : writeRepository.listPendingConfigDrafts()) {

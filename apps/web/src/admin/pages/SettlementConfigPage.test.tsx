@@ -9,6 +9,10 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 const DEFAULTS = [
   { group: "通票分账", key: "platform_retention_bps", label: "项目公司留存比例(万分比)", value: "2000" },
   { group: "通票分账", key: "combo_discount_bearer", label: "套票折扣归属", value: "platform_absorb" },
+  // V340(P0-D):提成/积分出厂默认 = 改造前写死值(销售 1500bp / 每积 1 分需 100 分)。
+  { group: "提成与积分", key: "commission_rate_sales", label: "卡座提成率·销售人员(万分比)", value: "1500" },
+  { group: "提成与积分", key: "commission_rate_non_sales", label: "卡座提成率·非销售人员(万分比)", value: "1000" },
+  { group: "提成与积分", key: "points_amount_cent_per_point", label: "积分累计率(每积1分所需消费·分)", value: "100" },
 ];
 const OVERVIEW_NO_DRAFT = { platformDefaults: DEFAULTS, pendingDraftCount: 0, pendingDrafts: [] };
 const OVERVIEW_WITH_DRAFTS = {
@@ -17,6 +21,13 @@ const OVERVIEW_WITH_DRAFTS = {
   pendingDrafts: [
     { id: "tdmr_d_1", configGroup: "merchant_rate", summary: "project=__DEFAULT__ 商户=m1 每客/固定=500/-" },
     { id: "trt_d_1", configGroup: "rank_tiers", summary: "project=proj_9 排名档位草案(2 档)" },
+  ],
+};
+const OVERVIEW_WITH_COMMISSION_DRAFT = {
+  platformDefaults: DEFAULTS,
+  pendingDraftCount: 1,
+  pendingDrafts: [
+    { id: "bcrc_d_1", configGroup: "commission_rate", summary: "project=__DEFAULT__ 商户=m1 角色=sales 提成 2000bps" },
   ],
 };
 
@@ -106,6 +117,65 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     ));
     // rank_tiers 不在软删白名单 → 无「下线」按钮
     expect(screen.queryByTestId("settlement-config-archive-trt_d_1")).toBeNull();
+  });
+
+  // V340(P0-D/CFG-01):提成率/积分累计率原写死在代码里,现进本页「提成与积分」栏目,同走落草案 + 差人复核转正。
+  it("提成与积分栏目渲染 2 个配置块 + 概览展示其当前生效值", async () => {
+    renderPage(makeApi());
+    await screen.findByTestId("settlement-config-commission-points");
+    expect(screen.getByTestId("settlement-config-block-commission_rate")).toBeTruthy();
+    expect(screen.getByTestId("settlement-config-block-points_accrual_rate")).toBeTruthy();
+    expect(screen.getByTestId("settlement-config-default-commission_rate_sales").textContent).toContain("1500");
+    expect(screen.getByTestId("settlement-config-default-points_amount_cent_per_point").textContent).toContain("100");
+  });
+
+  it("「改」卡座提成费率 → 按项目×商户×角色档 POST 落草案端点", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
+    fireEvent.click(await screen.findByTestId("settlement-config-edit-commission_rate"));
+    fireEvent.change(screen.getByTestId("settlement-config-field-merchantId"), { target: { value: "m_bar_1" } });
+    fireEvent.change(screen.getByTestId("settlement-config-field-roleType"), { target: { value: "non_sales" } });
+    fireEvent.change(screen.getByTestId("settlement-config-field-rateBp"), { target: { value: "1200" } });
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/commission-rate",
+      expect.objectContaining({
+        merchantId: "m_bar_1", roleType: "non_sales", rateBp: 1200, idempotencyKey: expect.any(String),
+      }),
+    ));
+  });
+
+  it("「改」积分累计率 → POST 落草案端点；累计单位须大于 0", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
+    fireEvent.click(await screen.findByTestId("settlement-config-edit-points_accrual_rate"));
+    // 0 非法 → 不放行进确认步
+    fireEvent.change(screen.getByTestId("settlement-config-field-amountCentPerPoint"), { target: { value: "0" } });
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    expect(screen.getByTestId("settlement-config-field-amountCentPerPoint")).toBeTruthy(); // 仍停在填写步
+    fireEvent.change(screen.getByTestId("settlement-config-field-amountCentPerPoint"), { target: { value: "50" } });
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/points-accrual-rate",
+      expect.objectContaining({ amountCentPerPoint: 50, idempotencyKey: expect.any(String) }),
+    ));
+  });
+
+  it("草案队列:commission_rate 草案可复核转正、可下线(商户特例回落默认)", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_WITH_COMMISSION_DRAFT), post));
+    fireEvent.click(await screen.findByTestId("settlement-config-activate-bcrc_d_1"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/commission_rate/bcrc_d_1/activate"));
+
+    vi.spyOn(window, "prompt").mockReturnValue("特例作废");
+    fireEvent.click(screen.getByTestId("settlement-config-archive-bcrc_d_1"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/commission_rate/bcrc_d_1/archive",
+      expect.objectContaining({ archiveReason: "特例作废", idempotencyKey: expect.any(String) }),
+    ));
   });
 
   it("差人转正被拒(SELF_ACTIVATION_FORBIDDEN)→ 友好中文提示", async () => {

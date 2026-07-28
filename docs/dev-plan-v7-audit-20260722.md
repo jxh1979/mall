@@ -61,7 +61,7 @@
 | **P0-A** ✅已落地(2026-07-27·V339) | **多主体 PII 明文**(★GAP-07/SEC-04) | E域实证 merchants 59/59明文;商户/供应商/招商/费用通知电话写入路径未接 PiiCipher | 五条写入路径(实读时又追加「施工进场报备」第五条·同一缺陷面)接 PiiCipher:六列加密存储 + 读时解密 + 按 `pii.contact_phone.view` 权限脱敏展示;V339 加宽列到 128 + 六个 `NOT VALID` CHECK 卡明文新写入 + 种权限;存量明文由启动期 `MultiPartyContactPhonePiiBackfill` 幂等回填(三层防二次加密)。实读确认这五处**没有任何按手机号的后端检索路径**,故不需盲索引;合规文档 §6.1 旧口径「B2B 联系人保持明文」同步作废 |
 | **P0-B** | **资金台账 append-only 破防** | ar_ap_items补录改原行金额;settlement_transactions(最高价值账本)漏触发器;points_ledger就地UPDATE | 改红冲(不改原行)+ 补触发器族 + points 改追加 |
 | **P0-C** | **高价值退酒先生效后审批**(FLOW-07) | `BarOrderService` 仍先生效后审；**文档口径已于 2026-07-27 收口 A1**：仅已出品、默认阈值超过5000元可配、高价值先审后行+双证据、低价值可即时生效（见 bar PRD §10.2.1 / business-decision-log BAR-VOID-A1）。编码未改。 | 按文档实现：阈值配置 + 已出品高价值先审后行 + 双证据；低价值 A1 即时生效 |
-| **P0-D** | **提成/积分硬编码**(CFG-01) | `BarBillingService.java:529` 15%/10%写死;积分每元1分 | 建配置表 + 引擎读配置(违"业务策略一律可配"母铁律) |
+| **P0-D** | **提成/积分硬编码**(CFG-01) ✅**2026-07-28 已落地** | `BarBillingService.java:529` 15%/10%写死;`TicketOrderService` `POINTS_PER_YUAN_CENT=100L` 每元1分写死 | **V340** 建 `bar_commission_rate_configs`(项目×商户×角色档)+`points_accrual_rate_configs`(项目×商户),引擎改读配置(端口 `BarCommissionRateConfigPort`/`PointsAccrualRateConfigPort` ← `JdbcCommissionPointsConfigRepository`);后台入口 ADM-STL-001 新增「提成与积分」栏(落草案+差人复核转正);出厂种子=原写死值 → **零行为改变**;缺配置 fail-loud 不回落硬编码 |
 | **P0-E** | **对账旁路手填 + 抽成无草案闸** | `IntegrationReconciliationService.java:112`手填平台金额 vs `FinanceService.java:491`强制系统取数;turnover_rent_rules单人直改进结算 | 改系统取数禁手填 + 抽成规则纳入配置中心草案转正 |
 | 另 P0 | 综合服务费重建(=R-3/专项①)、四舍五入(=R-7)、游乐绑定软删(=R-12)、端开关取最严(=R-10) | 见上 | 见上 |
 
@@ -78,7 +78,7 @@
 2. ✅ 多主体 PII 明文加密(P0-A/GAP-07)——2026-07-27 落地,迁移 V339
 3. 资金台账 append-only 修复(P0-B)
 4. 高价值退酒先审后行(P0-C/FLOW-07)
-5. 提成/积分硬编码配置化(P0-D/CFG-01)
+5. 提成/积分硬编码配置化(P0-D/CFG-01) ✅ **2026-07-28 已落地(V340)**
 6. 对账旁路手填 + 抽成草案闸(P0-E)
 7. 四舍五入严格落地 + 尾差单列(R-7)
 8. 游乐权益绑定改软删(R-12)
