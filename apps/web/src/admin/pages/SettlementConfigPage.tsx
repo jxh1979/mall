@@ -23,7 +23,6 @@ type Overview = { platformDefaults: ConfigItem[]; pendingDraftCount: number; pen
 
 // 8 类通票分账配置 + V340 提成/积分 2 类（configGroup 即转正泛化 configType，rank_tiers 例外走 /rank-tiers/activate）。
 type EditKey =
-  | "retention"
   | "distribution_method"
   | "rank_tiers"
   | "merchant_rate"
@@ -38,11 +37,10 @@ type BlockDef = { key: EditKey; title: string; defaultKey?: string; note?: strin
 
 // 各块：标题 + 当前生效值取自 overview.platformDefaults 的哪个 key（无则块内提示按域/按商户维护）。
 const BLOCKS: BlockDef[] = [
-  { key: "retention", title: "项目公司留存比例", defaultKey: "platform_retention_bps", endpoint: "retention" },
   { key: "distribution_method", title: "各酒吧分配方式", defaultKey: "distribution_method", endpoint: "distribution-method" },
   { key: "rank_tiers", title: "排名档位分账梯子", endpoint: "rank-tiers", note: "按销售排名分档分账；当前生效梯子按项目维护，改动落草案、复核转正后生效。" },
   { key: "merchant_rate", title: "商户每客单价 / 固定额", endpoint: "merchant-rate", note: "按「项目 × 商户」配置，改动落草案；可对草案「下线」。" },
-  { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。" },
+  { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。即娱乐平台公司留存 / 项目管理费——与原「项目公司留存比例」为同一项、只扣一次，原留存卡片已并入本费率。" },
   { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态票面原价×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
   { key: "channel_fee", title: "渠道抽成费率", endpoint: "channel-fee", note: "按项目配置通用渠道抽成率（万分比），改动落草案。" },
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
@@ -118,7 +116,6 @@ const BENEFICIARY_KIND_OPTIONS: [string, string][] = [
 ];
 // configGroup → 中文（草案队列展示用；未列出的原样显示）。
 const GROUP_LABELS: Record<string, string> = {
-  retention: "留存比例",
   distribution_method: "分配方式",
   rank_tiers: "排名档位",
   merchant_rate: "商户每客/固定额",
@@ -152,7 +149,6 @@ type TierRow = { rankFrom: string; rankTo: string; shareBps: string };
 type TicketTypeOption = { id: string; ticketName?: string; status?: string };
 type Form = {
   projectId: string;
-  retentionBps: string;
   methodType: string;
   specialApprovalTermValue: string;
   specialApprovalTermUnit: string;
@@ -174,7 +170,7 @@ type Form = {
   amountCentPerPoint: string;
 };
 const EMPTY_FORM: Form = {
-  projectId: "", retentionBps: "", methodType: "by_venue_per_guest",
+  projectId: "", methodType: "by_venue_per_guest",
   specialApprovalTermValue: "3", specialApprovalTermUnit: "month", merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", roundingToleranceYuan: "5", revenueStream: "all_pass_ticket", managementEntityId: "",
@@ -521,12 +517,6 @@ function editSteps(
   );
   let content: React.ReactNode;
   switch (key) {
-    case "retention":
-      content = (<>{projectField}
-        <label>留存万分比（0~10000）
-          <input data-testid="settlement-config-field-retentionBps" type="number" min={0} max={10000} value={form.retentionBps} onChange={setField("retentionBps")} />
-        </label></>);
-      break;
     case "distribution_method":
       content = (<>{projectField}
         <label>分配方式
@@ -675,7 +665,6 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: Ti
     return ticketTypes.find((x) => x.id === t)?.ticketName ?? t;
   };
   switch (key) {
-    case "retention": return [scope, { label: "留存万分比", value: form.retentionBps || "—" }];
     case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期", value: `${form.specialApprovalTermValue || "3"} ${form.specialApprovalTermUnit === "day" ? "天" : "个月"}` }];
     case "merchant_rate": return [scope, { label: "商户", value: form.merchantId || "—" }, { label: "每客单价（分）", value: form.perGuestCent || "—" }, { label: "固定额（分）", value: form.fixedAmountCent || "—" }];
     case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
@@ -691,8 +680,6 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: Ti
 // 单屏校验（返回中文错误则阻止提交，null 放行）。
 function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
   switch (key) {
-    case "retention":
-      return isIntInRange(form.retentionBps, 0, 10000) ? null : "留存万分比需为 0~10000 的整数。";
     case "distribution_method":
       // S9/V368：超池特批有效期 = 数值 + 单位（天/月）。业务口径「期限可配，默认不超过 3 个月」，
       //   留空按 3 个月落库；配 3 天这种短期激励是合法的，下限只到 1（个单位），没有上限。
@@ -739,8 +726,6 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
   if (invalid) throw new Error(invalid);
   const project = orUndef(form.projectId);
   switch (key) {
-    case "retention":
-      return { idempotencyKey, projectId: project, retentionBps: Number(form.retentionBps) };
     case "distribution_method":
       return {
         idempotencyKey, projectId: project, methodType: form.methodType,

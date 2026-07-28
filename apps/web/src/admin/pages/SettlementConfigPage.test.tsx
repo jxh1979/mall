@@ -7,7 +7,7 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 
 // 结算配置中心总控页(ADM-STL-001)组件测试:概览默认值 + 通票分账 8 块「改」落草案 + 草案队列转正/下线路由 + 差人友好提示。
 const DEFAULTS = [
-  { group: "通票分账", key: "platform_retention_bps", label: "项目公司留存比例(万分比)", value: "2000" },
+  // S4:原「项目公司留存比例」已并入门票综合服务费(同一项只扣一次),留存卡片下线。
   { group: "通票分账", key: "combo_discount_bearer", label: "套票折扣归属", value: "platform_absorb" },
   // V340(P0-D):提成/积分出厂默认 = 改造前写死值(销售 1500bp / 每积 1 分需 100 分)。
   { group: "提成与积分", key: "commission_rate_sales", label: "卡座提成率·销售人员(万分比)", value: "1500" },
@@ -65,31 +65,32 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     renderPage(makeApi(get));
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/settlement/config/overview"));
     expect(await screen.findByTestId("settlement-config-page")).toBeTruthy();
-    expect(screen.getByTestId("settlement-config-default-platform_retention_bps").textContent).toContain("2000");
+    expect(screen.getByTestId("settlement-config-default-combo_discount_bearer").textContent).toContain("platform_absorb");
     expect(screen.getByTestId("settlement-config-drafts-empty")).toBeTruthy();
   });
 
-  it("通票分账栏目渲染 8 个配置块", async () => {
+  it("通票分账栏目渲染 7 个配置块(留存卡片已并入综合服务费)", async () => {
     renderPage(makeApi());
     await screen.findByTestId("settlement-config-ticket-distribution");
     for (const key of [
-      "retention", "distribution_method", "rank_tiers", "merchant_rate",
+      "distribution_method", "rank_tiers", "merchant_rate",
       "comprehensive_service_fee", "combo_discount", "channel_fee", "revenue_stream_attribution",
     ]) {
       expect(screen.getByTestId(`settlement-config-block-${key}`)).toBeTruthy();
     }
+    // S4:原「项目公司留存比例」卡片不复存在——与门票综合服务费为同一项、只扣一次。
+    expect(screen.queryByTestId("settlement-config-block-retention")).toBeNull();
   });
 
-  it("「改」留存比例 → GuidedFlowModal 填写 → POST 落草案端点带 idempotency_key", async () => {
+  it("「改」套票折扣归属 → GuidedFlowModal 填写 → POST 落草案端点带 idempotency_key", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
-    fireEvent.click(await screen.findByTestId("settlement-config-edit-retention"));
-    fireEvent.change(screen.getByTestId("settlement-config-field-retentionBps"), { target: { value: "2500" } });
+    fireEvent.click(await screen.findByTestId("settlement-config-edit-combo_discount"));
     fireEvent.click(screen.getByTestId("settlement-config-guided-next")); // 填写 → 确认
     fireEvent.click(screen.getByTestId("settlement-config-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
-      "/api/v1/settlement/config/retention",
-      expect.objectContaining({ retentionBps: 2500, idempotencyKey: expect.any(String) }),
+      "/api/v1/settlement/config/combo-discount",
+      expect.objectContaining({ discountBearer: "platform_absorb", idempotencyKey: expect.any(String) }),
     ));
   });
 

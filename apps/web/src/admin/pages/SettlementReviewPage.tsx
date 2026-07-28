@@ -29,6 +29,26 @@ export type SettlementRow = {
   createdAt: string;
 };
 
+// S4:月度结算单头(财务对账视角)。金额带符号——负数月 = 冲正多于新核销,当月净追回。
+export type SettlementBillRow = {
+  id: string;
+  projectId: string | null;
+  periodStart: string;
+  periodEnd: string;
+  ticketRevenueCent: number;
+  channelFeeCent: number;
+  compServiceFeePooledCent: number;
+  compServiceFeeExclusiveCent: number;
+  feeBeneficiaryEntityId: string | null;
+  feeBeneficiaryEntityName: string | null;
+  availablePoolCent: number;
+  distributedCent: number;
+  comboDiscountCent: number;
+  roundingResidualCent: number;
+  distributionMethod: string | null;
+  status: string | null;
+};
+
 function centToYuan(cent: number | undefined | null): string {
   if (cent === undefined || cent === null || Number.isNaN(Number(cent))) return "—";
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
@@ -55,6 +75,16 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
     onError: setGlobalError,
     fallbackMessage: "结算流水读取失败",
   });
+
+  // S4:月度结算单头(近 24 单)。财务对账三问:这单收了多少门票综合服务费、池链/专属各多少、归了谁。
+  const [bills, setBills] = React.useState<SettlementBillRow[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    api.get<SettlementBillRow[]>("/api/v1/settlement/bills")
+      .then((data) => { if (!cancelled) setBills(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setBills([]); }); // 结算单读取失败不拦流水审阅主功能
+    return () => { cancelled = true; };
+  }, [api]);
 
   function submitSearch() {
     setProjectFilter(projectDraft);
@@ -141,6 +171,34 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
           </table>
           <TablePager testid="settlement-review-pager" page={rows.page} pageCount={rows.pageCount} total={rows.total} onPrev={rows.prev} onNext={rows.next} />
         </div>
+        {bills.length > 0 ? (
+          <div data-testid="settlement-review-bills">
+            <h3>月度结算单（近 {bills.length} 单）</h3>
+            <p className="admin-muted-action">
+              门票综合服务费＝娱乐平台公司留存／项目管理费，同一项只扣一次，分「池链」「专属」两支：池链支从可分配池前扣、专属支从专属商户直付前扣。可分配池＝酒吧份额扣完渠道费与池链服务费后的剩余，仅用于各酒吧分配，池内不再二次扣留存。金额为负＝该月冲正多于新核销，属向对方追回。
+            </p>
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="settlement-review-bills-table">
+                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>渠道抽成（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>状态</th></tr></thead>
+                <tbody>{bills.map((bill) => (
+                  <tr key={bill.id} data-testid={`settlement-review-bill-${bill.id}`}>
+                    <td>{bill.periodStart?.slice(0, 7) ?? "—"}</td>
+                    <td>{bill.projectId ?? "平台默认"}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.ticketRevenueCent)}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.channelFeeCent)}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.compServiceFeePooledCent)}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.compServiceFeeExclusiveCent)}</td>
+                    <td>{bill.feeBeneficiaryEntityName ?? bill.feeBeneficiaryEntityId ?? "归属未配置"}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.availablePoolCent)}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.distributedCent)}</td>
+                    <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(bill.roundingResidualCent)}</td>
+                    <td>{formatBusinessStatus(bill.status ?? "—")}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
