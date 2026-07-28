@@ -48,7 +48,7 @@ class SettlementQueryServiceTests {
     @Test
     void clampsPageAndSizeAndComputesOffset() {
         CapturingRepo repo = new CapturingRepo();
-        SettlementQueryService service = new SettlementQueryService(repo);
+        SettlementQueryService service = new SettlementQueryService(repo, null);
 
         PageResponse<SettlementTransactionView> page = service.listSettlements("prj_a", null, 3, 20);
 
@@ -63,7 +63,7 @@ class SettlementQueryServiceTests {
     @Test
     void clampsNonPositivePageAndOversizeAndBlankFilters() {
         CapturingRepo repo = new CapturingRepo();
-        SettlementQueryService service = new SettlementQueryService(repo);
+        SettlementQueryService service = new SettlementQueryService(repo, null);
 
         service.listSettlements("  ", "   ", 0, 9999);
 

@@ -15,7 +15,6 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.Distributio
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTierInput;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
-import com.complex.platform.settlement.SettlementConfigWriteRequests.RetentionRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
 import com.complex.platform.support.TestSecurityActors;
 import java.util.List;
@@ -87,7 +86,8 @@ class SettlementConfigWriteJdbcIntegrationTests {
     }
 
     private void cleanupProjectRows() {
-        for (String table : List.of("ticket_distribution_rank_tiers", "platform_retention_rules",
+        // S4:platform_retention_rules 已停用,写入面不再产生该表行,清理表清单同步删除。
+        for (String table : List.of("ticket_distribution_rank_tiers",
                 "ticket_distribution_configs", "ticket_distribution_merchant_rates",
                 "comprehensive_service_fee_configs", "ticket_combo_discount_configs",
                 "channel_fee_configs", "revenue_stream_attribution")) {
@@ -101,20 +101,26 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 String.class, PROJECT);
     }
 
-    /** Path 2 保值核心:项目级配置编辑存草案期间,读侧仍读旧生效值;转正后才切换(起草/复核差人)。 */
+    /** Path 2 保值核心(S4 起以综合服务费为样本,原留存表已停用):草案期读侧仍读旧生效值;转正后才切换(差人)。 */
     @Test
-    void retentionDraftDoesNotAffectEffectiveUntilActivated() {
-        writeService.saveRetention(new RetentionRequest("k1", PROJECT, 3000), DRAFTER);
-        assertThat(billRepository.findRetentionBps(PROJECT)).isEqualTo(2000); // 草案不被读,回退全局默认
+    void serviceFeeDraftDoesNotAffectEffectiveUntilActivated() {
+        writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null), DRAFTER);
+        // 草案不被读,回退全局默认(2000 = V370 等价保值种子:原池内 20% 留存平移为费率)
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(2000);
 
-        writeService.activateDraft("retention", draftRowId("platform_retention_rules"), APPROVER);
-        assertThat(billRepository.findRetentionBps(PROJECT)).isEqualTo(3000);
+        writeService.activateDraft("comprehensive_service_fee",
+                draftRowId("comprehensive_service_fee_configs"), APPROVER);
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(3000);
 
-        writeService.saveRetention(new RetentionRequest("k2", PROJECT, 5000), DRAFTER);
-        assertThat(billRepository.findRetentionBps(PROJECT)).isEqualTo(3000); // 保值:草案期读侧仍旧生效
+        writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("k2", PROJECT, null, null, 5000, null, null), DRAFTER);
+        // 保值:草案期读侧仍旧生效
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(3000);
 
-        writeService.activateDraft("retention", draftRowId("platform_retention_rules"), APPROVER);
-        assertThat(billRepository.findRetentionBps(PROJECT)).isEqualTo(5000);
+        writeService.activateDraft("comprehensive_service_fee",
+                draftRowId("comprehensive_service_fee_configs"), APPROVER);
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(5000);
     }
 
     /** 分配方式/渠道费/综合服务费/套票折扣:草案期读侧不变,转正后切换(逐类型证伪 Path 2)。 */
@@ -137,7 +143,8 @@ class SettlementConfigWriteJdbcIntegrationTests {
 
         writeService.saveComprehensiveServiceFee(
                 new ComprehensiveServiceFeeRequest("s1", PROJECT, null, null, 250, null, null), DRAFTER);
-        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isZero();
+        // 草案不被读 → 回落全局默认 2000(V370 等价保值种子)
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(2000);
         writeService.activateDraft("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(250);
@@ -182,8 +189,9 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
 
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, TICKET_TYPE).feeBps()).isEqualTo(1500);
-        // 同项目同商户、换个票种 → 命中不到该规则,回落全局默认(0)。
-        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, otherTicketType).feeBps()).isZero();
+        // 同项目同商户、换个票种 → 命中不到该规则,回落全局默认(2000,V370 等价保值种子)。
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, otherTicketType).feeBps())
+                .isEqualTo(2000);
     }
 
     /** S2:票种填了个不存在的 id → 中文 400(不让它撞 FK 变成 500,业务人员看得懂哪里填错了)。 */
@@ -228,17 +236,15 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertThat(billRepository.findRankTiers(PROJECT)).hasSize(2);
     }
 
-    /** 5 个收敛 finder:有种子→值不变(保值);删光该表→抛 SETTLEMENT_CONFIG_MISSING(fail-loud)。 */
+    /** 4 个收敛 finder(S4 起留存 finder 已删):有种子→值不变(保值);删光该表→抛 SETTLEMENT_CONFIG_MISSING(fail-loud)。 */
     @Test
     void convergedFindersFailLoudWhenSeedMissing() {
-        assertThat(billRepository.findRetentionBps(null)).isEqualTo(2000);
         assertThat(billRepository.findChannelFeeBps(null)).isZero();
         assertThat(billRepository.findDistributionMethod(null)).isEqualTo("by_rank_tier");
-        assertThat(billRepository.findComprehensiveServiceFee(null, null, null).feeBps()).isZero();
+        // V370 等价保值种子:全局默认综合服务费率 = 原留存率 2000。
+        assertThat(billRepository.findComprehensiveServiceFee(null, null, null).feeBps()).isEqualTo(2000);
         assertThat(billRepository.findComboDiscountConfig(null).discountBearer()).isEqualTo("platform_absorb");
 
-        jdbcTemplate.update("DELETE FROM platform_retention_rules");
-        assertMissing(() -> billRepository.findRetentionBps(null));
         jdbcTemplate.update("DELETE FROM channel_fee_configs");
         assertMissing(() -> billRepository.findChannelFeeBps(null));
         jdbcTemplate.update("DELETE FROM ticket_distribution_configs");
@@ -249,21 +255,25 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertMissing(() -> billRepository.findComboDiscountConfig(null));
     }
 
-    /** 转正软替换留档:旧生效行不是物理删,而是 status→inactive,转正后仍可查回(项6)。 */
+    /** 转正软替换留档:旧生效行不是物理删,而是 status→inactive,转正后仍可查回(项6;S4 起样本=综合服务费)。 */
     @Test
     void activateSoftReplacesOldEffectiveRowKeepingItInactive() {
-        writeService.saveRetention(new RetentionRequest("k1", PROJECT, 3000), DRAFTER);
-        writeService.activateDraft("retention", draftRowId("platform_retention_rules"), APPROVER);
+        writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null), DRAFTER);
+        writeService.activateDraft("comprehensive_service_fee",
+                draftRowId("comprehensive_service_fee_configs"), APPROVER);
         String oldEffectiveId = jdbcTemplate.queryForObject(
-                "SELECT id FROM platform_retention_rules WHERE project_id = ? AND retention_bps = 3000 AND status = 'active'",
+                "SELECT id FROM comprehensive_service_fee_configs WHERE project_id = ? AND fee_bps = 3000 AND status = 'active'",
                 String.class, PROJECT);
 
-        writeService.saveRetention(new RetentionRequest("k2", PROJECT, 5000), DRAFTER);
-        writeService.activateDraft("retention", draftRowId("platform_retention_rules"), APPROVER);
+        writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("k2", PROJECT, null, null, 5000, null, null), DRAFTER);
+        writeService.activateDraft("comprehensive_service_fee",
+                draftRowId("comprehensive_service_fee_configs"), APPROVER);
 
         // 旧生效行仍在库(未物理删),status=inactive。
-        assertThat(statusOf("platform_retention_rules", oldEffectiveId)).isEqualTo("inactive");
-        assertThat(billRepository.findRetentionBps(PROJECT)).isEqualTo(5000);
+        assertThat(statusOf("comprehensive_service_fee_configs", oldEffectiveId)).isEqualTo("inactive");
+        assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(5000);
     }
 
     /** revenue_stream Path 2 保值:编辑草案期间,resolveManagementEntity 仍返旧生效归属;转正后才切换。 */
@@ -306,10 +316,11 @@ class SettlementConfigWriteJdbcIntegrationTests {
     /** 差人转正(项5):执行人 = 起草人 → 403 SELF_ACTIVATION_FORBIDDEN(覆盖单行/归属/软删/attribution_rule)。 */
     @Test
     void selfActivationForbidden() {
-        writeService.saveRetention(new RetentionRequest("k1", PROJECT, 3000), DRAFTER);
-        String prrId = draftRowId("platform_retention_rules");
-        assertForbidden(() -> writeService.activateDraft("retention", prrId, DRAFTER)); // 同人转正 → 403
-        writeService.activateDraft("retention", prrId, APPROVER); // 换人可转
+        writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null), DRAFTER);
+        String csfcId = draftRowId("comprehensive_service_fee_configs");
+        assertForbidden(() -> writeService.activateDraft("comprehensive_service_fee", csfcId, DRAFTER)); // 同人 → 403
+        writeService.activateDraft("comprehensive_service_fee", csfcId, APPROVER); // 换人可转
 
         // 软删同样差人
         writeService.saveMerchantRate(new MerchantRateRequest("m1", PROJECT, MERCHANT, 500L, null), DRAFTER);
@@ -339,16 +350,20 @@ class SettlementConfigWriteJdbcIntegrationTests {
     /** §8:写面拒绝哨兵字面量 projectId → 400。 */
     @Test
     void rejectsSentinelProjectId() {
-        assertValidationFailed(() -> writeService.saveRetention(
-                new RetentionRequest("k1", "__DEFAULT__", 3000), DRAFTER));
+        assertValidationFailed(() -> writeService.saveComprehensiveServiceFee(
+                new ComprehensiveServiceFeeRequest("k1", "__DEFAULT__", null, null, 3000, null, null), DRAFTER));
     }
 
-    /** 转正泛化:不存在/非草案 id → 400 DRAFT_NOT_ACTIVATABLE。 */
+    /** 转正泛化:不存在/非草案 id → 400 DRAFT_NOT_ACTIVATABLE;已下线的 retention 类型 → 400 UNKNOWN_CONFIG_TYPE。 */
     @Test
     void activateNonexistentDraftFails() {
-        assertThatThrownBy(() -> writeService.activateDraft("retention", "prr_d_nonexistent", APPROVER))
+        assertThatThrownBy(() -> writeService.activateDraft("comprehensive_service_fee", "csfc_d_nonexistent", APPROVER))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("DRAFT_NOT_ACTIVATABLE"));
+        // S4:retention 配置类型随留存合并下线,泛化端点不再认识它。
+        assertThatThrownBy(() -> writeService.activateDraft("retention", "prr_d_any", APPROVER))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("UNKNOWN_CONFIG_TYPE"));
     }
 
     /**

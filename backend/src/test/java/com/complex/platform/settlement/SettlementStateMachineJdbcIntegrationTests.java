@@ -72,8 +72,8 @@ class SettlementStateMachineJdbcIntegrationTests {
         seedSettledFact("v_" + p + "_1", "ent_" + p, p, "mch_" + p, jan, 1000L, null);
         seedSettledFact("v_" + p + "_2", "ent_" + p, p, "mch_" + p, feb, 1000L, null);
 
-        assertThat(billRepository.sumVerifiedRevenueCent(p, monthStart(jan), monthEnd(jan))).isEqualTo(1000L);
-        assertThat(billRepository.sumVerifiedRevenueCent(p, monthStart(feb), monthEnd(feb))).isEqualTo(1000L);
+        assertThat(billRepository.sumPooledTotals(p, monthStart(jan), monthEnd(jan)).revenueCent()).isEqualTo(1000L);
+        assertThat(billRepository.sumPooledTotals(p, monthStart(feb), monthEnd(feb)).revenueCent()).isEqualTo(1000L);
     }
 
     @Test
@@ -121,7 +121,7 @@ class SettlementStateMachineJdbcIntegrationTests {
                 Integer.class, "ST-VR-rev_" + p);
         assertThat(negRows).isEqualTo(1);
         // 未过账月：正+负净为 0。
-        assertThat(billRepository.sumVerifiedRevenueCent(p, monthStart(jan), monthEnd(jan))).isZero();
+        assertThat(billRepository.sumPooledTotals(p, monthStart(jan), monthEnd(jan)).revenueCent()).isZero();
     }
 
     @Test
@@ -146,7 +146,7 @@ class SettlementStateMachineJdbcIntegrationTests {
                 "v_" + p, "rev_" + p, "ent_" + p, "order_x", "mch_" + p, 1));
 
         // 历史(Jan)不改：仍为原正向 1000（不删历史行）。
-        assertThat(billRepository.sumVerifiedRevenueCent(p, monthStart(jan), monthEnd(jan))).isEqualTo(1000L);
+        assertThat(billRepository.sumPooledTotals(p, monthStart(jan), monthEnd(jan)).revenueCent()).isEqualTo(1000L);
         // 负向红冲落当月(now)，不在 Jan 窗内。
         Instant vrBusiness = jdbcTemplate.queryForObject(
                 "SELECT business_at FROM settlement_transactions WHERE transaction_no = ?",

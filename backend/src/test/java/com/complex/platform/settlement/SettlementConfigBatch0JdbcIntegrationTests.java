@@ -44,7 +44,7 @@ class SettlementConfigBatch0JdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    private final List<String> retentionIds = new ArrayList<>();
+    private final List<String> feeConfigIds = new ArrayList<>();
     private final List<String> attributionIds = new ArrayList<>();
 
     @BeforeEach
@@ -55,39 +55,48 @@ class SettlementConfigBatch0JdbcIntegrationTests {
     @AfterEach
     void cleanup() {
         TestSecurityActors.clear();
-        for (String id : retentionIds) {
-            jdbcTemplate.update("DELETE FROM platform_retention_rules WHERE id = ?", id);
+        for (String id : feeConfigIds) {
+            jdbcTemplate.update("DELETE FROM comprehensive_service_fee_configs WHERE id = ?", id);
         }
         for (String id : attributionIds) {
             jdbcTemplate.update("DELETE FROM merchant_revenue_attribution_rules WHERE id = ?", id);
         }
     }
 
-    /** ① 草案不生效:project 特例 is_draft=TRUE 不被 finder 采用(回落全局默认 2000);转正 FALSE 后才生效为 3333。 */
+    /** ① 草案不生效(S4 起以综合服务费为样本,原留存表已停用):project 特例 is_draft=TRUE 不被 finder 采用
+     *  (回落全局默认 2000 = V370 等价保值种子);转正 FALSE 后才生效为 3333。 */
     @Test
     void draftConfigNotApplied_untilActivated() {
         String pid = "pv326" + Long.toHexString(System.nanoTime() & 0xFFFFFFFL);
-        String id = "prr_b0_" + Long.toHexString(System.nanoTime());
-        retentionIds.add(id);
+        String id = "csfc_b0_" + Long.toHexString(System.nanoTime());
+        feeConfigIds.add(id);
         jdbcTemplate.update(
-                "INSERT INTO platform_retention_rules (id, project_id, retention_bps, status, is_draft)"
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, fee_bps, status, is_draft)"
                         + " VALUES (?, ?, 3333, 'active', TRUE)", id, pid);
 
-        // 草案态:不采用 → 回落全局默认种子(2000)
-        assertThat(billRepository.findRetentionBps(pid)).isEqualTo(2000);
+        // 草案态:不采用 → 回落全局默认种子(2000,V370 由留存率平移)
+        assertThat(billRepository.findComprehensiveServiceFee(pid, null, null).feeBps()).isEqualTo(2000);
 
         // 转正为正式:生效
-        jdbcTemplate.update("UPDATE platform_retention_rules SET is_draft = FALSE WHERE id = ?", id);
-        assertThat(billRepository.findRetentionBps(pid)).isEqualTo(3333);
+        jdbcTemplate.update("UPDATE comprehensive_service_fee_configs SET is_draft = FALSE WHERE id = ?", id);
+        assertThat(billRepository.findComprehensiveServiceFee(pid, null, null).feeBps()).isEqualTo(3333);
     }
 
-    /** ② V326 现存种子一次性转正:迁移后全局默认种子 is_draft=FALSE,读得到种子(零行为变化)。 */
+    /** ② 种子形态(V326 转正 + V370 合并留存):综合服务费全局默认行 is_draft=FALSE 且费率=2000
+     *  (等价保值:原池内 20% 留存平移为费率);platform_retention_rules 已整体停用(无 active 行)。 */
     @Test
     void migrationActivatedExistingSeeds() {
-        Boolean retentionSeedDraft = jdbcTemplate.queryForObject(
-                "SELECT is_draft FROM platform_retention_rules WHERE project_id IS NULL", Boolean.class);
-        assertThat(retentionSeedDraft).isFalse();
-        assertThat(billRepository.findRetentionBps(null)).isEqualTo(2000);
+        Boolean feeSeedDraft = jdbcTemplate.queryForObject(
+                "SELECT is_draft FROM comprehensive_service_fee_configs"
+                        + " WHERE project_id IS NULL AND merchant_id IS NULL AND ticket_type_id IS NULL"
+                        + " AND status = 'active' AND is_draft = FALSE", Boolean.class);
+        assertThat(feeSeedDraft).isFalse();
+        assertThat(billRepository.findComprehensiveServiceFee(null, null, null).feeBps()).isEqualTo(2000);
+
+        // S4/V370:留存与综合服务费为同一项、只扣一次 → 留存表软删停用,不许再有生效行。
+        Integer activeRetention = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM platform_retention_rules WHERE status = 'active'", Integer.class);
+        assertThat(activeRetention).isZero();
 
         Boolean giveawaySeedDraft = jdbcTemplate.queryForObject(
                 "SELECT is_draft FROM giveaway_cost_configs WHERE project_id IS NULL", Boolean.class);
