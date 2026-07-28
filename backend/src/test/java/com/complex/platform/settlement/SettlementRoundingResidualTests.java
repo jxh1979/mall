@@ -47,7 +47,10 @@ class SettlementRoundingResidualTests {
     @AfterEach
     void cleanup() {
         for (String pid : projectIds) {
-            jdbcTemplate.update("DELETE FROM settlement_transactions WHERE project_id = ?", pid);
+            // V344 起 settlement_transactions 是 append-only 硬强制表(触发器拒 UPDATE/DELETE),
+            //   清场 DELETE 须走测试专用旁路(与 SettlementBatch2EngineTests 同范式)。
+            com.complex.platform.support.AppendOnlyTestBypass.update(
+                    jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", pid);
             jdbcTemplate.update(
                     "DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)",
                     pid);
