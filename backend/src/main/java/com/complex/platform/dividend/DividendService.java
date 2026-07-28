@@ -44,7 +44,7 @@ import static com.complex.platform.common.Strings.requireText;
  * − 期间销货成本（V296 sumOutboundCost 同谓词，可配开关）
  * − 期间费用（V297 费用归集台账净额，计入类别可配）
  * = 净利润 → 按方案比例劈分（余数归主理人） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
- * 整除链截断与薪资税表同口径） → 净发放额。
+ * 平台分成/风险准备金四舍五入、代扣个税整除截断对齐税局——2026-07-28 用户拍板） → 净发放额。
  *
  * <p>时窗：BusinessDayResolver 平台全局经营日切分（与 V296 成本汇总/营业额租金同口径）——三来源同窗才能恒等；
  * 费用侧为 V297 的月份桶粒度（台账本身按月归集）。
@@ -492,13 +492,14 @@ public class DividendService {
                             + "，结转至下期 " + dist.carryAfterCent() + " 分", now);
         }
         addLine(lines, statementId, merchantId, seq, "platform_share", dist.platformShareCent(),
-                "平台分成（" + plan.platformShareBps() + " 万分比，整除链截断）", now);
+                "平台分成（" + plan.platformShareBps() + " 万分比，四舍五入到分）", now);
         addLine(lines, statementId, merchantId, seq, "principal_gross", dist.principalGrossCent(),
                 "主理人应得（可分配额 − 平台分成，余数归主理人）", now);
         addLine(lines, statementId, merchantId, seq, "tax_withheld", -dist.taxCent(),
                 isCompany
                         ? "公司股东不代扣个税，按约定全额发放（代扣 0 分）"
-                        : "代扣股息红利个税（个人真实股东口径，税率 " + effectiveTaxBps + " 万分比，整除链截断）", now);
+                        : "代扣股息红利个税（个人真实股东口径，税率 " + effectiveTaxBps
+                                + " 万分比，整除截断·对齐税局申报口径）", now);
         addLine(lines, statementId, merchantId, seq, "principal_net", dist.principalNetCent(),
                 "税后应得 = 主理人应得 − 代扣税", now);
         if (plan.arrearsOffsetEnabled() && dist.arrearsOffsetCent() > 0) {

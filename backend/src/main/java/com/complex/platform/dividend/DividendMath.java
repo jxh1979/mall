@@ -1,21 +1,38 @@
 package com.complex.platform.dividend;
 
+import com.complex.platform.common.money.MoneyRounding;
+
 /**
- * 持股分红纯算法（整数分）。取整口径与薪资税表（V217 payroll_tax_brackets）一致：
- * bps 比例用整除链截断（{@code amount * bps / 10000}，long 整除），不四舍五入。
+ * 持股分红纯算法（整数分）。
+ *
+ * <p><b>取整口径（2026-07-28 用户拍板，R-7/D15.1 收尾）——两种口径刻意混用</b>：
+ * <ul>
+ *   <li><b>平台分成、风险准备金留存 → 四舍五入 HALF_UP</b>（走公共入口 {@link MoneyRounding#bpsOf}）。
+ *       旧整除截断使平台恒少收、差额白送主理人且不留痕，与「金额一律四舍五入到分」的全局口径不符。</li>
+ *   <li><b>代扣个税 → 保持整除截断</b>（{@code principalGross * taxRateBps / 10000}，与薪资税表
+ *       V217 payroll_tax_brackets 同口径）。理由：<b>与税局申报口径对齐</b>，改成四舍五入会导致代扣申报对不上。
+ *       <b>此处不得改用 MoneyRounding</b>。</li>
+ * </ul>
+ *
+ * <p><b>混用不破坏守恒</b>：链上每一步的另一半都取<b>补数</b>定义
+ * （{@code principalGross := distributable − platformShare}、{@code principalNet := principalGross − tax}、
+ * {@code payout := afterCustom − reserve} …），故各步用什么取整口径都不影响总额恒等：
+ * {@code 平台分成 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 ≡ 可分配额}，逐分严格相等。
+ * 由此分红链的<b>舍入尾差恒为 0</b>（与通票分账不同——那边各家份额各自独立按比例算才会产生尾差），
+ * 无尾差可单列，故不设 residual 列。见 {@code DividendMathTests#mixedRoundingConservesTotalAcrossAllParties}。
  *
  * <p>V299 恒等式（与 dividend_statements 的 DB CHECK 一一对应）：
  * <ul>
  *   <li>distributable = max(netProfit − applied, 0)（applied=本期结转弥补额；关闭期 applied=0，退化为 max(netProfit,0)）</li>
  *   <li>platformShare + principalGross = distributable（余数归主理人，劈分不丢分）</li>
- *   <li>principalNet = principalGross − tax（tax = principalGross * taxRateBps / 10000）</li>
+ *   <li>principalNet = principalGross − tax（tax = principalGross * taxRateBps / 10000，<b>整除截断·对齐税局</b>）</li>
  * </ul>
  *
  * <p>V303 扣除项三开关（默认全关时逐分等于 V299 现状）：
  * <ul>
  *   <li>亏损结转：累计恒结转（after 恒累计，关闭期不清零）；开关只控本期是否扣减可分配额（applied）；结转链见 {@link Distribution}</li>
  *   <li>欠款抵扣：税后应得先抵扣未清应收 arrearsOutstanding（钳到 principalNet 上限）</li>
- *   <li>发放保护线：留存 = min(抵扣后余额, max(余额×bps/10000, 固定额))，实发 = 抵扣后余额 − 留存</li>
+ *   <li>发放保护线：留存 = min(抵扣后余额, max(<b>四舍五入</b>(余额×bps/10000), 固定额))，实发 = 抵扣后余额 − 留存</li>
  * </ul>
  *
  * <p>V309 自定义扣除项（#35）：欠款抵扣之后、留存之前，对 (税后应得 − 欠款抵扣) 余额逐项按顺序封顶扣减
@@ -137,8 +154,12 @@ public final class DividendMath {
         long distributable = Math.max(netProfitCent - carryApplied, 0L);
         long carryAfter = carryIn - carryApplied + Math.max(-netProfitCent, 0L);
 
-        long platformShare = distributable * platformShareBps / BPS_DENOMINATOR;
+        // R-7(2026-07-28 拍板):平台分成【四舍五入】——旧整除截断平台恒少收、差额白送主理人且不留痕。
+        //   bps≤10000 且 distributable≥0 ⇒ platformShare ≤ distributable ⇒ principalGross ≥ 0(补数非负)。
+        long platformShare = MoneyRounding.bpsOf(distributable, platformShareBps);
         long principalGross = distributable - platformShare;
+        // 🔴 代扣个税【保持整除截断】(2026-07-28 用户拍板):与税局申报口径对齐,改四舍五入会使代扣申报对不上。
+        //   此行【不得】改用 MoneyRounding;与 JdbcStaffRepository 薪资个税税表整除链同口径。
         long tax = principalGross * taxRateBps / BPS_DENOMINATOR;
         long principalNet = principalGross - tax;
 
@@ -154,7 +175,8 @@ public final class DividendMath {
 
         long reserve = 0L;
         if (payoutFloor) {
-            long byRate = afterCustom * reserveBps / BPS_DENOMINATOR;
+            // R-7(2026-07-28 拍板):风险准备金留存比例额【四舍五入】(旧整除截断留存恒偏少)。
+            long byRate = MoneyRounding.bpsOf(afterCustom, reserveBps);
             reserve = Math.min(afterCustom, Math.max(byRate, Math.max(reserveFixedCent, 0L)));
         }
         long payout = afterCustom - reserve;

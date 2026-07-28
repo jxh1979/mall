@@ -123,6 +123,8 @@ class JdbcStaffRepository implements StaffRepository {
                   -- 个税可配置化(V217):劳务报酬预扣税表落 payroll_tax_brackets,按毛收入(svc,分)落档,
                   -- 每档公式 GREATEST(0,(svc*base_bps/10000 - flat_deduction)*rate_bps/10000 - quick_deduction)。
                   -- 整除链与原 CASE WHEN 逐分等价;税法参数变更改配置表不改代码。svc<=0 无 service_order 劳务→无档匹配→tax 0。
+                  -- 🔴 R-7:个税整除链【刻意保持截断】(2026-07-28 用户拍板)——与税局申报口径对齐,改四舍五入会使代扣申报对不上;
+                  --    与 DividendMath 的代扣个税同口径。全局「金额四舍五入到分」(D15.1)对本式【不适用】。
                   LEFT JOIN (SELECT sb.user_id,
                                     GREATEST(0,
                                         (sb.svc * br.income_base_bps / 10000 - br.flat_deduction_cent)
