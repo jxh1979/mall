@@ -27,6 +27,10 @@ public class TicketCatalogService {
     private static final BigDecimal MAX_DISCOUNT_RATE = BigDecimal.valueOf(100);
     private static final Set<String> PRICE_VARIANTS = Set.of("group", "new_customer", "student", "channel", "member");
     private static final Set<String> PRICE_MODES = Set.of("derive_from_calendar_price", "fixed_price");
+    // 基础日历价模式白名单：业务口径只有「平日/周末/节假日三类基础价」一种
+    // （业务系统地图「平日票、周末票、节假日票（基础价，优先级最高）」）。
+    // 与上面派生价规则的 PRICE_MODES 是两个不同字段，勿混用。
+    private static final Set<String> BASE_CALENDAR_PRICE_MODES = Set.of("weekday_weekend_holiday");
     // 结算重构批4（V230）：票种资格/定价档分类；null/standard=标准（与 DB CHECK 一致）。
     private static final Set<String> TICKET_CATEGORIES = Set.of("standard", "new_person", "student");
 
@@ -51,7 +55,7 @@ public class TicketCatalogService {
         return repository.saveTicketType(new TicketTypeRecord(
                 "ticket_type_" + slug(actual.idempotencyKey()),
                 requireText(actual.ticketName(), "ticket_name"),
-                requireText(actual.baseCalendarPriceMode(), "base_calendar_price_mode"),
+                requireEnum(actual.baseCalendarPriceMode(), BASE_CALENDAR_PRICE_MODES, "base_calendar_price_mode"),
                 actual.weekdayPriceCent(),
                 actual.weekendPriceCent(),
                 actual.holidayPriceCent(),
