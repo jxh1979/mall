@@ -31,8 +31,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class RevenueStreamAttributionJdbcIntegrationTests {
 
     private static final String PROJECT = "proj_rsa_it";
-    private static final String ENT_DEFAULT = "be_rsa_ent_default";   // 平台默认娱乐运营平台
-    private static final String ENT_PROJECT = "be_rsa_ent_project";   // 项目特例娱乐运营平台
+    private static final String ENT_DEFAULT = "be_rsa_ent_default";   // 平台默认娱乐平台公司
+    private static final String ENT_PROJECT = "be_rsa_ent_project";   // 项目特例娱乐平台公司
     private static final YearMonth MONTH = YearMonth.of(2013, 5);
 
     @Autowired
@@ -120,7 +120,7 @@ class RevenueStreamAttributionJdbcIntegrationTests {
         jdbcTemplate.update("""
                 INSERT INTO business_entities (id, entity_name, entity_role, parent_entity_id, status, created_at, updated_at)
                 VALUES (?, ?, 'management_company', ?, 'active', ?, ?)
-                """, ENT_PROJECT, "娱乐运营平台X", ENT_DEFAULT, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
+                """, ENT_PROJECT, "娱乐平台公司X", ENT_DEFAULT, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
 
         String parent = jdbcTemplate.queryForObject(
                 "SELECT parent_entity_id FROM business_entities WHERE id = ?", String.class, ENT_PROJECT);
