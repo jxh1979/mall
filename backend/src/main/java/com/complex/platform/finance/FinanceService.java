@@ -51,7 +51,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout",
             "dividend_reserve_withheld", "dividend_reserve_released", "termination_penalty", "deposit_refund",
             // D7 超池特批·超额 C 口径(甲标签法):池内额过 ticket_distribution(项目公司承担)、超出总池的超额部分过
-            //   platform_incentive_subsidy(L3 娱乐运营平台承担)。DB 层 source_type 自由 VARCHAR 无 CHECK,零迁移。
+            //   platform_incentive_subsidy(L3 娱乐平台公司承担)。DB 层 source_type 自由 VARCHAR 无 CHECK,零迁移。
             "platform_incentive_subsidy");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");

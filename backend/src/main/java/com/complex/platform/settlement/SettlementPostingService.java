@@ -33,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>D7 超额 C 口径（甲标签法）</b>：仅当 bill <b>超池</b>（池分账合计 poolDistributed &gt; spvPool）时，
  * 对<b>池明细</b>（method≠exclusive_full）两段拆——池内额 {@code pool_i = a_i*spvPool/poolDistributed}
  * 过 {@code ticket_distribution}（项目公司承担）、超额 {@code excess_i = a_i-pool_i} 过
- * {@code platform_incentive_subsidy}（L3 娱乐运营平台承担，独立幂等前缀 {@code settle-pis-} 防与 td 行撞）。
+ * {@code platform_incentive_subsidy}（L3 娱乐平台公司承担，独立幂等前缀 {@code settle-pis-} 防与 td 行撞）。
  * 专属直付 item（exclusive_full）永不拆、全额 ticket_distribution；未超池 bill 完全现状（单条）。
  *
  * <p>状态流转：结算单 draft →（引擎校验通过 or 超池特批）confirmed →（本服务过账）settled；

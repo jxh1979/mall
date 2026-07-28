@@ -195,7 +195,7 @@ public class TicketDistributionSettlementService {
         String status = overPool ? STATUS_DRAFT : STATUS_CONFIRMED;
         String specialApprovalRef = null; // 越池时留 null 待人工填;未越池时也 null(无需特批)
 
-        // 六业态收入归属:通票收入归属的 L3 管理公司(娱乐运营平台),按 (项目, all_pass_ticket) 可配置解析;
+        // 六业态收入归属:通票收入归属的 L3 管理公司(娱乐平台公司),按 (项目, all_pass_ticket) 可配置解析;
         //   项目特例优先→全局默认→未配置返 null(仅记归属,不改任何金额)。
         String attributedEntityId =
                 attributionRepository.resolveManagementEntity(projectId, REVENUE_STREAM_ALL_PASS_TICKET);
