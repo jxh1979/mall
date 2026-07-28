@@ -756,3 +756,14 @@
 - 阈值可配；默认不做主管豁免。
 
 承接：`amusement-business-operations-product-prd-v0.1.md` §7.2A。
+
+
+## DEC-DATA-FRESH-PRAGMATIC-001（2026-07-28）
+
+闭合 **ADV-ED-008**。用户：不必那么精准；希望数据都有；出问题可用近似。
+
+- 有数优先；异常允许最近快照/近似；
+- 页面级轻量提示即可；不强制逐卡精密新鲜度；
+- 无定义空值不默默当 0；阈值可配。
+
+承接：`data-analysis-layer-spec-v0.2.md` §F；游乐 PRD 指针 §8.1A。

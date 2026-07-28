@@ -170,6 +170,11 @@ flowchart TD
 | 定期检修 | 工程师、检修单位（复用供应商）、点位、来源终端、检修时间、检修结果、异常说明、主管确认恢复营业 |
 | 项目异常 | 暂停、关闭、故障、超容、争议 |
 
+
+### 8.1A 经营数据展示口径（指针）
+
+游乐经营看板/管理层指标的数据可用性与近似展示，遵循 `data-analysis-layer-spec-v0.2.md` §F（**DEC-DATA-FRESH-PRAGMATIC-001**：有数优先，异常可用近似，轻量提示即可，不强制逐卡精密新鲜度）。
+
 ## 9. P0 验收标准
 
 - 游乐项目必须能绑定空间点位和适用权益。
@@ -278,3 +283,5 @@ flowchart TD
 | 2026-06-07 | 改 | §9 验收 | 补三维度容量取最小值验收项 | amuse-1 |
 | 2026-06-07 | 改 | §11 已确认规则 | 检修单位明确=复用供应链 suppliers 主数据；主管确认前不可恢复营业升级为状态机约束 | amuse-3、kiosk-4、基准 D7 |
 | 2026-06-20 `文档goalP1` | 增 | §11A | 新增「超容放行与准入拦截能力补充」：①游乐超容 over_capacity 软/硬阈值放行策略（V104，硬阻断+软告警放行均落异常与事件，后台可切 warn_only 仅告警）②准入闸 over_space/over_contract_scope 游乐入场拦截+升级放行（V099，fail-closed）③团体/包场据 V035 实证由「未做」更正为「已落地」（group/private、四态机、approve 受准入闸双控）。权威指向 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §1/§7/§18 | 文档goalP1；grep 实证 V104/V099/V035 + AmusementService/AmusementBookingService |
+
+| 2026-07-28 | 增 | §8.1A | 数据近似展示指针 ADV-ED-008 |
