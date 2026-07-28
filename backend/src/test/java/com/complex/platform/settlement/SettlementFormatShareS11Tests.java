@@ -66,7 +66,6 @@ class SettlementFormatShareS11Tests {
                      WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)""", pid);
             jdbcTemplate.update("DELETE FROM settlement_bills WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM ticket_distribution_rank_tiers WHERE project_id = ?", pid);
-            jdbcTemplate.update("DELETE FROM platform_retention_rules WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM channel_fee_configs WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM ticket_combo_discount_configs WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM revenue_stream_attribution WHERE project_id = ?", pid);
@@ -85,25 +84,26 @@ class SettlementFormatShareS11Tests {
      *
      * <p>这是本刀「不动老账」的正面证明：综合体今天卖的绝大多数还是纯酒吧通票，
      * 财务这个月拿到的结算单不能因为系统多了一层业态拆分就变个数字。
-     * 断言方式是把结算单整行 {@code SELECT *} 转成 Map、与手算的<b>全部 23 列</b>逐列比对，
+     * 断言方式是把结算单整行 {@code SELECT *} 转成 Map、与手算的<b>全部列</b>逐列比对，
      * 不是挑几列看看——挑几列看，恰好没挑的那列错了就漏过去了。
+     * (S4 起综合服务费两支/收款主体快照列并入本全列比对;每笔费按 20% 等价保值口径逐笔计提。)
      */
     @Test
     void barOnlyPassKeepsEveryBillColumnPennyIdentical() {
         String pid = newProject();
-        setRetentionBps(pid, 2000);
         setRankTier(pid, 1, 9, 3333);
         seedMerchant("m_bar_a", "bar");
         seedMerchant("m_bar_b", "bar");
         seedMerchant("m_bar_c", "bar");
-        seedVerified(pid, "m_bar_a", 3, 2, 40001L);
-        seedVerified(pid, "m_bar_b", 2, 1, 30007L);
-        seedVerified(pid, "m_bar_c", 1, 1, 29991L);
+        // 每笔核销带按 20% HALF_UP 计提的池链综合服务费:8000 / 6001 / 5998(计提时逐笔舍入)。
+        seedVerifiedWithFee(pid, "m_bar_a", 3, 2, 40001L, 8000L);
+        seedVerifiedWithFee(pid, "m_bar_b", 2, 1, 30007L, 6001L);
+        seedVerifiedWithFee(pid, "m_bar_c", 1, 1, 29991L, 5998L);
 
         String billId = settlementService.settleMonth(pid, MONTH);
 
-        // 手算（拆份额之前的老公式）：收入 99999 → 渠道费 0 → 池 99999 → 留存 20000 → 各吧总池 79999；
-        //   三家各 3333‱ = 26664（四舍五入到分），Σ=79992，应分总额 79991 → 尾差 −1（单列归平台兜底）。
+        // 手算：收入 99999 → 渠道费 0 → 池链综合服务费 Σ=19999 → 可分配池 80000；
+        //   三家各 3333‱ = 26664（80000×0.3333 恰整），Σ=79992=应分总额 → 尾差 0。
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("id", billId);
         expected.put("project_id", pid);
@@ -111,22 +111,20 @@ class SettlementFormatShareS11Tests {
         expected.put("period_end", java.sql.Date.valueOf(PERIOD_END));
         expected.put("ticket_revenue_cent", 99999L);
         expected.put("channel_fee_cent", 0L);
-        expected.put("giveaway_cost_cent", 0L);
-        expected.put("available_pool_cent", 99999L);
-        expected.put("retention_bps", 2000);
-        expected.put("retention_cent", 20000L);
-        expected.put("spv_pool_cent", 79999L);
+        expected.put("available_pool_cent", 80000L);
         expected.put("distributed_cent", 79992L);
+        expected.put("comp_service_fee_pooled_cent", 19999L);
+        expected.put("comp_service_fee_exclusive_cent", 0L);
+        expected.put("fee_beneficiary_entity_id", "be_ent_platform"); // V370 全局归属种子:归娱乐平台公司
         expected.put("distribution_method", "by_rank_tier");
         expected.put("special_approval_ref", null);
         expected.put("special_approval_valid_until", null);
         expected.put("status", "confirmed");
         expected.put("confirmed_at", null);
         expected.put("settled_at", null);
-        expected.put("comp_service_fee_cent", 0L);
         expected.put("attributed_entity_id", null);
         expected.put("combo_discount_cent", 0L);
-        expected.put("rounding_residual_cent", -1L);
+        expected.put("rounding_residual_cent", 0L);
 
         Map<String, Object> actual = new HashMap<>(bill(pid));
         actual.remove("created_at");   // 落库时刻，非业务口径
@@ -135,12 +133,13 @@ class SettlementFormatShareS11Tests {
                 .as("单业态票（只有酒吧）→ 酒吧占比 100% → 结算单每一列逐分不变")
                 .isEqualTo(expected);
 
-        // 业态份额只有酒吧一行，净份额恰是可分配池的基数。
+        // 业态份额只有酒吧一行，净份额(毛额−渠道费−综合服务费)恰是可分配池。
         Map<String, Map<String, Object>> shares = formatShares(billId);
         assertThat(shares.keySet()).containsExactly("bar");
         assertThat(shares.get("bar").get("gross_revenue_cent")).isEqualTo(99999L);
         assertThat(shares.get("bar").get("channel_fee_cent")).isEqualTo(0L);
-        assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(99999L);
+        assertThat(shares.get("bar").get("comp_service_fee_cent")).isEqualTo(19999L);
+        assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(80000L);
         assertThat(shares.get("bar").get("beneficiary_kind")).isEqualTo("entity");
     }
 
@@ -155,42 +154,45 @@ class SettlementFormatShareS11Tests {
     @Test
     void onlyBarShareEntersPoolAndOnlyBarsAreRanked() {
         String pid = newProject();
-        setRetentionBps(pid, 2000);
         setRankTier(pid, 1, 9, 5000);
         seedMerchant("m_fmt_bar1", "bar");
         seedMerchant("m_fmt_bar2", "bar");
         seedMerchant("m_fmt_amu", "amusement");
         seedMerchant("m_fmt_cat", "catering");
-        seedVerified(pid, "m_fmt_bar1", 6, 6, 60000L);
-        seedVerified(pid, "m_fmt_bar2", 4, 4, 40000L);
-        seedVerified(pid, "m_fmt_amu", 9, 9, 30000L);   // 核销数最多，从前会抢到第 1 名
-        seedVerified(pid, "m_fmt_cat", 8, 8, 10000L);
+        // 综合服务费对所有门票核销一视同仁(每笔 20%):酒吧 12000+8000、游乐 6000、餐饮 2000。
+        seedVerifiedWithFee(pid, "m_fmt_bar1", 6, 6, 60000L, 12000L);
+        seedVerifiedWithFee(pid, "m_fmt_bar2", 4, 4, 40000L, 8000L);
+        seedVerifiedWithFee(pid, "m_fmt_amu", 9, 9, 30000L, 6000L);   // 核销数最多，从前会抢到第 1 名
+        seedVerifiedWithFee(pid, "m_fmt_cat", 8, 8, 10000L, 2000L);
 
         String billId = settlementService.settleMonth(pid, MONTH);
         Map<String, Object> b = bill(pid);
 
-        // 通票收入是整张票的钱（各业态毛额之和），可分配池只拿酒吧那一份。
+        // 通票收入是整张票的钱（各业态毛额之和），可分配池只拿酒吧那一份(扣完酒吧侧服务费)。
         assertThat(b.get("ticket_revenue_cent")).isEqualTo(140000L);
-        assertThat(b.get("available_pool_cent")).as("池 = 酒吧份额，不含游乐/餐饮").isEqualTo(100000L);
-        assertThat(b.get("retention_cent")).isEqualTo(20000L);
-        assertThat(b.get("spv_pool_cent")).isEqualTo(80000L);
+        assertThat(b.get("comp_service_fee_pooled_cent")).as("池链服务费 = 全部业态计提合计").isEqualTo(28000L);
+        assertThat(b.get("available_pool_cent")).as("池 = 酒吧份额 − 酒吧侧服务费,不含游乐/餐饮").isEqualTo(80000L);
 
         // 分池明细里只有两家酒吧，各 50%。
         Map<String, Long> items = itemAmounts(pid);
         assertThat(items).containsOnlyKeys("m_fmt_bar1", "m_fmt_bar2");
         assertThat(items.values()).containsExactly(40000L, 40000L);
 
-        // 业态份额三行，归属各就各位；K20：Σ净份额 + 渠道费 = 通票收入。
+        // 业态份额三行，归属各就各位；K20：Σ净份额 + 渠道费 + 综合服务费 = 通票收入。
         Map<String, Map<String, Object>> shares = formatShares(billId);
         assertThat(shares.keySet()).containsExactlyInAnyOrder("bar", "amusement", "catering");
-        assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(100000L);
-        assertThat(shares.get("amusement").get("net_revenue_cent")).isEqualTo(30000L);
-        assertThat(shares.get("catering").get("net_revenue_cent")).isEqualTo(10000L);
+        assertThat(shares.get("bar").get("comp_service_fee_cent")).isEqualTo(20000L);
+        assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(80000L);
+        assertThat(shares.get("amusement").get("comp_service_fee_cent")).isEqualTo(6000L);
+        assertThat(shares.get("amusement").get("net_revenue_cent")).isEqualTo(24000L);
+        assertThat(shares.get("catering").get("comp_service_fee_cent")).isEqualTo(2000L);
+        assertThat(shares.get("catering").get("net_revenue_cent")).isEqualTo(8000L);
         assertThat(shares.get("amusement").get("beneficiary_kind")).as("游乐份额归游乐公司这个主体").isEqualTo("entity");
         assertThat(shares.get("catering").get("beneficiary_kind")).as("餐饮份额归提供这份餐的商户自己").isEqualTo("per_merchant");
         assertThat(shares.get("catering").get("beneficiary_entity_id")).isNull();
-        assertThat(sumOf(shares, "net_revenue_cent") + (Long) b.get("channel_fee_cent"))
-                .as("K20:Σ各业态净份额 + 整单渠道费 ≡ 通票收入")
+        assertThat(sumOf(shares, "net_revenue_cent") + (Long) b.get("channel_fee_cent")
+                + (Long) b.get("comp_service_fee_pooled_cent"))
+                .as("K20:Σ各业态净份额 + 整单渠道费 + 池链综合服务费 ≡ 通票收入")
                 .isEqualTo(b.get("ticket_revenue_cent"));
     }
 
@@ -206,17 +208,16 @@ class SettlementFormatShareS11Tests {
     @Test
     void channelFeeIsChargedOnWholeOrderAndBorneByEveryFormat() {
         String pid = newProject();
-        setRetentionBps(pid, 2000);
         setRankTier(pid, 1, 9, 5000);
         setChannelFeeBps(pid, null, 1000);
         seedMerchant("m_ch_bar1", "bar");
         seedMerchant("m_ch_bar2", "bar");
         seedMerchant("m_ch_amu", "amusement");
         seedMerchant("m_ch_cat", "catering");
-        seedVerified(pid, "m_ch_bar1", 6, 6, 60000L);
-        seedVerified(pid, "m_ch_bar2", 4, 4, 40000L);
-        seedVerified(pid, "m_ch_amu", 3, 3, 30000L);
-        seedVerified(pid, "m_ch_cat", 1, 1, 10000L);
+        seedVerifiedWithFee(pid, "m_ch_bar1", 6, 6, 60000L, 12000L);
+        seedVerifiedWithFee(pid, "m_ch_bar2", 4, 4, 40000L, 8000L);
+        seedVerifiedWithFee(pid, "m_ch_amu", 3, 3, 30000L, 6000L);
+        seedVerifiedWithFee(pid, "m_ch_cat", 1, 1, 10000L, 2000L);
 
         String billId = settlementService.settleMonth(pid, MONTH);
         Map<String, Object> b = bill(pid);
@@ -228,9 +229,9 @@ class SettlementFormatShareS11Tests {
         assertThat(shares.get("catering").get("channel_fee_cent")).isEqualTo(1000L);
         assertThat(shares.get("bar").get("channel_fee_cent")).as("酒吧只担自己那一份渠道费").isEqualTo(10000L);
         assertThat(sumOf(shares, "channel_fee_cent")).isEqualTo(14000L);
-        assertThat(b.get("available_pool_cent")).isEqualTo(90000L);   // 100000 − 10000
-        assertThat(b.get("spv_pool_cent")).isEqualTo(72000L);         // 90000 − 18000 留存
-        assertThat(itemAmounts(pid).values()).containsExactly(36000L, 36000L);
+        // 池 = 酒吧毛额 100000 − 酒吧渠道费 10000 − 酒吧侧综合服务费 20000 = 70000。
+        assertThat(b.get("available_pool_cent")).isEqualTo(70000L);
+        assertThat(itemAmounts(pid).values()).containsExactly(35000L, 35000L);
     }
 
     /** 渠道费率按【订单销售渠道】解析：某渠道配了专属率就用专属率，没配的落回通用率（默认 0＝官方直销不抽）。 */
@@ -255,7 +256,6 @@ class SettlementFormatShareS11Tests {
     @Test
     void platformBorneDiscountIsAddedBackToEveryFormat() {
         String pid = newProject();
-        setRetentionBps(pid, 0);
         setRankTier(pid, 1, 9, 10000);
         seedMerchant("m_dis_bar", "bar");
         seedMerchant("m_dis_amu", "amusement");
@@ -292,7 +292,6 @@ class SettlementFormatShareS11Tests {
     @Test
     void rerunRewritesFormatSharesWithoutLeavingStaleRows() {
         String pid = newProject();
-        setRetentionBps(pid, 2000);
         setRankTier(pid, 1, 9, 5000);
         seedMerchant("m_re_bar", "bar");
         seedMerchant("m_re_cat", "catering");
@@ -326,13 +325,6 @@ class SettlementFormatShareS11Tests {
                 """, merchantId, merchantId, businessFormat);
     }
 
-    private void setRetentionBps(String projectId, int bps) {
-        jdbcTemplate.update("""
-                INSERT INTO platform_retention_rules (id, project_id, retention_bps, status, is_draft)
-                VALUES (?, ?, ?, 'active', FALSE)
-                """, "prr_" + projectId, projectId, bps);
-    }
-
     private void setRankTier(String projectId, int from, int to, int shareBps) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_distribution_rank_tiers (id, project_id, rank_from, rank_to, share_bps, status, is_draft)
@@ -356,11 +348,21 @@ class SettlementFormatShareS11Tests {
     }
 
     private void seedVerified(String projectId, String merchantId, int verifiedCount, int numPeople, long cent) {
-        seedVerifiedWithDiscount(projectId, merchantId, verifiedCount, numPeople, cent, 0L);
+        seedVerifiedFull(projectId, merchantId, verifiedCount, numPeople, cent, 0L, 0L);
+    }
+
+    private void seedVerifiedWithFee(String projectId, String merchantId, int verifiedCount, int numPeople,
+                                     long cent, long compServiceFeeCent) {
+        seedVerifiedFull(projectId, merchantId, verifiedCount, numPeople, cent, 0L, compServiceFeeCent);
     }
 
     private void seedVerifiedWithDiscount(String projectId, String merchantId, int verifiedCount,
                                           int numPeople, long cent, long discountCent) {
+        seedVerifiedFull(projectId, merchantId, verifiedCount, numPeople, cent, discountCent, 0L);
+    }
+
+    private void seedVerifiedFull(String projectId, String merchantId, int verifiedCount,
+                                  int numPeople, long cent, long discountCent, long compServiceFeeCent) {
         String id = "st_s11_" + java.util.UUID.randomUUID().toString().substring(0, 12);
         java.sql.Timestamp ts = java.sql.Timestamp.from(PERIOD_START.plusDays(9).atStartOfDay().toInstant(ZoneOffset.UTC));
         com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, """
@@ -368,12 +370,12 @@ class SettlementFormatShareS11Tests {
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
                     verification_id, settlement_status, entitlement_valid_to, business_at,
-                    discount_amount_cent, created_at, updated_at)
+                    discount_amount_cent, created_at, updated_at, comp_service_fee_cent)
                 VALUES (?, ?, 'verification_settled', ?, 'pass', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
-                    'draft', ?, ?, ?, ?, ?)
+                    'draft', ?, ?, ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, verifiedCount, Math.max(verifiedCount, 1), numPeople,
-                cent, cent, merchantId, projectId, "vf_" + id, ts, ts, discountCent, ts, ts);
+                cent, cent, merchantId, projectId, "vf_" + id, ts, ts, discountCent, ts, ts, compServiceFeeCent);
     }
 
     private Map<String, Object> bill(String projectId) {

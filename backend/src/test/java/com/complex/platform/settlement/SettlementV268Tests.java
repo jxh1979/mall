@@ -21,7 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>综合服务费落点=月度分账引擎的专属商户直付线(单独门票走此线)。逐家真实断言金额(资金铁律)。
  * <ol>
- *   <li><b>默认 0% = 零行为变更</b>:未配置费率时专属商户仍拿全额,bill.comp_service_fee_cent=0;</li>
+ *   <li><b>默认 0% = 零行为变更</b>:未配置费率时专属商户仍拿全额,bill.comp_service_fee_exclusive_cent=0;</li>
  *   <li><b>配置非零费率</b>:商户拿净额(收入-服务费),服务费归项目记入 bill.comp_service_fee_cent;</li>
  *   <li><b>多专属商户各自独立</b>:各家净额独立、费率按商户/票种精确命中,N 家 N 条独立明细(不串户/不撞键);</li>
  *   <li><b>套票折扣归属</b>:默认 platform_absorb;项目特例可覆盖。</li>
@@ -86,7 +86,7 @@ class SettlementV268Tests {
         settle(pid);
 
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(100000L); // 全额,未扣费
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(0L);
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(0L);
     }
 
     /** 配置某商户某票种 10% 服务费 → 商户拿净额 90000,服务费 10000 归项目。 */
@@ -99,7 +99,7 @@ class SettlementV268Tests {
         settle(pid);
 
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(90000L); // 100000 - 10%
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(10000L);
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(10000L);
     }
 
     /**
@@ -121,7 +121,7 @@ class SettlementV268Tests {
         assertThat(exclusiveAmount(pid, "barB")).isEqualTo(60000L);  // 无配置,全额
         assertThat(exclusiveAmount(pid, "barC")).isEqualTo(30000L);  // 40000 - 10000
         // 项目综合服务费合计 = 10000 + 0 + 10000
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(20000L);
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(20000L);
         // 恰好 3 条专属明细,各家一条(不串户)
         long exclCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM settlement_items si JOIN settlement_bills sb ON sb.id = si.bill_id"
@@ -145,7 +145,7 @@ class SettlementV268Tests {
         settle(pid);
 
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(130000L); // 90000 + 40000
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(10000L); // 仅 ticket 那笔
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(10000L); // 仅 ticket 那笔
     }
 
     /**
@@ -160,7 +160,7 @@ class SettlementV268Tests {
 
         settle(pid);
 
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(500L); // 100 × 5 张(非整包 100)
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(500L); // 100 × 5 张(非整包 100)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(99500L);          // 100000 − 500
     }
 
@@ -173,7 +173,7 @@ class SettlementV268Tests {
 
         settle(pid);
 
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(300L); // min(500, 300)
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(300L); // min(500, 300)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(0L);              // 净额不为负
     }
 
@@ -191,7 +191,7 @@ class SettlementV268Tests {
 
         settle(pid);
 
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(5000L);  // min(10000, 5000)
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(5000L);  // min(10000, 5000)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(95000L);            // 100000 - 5000
     }
 
@@ -207,7 +207,7 @@ class SettlementV268Tests {
 
         settle(pid);
 
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(300L);  // min(500, 300)
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(300L);  // min(500, 300)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(99700L);          // 100000 - 300
     }
 
@@ -220,7 +220,7 @@ class SettlementV268Tests {
 
         settle(pid);
 
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(10000L); // 未触顶,原样
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(10000L); // 未触顶,原样
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(90000L);
     }
 
@@ -238,7 +238,7 @@ class SettlementV268Tests {
 
         settle(pid);
 
-        assertThat(num(bill(pid), "comp_service_fee_cent")).isEqualTo(15000L); // 聚合 20000 → 封 15000(非逐票种各压=20000)
+        assertThat(num(bill(pid), "comp_service_fee_exclusive_cent")).isEqualTo(15000L); // 聚合 20000 → 封 15000(非逐票种各压=20000)
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(185000L);           // 200000 - 15000
     }
 
@@ -308,6 +308,13 @@ class SettlementV268Tests {
     private String newProject() {
         String pid = "pv268" + Long.toHexString(System.nanoTime() & 0xFFFFFFFL);
         projectIds.add(pid);
+        // S4/V370:全局默认费率已按等价保值种成 2000(原池内留存平移)。本类验的是【专属线按商户/票种谈的费率】,
+        // 「无配置商户拿全额」语义靠项目级回退 0 兜住(= 给该项目的专属商户显式补 0 费率的口径)。
+        String fallbackId = "csfc_fb_" + pid;
+        feeConfigIds.add(fallbackId);
+        jdbcTemplate.update(
+                "INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, ticket_type_id,"
+                        + " fee_bps, is_draft) VALUES (?, ?, NULL, NULL, 0, FALSE)", fallbackId, pid);
         return pid;
     }
 

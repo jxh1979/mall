@@ -13,7 +13,6 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRat
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersActivateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
-import com.complex.platform.settlement.SettlementConfigWriteRequests.RetentionRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -55,12 +54,6 @@ public class SettlementConfigController {
     }
 
     // ================= §2 写入面(落草案;settlement.config.manage + 平台域)=================
-
-    @PostMapping("/retention")
-    public ApiResponse<Void> saveRetention(@RequestBody RetentionRequest request) {
-        writeService.saveRetention(request, requireManageActor());
-        return ApiResponse.ok(null);
-    }
 
     @PostMapping("/distribution-method")
     public ApiResponse<Void> saveDistributionMethod(@RequestBody DistributionMethodRequest request) {

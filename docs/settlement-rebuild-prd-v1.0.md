@@ -216,7 +216,7 @@
 
 - **四舍五入到分(HALF_UP),不再整除截断**。一切「金额 × 比例」一律走 `MoneyRounding.bpsOf/prorate`。
   旧写法 `金额 * bps / 10000` 是**向零截断**:收费方(项目公司/平台/员工)系统性少收、余数悄悄留在付款方且不留痕,
-  与「四舍五入」字面口径不符。本轮已改:渠道费、项目留存、按排名档位分池、套票折扣项目承担额、
+  与「四舍五入」字面口径不符。本轮已改:渠道费、池前扣项(现为门票综合服务费,S4 前称项目留存)、按排名档位分池、套票折扣项目承担额、
   单独门票综合服务费、过期未核销归项目切分、核销累计增量公式(原 `Math.round((double)…)` 有浮点失精且对负数不对称)。
 - **符号对称**:HALF_UP 远离零进位,`f(−x) = −f(x)`。跨月红冲取原行之反时逐分精确对消,
   P6「每笔实收 fee 落库 + 冲正取反」的守恒性不被舍入破坏。
@@ -233,15 +233,15 @@
 | 符号 | 正数=各家舍入后合计偏少、差额留在平台;负数=各家舍入后合计偏多、由平台补足 |
 | 量级 | 尾差绝对值 ≤ 参与分账商户数(每家最多贡献 0.5 分);越界 = 分配算法出错,引擎 fail-loud 拒绝出单 |
 | 守恒 | `Σ池分账明细 + 尾差 ≡ 应分总额`,逐分严格相等 |
-| 自检 | `TicketDistributionSettlementService.verifyConservation` 运行期校验①池链 `可分配池 = 留存 + 各酒吧总池`②分账链尾差恒等式③尾差量级;任一不成立抛 `SETTLEMENT_CONSERVATION_VIOLATED`,宁可拒绝出单也不出一张不守恒的结算单 |
+| 自检 | 运行期两道:`verifyFormatSplit` 校验拆份额链 `Σ各业态净份额 + 渠道费 + 池链综合服务费 ≡ 通票收入`(S4/V370 起,原「可分配池 = 留存 + 各酒吧总池」随留存链删除);`verifyConservation` 校验分账链尾差恒等式与尾差量级;任一不成立抛 `SETTLEMENT_CONSERVATION_VIOLATED`,宁可拒绝出单也不出一张不守恒的结算单 |
 
 - **越池判定改按「应分总额」**(= Σ已舍入 + 尾差)而非 Σ已舍入:特批闸管的是「业务上分超了池」,
   不该被 ±n/2 分的舍入尾差触发(尾差本就由平台兜底,不需要为几分钱把整月单打回待特批)。
   无舍入场景(按客数/固定额/比例除得尽)应分总额 ≡ Σ已舍入 → 与改造前逐分同判,**零行为变更**。
-- **不产生尾差的补数式拆分**:渠道费/池、留存/总池、综合服务费/商户净额、过期核销/未核销——
-  后者恒取前者的整数补数,两侧相加恒等于总额,故无尾差,不占 `rounding_residual_cent`。
-- **超池两段拆(§5.0 超额 C 口径)保持向下取整,属本口径的合规特例**:`pool_i = ⌊a_i×spvPool/poolDistributed⌋`
-  向下取整使 `Σpool ≤ spvPool` 硬约束恒成立,且余数落在 `excess_i = a_i − pool_i`(**由 L3 平台承担**)——
+- **不产生尾差的补数式拆分**:渠道费/池、池链综合服务费/可分配池(S4 起费为逐笔计提之和,池取整数补数)、
+  综合服务费/商户净额、过期核销/未核销——后者恒取前者的整数补数,两侧相加恒等于总额,故无尾差,不占 `rounding_residual_cent`。
+- **超池两段拆(§5.0 超额 C 口径)保持向下取整,属本口径的合规特例**:`pool_i = ⌊a_i×可分配池/poolDistributed⌋`
+  向下取整使 `Σpool ≤ 可分配池` 硬约束恒成立,且余数落在 `excess_i = a_i − pool_i`(**由 L3 平台承担**)——
   方向上已是「尾差归平台」,且已**单列**在 `platform_incentive_subsidy` 独立台账行上,满足留痕要求;
   改 HALF_UP 反而会同时破坏「不得超总池」与「尾差归平台」两条。故此处**刻意不改**,以本条为准。
 
@@ -249,10 +249,17 @@
 用户明确:分账方案本身可配,20/80 只是财务平均视角(2026-07-28 后瀑布已改为三道池前扣项,见 §5.0)。引擎设计为**可插拔的分账方案**:
 
 **第一层——门票综合服务费 / 娱乐平台公司留存**(所有门票都过一道,同一项只扣一次,用户裁定):
-- `platform_retention_rule`:从通票收入留存的方式,支持 `percentage`(默认 20%,可配)/ `fixed` / `tiered`;
-- 留存部分 = 门票综合服务费 = 项目管理费 = 平台运营服务费(**同一项**),**归娱乐平台公司**(2026-07-28 改,原写归项目公司);
-- **在可分配池之前扣**,池内不再二次扣;
-- 单独门票(§7.2)的服务费复用同一条规则,费率可按票种/商户各自洽谈。
+- ✅ **已落地(S4/V370,2026-07-28)**:原独立的 `platform_retention_rules`(池内 20% 留存)与综合服务费是**同一项**,
+  已**合并**——留存表整体停用(软删留库),费率统一走 `comprehensive_service_fee_configs`(项目 × 商户 × 票种,
+  比例/固定额/封顶可配);**等价保值**:原留存率 2000bps 平移为全局默认费率,上线瞬间池链金额逐分不变。
+- 费在**每笔核销时**计提落 `settlement_transactions.comp_service_fee_cent`(不可变事实,冲正取原行之反),
+  月结只做线性求和;拆**两支**落结算单:池链支 `comp_service_fee_pooled_cent`(可分配池之前扣,池内不再二次扣)
+  与专属支 `comp_service_fee_exclusive_cent`(专属商户直付前扣)——同一道费的两支,不是两种费。
+- 收款方 = **娱乐平台公司**(2026-07-28 改,原写归项目公司):由 `revenue_stream_attribution(ticket_service_fee)`
+  解析(V370 种全局默认 → `be_ent_platform`,项目可覆盖),月结时定格快照 `settlement_bills.fee_beneficiary_entity_id`。
+  ⚠️ **口径变更显式记一笔**:等价保值只保金额逐分不变,**归属方从「项目公司」正名为「娱乐平台公司」**——
+  这是业务 HTML 要求的语义变更,不是回归;财务侧看到金额没变,不等于什么都没发生。
+- 单独门票(§7.2)的服务费本就是同一条规则(专属支),费率可按票种/商户各自洽谈。
 
 **第二层——可分配池在各酒吧商户间分配**(按核销 + 整月排名/客数月结):
 - `spv_distribution_method`,可选:
@@ -278,7 +285,7 @@
 - `by_entitlement_price` / `by_visited_point_average` / `by_component_price_ratio` 是**权益级精分/过渡口径**,不属于本两段模型;项目公司级选用哪套,后台可配。
 - 未核销权益不参与二层分配 → 其对应余额**留在平台**(=未用归项目,原则 2)。
 
-> **实装现状与缺口(如实标注)**:引擎现按**单一 `spv_distribution_method` 整池一次分完**(`TicketDistributionSettlementService`),**两段分配未实现**;`verifyConservation` 现校验的池链恒等式是「可分配池 = 留存 + 各酒吧总池」,两段化后需扩为「池 = 第一段Σ + 第二段Σ + 尾差」,**待开发**。
+> **实装现状与缺口(如实标注)**:引擎现按**单一 `spv_distribution_method` 整池一次分完**(`TicketDistributionSettlementService`),**两段分配未实现**(S8 待开发);S4 起池链已无留存项(可分配池 = 酒吧净份额 − 池链综合服务费),两段化后守恒式扩为「池 = 第一段Σ + 第二段Σ + 尾差」,**待开发**。
 
 ### 5.2 结算触发(按核销,非发放)
 ```
@@ -395,7 +402,7 @@
 - 权益标记 `exclusive_merchant_id` 非空时:该权益核销收入**全额归该商户**,不进 SPV 分账池、不平均分;
 - 适用"仅限某酒吧的酒水/服务"单点消费(酒吧内或第三方购买)。
 
-> ✅ **已落地(批3-4,V228,main=d0e0e60)**:`entitlement_templates`/`issued_entitlements`/`settlement_transactions` 加 `exclusive_merchant_id`(核销双写定格结算源真相);月度引擎 split——池基/排名/客数聚合加 `exclusive_merchant_id IS NULL` 过滤(专属不进池不稀释),专属核销按 `exclusive_merchant_id` 分组**全额直付**明细(`method=exclusive_full`·不扣留存·不进 spvPool·明细 id 加 `_excl` 后缀防撞);越池校验只算池分账。
+> ✅ **已落地(批3-4,V228,main=d0e0e60)**:`entitlement_templates`/`issued_entitlements`/`settlement_transactions` 加 `exclusive_merchant_id`(核销双写定格结算源真相);月度引擎 split——池基/排名/客数聚合加 `exclusive_merchant_id IS NULL` 过滤(专属不进池不稀释),专属核销按 `exclusive_merchant_id` 分组**直付**明细(`method=exclusive_full`·不进可分配池·明细 id 加 `_excl` 后缀防撞;S4 起直付净额 = 毛额 − 专属支综合服务费);越池校验只算池分账。
 
 ### 6.5 游乐票购买人脸拍照存档(用户口径,2026-07-04 新增)
 - **游乐票购买时做人脸校验、拍一张照片加密存档;核销时后台显示该照片**,核销员据此确认核销的是本人(防转票/人票一致)。区别于 `entry/` 人脸入场闸(判 18+ 年龄闸·不存照)。
@@ -437,9 +444,9 @@
 - 结算走 §5 分账引擎。
 
 ### 7.2 单独门票——综合服务费(用户口径 8 + "所有门票都抽",用户裁定)
-> ✅ **已落地(V268)**:建 `comprehensive_service_fee_configs`(项目×商户×票种范围可配·`fee_bps` 默认 0=不抽·禁硬编码)。**注**:V268~V364 期间第三维实际存的是**权益类型**、且只对专属商户抽,已由 **S2/V365** 改正为票种 + 覆盖所有门票(见本节末 S2 段)。落点=月度分账引擎专属商户直付线(单独门票走此线):直付前项目公司按配置费率抽综合服务费,商户拿净额(收入−服务费),服务费归项目记入 `settlement_bills.comp_service_fee_cent`。**默认费率 0 → 商户拿全额 → 零行为变更**(现有 batch34 专属直付测试断言全额不变、仍绿)。通票的"留存 20%"仍是同族另一条规则(`platform_retention_rules` §5.1 第一层),本表专管单独/专属门票那道。
-- 客人购买某商户的单独门票(任意渠道):项目公司先抽**综合服务费/项目管理费**(= 平台留存规则 §5.1,费率项目↔商户可洽谈、可配),余额结给该商户;
-- **所有门票**(含通票)都过平台留存这一道——通票的"留存 20%"与单独门票的"综合服务费"是**同一条留存规则**的不同费率实例。
+> ✅ **已落地(V268)**:建 `comprehensive_service_fee_configs`(项目×商户×票种范围可配·`fee_bps` 默认 0=不抽·禁硬编码)。**注**:V268~V364 期间第三维实际存的是**权益类型**、且只对专属商户抽,已由 **S2/V365** 改正为票种 + 覆盖所有门票(见本节末 S2 段)。落点=月度分账引擎专属商户直付线(单独门票走此线):直付前项目公司按配置费率抽综合服务费,商户拿净额(收入−服务费),服务费记入 `settlement_bills.comp_service_fee_exclusive_cent`(S4 起列名,专属支)。**S4/V370 更新**:原「通票留存 20%」规则(`platform_retention_rules`)已并入本表——同一项只扣一次,全局默认费率按等价保值从留存率平移为 2000bps;进池核销的计提走池链支 `comp_service_fee_pooled_cent`,从可分配池之前扣。两支都归**娱乐平台公司**。
+- 客人购买某商户的单独门票(任意渠道):先抽**综合服务费/项目管理费**(§5.1,费率项目↔商户↔票种可洽谈、可配),余额结给该商户,费归娱乐平台公司;
+- **所有门票**(含通票)都过综合服务费这一道——通票与单独门票走的是**同一张费率表**(`comprehensive_service_fee_configs`)的不同费率实例,S4 起不存在独立的「留存规则」。
 > ✅ **已落地(V328)**:综合服务费现支持**比例或固定额二选一**——配固定额(`fixed_amount_cent`)则费率(`fee_bps`)须为 0(DB 约束 `chk_csfc_fee_mode` 保证二者不并存);默认仍费率 0 → 零行为变更。
 > ✅ **月度封顶(V336·批2·用户 2026-07-21 拍板 A「按费率规则各自封」)**:综合服务费加**可配月度封顶** `monthly_cap_amount_cent`(绝对分值·比例与固定额两模式**共用**同一上限)。封顶配在**每条费率规则上**(项目×商户×票种作用域)。引擎按**【商户 × 解析到的规则 id】聚合**封顶前原始费后再 clamp `fee = min(Σraw, cap)`——因费率规则可跨票种(商户级规则 `ticket_type_id`=NULL;**S2/V365 前该列是 `entitlement_type`**)或跨商户(全局默认 merchant_id=NULL),故封顶**不能**逐 (商户×票种) 聚合行各自压(否则同商户多票种落同一规则被压 N 次=N×封顶):商户级规则=该商户当月封顶、票种级规则=该票种封顶、全局规则=各商户各自封顶(不跨商户合并)。**默认 NULL = 不封顶 → 零行为变更**;`chk_csfc_monthly_cap` 保证 ≥0;封顶只压不抬(未触顶 fee 原样)。全链:引擎两趟(读侧 ServiceFeeConfig 带规则 id)+ 写侧(草案→差人转正)+ 前端总控页输入框;`SettlementV268Tests` 11 绿(比例/固定额/未触顶/**跨商户多票种聚合封顶回归锁**)+ 写侧往返绿。**(对抗自查修:初版逐 (商户×票种) 各自压致同商户多票种被 N×封顶,已改聚合封。)**
 >
@@ -501,7 +508,7 @@
 
 | 配置表 | 承载 | 后台页(建议编号) |
 |---|---|---|
-| `platform_retention_rules` | 平台留存/综合服务费(通票+单独门票) | ADM-STL-001 |
+| `platform_retention_rules` | 【已停用·V370】原平台留存——与综合服务费同一项,已并入 `comprehensive_service_fee_configs`(软删留库) | —(卡片已下线) |
 | `spv_distribution_configs` | 分账方案选择 + 参数(方法/点位数/中央餐饮开关) | ADM-STL-002 |
 | `entitlement_pricing_rules` | 实物内部价 / 虚拟权益单价 | ADM-STL-003 |
 | `refund_fee_rules` | 退款手续费预扣 | ADM-STL-004 |
@@ -757,7 +764,8 @@
 | **报表·放弃权益额外收入(结算B2,2026-07-21·✅已上线prod)** | ✅ 上线(PR#200·main dd5f6728) | 只读财务报表 **ADM-ANA-013**「放弃权益额外收入」:客人买票但已过期未核销的权益,其未核销部分归项目公司的额外收入,按 **票种(通票 `ie.bar_id IS NULL` / 单独门票 `bar_id` 非空)× 权益类型(酒水/入场/游乐/演出/其他,沿用 analytics 分桶)** 交叉呈现,含行合计/列合计/总计。数据源直读 `SettlementExpiryJob` 每日 02:30 写好的 `settlement_transactions`(`transaction_type='unverified_expired'` + `beneficiary_type='project'`)归项目流水,金额取权威 `unverified_amount_cent`(不重算口径)、笔数 `COUNT(*)`,窗口 `[start(含), end(不含))` 经营日切(`BusinessDayResolver`)。端点 `GET /api/v1/analytics/abandoned-entitlement-revenue`(复用 `analytics.dashboard.view` 只读权限 + `requirePlatformScope`·已登 openapi-p0);**零迁移(纯读)**。项目维度过滤暂不做(归项目流水 `project_id` 恒 NULL,诚实标注全局+日期)。证伪测试 `AbandonedEntitlementRevenueJdbcIntegrationTests` 逐格断言 + 边界补测(start 边界含/other 桶命中/business_at=NULL 回退)2 绿;12 门禁全绿。**对抗审计(2026-07-21)结论:无 🔴,核心口径正确(重报/漏报/票种/分桶/窗口/金额/鉴权隔离全过)**。🟡 跟踪(非阻断):① 演出(show)桶当前无数据产生方=结构性恒 0 前瞻桶(非漏数);② **潜在隔离**:一旦批2+ 让 `SettlementExpiryJob` 对 unverified_expired 行写真实 `project_id`,须同步给本报表加 `currentProjectScopeQuietly()` 项目域收紧,否则项目级员工越读他项目数据(当前 project_id 恒 NULL 无泄漏);③ INNER JOIN 依赖软删铁律(注释已锁,清档致少报时改 LEFT JOIN) |
 
 | **S5 赠送权益逐项模型底座(通票分账重建,2026-07-28)** | ✅ 开发完成·PR 待并 | **零迁移**。`bar_item_ref` 语义定死 `bar_products.id` + 建模板三重校验(存在 / 属本提供方 / 需扣库则必有库存物料);新增 `InternalSettlementPriceResolver`(全平台唯一取价入口,预扣与兑付同源,价随 `ticket.gift_verified` 事件下发、冲正按原价对冲);`resolveSettlementPrice` 对提供方兑付类权益改 **fail-closed**(`ENTITLEMENT_PRICE_UNRESOLVED`),自营吧不再豁免;**K16 跨提供方核销守卫**(`ENTITLEMENT_PROVIDER_MISMATCH`·与角色无关·在线与离线同步旁路同守·设备未绑商户即 `VERIFY_DEVICE_MERCHANT_UNRESOLVED` 拒绝);**K17 每吧至少一杯发布校验**(`PASS_BAR_GIFT_COVERAGE_INSUFFICIENT`·仅对已配赠酒的票生效·酒吧集合动态算);票面赠酒清单端点 `GET /api/v1/ticketing/ticket-types/{id}/gift-coverage`;前端组合配置页补「赠送商品」下拉并透传 `bar_item_ref`(此前赠饮模板在后台建不出来)。**本刀不产生任何金额**:解析结果只写 `ticket_verifications.settlement_price_cent`,跨吧守卫只拒不改钱;全量 **2987 测试全绿**、既有金额断言零改动。⚠️ 上线前置:**核销设备必须在后台绑好所属商户**,否则赠饮 / 餐饮类权益一律拒核销(这是「说不清在哪家核的就不记账」的有意设计) |
-| **S11 联合/综合通票业态份额拆分(通票分账重建,2026-07-28)** | ✅ 开发完成·PR 待并 | **V366** `settlement_bill_format_shares`(结算单 × 业态份额留痕,只建表不改既有列)。① 月度引擎把进池核销**按提供方商户业态**(`merchants.merchant_type`,V348 五值)归堆成业态份额,**只有酒吧份额进可分配池**,游乐/餐饮/零售份额单列留痕 + 定归属(酒吧→娱乐平台公司、游乐→游乐公司、餐饮/零售/其他→提供方商户自己);`aggregateMerchantStats` 同步加业态过滤(排名/客数只算酒吧)。② **渠道抽成整单前移**:按 `channel_fee_configs` 项目 × 渠道费率算整单渠道费,再按各业态毛额占比分摊(尾差归酒吧支),不再由酒吧一家替全场扛。③ **票面原价 NULL/0 语义收紧**:0=免费(权重 0)、NULL=未配价→发布拒(`TICKET_COMPONENT_PRICE_REQUIRED`)/出票拒(`TICKET_COMPONENT_PRICE_MISSING`),**废除「全 NULL 回退均摊」的 fail-open**。④ 折扣承担方补回口径扩到**每一个业态**。⑤ 运行期守恒自检 K20(Σ各业态净份额 + 渠道费 ≡ 通票收入、Σ业态渠道费 ≡ 整单渠道费、业态分组不重不漏),不守恒即拒绝出账。⑥ 票种组合配置页补「票面原价(元)」输入。**逐分不变已证**:纯酒吧票(占比 100%、渠道费率 0)结算单 `SELECT *` **全部 23 列**与老公式手算值逐列相等(`SettlementFormatShareS11Tests`);K21 两条价线不串亦有专项断言(把内部结算价改到 999999 分,各业态份额一分不动)。已按 `business-system-map-for-operations-v0.1.html` :737/:741/:742/:1141 逐字回核。**本刀未覆盖的相邻条目**(HTML 已写、留给对应刀):票种售价不自动由各业态票面原价相加打折算出(:741·现由运营直接填、差额记为套票折扣不拦);免费权益的「成本承担方」标注字段(商户让利型 / 平台出资型,属 S6 赠送成本层——两类都因价格 0 不参与拆分,故不影响本刀份额);渠道抽成的「固定金额」计费方式(`channel_fee_configs` 现仅 `fee_bps` 比例);酒吧支的「赠送权益预估成本」(S6)与「门票综合服务费取代娱乐平台公司留存、只扣一次」(S2/S4,现仍为 `platform_retention_rules` 留存) |
+| **S11 联合/综合通票业态份额拆分(通票分账重建,2026-07-28)** | ✅ 开发完成·PR 待并 | **V366** `settlement_bill_format_shares`(结算单 × 业态份额留痕,只建表不改既有列)。① 月度引擎把进池核销**按提供方商户业态**(`merchants.merchant_type`,V348 五值)归堆成业态份额,**只有酒吧份额进可分配池**,游乐/餐饮/零售份额单列留痕 + 定归属(酒吧→娱乐平台公司、游乐→游乐公司、餐饮/零售/其他→提供方商户自己);`aggregateMerchantStats` 同步加业态过滤(排名/客数只算酒吧)。② **渠道抽成整单前移**:按 `channel_fee_configs` 项目 × 渠道费率算整单渠道费,再按各业态毛额占比分摊(尾差归酒吧支),不再由酒吧一家替全场扛。③ **票面原价 NULL/0 语义收紧**:0=免费(权重 0)、NULL=未配价→发布拒(`TICKET_COMPONENT_PRICE_REQUIRED`)/出票拒(`TICKET_COMPONENT_PRICE_MISSING`),**废除「全 NULL 回退均摊」的 fail-open**。④ 折扣承担方补回口径扩到**每一个业态**。⑤ 运行期守恒自检 K20(Σ各业态净份额 + 渠道费 ≡ 通票收入、Σ业态渠道费 ≡ 整单渠道费、业态分组不重不漏),不守恒即拒绝出账。⑥ 票种组合配置页补「票面原价(元)」输入。**逐分不变已证**:纯酒吧票(占比 100%、渠道费率 0)结算单 `SELECT *` **全部 23 列**与老公式手算值逐列相等(`SettlementFormatShareS11Tests`);K21 两条价线不串亦有专项断言(把内部结算价改到 999999 分,各业态份额一分不动)。已按 `business-system-map-for-operations-v0.1.html` :737/:741/:742/:1141 逐字回核。**本刀未覆盖的相邻条目**(HTML 已写、留给对应刀):票种售价不自动由各业态票面原价相加打折算出(:741·现由运营直接填、差额记为套票折扣不拦);免费权益的「成本承担方」标注字段(商户让利型 / 平台出资型,属 S6 赠送成本层——两类都因价格 0 不参与拆分,故不影响本刀份额);渠道抽成的「固定金额」计费方式(`channel_fee_configs` 现仅 `fee_bps` 比例);酒吧支的「赠送权益预估成本」(S6);「门票综合服务费取代娱乐平台公司留存、只扣一次」已由 **S4/V370** 落地(留存全链删除、费拆池链/专属两支进主链、等价保值 2000bps、负收入月带符号) |
+| **S4 合并留存·门票综合服务费进主链(通票分账重建,2026-07-28)** | ✅ 开发完成·PR 待并 | **V370** ① `settlement_bills` 列改造:`retention_bps`/`retention_cent`/`spv_pool_cent`/`giveaway_cost_cent` 四列删除;`comp_service_fee_cent` 正名 `comp_service_fee_exclusive_cent`(专属支),新增 `comp_service_fee_pooled_cent`(池链支)与 `fee_beneficiary_entity_id`(收款主体快照);`available_pool_cent` 语义收窄为**唯一的池**(= 酒吧净份额 − 池链服务费,池内不再二次扣任何留存)。② **等价保值种子(K9)**:`platform_retention_rules.retention_bps` 现值(2000)平移进 `comprehensive_service_fee_configs` 全局默认行 `fee_bps` → 上线瞬间池链金额逐分不变;留存表整体停用(软删留库,读写代码全下线)。③ **带符号(R-3)**:`chk_sb_amount`/`chk_si_amount` 放开,负收入月(红冲多于新核销)照常月结,负数=向对方追回;负额明细过账 fail-loud 拒绝(`SETTLEMENT_NEGATIVE_ITEMS_UNPOSTABLE`,负额挂应收属过账激活批次)。④ 各业态份额行补 `comp_service_fee_cent` 列(费跟核销走,游乐/餐饮份额的费从各自净份额扣,不错扣酒吧池);K20 守恒扩展(收入+费两合计互核)。⑤ 归属:`revenue_stream_attribution` 种全局默认 `ticket_service_fee → be_ent_platform`(项目可覆盖),月结定格快照。⑥ 配置中心「项目公司留存比例」卡片/端点/草案链下线;新增 `GET /api/v1/settlement/bills` 结算单头查询 + 结算审阅页「月度结算单」表(财务三问:收了多少服务费、两支各多少、归了谁)。**K9 已证**:费配 2000bps 时结算单 `SELECT *` 全列 + 分账明细每行与改造前手算值逐列相等(`SettlementMergeRetentionS4Tests`);⚠️ 金额不变但**归属方从「项目公司」正名为「娱乐平台公司」**(HTML 要求的口径变更,非回归)。 |
 | 状态机加固(审计 AUD-012/013/017/018/019·资金正确性核心) | ✅ 代码落地·PR 待并 | **V323**(`settlement_transactions` 转不可变账务事件账本)+**V324**(`ticket_refunds` 终态)。①核销按 `verification_id` 写不可变**增量**结算行(增量=f(k)−f(k−1),`business_at` 落月→跨月各归其月,取代累计值覆盖首插行)②核销冲正追加**负向**结算 `ST-VR`(严格取原行反;原月未过账则该月净重算、已过账则落当月红冲不改历史)③退款仅 `success` 且按 `succeeded_at` 聚合(finance/analytics/dividend 四处),修 `FinanceJdbcIntegrationTests`「`requested` 计入退款」错误绿灯④到期归项目「可没收终态」白名单=`status='active'`+父实例非冻结(排除已成功退款/退款申请中)⑤消费者幂等 append-only(重放 DO NOTHING)+ `SettlementReconciliationJob.rebuildMissingSettlements` 按核销权威事实重建缺失结算(AUD-017 outbox 之替代;全量事务性 outbox+死信为后续上限)。资金恒等自检 `SettlementAmountsTests`(非DB) + 门禁 `SettlementStateMachineJdbcIntegrationTests`/`FinanceJdbcIntegrationTests`(DB,主会话串行跑) |
 
 > 🔒部署前核对(状态机加固·复核提示):①`ticket_refunds` 加 status CHECK 前先 `SELECT DISTINCT status FROM ticket_refunds` 确认无八值外脏值;②重建 `rebuildMissingSettlements` 为本 PR 全新、生产从未跑过(基线 d577fc4b 无此方法),库内不应有「同权益既有遗留累计行 verification_id IS NULL、又有 per-verification 行」的双计残留——部署前核对下句应返回 0 行(非 0 先排查、勿开 `settlement.reconciliation.scheduled` 重建):`SELECT s.entitlement_id FROM settlement_transactions s WHERE s.transaction_type='verification_settled' AND s.verification_id IS NOT NULL AND EXISTS(SELECT 1 FROM settlement_transactions leg WHERE leg.entitlement_id=s.entitlement_id AND leg.transaction_type='verification_settled' AND leg.verification_id IS NULL) GROUP BY s.entitlement_id;`。注:`settlement.reconciliation.scheduled.enabled` 生产=true(application-prod.yml:31),重建首夜即跑,故上述前置校验为部署闸。
@@ -789,7 +797,7 @@
 **A1 · 结算与分账规则(核销时逐笔触发)**
 | 参数 | 默认值 | 配置表 | 触发/口径 |
 |---|---|---|---|
-| 门票综合服务费(=娱乐平台公司留存/项目管理费,同一项) | 20% | platform_retention_rules | 分账瀑布中在**可分配池之前**扣、只扣一次;所有门票都过;**归娱乐平台公司**(2026-07-28) |
+| 门票综合服务费(=娱乐平台公司留存/项目管理费,同一项) | 2000bps(全局默认,V370 由原留存率等价平移) | comprehensive_service_fee_configs(项目×商户×票种;`platform_retention_rules` 已停用) | 分账瀑布中在**可分配池之前**扣、只扣一次;所有门票都过;**归娱乐平台公司**(2026-07-28);每笔核销计提、月结线性求和 |
 | 赠送权益预估成本预扣模式 | 按票种配(`by_item` 按件计 / `by_ticket` 按票整额) | 票种级配置(待建) | 池前预扣、**归娱乐平台公司**;按件计=Σ(票面权益数量×提供方内部结算价),按票计=该票种赠送部分售价整额(2026-07-28 新增,**待开发**) |
 | SPV 分账方式 | 按核销权益单价精分(默认) / 按各酒吧每客协议价(`by_venue_per_guest`) | spv_distribution_configs、spv_per_guest_rate | 核销时逐笔;余额=票款−留存;`by_venue_per_guest`=按客数×协议单价分(赠酒补偿走 bar 域内部结算价,D5 后不预留赠酒成本) |
 | 非散台服务费率(仅包厢/卡座) | 10% | — | **(实际低消+对应二次消费)× 费率**,合计后乘,散台不收 |

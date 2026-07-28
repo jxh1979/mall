@@ -96,6 +96,7 @@ class SettlementServiceFeeDimensionS2Tests {
      * <p>对照组构造法:改造前进池核销压根不过费率解析这条路,落库的 {@code comp_service_fee_cent} 恒为 0。
      * 所以把同样的核销事实按「费恒 0」直接落库,就是改造前那张账单;实验组走真消费者(会解析费率、会给进池的行
      * 也算一遍费)。两边整行 {@code SELECT *} 转 Map 全列比对,只排除账单 id / 项目 id / 时间戳这类天然不同的列。
+     * (S4/V370 起全局默认费率=2000 等价保值,本例给项目显式配 0 费率来复现「费率为 0」前提。)
      */
     @Test
     void everyBillColumnIsPennyIdenticalWhenFeeRateIsStillZero() {
@@ -104,6 +105,7 @@ class SettlementServiceFeeDimensionS2Tests {
 
         for (String pid : List.of(after, before)) {
             setRankTier(pid, 1, 50, 10000);
+            seedFee(pid, null, null, 0); // 项目级费率 0(压过 V370 全局默认 2000)
         }
         // 三笔进池核销 + 一笔专属核销,两组数据完全一样。
         settleViaConsumer(after, "s2a", "barA", null, 60000L);
@@ -118,7 +120,7 @@ class SettlementServiceFeeDimensionS2Tests {
         settlementService.settleMonth(after, MONTH);
         settlementService.settleMonth(before, MONTH);
 
-        // 出厂费率 0 → 每一笔(含进池那三笔)实收服务费都是 0。
+        // 项目费率 0 → 每一笔(含进池那三笔)实收服务费都是 0。
         assertThat(feeSum(after)).as("费率为 0 时不许凭空抽出一分钱").isZero();
 
         Map<String, Object> a = new HashMap<>(bill(after));
@@ -142,11 +144,11 @@ class SettlementServiceFeeDimensionS2Tests {
      * 覆盖面:配上费率后,<b>非专属(进池)</b>的核销也开始计提综合服务费 —— 这正是
      * 「所有门票项目都要收一道综合服务费」;改造前这类核销一分不抽。
      *
-     * <p>同时守住本刀的边界:进池那部分只落成事实,<b>还不进引擎</b>(账单上的综合服务费仍只统计专属那条线,
-     * 进主链是 S4),所以账单数字此刻不动。
+     * <p>S4 起进池那部分也进主链:池链支落 {@code comp_service_fee_pooled_cent} 并从可分配池扣;
+     * 专属支落 {@code comp_service_fee_exclusive_cent}(两支是同一道费,都归娱乐平台公司)。
      */
     @Test
-    void pooledVerificationNowAccruesFeeButEngineStillUntouched() {
+    void pooledVerificationAccruesFeeAndEntersMainChain() {
         String pid = newProject();
         setRankTier(pid, 1, 50, 10000);
         seedFee(pid, null, null, 1000); // 该项目全票种 10%
@@ -158,9 +160,13 @@ class SettlementServiceFeeDimensionS2Tests {
         assertThat(feeOf("cov2")).isEqualTo(5000L);
 
         settlementService.settleMonth(pid, MONTH);
-        assertThat(num(bill(pid), "comp_service_fee_cent"))
-                .as("本刀不动引擎数值公式:账单上的综合服务费仍只含专属那条线(进池部分进主链是 S4)")
-                .isEqualTo(5000L);
+        Map<String, Object> b = bill(pid);
+        assertThat(num(b, "comp_service_fee_pooled_cent"))
+                .as("S4:进池计提进主链,落池链支").isEqualTo(10000L);
+        assertThat(num(b, "comp_service_fee_exclusive_cent"))
+                .as("专属计提落专属支").isEqualTo(5000L);
+        assertThat(num(b, "available_pool_cent"))
+                .as("可分配池 = 进池收入 − 池链服务费").isEqualTo(90000L);
     }
 
     // ─────────────────────────── ③ 换维:按票种,不是按权益类型 ───────────────────────────
@@ -171,6 +177,7 @@ class SettlementServiceFeeDimensionS2Tests {
         String pid = newProject();
         String ttA = ticketType("a");
         String ttB = ticketType("b");
+        seedFee(pid, null, null, 0);   // 项目级回退 0(压过 V370 全局默认 2000,隔离出票种维度差异)
         seedFee(pid, null, ttA, 2000); // 只对票种 A 收 20%
 
         settleViaConsumer(pid, "dimA", "barA", null, 10000L, ttA, "bar");
@@ -197,9 +204,9 @@ class SettlementServiceFeeDimensionS2Tests {
                 .as("落库的项目归属必须与解析费率用的是同一个值")
                 .isEqualTo(pid);
 
-        // 平台口径(无项目 scope)的同一笔核销不吃这条项目特例,回落全局默认 0。
+        // 平台口径(无项目 scope)的同一笔核销不吃这条项目特例,回落全局默认(V370 等价保值 2000 → 20%)。
         settleLoose("prj2", "barA", null, 10000L);
-        assertThat(feeOf("prj2")).isZero();
+        assertThat(feeOf("prj2")).isEqualTo(2000L);
         assertThat(projectIdOf("prj2")).isNull();
     }
 

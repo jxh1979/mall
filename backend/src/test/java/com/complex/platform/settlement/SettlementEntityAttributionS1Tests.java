@@ -68,7 +68,6 @@ class SettlementEntityAttributionS1Tests {
                     pid);
             jdbcTemplate.update("DELETE FROM settlement_bills WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM ticket_distribution_rank_tiers WHERE project_id = ?", pid);
-            jdbcTemplate.update("DELETE FROM platform_retention_rules WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM revenue_stream_attribution WHERE project_id = ?", pid);
         }
         projectIds.clear();
@@ -83,7 +82,6 @@ class SettlementEntityAttributionS1Tests {
     @Test
     void billAmountsAreIdenticalWhetherAttributionIsConfiguredOrNot() {
         String pid = newProject();
-        setRetentionBps(pid, 2000);
         setRankTier(pid, 1, 9, 3333);
         seedVerified(pid, "bar_k1", 3, 2, 40001L);
         seedVerified(pid, "bar_k2", 2, 1, 30007L);
@@ -129,7 +127,9 @@ class SettlementEntityAttributionS1Tests {
         String pid = newProject();
         // 默认开关关(application.yml 不配该键)→ 现状行为:返空、只告警、不阻断。
         assertThat(attributionRepository.resolveAttribution(pid, "pass_gift_cost")).isNull();
-        assertThat(attributionRepository.resolveManagementEntity(pid, "ticket_service_fee")).isNull();
+        // S4/V370:门票综合服务费归属已种全局默认(HTML 明文归娱乐平台公司)→ 项目未配也能回落解析到。
+        assertThat(attributionRepository.resolveManagementEntity(pid, "ticket_service_fee"))
+                .isEqualTo("be_ent_platform");
         // 归属为空也能正常结算(引擎不因此崩)
         seedVerified(pid, "bar_off", 1, 1, 1000L);
         assertThat(settlementService.settleMonth(pid, MONTH)).isNotBlank();
@@ -141,15 +141,16 @@ class SettlementEntityAttributionS1Tests {
         RevenueStreamAttributionRepository blocking =
                 new RevenueStreamAttributionRepository(namedJdbcTemplate, true);
 
-        assertThatThrownBy(() -> blocking.resolveAttribution(pid, "ticket_service_fee"))
+        // S4 起 ticket_service_fee 已有全局种子不再缺配,用仍无种子的 supply_goods 验证阻断语义。
+        assertThatThrownBy(() -> blocking.resolveAttribution(pid, "supply_goods"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("收入归属未配置")
-                .hasMessageContaining("ticket_service_fee");
+                .hasMessageContaining("supply_goods");
 
         // 配上之后同一个开关打开的解析器就不再阻断
         attributionRepository.upsert(new RevenueStreamAttributionRecord(
-                rsaId("b"), pid, "ticket_service_fee", ENT_PLATFORM, "active", "tester", Instant.now()));
-        assertThat(blocking.resolveManagementEntity(pid, "ticket_service_fee")).isEqualTo(ENT_PLATFORM);
+                rsaId("b"), pid, "supply_goods", "be_central_catering", "active", "tester", Instant.now()));
+        assertThat(blocking.resolveManagementEntity(pid, "supply_goods")).isEqualTo("be_central_catering");
     }
 
     // ---------------------------------------------------------------- ③ 归各商户自己
@@ -339,13 +340,6 @@ class SettlementEntityAttributionS1Tests {
                 """,
                 id, verificationId == null ? "TN-" + id : "ST-VS-" + verificationId, "ent_" + id, beneficiaryType, merchantId, entityId, projectId,
                 verificationId == null ? "vf_" + id : verificationId, ts, ts, ts, ts);
-    }
-
-    private void setRetentionBps(String projectId, int bps) {
-        jdbcTemplate.update("""
-                INSERT INTO platform_retention_rules (id, project_id, retention_bps, status, is_draft)
-                VALUES (?, ?, ?, 'active', FALSE)
-                """, "prr_s1_" + projectId, projectId, bps);
     }
 
     private void setRankTier(String projectId, int rankFrom, int rankTo, int shareBps) {

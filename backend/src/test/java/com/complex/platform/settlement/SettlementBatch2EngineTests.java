@@ -59,13 +59,13 @@ class SettlementBatch2EngineTests {
         }
     }
 
-    // ---- ① 池/留存/总池:赠酒不从池扣(D5,2026-07-21 用户拍板) ----
+    // ---- ① 池/综合服务费(S4 合并留存:池 = 收入 − 渠道费 − 池链综合服务费;赠酒不从池扣 D5) ----
 
     @Test
     void giveawayVerificationsDoNotReduceDistributionPool() {
         String pid = newProject();
-        // 两家酒吧核销收入合计 100000 分;另 gift_drink 10 杯。D5:赠酒补偿走 bar 域内部结算价应付,不从分账池扣;
-        // 故即便有 10 杯赠酒核销,也不缩小池、giveaway_cost_cent 恒 0(证伪:池 = 收入 − 渠道费,不含赠酒项)。
+        // 两家酒吧核销收入合计 100000 分(每笔按 20% 计提综合服务费=等价保值口径);另 gift_drink 10 杯。
+        // D5:赠酒补偿走 bar 域内部结算价应付,不从分账池扣 → 即便 10 杯赠酒核销,也不缩小池。
         seedVerified(pid, "m1", "entry", 5, 3, 60000L);
         seedVerified(pid, "m2", "entry", 4, 2, 40000L);
         seedVerified(pid, "m1", "gift_drink", 10, 0, 0L); // 赠酒 10 杯核销——不应影响池
@@ -75,11 +75,9 @@ class SettlementBatch2EngineTests {
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(100000L);
         assertThat(num(bill, "channel_fee_cent")).isEqualTo(0L);          // 渠道费先 0
-        assertThat(num(bill, "giveaway_cost_cent")).isEqualTo(0L);        // D5:赠酒不占池,恒 0(即便 10 杯核销)
-        assertThat(num(bill, "available_pool_cent")).isEqualTo(100000L);  // 100000 − 0(渠道费),不再减赠酒
-        assertThat(bill.get("retention_bps")).isEqualTo(2000);           // 默认 20%
-        assertThat(num(bill, "retention_cent")).isEqualTo(20000L);        // 100000 × 20%
-        assertThat(num(bill, "spv_pool_cent")).isEqualTo(80000L);         // 100000 − 20000
+        // S4:池链综合服务费 = Σ每笔计提 20000;可分配池 = 100000 − 0 − 20000(与改造前「池 − 20% 留存」逐分一致)。
+        assertThat(num(bill, "comp_service_fee_pooled_cent")).isEqualTo(20000L);
+        assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
     }
 
     // ---- ② by_rank_tier(默认档位 16/12/9/6)----
@@ -88,14 +86,14 @@ class SettlementBatch2EngineTests {
     void byRankTierDistributesByRankShareBps() {
         String pid = newProject();
         // 默认方式=by_rank_tier;造 3 家不同核销数 → 排名 1/2/3。
-        // 池=100000,留存 20% → 总池 80000。第1名 16%=12800,2-4名各 12%=9600。
+        // 收入 100000,每笔 20% 综合服务费 → 可分配池 80000。第1名 16%=12800,2-4名各 12%=9600。
         seedVerified(pid, "top", "entry", 10, 0, 50000L);   // rank1
         seedVerified(pid, "mid", "entry", 6, 0, 30000L);    // rank2
         seedVerified(pid, "low", "entry", 2, 0, 20000L);    // rank3
 
         service.settleMonth(pid, MONTH);
 
-        assertThat(num(bill(pid), "spv_pool_cent")).isEqualTo(80000L);
+        assertThat(num(bill(pid), "available_pool_cent")).isEqualTo(80000L);
         assertThat(itemAmount(pid, "top")).isEqualTo(12800L); // 80000×16%
         assertThat(itemAmount(pid, "mid")).isEqualTo(9600L);  // 80000×12%(rank2 in 2-4)
         assertThat(itemAmount(pid, "low")).isEqualTo(9600L);  // 80000×12%(rank3 in 2-4)
@@ -147,7 +145,7 @@ class SettlementBatch2EngineTests {
     void overPoolKeepsDraftForSpecialApproval() {
         String pid = newProject();
         setMethod(pid, "by_fixed_amount");
-        // 池=100000,留存20% → 总池 80000;两家固定额合计 200000 > 80000。
+        // 收入 100000,每笔 20% 综合服务费 → 可分配池 80000;两家固定额合计 200000 > 80000。
         setMerchantRate(pid, "x", null, 100000L);
         setMerchantRate(pid, "y", null, 100000L);
         seedVerified(pid, "x", "entry", 5, 2, 50000L);
@@ -156,8 +154,8 @@ class SettlementBatch2EngineTests {
         service.settleMonth(pid, MONTH);
 
         Map<String, Object> bill = bill(pid);
-        assertThat(num(bill, "spv_pool_cent")).isEqualTo(80000L);
-        assertThat(num(bill, "distributed_cent")).isEqualTo(200000L);   // 超总池
+        assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
+        assertThat(num(bill, "distributed_cent")).isEqualTo(200000L);   // 超可分配池
         assertThat(bill.get("status")).isEqualTo("draft");             // 保持 draft 待特批
         assertThat(bill.get("special_approval_ref")).isNull();         // 待人工填
     }
@@ -192,9 +190,8 @@ class SettlementBatch2EngineTests {
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(0L);
         assertThat(num(bill, "available_pool_cent")).isEqualTo(0L);
-        assertThat(bill.get("retention_bps")).isEqualTo(2000);          // 建表默认兜底
+        assertThat(num(bill, "comp_service_fee_pooled_cent")).isEqualTo(0L); // 无核销无计提
         assertThat(bill.get("distribution_method")).isEqualTo("by_rank_tier"); // 默认方式兜底
-        assertThat(num(bill, "spv_pool_cent")).isEqualTo(0L);
         Integer items = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM settlement_items WHERE bill_id = ?", Integer.class, id);
         assertThat(items).isEqualTo(0); // 无核销→无明细
@@ -209,7 +206,8 @@ class SettlementBatch2EngineTests {
         return pid;
     }
 
-    /** 直插一条 verification_settled(created_at 落 MONTH 月中=月窗驱动,归商户;confirmed_at 留 NULL 同批1双写)。 */
+    /** 直插一条 verification_settled(created_at 落 MONTH 月中=月窗驱动,归商户;confirmed_at 留 NULL 同批1双写)。
+     *  S4:每笔带 20% 池链综合服务费(= V370 等价保值费率下消费者会计提的值),月结只做线性求和。 */
     private void seedVerified(String projectId, String merchantId, String entType,
                               int verifiedCount, int numPeople, long verifiedCent) {
         Instant createdAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
@@ -219,13 +217,14 @@ class SettlementBatch2EngineTests {
                 INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
-                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at)
+                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at,
+                    comp_service_fee_cent)
                 VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
-                    'draft', ?, ?, ?)
+                    'draft', ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, "vf_" + id, ts, ts, ts);
+                merchantId, projectId, "vf_" + id, ts, ts, ts, verifiedCent / 5);
     }
 
     private void setMethod(String projectId, String method) {

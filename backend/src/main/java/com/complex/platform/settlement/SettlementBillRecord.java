@@ -2,7 +2,7 @@ package com.complex.platform.settlement;
 
 import java.time.LocalDate;
 
-/** 结算重构批2-3：月度结算单头（settlement_bills 一行）。金额均整数分。 */
+/** 结算重构批2-3：月度结算单头（settlement_bills 一行）。金额均整数分,<b>带符号</b>(冲正月可为负=当月净追回)。 */
 public record SettlementBillRecord(
         String id,
         String projectId,
@@ -10,13 +10,17 @@ public record SettlementBillRecord(
         LocalDate periodEnd,
         long ticketRevenueCent,
         long channelFeeCent,
-        long giveawayCostCent,
+        // S4:可分配池(唯一的池)= 酒吧业态净份额 − 池链综合服务费。仅用于各酒吧分配,
+        //   池内不再二次扣任何留存(业务 HTML「不再从可分配池中二次扣娱乐平台公司留存」)。
         long availablePoolCent,
-        int retentionBps,
-        long retentionCent,
-        long spvPoolCent,
         long distributedCent,
-        long compServiceFeeCent,
+        // S4 门票综合服务费拆两支(同一道费,不是两种费;都归娱乐平台公司):
+        //   pooled = 当月进池核销逐笔计提合计(从池链扣);exclusive = 专属直付前抽取合计(从专属净额扣)。
+        long compServiceFeePooledCent,
+        long compServiceFeeExclusiveCent,
+        // S4 收款主体快照:两支综合服务费的收款方(business_entities.id,解析自
+        //   revenue_stream_attribution 的 ticket_service_fee 流;月结时定格,后改配置不追溯已出单据)。
+        String feeBeneficiaryEntityId,
         String distributionMethod,
         String specialApprovalRef,
         String status,
