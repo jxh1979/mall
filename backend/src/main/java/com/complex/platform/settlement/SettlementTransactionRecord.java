@@ -41,6 +41,10 @@ public record SettlementTransactionRecord(
         // V355(B-7)beneficiary_type='entity' 时的收款主体 business_entities.id
         //   (未核销权益款归娱乐平台公司 / 游乐通票未核销款归游乐公司);merchant/project 时为 null。
         //   DB CHECK chk_st_beneficiary 强制:type=entity ⇒ 本列非空。
-        String beneficiaryEntityId
+        String beneficiaryEntityId,
+        // S3(V367)父票锚点 issued_entitlements.parent_ticket_id:「门票综合服务费一张票只收一道」的判定键。
+        //   核销行从权益带上;冲正行原样沿用被冲那行的值(否则该票净额抵不回 0、锚点复不了位)。
+        //   到期归项目/重建行恒 null(这两条路 fee 恒 0,锚点无意义)。
+        String parentTicketId
 ) {
 }

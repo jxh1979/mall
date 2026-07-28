@@ -92,7 +92,10 @@ public class SettlementReversedConsumer {
                 -original.compServiceFeeCent(),
                 original.compServiceFeeConfigId(),
                 // V355(B-7):原行归某主体时,冲正行必须原样带上主体 id,否则撞 chk_st_beneficiary 直接落不下。
-                original.beneficiaryEntityId()));
+                original.beneficiaryEntityId(),
+                // S3:父票锚点原样沿用被冲那行 —— 冲正把该票的综合服务费净额抵回 0,锚点复位,
+                //   这张票下一次核销可以重新收一道(否则冲掉首笔核销 = 这张票永远免这道费)。
+                original.parentTicketId()));
     }
 
     /** 原核销所属月已过账 → 红冲落当月(now)；否则落原月(原核销时刻)由该月重算净掉。 */
