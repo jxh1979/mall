@@ -702,3 +702,16 @@
 - 含义：文档审计已登记、待后续专项补 PRD/裁决的项。
 - 不表示用户已接受业务风险上线；仅表示本审计线程 docs-only 范围内不阻塞 coverage 闭环。
 - 编码实现不在本标签授权范围内。
+
+
+## HTML-TERMINAL-BIND-001（2026-07-28）
+
+- 终端职责与售票范围以业务 HTML 为准，在 `terminal-page-product-prd-v0.1.md` §11.1 做可验收承接。
+- 覆盖：BSM-0130/0132/0135/0142、PGM-0075/0077。
+
+## DOCS-B-LINE-BATCH1（2026-07-28）
+
+- 路径 B：先清偿高严重度 OPEN 文档债。
+- 本批闭合：终端 6 MISSING、BAR-VOID-A1 相关 10 PARTIAL、积分 ADV-TX-004 相关 3 PARTIAL（改挂 ACCRUAL-002）。
+- 仍 OPEN（待业务拍板后补 PRD）：ADV-TX-003 储值混退；ADV-TX-007 卡座转并续；ADV-TX-008/XD-006 营业日；ADV-ED-003 准入冲突；ADV-ED-008 数据新鲜度（及对抗表 ADV-ED-007 指标口径）。
+- 仅文档；不改代码；不改三份权威 HTML。
