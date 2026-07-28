@@ -870,6 +870,40 @@ stateDiagram-v2
 >
 > 设备主数据为 §6.6.1 巡检周期判定与核销准入 `SAFETY_INSPECTION_EXPIRED` 阻断的配置来源；正式路径仍以 OpenAPI/追溯附录为事实源（见 §8 开篇收口口径）。
 
+
+### 8.6a 项目↔权益绑定 API（V341 软删范式）
+
+> **✅ 已实现（v7 审计 R-12，2026-07-27，迁移 V341）**：项目↔权益类型绑定（`amusement_project_entitlements`）由**物理删除改软删**。
+> 原 `POST /projects/{id}/entitlements/{entitlementType}/remove` 直接 `DELETE FROM amusement_project_entitlements`，解绑即抹行，
+> 违反删除铁律（删除 = 存库 + 前台不显 + 可恢复 + 分类 + 填理由 + 最高权限批准）。现照 V255/V260/V271/V272 范式重做：
+>
+> | 方法 | 路径 | 说明 | 权限 |
+> |---|---|---|---|
+> | GET | `/projects/{id}/entitlements` | 查绑定；默认只返回**生效中**（未存档且未审批删除）；`?include_archived=true` 才带出已存档/墓碑 | `amusement.project_entitlement.manage` |
+> | POST | `/projects/{id}/entitlements` | 新建绑定；命中既有已存档/墓碑行时**复绑=恢复**（保留原 id/created_at，清空存档与删除标记） | `amusement.project_entitlement.manage` |
+> | POST | `/projects/{id}/entitlements/{entitlementType}/archive` | 存档（停用），**存档理由必填** | `amusement.project_entitlement.manage` |
+> | POST | `/projects/{id}/entitlements/{entitlementType}/remove` | 同 archive（保留旧路径不断链，语义已由物理删改为存档） | `amusement.project_entitlement.manage` |
+> | POST | `/projects/{id}/entitlements/{entitlementType}/unarchive` | 恢复；若为墓碑（`delete_status='approved'`）则再要 `...approve` 权限 | `amusement.project_entitlement.manage` |
+> | POST | `/projects/{id}/entitlements/{entitlementType}/delete-request` | 发起删除申请：**须先存档**、**删除理由必填** | `amusement.project_entitlement.manage` |
+> | POST | `/projects/{id}/entitlements/{entitlementType}/delete-approve` | 审批删除：`action=approved` 落墓碑 / `rejected` 回 `none`；**申请人禁自审** | `amusement.project_entitlement.approve` |
+>
+> **字段族（V341，与 V271 一字不差）**：`archived_at` / `archived_by` / `archive_reason` / `delete_status`(`none`\|`pending`\|`approved`) /
+> `delete_requested_by` / `delete_requested_at` / `delete_reason`；CHECK 约束 `chk_amusement_project_entitlement_delete_status`；
+> 偏索引 `idx_amusement_project_entitlements_active_list (project_id, entitlement_type) WHERE archived_at IS NULL AND delete_status <> 'approved'`。
+>
+> **分类（删除铁律「分类」项）**：两轴即分类——存档轴（软下线可恢复）与删除轴（审批后墓碑），库内分别可查、可分别筛出；后台状态列展示「生效中 / 已存档 / 待审批删除 / 已删除（可恢复）」。
+>
+> **最高权限批准**：`amusement.project_entitlement.approve`（`critical` + `requires_approval`）**只授 `role_platform_admin`**（系统内最高角色），
+> 与发起权 `amusement.project_entitlement.manage` 职责分离。
+>
+> **读取路径口径（全部过滤墓碑与已存档）**：
+> ① `§6.4` 核销绑定校验（`listProjectEntitlementTypes`）只认生效绑定——存档后该绑定不再收紧核销，也不留幽灵绑定；
+> ② 管理端列表（`listProjectEntitlements`）默认过滤，`include_archived` 才放行；
+> ③ 单条读取（`findProjectEntitlement`）**故意不过滤**，因为存档→申请删除→审批→恢复整链都要读得到该行（仅管理链内部使用，不出现在任何前台/统计/结算读取路径）。
+> 本表不参与结算、分析、导出、对账任何读取路径（全仓引用仅 `JdbcAmusementRepository`，已逐条核对）。
+>
+> **前端**：后台「项目与场次」页新增「项目权益绑定」区——按项目筛选、默认不显示已归档、「查看已归档」开关、行内「停用（存档）/ 恢复 / 申请删除 / 批准删除 / 驳回」，停用与申请删除强制填理由。
+
 ### 8.7 巡检 API
 
 | 方法 | 路径 | 说明 |
@@ -1237,3 +1271,4 @@ P0 完成时必须满足：
 | 2026-06-22 已实现修复回写 | 注 | §6.4 | F-OPS-03：硬安全容量禁 warn_only 旁路——warn_only 仅作用软上限告警放行，硬上限任何处置模式都阻断核销；over_capacity 事件 severity 恒 high 触发自动停运 open→paused | 回写 .160 已编译通过的修复（F-OPS-03） |
 | 2026-06-22 已实现修复回写 | 注/增 | §6.6.1/§7.9/§8.6 | F-OPS-04：新增 amusement_devices 主数据 + 每设备 safety_check_interval_hours（空回退项目级 24h）；evaluateOpenEligibility 增"最近 PASS 巡检须在设备周期内有效"判定，过期返回 SAFETY_INSPECTION_EXPIRED 阻断核销；PASS 刷新 last_pass_inspection_at；新表 amusement_inspection_tasks + 薄 @Scheduled AmusementInspectionTaskJob（阶段4待实现）；新增设备 CRUD 端点 GET/POST /projects/{id}/devices（权限 amusement.device.view/manage） | 回写 .160 已编译通过的修复（F-OPS-04 + §6.6.1） |
 | 2026-07-04 逻辑一致性修订 | 改 | §3/§6.4/§7.7/§7.9/§10.1/§12.2/§12.3/§16/§17 | 现场核销统一二维码扫码：作废 NFC 腕带/手环核销、闸机 NFC 联动；核销 method 弃 nfc/gate，设备类型弃 nfc/gate；硬件 NFC 读卡器/NFC 手环标不再采购 | 用户 2026-07-04 决定：现场核销统一二维码扫码，免采购 NFC 读卡器，客人凭证统一二维码（私人手机身份 Keystore 凭证与本次无关，保持不动） |
+| 2026-07-27 v7审计 R-12 | 增/改 | §8.6a/§18 | 项目↔权益绑定由物理删改软删（迁移 V341）：加 archived_at/archived_by/archive_reason/delete_status/delete_requested_by/delete_requested_at/delete_reason 字段族（对齐 V271）+ CHECK + 生效偏索引；新增 archive/unarchive/delete-request/delete-approve 四端点，/remove 保留但语义改为存档；存档与删除理由必填、须先存档再申请删除、申请人禁自审、审批权 amusement.project_entitlement.approve 只授 role_platform_admin；核销绑定校验与管理列表只认生效绑定，墓碑行留库可恢复 | 删除铁律（删除=存库+前台不显+可恢复+分类+填理由+最高权限批准）；v7 审计 R-12 判 P0 守，见 docs/dev-plan-v7-audit-20260722.md |

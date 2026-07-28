@@ -102,10 +102,14 @@ public class AmusementController {
         return ApiResponse.ok(service.createProjectRule(id, request));
     }
 
+    /** V341：默认只列生效中绑定；include_archived=true 才连同已存档/已删除墓碑返回（后台「查看已归档」）。 */
     @GetMapping("/projects/{id}/entitlements")
-    public ApiResponse<PageResponse<AmusementProjectEntitlementRecord>> listProjectEntitlements(@PathVariable String id) {
+    public ApiResponse<PageResponse<AmusementProjectEntitlementRecord>> listProjectEntitlements(
+            @PathVariable String id,
+            @RequestParam(name = "include_archived", required = false, defaultValue = "false") boolean includeArchived
+    ) {
         authorizationService.requirePermission("amusement.project_entitlement.manage");
-        return ApiResponse.ok(service.listProjectEntitlements(id));
+        return ApiResponse.ok(service.listProjectEntitlements(id, includeArchived));
     }
 
     @PostMapping("/projects/{id}/entitlements")
@@ -118,6 +122,10 @@ public class AmusementController {
         return ApiResponse.ok(service.createProjectEntitlement(id, request));
     }
 
+    /**
+     * V341（R-12）：原「解除绑定」端点改软删语义——存档（行留库、前台不显、可恢复），reason 必填。
+     * 路径保留，避免既有客户端断链；等价于 /archive。
+     */
     @PostMapping("/projects/{id}/entitlements/{entitlementType}/remove")
     public ApiResponse<AmusementProjectEntitlementRecord> removeProjectEntitlement(
             @PathVariable String id,
@@ -126,8 +134,68 @@ public class AmusementController {
     ) {
         authorizationService.requirePermission("amusement.project_entitlement.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.deleteProjectEntitlement(
+        return ApiResponse.ok(service.archiveProjectEntitlement(
+                id, entitlementType,
+                request == null ? null : request.reason(),
+                request == null ? null : request.idempotencyKey()));
+    }
+
+    /** V341：存档（停用）游乐项目权益绑定；存档理由必填。 */
+    @PostMapping("/projects/{id}/entitlements/{entitlementType}/archive")
+    public ApiResponse<AmusementProjectEntitlementRecord> archiveProjectEntitlement(
+            @PathVariable String id,
+            @PathVariable String entitlementType,
+            @RequestBody(required = false) @jakarta.validation.Valid com.complex.platform.ticketing.dto.StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("amusement.project_entitlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archiveProjectEntitlement(
+                id, entitlementType,
+                request == null ? null : request.reason(),
+                request == null ? null : request.idempotencyKey()));
+    }
+
+    /** V341：恢复（取消存档）游乐项目权益绑定；墓碑恢复由服务层再要 approve 权限。 */
+    @PostMapping("/projects/{id}/entitlements/{entitlementType}/unarchive")
+    public ApiResponse<AmusementProjectEntitlementRecord> unarchiveProjectEntitlement(
+            @PathVariable String id,
+            @PathVariable String entitlementType,
+            @RequestBody(required = false) @jakarta.validation.Valid com.complex.platform.ticketing.dto.StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("amusement.project_entitlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.restoreProjectEntitlement(
                 id, entitlementType, request == null ? null : request.idempotencyKey()));
+    }
+
+    /** V341：发起删除申请（须先存档、理由必填）。 */
+    @PostMapping("/projects/{id}/entitlements/{entitlementType}/delete-request")
+    public ApiResponse<AmusementProjectEntitlementRecord> requestDeleteProjectEntitlement(
+            @PathVariable String id,
+            @PathVariable String entitlementType,
+            @RequestBody(required = false) @jakarta.validation.Valid com.complex.platform.ticketing.dto.StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("amusement.project_entitlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestDeleteProjectEntitlement(
+                id, entitlementType,
+                request == null ? null : request.reason(),
+                request == null ? null : request.idempotencyKey()));
+    }
+
+    /** V341：审批删除申请（最高权限 amusement.project_entitlement.approve，申请人禁自审）。action=approved|rejected。 */
+    @PostMapping("/projects/{id}/entitlements/{entitlementType}/delete-approve")
+    public ApiResponse<AmusementProjectEntitlementRecord> approveDeleteProjectEntitlement(
+            @PathVariable String id,
+            @PathVariable String entitlementType,
+            @RequestBody(required = false) @jakarta.validation.Valid com.complex.platform.ticketing.dto.StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("amusement.project_entitlement.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.decideDeleteProjectEntitlement(
+                id, entitlementType,
+                request == null ? null : request.action(),
+                request == null ? null : request.idempotencyKey()));
     }
 
     @GetMapping("/projects/{id}/capacity-config")

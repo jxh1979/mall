@@ -254,24 +254,46 @@ class JdbcAmusementRepository implements AmusementRepository {
                         rs.getString("merchant_id")));
     }
 
+    // V341（R-12 软删）：绑定行全字段列（存档轴 + 删除轴），所有读取路径统一走这一串，避免漏字段。
+    private static final String PROJECT_ENTITLEMENT_COLUMNS = """
+            id, project_id, entitlement_type, created_at,
+            archived_at, archived_by, archive_reason,
+            delete_status, delete_requested_by, delete_requested_at, delete_reason
+            """;
+
+    // V341：生效中绑定的统一过滤谓词（未存档 + 未审批通过删除）。走 idx_amusement_project_entitlements_active_list 偏索引。
+    private static final String PROJECT_ENTITLEMENT_ACTIVE_FILTER =
+            " archived_at IS NULL AND delete_status <> 'approved' ";
+
     @Override
     public List<String> listProjectEntitlementTypes(String projectId) {
+        // 核销绑定校验读取路径：只认生效绑定；已存档/墓碑绑定视同不存在（不再收紧核销、也不误放行）。
         return jdbcTemplate.queryForList("""
                 SELECT entitlement_type
                   FROM amusement_project_entitlements
                  WHERE project_id = :project_id
+                   AND""" + PROJECT_ENTITLEMENT_ACTIVE_FILTER + """
                  ORDER BY entitlement_type
                 """, Map.of("project_id", projectId), String.class);
     }
 
     @Override
     public AmusementProjectEntitlementRecord saveProjectEntitlement(AmusementProjectEntitlementRecord entitlement) {
+        // V341：唯一键 (project_id, entitlement_type) 使已存档/墓碑行继续占位，DO NOTHING 会让「重新绑定」静默失效。
+        // 故复绑=恢复——命中冲突时清空存档/删除标记（保留原 id/created_at，审计留痕由 audit_events 承载）。
         jdbcTemplate.update("""
                 INSERT INTO amusement_project_entitlements (
                     id, project_id, entitlement_type, created_at
                 )
                 VALUES (:id, :project_id, :entitlement_type, :created_at)
-                ON CONFLICT (project_id, entitlement_type) DO NOTHING
+                ON CONFLICT (project_id, entitlement_type) DO UPDATE SET
+                    archived_at = NULL,
+                    archived_by = NULL,
+                    archive_reason = NULL,
+                    delete_status = 'none',
+                    delete_requested_by = NULL,
+                    delete_requested_at = NULL,
+                    delete_reason = NULL
                 """, new MapSqlParameterSource()
                 .addValue("id", entitlement.id())
                 .addValue("project_id", entitlement.projectId())
@@ -281,9 +303,10 @@ class JdbcAmusementRepository implements AmusementRepository {
         return findProjectEntitlement(entitlement.projectId(), entitlement.entitlementType()).orElse(entitlement);
     }
 
-    private Optional<AmusementProjectEntitlementRecord> findProjectEntitlement(String projectId, String entitlementType) {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, entitlement_type, created_at
+    @Override
+    public Optional<AmusementProjectEntitlementRecord> findProjectEntitlement(String projectId, String entitlementType) {
+        // 管理端单条读取：含已存档/墓碑行（存档→申请删除→审批→恢复整链都要读得到）。
+        return jdbcTemplate.query("SELECT " + PROJECT_ENTITLEMENT_COLUMNS + """
                   FROM amusement_project_entitlements
                  WHERE project_id = :project_id AND entitlement_type = :entitlement_type
                 """, Map.of("project_id", projectId, "entitlement_type", entitlementType),
@@ -291,22 +314,73 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
-    public List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId) {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, entitlement_type, created_at
+    public List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId, boolean includeArchived) {
+        return jdbcTemplate.query("SELECT " + PROJECT_ENTITLEMENT_COLUMNS + """
                   FROM amusement_project_entitlements
                  WHERE project_id = :project_id
+                   AND (:include_archived = TRUE OR (""" + PROJECT_ENTITLEMENT_ACTIVE_FILTER + """
+                   ))
                  ORDER BY entitlement_type
-                """, Map.of("project_id", projectId), rowMapper::mapProjectEntitlement);
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("include_archived", includeArchived), rowMapper::mapProjectEntitlement);
     }
 
     @Override
-    public boolean deleteProjectEntitlement(String projectId, String entitlementType) {
-        int deleted = jdbcTemplate.update("""
-                DELETE FROM amusement_project_entitlements
+    public int archiveProjectEntitlement(String projectId, String entitlementType, String reason, String actorId) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_project_entitlements
+                   SET archived_at = :archived_at, archived_by = :archived_by, archive_reason = :reason
+                 WHERE project_id = :project_id AND entitlement_type = :entitlement_type
+                   AND archived_at IS NULL AND delete_status = 'none'
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("entitlement_type", entitlementType)
+                .addValue("archived_at", timestampWithTimeZone(Instant.now()))
+                .addValue("archived_by", actorId)
+                .addValue("reason", reason));
+    }
+
+    @Override
+    public int restoreProjectEntitlement(String projectId, String entitlementType) {
+        // 恢复：清存档标记，并把删除轴回退 none（pending 申请撤回；approved 墓碑复活——服务层已按最高权限闸把守）。
+        return jdbcTemplate.update("""
+                UPDATE amusement_project_entitlements
+                   SET archived_at = NULL, archived_by = NULL, archive_reason = NULL,
+                       delete_status = 'none', delete_requested_by = NULL,
+                       delete_requested_at = NULL, delete_reason = NULL
                  WHERE project_id = :project_id AND entitlement_type = :entitlement_type
                 """, Map.of("project_id", projectId, "entitlement_type", entitlementType));
-        return deleted > 0;
+    }
+
+    @Override
+    public int requestDeleteProjectEntitlement(String projectId, String entitlementType, String reason, String actorId) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_project_entitlements
+                   SET delete_status = 'pending', delete_requested_by = :by,
+                       delete_requested_at = :at, delete_reason = :reason
+                 WHERE project_id = :project_id AND entitlement_type = :entitlement_type
+                   AND archived_at IS NOT NULL AND delete_status = 'none'
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("entitlement_type", entitlementType)
+                .addValue("by", actorId)
+                .addValue("at", timestampWithTimeZone(Instant.now()))
+                .addValue("reason", reason));
+    }
+
+    @Override
+    public int decideDeleteProjectEntitlement(String projectId, String entitlementType, boolean approved) {
+        // approved 落墓碑（行不删、读取路径过滤），rejected 回 none（申请人/理由留库作留痕）。
+        return jdbcTemplate.update("""
+                UPDATE amusement_project_entitlements
+                   SET delete_status = :status
+                 WHERE project_id = :project_id AND entitlement_type = :entitlement_type
+                   AND delete_status = 'pending'
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("entitlement_type", entitlementType)
+                .addValue("status", approved ? "approved" : "none"));
     }
 
     @Override

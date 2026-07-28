@@ -297,7 +297,13 @@ public class AmusementService implements AmusementVerificationPort {
         );
     }
 
+    /** 默认视图：只返回生效中绑定（已存档/已删除墓碑不展示，删除铁律「前台不显」）。 */
     public PageResponse<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId) {
+        return listProjectEntitlements(projectId, false);
+    }
+
+    /** includeArchived=true：连同已存档与已删除墓碑一并返回，供后台「查看已归档」与恢复用。 */
+    public PageResponse<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId, boolean includeArchived) {
         String id = requireText(projectId, "project_id");
         checkProjectOwnership(id);
         return readPage(
@@ -305,7 +311,7 @@ public class AmusementService implements AmusementVerificationPort {
                 "amusement.project_entitlement.view_failed",
                 "amusement.project_entitlement.manage",
                 "amusement_project_entitlement",
-                () -> repository.listProjectEntitlements(id)
+                () -> repository.listProjectEntitlements(id, includeArchived)
         );
     }
 
@@ -326,13 +332,56 @@ public class AmusementService implements AmusementVerificationPort {
         );
     }
 
+    // ================= V341（v7 审计 R-12）游乐权益绑定：物理删 → 软删（范式照抄 V255/V260/V271/V272） =================
+
+    /**
+     * 存档（=原「解除绑定/停用」）：不删行，只打存档标记，理由必填。存档后核销绑定校验不再采信该绑定。
+     * 权限 amusement.project_entitlement.manage（日常运营）；恢复见 {@link #restoreProjectEntitlement}。
+     */
     @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.manage")
     @Transactional
-    public AmusementProjectEntitlementRecord deleteProjectEntitlement(String projectId, String entitlementType, String idempotencyKey) {
+    public AmusementProjectEntitlementRecord archiveProjectEntitlement(
+            String projectId, String entitlementType, String reason, String idempotencyKey) {
+        String id = requireText(projectId, "project_id");
+        String type = requireText(entitlementType, "entitlement_type");
+        // 存档必填理由（业务HTML 2026-07-07「存档及删除需要填写存档及删除理由」）。
+        String archiveReason = requireArchiveReason(reason, "存档理由不能为空");
+        return executeWrite(
+                "archiveAmusementProjectEntitlement:" + id + ":" + type,
+                idempotencyKey,
+                Map.of("project_id", id, "entitlement_type", type, "reason", archiveReason),
+                AmusementProjectEntitlementRecord.class,
+                "amusement.project_entitlement.changed",
+                "amusement.project_entitlement.change_failed",
+                "amusement.project_entitlement.manage",
+                "amusement_project_entitlement",
+                () -> {
+                    checkProjectOwnership(id);
+                    AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
+                    if (existing.archivedAt() != null) {
+                        throw ApiException.conflict("PROJECT_ENTITLEMENT_ALREADY_ARCHIVED", "该权益绑定已存档");
+                    }
+                    if (!"none".equals(existing.deleteStatus())) {
+                        throw ApiException.conflict("PROJECT_ENTITLEMENT_DELETE_IN_PROGRESS", "该权益绑定已进入删除流程");
+                    }
+                    repository.archiveProjectEntitlement(id, type, archiveReason, currentActorId());
+                    return requireProjectEntitlement(id, type);
+                }
+        );
+    }
+
+    /**
+     * 恢复（取消存档 / 墓碑复活）：清存档标记 + 删除轴回退 none。
+     * 已被审批通过删除（墓碑）的绑定恢复须持审批权 amusement.project_entitlement.approve（只授 role_platform_admin）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.manage")
+    @Transactional
+    public AmusementProjectEntitlementRecord restoreProjectEntitlement(
+            String projectId, String entitlementType, String idempotencyKey) {
         String id = requireText(projectId, "project_id");
         String type = requireText(entitlementType, "entitlement_type");
         return executeWrite(
-                "deleteAmusementProjectEntitlement:" + id + ":" + type,
+                "restoreAmusementProjectEntitlement:" + id + ":" + type,
                 idempotencyKey,
                 Map.of("project_id", id, "entitlement_type", type),
                 AmusementProjectEntitlementRecord.class,
@@ -342,12 +391,115 @@ public class AmusementService implements AmusementVerificationPort {
                 "amusement_project_entitlement",
                 () -> {
                     checkProjectOwnership(id);
-                    if (!repository.deleteProjectEntitlement(id, type)) {
-                        throw ApiException.notFound("PROJECT_ENTITLEMENT_NOT_FOUND", "project entitlement binding not found");
+                    AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
+                    if (existing.active()) {
+                        throw ApiException.conflict("PROJECT_ENTITLEMENT_NOT_ARCHIVED", "该权益绑定处于生效中，无需恢复");
                     }
-                    return new AmusementProjectEntitlementRecord("removed", id, type, Instant.now());
+                    if ("approved".equals(existing.deleteStatus())) {
+                        // 墓碑复活=撤销一次最高权限批准的删除，按同级最高权限把守。
+                        authorizationService.requirePermission("amusement.project_entitlement.approve");
+                    }
+                    repository.restoreProjectEntitlement(id, type);
+                    return requireProjectEntitlement(id, type);
                 }
         );
+    }
+
+    /** 发起删除申请：须先存档（防误删在用绑定）、理由必填；状态 none→pending。 */
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.manage")
+    @Transactional
+    public AmusementProjectEntitlementRecord requestDeleteProjectEntitlement(
+            String projectId, String entitlementType, String reason, String idempotencyKey) {
+        String id = requireText(projectId, "project_id");
+        String type = requireText(entitlementType, "entitlement_type");
+        String deleteReason = requireArchiveReason(reason, "删除理由不能为空");
+        return executeWrite(
+                "requestDeleteAmusementProjectEntitlement:" + id + ":" + type,
+                idempotencyKey,
+                Map.of("project_id", id, "entitlement_type", type, "reason", deleteReason),
+                AmusementProjectEntitlementRecord.class,
+                "amusement.project_entitlement.changed",
+                "amusement.project_entitlement.change_failed",
+                "amusement.project_entitlement.manage",
+                "amusement_project_entitlement",
+                () -> {
+                    checkProjectOwnership(id);
+                    AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
+                    if (existing.archivedAt() == null) {
+                        throw ApiException.badRequest("PROJECT_ENTITLEMENT_NOT_ARCHIVED", "请先存档再申请删除");
+                    }
+                    if (!"none".equals(existing.deleteStatus())) {
+                        throw ApiException.conflict("PROJECT_ENTITLEMENT_DELETE_ALREADY_PENDING", "该权益绑定已有待审批的删除申请");
+                    }
+                    repository.requestDeleteProjectEntitlement(id, type, deleteReason, currentActorId());
+                    return requireProjectEntitlement(id, type);
+                }
+        );
+    }
+
+    /**
+     * 审批删除申请：approved → delete_status='approved'（墓碑，行留库、全读取路径过滤、可恢复，不物理删）；
+     * rejected → 回 none。权限 amusement.project_entitlement.approve（只授 role_platform_admin），且申请人禁自审。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.approve")
+    @Transactional
+    public AmusementProjectEntitlementRecord decideDeleteProjectEntitlement(
+            String projectId, String entitlementType, String decision, String idempotencyKey) {
+        String id = requireText(projectId, "project_id");
+        String type = requireText(entitlementType, "entitlement_type");
+        String verdict = decision == null ? null : decision.trim().toLowerCase(Locale.ROOT);
+        if (!"approved".equals(verdict) && !"rejected".equals(verdict)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        return executeWrite(
+                "decideDeleteAmusementProjectEntitlement:" + id + ":" + type,
+                idempotencyKey,
+                Map.of("project_id", id, "entitlement_type", type, "decision", verdict),
+                AmusementProjectEntitlementRecord.class,
+                "amusement.project_entitlement.changed",
+                "amusement.project_entitlement.change_failed",
+                "amusement.project_entitlement.approve",
+                "amusement_project_entitlement",
+                () -> {
+                    checkProjectOwnership(id);
+                    AmusementProjectEntitlementRecord existing = requireProjectEntitlement(id, type);
+                    if (!"pending".equals(existing.deleteStatus())) {
+                        throw ApiException.badRequest("PROJECT_ENTITLEMENT_DELETE_NOT_PENDING", "该权益绑定没有待审批的删除申请");
+                    }
+                    // 职责分离：删除申请发起人不得审批自己的申请（照 supervisor_review SELF_REVIEW_FORBIDDEN 原则）。
+                    String actorId = currentActorId();
+                    if (actorId != null && actorId.equals(existing.deleteRequestedBy())) {
+                        throw ApiException.forbidden("PROJECT_ENTITLEMENT_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
+                    }
+                    repository.decideDeleteProjectEntitlement(id, type, "approved".equals(verdict));
+                    return requireProjectEntitlement(id, type);
+                }
+        );
+    }
+
+    private AmusementProjectEntitlementRecord requireProjectEntitlement(String projectId, String entitlementType) {
+        return repository.findProjectEntitlement(projectId, entitlementType)
+                .orElseThrow(() -> ApiException.notFound("PROJECT_ENTITLEMENT_NOT_FOUND", "project entitlement binding not found"));
+    }
+
+    /** 存档/删除理由必填（空白即 400），与 V271 全域口径一致。 */
+    private String requireArchiveReason(String reason, String message) {
+        String trimmed = trimToNull(reason);
+        if (trimmed == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", message);
+        }
+        return trimmed;
+    }
+
+    private String currentActorId() {
+        try {
+            var actor = authorizationService.currentActor();
+            return actor == null ? null : actor.id();
+        } catch (RuntimeException ignored) {
+            // 无鉴权上下文（内部调用/单测）：不阻断软删主链；操作者留空，留痕由 audit_events 兜底。
+            // 此时禁自审闸自动跳过（照 TicketCatalogService「actorId 为 null 时跳过该闸」既有口径）。
+            return null;
+        }
     }
 
     public PageResponse<AmusementCapacityConfigRecord> listCapacityConfigs(String projectId) {

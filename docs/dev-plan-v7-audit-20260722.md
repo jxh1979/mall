@@ -21,7 +21,7 @@
 | **R-9** 退租押金 | 三种终止统一多级审批+自动落账 | HTML已改(完成);**合同到期结算加多级审批链**(现单人开账+手动确认→财务/运营多部门) | P1 | HTML完·代码待开发 |
 | **R-10** 端开关取最严+灰度 | 取最严 + 新增灰度层 | **求值改"高层关闭压倒低层打开" + 新增灰度独立最细级(白名单试点)**;HTML维度已补 | P0 | ✅ 已开发(V342·求值取最严+灰度层+后台灰度维护页+PRD同步;256组合矩阵测试) |
 | **R-11** 券静态核销码 | P1 | **券 onsite 核销码对齐动态模型(token+窗口+HMAC)或在线短时效码 + PRD同步** | P1 | 待开发 |
-| **R-12** 游乐权益绑定物理删 | 守 P0 | **物理删改软删**(存库+可恢复+分类+理由+最高权限批准) | P0 | 待开发 |
+| **R-12** 游乐权益绑定物理删 | 守 P0 | **物理删改软删**(存库+可恢复+分类+理由+最高权限批准) | P0 | ✅ 已落地(2026-07-27,迁移 **V341**):amusement_project_entitlements 加 V271 同款字段族(archived_at/archived_by/archive_reason/delete_status/delete_requested_by/delete_requested_at/delete_reason)+CHECK+生效偏索引;存档必填理由、须先存档再申请删除、审批禁自审、审批权 `amusement.project_entitlement.approve` 只授 role_platform_admin;delete_status='approved' 作墓碑不物理删且可恢复;核销绑定校验与管理列表只认生效绑定;后台「项目与场次」页加权益绑定区(默认不显已归档+查看已归档+恢复+理由强制)。详见 docs/amusement-operations-development-design.md §8.6a、docs/data-archive-delete-pattern-design-v0.1.md §14.4a |
 
 ---
 
@@ -81,7 +81,7 @@
 5. 提成/积分硬编码配置化(P0-D/CFG-01) ✅ **2026-07-28 已落地(V340)**
 6. 对账旁路手填 + 抽成草案闸(P0-E)
 7. 四舍五入严格落地 + 尾差单列(R-7)
-8. 游乐权益绑定改软删(R-12)
+8. ~~游乐权益绑定改软删(R-12)~~ ✅ 已落地(V341,2026-07-27)
 9. ✅ 端开关取最严 + 灰度层(R-10) —— 已开发:`resolveEffectiveSwitch` 改"任一层关闭即最终关闭"(返回最高层关闭行做审计口径)、
    新增灰度层 V342(`terminal_capability_canary_rollouts`/`terminal_capability_canary_targets`,白名单试点,只能收窄不能放宽)接入求值链、
    后台「终端开关矩阵」页加灰度维护区块、PRD §5.5/§5.7/§6.3A 与 r5-spec §1.2 同步;

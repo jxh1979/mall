@@ -47,19 +47,38 @@ public interface AmusementRepository {
     List<AmusementProjectDeviceRegistryBacklogRecord> listProjectsMissingDeviceRegistry(Optional<String> merchantScope);
 
     /**
-     * 返回该项目已配置的可用权益类型绑定（amusement_project_entitlements）。
-     * 为空表示该项目无绑定配置——核销时回退按「entitlement_type 为游乐类」放行（V082 注释、向后兼容）。
+     * 返回该项目【生效中】的可用权益类型绑定（amusement_project_entitlements）。
+     * V341（R-12）软删：已存档 / 已审批删除（墓碑）的绑定一律不返回，核销绑定校验只认生效绑定。
+     * 为空表示该项目无生效绑定配置——核销时回退按「entitlement_type 为游乐类」放行（V082 注释、向后兼容）。
      */
     List<String> listProjectEntitlementTypes(String projectId);
 
-    /** 写入/更新项目可用权益类型绑定（amusement_project_entitlements）。按 (project_id, entitlement_type) 唯一幂等。 */
+    /**
+     * 写入/更新项目可用权益类型绑定（amusement_project_entitlements）。按 (project_id, entitlement_type) 唯一幂等。
+     * V341：唯一键使已存档/墓碑行占位，故【复绑=恢复】——命中冲突时清空存档/删除标记，保留原 id/created_at 与审计链。
+     */
     AmusementProjectEntitlementRecord saveProjectEntitlement(AmusementProjectEntitlementRecord entitlement);
 
-    /** 列出项目全部权益类型绑定明细（管理端读取，含 id/created_at）。 */
-    List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId);
+    /**
+     * 列出项目权益类型绑定明细（管理端读取，含 id/created_at 与存档/删除字段族）。
+     * includeArchived=false（默认视图）只返回生效中绑定；true 时连同已存档与墓碑一并返回，供「查看已归档 / 恢复」用。
+     */
+    List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId, boolean includeArchived);
 
-    /** 删除项目某权益类型绑定（停用）；返回是否删除成功。 */
-    boolean deleteProjectEntitlement(String projectId, String entitlementType);
+    /** 按 (project_id, entitlement_type) 查单条绑定；含已存档/墓碑行（管理端存档/恢复/审批链需要读到）。 */
+    Optional<AmusementProjectEntitlementRecord> findProjectEntitlement(String projectId, String entitlementType);
+
+    /** V341 存档（软下线/停用）：archived_at/archived_by/archive_reason 落值。返回受影响行数。 */
+    int archiveProjectEntitlement(String projectId, String entitlementType, String reason, String actorId);
+
+    /** V341 恢复（取消存档）：清空存档标记；同时把删除轴回退 none（含墓碑恢复）。返回受影响行数。 */
+    int restoreProjectEntitlement(String projectId, String entitlementType);
+
+    /** V341 发起删除申请：delete_status→pending + 申请人/时间/理由。返回受影响行数。 */
+    int requestDeleteProjectEntitlement(String projectId, String entitlementType, String reason, String actorId);
+
+    /** V341 审批删除：approved→'approved'（墓碑，不物理删）；rejected→回 'none'。返回受影响行数。 */
+    int decideDeleteProjectEntitlement(String projectId, String entitlementType, boolean approved);
 
     /** 写入/更新点位/设备并发容量配置（amusement_capacity_config）。按 id 幂等 upsert。 */
     AmusementCapacityConfigRecord saveCapacityConfig(AmusementCapacityConfigRecord config);

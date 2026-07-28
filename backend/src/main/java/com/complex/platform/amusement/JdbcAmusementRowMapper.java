@@ -62,7 +62,15 @@ final class JdbcAmusementRowMapper {
                 rs.getString("id"),
                 rs.getString("project_id"),
                 rs.getString("entitlement_type"),
-                instant(rs, "created_at")
+                instant(rs, "created_at"),
+                // V341（R-12）软删字段族：存档轴 + 删除轴。
+                instant(rs, "archived_at"),
+                rs.getString("archived_by"),
+                rs.getString("archive_reason"),
+                rs.getString("delete_status"),
+                rs.getString("delete_requested_by"),
+                instant(rs, "delete_requested_at"),
+                rs.getString("delete_reason")
         );
     }
 
