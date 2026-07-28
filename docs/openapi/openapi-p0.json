@@ -33610,6 +33610,136 @@
         }
       }
     },
+    "/api/v1/settlement/config/commission-rate": {
+      "post": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "settlementConfigUpsertCommissionRate",
+        "summary": "维护卡座销售提成费率(草案)",
+        "description": "结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 × 角色档 配置提成率万分比;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.config.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "settlement.config.bar_commission_rate_configs.updated",
+        "x-audit-event-failure": "settlement.config.bar_commission_rate_configs.update_failed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "merchant_id": {
+                    "type": "string"
+                  },
+                  "role_type": {
+                    "type": "string"
+                  },
+                  "rate_bp": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "role_type",
+                  "rate_bp"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/settlement/config/points-accrual-rate": {
+      "post": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "settlementConfigUpsertPointsAccrualRate",
+        "summary": "维护积分累计率(草案)",
+        "description": "结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 配置「每积 1 基础分所需消费金额(分)」;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.config.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "settlement.config.points_accrual_rate_configs.updated",
+        "x-audit-event-failure": "settlement.config.points_accrual_rate_configs.update_failed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "merchant_id": {
+                    "type": "string"
+                  },
+                  "amount_cent_per_point": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "amount_cent_per_point"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/settlement/config/rank-tiers": {
       "post": {
         "tags": [

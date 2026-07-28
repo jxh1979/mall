@@ -106,6 +106,16 @@ class TicketingServiceTests {
         // 令既有出票/支付用例行为一字不变 = 本次改造【零行为改变】的单测侧证据。
         pointsRateStub = new StubPointsAccrualRateConfigPort();
         orderService.pointsAccrualRateConfigPort = pointsRateStub;
+        // 🔴 用例隔离(2026-07-28 修):本类此前【没有】统一的登录主体准备,靠「先跑的用例里 TestSecurityActors.asMerchantUser(...)
+        // 未清理、后跑的用例捡漏」跑通——JUnit 方法顺序一变(例如本类新增/删除任一 @Test)就整片 "Api authentication is required"。
+        // 现改为每例前置平台管理员、每例后清理:各用例要特定主体的自己覆盖(既有用例本就显式调 asMerchantUser),
+        // 不再依赖跨用例泄漏。此举只补齐前置、不改任何断言。
+        TestSecurityActors.asPlatformAdmin();
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearSecurityActor() {
+        TestSecurityActors.clear();
     }
 
     @Test
