@@ -780,3 +780,10 @@
 用户路径：先要求考虑中国税法 → 确认 T-INVOICE-LINK（非自动闭合）。  
 承接：`finance-settlement-product-prd-v0.1.md` §4A。  
 不构成税务法律意见。
+
+
+## APPENDIX-DEEP-2026-07-28
+
+- APPENDIX 深审完成：主题探针 vs MAIN 现行裁决。
+- 产出行动队列；**默认不批量改 265 份附录正文**，待用户选 A1/A2/A3。
+- 权威顺序不变：HTML > 用户裁决 > MAIN > APPENDIX。
