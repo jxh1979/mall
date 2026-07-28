@@ -56,6 +56,22 @@ public final class SettlementConfigWriteRequests {
                                                   String managementEntityId) {
     }
 
+    /**
+     * V340(P0-D/CFG-01)bar_commission_rate_configs:卡座销售提成率万分比。
+     * roleType ∈{sales,non_sales};merchantId 留空=该项目通用;rateBp∈[0,10000](出厂默认 sales=1500/non_sales=1000)。
+     */
+    public record CommissionRateRequest(String idempotencyKey, String projectId, String merchantId,
+                                        String roleType, Integer rateBp) {
+    }
+
+    /**
+     * V340(P0-D/CFG-01)points_accrual_rate_configs:积分累计率。
+     * amountCentPerPoint=每积 1 基础分所需消费金额(分),须&gt;0(出厂默认 100=每 1 元积 1 分);merchantId 留空=通用。
+     */
+    public record PointsAccrualRateRequest(String idempotencyKey, String projectId, String merchantId,
+                                           Long amountCentPerPoint) {
+    }
+
     /** 梯子整体转正 body(§3):projectId 可空=全局默认梯子。 */
     public record RankTiersActivateRequest(String projectId) {
     }

@@ -47,6 +47,27 @@ class BarServiceTests {
     private BarService service;
     private BarBillingService billingService;
     private BarOrderService barOrderService;
+    private StubCommissionRateConfigPort commissionRateStub;
+
+    /** P0-D/CFG-01（V340）提成费率配置端口测试双子：记录被问到的作用域，按角色档返回可设定的费率。 */
+    private static final class StubCommissionRateConfigPort implements BarCommissionRateConfigPort {
+        private int salesBp;
+        private int nonSalesBp;
+        private String lastMerchantId;
+        private String lastRoleType;
+
+        StubCommissionRateConfigPort(int salesBp, int nonSalesBp) {
+            this.salesBp = salesBp;
+            this.nonSalesBp = nonSalesBp;
+        }
+
+        @Override
+        public int findCommissionRateBp(String projectId, String merchantId, String roleType) {
+            lastMerchantId = merchantId;
+            lastRoleType = roleType;
+            return "sales".equals(roleType) ? salesBp : nonSalesBp;
+        }
+    }
 
     @BeforeEach
     void setUp() {
@@ -68,6 +89,10 @@ class BarServiceTests {
                 receivableLedgerService);
         billingService = new BarBillingService(
                 barRepository, receivableLedgerService, authorizationService, auditEventService);
+        // P0-D/CFG-01（V340）：提成率改后台可配。单测注入「出厂种子等值」测试双子（销售 1500bp / 非销售 1000bp）——
+        // 既有提成用例的期望数字一字未改仍全绿 = 本次改造【零行为改变】的单测侧证据。
+        commissionRateStub = new StubCommissionRateConfigPort(1500, 1000);
+        billingService.commissionRateConfigPort = commissionRateStub;
         // AUD-007 退款额度闸 fail-closed 常在：默认注入宽松引擎，令既有退款调账用例（平台管理员操作）仍额度内放行；
         // 超额拒绝 / 引擎缺失场景各用例自行覆盖。
         billingService.refundAuthorizationService =
@@ -905,6 +930,41 @@ class BarServiceTests {
                         BarCommissionCalculationRecord::commissionAmountCent
                 )
                 .containsExactly("non_sales", 1000, 12880L);
+    }
+
+    @Test
+    void commissionRateComesFromConfigCenterNotHardcode() {
+        // P0-D/CFG-01（V340）：改后台配置（销售 20% / 非销售 5%）→ 计提立即按新费率，证明费率不再写死在代码里。
+        commissionRateStub.salesBp = 2000;
+        commissionRateStub.nonSalesBp = 500;
+
+        BarBillRecord salesBill = billForOrder("cfg-sales-order", "staff_sales");
+        BarCommissionCalculationRecord salesCommission = service.calculateCommission(
+                salesBill.id(), new CommissionCalculateRequest("cfg-commission-sales", salesBill.id(), true, false));
+        BarBillRecord nonSalesBill = billForOrder("cfg-service-order", null);
+        BarCommissionCalculationRecord nonSalesCommission = service.calculateCommission(
+                nonSalesBill.id(), new CommissionCalculateRequest("cfg-commission-non-sales", nonSalesBill.id(), true, false));
+
+        // 基数与 commissionUsesFifteenPercent… 用例同为 128800 分：20% → 25760；5% → 6440。
+        assertThat(salesCommission.commissionBaseCent()).isEqualTo(128800L);
+        assertThat(salesCommission.commissionRateBp()).isEqualTo(2000);
+        assertThat(salesCommission.commissionAmountCent()).isEqualTo(25760L);
+        assertThat(nonSalesCommission.commissionRateBp()).isEqualTo(500);
+        assertThat(nonSalesCommission.commissionAmountCent()).isEqualTo(6440L);
+        // 费率按「账单归属商户 × 角色档」解析（作用域取自账单，不来自请求体）。
+        assertThat(commissionRateStub.lastRoleType).isEqualTo("non_sales");
+        assertThat(commissionRateStub.lastMerchantId).isEqualTo(nonSalesBill.merchantId());
+    }
+
+    @Test
+    void commissionFailsLoudWhenRateConfigPortMissing() {
+        // 资金级 fail-closed：配置端口不可用时【拒绝计提】而非静默回落硬编码 15%/10%（零硬编码母铁律）。
+        BarBillRecord bill = billForOrder("cfg-missing", "staff_sales");
+        billingService.commissionRateConfigPort = null;
+        assertThatThrownBy(() -> service.calculateCommission(bill.id(),
+                new CommissionCalculateRequest("cfg-commission-missing", bill.id(), true, false)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("提成费率配置不可用");
     }
 
     @Test

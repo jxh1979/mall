@@ -5,9 +5,11 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ChannelFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscountRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersActivateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RetentionRequest;
@@ -86,6 +88,20 @@ public class SettlementConfigController {
     @PostMapping("/channel-fee")
     public ApiResponse<Void> saveChannelFee(@RequestBody ChannelFeeRequest request) {
         writeService.saveChannelFee(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    /** V340(P0-D/CFG-01):卡座销售提成费率(项目 × 商户 × 角色档)落草案。 */
+    @PostMapping("/commission-rate")
+    public ApiResponse<Void> saveCommissionRate(@RequestBody CommissionRateRequest request) {
+        writeService.saveCommissionRate(request, requireManageActor());
+        return ApiResponse.ok(null);
+    }
+
+    /** V340(P0-D/CFG-01):积分累计率(项目 × 商户)落草案。 */
+    @PostMapping("/points-accrual-rate")
+    public ApiResponse<Void> savePointsAccrualRate(@RequestBody PointsAccrualRateRequest request) {
+        writeService.savePointsAccrualRate(request, requireManageActor());
         return ApiResponse.ok(null);
     }
 

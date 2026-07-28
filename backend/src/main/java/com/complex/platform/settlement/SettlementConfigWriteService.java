@@ -9,9 +9,11 @@ import com.complex.platform.settlement.JdbcSettlementConfigWriteRepository.TierR
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ChannelFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscountRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTierInput;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RetentionRequest;
@@ -38,6 +40,9 @@ public class SettlementConfigWriteService {
     private static final String PERM = "settlement.config.manage";
     /** COALESCE 哨兵字面量:写面拒绝用户直接传入(否则与 NULL 种子同键但转正的 IS NOT DISTINCT FROM 删不掉致 500)。 */
     private static final Set<String> SCOPE_SENTINELS = Set.of("__DEFAULT__", "__ANY__", "__ALL__");
+    /** V340 全局默认种子行 id(禁止软删;见 {@link #rejectDefaultSeedArchive})。 */
+    private static final Set<String> DEFAULT_SEED_IDS =
+            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default");
 
     private final JdbcSettlementConfigWriteRepository writeRepository;
     private final RevenueStreamAttributionRepository attributionRepository;
@@ -166,6 +171,48 @@ public class SettlementConfigWriteService {
                         "channel", channelScope(req.channel()), "fee_bps", String.valueOf(feeBps)));
     }
 
+    /**
+     * V340(P0-D/CFG-01)卡座提成费率落草案:项目 × 商户 × 角色档,万分比。
+     * 出厂种子 sales=1500 / non_sales=1000(= 改造前写死值);此处只写草案,复核转正后引擎才读到。
+     */
+    public void saveCommissionRate(CommissionRateRequest request, String actorId) {
+        CommissionRateRequest req = requireRequest(request);
+        String idem = requireText(req.idempotencyKey(), "idempotency_key");
+        rejectSentinel(req.projectId(), "project_id");
+        rejectSentinel(req.merchantId(), "merchant_id");
+        String roleType = requireOneOf(req.roleType(), "role_type", "sales", "non_sales");
+        int rateBp = requireBps(req.rateBp(), "rate_bp");
+        String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId()) + "|" + roleType;
+        String landedId = writeRepository.upsertCommissionRateDraft(draftId("bcrc_d_", scopeKey, idem),
+                req.projectId(), req.merchantId(), roleType, rateBp, actorId);
+        audit("settlement.config.bar_commission_rate_configs.updated",
+                "bar_commission_rate_configs", landedId, idem,
+                Map.of("project_scope", defaultScope(req.projectId()), "merchant_id", anyScope(req.merchantId()),
+                        "role_type", roleType, "rate_bp", String.valueOf(rateBp)));
+    }
+
+    /**
+     * V340(P0-D/CFG-01)积分累计率落草案:项目 × 商户,每积 1 分所需消费金额(分)。
+     * 出厂种子 100(= 改造前每元 1 分);须 &gt;0(0 会致除零,DB CHECK 亦挡)。
+     */
+    public void savePointsAccrualRate(PointsAccrualRateRequest request, String actorId) {
+        PointsAccrualRateRequest req = requireRequest(request);
+        String idem = requireText(req.idempotencyKey(), "idempotency_key");
+        rejectSentinel(req.projectId(), "project_id");
+        rejectSentinel(req.merchantId(), "merchant_id");
+        Long unit = req.amountCentPerPoint();
+        if (unit == null || unit <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent_per_point must be > 0");
+        }
+        String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId());
+        String landedId = writeRepository.upsertPointsAccrualRateDraft(draftId("parc_d_", scopeKey, idem),
+                req.projectId(), req.merchantId(), unit, actorId);
+        audit("settlement.config.points_accrual_rate_configs.updated",
+                "points_accrual_rate_configs", landedId, idem,
+                Map.of("project_scope", defaultScope(req.projectId()), "merchant_id", anyScope(req.merchantId()),
+                        "amount_cent_per_point", String.valueOf(unit)));
+    }
+
     public void saveRankTiers(RankTiersRequest request, String actorId) {
         RankTiersRequest req = requireRequest(request);
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
@@ -253,7 +300,13 @@ public class SettlementConfigWriteService {
 
     // ================= §2 软删(差人守卫)=================
 
-    /** 软删(仅 merchant_rate / revenue_stream_attribution):status→inactive + archive_reason;差人守卫。 */
+    /**
+     * 软删:status→inactive + archive_reason;差人守卫。
+     * 白名单 = merchant_rate / revenue_stream_attribution(批1)+ commission_rate / points_accrual_rate(V340)。
+     *
+     * <p>V340 两类必须可软删的理由:提成率/积分累计率一旦落了<b>商户级特例</b>行,该商户就永久被特例遮挡、
+     * 再也回落不到项目/全局默认口径(改回同值只是又一条特例行)。软删 = 该特例下线、商户回落默认,且留档可追溯。
+     */
     public void archive(String configType, String id, ArchiveRequest request, String actorId) {
         String type = requireText(configType, "config_type");
         String targetId = requireText(id, "id");
@@ -272,6 +325,14 @@ public class SettlementConfigWriteService {
                 table = "revenue_stream_attribution";
                 requireDifferentActor(attributionRepository.activeUpdatedBy(targetId), actorId);
                 rows = attributionRepository.softDelete(targetId, reason, actorId, now);
+            }
+            // V340:提成费率 / 积分累计率的商户级特例条目可下线(回落项目/全局默认);全局默认种子受守卫保护。
+            case "commission_rate", "points_accrual_rate" -> {
+                SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
+                table = cfg.table();
+                rejectDefaultSeedArchive(targetId);
+                requireDifferentActor(writeRepository.singleRowActiveUpdatedBy(cfg, targetId), actorId);
+                rows = writeRepository.softDeleteSingleRow(cfg, targetId, reason, actorId, now);
             }
             default -> throw ApiException.badRequest("UNSUPPORTED_ARCHIVE",
                     "该配置类型不支持软删:" + type);
@@ -313,6 +374,18 @@ public class SettlementConfigWriteService {
         if (weightedSum != 10000L) {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "rank tier weighted share must sum to exactly 10000 bps, got " + weightedSum);
+        }
+    }
+
+    /**
+     * V340 兜底守卫:全局默认种子行(__DEFAULT__ 作用域)禁止软删。
+     * 种子被删 → 读取侧 requireConfigured 会对<b>全部</b>账单/订单 fail-loud(提成算不了、票务积分发不了),
+     * 属自伤操作。要改默认口径请「改」(落草案 → 复核转正),而不是把默认行下线。
+     */
+    private void rejectDefaultSeedArchive(String id) {
+        if (DEFAULT_SEED_IDS.contains(id)) {
+            throw ApiException.badRequest("DEFAULT_SEED_NOT_ARCHIVABLE",
+                    "全局默认配置不可下线（下线后全平台将无默认口径可用）；如需调整请改其数值并复核转正");
         }
     }
 

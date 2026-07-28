@@ -9,7 +9,8 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 结算配置中心批1 写入面仓储(§2/§3/§5):8 个配置类型的落草案(Path 2 并存)+ 复核转正 + 软删 + 待复核草案聚合。
+ * 结算配置中心批1 写入面仓储(§2/§3/§5):配置类型的落草案(Path 2 并存)+ 复核转正 + 软删 + 待复核草案聚合。
+ * 批1 收 8 类;V340(P0-D/CFG-01)追加「卡座提成费率 / 积分累计率」2 类,共 10 类。
  *
  * <p><b>Path 2 落草案</b>:INSERT is_draft=TRUE,ON CONFLICT(scope 表达式, is_draft) WHERE status='active' DO UPDATE ——
  * 命中「同 scope 的草案槽」则覆盖草案,<b>不动生效行</b>(is_draft=FALSE);读侧 finder 仍读生效行 → 编辑期保值。
@@ -30,7 +31,12 @@ public class JdbcSettlementConfigWriteRepository {
         COMPREHENSIVE_SERVICE_FEE("comprehensive_service_fee_configs", "comprehensive_service_fee",
                 List.of("project_id", "merchant_id", "entitlement_type")),
         COMBO_DISCOUNT("ticket_combo_discount_configs", "combo_discount", List.of("project_id")),
-        CHANNEL_FEE("channel_fee_configs", "channel_fee", List.of("project_id", "channel"));
+        CHANNEL_FEE("channel_fee_configs", "channel_fee", List.of("project_id", "channel")),
+        // V340（P0-D/CFG-01）：提成费率按 项目 × 商户 × 角色档；积分累计率按 项目 × 商户。同 Path 2 草案/转正范式。
+        COMMISSION_RATE("bar_commission_rate_configs", "commission_rate",
+                List.of("project_id", "merchant_id", "role_type")),
+        POINTS_ACCRUAL_RATE("points_accrual_rate_configs", "points_accrual_rate",
+                List.of("project_id", "merchant_id"));
 
         private final String table;
         private final String configType;
@@ -40,6 +46,11 @@ public class JdbcSettlementConfigWriteRepository {
             this.table = table;
             this.configType = configType;
             this.scopeColumns = scopeColumns;
+        }
+
+        /** 白名单表名(供 V340 软删/审计取表名;非用户输入)。 */
+        public String table() {
+            return table;
         }
 
         /** 转正泛化端点 configType(下划线)→ 白名单枚举;未知→400(不含 giveaway)。 */
@@ -166,6 +177,44 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("fee_bps", feeBps).addValue("updated_by", updatedBy), String.class);
     }
 
+    /** V340 卡座提成费率落草案(项目 × 商户 × 角色档;merchant_id NULL=该项目通用)。 */
+    public String upsertCommissionRateDraft(String id, String projectId, String merchantId,
+                                            String roleType, int rateBp, String updatedBy) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO bar_commission_rate_configs
+                    (id, project_id, merchant_id, role_type, rate_bp, status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :merchant_id, :role_type, :rate_bp, 'active', TRUE, :updated_by, now())
+                ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
+                             role_type, is_draft) WHERE status = 'active' DO UPDATE SET
+                    rate_bp = EXCLUDED.rate_bp,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                RETURNING id
+                """, new MapSqlParameterSource()
+                .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
+                .addValue("role_type", roleType).addValue("rate_bp", rateBp)
+                .addValue("updated_by", updatedBy), String.class);
+    }
+
+    /** V340 积分累计率落草案(项目 × 商户;amount_cent_per_point=每积 1 分所需消费金额,分)。 */
+    public String upsertPointsAccrualRateDraft(String id, String projectId, String merchantId,
+                                               long amountCentPerPoint, String updatedBy) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO points_accrual_rate_configs
+                    (id, project_id, merchant_id, amount_cent_per_point, status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :merchant_id, :amount_cent_per_point, 'active', TRUE, :updated_by, now())
+                ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
+                             is_draft) WHERE status = 'active' DO UPDATE SET
+                    amount_cent_per_point = EXCLUDED.amount_cent_per_point,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                RETURNING id
+                """, new MapSqlParameterSource()
+                .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
+                .addValue("amount_cent_per_point", amountCentPerPoint)
+                .addValue("updated_by", updatedBy), String.class);
+    }
+
     /**
      * 排名档位梯子落草案(§2:@Transactional 整套替换草案梯,不动生效梯)。
      * 先删该 scope 全部草案档位,再逐行插入新草案档位(is_draft=TRUE)。草案=未提交编辑,物理删无历史价值。
@@ -273,6 +322,14 @@ public class JdbcSettlementConfigWriteRepository {
                 rs -> rs.next() ? rs.getString(1) : null);
     }
 
+    /** 单行 scope 表 active 行最后编辑人(V340 软删差人守卫用;表名取自白名单枚举,无注入面)。 */
+    public String singleRowActiveUpdatedBy(SingleRowConfig cfg, String id) {
+        return jdbcTemplate.query(
+                "SELECT updated_by FROM " + cfg.table + " WHERE id = :id AND status = 'active'",
+                new MapSqlParameterSource().addValue("id", id),
+                rs -> rs.next() ? rs.getString(1) : null);
+    }
+
     /** 读该 project 的草案档位(供转正前区间覆盖复校,§2)。 */
     public List<TierRow> listDraftRankTiers(String projectId) {
         return jdbcTemplate.query("""
@@ -295,6 +352,22 @@ public class JdbcSettlementConfigWriteRepository {
                        updated_by = :updated_by, updated_at = :now
                  WHERE id = :id AND status = 'active'
                 """, new MapSqlParameterSource()
+                .addValue("id", id).addValue("archive_reason", archiveReason)
+                .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    /**
+     * V340 单行 scope 表软删(仅用于 commission_rate / points_accrual_rate 的<b>商户级特例条目</b>):
+     * status→inactive + archive_reason(留库不物理删),使该商户回落到项目/全局默认口径。表名取自白名单枚举。
+     * 返回更新行数(0=不存在或已下线)。全局默认种子不该被软删——由服务层守卫拦(见 SettlementConfigWriteService.archive)。
+     */
+    public int softDeleteSingleRow(SingleRowConfig cfg, String id, String archiveReason,
+                                   String updatedBy, Instant now) {
+        return jdbcTemplate.update("UPDATE " + cfg.table
+                + " SET status = 'inactive', archive_reason = :archive_reason,"
+                + "     updated_by = :updated_by, updated_at = :now"
+                + " WHERE id = :id AND status = 'active'",
+                new MapSqlParameterSource()
                 .addValue("id", id).addValue("archive_reason", archiveReason)
                 .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
     }
@@ -339,6 +412,18 @@ public class JdbcSettlementConfigWriteRepository {
                                || ' 抽成 ' || fee_bps || 'bps',
                            updated_at
                       FROM channel_fee_configs WHERE is_draft = TRUE AND status = 'active'
+                    UNION ALL
+                    SELECT id, 'commission_rate',
+                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || COALESCE(merchant_id, '__ANY__')
+                               || ' 角色=' || role_type || ' 提成 ' || rate_bp || 'bps',
+                           updated_at
+                      FROM bar_commission_rate_configs WHERE is_draft = TRUE AND status = 'active'
+                    UNION ALL
+                    SELECT id, 'points_accrual_rate',
+                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || COALESCE(merchant_id, '__ANY__')
+                               || ' 每积1分需消费 ' || amount_cent_per_point || '分',
+                           updated_at
+                      FROM points_accrual_rate_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
                     SELECT MIN(id) AS id, 'rank_tiers',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 排名档位草案(' || COUNT(*) || ' 档)',

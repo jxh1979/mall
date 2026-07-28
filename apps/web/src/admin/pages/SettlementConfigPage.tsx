@@ -19,7 +19,7 @@ type ConfigItem = { group: string; key: string; label: string; value: string };
 type DraftItem = { id: string; configGroup: string; summary: string };
 type Overview = { platformDefaults: ConfigItem[]; pendingDraftCount: number; pendingDrafts: DraftItem[] };
 
-// 8 类通票分账配置（configGroup 即转正泛化 configType，rank_tiers 例外走 /rank-tiers/activate）。
+// 8 类通票分账配置 + V340 提成/积分 2 类（configGroup 即转正泛化 configType，rank_tiers 例外走 /rank-tiers/activate）。
 type EditKey =
   | "retention"
   | "distribution_method"
@@ -28,10 +28,14 @@ type EditKey =
   | "comprehensive_service_fee"
   | "combo_discount"
   | "channel_fee"
-  | "revenue_stream_attribution";
+  | "revenue_stream_attribution"
+  | "commission_rate"
+  | "points_accrual_rate";
+
+type BlockDef = { key: EditKey; title: string; defaultKey?: string; note?: string; endpoint: string };
 
 // 各块：标题 + 当前生效值取自 overview.platformDefaults 的哪个 key（无则块内提示按域/按商户维护）。
-const BLOCKS: { key: EditKey; title: string; defaultKey?: string; note?: string; endpoint: string }[] = [
+const BLOCKS: BlockDef[] = [
   { key: "retention", title: "项目公司留存比例", defaultKey: "platform_retention_bps", endpoint: "retention" },
   { key: "distribution_method", title: "各酒吧分配方式", defaultKey: "distribution_method", endpoint: "distribution-method" },
   { key: "rank_tiers", title: "排名档位分账梯子", endpoint: "rank-tiers", note: "按销售排名分档分账；当前生效梯子按项目维护，改动落草案、复核转正后生效。" },
@@ -40,6 +44,29 @@ const BLOCKS: { key: EditKey; title: string; defaultKey?: string; note?: string;
   { key: "combo_discount", title: "套票折扣归属", defaultKey: "combo_discount_bearer", endpoint: "combo-discount" },
   { key: "channel_fee", title: "渠道抽成费率", endpoint: "channel-fee", note: "按项目配置通用渠道抽成率（万分比），改动落草案。" },
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
+];
+
+// V340（P0-D）：提成与积分两类原本写死在代码里的口径，收进本页统一维护（「业务策略一律可配、零硬编码全后台可改」）。
+const COMMISSION_POINTS_BLOCKS: BlockDef[] = [
+  {
+    key: "commission_rate",
+    title: "卡座销售提成费率",
+    endpoint: "commission-rate",
+    note: "按「项目 × 商户 × 角色档」配置提成率（万分比）；商户留空 = 该项目通用。出厂默认：销售人员 15%（1500）、非销售人员 10%（1000）。",
+  },
+  {
+    key: "points_accrual_rate",
+    title: "积分累计率",
+    endpoint: "points-accrual-rate",
+    note: "按「项目 × 商户」配置每积 1 分所需的消费金额（分）；商户留空 = 通用。出厂默认 100 = 每消费 1 元积 1 分（会员等级倍率、生日倍率另在会员配置叠加）。",
+  },
+];
+
+const ALL_BLOCKS: BlockDef[] = [...BLOCKS, ...COMMISSION_POINTS_BLOCKS];
+
+const ROLE_TYPE_OPTIONS: [string, string][] = [
+  ["sales", "销售人员"],
+  ["non_sales", "非销售人员"],
 ];
 
 const METHOD_OPTIONS: [string, string][] = [
@@ -71,9 +98,12 @@ const GROUP_LABELS: Record<string, string> = {
   channel_fee: "渠道抽成",
   revenue_stream_attribution: "收入流归因",
   attribution_rule: "收入归因规则",
+  commission_rate: "卡座提成费率",
+  points_accrual_rate: "积分累计率",
 };
-// 仅这两类草案支持「下线」（软删，对齐后端 archive 白名单）。
-const ARCHIVABLE = new Set(["merchant_rate", "revenue_stream_attribution"]);
+// 支持「下线」（软删）的草案类型，对齐后端 archive 白名单。
+// V340 提成/积分：商户级特例条目须可下线，否则该商户被特例永久遮挡、回落不到项目/全局默认口径。
+const ARCHIVABLE = new Set(["merchant_rate", "revenue_stream_attribution", "commission_rate", "points_accrual_rate"]);
 
 type TierRow = { rankFrom: string; rankTo: string; shareBps: string };
 type Form = {
@@ -90,11 +120,15 @@ type Form = {
   splitPlatformBps: string;
   revenueStream: string;
   managementEntityId: string;
+  roleType: string;
+  rateBp: string;
+  amountCentPerPoint: string;
 };
 const EMPTY_FORM: Form = {
   projectId: "", retentionBps: "", methodType: "by_venue_per_guest", merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", entitlementType: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", revenueStream: "all_pass_ticket", managementEntityId: "",
+  roleType: "sales", rateBp: "", amountCentPerPoint: "",
 };
 
 function nextKey(prefix: string) {
@@ -184,7 +218,7 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
   async function submitEdit() {
     if (!editing) return;
     setFormError("");
-    const block = BLOCKS.find((b) => b.key === editing)!;
+    const block = ALL_BLOCKS.find((b) => b.key === editing)!;
     const idempotencyKey = nextKey(editing);
     let body: Record<string, unknown>;
     try {
@@ -261,40 +295,39 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
         </table>
       </div>
       <p className="admin-muted-action">
-        税费、地产费用、提成分红、内部结算价等各组的可视化维护将随后续批次接入本页。
+        税费、地产费用、分红、内部结算价等各组的可视化维护将随后续批次接入本页。
       </p>
     </>
   );
 
-  const ticketDistributionTab = (
-    <div data-testid="settlement-config-ticket-distribution">
-      <p className="admin-muted-action">
-        通票分账 8 类配置：改动一律先落草案，经另一位有权限的同事「复核转正」后才生效（草案不即时生效）。
-      </p>
-      {BLOCKS.map((block) => {
-        const current = block.defaultKey ? defaultsByKey.get(block.defaultKey) : undefined;
-        return (
-          <div key={block.key} className="admin-muted-action" data-testid={`settlement-config-block-${block.key}`}
-            style={{ borderTop: "1px solid var(--adm-border, #eee)", padding: "10px 0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{block.title}</div>
-                <div data-testid={`settlement-config-current-${block.key}`}>
-                  当前生效值：{current ? current.value : "按项目/商户维度维护，见下方草案队列与生效口径"}
-                </div>
-                {block.note ? <div style={{ fontSize: 12 }}>{block.note}</div> : null}
-              </div>
-              <PermissionButton
-                permissionsState={effectivePermissions}
-                permissions={MANAGE}
-                data-testid={`settlement-config-edit-${block.key}`}
-                onClick={() => openEdit(block.key)}
-              >改</PermissionButton>
+  // 配置块渲染（通票分账 / 提成与积分 两个栏目共用）。
+  const renderBlocks = (blocks: BlockDef[]) => blocks.map((block) => {
+    const current = block.defaultKey ? defaultsByKey.get(block.defaultKey) : undefined;
+    return (
+      <div key={block.key} className="admin-muted-action" data-testid={`settlement-config-block-${block.key}`}
+        style={{ borderTop: "1px solid var(--adm-border, #eee)", padding: "10px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 600 }}>{block.title}</div>
+            <div data-testid={`settlement-config-current-${block.key}`}>
+              当前生效值：{current ? current.value : "按项目/商户维度维护，见下方草案队列与生效口径"}
             </div>
+            {block.note ? <div style={{ fontSize: 12 }}>{block.note}</div> : null}
           </div>
-        );
-      })}
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={MANAGE}
+            data-testid={`settlement-config-edit-${block.key}`}
+            onClick={() => openEdit(block.key)}
+          >改</PermissionButton>
+        </div>
+      </div>
+    );
+  });
 
+  // 待复核草案队列（两个栏目共用同一队列，配置组已在行内标明）。
+  const draftQueue = (
+    <>
       <h3>待复核草案（{data?.pendingDraftCount ?? 0}）</h3>
       {drafts.length === 0 ? (
         <p className="admin-muted-action" data-testid="settlement-config-drafts-empty">
@@ -333,6 +366,26 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
           </table>
         </div>
       )}
+    </>
+  );
+
+  const ticketDistributionTab = (
+    <div data-testid="settlement-config-ticket-distribution">
+      <p className="admin-muted-action">
+        通票分账 8 类配置：改动一律先落草案，经另一位有权限的同事「复核转正」后才生效（草案不即时生效）。
+      </p>
+      {renderBlocks(BLOCKS)}
+    </div>
+  );
+
+  // V340（P0-D）：提成率、积分累计率原写死在代码里，现收进本页；同样走「改→落草案→差人复核转正」。
+  const commissionPointsTab = (
+    <div data-testid="settlement-config-commission-points">
+      <p className="admin-muted-action">
+        卡座销售提成与会员积分累计的口径，改动一律先落草案，经另一位有权限的同事「复核转正」后才生效。
+        商户级特例可「下线」，下线后该商户回落到项目 / 全平台默认口径；全平台默认口径不可下线，只能改数值。
+      </p>
+      {renderBlocks(COMMISSION_POINTS_BLOCKS)}
     </div>
   );
 
@@ -350,14 +403,17 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
           items={[
             { key: "overview", label: "概览", children: overviewTab },
             { key: "ticket-distribution", label: "通票分账", forceRender: true, children: ticketDistributionTab },
+            { key: "commission-points", label: "提成与积分", forceRender: true, children: commissionPointsTab },
           ]}
         />
+        {/* 待复核草案队列各栏目共用一份（testid 唯一），放在页签下方常驻，任一栏目改动落草案后都在此复核转正。 */}
+        {draftQueue}
       </AdminDataState>
 
       {editing ? (
         <GuidedFlowModal
           open
-          title={`修改配置 · ${BLOCKS.find((b) => b.key === editing)!.title}`}
+          title={`修改配置 · ${ALL_BLOCKS.find((b) => b.key === editing)!.title}`}
           testId="settlement-config-guided"
           submitTestId="settlement-config-submit"
           submitLabel="保存草案"
@@ -438,6 +494,21 @@ function editSteps(
         </label>
         <label>归因管理公司 / 业态主体 id<input data-testid="settlement-config-field-managementEntityId" value={form.managementEntityId} onChange={setField("managementEntityId")} /></label></>);
       break;
+    case "commission_rate":
+      content = (<>{projectField}
+        <label>商户 id（留空 = 该项目通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
+        <label>提成角色档
+          <select data-testid="settlement-config-field-roleType" value={form.roleType} onChange={setField("roleType")}>
+            {ROLE_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+        <label>提成率万分比（0~10000；1500 = 15%）<input data-testid="settlement-config-field-rateBp" type="number" min={0} max={10000} value={form.rateBp} onChange={setField("rateBp")} /></label></>);
+      break;
+    case "points_accrual_rate":
+      content = (<>{projectField}
+        <label>商户 id（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
+        <label>每积 1 分所需消费金额（分，须大于 0；100 = 每 1 元积 1 分）<input data-testid="settlement-config-field-amountCentPerPoint" type="number" min={1} value={form.amountCentPerPoint} onChange={setField("amountCentPerPoint")} /></label></>);
+      break;
     case "rank_tiers": {
       const hint = rankTierHint(tiers);
       content = (<>{projectField}
@@ -476,6 +547,8 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[]): GuidedSummaryI
     case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }];
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "归因主体", value: form.managementEntityId || "—" }];
     case "rank_tiers": return [scope, { label: "档位数", value: String(tiers.length) }, { label: "区间校验", value: rankTierHint(tiers).msg }];
+    case "commission_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "该项目通用" }, { label: "角色档", value: ROLE_TYPE_OPTIONS.find(([v]) => v === form.roleType)?.[1] ?? form.roleType }, { label: "提成率万分比", value: form.rateBp || "—" }];
+    case "points_accrual_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "每积1分所需消费（分）", value: form.amountCentPerPoint || "—" }];
   }
 }
 
@@ -509,6 +582,11 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
       return orUndef(form.managementEntityId) === undefined ? "归因管理公司 / 业态主体 id 必填。" : null;
     case "rank_tiers":
       return rankTierHint(tiers).ok ? null : rankTierHint(tiers).msg;
+    case "commission_rate":
+      return isIntInRange(form.rateBp, 0, 10000) ? null : "提成率万分比需为 0~10000 的整数（1500 = 15%）。";
+    case "points_accrual_rate":
+      return isIntInRange(form.amountCentPerPoint, 1, Number.MAX_SAFE_INTEGER)
+        ? null : "每积 1 分所需消费金额需为大于 0 的整数（分）；100 = 每 1 元积 1 分。";
   }
 }
 
@@ -544,5 +622,9 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
       return { idempotencyKey, projectId: project, revenueStream: form.revenueStream, managementEntityId: form.managementEntityId.trim() };
     case "rank_tiers":
       return { idempotencyKey, projectId: project, tiers: tiers.map((t) => ({ rankFrom: Number(t.rankFrom), rankTo: Number(t.rankTo), shareBps: Number(t.shareBps) })) };
+    case "commission_rate":
+      return { idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), roleType: form.roleType, rateBp: Number(form.rateBp) };
+    case "points_accrual_rate":
+      return { idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), amountCentPerPoint: Number(form.amountCentPerPoint) };
   }
 }

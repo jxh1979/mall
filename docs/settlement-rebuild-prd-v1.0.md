@@ -261,6 +261,8 @@
 | ↳ 通票结算标注 | `settlement_bills.attributed_entity_id`(V319):settleMonth 按 (项目, all_pass_ticket) 解析归属主体并标注,不改任何金额 | — |
 | ~~`revenue_attribution_rules`(扩 V221)~~ | ⚠️ V221 `merchant_revenue_attribution_rules` 是商户级 net 口径(ticket/bar/rent 计入方式),粒度不同,非 6 主体归属;后者由上表 `revenue_stream_attribution` 承载 | — |
 | `tax_config`(税务全可配,2026-07-04) | 每主体×收入类型的 增值税/文化事业建设费/附加税(**有无 + 费率**均后台填) | ADM-STL-010 |
+| `bar_commission_rate_configs`(V340,2026-07-28) | 卡座销售提成率(项目公司 × 商户 × 角色档 sales/non_sales,万分比);出厂默认 销售 1500bp / 非销售 1000bp | ADM-STL-001「提成与积分」栏 |
+| `points_accrual_rate_configs`(V340,2026-07-28) | 会员积分累计率(项目公司 × 商户;每积 1 基础分所需消费金额,分);出厂默认 100 = 每 1 元积 1 分 | ADM-STL-001「提成与积分」栏 |
 - 均带 `is_draft`(草案态,复核后转正)、`effective_from/to`、`updated_by`、审计;
 - 权限点 `settlement.config.view/manage`,限项目公司财务/运营角色。
 
@@ -278,6 +280,19 @@
 > - **回退收敛**:缺配置 **fail-loud**,不再落第二份写死默认。
 > - **表映射校正(补批0)**:**新增 `channel_fee_configs`**(渠道费率·消灭写死 0·ADM-STL 通票分账栏);`giveaway_cost_configs` → **D5 后已废**(赠酒不占池,§5.3);`refund_fee_rules` → **作废**(退款手续费 2026-07-04 取消·§8/附录 E);`tax_config` = `settlement_tax_configs`(三维税表·零消费待接引擎)。分账方案 `spv_distribution_configs` → `ticket_distribution_configs` + `ticket_distribution_rank_tiers` + `ticket_distribution_merchant_rates`(重申 2026-07-20 note)。
 > - **权限点补**:`settlement.bill.post`(过账·高敏 requires_approval)、`settlement.distribution.manage`(分账/超池特批·高敏)。
+
+> **2026-07-28 P0-D/CFG-01 实现修订(提成/积分口径进配置中心)**:
+> - 背景:v7 综合审计 P0-D —— 卡座提成率(销售 15%/非销售 10%)与积分累计率(每元 1 分)**写死在代码里**
+>   (`BarBillingService.calculateCommission`、`TicketOrderService.POINTS_PER_YUAN_CENT`),违「业务策略一律可配、
+>   零硬编码全后台可改」母铁律与 `DEC-CFG-ALL-NUMERIC-001`(2026-07-28「时间与数字一律可配、禁止写死」)。
+> - 落地:**V340** 新建 `bar_commission_rate_configs` / `points_accrual_rate_configs` 两张配置表(范式同批1:项目作用域 +
+>   商户维 + `is_draft` 草案位 + 部分唯一索引带 `status`),引擎改读配置;总控页 **ADM-STL-001 新增「提成与积分」栏目**
+>   (2 个配置块,同走「改→落草案→差人复核转正」);权限沿用 `settlement.config.view/manage`,**不新增权限点**。
+> - **零行为改变**:两表出厂种子逐值等于改造前写死的常量(1500/1000/100),且引擎表达式与改造前同形(整数除),
+>   默认部署上改造前后逐笔金额/积分严格相等(单测 + JDBC 集成测试双向证明)。
+> - **缺配置 fail-loud**:沿用批1 `requireConfigured` 口径(`SETTLEMENT_CONFIG_MISSING`),不再落第二份写死默认。
+> - **软删白名单扩**:`commission_rate` / `points_accrual_rate` 的**商户级特例条目**可下线(回落项目/全平台默认口径);
+>   **全平台默认种子禁下线**(`DEFAULT_SEED_NOT_ARCHIVABLE`,下线即全平台无默认口径可用),只能改数值。
 
 ---
 

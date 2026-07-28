@@ -28,8 +28,6 @@ public class TicketOrderService {
 
     private static final String CURRENCY_CNY = "CNY";
     private static final Set<String> SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web", "channel");
-    // P0 清单#2：积分入账基础分口径——每 1 元（100 分）实付折 1 基础分（倍率由 LoyaltyService 叠加）。
-    private static final long POINTS_PER_YUAN_CENT = 100L;
 
     private final TicketingRepository repository;
     private final TicketPricingService pricingService;
@@ -44,6 +42,12 @@ public class TicketOrderService {
     // allowedCategories 是否含 ticketing。字段注入免改构造点；单测未注入=null 视为不拦截。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.contract.ContractScopeGuard contractScopeGuard;
+
+    // P0-D/CFG-01（V340）：积分累计率改后台可配（消灭「每元 1 分」写死 POINTS_PER_YUAN_CENT=100L）。
+    // 字段注入免改构造点；生产由 Spring 恒注入 JdbcCommissionPointsConfigRepository。
+    // fail-closed：为 null（旧构造/未注入的单测）即拒绝发积分事件，绝不静默回落硬编码常量（见 publishPointsEarnRequested）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    PointsAccrualRateConfigPort pointsAccrualRateConfigPort;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
@@ -340,15 +344,29 @@ public class TicketOrderService {
                 order.barId()
         ));
         // P0 清单#2：支付成功（订单转 paid）→ 发积分入账事件，customer 域写 pending（幂等 source_doc=ticket_order/orderId）。
-        // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额折算（每元 1 分）。
+        // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额按后台可配的积分累计率折算（出厂默认每元 1 分，V340）。
         publishPointsEarnRequested(order);
         return issued;
     }
 
+    /**
+     * P0-D/CFG-01（V340）：基础分 = 实付金额 ÷「每积 1 分所需消费金额」，累计率由
+     * 「结算配置中心 → 积分累计率」按 项目公司 × 商户 下发，不再写死每元 1 分。
+     * 出厂种子 = 100 分（原 POINTS_PER_YUAN_CENT），且表达式与改造前同为整数除 → 本次改造零行为改变。
+     *
+     * <p>fail-closed（对齐结算配置中心 requireConfigured 口径）：配置端口缺失/配置行缺失一律响亮抛错，
+     * 不静默回落硬编码常量、也不静默跳过发分（静默跳过 = 会员该拿的积分凭空消失，比报错更坏）。
+     */
     private void publishPointsEarnRequested(TicketOrderRecord order) {
-        long basePoints = order.amountCent() / POINTS_PER_YUAN_CENT;
+        if (pointsAccrualRateConfigPort == null) {
+            throw ApiException.badRequest("POINTS_ACCRUAL_CONFIG_UNAVAILABLE",
+                    "积分累计率配置不可用，无法计算积分；请先在结算配置中心配置积分累计率并复核转正");
+        }
+        long amountCentPerPoint = pointsAccrualRateConfigPort.findAmountCentPerPoint(
+                authorizationService.currentProjectScopeQuietly().orElse(null), order.merchantId());
+        long basePoints = order.amountCent() / amountCentPerPoint;
         if (basePoints <= 0) {
-            return; // 实付不足 1 元：不产生基础分。
+            return; // 实付不足一个累计单位（默认 1 元）：不产生基础分。
         }
         eventPublisher.publishEvent(new PointsEarnRequestedEvent(
                 order.id(),
