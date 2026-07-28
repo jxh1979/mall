@@ -1,6 +1,6 @@
 # 综合体管理系统 PRD 全量审计报告
 
-状态：**文档审计完成（phase1–7 + B 线高严重度清偿 + APPENDIX 深审）；APPENDIX A2 正文对齐已执行**  
+状态：**文档审计完成（phase1–7 + B 线 + APPENDIX 深审/A2 + P2 维度闭合）；覆盖无 PARTIAL**  
 完成日：2026-07-28  
 基线提交：`31f262c5`  
 范围：现行 PRD 及相关业务文档（B+3 MAIN/APPENDIX 分层）；**不含代码实现审计**
@@ -38,8 +38,8 @@
 
 | status | count |
 |---|---:|
-| FULL | 807 |
-| PARTIAL | 35 |
+| FULL | 842 |
+| PARTIAL | 0 |
 | MISSING | 0 |
 | NOT_APPLICABLE | 2 |
 
@@ -99,3 +99,8 @@
 - 状态：完成（探针法 + 行动队列）
 - 详见 `phases/08-appendix-deep-audit.md`
 - 附录不得反向立法；正文修订待用户批准 A1/A2/A3
+
+
+## P2 维度闭合（2026-07-28）
+
+8 条 P2 PARTIAL 已补 cross_period/expiry_exit 并标 FULL。见 `PHASE-P2-PARTIAL-CLOSEOUT.md`。
