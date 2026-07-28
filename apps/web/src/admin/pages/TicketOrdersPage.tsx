@@ -300,7 +300,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
             <tbody>
               {paged.pageRows.map((order) => (
                 <tr key={order.id} data-testid={`ticket-order-row-${order.id}`}
-                  className={`admin-row-clickable${focusMatches(order) ? " admin-row-focus" : ""}`} tabIndex={0}
+                  className={`admin-row-clickable${focusMatches(order) ? " admin-row-selected" : ""}`} tabIndex={0}
                   onClick={() => openOrderDetail(order)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOrderDetail(order); } }}>
                   <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此订单 ${order.id}`} data-testid={`ticket-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>

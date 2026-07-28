@@ -633,7 +633,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
             <tbody>
               {tickets.map((row) => (
                 <tr key={row.id} data-testid={`ticket-type-${row.id}`}
-                  className={`admin-row-clickable${focusObjectId === row.id ? " admin-row-focus" : ""}`} tabIndex={0}
+                  className={`admin-row-clickable${focusObjectId === row.id ? " admin-row-selected" : ""}`} tabIndex={0}
                   onClick={() => openTicketTypeDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTicketTypeDetail(row); } }}>
                   <td>{row.ticketName}</td>

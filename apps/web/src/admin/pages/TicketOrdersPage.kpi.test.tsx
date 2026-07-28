@@ -169,6 +169,6 @@ describe("TicketOrdersPage 行明细抽屉（整行可点·时间中文，与单
     await waitFor(() => expect(screen.getByTestId("ticket-order-row-o-1")).toBeTruthy());
     const row = screen.getByTestId("ticket-order-row-o-1");
     expect(row.className).toContain("admin-row-clickable");
-    expect(row.className).toContain("admin-row-focus");
+    expect(row.className).toContain("admin-row-selected");
   });
 });
