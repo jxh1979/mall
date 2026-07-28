@@ -8,7 +8,8 @@
 - 阶段 2：完成。
 - 阶段 3：完成。
 - 范围 B+3 返工与 phase3 附录交叉复核：完成（产物见 `method-b3-scope-and-tracks.md`、`document-scope-manifest.csv`、`phases/01b-scope-rework-b3.md`、`phases/03b-appendix-crosscheck.md`、`rounds/2026-07-27-b3-scope-crosscheck-report.md`）。
-- 阶段 4–7：未开始。
+- 阶段 4：进行中（初评+对抗已产出，PRD 修订待批准）。
+- 阶段 5–7：未开始。
 
 ## 权威事实源
 
@@ -28,6 +29,8 @@
 
 
 10. 2026-07-27：酒吧高价值已出品退酒审批文档收口为 A1（阈值默认超过5000元可配；仅已出品；低价值可即时生效）。编码未改。见 BAR-VOID-A1 / bar PRD §10.2.1。
+
+12. 阶段4初评：对抗场景与覆盖已产出；积分清算未决 ADV-TX-004。见 phases/04-transaction-member-ticket-bar.md。
 
 ## 最终报告保留章节
 
