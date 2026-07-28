@@ -340,7 +340,7 @@ class InventoryControllerTests {
 
     private InventoryItemRecord item() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new InventoryItemRecord("item_1", null, "Vodka", "spirit", "bottle", null, false, 2, "active", now, now, null, null);
+        return new InventoryItemRecord("item_1", null, "Vodka", "spirit", "bottle", null, false, 2, "active", now, now, null, false);
     }
 
     private StocktakeRecord stocktake() {

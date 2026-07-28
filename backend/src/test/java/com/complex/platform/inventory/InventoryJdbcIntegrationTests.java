@@ -86,7 +86,7 @@ class InventoryJdbcIntegrationTests {
                 now,
                 now,
                 null,
-                null
+                false
         ));
         repository.saveInventorySupplier(new InventorySupplierRecord(
                 "supplier_jdbc",
@@ -402,7 +402,7 @@ class InventoryJdbcIntegrationTests {
                 now,
                 now,
                 null,
-                null
+                false
         ));
         repository.saveInventorySupplier(new InventorySupplierRecord(
                 "supplier_p1_jdbc",

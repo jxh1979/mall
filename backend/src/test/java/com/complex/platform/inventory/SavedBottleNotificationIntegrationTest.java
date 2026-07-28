@@ -195,8 +195,6 @@ class SavedBottleNotificationIntegrationTest {
                 "LABEL-001",
                 "Guest A",
                 null,
-                null,
-                null,
                 List.of("registration-photo"),
                 null
         );

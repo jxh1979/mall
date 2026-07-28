@@ -63,20 +63,26 @@ public class BarOrderService {
     @Autowired(required = false)
     com.complex.platform.contract.ContractScopeGuard contractScopeGuard;
 
-    // P0-C/FLOW-07（V345·BAR-VOID-A1）：高价值退酒阈值改后台可配（消灭「5000 元」写死的可能）。
-    // 字段注入免改构造点（同上四例）；生产由 Spring 恒注入 JdbcBarVoidApprovalConfigRepository。
-    // 资金级 fail-closed：为 null 即拒绝受理退酒（见 requireVoidHighValueThresholdCent），
-    // 绝不静默回落硬编码阈值——回落常量正是 DEC-CFG-ALL-NUMERIC-001 要根除的东西。
+    // V350：「高价值」判定全平台归一——退酒不再拿「账单明细金额」比阈值（那是售价不是进货价），
+    // 改为与报损/盘点差异/存酒作废共用同一入口 HighValueDecisionService（物品进货价 vs 后台单一阈值 /
+    // 手工标记 / 阈值未配置 / 进货价未知 ⇒ 一律高价值拦下）。字段注入免改构造点（同上四例）。
+    // 未注入（旧构造器/单测）⇒ 已出品退酒一律按高价值先审后行，绝不静默放行。
     @Autowired(required = false)
-    BarVoidApprovalConfigPort voidApprovalConfigPort;
+    com.complex.platform.inventory.HighValueDecisionService highValueDecisionService;
+
+    // V351 退酒原因码字典（bar_void_reason_codes）：原因码必须命中字典里的生效码，
+    // 替换 V345 的「正则形状校验」——形状校验下 `asdf` 照样过闸，按原因码聚合退酒全是垃圾数据。
+    @Autowired(required = false)
+    BarVoidReasonCodeDirectory voidReasonCodeDirectory;
+
+    // 双证据闭环：所传附件 id 必须真实存在于 evidence_attachments，杜绝「随手编两个字符串就算有证据」。
+    @Autowired(required = false)
+    com.complex.platform.evidence.EvidenceAttachmentValidator evidenceAttachmentValidator;
 
     /** BAR-VOID-A1 审批闸模式：未出品 cancel / 已出品低价值 —— 库存与账单在发起时即时生效。 */
     static final String VOID_MODE_IMMEDIATE = "immediate";
-    /** BAR-VOID-A1 审批闸模式：已出品且超阈值 —— 先审后行，审批通过前不动库存/账单/明细。 */
+    /** BAR-VOID-A1 审批闸模式：已出品且判为高价值 —— 先审后行，审批通过前不动库存/账单/明细。 */
     static final String VOID_MODE_APPROVAL_FIRST = "approval_first";
-    /** 双证据之一「结构化原因码」的形态：小写字母开头的 snake_case 短码，2~32 位（非自由文本）。 */
-    private static final java.util.regex.Pattern VOID_REASON_CODE_PATTERN =
-            java.util.regex.Pattern.compile("^[a-z][a-z0-9_]{1,31}$");
 
     @Autowired
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
@@ -925,10 +931,20 @@ public class BarOrderService {
         String billId = trimToNull(actual.billId());
         List<String> evidenceAttachmentIds = safeList(actual.evidenceAttachmentIds());
         String reasonCode = trimToNull(actual.reasonCode());
+        // V351：原因码只认字典里的生效码（传了就校验，不论高低价值）。
+        requireKnownVoidReasonCode(reasonCode);
+        // 双证据闭环：所传附件 id 必须真实存在（同样不论高低价值——低价值单也不该收假 id）。
+        if (evidenceAttachmentValidator != null) {
+            evidenceAttachmentValidator.requireExisting(evidenceAttachmentIds, "evidence_attachment_ids");
+        }
 
-        // BAR-VOID-A1：阈值后台可配（默认 5000 元），只对【已出品】计高价值；出品前 cancel 不进本判定。
-        long thresholdCent = requireVoidHighValueThresholdCent(order.merchantId());
-        boolean highValue = wasDelivered && item.amountCent() > thresholdCent;
+        // V350 归一：高价值 = 该【物品的进货价】高于后台单一阈值（或手工标记/阈值未配置/进货价未知）。
+        // 改造前比的是「本条明细的账单金额 > 5000 元」——那是卖价、还跟数量走，与全平台口径两回事。
+        // 仍只对【已出品】计高价值：出品前 cancel 不进本判定（BAR-VOID-A1 未变）。
+        com.complex.platform.inventory.HighValueDecisionService.HighValueDecision decision =
+                decideVoidHighValue(item, order.merchantId());
+        Long thresholdCent = decision.thresholdCent();
+        boolean highValue = wasDelivered && decision.highValue();
         String approvalMode = highValue ? VOID_MODE_APPROVAL_FIRST : VOID_MODE_IMMEDIATE;
 
         String inventoryMovementId = null;
@@ -996,38 +1012,56 @@ public class BarOrderService {
                         "return_to_stock", returnToStock,
                         "amount_cent", item.amountCent(),
                         "approval_mode", approvalMode,
-                        "high_value_threshold_cent", thresholdCent));
+                        "high_value_basis", decision.basis(),
+                        "high_value_threshold_cent", String.valueOf(thresholdCent)));
         return voidRecord;
     }
 
     /**
-     * P0-C/FLOW-07（V345）取高价值退酒阈值（分）。资金级 fail-closed：配置端口缺失（仅旧构造/未注入的单测，
-     * 生产恒注入）时<b>拒绝受理退酒</b>而非回落硬编码 5000 元 —— DEC-CFG-ALL-NUMERIC-001 的落地方式。
+     * V350 取退酒的高价值判定：物品 = 明细所属商品关联的库存物料（{@code bar_products.inventory_item_id}）。
      *
-     * <p>projectId 取操作者的综合体 scope（平台管理员为空 = 全局默认口径），merchantId 取订单归属商户
-     * （权威、不来自请求体），与 {@code BarBillingService.requireCommissionRateBp} 取值方式一致。
+     * <p>判定器未注入（旧构造器/单测）或商品查不到 ⇒ 走「阈值未配置 / 进货价未知」那一侧，即<b>判为高价值</b>：
+     * 没接线、没关联物料、没录进货价，三者都不构成「可以静默放行」的理由。
      */
-    private long requireVoidHighValueThresholdCent(String merchantId) {
-        if (voidApprovalConfigPort == null) {
-            throw ApiException.badRequest("BAR_VOID_THRESHOLD_CONFIG_UNAVAILABLE",
-                    "高价值退酒阈值配置不可用，无法受理退酒；请先在结算配置中心配置阈值并复核转正");
+    private com.complex.platform.inventory.HighValueDecisionService.HighValueDecision decideVoidHighValue(
+            BarOrderItemRecord item, String merchantId) {
+        if (highValueDecisionService == null) {
+            return new com.complex.platform.inventory.HighValueDecisionService.HighValueDecision(
+                    true, null, null,
+                    com.complex.platform.inventory.HighValueDecisionService.BASIS_THRESHOLD_UNSET);
         }
-        return voidApprovalConfigPort.findVoidHighValueThresholdCent(
-                authorizationService.currentProjectScopeQuietly().orElse(null), merchantId);
+        String inventoryItemId = repository.findProductById(item.productId())
+                .map(BarProductRecord::inventoryItemId)
+                .orElse(null);
+        return highValueDecisionService.decide(inventoryItemId, merchantId);
     }
 
     /**
      * BAR-VOID-A1 双证据（仅高价值已出品退酒强制）：<b>结构化原因码</b> + <b>附件证据</b>，缺一不可。
      * 与自由文本 reason 分开——reason 是给人看的说明，reason_code 是可聚合、可比对的机读证据项。
+     *
+     * <p>V351/双证据闭环收紧两处：原因码必须命中<b>字典里的生效码</b>（不再只校形状，`asdf` 不再放行）；
+     * 附件 id 必须<b>真实存在</b>于 evidence_attachments（不再「随手编两个字符串就算有证据」）。
      */
     private void requireVoidDualEvidence(String reasonCode, List<String> evidenceAttachmentIds) {
-        if (reasonCode == null || !VOID_REASON_CODE_PATTERN.matcher(reasonCode).matches()) {
+        if (reasonCode == null) {
             throw ApiException.badRequest("BAR_VOID_EVIDENCE_REQUIRED",
-                    "高价值已出品退酒须双证据：缺结构化原因码（reason_code 须为小写字母开头的短码，2~32 位）");
+                    "高价值已出品退酒须双证据：缺结构化原因码（reason_code 不可为空）");
         }
         if (evidenceAttachmentIds.isEmpty()) {
             throw ApiException.badRequest("BAR_VOID_EVIDENCE_REQUIRED",
                     "高价值已出品退酒须双证据：缺附件证据（evidence_attachment_ids 不可为空）");
+        }
+    }
+
+    /** V351：原因码必须是退酒原因码字典里的生效码（传了才校验；高价值必填由双证据关把住）。 */
+    private void requireKnownVoidReasonCode(String reasonCode) {
+        if (reasonCode == null || voidReasonCodeDirectory == null) {
+            return;
+        }
+        if (!voidReasonCodeDirectory.isActiveReasonCode(reasonCode)) {
+            throw ApiException.badRequest("BAR_VOID_REASON_CODE_UNKNOWN",
+                    "退酒原因码不在字典内或已下线：" + reasonCode + "；请在后台「退酒原因」字典维护后再选");
         }
     }
 

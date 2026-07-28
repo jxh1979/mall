@@ -852,8 +852,8 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `unit` | varchar | 基础单位 |
 | `cost_price` | bigint | 成本价 |
 | `safety_stock` | numeric | 安全库存 |
-| `is_high_value` | boolean | 高价值标记，命中即触发报损/盘点差异/作废的"照片+视频双证据+主管复核" |
-| `high_value_threshold` | bigint | 高价值金额阈值（单位分），可为空时取平台默认 |
+| `manual_high_value` | boolean | 物品档案**手工标记**为高价值；标了就恒为高价值（不看进货价），触发报损/盘点差异/作废/退酒的"照片+视频双证据+主管复核" |
+| ~~`high_value_threshold`~~ | ~~bigint~~ | **V350 已删**：按物料各设阈值与「全平台一个固定金额阈值」冲突。阈值统一落 `high_value_thresholds`，进货价取 `inventory_item_cost_state.avg_unit_cost_cent` |
 | `status` | varchar | 状态 |
 
 > 修订说明（2026-06-07）：依 finding supply-4，补 `is_high_value`（物品档案手工标记）与 `high_value_threshold` 字段，配合平台默认金额阈值，使"高价值→双证据+复核"规则（finding supply-3）可在报损/盘点/作废流程自动判定；高价值判定已按平台默认阈值 + `is_high_value` 手工标记双口径收口（见 §15.1）。
@@ -1419,7 +1419,7 @@ P0 完成时必须能演示：
 | 卡座销售提成 | **P0 记录和复核**：新增销售人员岗位；销售人员售卖卡座按卡座消费额 15% 计提，非销售人员按 10% 计提；不含通票、票务权益、卡座预约入场名额、赠酒成本、退款、免单和不可计提调整；实际薪资发放/个税后置 | 2026-06-10 用户新增规则 |
 | 酒吧年龄/人脸核验供应商 | **生产必须配置**：P0 先保留第三方人脸/年龄核验适配器和 mock，正式生产需采购/接入供应商或等效设备后才能标记正式通过 | 2026-06-10 总控拍板 |
 | P0 是否强制库存扣减 | **强制但限定范围**：整瓶、按杯标准量、赠饮/酒水兑换、积分兑换、存酒、报损、盘点差异等明确数量场景必须扣减或状态转移；复杂 BOM 后置 | 2026-06-10 库存扣减审计 |
-| 高价值酒水阈值由谁配置 | **已确认**：平台配置默认金额阈值，物品档案支持 `is_high_value` 手工标记，商户可申请调整；触发双证据和主管复核 | supply-chain-inventory PRD §10 |
+| 高价值酒水阈值由谁配置 | **已确认（2026-07-28 归一）**：全平台**一个固定金额阈值**在结算配置中心维护（`high_value_thresholds`，项目公司 × 商户），与**物品进货价**比较；物品档案支持 `manual_high_value` 手工标记；阈值或进货价缺失一律按高价值拦下走审批 | supply-chain-inventory PRD §10 / 业务HTML「高价值物品」 |
 
 ### 15.2 已确认执行口径
 

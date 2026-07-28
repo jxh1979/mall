@@ -56,7 +56,8 @@ public class PurchaseRequestService {
             AuditEventService auditEventService,
             AuthorizationService authorizationService,
             SupplyContractService supplyContractService,
-            SupplierQualificationService supplierQualificationService
+            SupplierQualificationService supplierQualificationService,
+            HighValueDecisionService highValueDecisionService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
@@ -66,8 +67,13 @@ public class PurchaseRequestService {
         this.supplierQualificationService = supplierQualificationService;
         this.stockMovementService = new InventoryStockMovementService(
                 repository, idempotencyService, auditEventService, authorizationService,
+                // 采购收货只走入库，不经报损/盘点差异，故不建高价值复核单（附件校验器传 null 无影响）。
                 new InventoryHighValueReviewService(
-                        repository, idempotencyService, auditEventService, authorizationService));
+                        repository, idempotencyService, auditEventService, authorizationService, null),
+                // V350：判定器随构造注入；未注入（旧单测）自建一个 —— 其阈值端口为空 ⇒ 一律判高价值（从严侧）。
+                highValueDecisionService != null
+                        ? highValueDecisionService
+                        : new HighValueDecisionService(repository, authorizationService));
     }
 
     /** 审批：created/submitted →(decision) approved/rejected。绑定合同则按 purchasable_scope 卡控。 */

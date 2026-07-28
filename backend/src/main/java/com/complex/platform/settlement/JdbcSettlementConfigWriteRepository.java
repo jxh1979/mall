@@ -37,8 +37,8 @@ public class JdbcSettlementConfigWriteRepository {
                 List.of("project_id", "merchant_id", "role_type")),
         POINTS_ACCRUAL_RATE("points_accrual_rate_configs", "points_accrual_rate",
                 List.of("project_id", "merchant_id")),
-        // V345（P0-C/FLOW-07·BAR-VOID-A1）：高价值退酒审批阈值按 项目 × 商户。同 Path 2 草案/转正范式。
-        BAR_VOID_THRESHOLD("bar_void_approval_configs", "bar_void_threshold",
+        // V350：全平台「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用）按 项目 × 商户。同 Path 2 草案/转正范式。
+        HIGH_VALUE_THRESHOLD("high_value_thresholds", "high_value_threshold",
                 List.of("project_id", "merchant_id")),
         // V346（P0-E）：营业额抽成规则收进配置中心草案闸。scope = 合同 × 商户
         //（同合同同商户的旧生效规则在转正时软替换；写面在 FinanceService.createTurnoverRentRule，本处只做转正/软删）。
@@ -222,11 +222,11 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("updated_by", updatedBy), String.class);
     }
 
-    /** V345 高价值退酒审批阈值落草案（项目 × 商户；merchant_id NULL=该项目通用）。单位：分。 */
-    public String upsertBarVoidThresholdDraft(String id, String projectId, String merchantId,
+    /** V350 全平台高价值判定阈值落草案（项目 × 商户；merchant_id NULL=该项目通用）。单位：分，比的是物品进货价。 */
+    public String upsertHighValueThresholdDraft(String id, String projectId, String merchantId,
                                               long highValueThresholdCent, String updatedBy) {
         return jdbcTemplate.queryForObject("""
-                INSERT INTO bar_void_approval_configs
+                INSERT INTO high_value_thresholds
                     (id, project_id, merchant_id, high_value_threshold_cent, status, is_draft, updated_by, updated_at)
                 VALUES (:id, :project_id, :merchant_id, :high_value_threshold_cent, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
@@ -461,11 +461,11 @@ public class JdbcSettlementConfigWriteRepository {
                            updated_at
                       FROM points_accrual_rate_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
-                    SELECT id, 'bar_void_threshold',
+                    SELECT id, 'high_value_threshold',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || COALESCE(merchant_id, '__ANY__')
-                               || ' 高价值退酒阈值 ' || high_value_threshold_cent || '分',
+                               || ' 高价值判定阈值(进货价) ' || high_value_threshold_cent || '分',
                            updated_at
-                      FROM bar_void_approval_configs WHERE is_draft = TRUE AND status = 'active'
+                      FROM high_value_thresholds WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
                     SELECT MIN(id) AS id, 'rank_tiers',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 排名档位草案(' || COUNT(*) || ' 档)',

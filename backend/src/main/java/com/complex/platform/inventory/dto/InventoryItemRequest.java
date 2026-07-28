@@ -14,7 +14,8 @@ public record InventoryItemRequest(
         String unit,
         @PositiveOrZero Integer minQuantity,
         String status,
-        // R5 T6-4：物料高价值阈值（整数分，可空）。null = 不视为高价值/报损/盘点差异不触发复核（向后兼容）。
-        @PositiveOrZero Long highValueThresholdCents
+        // V350 归一：物品档案「手工标记为高价值」（业务HTML「或被手工标记为高价值」）。
+        // 取代按物料各设一个阈值——那是三套阈值里的一套，与「全平台一个固定金额阈值」直接冲突。
+        Boolean manualHighValue
 ) {
 }

@@ -9,8 +9,9 @@ spring:
     name: complex-api
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      # 证据附件含视频，故上限比 POS 商品图（自带 5MB 校验）大；数字一律可配（DEC-CFG-ALL-NUMERIC-001）。
+      max-file-size: ${COMPLEX_MULTIPART_MAX_FILE_SIZE:50MB}
+      max-request-size: ${COMPLEX_MULTIPART_MAX_REQUEST_SIZE:60MB}
   jackson:
     property-naming-strategy: SNAKE_CASE
   profiles:
@@ -80,6 +81,13 @@ ticket:
       secret: ${COMPLEX_TICKET_SIGNING_SECRET:complex-dev-ticket-signing-secret-change-me}
       # 签名密钥版本，写入 ticket_credentials.signature_version，为后续密钥轮转预留。
       version: ${COMPLEX_TICKET_SIGNING_VERSION:v1}
+
+evidence:
+  attachment:
+    # 证据附件（照片/视频）本地存储目录 + 单文件上限（字节，默认 50MB）。
+    # 生产可由 env COMPLEX_EVIDENCE_ATTACHMENT_DIR 指向持久化卷；dev 默认相对工作目录。
+    dir: ${COMPLEX_EVIDENCE_ATTACHMENT_DIR:./data/evidence-files}
+    max-bytes: ${COMPLEX_EVIDENCE_ATTACHMENT_MAX_BYTES:52428800}
 
 bar:
   pos:

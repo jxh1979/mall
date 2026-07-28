@@ -64,7 +64,7 @@ class SupplyChainT6ServiceTests {
         warehouseService = new WarehouseService(repo, idem, audit, authorizationService);
         qualificationService = new SupplierQualificationService(repo, idem, audit, authorizationService);
         purchaseRequestService = new PurchaseRequestService(
-                repo, idem, audit, authorizationService, contractService, qualificationService);
+                repo, idem, audit, authorizationService, contractService, qualificationService, null);
         // 默认种子：供应商 supplier_1 + 一条 active 未过期资质（让既有采购审批流转测试不受进货查验卡控影响）。
         repo.saveInventorySupplier(new InventorySupplierRecord(
                 "supplier_1", "供应商一", "general", null, null, "active",

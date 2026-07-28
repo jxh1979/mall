@@ -79,6 +79,15 @@ public interface InventoryRepository {
 
     default void updateCostState(InventoryItemCostStateRecord state) { }
 
+    /**
+     * V350 高价值判定用：不加锁读成本状态行（进货价 = has_cost_basis 时的 avg_unit_cost_cent）。
+     * 判定是只读旁路，不能借 {@link #lockCostStateForUpdate} 的行锁去卡住出入库写路径。
+     * default 返回空 = 无成本基准 ⇒ 判定侧按「进货价未知」处理 ⇒ 一律高价值（fail-closed，不静默放行）。
+     */
+    default Optional<InventoryItemCostStateRecord> findCostState(String itemId) {
+        return Optional.empty();
+    }
+
     /** 成本流水分页（含成本列；itemId 可空=不过滤）。 */
     default com.complex.platform.common.api.PageResponse<StockMovementRecord> listCostLedgerPaged(
             String merchantId, String projectId, String itemId, int page, int size) {

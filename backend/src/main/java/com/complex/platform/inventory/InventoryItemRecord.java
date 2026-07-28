@@ -16,7 +16,8 @@ public record InventoryItemRecord(
         Instant createdAt,
         Instant updatedAt,
         @JsonIgnore String merchantId,
-        // R5 T6-4：高价值阈值（整数分，可空）。null = 该物料不视为高价值/不触发报损/盘点差异复核（向后兼容）。
-        Long highValueThresholdCents
+        // V350 归一：物品档案「手工标记为高价值」。TRUE = 不论进货价一律按高价值走复核/先审后行。
+        // 取代此前的按物料阈值 high_value_threshold_cents（与「全平台一个固定金额阈值」冲突，V350 已删）。
+        boolean manualHighValue
 ) {
 }
