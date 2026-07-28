@@ -8,7 +8,7 @@
 - 阶段 2：完成。
 - 阶段 3：完成。
 - 范围 B+3 返工与 phase3 附录交叉复核：完成（产物见 `method-b3-scope-and-tracks.md`、`document-scope-manifest.csv`、`phases/01b-scope-rework-b3.md`、`phases/03b-appendix-crosscheck.md`、`rounds/2026-07-27-b3-scope-crosscheck-report.md`）。
-- 阶段 4：**文档收口完成**（coverage+对抗场景已归档；积分域见 main 会员积分主 PRD / ACCRUAL-002；详见 phases/04-… 收口节）。
+- 阶段 4：**完成（文档审计）**（coverage+对抗场景已归档；积分域见 main 会员积分主 PRD / ACCRUAL-002；详见 phases/04-… 收口节）。
 - 阶段 5–7：未开始。
 
 ## 权威事实源
@@ -36,6 +36,8 @@
 13. 2026-07-28：确认 POINTS-VOUCHER-ACCRUAL-002——积分兑商户虚拟券**不**先冻结至核销；兑换时点扣减并计承接。净积分计价仍开。
 
 14. 2026-07-28：PR #218 phase4 审计文档收口；积分承接以 ACCRUAL-002 为准；本审计仅文档。
+
+15. 2026-07-28：一次性完成 phase4+phase5 文档审计；详见 `PHASE4-5-CLOSEOUT.md`。剩余规则约 111 条进 phase6/7。
 
 ## 最终报告保留章节
 

@@ -1,0 +1,74 @@
+{
+  "baseline": "6a79450b",
+  "phase4": "COMPLETE_DOCS",
+  "phase5_rules": 132,
+  "phase5_status": {
+    "FULL": 131,
+    "PARTIAL": 1
+  },
+  "phase5_issues": 1,
+  "coverage_total": 733,
+  "ledger_total": 844,
+  "remaining_rules": 111,
+  "remaining_by_domain": {
+    "amusement": 32,
+    "thirdparty": 35,
+    "terminal": 11,
+    "service": 4,
+    "merchant": 3,
+    "data": 26
+  },
+  "phase5_adversarial": [
+    {
+      "id": "ADV-RE-001",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-RE-002",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-RE-003",
+      "result": "COVERED",
+      "severity": "P1"
+    },
+    {
+      "id": "ADV-RE-004",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-RE-005",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-RE-006",
+      "result": "COVERED",
+      "severity": "P1"
+    },
+    {
+      "id": "ADV-RE-007",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-RE-008",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-RE-009",
+      "result": "COVERED",
+      "severity": "P0"
+    }
+  ],
+  "auth_hashes": {
+    "business-system-map-for-operations-v0.1.html": "0492b9112fec7ac03366f8c69a7a948f7706e9483b70370396359197f2ca087e",
+    "platform-governance-map-for-operations-v0.1.html": "a18cfff21c9cfbaf68d48ec6a0d68eeaa9afd3ae462dff76093c0a56dc31572b",
+    "business-enum-quick-reference-v0.1.html": "3e2071d8b740aea43df8a4685871c307a4185591ced4f1ced279ffa202e39648"
+  },
+  "code_changes": false
+}
