@@ -523,3 +523,13 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 - 实现切片：`docs/superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`
 - P1 运营参数表（待裁）：`docs/member-points-p1-ops-parameter-tables-v0.1.md`
+
+
+## 通票分账与组织主体口径入口（2026-07-28）
+
+- **业务真源**：业务 HTML 提交 `f19ea732`（PR #250，10 组 28 处，用户逐条批准）——`business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html`。
+- **口径索引**：`docs/prd-audit/HTML-PASS-SETTLEMENT-WATERFALL-2026-07-28.md`（瀑布、赠送权益、收入归属、同步落点、实现缺口、HTML 哈希）。
+- **术语与组织主数据权威表**：`docs/terminology-canonical-v1.0.md` §三/§五/**§六 组织主数据登记**；结算侧副本 `docs/settlement-rebuild-prd-v1.0.md` §2.3A。
+- **业务裁决**：`docs/business-decision-log-v0.1.md` **DEC-ORG-2026-07-28-01~07**；审计侧同步 `docs/prd-audit/business-decision-ledger.md`「2026-07-28 新增业务裁决」节。
+- **要点**：① 专名「娱乐运营平台」废止 → **娱乐平台公司**；② 分账瀑布 = 渠道抽成 → 赠送权益预估成本（娱乐平台公司）→ 门票综合服务费/留存（同一项只扣一次，**归娱乐平台公司**）→ 可分配池仅各酒吧分；③ 赠送权益每样独立、绑提供方、按内部结算价计成本，预扣按票种配「按件计／按票整额」；④ 赠酒每吧至少一杯、杯数写票面、**不得跨吧核销**；⑤ 非散台服务费与订台低消/二次消费/额外酒水归**各酒吧商户**（⚠️可重议）、场地租金归**长沙项目公司**（= 资产公司）、向商户供货货款归**中央餐饮公司**。
+- **准入提示**：以上 ②③④ 与「综合服务费归属主体」**代码尚未实现**，属待开发缺口（见 `docs/dev-plan-v7-audit-20260722.md` R-1/R-3）；本轮为**文档同步批次，未改代码、未新增端点**。

@@ -64,7 +64,7 @@
 | 卡座提成查看/复核 | `bar.table_commission.view` / `bar.table_commission.review` | 财务、运营主管、HR/薪酬授权人 | 高 | 是 | `bar.table_commission.calculated` / `bar.table_commission.adjusted` | 普通销售人员只能看本人提成摘要，不得改提成基数 |
 | 开台/关台 | `bar.table.open_close` | 酒吧服务员、吧台、主管 | 中 | 否 | `bar.table.opened` / `bar.table.cleared` | P0 基础酒吧闭环 |
 | 点酒/出酒 | `bar.order.create` | 服务员、吧台 | 中 | 否 | `bar.order_created` / `bar.order_delivered` | 高价值酒水保持在线 |
-| 酒水赠饮核销 | `bar.drink_benefit.redeem` | 吧台、主管 | 中 | 否 | `bar.gift_redeemed` | 通票赠酒成本由平台承担 |
+| 酒水赠饮核销 | `bar.drink_benefit.redeem` | 吧台、主管 | 中 | 否 | `bar.gift_redeemed` | 通票赠送权益成本由**娱乐平台公司**承担（2026-07-28）；A 吧赠酒只能在 A 吧核销 |
 | 存酒登记/领取/作废 | `bar.saved_bottle.manage` | 吧台、主管 | 高 | 领取/作废可配置 | `bar.saved_bottle.created` / `bar.saved_bottle_picked_up` / `bar.saved_bottle.voided` | 必须照片/签收/手机号 |
 | 库存入库/出库 | `inventory.stock.move` | 仓库、吧台、主管 | 中 | 可配置 | `inventory.inbound_confirmed` / `inventory.outbound_verified` / `inventory.transferred` | P0 必须支持库存扣减闭环 |
 | 库存盘点差异确认 | `inventory.stock.adjust` | 仓库主管、财务复核 | 高 | 是 | `inventory.counted` / `inventory.damaged` / `inventory.surplus_recorded` / `inventory.reversed` | 高价值酒水需附件 |
@@ -234,7 +234,7 @@
 | 开台/关台 | `bar.table.open_close` | 中/否 | 可用 |
 | 点酒/出酒 | `bar.order.create` | 中/否 | 可用 |
 | 酒吧订单查看 | `bar.order.view` | 低/否 | 可用（按本酒吧/卡座范围） |
-| 账单：酒水赠饮核销 | `bar.drink_benefit.redeem` | 中/否 | 可用（通票赠酒成本由平台承担） |
+| 账单：酒水赠饮核销 | `bar.drink_benefit.redeem` | 中/否 | 可用（通票赠送权益成本由**娱乐平台公司**承担，2026-07-28；不得跨吧核销） |
 | 存酒登记/领取/作废 | `bar.saved_bottle.manage` | 高/领取作废可配置 | 可用（须照片/签收/手机号） |
 | 库存入库/出库 | `inventory.stock.move` | 中/可配置 | 可用（本商户库存扣减闭环） |
 | 库存余额/流水查看 | `inventory.stock.view` | 低/否 | 可用（按本仓库/酒吧范围） |
