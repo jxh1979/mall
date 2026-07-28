@@ -732,22 +732,22 @@ BEQ-0104,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗计量,FULL,,,,
 BEQ-0105,docs/real-estate-full-chain-domain-prd-v0.1.md,5. 能耗计量,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0106,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
 BEQ-0107,docs/building-operations-prd-v1.0.md,1. 业务对象与状态枚举（对齐 HTML §十，逐字落 DB CHECK）,FULL,,,,,,05-realestate-leasing-building-supply
-BSM-0137,docs/terminal-page-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
-BSM-0138,docs/terminal-page-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0137,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
+BSM-0138,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0139,docs/terminal-page-product-prd-v0.1.md,2. 终端分层,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0143,docs/terminal-page-product-prd-v0.1.md,2. 终端分层,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0143,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0145,docs/operation-traceability-and-terminal-switch-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0191,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0192,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0195,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0197,docs/business-decision-log-v0.1.md,变更日志,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0231,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
-BSM-0232,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0231,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
+BSM-0232,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0233,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0234,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0235,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0236,docs/amusement-business-operations-product-prd-v0.1.md,11A.1 游乐超容（over_capacity）软/硬阈值放行策略（权威：spec §7，V104）,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0237,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,PARTIAL,P1,ADV-ED-003,身高、年龄、健康、安全告知和监护要求互相冲突=>PARTIAL:缺监护,统一准入校验优先级与冲突处理,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0237,docs/amusement-business-operations-product-prd-v0.1.md,§7.2A DEC-ADM-PRIORITY-001,FULL,P1,ADV-ED-003,,,DEC-ADM-PRIORITY-001,06-amusement-terminal-thirdparty-data
 BSM-0238,docs/business-decision-log-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0239,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0240,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
