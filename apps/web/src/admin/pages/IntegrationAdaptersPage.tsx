@@ -135,7 +135,7 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
           <table className="admin-table" data-testid="integration-adapters-table">
             <thead><tr><th>供应商</th><th>适配器类型</th><th>生产就绪</th><th>详情</th></tr></thead>
             <tbody>{rows.map((row) => (
-              <tr key={row.id} className={`admin-row-clickable${focusObjectId === row.providerCode ? " admin-row-focus" : ""}`} tabIndex={0} data-testid={`integration-adapter-row-${row.id}`}
+              <tr key={row.id} className={`admin-row-clickable${focusObjectId === row.providerCode ? " admin-row-selected" : ""}`} tabIndex={0} data-testid={`integration-adapter-row-${row.id}`}
                 onClick={() => openAdapterDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAdapterDetail(row); } }}>
                 <td>{row.providerCode}</td>

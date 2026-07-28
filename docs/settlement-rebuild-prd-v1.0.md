@@ -558,7 +558,7 @@
 ## 10. 数据模型变更清单
 
 ### 10.1 新建表
-- **管理公司/业态主体层**(L3:娱乐平台/酒吧SPV/中央餐饮/游乐/传媒/资产;持股/分红配置)——⚠️ 2026-07-04 对齐代码:**DB 层复用 `business_entities` + `entity_role` 承载(现状无 organizations 表),不新建 management_companies 表**;四主体绑定见 `business_entity_bindings`(active 唯一);`projects` 表是业态经营单元/场馆(非"项目公司")。详见 `merchant-space-contract-model-v0.1.md`
+- **管理公司/业态主体层**(L3:娱乐平台公司/中央餐饮公司/游乐公司/传媒公司;持股/分红配置——2026-07-28 口径:**各酒吧为 L4 独立商户**(娱乐平台公司参股)、**资产公司即长沙项目公司**(L2),两者均不在 L3)——⚠️ 2026-07-04 对齐代码:**DB 层复用 `business_entities` + `entity_role` 承载(现状无 organizations 表),不新建 management_companies 表**;四主体绑定见 `business_entity_bindings`(active 唯一);`projects` 表是业态经营单元/场馆(非"项目公司")。详见 `merchant-space-contract-model-v0.1.md`
   - **2026-07-19 落库(V318/V319)**:①`business_entities.parent_entity_id`(V318)显式挂 L3→L2 项目公司父链(「一个项目公司下多个管理公司主体」= 多行 parent 指向同一项目公司);②`revenue_stream_attribution`(V319)承载 6 业态收入流→管理公司主体映射(可配,项目特例 > 平台默认);③`settlement_bills.attributed_entity_id`(V319)通票分账已接:settleMonth 解析并标注归属主体。其余 5 类收入流(餐饮/服务费/游乐/演出/租金)复用同一 `RevenueStreamAttributionRepository.resolveManagementEntity` 解析,随各自结算路径上线时接入。
 - `venue_sessions`(场次/开歇业周期)+ `entitlement_entry_records`(入场记录)
 - `settlement_transactions`(按核销的结算流水:票→权益→核销→主体→金额→税务属性)
@@ -569,7 +569,7 @@
 - `refund_fee_rules`
 
 ### 10.2 改表
-- `merchants`:加 `management_company_id`(挂靠 L3)+ `business_category`(业态:酒吧/餐饮/零售/游乐…,供租售比业态化 §13)
+- `merchants`:加 `management_company_id`(挂靠 L3);业态字段**已落地为 `merchants.merchant_type`**(V348 五值封口:酒吧/餐饮/零售/游乐/其他,NOT NULL + CHECK,招商录入必填),供租售比业态化 §13——原拟的 `business_category` 未建,勿再引用。
 - `entitlement_templates`:加 `entitlement_kind`(实物/虚拟)、`agreement_price_cent`、`consumption_window`、`exclusive_merchant_id`
 - `issued_entitlements`:结算状态从"发放即分摊"迁移为"待核销/已核销结算/已回收"(§11)
 - `ticket_types`:加 `sales_subject_restriction`(仅项目公司可售通票)、`is_standalone` 标记
@@ -638,7 +638,7 @@
 |---|---|---|---|
 | **批 0** | 本 PRD 评审定稿 + 术语表 + 配置表族 schema 设计 | — | 定稿 PRD、DDL 草案 |
 | **批 1(地基)** | 按核销结算引擎 + 未用归项目 + settlement_transactions + 双写观察 | 批0 | 核心引擎 + 校验 |
-| **批 2** | 管理公司层(平台+酒吧SPV)+ 两层分账方案(可配)+ 中央餐饮开关 | 批1 | 分账落地 |
+| **批 2** | 管理公司层(娱乐平台公司 + 各酒吧商户)+ 两层分账方案(可配)+ 中央餐饮开关 | 批1 | 分账落地 |
 | **批 3** | 权益结算细则:实物内部价/虚拟权益单价/场次入场/游乐当天无限/专属不分摊 | 批1 | 权益精算 |
 | **批 4** | 票种规则:综合服务费(所有门票)/单独门票/套票折扣 + 退款手续费预扣 | 批2/3 | 票种闭环 |
 | **批 5** | 配置中心配置表 + 后台页(ADM-STL-001~007、010 税务)+ 权限 | 批2-4 | 全可配 |
@@ -708,7 +708,7 @@
 |---|---|---|---|
 | 赠送权益兑付(核销侧) | 按提供方商品内部结算价(真实进货成本) | ~~giveaway_cost_configs(废)~~ | **核销时按内部结算价与提供商户结算**(`pass_drink_settlement`),**由娱乐平台公司承担**;未核销不兑付;成本按商户业态(酒吧/餐厅/零售)分记。原「每杯 3 元」是财务测算假设(附录 B),已删不进系统 |
 | 预扣与实付差额处理 | 留在娱乐平台公司 | 待建 | 2026-07-28:差额不回流可分配池、不改已结酒吧分账,按可配规则在娱乐平台公司侧调账留痕 |
-| 中央餐饮场地返佣 | 可配比例或固定额 | catering_venue_rebate_rules | 开关开时,按**实际酒水销售额**返给提供场地的酒吧 SPV(真实场地费,非财务分利) |
+| 中央餐饮场地返佣 | 可配比例或固定额 | catering_venue_rebate_rules | 开关开时,按**实际酒水销售额**返给提供场地的酒吧商户(真实场地费,非财务分利) |
 | 订台渠道佣金率(通票无) | 15% | — | **订台权益核销时**平台预扣;非平均分 |
 
 **A3 · 运营定价(运营后台设定,非公式反推)**
@@ -754,7 +754,7 @@
 | 收入 | 主体 | 增值税(默认) | 文化事业建设费(默认) |
 |---|---|---|---|
 | 通票 | 娱乐平台 | 6% | 3% |
-| SPV 运营服务(分账) | 酒吧SPV | 6% | — |
+| 酒吧运营服务(分账) | 各酒吧商户 | 6% | — |
 | 非散台服务费 | 各酒吧商户 | 6% | 3% |
 | 订台低消/二次消费/额外酒水 | 各酒吧商户(⚠️可重议) | 6% | — |
 | 向商户供货的货款 | 中央餐饮公司 | 按货物销售/供应链服务适用 | — |
@@ -795,7 +795,7 @@
 
 ### B.3 对批次与数据模型的影响
 - §10.1 新建表追加:`settlement_invoice_items`、`invoice_subject_rules`、`company_equity_holdings`、`profit_distribution_records`。
-- §2.3 管理公司范围修正:**酒吧 SPV 按真实 N 家建、数量可配**(非"先 1 个统一模型")。
+- §2.3 管理公司范围修正:**各酒吧按真实 N 家建、数量可配**(非"先 1 个统一模型");2026-07-28 起各酒吧为 L4 独立商户,不再作 L3 业态主体单列。
 - §14 批次追加:
   - **批 4b 开票清单模块**(接批 4,ADM-STL-008)
   - **批 9 持股分红层**(接批 2/批 5,ADM-STL-009,依赖成本归集)

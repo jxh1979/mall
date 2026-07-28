@@ -2151,7 +2151,6 @@ body {
 
 .admin-trace-link { background: none; border: none; padding: 0; margin: 0; color: #2563eb; text-decoration: underline; cursor: pointer; font: inherit; }
 .admin-trace-link:hover { color: #1d4ed8; }
-.admin-row-focus { background: #fef3c7; outline: 2px solid #f59e0b; }
 
 /* === fix/ui-pages 追加区 ===（只在文件末尾追加，勿并入上方规则） */
 /* 金额类列等宽数字（台账/合同/账单统一） */
