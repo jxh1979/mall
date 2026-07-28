@@ -294,6 +294,27 @@
 > - **软删白名单扩**:`commission_rate` / `points_accrual_rate` 的**商户级特例条目**可下线(回落项目/全平台默认口径);
 >   **全平台默认种子禁下线**(`DEFAULT_SEED_NOT_ARCHIVABLE`,下线即全平台无默认口径可用),只能改数值。
 
+> **2026-07-28 P0-E 实现修订(营业额抽成规则进配置中心草案闸)**:
+> - 背景:v7 综合审计 P0-E —— `turnover_rent_rules`(营业额抽成规则:阶梯扣率 + 保底)**单人一次提交即进结算**,
+>   建规则落库就是 `status='active'`、读侧 `findActiveTurnoverRentRuleByContract` 立刻读到,
+>   **无草案、无复核、无转正**——与配置中心其余 10 类配置「改→落草案→差人复核转正→才生效」的口径不一致,
+>   等于在结算配置总控之外留了一条可以单人改钱的口子。
+> - 落地:**V346** 给 `turnover_rent_rules` 加 `is_draft` / `updated_by` / `archive_reason` 三列(范式同批1/V340),
+>   收进 `SingleRowConfig` 第 **11** 类 `turnover_rent_rule`(scope = 合同 × 商户):
+>   - **写面**(编辑入口不变):`POST /api/v1/finance/turnover-rent/rules`(合同工作台「提成租金规则」)改为**只落草案**,
+>     `is_draft=TRUE` + 记起草人;档位明细挂 `turnover_rent_rule_tiers`,随规则行整体转正,不单独设草案位。
+>   - **读面保值**:`findActiveTurnoverRentRuleByContract` 加 `AND is_draft = FALSE`;
+>     `billTurnoverRent` 对草案规则 **fail-loud**(`TURNOVER_RENT_RULE_NOT_ACTIVATED`)、对已下线规则
+>     `TURNOVER_RENT_RULE_NOT_ACTIVE`。**编辑期旧规则口径纹丝不动**(Path 2 保值)。
+>   - **转正**:走**既有转正泛化端点** `POST /api/v1/settlement/config/turnover_rent_rule/{id}/activate`
+>     (**零新增端点**),差人守卫 `SELF_ACTIVATION_FORBIDDEN`;转正 = 同合同同商户旧生效规则软替换 `status→inactive`
+>     (留库可追溯)+ 草案翻生效,两步同事务。
+>   - **草案队列**:`listPendingConfigDrafts` 增 `turnover_rent_rule` 分组,总控页 **ADM-STL-001** 待复核队列直接可见可转正;
+>     合同工作台按钮改为「存为草案(待复核转正)」并写明须他人复核。
+>   - **软删白名单扩**:`turnover_rent_rule` 可下线(合同终止/换规则),下线后该合同不再产生抽成应收。
+> - **零行为改变**:迁移只加列(`is_draft` 默认 FALSE),**存量生效规则视同已批准**,抽成取数结果不变(同 V326/V329 对既有种子的处理口径)。
+> - **不新增权限点**:编辑沿用 `finance.turnover_rent.bill`,转正/软删沿用 `settlement.config.manage`(高敏 + 平台域)。
+
 ---
 
 ## 10. 数据模型变更清单

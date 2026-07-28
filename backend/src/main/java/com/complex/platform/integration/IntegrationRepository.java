@@ -79,6 +79,18 @@ public interface IntegrationRepository {
 
     List<ReconciliationDifferenceRecord> listReconciliationDifferences();
 
+    /**
+     * P0-E 第三方侧系统取数：按 (provider_code, business_type, external_business_id) 聚合回流实收金额（分）。
+     * 口径 = SUM(order.amount_cent) − SUM(refund.amount_cent)，负数钳 0（退款超单额无业务意义）。
+     * 返回 0 表示该单第三方根本没有回流落库 → 服务层据此拒绝人工登记差异（无系统取数支撑）。
+     *
+     * <p>default 返回 0 以兼容既有测试双子（与 FinanceRepository.aggregatePlatformExpectedForBusinessRef 同做法）。
+     */
+    default long aggregateProviderTakingsForExternalBusiness(
+            String providerCode, String businessType, String externalBusinessId) {
+        return 0L;
+    }
+
     // ── R5 T14 第三方接口/开关预留骨架 ───────────────────────────────────────────
     RobotTaskEventRecord saveRobotTaskEvent(RobotTaskEventRecord record);
 

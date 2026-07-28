@@ -140,6 +140,25 @@
 
 `POST /api/v1/integration/reconciliation/differences`
 
+> **2026-07-28 v7 审计 P0-E 修订（对账旁路手填封堵）**：本端点由「录入差异」收窄为「**登记差异**」。
+> 依据业务 HTML 铁律 `RULE-FIN-SOURCE-01`（业务:1340「平台侧金额必须系统自动取数、不许手填」）与决议 `R6-D07`。
+> 原契约允许请求体直接给 `internal_amount_cent`（平台侧）/ `provider_amount_cent`（第三方侧）/ `difference_amount_cent`，
+> 等于给了一条绕过系统取数、凭空造差异金额的后门；财务域同类接口（`POST /api/v1/finance/reconciliation/differences`）
+> 早已按 R6-D07 强制系统取数，两套口径不一致。现统一：
+>
+> - **三个金额字段全部废止**。请求体带其中任一（哪怕值正确）一律 `400 RECONCILIATION_MANUAL_AMOUNT_FORBIDDEN`
+>   ——**显式拒绝而非静默忽略**，避免操作员误以为自己填的数生效了。
+> - **第三方侧金额系统取数**：按 `(provider_code, business_type, external_business_id)` 聚合
+>   `integration_order_syncs` 的回流实收（订单额 − 退款额，钳 0，只认 `synced` / `difference_found`）。
+> - **无系统取数支撑一律拒绝**：该外部单号毫无回流 → `400 RECONCILIATION_NO_SYSTEM_TAKINGS`。
+>   要登记这笔，先按正规通道把第三方回流落库（order-sync 摄入 / 渠道自动对账），而不是在这里手打数字。
+> - **平台侧恒 0**：本域没有任何按外部单号可查的平台侧金额台账，人工登记只能表达
+>   「第三方回流有这笔、平台侧无对应取数」。平台侧确有对应取数的差异，必须走
+>   `POST /api/v1/integration/reconciliation/channel-auto`（系统两侧比对产出），不得手工登记。
+> - **强制进复核**：登记结果 `status = needs_review`，并记 `registered_by_user_id`；
+>   复核（resolve）时**登记人不得自审**，否则 `403 SELF_REVIEW_FORBIDDEN`（操作者取自会话，不采信请求体 `operator_user_id`）。
+> - **金额不可改**：差异落库后，处置只更新状态 / 处理人 / 结论 / 证据，两侧金额与登记人永不被覆盖（DB upsert 层锁死）。
+
 ```json
 {
   "idempotency_key": "difference-001",
@@ -148,15 +167,15 @@
   "business_type": "catering",
   "external_business_id": "external-order-1",
   "difference_type": "amount_mismatch",
-  "internal_amount_cent": 128800,
-  "provider_amount_cent": 128700,
-  "difference_amount_cent": 100,
   "assigned_to_user_id": "finance_1",
   "provider_payload": {
     "provider_private_status": "DIFF"
   }
 }
 ```
+
+响应中的 `internal_amount_cent` / `provider_amount_cent` / `difference_amount_cent` 由系统取数落值；
+`amount_source` 标注 `system`（渠道自动对账产出）或 `manual_registration`（人工登记，金额仍系统取数）。
 
 `POST /api/v1/integration/reconciliation/differences/{id}/resolve`
 
@@ -171,6 +190,8 @@
 ```
 
 差异创建时必须校验 `batch_id` 存在，并且批次的 `provider_code`、`business_type` 与差异一致。
+
+差异处置（resolve）除既有校验外，还须通过**差人复核守卫**：人工登记的差异（`needs_review`）不允许登记人本人处置。
 
 ## 4. 审计事件
 

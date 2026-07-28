@@ -664,7 +664,15 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 () -> billTurnoverRentInternal(request));
     }
 
-    /** 建提成租金规则(填合同条款时):挂合同 + 阶梯超额累进 + 保底(无封顶)。 */
+    /**
+     * 建提成租金规则(填合同条款时):挂合同 + 阶梯超额累进 + 保底(无封顶)。
+     *
+     * <p><b>P0-E（v7 审计·抽成规则草案闸）</b>：本端点<b>只落草案</b>（is_draft=TRUE），落库后对结算<b>零影响</b>——
+     * 读侧 {@code findActiveTurnoverRentRuleByContract} 只认 is_draft=FALSE。要让新规则生效，须由
+     * <b>另一位</b>持 {@code settlement.config.manage} 的同事在结算配置中心复核转正：
+     * {@code POST /api/v1/settlement/config/turnover_rent_rule/{id}/activate}（差人守卫，起草人不得自审）。
+     * 转正时同合同 + 同商户的旧生效规则被软替换为 inactive（留库可追溯），草案翻为生效。
+     */
     public TurnoverRentRuleRecord createTurnoverRentRule(TurnoverRentRuleRequest request) {
         return executeWrite(
                 "createTurnoverRentRule",
@@ -1531,7 +1539,8 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         }
         Instant now = Instant.now();
         String ruleId = "trr_" + slug(merchantId + "_" + actual.idempotencyKey());
-        TurnoverRentRuleRecord rule = repository.saveTurnoverRentRule(new TurnoverRentRuleRecord(
+        // P0-E：一律落草案 + 记起草人（差人复核转正的守卫依据），草案对结算零影响。
+        TurnoverRentRuleRecord rule = repository.saveTurnoverRentRuleDraft(new TurnoverRentRuleRecord(
                 ruleId,
                 actual.contractId(),
                 merchantId,
@@ -1542,7 +1551,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 effectiveFrom,
                 effectiveTo,
                 "active",
-                now));
+                now), authorizationService.currentActor().id());
         int seq = 1;
         for (TurnoverRentRuleRequest.TierInput t : tierInputs) {
             repository.saveTurnoverRentRuleTier(new TurnoverRentRuleTierRecord(
@@ -1725,6 +1734,15 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
 
         TurnoverRentRuleRecord rule = repository.findTurnoverRentRuleById(ruleId)
                 .orElseThrow(() -> ApiException.notFound("TURNOVER_RENT_RULE_NOT_FOUND", "turnover rent rule not found"));
+        // P0-E：未转正草案 / 已下线规则一律不得计费（fail-loud，不静默按旧规则算）。
+        if (repository.isTurnoverRentRuleDraft(ruleId)) {
+            throw ApiException.badRequest("TURNOVER_RENT_RULE_NOT_ACTIVATED",
+                    "抽成规则仍是待复核草案，须经结算配置中心复核转正后才能计费");
+        }
+        if (!"active".equals(rule.status())) {
+            throw ApiException.badRequest("TURNOVER_RENT_RULE_NOT_ACTIVE",
+                    "抽成规则已下线，不能用于计费");
+        }
         checkMerchantOwnership(rule.merchantId());
         if (!"active".equals(rule.status())) {
             throw ApiException.badRequest("TURNOVER_RENT_RULE_INACTIVE", "turnover rent rule is not active");
