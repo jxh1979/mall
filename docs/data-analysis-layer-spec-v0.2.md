@@ -965,7 +965,7 @@ flowchart TD
 
 ## F. 后台数据精准性与展示（DEC-DATA-BACKEND-ACCURATE-001，2026-07-28 重裁）
 
-> 原 `DEC-DATA-BACKEND-ACCURATE-001（原 PRAGMATIC 已废止）`（有数优先、异常可近似）**废止**。  
+> 原 `DEC-DATA-FRESH-PRAGMATIC-001`（有数优先、异常可近似）**废止**。  
 > 用户 2026-07-28 重裁：**后台的数据必须精准**。
 
 ### F.1 原则
