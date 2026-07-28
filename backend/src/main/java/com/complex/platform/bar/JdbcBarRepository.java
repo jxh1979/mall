@@ -164,11 +164,6 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
-    public Optional<BarProductRecord> findProductByInventoryItem(String barId, String inventoryItemId) {
-        return catalog.findProductByInventoryItem(barId, inventoryItemId);
-    }
-
-    @Override
     public BarOrderRecord saveOrder(BarOrderRecord order) {
         return orderRepository.saveOrder(order);
     }

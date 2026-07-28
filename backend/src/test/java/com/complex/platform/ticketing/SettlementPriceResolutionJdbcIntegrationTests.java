@@ -95,16 +95,35 @@ class SettlementPriceResolutionJdbcIntegrationTests {
     }
 
     @Test
-    void physicalEntitlementWithoutInternalPriceFallsBackToValueAmount() {
+    void physicalEntitlementWithoutInternalPriceIsRejectedFailClosed() {
+        // S5：商品没录内部结算价 → 拒绝核销，绝不回退票面价 7777
+        //（票面原价与内部结算价不可混用；回退会让成本悄悄按售价计，账面平、钱全错）。
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         String suffix = Long.toString(System.nanoTime());
         seedDevice(suffix);
         String barProductId = seedBarProduct(suffix, null); // 内部结算价 NULL
         String code = seedEntitlement(suffix, "physical", barProductId, null, 7777L);
 
-        verify(suffix, code);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> verify(suffix, code))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("ENTITLEMENT_PRICE_UNRESOLVED"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ticket_verifications WHERE entitlement_id = ?", Integer.class, "ent_" + code))
+                .isZero();
+    }
 
-        assertThat(settlementPrice(code)).isEqualTo(7777L); // 内部价空 → 回退 value_amount
+    @Test
+    void physicalEntitlementBoundToAnotherBarsProductIsRejectedFailClosed() {
+        // S5：A 吧的权益绑到 B 吧的商品 → 成本记给谁全凭巧合 → 不解析、拒核销。
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        String suffix = Long.toString(System.nanoTime());
+        seedDevice(suffix);
+        String barProductId = seedBarProduct(suffix, 5000L, "merchant_other");
+        String code = seedEntitlement(suffix, "physical", barProductId, null, 9999L);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> verify(suffix, code))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("ENTITLEMENT_PRICE_UNRESOLVED"));
     }
 
     @Test
@@ -136,13 +155,18 @@ class SettlementPriceResolutionJdbcIntegrationTests {
         java.sql.Timestamp ts = java.sql.Timestamp.from(Instant.now());
         jdbcTemplate.update("""
                 INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
-                    status, created_at, updated_at)
-                VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', ?, ?)
+                    status, merchant_id, created_at, updated_at)
+                VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', 'merchant_a', ?, ?)
                 """, deviceCode, "dev-" + deviceCode, "DC-" + deviceCode, ts, ts);
     }
 
     /** 播一个 bar_product，internal_settlement_price_cent 可空。返回其 id（= 权益 bar_item_ref）。 */
     private String seedBarProduct(String suffix, Long internalPrice) {
+        return seedBarProduct(suffix, internalPrice, "merchant_a");
+    }
+
+    /** S5：商品归属可指定——用于验证「商品不属于本提供方则不解析」。 */
+    private String seedBarProduct(String suffix, Long internalPrice, String barId) {
         String pid = "barprod_sp_" + suffix;
         seededBarProducts.add(pid);
         java.sql.Timestamp ts = java.sql.Timestamp.from(Instant.now());
@@ -150,7 +174,7 @@ class SettlementPriceResolutionJdbcIntegrationTests {
                 INSERT INTO bar_products (id, bar_id, product_name, product_type, price_cent, currency,
                     stock_deduction_required, status, internal_settlement_price_cent, created_at, updated_at)
                 VALUES (?, ?, 'SP Drink', 'drink', 12000, 'CNY', FALSE, 'active', ?, ?, ?)
-                """, pid, "bar_" + suffix, internalPrice, ts, ts);
+                """, pid, barId, internalPrice, ts, ts);
         return pid;
     }
 

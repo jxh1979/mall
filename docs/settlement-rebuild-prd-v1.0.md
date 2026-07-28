@@ -297,7 +297,17 @@
 
 **实装现状与缺口(如实标注)**
 - **已实装**:核销时由 bar 域按该商品内部结算价给出品酒吧挂应付(`pass_drink_settlement`·幂等 + 可冲正)——对应上文 ③ 的兑付动作,但**承担主体口径需由「平台」收敛为「娱乐平台公司」**,且**成本尚未按商户业态分记**。
-- **未实装(待开发)**:① 池前「赠送权益预估成本」预扣(按件计 / 按票计两模式与票种级配置);② 预扣与实付差额在娱乐平台公司侧的调账留痕;③ 赠酒按酒吧配额(每吧至少一杯、杯数写票面)与**跨吧核销拒绝**;④ 门票综合服务费归属主体由项目公司改娱乐平台公司。以上属本轮 HTML 口径新增,**代码尚未跟上**。
+- **✅ 已实装(S5 赠送权益逐项模型底座,2026-07-28)**:
+  - **提供方商品口径定死**:权益模板的 `bar_item_ref` 语义统一为 **`bar_products.id`**(此前票务侧按商品 id 查、bar 侧按库存物料 id 查,两边各查各的,票务侧查不到还**静默回退票面价**)。建模板时当场校验:商品必须存在、必须属于该权益的提供方商户、若该商品需扣库存则必须已绑库存物料;库存扣减改走商品绑定的库存物料,不需扣库的赠品不再被硬扣。
+  - **内部结算价统一解析器** `InternalSettlementPriceResolver`:全平台只此一处解析(提供方商品内部结算价 → 模板签约内部结算价 → 未解析)。**预扣(S6)与兑付(bar 域)共用同一结果**——兑付价由票务侧解析后随 `ticket.gift_verified` 事件下发,bar 域不再自查;冲正按原核销**当时固化的价**逐分对冲,不重查目录。
+  - **`resolveSettlementPrice` 改 fail-closed**:提供方兑付类权益(赠饮 / 实物 / 配了专属商户的餐饮零售)取不到内部结算价即抛 `ENTITLEMENT_PRICE_UNRESOLVED` 拒绝核销,**不再回退票面价**(HTML §5.0c ④「票面原价与内部结算价两者不可混用」)。入场 / 游乐等非成本口径权益零变更。价 = 0 合法(商户让利型),NULL 才是「没配价」。
+  - **平台自营吧不再豁免**:自营吧同样必须有内部结算价(否则成本口径出黑洞),只是无商户对手方 → 不挂应付、在兑付留痕上记明「成本归平台、无对手方」。
+  - **K16 跨提供方核销守卫**:「A 酒吧的赠酒只能在 A 酒吧核销」落为**业务不变量**——核销上下文取核销设备绑定的商户(`terminal_devices.merchant_id`),与提供方不一致即 409 `ENTITLEMENT_PROVIDER_MISMATCH`;**与角色无关**(平台管理员同样受约束),**离线同步旁路走同一入口**同样拦得住。设备未绑商户 → `VERIFY_DEVICE_MERCHANT_UNRESOLVED` 拒绝(说不清在哪家核的,就不记这笔账)。
+  - **K17 每吧至少一杯发布校验**:票种发布时,若这张票**已经配了赠酒**,则它覆盖的**每家酒吧**(有入场类权益且商户业态为酒吧)都必须至少有 1 杯,否则 409 `PASS_BAR_GIFT_COVERAGE_INSUFFICIENT` 并点名缺哪家。不含任何赠酒的普通门票不受此约束。酒吧集合按票种实际绑定动态算,不写死家数。
+  - **票面赠酒清单**:`GET /api/v1/ticketing/ticket-types/{id}/gift-coverage`(权限 `ticket.product.view`)返回按酒吧分组的赠品与杯数,**与 K17 发布校验取同一份数据**;后台组合配置页同屏展示,即票面写明的内容。
+  - **前端补录入**:组合配置页「酒吧权益」行新增**赠送商品**下拉(数据源 = 该酒吧自己的商品),提交时透传 `bar_item_ref`。此前前端从不发该字段,**赠饮模板在后台根本建不出来**(必 400)。
+  - **本刀不产生任何金额**:内部价解析结果只写 `ticket_verifications.settlement_price_cent`(已有列);跨吧守卫只拒不改钱(被拒时权益未消费、核销记录 / 结算流水 / 往来项一条都不落)。全量 2987 测试通过、既有金额断言零改动。
+- **未实装(待开发)**:① 池前「赠送权益预估成本」预扣(按件计 / 按票计两模式与票种级配置,S6);② 预扣与实付差额在娱乐平台公司侧的调账留痕(S7);③ 成本按提供方商户业态分记(S7);④ 门票综合服务费归属主体由项目公司改娱乐平台公司。
 
 > ⚠️ **口径沿革(勿再引用旧文)**
 > - 2026-07-04「两段式赠酒(3 元/点位先留 + 剩余按每客分账)」**作废**。
@@ -321,7 +331,13 @@
 
 > **2026-07-28 补两条**:① 本表管的是**成本侧结算价**;权益还有一个**票面原价**用于定价与业态份额拆分,**两者不可混用**(§5.0c ④)。② 内部结算价的**唯一真源将收敛到内部结算 SKU 目录**(§9.7 / `finance-settlement-product-prd-v0.1.md` §3B),目录建成后本表的取价路径改读目录。
 
-> ✅ **已落地(批3-1,V225,main=eb5cba5)**:`entitlement_templates`/`issued_entitlements` 加 `entitlement_kind`+`agreement_price_cent`,`ticket_verifications` 加 `settlement_price_cent`;核销时 `TicketVerificationService.resolveSettlementPrice` 判定——实物经 `bar_item_ref`→`bar_products.internal_settlement_price_cent`(V152)回退 value,虚拟取 `agreement_price_cent` 回退 value,NULL 回退 value;落该次核销记录。
+> ✅ **已落地(批3-1,V225,main=eb5cba5)**:`entitlement_templates`/`issued_entitlements` 加 `entitlement_kind`+`agreement_price_cent`,`ticket_verifications` 加 `settlement_price_cent`;核销时 `TicketVerificationService.resolveSettlementPrice` 判定,落该次核销记录。
+
+> ✅ **已改口径(S5,2026-07-28)**:取价收进 **`InternalSettlementPriceResolver`** 一处(全平台唯一解析入口,预扣与兑付同源):
+> - **提供方兑付类权益**(赠饮 / 实物 / 配了专属商户的餐饮零售):`bar_item_ref`(**= `bar_products.id`**,且该商品必须属于本权益的提供方商户)→ 内部结算价;取不到则退到模板 `agreement_price_cent`;**再取不到即 fail-closed 抛 `ENTITLEMENT_PRICE_UNRESOLVED` 拒绝核销,不再回退票面价**。
+> - **其余权益**(入场 / 游乐等):票面价即分账基准、本就不是成本口径,维持现状(虚拟取 `agreement_price_cent`,否则回退 `value_amount_cent`)。
+> - **0 与 NULL 语义分开**:内部结算价 = 0 合法(商户让利型免费权益,平台不出钱);NULL = 没配价 → 拒绝。
+> - 目录(§9.7)建成后只需把解析器的两支改读目录,所有调用方无感。
 
 ### 6.2 酒吧入场资格——场次规则(用户口径 4,全新)
 - 入场资格权益的核销单位是**场次**(一个"开业→歇业"周期):
@@ -648,6 +664,7 @@
 | **新立项·批1(结算配置中心增量,2026-07-21)** | ✅ 开发完成·待主计划集成(worktree) | **D1 渠道费率**(**V327** `channel_fee_configs`·消灭写死 0)/ **B1-2 综合服务费固定额**(**V328** `fixed_amount_cent`·比例或固定额二选一)/ **B1-3 配置写入面全套** + 转正泛化端点 + 双人复核(执行人≠起草人 `SELF_ACTIVATION_FORBIDDEN`)+ Path 2 保值(草案不影响进行中结算)+ 回退收敛(缺配置 fail-loud)(**V329/V330**)/ **D5 削赠酒池扣**(赠酒不占池·补偿改 bar 域内部结算价挂应付)/ **过账 pipeline ①②**(`POST /settlement/bills/{id}/post`·**默认关·生产首次激活另行拍板**)/ **D6 套票折扣落库 + 应用**(**V331** `component_full_price_cent`→`discount_amount_cent`→`combo_discount_cent`)/ **B1-4 前端**/ **✅ D7 超池特批出口 + 超额 C 口径(甲标签法)**——特批端点 `POST /settlement/bills/{id}/special-approval`(复用 `settlement.bill.post`·仅超池 draft 可批·拒 `BILL_NOT_OVERPOOL_DRAFT`)+ `postBill` 两段拆(池内 `pool_i` 过 `ticket_distribution`/超额 `excess_i` 过 `platform_incentive_subsidy`·独立幂等前缀 `settle-pis-`·`pool_i+excess_i=a_i`/`Σpool≤spvPool`)+ 专属直付不拆/未超池零变更 + `upsertBill` 防覆盖(COALESCE ref/CASE 锁 status 不被重跑打回)·**零迁移**(`source_type` 自由 VARCHAR·复用权限)·`SettlementOverPoolSpecialApprovalTests` **9 绿**(6 验收 + 3 对抗复核回归锁:溢出安全/特批冻结/补贴 project_id NULL 出项目域)。**迁移 **V327–V331** 已落 worktree(D7 无迁移,故无 V332)** |
 | **报表·放弃权益额外收入(结算B2,2026-07-21·✅已上线prod)** | ✅ 上线(PR#200·main dd5f6728) | 只读财务报表 **ADM-ANA-013**「放弃权益额外收入」:客人买票但已过期未核销的权益,其未核销部分归项目公司的额外收入,按 **票种(通票 `ie.bar_id IS NULL` / 单独门票 `bar_id` 非空)× 权益类型(酒水/入场/游乐/演出/其他,沿用 analytics 分桶)** 交叉呈现,含行合计/列合计/总计。数据源直读 `SettlementExpiryJob` 每日 02:30 写好的 `settlement_transactions`(`transaction_type='unverified_expired'` + `beneficiary_type='project'`)归项目流水,金额取权威 `unverified_amount_cent`(不重算口径)、笔数 `COUNT(*)`,窗口 `[start(含), end(不含))` 经营日切(`BusinessDayResolver`)。端点 `GET /api/v1/analytics/abandoned-entitlement-revenue`(复用 `analytics.dashboard.view` 只读权限 + `requirePlatformScope`·已登 openapi-p0);**零迁移(纯读)**。项目维度过滤暂不做(归项目流水 `project_id` 恒 NULL,诚实标注全局+日期)。证伪测试 `AbandonedEntitlementRevenueJdbcIntegrationTests` 逐格断言 + 边界补测(start 边界含/other 桶命中/business_at=NULL 回退)2 绿;12 门禁全绿。**对抗审计(2026-07-21)结论:无 🔴,核心口径正确(重报/漏报/票种/分桶/窗口/金额/鉴权隔离全过)**。🟡 跟踪(非阻断):① 演出(show)桶当前无数据产生方=结构性恒 0 前瞻桶(非漏数);② **潜在隔离**:一旦批2+ 让 `SettlementExpiryJob` 对 unverified_expired 行写真实 `project_id`,须同步给本报表加 `currentProjectScopeQuietly()` 项目域收紧,否则项目级员工越读他项目数据(当前 project_id 恒 NULL 无泄漏);③ INNER JOIN 依赖软删铁律(注释已锁,清档致少报时改 LEFT JOIN) |
 
+| **S5 赠送权益逐项模型底座(通票分账重建,2026-07-28)** | ✅ 开发完成·PR 待并 | **零迁移**。`bar_item_ref` 语义定死 `bar_products.id` + 建模板三重校验(存在 / 属本提供方 / 需扣库则必有库存物料);新增 `InternalSettlementPriceResolver`(全平台唯一取价入口,预扣与兑付同源,价随 `ticket.gift_verified` 事件下发、冲正按原价对冲);`resolveSettlementPrice` 对提供方兑付类权益改 **fail-closed**(`ENTITLEMENT_PRICE_UNRESOLVED`),自营吧不再豁免;**K16 跨提供方核销守卫**(`ENTITLEMENT_PROVIDER_MISMATCH`·与角色无关·在线与离线同步旁路同守·设备未绑商户即 `VERIFY_DEVICE_MERCHANT_UNRESOLVED` 拒绝);**K17 每吧至少一杯发布校验**(`PASS_BAR_GIFT_COVERAGE_INSUFFICIENT`·仅对已配赠酒的票生效·酒吧集合动态算);票面赠酒清单端点 `GET /api/v1/ticketing/ticket-types/{id}/gift-coverage`;前端组合配置页补「赠送商品」下拉并透传 `bar_item_ref`(此前赠饮模板在后台建不出来)。**本刀不产生任何金额**:解析结果只写 `ticket_verifications.settlement_price_cent`,跨吧守卫只拒不改钱;全量 **2987 测试全绿**、既有金额断言零改动。⚠️ 上线前置:**核销设备必须在后台绑好所属商户**,否则赠饮 / 餐饮类权益一律拒核销(这是「说不清在哪家核的就不记账」的有意设计) |
 | 状态机加固(审计 AUD-012/013/017/018/019·资金正确性核心) | ✅ 代码落地·PR 待并 | **V323**(`settlement_transactions` 转不可变账务事件账本)+**V324**(`ticket_refunds` 终态)。①核销按 `verification_id` 写不可变**增量**结算行(增量=f(k)−f(k−1),`business_at` 落月→跨月各归其月,取代累计值覆盖首插行)②核销冲正追加**负向**结算 `ST-VR`(严格取原行反;原月未过账则该月净重算、已过账则落当月红冲不改历史)③退款仅 `success` 且按 `succeeded_at` 聚合(finance/analytics/dividend 四处),修 `FinanceJdbcIntegrationTests`「`requested` 计入退款」错误绿灯④到期归项目「可没收终态」白名单=`status='active'`+父实例非冻结(排除已成功退款/退款申请中)⑤消费者幂等 append-only(重放 DO NOTHING)+ `SettlementReconciliationJob.rebuildMissingSettlements` 按核销权威事实重建缺失结算(AUD-017 outbox 之替代;全量事务性 outbox+死信为后续上限)。资金恒等自检 `SettlementAmountsTests`(非DB) + 门禁 `SettlementStateMachineJdbcIntegrationTests`/`FinanceJdbcIntegrationTests`(DB,主会话串行跑) |
 
 > 🔒部署前核对(状态机加固·复核提示):①`ticket_refunds` 加 status CHECK 前先 `SELECT DISTINCT status FROM ticket_refunds` 确认无八值外脏值;②重建 `rebuildMissingSettlements` 为本 PR 全新、生产从未跑过(基线 d577fc4b 无此方法),库内不应有「同权益既有遗留累计行 verification_id IS NULL、又有 per-verification 行」的双计残留——部署前核对下句应返回 0 行(非 0 先排查、勿开 `settlement.reconciliation.scheduled` 重建):`SELECT s.entitlement_id FROM settlement_transactions s WHERE s.transaction_type='verification_settled' AND s.verification_id IS NOT NULL AND EXISTS(SELECT 1 FROM settlement_transactions leg WHERE leg.entitlement_id=s.entitlement_id AND leg.transaction_type='verification_settled' AND leg.verification_id IS NULL) GROUP BY s.entitlement_id;`。注:`settlement.reconciliation.scheduled.enabled` 生产=true(application-prod.yml:31),重建首夜即跑,故上述前置校验为部署闸。

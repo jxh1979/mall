@@ -22,11 +22,15 @@ import static com.complex.platform.common.Strings.trimToNull;
  *
  * <p><b>幂等</b>：bar_gift_redemptions 的 verification_id 唯一键保证一次核销至多一单；重复事件即跳过。
  *
- * <p><b>赠饮→吧台 SKU 映射来源结论</b>：来源为权益模板 entitlement_templates.bar_item_ref（R5 已落地#2 已接通）。
- * gift_drink 模板配置 bar_item_ref 后，事件携带该 itemRef，下游对该 item 走 redeem_consume 扣减；
- * 模板未配置(itemRef=null)时跳过扣减并在 redemption.note 标注（向后兼容）。运营配置入口（创建 DTO 透传）为后续工作。
+ * <p><b>赠饮→吧台商品映射（S5 定死）</b>：来源为权益模板 entitlement_templates.bar_item_ref，
+ * 语义 = <b>bar_products.id</b>（票务侧与本域同一把钥匙）。库存物料 inventory_item_id 从该商品二跳取，
+ * 且只在商品标了「需扣库存」时才用得上；建权益模板时已 fail-closed 校验商品存在、属本提供方、需扣库则必有物料。
  *
- * <p>成本归平台：赠饮单 amount=0，不计商户应收（finance 应收链路按金额 0 自然不产生应收）。
+ * <p><b>内部结算价</b>：由票务侧 {@code InternalSettlementPriceResolver} 统一解析并随事件下发，本域不再自查——
+ * 预扣与兑付必须同源，否则月底「预扣了多少 / 实付了多少」根本不可比。平台自营吧同样要有内部价（不再豁免），
+ * 只是没有商户对手方 → 不挂应付、以 note 记明成本归平台。
+ *
+ * <p>赠饮单 amount=0，不计商户收入（finance 应收链路按金额 0 自然不产生应收）；平台↔酒吧的钱走应付。
  */
 @Component
 public class BarGiftConsumer {
@@ -71,23 +75,28 @@ public class BarGiftConsumer {
         }
 
         // AUD-015 前置校验（在写任何单据前 fail-closed）：
-        //  ① SKU 映射(bar_item_ref)必须存在 → 否则无法扣库/结算；
-        //  ② 商户吧必须能定位内部结算价(>0) → 否则平台无从向酒吧挂应付（商户白送、平台零补偿=资金漏）。
-        //  平台自营吧(merchantId=null)无商户结算，跳过②。
+        //  ① 提供方商品(bar_item_ref)必须存在 → 否则无从出品/扣库/结算；
+        //  ② 必须有内部结算价 → 否则平台无从向酒吧挂应付（商户白送、平台零补偿=资金漏）。
+        // S5：itemRef 语义定死 = bar_products.id（与票务侧同一口径，不再按库存物料 id 反查——
+        //     两侧曾各查各的，票务侧取不到还静默回退面值，预扣与实付从第一天起就不可比）。
+        // S5：价由票务侧统一解析器算好随事件下发，本域不再自查一遍（不可能漂）。
+        // S5：平台自营吧(merchantId=null)不再豁免②——自营吧也要有内部价，否则成本口径出现黑洞；
+        //     只是没有商户对手方，故不挂应付、以 note 记明「成本归平台、无对手方」。
         String itemRef = trimToNull(event.itemRef());
         if (itemRef == null) {
             throw ApiException.badRequest("GIFT_ITEM_UNMAPPED",
                     "赠饮未配置吧台商品映射(bar_item_ref)，无法扣库结算");
         }
         String merchantId = trimToNull(event.merchantId());
-        Long merchantInternalPrice = null;
-        if (receivableLedgerService != null && merchantId != null) {
-            merchantInternalPrice = repository.findProductByInventoryItem(barId, itemRef)
-                    .map(BarProductRecord::internalSettlementPriceCent).orElse(null);
-            if (merchantInternalPrice == null || merchantInternalPrice <= 0) {
-                throw ApiException.badRequest("GIFT_SETTLEMENT_PRICE_MISSING",
-                        "商户吧台商品未配置内部结算价，赠饮无法结算");
-            }
+        Long settlementPriceCent = event.settlementPriceCent();
+        if (settlementPriceCent == null || settlementPriceCent < 0) {
+            throw ApiException.badRequest("GIFT_SETTLEMENT_PRICE_MISSING",
+                    "赠饮商品未配置内部结算价，无法结算");
+        }
+        BarProductRecord giftProduct = repository.findProductById(itemRef).orElse(null);
+        if (giftProduct == null || !barId.equals(giftProduct.barId())) {
+            throw ApiException.badRequest("GIFT_ITEM_UNMAPPED",
+                    "赠饮商品不存在或不属于该酒吧，无法履约");
         }
 
         Instant now = Instant.now();
@@ -130,28 +139,40 @@ public class BarGiftConsumer {
         ));
 
         // 3) 扣减：movement_type=redeem_consume（积分/兑换扣减白名单，复用 bar 既有原子扣减能力）。
-        //    AUD-015：itemRef 已在前置校验保证非空；库存不足（含并发抢到最后一件的失败方）→ 抛错回滚，绝不标记 delivered。
-        String inventoryMovementId = "movement_" + slug(seed + ":" + itemRef);
-        if (!repository.atomicDecreaseStock(itemRef, STOCK_LOCATION_DEFAULT, 1)) {
-            throw ApiException.conflict("GIFT_STOCK_INSUFFICIENT",
-                    "赠饮对应吧台库存不足，无法履约");
+        //    S5：按商品自己的「是否需扣库存」决定——不需扣库的赠品（如现调、外采直供）本就没有库存物料，
+        //    以前一律硬扣、物料为空就崩。需扣库的商品必有库存物料（建权益模板时已 fail-closed 校验）。
+        //    AUD-015：库存不足（含并发抢到最后一件的失败方）→ 抛错回滚，绝不标记 delivered。
+        String inventoryItemId = trimToNull(giftProduct.inventoryItemId());
+        boolean deductStock = giftProduct.stockDeductionRequired() && inventoryItemId != null;
+        String inventoryMovementId = null;
+        String note = "gift redeemed; stock deduction not required for this product";
+        if (deductStock) {
+            inventoryMovementId = "movement_" + slug(seed + ":" + inventoryItemId);
+            if (!repository.atomicDecreaseStock(inventoryItemId, STOCK_LOCATION_DEFAULT, 1)) {
+                throw ApiException.conflict("GIFT_STOCK_INSUFFICIENT",
+                        "赠饮对应吧台库存不足，无法履约");
+            }
+            repository.saveStockMovement(new StockMovementSnapshot(
+                    inventoryMovementId,
+                    "redeem_consume",
+                    inventoryItemId,
+                    STOCK_LOCATION_DEFAULT,
+                    null,
+                    1,
+                    "bar_gift_redemption",
+                    orderId,
+                    null,
+                    null,
+                    List.of(),
+                    "completed",
+                    now
+            ));
+            note = "gift redeemed; stock decreased via redeem_consume";
         }
-        repository.saveStockMovement(new StockMovementSnapshot(
-                inventoryMovementId,
-                "redeem_consume",
-                itemRef,
-                STOCK_LOCATION_DEFAULT,
-                null,
-                1,
-                "bar_gift_redemption",
-                orderId,
-                null,
-                null,
-                List.of(),
-                "completed",
-                now
-        ));
-        String note = "gift redeemed; stock decreased via redeem_consume";
+        if (merchantId == null) {
+            // S5：自营吧无商户对手方 → 不挂应付，但成本已按内部结算价固化在本行，明记原因不留黑洞。
+            note = note + "; platform-operated bar: cost borne by platform, no merchant payable";
+        }
 
         // 4) 出品 deliver 事件（回填 inventory_movement_id 关联库存流水）。
         repository.saveProductionTicketEvent(new BarProductionTicketEventRecord(
@@ -194,14 +215,14 @@ public class BarGiftConsumer {
         if (!inserted) {
             // 并发下另一次已先落单：本次回补已扣库存以避免重复扣减。
             if (inventoryMovementId != null) {
-                repository.atomicDecreaseStock(itemRef, STOCK_LOCATION_DEFAULT, -1);
+                repository.atomicDecreaseStock(inventoryItemId, STOCK_LOCATION_DEFAULT, -1);
             }
             return;
         }
-        // 通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b）：商户吧已在前置校验拿到内部价(>0) → 挂应付；
-        // 平台自营吧(merchantId=null)/未启用结算(receivableLedgerService=null) → merchantInternalPrice 为 null，不结算。
-        if (merchantInternalPrice != null) {
-            receivableLedgerService.createPayableForGiftSettlement(verificationId, merchantId, merchantInternalPrice);
+        // 通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b）：按票务侧固化的内部结算价向提供方酒吧挂应付。
+        // 自营吧(merchantId=null)/未启用结算(receivableLedgerService=null) → 无对手方，不挂应付（成本已记在 note）。
+        if (receivableLedgerService != null && merchantId != null) {
+            receivableLedgerService.createPayableForGiftSettlement(verificationId, merchantId, settlementPriceCent);
         }
     }
 
@@ -221,11 +242,15 @@ public class BarGiftConsumer {
         }
         Instant now = Instant.now();
         // 若此前已实际扣减库存，则回补（反向 movement，redeem_consume 反向）。
-        if (redemption.inventoryMovementId() != null && redemption.itemRef() != null) {
+        // S5：itemRef 是提供方商品 id，库存走它绑定的库存物料（与正向扣减同一把钥匙）。
+        String reverseInventoryItemId = redemption.itemRef() == null ? null
+                : repository.findProductById(redemption.itemRef())
+                        .map(BarProductRecord::inventoryItemId).orElse(null);
+        if (redemption.inventoryMovementId() != null && reverseInventoryItemId != null) {
             repository.saveStockMovement(new StockMovementSnapshot(
                     "movement_" + slug("gift_reverse:" + verificationId),
                     "redeem_consume",
-                    redemption.itemRef(),
+                    reverseInventoryItemId,
                     // P1-5 修复：赠饮冲正是「返库」(余额 +1)，流水方向须为入库(source=null→target=default)，与余额恢复同向；
                     // 此前误写出库形态(source=default,target=null)，致按流水重建库存重复扣减、账实偏差累积。
                     null,
@@ -240,7 +265,7 @@ public class BarGiftConsumer {
                     now
             ));
             // 反向回补余额：负数量增量恢复原扣减（atomicDecreaseStock 以负数实现回补）。
-            repository.atomicDecreaseStock(redemption.itemRef(), STOCK_LOCATION_DEFAULT, -1);
+            repository.atomicDecreaseStock(reverseInventoryItemId, STOCK_LOCATION_DEFAULT, -1);
         }
         repository.saveGiftRedemption(new BarGiftRedemptionRecord(
                 redemption.id(),
@@ -256,14 +281,13 @@ public class BarGiftConsumer {
                 redemption.createdAt(),
                 now
         ));
-        // 赠饮冲正 → 冲销平台↔酒吧结算应付（对冲应收，净额归零）；条件与正向一致（商户吧 + 可解析内部价>0）。
-        if (receivableLedgerService != null && redemption.merchantId() != null && redemption.itemRef() != null) {
-            Long internalPrice = repository.findProductByInventoryItem(redemption.barId(), redemption.itemRef())
-                    .map(BarProductRecord::internalSettlementPriceCent).orElse(null);
-            if (internalPrice != null && internalPrice > 0) {
-                receivableLedgerService.reverseGiftSettlementPayable(
-                        verificationId, redemption.merchantId(), internalPrice);
-            }
+        // 赠饮冲正 → 冲销平台↔酒吧结算应付（对冲应收，净额归零）。
+        // S5：按原核销当时固化的内部结算价逐分对冲（随事件带下来），不重查目录——目录改价不得动已发生的账
+        // （业务 HTML §内部结算价目录「已发生的不可改」）。价为空=原核销本就没挂应付，无可对冲。
+        Long reversalPriceCent = event.settlementPriceCent();
+        if (receivableLedgerService != null && redemption.merchantId() != null && reversalPriceCent != null) {
+            receivableLedgerService.reverseGiftSettlementPayable(
+                    verificationId, redemption.merchantId(), reversalPriceCent);
         }
     }
 

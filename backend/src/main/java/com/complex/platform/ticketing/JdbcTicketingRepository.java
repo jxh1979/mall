@@ -1003,18 +1003,65 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
-    public Optional<Long> findBarProductInternalPrice(String barProductId) {
-        // 结算重构批3-1(PRD §6.1)：实物权益按酒吧商品内部结算价(V152)结算。
-        // 直接读 bar_products 单列(不引 bar 域类型，避免 bar↔ticketing 包环)；无此商品/内部价为空 → 空 → 判定层回退 value_amount。
+    public Optional<BarProductRefRecord> findBarProductRef(String barProductId) {
+        // S5：bar_item_ref 语义定死 = bar_products.id。裸查 bar_products 少数几列(不引 bar 域类型，避免 bar↔ticketing 包环)。
         return jdbcTemplate.query("""
-                SELECT internal_settlement_price_cent
+                SELECT id, bar_id, internal_settlement_price_cent, inventory_item_id, stock_deduction_required, status
                   FROM bar_products
                  WHERE id = :id
                 """, Map.of("id", barProductId),
                 (resultSet, rowNumber) -> {
-                    long value = resultSet.getLong("internal_settlement_price_cent");
-                    return resultSet.wasNull() ? null : value;
-                }).stream().filter(java.util.Objects::nonNull).findFirst();
+                    long price = resultSet.getLong("internal_settlement_price_cent");
+                    // wasNull() 反映的是「最近一次读取」，必须紧挨着读完就取，否则会被后面几列的读取覆盖，
+                    // 把「没录内部价」误判成 0 元（0 是合法的商户让利价，语义完全不同）。
+                    Long internalPrice = resultSet.wasNull() ? null : price;
+                    return new BarProductRefRecord(
+                            resultSet.getString("id"),
+                            resultSet.getString("bar_id"),
+                            internalPrice,
+                            resultSet.getString("inventory_item_id"),
+                            resultSet.getBoolean("stock_deduction_required"),
+                            resultSet.getString("status"));
+                }).stream().findFirst();
+    }
+
+    @Override
+    public Optional<String> findTerminalDeviceMerchantId(String deviceId) {
+        // S5 K16：核销上下文所属商户 = 核销设备绑定的商户(V007 terminal_devices.merchant_id)。未绑=空→调用方拒绝。
+        return jdbcTemplate.queryForList(
+                "SELECT merchant_id FROM terminal_devices WHERE id = :id AND merchant_id IS NOT NULL",
+                Map.of("id", deviceId == null ? "" : deviceId), String.class).stream().findFirst();
+    }
+
+    @Override
+    public List<TicketTypeProviderEntitlementRow> listTicketTypeProviderEntitlements(String ticketTypeId) {
+        // S5：票面按提供方分组的唯一数据源（K17 发布校验 + 票面清单端点共用）。
+        // 已存档/待删的权益模板不算票面内容（与 bindTicketTypeEntitlement 的拒绑口径一致）。
+        return jdbcTemplate.query("""
+                SELECT tte.entitlement_template_id AS template_id,
+                       et.name                     AS template_name,
+                       et.entitlement_type         AS entitlement_type,
+                       et.merchant_id              AS provider_merchant_id,
+                       m.merchant_name             AS provider_merchant_name,
+                       m.merchant_type             AS provider_merchant_type,
+                       tte.quantity                AS quantity,
+                       tte.num_people              AS num_people
+                  FROM ticket_type_entitlements tte
+                  JOIN entitlement_templates et ON et.id = tte.entitlement_template_id
+                  LEFT JOIN merchants m ON m.id = et.merchant_id
+                 WHERE tte.ticket_type_id = :ticket_type_id
+                   AND et.archived_at IS NULL
+                 ORDER BY m.merchant_name NULLS LAST, et.name, tte.entitlement_template_id
+                """, Map.of("ticket_type_id", ticketTypeId),
+                (resultSet, rowNumber) -> new TicketTypeProviderEntitlementRow(
+                        resultSet.getString("template_id"),
+                        resultSet.getString("template_name"),
+                        resultSet.getString("entitlement_type"),
+                        resultSet.getString("provider_merchant_id"),
+                        resultSet.getString("provider_merchant_name"),
+                        resultSet.getString("provider_merchant_type"),
+                        resultSet.getInt("quantity"),
+                        resultSet.getInt("num_people")));
     }
 
     // ===== 结算重构批3-2(PRD §6.2) 酒吧入场资格「场次规则」：营业时间表/场次/入场记录裸查询（不引 bar/venue 域类型）=====

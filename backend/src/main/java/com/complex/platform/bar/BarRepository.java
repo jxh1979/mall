@@ -90,15 +90,6 @@ public interface BarRepository {
 
     Optional<BarProductRecord> findProductById(String id);
 
-    /**
-     * F-TXN-03 piece③b：按 (bar_id, inventory_item_id) 定位吧台商品（通票赠饮经 itemRef[库存物料] 桥接到 bar_product
-     * 取 internal_settlement_price_cent 作平台↔酒吧结算价）。多命中取 active 优先；无则空。
-     * default 返回 empty 兼容既有测试双子。
-     */
-    default Optional<BarProductRecord> findProductByInventoryItem(String barId, String inventoryItemId) {
-        return Optional.empty();
-    }
-
     BarOrderRecord saveOrder(BarOrderRecord order);
 
     List<BarOrderRecord> listOrders(Optional<String> merchantScope);

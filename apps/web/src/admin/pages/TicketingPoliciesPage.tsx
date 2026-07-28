@@ -76,7 +76,19 @@ const BAR_ENTITLEMENT_KINDS = [
 ];
 
 // 组合表单里的酒吧权益行。
-type BarLine = { merchantId: string; kind: string; totalTimes: string; valueYuan: string };
+// barItemRef：酒水兑换必填——指向该酒吧的商品，成本按这件商品的内部结算价与这家酒吧结算。
+type BarLine = { merchantId: string; kind: string; totalTimes: string; valueYuan: string; barItemRef: string };
+// 提供方商品（下拉数据源：该酒吧自己的商品）。
+type BarProductRow = { id: string; barId: string; productName: string };
+// 票面赠酒清单行（按酒吧分组，售票时写明票面）。
+type GiftCoverageRow = {
+  barId: string;
+  barName: string;
+  giftName: string;
+  quantity: number;
+  cups: number;
+  barTotalCups: number;
+};
 // 餐饮权益行（用户2026-07-06 拍板）：选餐厅商户 + 价格(可0) + 折扣 + 内部结算价。
 //   结算按【内部结算价】全额归餐厅商户(exclusive_merchant_id + agreement_price_cent，走 §6.4 不分摊直付)；
 //   价格(面值,可0)与折扣仅为售卖/展示口径，不参与结算(核销结算价=内部结算价，不再把折扣当面值乱记)。
@@ -162,6 +174,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   // 组合式配置策略（新）：选一张通票 → 多选酒吧（每个配权益：兑换/次数/面值）+ 多选游乐设施 → 一次性组合创建。
   const [comboTicketId, setComboTicketId] = React.useState("");
   const [barLines, setBarLines] = React.useState<BarLine[]>([]);
+  // 各酒吧的商品（按商户 id 缓存，选中酒吧时按需拉一次）。
+  const [barProducts, setBarProducts] = React.useState<Record<string, BarProductRow[]>>({});
+  // 票面赠酒清单（各酒吧分别赠几杯）。
+  const [giftCoverage, setGiftCoverage] = React.useState<GiftCoverageRow[]>([]);
   const [diningLines, setDiningLines] = React.useState<DiningLine[]>([]);
   const [selectedProjects, setSelectedProjects] = React.useState<Record<string, boolean>>({});
   const [projectTimes, setProjectTimes] = React.useState("1");
@@ -438,8 +454,33 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   function merchantName(id: string): string {
     return merchants.find((m) => m.id === id)?.merchantName ?? id;
   }
+  // 选中酒吧后按需拉该吧商品（一家拉一次；读失败降级为空，不阻断本页）。
+  const loadBarProducts = React.useCallback(async (merchantId: string) => {
+    if (!merchantId || barProducts[merchantId]) return;
+    const rows = await api
+      .get<unknown>(`/api/v1/bar/catalog/products?bar_id=${encodeURIComponent(merchantId)}`)
+      .catch(() => []);
+    setBarProducts((prev) => ({ ...prev, [merchantId]: toRows<BarProductRow>(rows) }));
+  }, [api, barProducts]);
+
+  // 票面赠酒清单：选中通票后拉一次，配置完再刷新。
+  const loadGiftCoverage = React.useCallback(async (ticketTypeId: string) => {
+    if (!ticketTypeId) { setGiftCoverage([]); return; }
+    const rows = await api
+      .get<unknown>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(ticketTypeId)}/gift-coverage`)
+      .catch(() => ({ items: [] }));
+    setGiftCoverage(toRows<GiftCoverageRow>(rows));
+  }, [api]);
+
+  function updateBarLine(index: number, patch: Partial<BarLine>) {
+    setBarLines(barLines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+    if (patch.merchantId) void loadBarProducts(patch.merchantId);
+  }
+
   function addBarLine() {
-    setBarLines([...barLines, { merchantId: merchants[0]?.id ?? "", kind: "gift_drink", totalTimes: "1", valueYuan: "" }]);
+    const merchantId = merchants[0]?.id ?? "";
+    setBarLines([...barLines, { merchantId, kind: "gift_drink", totalTimes: "1", valueYuan: "", barItemRef: "" }]);
+    if (merchantId) void loadBarProducts(merchantId);
   }
   function addDiningLine() {
     setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", internalYuan: "" }]);
@@ -455,6 +496,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     // 餐饮结算(用户2026-07-06)：内部结算价 + 专属餐厅商户(可选，仅餐饮传)。核销按内部结算价全额归餐厅。
     agreementPriceCent?: number | null;
     exclusiveMerchantId?: string | null;
+    // 酒水兑换：提供方商品（成本按该商品的内部结算价与这家酒吧结算）。
+    barItemRef?: string | null;
   }, ticketTypeId: string) {
     const tpl = await api.post<{ id: string }>("/api/v1/ticketing/entitlement-templates", {
       idempotency_key: crypto.randomUUID(),
@@ -466,6 +509,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       merchant_id: payload.merchantId,
       agreement_price_cent: payload.agreementPriceCent ?? null,
       exclusive_merchant_id: payload.exclusiveMerchantId ?? null,
+      bar_item_ref: payload.barItemRef ?? null,
     });
     await api.post(`/api/v1/ticketing/ticket-types/${ticketTypeId}/entitlements`, {
       idempotency_key: crypto.randomUUID(),
@@ -491,6 +535,12 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       setComboError("已勾选游乐设施，请选择游乐权益的归属商户。");
       return;
     }
+    // 酒水兑换必须指明是哪件商品：成本按该商品的内部结算价与这家酒吧结算，不指明就没法结账。
+    const missingProduct = barLines.find((line) => line.merchantId && line.kind === "gift_drink" && !line.barItemRef);
+    if (missingProduct) {
+      setComboError(`${merchantName(missingProduct.merchantId)} 的酒水兑换请选择赠送的商品。`);
+      return;
+    }
     setComboError("");
     setComboBusy(true);
     try {
@@ -504,6 +554,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           totalTimes: Number(line.totalTimes) || 1,
           valueCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : null,
           merchantId: line.merchantId,
+          barItemRef: line.kind === "gift_drink" ? line.barItemRef : null,
         }, comboTicketId);
       }
       // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。归属商户用统一选择的 amusementMerchantId。
@@ -550,6 +601,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       setBarLines([]);
       setSelectedProjects({});
       setDiningLines([]);
+      void loadGiftCoverage(comboTicketId);
       reload();
     } catch (composeError) {
       setComboError(composeError instanceof Error ? composeError.message : "组合配置失败");
@@ -758,7 +810,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施、加餐饮项（餐厅/价格/折扣/内部结算价），点「组合配置到通票」一次性写入。
       </div>
       <div className="admin-inline-form" data-testid="pass-combo-form">
-        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => setComboTicketId(event.target.value)}>
+        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => { setComboTicketId(event.target.value); void loadGiftCoverage(event.target.value); }}>
           <option value="">选择要配置的通票</option>
           {tickets.map((t) => (
             <option key={t.id} value={t.id}>{t.ticketName}</option>
@@ -770,24 +822,34 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="combo-bar-table">
           <thead>
-            <tr><th>酒吧/商户</th><th>权益</th><th>次数</th><th>面值（元）</th><th>操作</th></tr>
+            <tr><th>酒吧/商户</th><th>权益</th><th>赠送商品</th><th>次数</th><th>面值（元）</th><th>操作</th></tr>
           </thead>
           <tbody>
             {barLines.map((line, index) => (
               <tr key={index} data-testid={`combo-bar-line-${index}`}>
                 <td>
-                  <select aria-label="酒吧" value={line.merchantId} onChange={(event) => setBarLines(barLines.map((l, i) => i === index ? { ...l, merchantId: event.target.value } : l))}>
+                  <select aria-label="酒吧" value={line.merchantId} onChange={(event) => updateBarLine(index, { merchantId: event.target.value, barItemRef: "" })}>
                     <option value="">选择商户</option>
                     {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
                   </select>
                 </td>
                 <td>
-                  <select aria-label="权益" value={line.kind} onChange={(event) => setBarLines(barLines.map((l, i) => i === index ? { ...l, kind: event.target.value } : l))}>
+                  <select aria-label="权益" value={line.kind} onChange={(event) => updateBarLine(index, { kind: event.target.value })}>
                     {BAR_ENTITLEMENT_KINDS.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
                   </select>
                 </td>
-                <td><input aria-label="次数" type="number" min={1} value={line.totalTimes} onChange={(event) => setBarLines(barLines.map((l, i) => i === index ? { ...l, totalTimes: event.target.value } : l))} /></td>
-                <td><input aria-label="面值（元）" type="number" min={0} step="0.01" value={line.valueYuan} placeholder="可空" onChange={(event) => setBarLines(barLines.map((l, i) => i === index ? { ...l, valueYuan: event.target.value } : l))} /></td>
+                <td>
+                  {line.kind === "gift_drink" ? (
+                    <select aria-label="赠送商品" data-testid={`combo-bar-product-${index}`} value={line.barItemRef} onChange={(event) => updateBarLine(index, { barItemRef: event.target.value })}>
+                      <option value="">选择该酒吧的商品</option>
+                      {(barProducts[line.merchantId] ?? []).map((product) => (
+                        <option key={product.id} value={product.id}>{product.productName}</option>
+                      ))}
+                    </select>
+                  ) : <span>—</span>}
+                </td>
+                <td><input aria-label="次数" type="number" min={1} value={line.totalTimes} onChange={(event) => updateBarLine(index, { totalTimes: event.target.value })} /></td>
+                <td><input aria-label="面值（元）" type="number" min={0} step="0.01" value={line.valueYuan} placeholder="可空" onChange={(event) => updateBarLine(index, { valueYuan: event.target.value })} /></td>
                 <td><button type="button" className="admin-secondary-button" onClick={() => setBarLines(barLines.filter((_, i) => i !== index))}>移除</button></td>
               </tr>
             ))}
@@ -795,6 +857,32 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </table>
       </div>
       <button type="button" className="admin-secondary-button" data-testid="combo-add-bar" onClick={addBarLine} disabled={merchants.length === 0}>+ 添加酒吧权益</button>
+      <div className="admin-preview">
+        酒水兑换要指明赠送的是哪件商品：客人只能到这家酒吧核销，平台按这件商品的内部结算价与这家酒吧结算。
+        这张票让客人能进的每个酒吧都要至少赠一杯，各吧几杯写在票面上（下方清单即票面写明的内容）。
+      </div>
+
+      <h4>票面赠酒清单（各酒吧分别赠几杯）</h4>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="combo-gift-coverage-table">
+          <thead>
+            <tr><th>酒吧</th><th>赠品</th><th>份数</th><th>杯数</th><th>该吧合计</th></tr>
+          </thead>
+          <tbody>
+            {giftCoverage.length === 0 ? (
+              <tr><td colSpan={5}>{comboTicketId ? "该票种还没有赠酒权益" : "请先选择要配置的通票"}</td></tr>
+            ) : giftCoverage.map((row) => (
+              <tr key={`${row.barId}-${row.giftName}`}>
+                <td>{row.barName}</td>
+                <td>{row.giftName}</td>
+                <td>{row.quantity}</td>
+                <td>{row.cups}</td>
+                <td>{row.barTotalCups}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <h4>游乐设施（多选）</h4>
       <div className="admin-inline-form" data-testid="combo-amusement-list">

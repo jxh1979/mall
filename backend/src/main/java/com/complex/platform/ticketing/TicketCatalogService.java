@@ -128,13 +128,31 @@ public class TicketCatalogService {
         EntitlementTemplateRequest actual = requireRequest(request);
         Instant now = Instant.now();
         String entitlementType = requireText(actual.entitlementType(), "entitlement_type");
-        // AUD-015：赠饮(gift_drink)模板启用前必须绑定可扣库存的吧台商品 SKU(bar_item_ref)。缺映射则核销时
+        String templateMerchantId = requireMerchant(actual.merchantId());
+        String barItemRef = trimToNull(actual.barItemRef());
+        // AUD-015：赠饮(gift_drink)模板启用前必须绑定提供方商品(bar_item_ref)。缺映射则核销时
         // 无法生成 0 元出品单/扣吧台库存/进结算（业务图 :727,1044-1050；bar PRD §15.2 第 2 条）。
         if ("gift_drink".equals(entitlementType)
                 && "active".equals(trimToDefault(actual.status(), "active"))
-                && trimToNull(actual.barItemRef()) == null) {
+                && barItemRef == null) {
             throw ApiException.badRequest("GIFT_TEMPLATE_ITEM_UNMAPPED",
-                    "赠饮模板启用前必须配置可扣库存的吧台商品映射(bar_item_ref)");
+                    "赠饮模板启用前必须配置提供方的商品");
+        }
+        // S5：bar_item_ref 语义定死 = bar_products.id，且配置当场就把三件事查实，别留到客人站在吧台前才炸：
+        //   ① 这个商品真的存在；② 它确实是这家提供方的商品（A 吧的酒不能算作 B 吧请的）；
+        //   ③ 若这个商品要扣库存，它必须已绑好库存物料，否则核销时扣不动库。
+        if (barItemRef != null) {
+            BarProductRefRecord product = repository.findBarProductRef(barItemRef)
+                    .orElseThrow(() -> ApiException.badRequest("GIFT_TEMPLATE_ITEM_NOT_FOUND",
+                            "所选的提供方商品不存在"));
+            if (!templateMerchantId.equals(product.barId())) {
+                throw ApiException.badRequest("GIFT_TEMPLATE_ITEM_MERCHANT_MISMATCH",
+                        "所选商品不属于该权益的提供方商户");
+            }
+            if (product.stockDeductionRequired() && trimToNull(product.inventoryItemId()) == null) {
+                throw ApiException.badRequest("GIFT_TEMPLATE_ITEM_STOCK_UNMAPPED",
+                        "该商品需要扣库存但还没绑定库存物料，不能用作赠送权益");
+            }
         }
         return repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_" + slug(actual.idempotencyKey()),
@@ -146,12 +164,12 @@ public class TicketCatalogService {
                 // 审计断层①(2026-07-05):模板必须绑商户。不绑则核销结算款因月度成账 SQL
                 // (JdbcSettlementBillRepository 的 merchant_id IS NOT NULL)永远进不了账单→孤儿。
                 // 从源头强制非空;联合通票各模板可填各自归属(venue/point 仍可选)。
-                requireMerchant(actual.merchantId()),
+                // S5：该商户即本权益的「提供方」——客人须到这家核销、成本按这家的内部结算价计。
+                templateMerchantId,
                 trimToNull(actual.venueId()),
                 trimToNull(actual.pointId()),
-                // #3 配置入口：赠饮→吧台 SKU 映射（bar_item_ref）由请求透传（可选）。
-                // 为空时赠饮核销跳过库存扣减并标注。
-                trimToNull(actual.barItemRef()),
+                // S5：提供方商品（bar_item_ref = bar_products.id），上方已校验存在 + 归属 + 扣库前置。
+                barItemRef,
                 now,
                 now,
                 // 结算重构批3-1(PRD §6.1)：新建模板结算类别与 V225 回填口径一致——gift_drink=实物(走内部结算价)，
@@ -421,6 +439,7 @@ public class TicketCatalogService {
                     "ticket type must have at least one entitlement binding before publish");
         }
         requireComponentPricesForMultiBusinessPass(current.id());
+        requireBarGiftCoverage(current.id());
         Instant now = Instant.now();
         return repository.saveTicketType(new TicketTypeRecord(
                 current.id(),
@@ -445,6 +464,89 @@ public class TicketCatalogService {
                 // AUD-076：发布时保留既有酒吧归属（不可变）。
                 current.barId()
         ));
+    }
+
+    /** S5 K17：入场类权益的类型（这些权益让客人能进这家吧的门）。 */
+    private static final java.util.Set<String> ENTRY_ENTITLEMENT_TYPES = java.util.Set.of("entry", "admission");
+    /** 酒吧业态（V348 商户业态五值封口）。 */
+    private static final String MERCHANT_TYPE_BAR = "bar";
+    /** 赠酒类权益。 */
+    private static final String GIFT_DRINK_ENTITLEMENT_TYPE = "gift_drink";
+
+    /**
+     * S5 K17「每个酒吧至少赠一杯」发布校验（业务 HTML §通票赠酒按酒吧分配：
+     * 「一张通票覆盖的每个酒吧至少赠一杯，各酒吧分别赠几杯在售票时写明票面」）。
+     *
+     * <p><b>为什么卡在发布这一步</b>：票一旦开卖，客人拿着它进 B 吧却发现没有赠酒，B 吧的店长要么自掏腰包
+     * 请这杯、要么让客人白跑一趟——两种都得吵一架，而且事后没法补（票面已经印出去了）。所以在票还没卖
+     * 之前就把漏配的吧点名报出来，让运营当场补上。
+     *
+     * <p><b>什么票才卡</b>：只卡「已经带了赠酒的票」。一张不含任何赠酒的普通门票本来就不该被要求请客，
+     * 卡它只会让运营连普通票都发不出去。但只要这张票给某家吧配了赠酒，它覆盖的每家吧就都得有——
+     * 有 A 没 B 恰恰是最常见也最伤人的漏配。
+     *
+     * <p>覆盖的酒吧集合按该票种<b>实际绑定的入场类权益</b>动态算，不按固定家数（可能七八家，也可能二三十家）。
+     */
+    private void requireBarGiftCoverage(String ticketTypeId) {
+        java.util.List<TicketTypeProviderEntitlementRow> rows =
+                repository.listTicketTypeProviderEntitlements(ticketTypeId);
+        java.util.Map<String, Integer> giftUnitsByBar = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> barNames = new java.util.LinkedHashMap<>();
+        java.util.Set<String> barsWithEntry = new java.util.LinkedHashSet<>();
+        for (TicketTypeProviderEntitlementRow row : rows) {
+            if (row.providerMerchantId() == null || !MERCHANT_TYPE_BAR.equals(row.providerMerchantType())) {
+                continue;
+            }
+            barNames.putIfAbsent(row.providerMerchantId(),
+                    row.providerMerchantName() == null ? row.providerMerchantId() : row.providerMerchantName());
+            if (ENTRY_ENTITLEMENT_TYPES.contains(row.entitlementType())) {
+                barsWithEntry.add(row.providerMerchantId());
+            }
+            if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(row.entitlementType())) {
+                giftUnitsByBar.merge(row.providerMerchantId(), row.units(), Integer::sum);
+            }
+        }
+        if (giftUnitsByBar.values().stream().noneMatch(units -> units >= 1)) {
+            return; // 这张票压根不含赠酒（普通门票）→ 本条不适用。
+        }
+        java.util.List<String> missing = barsWithEntry.stream()
+                .filter(barId -> giftUnitsByBar.getOrDefault(barId, 0) < 1)
+                .map(barNames::get)
+                .sorted()
+                .toList();
+        if (!missing.isEmpty()) {
+            throw ApiException.conflict("PASS_BAR_GIFT_COVERAGE_INSUFFICIENT",
+                    "这张票覆盖的每个酒吧都要至少赠一杯，还差：" + String.join("、", missing));
+        }
+    }
+
+    /**
+     * S5 票面按酒吧分组的赠酒清单（只读投影）：售票时要写明「各酒吧分别赠几杯」。
+     * 与 K17 发布校验取同一份数据，票面写的和发布时校的必定是同一件事。
+     */
+    java.util.List<TicketTypeGiftCoverageRow> listGiftCoverage(String ticketTypeId) {
+        requireTicketTypeRecord(ticketTypeId);
+        java.util.List<TicketTypeProviderEntitlementRow> rows =
+                repository.listTicketTypeProviderEntitlements(ticketTypeId);
+        java.util.Map<String, Integer> totalByBar = new java.util.LinkedHashMap<>();
+        for (TicketTypeProviderEntitlementRow row : rows) {
+            if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(row.entitlementType()) && row.providerMerchantId() != null) {
+                totalByBar.merge(row.providerMerchantId(), row.units(), Integer::sum);
+            }
+        }
+        return rows.stream()
+                .filter(row -> GIFT_DRINK_ENTITLEMENT_TYPE.equals(row.entitlementType()))
+                .filter(row -> row.providerMerchantId() != null)
+                .map(row -> new TicketTypeGiftCoverageRow(
+                        row.providerMerchantId(),
+                        row.providerMerchantName() == null ? row.providerMerchantId() : row.providerMerchantName(),
+                        row.entitlementTemplateId(),
+                        row.templateName(),
+                        row.quantity(),
+                        row.numPeople(),
+                        row.units(),
+                        totalByBar.getOrDefault(row.providerMerchantId(), 0)))
+                .toList();
     }
 
     /**
