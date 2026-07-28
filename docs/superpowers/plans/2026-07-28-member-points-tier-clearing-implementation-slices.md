@@ -76,3 +76,7 @@
 
 ## 6. 非目标
 改 HTML、统一收银牌照、城市专属积分、整单抵现、无配置校验的假单价进生产。
+
+## 附录：P1 运营参数表
+
+- `docs/member-points-p1-ops-parameter-tables-v0.1.md`

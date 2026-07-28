@@ -522,3 +522,4 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 
 - 实现切片：`docs/superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`
+- P1 运营参数表（待裁）：`docs/member-points-p1-ops-parameter-tables-v0.1.md`
