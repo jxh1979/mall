@@ -25,4 +25,14 @@ public record LeasingLeadRecord(
         Instant createdAt,
         Instant updatedAt
 ) {
+
+    /**
+     * P0-A/GAP-07 展示脱敏：无 {@code pii.contact_phone.view} 权限的读端返回掩码手机号。
+     * 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。
+     */
+    public LeasingLeadRecord withMaskedPhone() {
+        return new LeasingLeadRecord(id, contactName, com.complex.platform.common.PhoneMask.mask(contactPhone),
+                source, intendedBusinessType, intendedSpaceId, intendedAreaSqm, brandId, ownerUserId, status,
+                lostOrHoldReason, lastFollowUpAt, projectId, createdAt, updatedAt);
+    }
 }

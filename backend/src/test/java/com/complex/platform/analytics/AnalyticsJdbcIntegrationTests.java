@@ -480,7 +480,9 @@ class AnalyticsJdbcIntegrationTests {
         jdbcTemplate.update("""
                 INSERT INTO merchants (id, business_entity_id, merchant_name, merchant_type, contact_name,
                         contact_phone, status, created_at, updated_at)
-                VALUES ('mch_m4', 'org_m4', 'M4汇总商户', 'other', 'M4', 'enc:m4', 'active', now(), now())
+                -- V339（P0-A/GAP-07）：contact_phone 落库必须是 enc:v1: 信封密文（DB CHECK 强制）；
+                -- 本用例只做汇总统计不读手机号，置 NULL 即可。
+                VALUES ('mch_m4', 'org_m4', 'M4汇总商户', 'other', 'M4', NULL, 'active', now(), now())
                 ON CONFLICT (id) DO NOTHING
                 """, java.util.Map.of());
         repository.upsertMetricSnapshot(new AnalyticsRecords.MetricSnapshotKey(

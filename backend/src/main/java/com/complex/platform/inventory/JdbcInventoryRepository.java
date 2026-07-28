@@ -1178,7 +1178,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("supplier_name", supplier.supplierName())
                 .addValue("supplier_type", supplier.supplierType())
                 .addValue("contact_name", supplier.contactName())
-                .addValue("contact_phone", supplier.contactPhone())
+                // P0-A/GAP-07：供应商联系人手机号 PII 落库加密（V339），范式同存酒客人手机号（同仓库 1328 行）。
+                .addValue("contact_phone", piiCipher.encrypt(supplier.contactPhone()))
                 .addValue("status", supplier.status())
                 .addValue("created_at", offset(supplier.createdAt()))
                 .addValue("updated_at", offset(supplier.updatedAt()))

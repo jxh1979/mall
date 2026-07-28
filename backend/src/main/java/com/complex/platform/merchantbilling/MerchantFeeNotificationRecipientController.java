@@ -1,6 +1,7 @@
 package com.complex.platform.merchantbilling;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -44,7 +45,7 @@ public class MerchantFeeNotificationRecipientController {
             @RequestParam(value = "merchant_id", required = false) String merchantId
     ) {
         Optional<String> selfScope = selfServiceScopeOrPlatform();
-        return ApiResponse.ok(service.list(selfScope.orElse(merchantId)));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.list(selfScope.orElse(merchantId))));
     }
 
     @GetMapping("/{id}")
@@ -52,7 +53,7 @@ public class MerchantFeeNotificationRecipientController {
         Optional<String> selfScope = selfServiceScopeOrPlatform();
         MerchantFeeNotificationRecipientRecord record = service.get(id);
         requireOwnMerchant(selfScope, record);
-        return ApiResponse.ok(record);
+        return ApiResponse.ok(maskPhoneForUnauthorized(record));
     }
 
     @PostMapping
@@ -68,14 +69,14 @@ public class MerchantFeeNotificationRecipientController {
                         request == null ? null : request.recipientPhone(),
                         authorizationService.currentActor().id()))
                 .orElse(request);
-        return ApiResponse.ok(service.upsert(effective));
+        return ApiResponse.ok(maskPhoneForUnauthorized(service.upsert(effective)));
     }
 
     @PostMapping("/{id}/deactivate")
     public ApiResponse<MerchantFeeNotificationRecipientRecord> deactivate(@PathVariable String id) {
         Optional<String> selfScope = selfServiceScopeOrPlatform();
         requireOwnMerchant(selfScope, service.get(id));
-        return ApiResponse.ok(service.deactivate(id));
+        return ApiResponse.ok(maskPhoneForUnauthorized(service.deactivate(id)));
     }
 
     /** 平台口径返回 empty(任意商户);商户自助口径返回本商户 scope(员工无商户归属 fail-closed)。 */
@@ -89,6 +90,26 @@ public class MerchantFeeNotificationRecipientController {
                     .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED",
                             "a merchant scope is required for self-service recipient management")));
         }
+    }
+
+    // ── P0-A/GAP-07 接收人手机号展示脱敏（V339）。无 pii.contact_phone.view 的读端看掩码；
+    // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。短信触达链路走 service/resolver，仍拿明文。 ──
+    private MerchantFeeNotificationRecipientRecord maskPhoneForUnauthorized(
+            MerchantFeeNotificationRecipientRecord record) {
+        if (record == null || authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return record;
+        }
+        return record.withMaskedPhone();
+    }
+
+    private PageResponse<MerchantFeeNotificationRecipientRecord> maskPhonesForUnauthorized(
+            PageResponse<MerchantFeeNotificationRecipientRecord> page) {
+        if (authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return page;
+        }
+        return new PageResponse<>(
+                page.items().stream().map(MerchantFeeNotificationRecipientRecord::withMaskedPhone).toList(),
+                page.page(), page.pageSize(), page.total());
     }
 
     private static void requireOwnMerchant(Optional<String> selfScope, MerchantFeeNotificationRecipientRecord record) {

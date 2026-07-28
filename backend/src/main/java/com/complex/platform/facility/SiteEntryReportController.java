@@ -4,6 +4,7 @@ import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.facility.dto.SiteEntryCompletionUploadRequest;
@@ -38,20 +39,20 @@ public class SiteEntryReportController {
     @GetMapping
     public ApiResponse<PageResponse<SiteEntryReportRecord>> list() {
         requireReadPermission();
-        return ApiResponse.ok(service.list());
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.list()));
     }
 
     @GetMapping("/{report_id}")
     public ApiResponse<SiteEntryReportRecord> get(@PathVariable("report_id") String reportId) {
         requireReadPermission();
-        return ApiResponse.ok(service.findById(reportId));
+        return ApiResponse.ok(maskPhoneForUnauthorized(service.findById(reportId)));
     }
 
     @PostMapping
     public ApiResponse<SiteEntryReportRecord> create(@RequestBody @jakarta.validation.Valid SiteEntryReportRequest request) {
         authorizationService.requirePermission("facility.site_entry.create_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.create(request));
+        return ApiResponse.ok(maskPhoneForUnauthorized(service.create(request)));
     }
 
     @PostMapping("/{report_id}/submit")
@@ -59,7 +60,7 @@ public class SiteEntryReportController {
             @PathVariable("report_id") String reportId, @RequestBody @jakarta.validation.Valid SiteEntryReportSubmitRequest request) {
         authorizationService.requirePermission("facility.site_entry.submit_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.submit(reportId, request));
+        return ApiResponse.ok(maskPhoneForUnauthorized(service.submit(reportId, request)));
     }
 
     @PostMapping("/{report_id}/completion")
@@ -67,7 +68,7 @@ public class SiteEntryReportController {
             @PathVariable("report_id") String reportId, @RequestBody @jakarta.validation.Valid SiteEntryCompletionUploadRequest request) {
         authorizationService.requirePermission(UPLOAD_COMPLETION_ASSIGNED);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.uploadCompletion(reportId, request));
+        return ApiResponse.ok(maskPhoneForUnauthorized(service.uploadCompletion(reportId, request)));
     }
 
     @PostMapping("/{report_id}/review")
@@ -75,7 +76,7 @@ public class SiteEntryReportController {
             @PathVariable("report_id") String reportId, @RequestBody @jakarta.validation.Valid SiteEntryReportReviewRequest request) {
         authorizationService.requirePermission(REVIEW);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.review(reportId, request));
+        return ApiResponse.ok(maskPhoneForUnauthorized(service.review(reportId, request)));
     }
 
     @PostMapping("/{report_id}/accept")
@@ -83,7 +84,24 @@ public class SiteEntryReportController {
             @PathVariable("report_id") String reportId, @RequestBody @jakarta.validation.Valid SiteEntryReportAcceptanceRequest request) {
         authorizationService.requirePermission(ACCEPT);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.accept(reportId, request));
+        return ApiResponse.ok(maskPhoneForUnauthorized(service.accept(reportId, request)));
+    }
+
+    // ── P0-A/GAP-07 进场报备联系人手机号展示脱敏（V339）。无 pii.contact_phone.view 的读端看掩码；
+    // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。 ──
+    private SiteEntryReportRecord maskPhoneForUnauthorized(SiteEntryReportRecord record) {
+        if (record == null || authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return record;
+        }
+        return record.withMaskedPhone();
+    }
+
+    private PageResponse<SiteEntryReportRecord> maskPhonesForUnauthorized(PageResponse<SiteEntryReportRecord> page) {
+        if (authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return page;
+        }
+        return new PageResponse<>(page.items().stream().map(SiteEntryReportRecord::withMaskedPhone).toList(),
+                page.page(), page.pageSize(), page.total());
     }
 
     private void requireReadPermission() {

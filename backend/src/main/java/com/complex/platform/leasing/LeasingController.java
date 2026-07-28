@@ -3,6 +3,7 @@ package com.complex.platform.leasing;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.contract.ContractRecord;
@@ -42,7 +43,7 @@ public class LeasingController {
             @RequestParam(name = "page", defaultValue = "1") int page,
             @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.lead.manage");
-        return ApiResponse.ok(service.listLeads(page, size));
+        return ApiResponse.ok(maskLeadPhonesForUnauthorized(service.listLeads(page, size)));
     }
 
     @GetMapping("/leads/follow-up-due")
@@ -50,14 +51,14 @@ public class LeasingController {
             @RequestParam(name = "page", defaultValue = "1") int page,
             @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.lead.manage");
-        return ApiResponse.ok(service.listLeadsNeedingFollowUp(page, size));
+        return ApiResponse.ok(maskLeadPhonesForUnauthorized(service.listLeadsNeedingFollowUp(page, size)));
     }
 
     @PostMapping("/leads")
     public ApiResponse<LeasingLeadRecord> createLead(@RequestBody @jakarta.validation.Valid LeasingLeadRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createLead(request));
+        return ApiResponse.ok(maskLeadPhoneForUnauthorized(service.createLead(request)));
     }
 
     @PostMapping("/leads/{lead_id}/assign")
@@ -65,7 +66,7 @@ public class LeasingController {
             @PathVariable("lead_id") String leadId, @RequestBody @jakarta.validation.Valid LeasingLeadAssignRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.assignLead(leadId, request));
+        return ApiResponse.ok(maskLeadPhoneForUnauthorized(service.assignLead(leadId, request)));
     }
 
     @PostMapping("/leads/{lead_id}/status")
@@ -73,7 +74,7 @@ public class LeasingController {
             @PathVariable("lead_id") String leadId, @RequestBody @jakarta.validation.Valid LeasingLeadStatusRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.updateLeadStatus(leadId, request));
+        return ApiResponse.ok(maskLeadPhoneForUnauthorized(service.updateLeadStatus(leadId, request)));
     }
 
     // ---- 意向 ----
@@ -148,5 +149,22 @@ public class LeasingController {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createFollowUp(request));
+    }
+
+    // ── P0-A/GAP-07 招商线索联系人手机号展示脱敏（V339）。无 pii.contact_phone.view 的读端看掩码；
+    // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。 ──
+    private LeasingLeadRecord maskLeadPhoneForUnauthorized(LeasingLeadRecord record) {
+        if (record == null || authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return record;
+        }
+        return record.withMaskedPhone();
+    }
+
+    private PageResponse<LeasingLeadRecord> maskLeadPhonesForUnauthorized(PageResponse<LeasingLeadRecord> page) {
+        if (authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            return page;
+        }
+        return new PageResponse<>(page.items().stream().map(LeasingLeadRecord::withMaskedPhone).toList(),
+                page.page(), page.pageSize(), page.total());
     }
 }

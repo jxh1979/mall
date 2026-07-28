@@ -63,7 +63,8 @@ final class JdbcInventoryRowMapper {
                 resultSet.getString("supplier_name"),
                 resultSet.getString("supplier_type"),
                 resultSet.getString("contact_name"),
-                resultSet.getString("contact_phone"),
+                // P0-A/GAP-07：供应商联系人手机号密文落库（V339），读时解密还原明文给业务层。
+                piiCipher.decrypt(resultSet.getString("contact_phone")),
                 resultSet.getString("status"),
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at"),

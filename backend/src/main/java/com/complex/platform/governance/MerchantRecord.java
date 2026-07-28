@@ -55,6 +55,19 @@ public record MerchantRecord(
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
     }
 
+    /**
+     * P0-A/GAP-07 展示脱敏：无 {@code pii.contact_phone.view} 权限的读端，第一/第二联系人手机号一律返回掩码。
+     * 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。
+     */
+    public MerchantRecord withMaskedPhones() {
+        return new MerchantRecord(id, merchantName, merchantType, businessEntityId, contractEntityId,
+                settlementEntityId, contactName, com.complex.platform.common.PhoneMask.mask(contactPhone),
+                ownerPerson, mallBlockCode, areaSquareMeter, leasedAreaSquareMeter, secondaryContactName,
+                com.complex.platform.common.PhoneMask.mask(secondaryContactPhone), rentPerSquareMeter,
+                cooperationForm, status, createdAt, updatedAt,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+    }
+
     public MerchantRecord withDelete(String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt,
             String deleteReason, Instant updatedAt) {
         return new MerchantRecord(id, merchantName, merchantType, businessEntityId, contractEntityId,

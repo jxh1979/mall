@@ -41,6 +41,11 @@ class MerchantFeeNotificationIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // V339（P0-A/GAP-07）：merchants.contact_phone 落库必须是 enc:v1: 信封密文（DB CHECK 强制）。
+    // 本测试绕过仓库直插，需自己加密后再写。
+    @Autowired
+    private com.complex.platform.common.crypto.PiiCipher piiCipher;
+
     @BeforeEach
     void setUp() {
         TestSecurityActors.asPlatformAdmin();
@@ -316,7 +321,7 @@ class MerchantFeeNotificationIntegrationTest {
                     contact_phone = EXCLUDED.contact_phone,
                     status = EXCLUDED.status,
                     updated_at = now()
-                """, merchantId, "Merchant " + merchantId, phone);
+                """, merchantId, "Merchant " + merchantId, piiCipher.encrypt(phone));
     }
 
     private void insertArApItem(String id, String merchantId, long amountCent) {

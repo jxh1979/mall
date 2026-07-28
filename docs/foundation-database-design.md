@@ -2144,6 +2144,45 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 > 备注：以上为登记指针，字段级权威以迁移 `backend/src/main/resources/db/migration/V16*.sql`/`V17*.sql` 为准；append-only / scope 强制以 §3A + `verify:tenant-isolation` 为准。
 
 
+### 11.35 多主体联系电话 PII 加密（V339 → 六列改密文 + DB CHECK + 明文查看权限，修复 P0-A / ★GAP-07 / SEC-04）
+
+> v7 综合审计 E 域实证：`merchants` 59/59 手机号明文入库。商户、供应商、招商线索、费用通知接收人四条写入路径没接 `PiiCipher`；
+> 本次实读代码时又发现同一缺陷面的第五条——施工进场报备联系人（`site_entry_reports.contact_phone`，V179），一并纳入。
+> 消费者侧手机号早在 V188/V247/V248 已加密，本迁移把同一范式补齐到剩下的「多主体」联系电话。
+
+**覆盖六列**（均由 `VARCHAR(20|32|40)` 加宽到 `VARCHAR(128)`，容纳 `enc:v1:base64(iv|ct+tag)` 信封）：
+
+| 表 | 列 | 原宽度 |
+|---|---|---|
+| `merchants` | `contact_phone`（第一联系人） | 20 |
+| `merchants` | `secondary_contact_phone`（第二联系人） | 20 |
+| `inventory_suppliers` | `contact_phone` | 20 |
+| `leasing_leads` | `contact_phone` | 40 |
+| `merchant_fee_notification_recipient` | `recipient_phone` | 32 |
+| `site_entry_reports` | `contact_phone` | 32 |
+
+- **加解密位置**：各域 JDBC 仓库层——写参数经 `PiiCipher.encrypt`，行映射经 `PiiCipher.decrypt`。业务层/服务层始终拿明文，
+  下游（如费用通知短信触达 `MerchantFeeNotificationRecipientResolver`）无感知。
+- **DB 级边界**：六个 `CHECK (col IS NULL OR col = '' OR col LIKE 'enc:v1:%')`，建为 `NOT VALID`——
+  放行加约束之前就存在的存量明文行（由回填负责加密），但**任何新写入/更新必须是信封密文**，
+  仓库以外的手写 SQL / 批量导入 / 运维脚本一律绕不过（沿用 V249/V252 的 DB 强制思路）。
+  存量全部加密后可另行 `VALIDATE CONSTRAINT` 转正（需另占迁移号）。
+- **存量回填**：`common.crypto.MultiPartyContactPhonePiiBackfill`（`ApplicationRunner`，与 V188/V247/V248 三个既有回填同款）。
+  **防二次加密三层**：① SQL 只捞 `NOT LIKE 'enc:v1:%'` 的行，已加密行不进结果集，重跑即空操作；
+  ② 更新前先 `decrypt` 再 `encrypt`，半途中断重跑也能拿回明文；③ `PiiCipher.encrypt` 见前缀原样返回兜底。
+  单条解密失败（跨密钥遗留数据）只告警跳过，不阻断启动。
+- **不建盲索引**：实读全仓代码确认这六列**没有任何按手机号的后端检索路径**——后台列表的关键词过滤是前端对已取回行做
+  JSON 客户端匹配，与落库形态无关。故不需要 `customers.phone` 那样的 `phone_hash`（V188）配套。
+  日后若真出现"按手机号查商户/供应商"的需求，照 V188 范式补盲索引列即可。
+- **展示脱敏**：新权限 `pii.contact_phone.view`（domain=governance，risk=high，V279 权限种子范式；V206 范式直授
+  `role_platform_admin`）。无此权限的读端一律见掩码（前 3 后 4，统一走 `common.PhoneMask`）。
+  脱敏做在 controller 层（service 之外），与 V279 内部结算价同款——避免脱敏值污染写幂等缓存后被有权限者重放读到掩码。
+  依据业务 HTML§应急恢复和客人隐私「员工日常界面只显示脱敏号码，不见明文」。
+- **口径纠正**：`compliance-and-personal-information-protection-requirements-v0.1.md` §6.1 原写
+  「商业联系人手机号按运营检索需要保持明文」，该口径已随本迁移作废并改写（PIPL 不按消费者/商业伙伴划线，
+  且"按运营检索需要"经实读证伪）。本文 §2.2 `merchants` 旧设计表与真实迁移不符（头部已标「有设计无迁移」），以迁移为准。
+
+
 ## 10. 下一步
 
 > 修订说明（2026-06-07）：依据基准 D10（A1 用户 2026-06-07 拍板迁移 Java），技术栈已确定，不再是「待选择」。原「下一步进入技术栈选择」按 D10 修正为「按既定技术栈搭建骨架」。

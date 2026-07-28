@@ -3,6 +3,7 @@ package com.complex.platform.leasing;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
@@ -23,10 +24,13 @@ class JdbcLeasingRepository implements LeasingRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    // P0-A/GAP-07：招商线索联系人手机号 PII 落库加密（V339）。写时 encrypt、读时 decrypt，业务层拿明文。
+    private final PiiCipher piiCipher;
 
-    JdbcLeasingRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcLeasingRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper, PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.piiCipher = piiCipher;
     }
 
     // ---------- leads ----------
@@ -49,7 +53,7 @@ class JdbcLeasingRepository implements LeasingRepository {
                 """, new MapSqlParameterSource()
                 .addValue("id", lead.id())
                 .addValue("contact_name", lead.contactName())
-                .addValue("contact_phone", lead.contactPhone())
+                .addValue("contact_phone", piiCipher.encrypt(lead.contactPhone()))
                 .addValue("source", lead.source())
                 .addValue("intended_business_type", lead.intendedBusinessType())
                 .addValue("intended_space_id", lead.intendedSpaceId())
@@ -334,7 +338,8 @@ class JdbcLeasingRepository implements LeasingRepository {
     // ---------- row mappers ----------
     private LeasingLeadRecord mapLead(ResultSet rs, int n) throws SQLException {
         return new LeasingLeadRecord(
-                rs.getString("id"), rs.getString("contact_name"), rs.getString("contact_phone"), rs.getString("source"),
+                rs.getString("id"), rs.getString("contact_name"),
+                piiCipher.decrypt(rs.getString("contact_phone")), rs.getString("source"),
                 rs.getString("intended_business_type"), rs.getString("intended_space_id"),
                 rs.getBigDecimal("intended_area_sqm"), rs.getString("brand_id"), rs.getString("owner_user_id"),
                 rs.getString("status"), rs.getString("lost_or_hold_reason"), nullableInstant(rs, "last_follow_up_at"),

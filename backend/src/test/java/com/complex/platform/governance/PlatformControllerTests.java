@@ -149,10 +149,31 @@ class PlatformControllerTests {
                 .andExpect(jsonPath("$.data.items[0].area_square_meter").value(128.50))
                 .andExpect(jsonPath("$.data.items[0].leased_area_square_meter").value(120.00))
                 .andExpect(jsonPath("$.data.items[0].secondary_contact_name").value("Jack"))
-                .andExpect(jsonPath("$.data.items[0].secondary_contact_phone").value("18800000013"))
+                // P0-A/GAP-07（V339）：无 pii.contact_phone.view 的读端两个联系电话都只见掩码。
+                .andExpect(jsonPath("$.data.items[0].contact_phone").value("188****0011"))
+                .andExpect(jsonPath("$.data.items[0].secondary_contact_phone").value("188****0013"))
                 .andExpect(jsonPath("$.data.items[0].rent_per_square_meter").value(12.30))
                 .andExpect(jsonPath("$.data.items[0].cooperation_form").value("fixed_rent_plus_commission"))
                 .andExpect(jsonPath("$.data.total").value(1));
+    }
+
+    @Test
+    void listingMerchantsReturnsPlaintextPhoneWithPiiPermission() throws Exception {
+        // P0-A/GAP-07（V339）：有 pii.contact_phone.view 的读端才见联系电话明文。
+        when(authorizationService.currentActorHasPermission("pii.contact_phone.view")).thenReturn(true);
+        when(service.listMerchants(eq(false), anyInt(), anyInt())).thenReturn(new PageResponse<>(
+                List.of(new MerchantRecord(
+                        "mch_1", "P0 Merchant", "other", "be_1", null, null, "Jane", "18800000011",
+                        "Owner Wang", "1F-A", BigDecimal.valueOf(128.50), BigDecimal.valueOf(120.00),
+                        "Jack", "18800000013", BigDecimal.valueOf(12.30), "fixed_rent_plus_commission", "active",
+                        Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")
+                )), 1, 50, 1));
+
+        mockMvc.perform(get("/api/v1/platform/merchants")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].contact_phone").value("18800000011"))
+                .andExpect(jsonPath("$.data.items[0].secondary_contact_phone").value("18800000013"));
     }
 
     @Test
