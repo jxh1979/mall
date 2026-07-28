@@ -768,6 +768,10 @@
 
 承接：`data-analysis-layer-spec-v0.2.md` §F；游乐 PRD 指针 §8.1A。
 
+
+> **已废止（2026-07-28）**：由 DEC-DATA-BACKEND-ACCURATE-001 取代。
+
+
 ## DEC-BIZDAY-001 / DEC-TAX-CN-REFUND-001（2026-07-28，用户确认）
 
 闭合 **ADV-TX-008** / **XD-006**。
@@ -806,3 +810,11 @@
 - 分红跨周期：dividend §4A
 
 不改 HTML；不改代码。
+
+
+## DEC-DATA-BACKEND-ACCURATE-001（2026-07-28，重裁）
+
+- **废止** `DEC-DATA-FRESH-PRAGMATIC-001`（有数优先、异常可近似）。
+- **后台/管理端正式数据必须精准**；延迟/缺数时显式状态，禁止用近似值冒充正式指标。
+- 非最终快照不得进入结算/分红/提成/对账关账。
+- 承接：`data-analysis-layer-spec-v0.2.md` §F；`amusement-business-operations-product-prd-v0.1.md` §8.1A。
