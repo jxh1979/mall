@@ -7,7 +7,7 @@ import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, BarBillRow, BarOrderItemVoidRow, BarOrderRow } from "../types";
-import { isSalesOrder } from "./barSalesRole";
+import { commissionRateLabel, isSalesOrder, latestBill, salesRoleLabel } from "./barSalesRole";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
@@ -36,7 +36,7 @@ const TEXT = {
   bill: "\u8d26\u5355",
   billHelp: "\u5df2\u6709\u5173\u8054\u8d26\u5355",
   commission: "\u9500\u552e\u63d0\u6210",
-  commissionHelp: "\u9500\u552e\u4eba\u5458\u6309 15%",
+  commissionHelp: "\u5c5e\u9500\u552e\u5c97\u5f52\u5c5e",
   amount: "\u8ba2\u5355\u91d1\u989d",
   amountHelp: "\u4e0d\u542b\u901a\u7968\u6743\u76ca\u62b5\u6263",
   selectedOrder: "\u9009\u4e2d\u8ba2\u5355",
@@ -55,8 +55,6 @@ const TEXT = {
   createdAt: "\u4e0b\u5355\u65f6\u95f4",
   paidAt: "\u652f\u4ed8\u65f6\u95f4",
   noBill: "\u672a\u751f\u6210",
-  sales15: "\u9500\u552e\u4eba\u5458 15%",
-  nonSales: "\u975e\u9500\u552e",
   billNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u8d26\u5355",
   deliverNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u54c1",
   settleNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u7ed3\u7b97",
@@ -94,7 +92,7 @@ function formatAmount(amountCent: number | undefined) {
 }
 
 function firstBill(order: BarOrderRow | undefined): BarBillRow | undefined {
-  return order?.bills?.[0];
+  return latestBill(order);
 }
 
 function firstBillId(order: BarOrderRow | undefined) {
@@ -154,7 +152,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         { label: TEXT.orderStatus, value: displayStatus(order.status) },
         { label: TEXT.billStatus, value: bill?.id ? `${bill.id} / ${formatBusinessStatus(bill.status)}` : TEXT.noBill },
         { label: TEXT.amount, value: formatAmount(order.totalAmountCent ?? order.totalAmount) },
-        { label: TEXT.commissionBasis, value: isSalesOrder(order) ? TEXT.sales15 : `${TEXT.nonSales} 10%` },
+        { label: TEXT.commissionBasis, value: `${salesRoleLabel(order)} · ${commissionRateLabel(order)}` },
         { label: TEXT.createdAt, value: cnDate(order.createdAt) },
         { label: TEXT.paidAt, value: cnDate(bill?.paidAt ?? order.paidAt) },
       ],
@@ -413,7 +411,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                     <td>{displayStatus(order.status)}</td>
                     <td>{bill?.id ? `${bill.id} / ${formatBusinessStatus(bill.status)}` : TEXT.noBill}</td>
                     <td>{formatAmount(order.totalAmountCent ?? order.totalAmount)}</td>
-                    <td>{isSalesOrder(order) ? TEXT.sales15 : `${TEXT.nonSales} 10%`}</td>
+                    <td>{salesRoleLabel(order)} · {commissionRateLabel(order)}</td>
                     <td>{cnDate(order.createdAt)}</td>
                     <td data-testid={`bar-order-paid-at-${order.id}`}>{cnDate(bill?.paidAt ?? order.paidAt)}</td>
                   <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看订单详情" onClick={(event) => { event.stopPropagation(); openOrderDetail(order); }}>查看详情</button></td></tr>

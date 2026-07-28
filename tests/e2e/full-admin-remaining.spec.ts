@@ -82,6 +82,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
   { pageId: "ADM-STF-002", label: "薪酬与请假", route: "/admin/staff/payroll" },
   { pageId: "ADM-STF-003", label: "个税税表", route: "/admin/staff/tax-brackets" },
+  { pageId: "ADM-STF-004", label: "员工档案", route: "/admin/staff/profiles" },
   { pageId: "ADM-SVC-001", label: "服务点单", route: "/admin/services/orders" },
   { pageId: "ADM-OPS-002", label: "数据清理工具", route: "/admin/ops/data-cleanup" },
 ];
@@ -227,6 +228,10 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("payroll-tax-brackets-page")).toBeVisible();
     await expect(page.getByTestId("payroll-tax-brackets-table")).toContainText("20.00%");
     await expect(page.getByTestId("payroll-tax-brackets-form")).toBeVisible();
+  } else if (spec.pageId === "ADM-STF-004") {
+    await expect(page.getByTestId("staff-profiles-page")).toBeVisible();
+    await expect(page.getByTestId("staff-profiles-table")).toContainText("销售岗");
+    await expect(page.getByTestId("staff-profiles-reason")).toBeVisible();
   } else if (spec.pageId === "ADM-OPS-002") {
     await expect(page.getByTestId("data-cleanup-page")).toBeVisible();
     await expect(page.getByTestId("data-cleanup-request")).toBeVisible();

@@ -10,13 +10,13 @@ import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
-import { isSalesOrder } from "./barSalesRole";
+import { commissionRateLabel, isSalesOrder, latestBill, salesRoleLabel } from "./barSalesRole";
 
 const CALC_PERM = ["bar.table_commission.calculate"];
 
 const TEXT = {
   title: "销售提成",
-  description: "按卡座销售口径核算业务提成：销售人员 15%，非销售人员 10%，不含通票金额，不在本页直接发放薪酬。",
+  description: "按卡座销售口径核算业务提成：计提档按员工岗位判（员工档案里标了「销售岗」的按销售人员费率，其余按非销售人员费率），费率在「结算配置中心 → 提成与积分」维护。本页比例列显示的是提成台账里的真实计提比例，不含通票金额，不在本页直接发放薪酬。",
   evidence: "接口证据：读取 /api/v1/bar/orders；计算 POST /api/v1/bar/bills/{bill_id}/commissions/calculate。",
   loadFailed: "销售提成数据读取失败",
   actionFailed: "销售提成计算失败",
@@ -27,7 +27,7 @@ const TEXT = {
   excludeTickets: "不含通票",
   selectedBill: "选中账单",
   calculate: "计算提成",
-  boundary: "提成只按卡座消费额计算：销售人员 15%，非销售人员 10%，不含通票、赠票、票务权益和卡座免通票入场人数。结算发放仍需财务复核。",
+  boundary: "提成只按卡座消费额计算：计提档按员工岗位判（销售岗按销售人员费率、其余按非销售人员费率，费率后台可配），不含通票、赠票、票务权益和卡座免通票入场人数。结算发放仍需财务复核。",
   select: "选择",
   orderNo: "订单号",
   table: "卡座",
@@ -37,8 +37,8 @@ const TEXT = {
   rate: "计提比例",
   status: "状态",
   time: "时间",
-  sales: "销售人员 15%",
-  nonSales: "非销售人员 10%",
+  sales: "销售人员",
+  nonSales: "非销售人员",
   excludeTicketsHelp: "提成不计通票金额",
   focusClear: "清除筛选，返回全部",
 };
@@ -52,7 +52,7 @@ function readKpiFocusFromUrl(): KpiTarget | null {
 }
 
 function firstBill(order: BarOrderRow | undefined): BarBillRow | undefined {
-  return order?.bills?.[0];
+  return latestBill(order);
 }
 
 function firstBillId(order: BarOrderRow | undefined) {
@@ -63,14 +63,13 @@ function formatAmount(amountCent: number | undefined) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(Number(amountCent ?? 0) / 100);
 }
 
+// 计提比例/销售角色一律取真实落库值（barSalesRole 统一口径），页面不再自算。
 function commissionRate(order: BarOrderRow | undefined) {
-  if (!order) return "-";
-  return isSalesOrder(order) ? "15%" : "10%";
+  return order ? commissionRateLabel(order) : "-";
 }
 
 function sellerLabel(order: BarOrderRow | undefined) {
-  if (!order) return "-";
-  return isSalesOrder(order) ? TEXT.sales : TEXT.nonSales;
+  return order ? salesRoleLabel(order) : "-";
 }
 
 export function BarCommissionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
@@ -132,7 +131,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
 
 
   const billId = firstBillId(selectedOrder);
-  const salesOrders = orders.filter((order) => commissionRate(order) === "15%").length;
+  const salesOrders = orders.filter((order) => isSalesOrder(order)).length;
   const nonSalesOrders = orders.length - salesOrders;
   // 列表接口返回 totalAmountCent（旧 totalAmount 字段兼容保留）：此前读幽灵字段恒为 0。
   const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmountCent ?? order.totalAmount ?? 0), 0);
@@ -143,11 +142,11 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   const orderAmountKpi = useMetricKpiValue(api, "bar.order_amount", {});
   const orderCountDisplay = orderCountKpi.status === "ready" && orderCountKpi.value !== null ? orderCountKpi.value : orders.length;
   const orderAmountDisplay = orderAmountKpi.status === "ready" && orderAmountKpi.value !== null ? orderAmountKpi.value : totalAmount;
-  // 聚焦时对提成表做客户端筛选：sales=15%口径、non_sales=其余；仅过滤已加载内存数组，不发后端查询。
+  // 聚焦时对提成表做客户端筛选：sales=销售岗归属、non_sales=其余；仅过滤已加载内存数组，不发后端查询。
   const visibleOrders = kpiFocus === "sales"
-    ? orders.filter((order) => commissionRate(order) === "15%")
+    ? orders.filter((order) => isSalesOrder(order))
     : kpiFocus === "non_sales"
-      ? orders.filter((order) => commissionRate(order) !== "15%")
+      ? orders.filter((order) => !isSalesOrder(order))
       : orders;
 
   async function calculateCommission() {
@@ -155,12 +154,9 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
       setFormError(TEXT.noBill);
       return;
     }
-    const requestBody = {
-      includeTicketAmount: false,
-      salesRate: 0.15,
-      nonSalesRate: 0.1,
-      operatorNote: "完整后台验收提成计算",
-    };
+    // 请求体只带后端 CommissionCalculateRequest 真有的字段：费率由后端按角色档从结算配置中心取，
+    // 前端不下发费率（原先下发的 salesRate/nonSalesRate 后端根本不接，纯属误导读者以为费率由页面定）。
+    const requestBody = { includeOnlyTableSales: true };
     setSubmitting(true);
     setFormError("");
     setGlobalError(null);
@@ -193,8 +189,8 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
         <>
         <div className="admin-kpi-grid" data-testid="bar-commissions-summary">
           <div className="admin-kpi-card"><span>{TEXT.orderCount}</span><strong data-testid="bar-commissions-kpi-orders">{orderCountDisplay}</strong><small data-testid="bar-commissions-kpi-amount">{formatAmount(orderAmountDisplay)}{orderCountKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="bar.order_count" testid="bar-commissions-metric-detail-orders" /></> : null}</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.salesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-sales" onClick={() => enterKpiFocus("sales")}>{salesOrders}</button><small>15% · {salesOrders} 单</small></div>
-          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.nonSalesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-non-sales" onClick={() => enterKpiFocus("non_sales")}>{nonSalesOrders}</button><small>10% · {nonSalesOrders} 单</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.salesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-sales" onClick={() => enterKpiFocus("sales")}>{salesOrders}</button><small>{salesOrders} 单 · 按销售人员费率</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.nonSalesRate}</span><button type="button" className="admin-kpi-value" data-testid="bar-commissions-kpi-non-sales" onClick={() => enterKpiFocus("non_sales")}>{nonSalesOrders}</button><small>{nonSalesOrders} 单 · 按非销售人员费率</small></div>
           <div className="admin-kpi-card"><span>{TEXT.excludeTickets}</span><strong>是</strong><small>{TEXT.excludeTicketsHelp}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selectedBill}</span><strong className="admin-kpi-value--text" title={billId || "-"}>{billId || "-"}</strong><small>{selectedOrder?.id ?? "-"}</small></div>
         </div>

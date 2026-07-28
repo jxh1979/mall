@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 692 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 693 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 322 | 人工权限矩阵正文未覆盖 220 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1384 | 人工事件矩阵正文未覆盖 1342 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 692 | 人工任务映射正文未逐项覆盖 686 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 418 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1386 | 人工事件矩阵正文未覆盖 1344 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 693 | 人工任务映射正文未逐项覆盖 687 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 419 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -308,7 +308,7 @@
 | `staff.notice.view` | staff-token | project | 2 | listEmployeeNotices, acknowledgeEmployeeNotice | OpenAPI 补充，以本附录为准 |
 | `staff.payroll.manage` | staff-token | platform | 6 | listPayrollTaxBrackets, setStaffBaseSalary, addStaffPayrollAdjustment, addStaffCommission, closeStaffPayrollMonth, listStaffPayroll | OpenAPI 补充，以本附录为准 |
 | `staff.payroll.view_mine` | staff-token | platform | 1 | listMyStaffPayroll | OpenAPI 补充，以本附录为准 |
-| `staff.profile.review` | staff-token | project | 1 | reviewStaffRegistration | OpenAPI 补充，以本附录为准 |
+| `staff.profile.review` | staff-token | project | 2 | reviewStaffRegistration, setStaffSalesPosition | OpenAPI 补充，以本附录为准 |
 | `staff.profile.submit` | staff-token | project | 1 | submitStaffRegistration | OpenAPI 补充，以本附录为准 |
 | `staff.profile.view` | staff-token | project | 1 | listStaffProfiles | OpenAPI 补充，以本附录为准 |
 | `staff.shift.manage` | staff-token | platform | 4 | listStaffShifts, upsertStaffShift, listStaffLeaves, reviewStaffLeave | OpenAPI 补充，以本附录为准 |
@@ -1554,6 +1554,8 @@
 | `staff.payroll.tax_bracket_viewed` | success | `listPayrollTaxBrackets` | `GET` | `/api/v1/staff/payroll/tax-brackets` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.view_failed` | failure | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `staff.payroll.viewed` | success | `listStaffPayroll` | `GET` | `/api/v1/staff/payroll` | P0-待归类 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `staff.profile.sales_position_change_failed` | failure | `setStaffSalesPosition` | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
+| `staff.profile.sales_position_changed` | success | `setStaffSalesPosition` | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
 | `staff.profile.view_failed` | failure | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | AUTH-账号权限 | `staff.profile.view` | 接口级事件，以本附录为准 |
 | `staff.profile.viewed` | success | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | AUTH-账号权限 | `staff.profile.view` | 接口级事件，以本附录为准 |
 | `staff.register_failed` | failure | `submitStaffRegistration` | `POST` | `/api/v1/staff/registrations` | AUTH-账号权限 | `staff.profile.submit` | 接口级事件，以本附录为准 |
@@ -1892,6 +1894,7 @@
 | AUTH-账号权限 | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | 审批员工注册 | `staff.profile.review` | `staff.approved` / `staff.review_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | 解绑/失效设备凭证 | `staff.device.revoke` | `staff_device.revoked` / `staff_device.revoke_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `revokeTemporaryGrant` | `POST` | `/api/v1/access/temporary-grants/{id}/revoke` | 撤销临时授权 | `access.temporary_grant.revoke` | `permission_template.revoked` / `temporary_grant.revoke_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `setStaffSalesPosition` | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | 设置员工销售岗标识 | `staff.profile.review` | `staff.profile.sales_position_changed` / `staff.profile.sales_position_change_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `submitStaffRegistration` | `POST` | `/api/v1/staff/registrations` | 员工自助注册 | `staff.profile.submit` | `staff.registered` / `staff.register_failed` | staff_private_phone, web | operation 级补充 |
 | AUTH-账号权限 | `unassignUserRole` | `POST` | `/api/v1/access/role-assignments/unassign` | 取消用户角色 | `access.role.assign` | `access.role.unassigned` / `access.role.unassign_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `updatePermissionTemplate` | `PUT` | `/api/v1/access/permission-templates/{id}` | 修改权限模板 | `access.permission_template.manage` | `permission_template.changed` / `permission_template.change_failed` | web | operation 级补充 |

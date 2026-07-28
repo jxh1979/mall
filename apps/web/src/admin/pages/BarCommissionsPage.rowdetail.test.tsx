@@ -7,7 +7,7 @@ import type { AdminApiClient, AdminPageProps, BarOrderRow, EffectivePermissionsS
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 const ORDERS: BarOrderRow[] = [
-  { id: "ord-1", tableId: "T-1", salesStaffId: "staff_sales_1", totalAmount: 20000, status: "paid", createdAt: "2026-07-05T13:20:00Z", bills: [{ id: "bill-1", status: "settled", paidAt: "2026-07-05T14:00:00Z" }] },
+  { id: "ord-1", tableId: "T-1", salesStaffId: "staff_sales_1", totalAmount: 20000, status: "paid", createdAt: "2026-07-05T13:20:00Z", bills: [{ id: "bill-1", status: "settled", paidAt: "2026-07-05T14:00:00Z", salesRoleType: "sales", commissionRateBp: 2000, commissionAmountCent: 4000 }] },
   { id: "ord-2", tableId: "T-2", totalAmount: 10000, status: "ordered", createdAt: "2026-07-05T10:00:00Z" },
 ];
 
@@ -44,7 +44,8 @@ describe("BarCommissionsPage 行明细抽屉 + 零英文", () => {
     fireEvent.click(screen.getByTestId("bar-commission-row-ord-1"));
     const drawer = screen.getByTestId("row-detail-drawer");
     expect(drawer.textContent).toContain("¥200.00");
-    expect(drawer.textContent).toContain("15%");
+    // 计提比例读台账真实落库值（本例 2000bp=20%），不是页面写死的 15%。
+    expect(drawer.textContent).toContain("20%");
     expect(drawer.textContent).toContain("已结清");
     expect(drawer.textContent).toContain("2026年7月5日");
     // 零英文：状态码不得漏出

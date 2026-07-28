@@ -73,6 +73,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-STF-001", label: "排班与考勤", module: "人事", group: "ops", route: "/admin/staff/shifts", requiredPermissions: ["staff.shift.manage"] },
   { pageId: "ADM-STF-002", label: "薪酬与请假", module: "人事", group: "ops", route: "/admin/staff/payroll", requiredPermissions: ["staff.payroll.manage"] },
   { pageId: "ADM-STF-003", label: "个税税表", module: "人事", group: "ops", route: "/admin/staff/tax-brackets", requiredPermissions: ["staff.payroll.manage"] },
+  { pageId: "ADM-STF-004", label: "员工档案", module: "人事", group: "ops", route: "/admin/staff/profiles", requiredPermissions: ["staff.profile.view"] },
   { pageId: "ADM-SVC-001", label: "服务点单", module: "服务", group: "ops", route: "/admin/services/orders", requiredPermissions: ["service.catalog.manage"] },
   { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-010", label: "AI阈值", module: "分析", group: "overview", route: "/admin/analytics/ai-thresholds", requiredPermissions: ["analytics.dashboard.view"] },

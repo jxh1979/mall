@@ -40,6 +40,11 @@ public class BarBillingService {
     // （见 requireCommissionRateBp），绝不静默回落硬编码常量——回落常量正是本批要根除的东西。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     BarCommissionRateConfigPort commissionRateConfigPort;
+    // G/V349：提成角色档改按【员工岗位】判（员工档案的「销售岗」标识），不再按「这单挂没挂销售归属人」判。
+    // 字段注入免改构造点（同上三例）；生产由 Spring 恒注入 JdbcStaffRepository。
+    // bar → access.staff 是既有的向下依赖（本类已依赖 access.AuthorizationService），无需再造端口。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.access.staff.StaffRepository staffRepository;
 
     public BarBillingService(
             BarRepository repository,
@@ -88,7 +93,10 @@ public class BarBillingService {
         long depositDeduct = reservation == null ? 0L : Math.min(reservation.depositAmountCent(), subtotal);
         long payable = subtotal - depositDeduct;
         Instant now = Instant.now();
-        String salesRoleType = trimToNull(order.salesStaffId()) == null ? "non_sales" : "sales";
+        // G/V349：开单即把提成角色档【按销售归属人的员工岗位】快照进账单，计提时直接读这一列。
+        // 快照而非计提时现查：账单上写的角色档、提成台账里的角色档、对账页上看到的角色档必须是同一个值；
+        // 人事此后改岗位只影响之后新开的单，不悄悄改写已开账单的历史提成。
+        String salesRoleType = resolveSalesRoleType(order.salesStaffId());
         return repository.saveBill(new BarBillRecord(
                 "bill_" + billSlug(order.id() + ":" + now.toEpochMilli()),
                 "BILL" + now.toEpochMilli(),
@@ -531,7 +539,11 @@ public class BarBillingService {
         if (existingCommission.isPresent()) {
             return existingCommission.get();
         }
-        String roleType = trimToNull(bill.salesStaffId()) == null ? "non_sales" : "sales";
+        // G/V349：角色档读账单上开单时快照的 sales_role_type（该列此前建了却没人读，判档逻辑与 createBill 重复了一遍）。
+        // 改前是【反的】：按「挂没挂 salesStaffId」判——挂了人就 sales 拿 15%、没挂人才 10%；
+        // 而 PRD §5b 说的是「非销售人员售卖【或被归属为】卡座销售按 10%」，即被归属的人要按其岗位判，
+        // 原实现等于把「有归属」当成「是销售岗」，非销售岗员工被挂上归属反而多拿 5 个点。
+        String roleType = requireSalesRoleType(bill);
         // P0-D/CFG-01（V340）：提成率由「结算配置中心 → 卡座提成费率」按 项目公司 × 商户 × 角色档 下发，
         // 不再写死 sales?1500:1000。出厂种子 = 原写死值（销售 1500bp / 非销售 1000bp）→ 本次改造零行为改变。
         // 依据：bar PRD §4/§8/§11「卡座提成率后台可配（默认销售 15%/非销售 10%）」+ DEC-CFG-ALL-NUMERIC-001。
@@ -588,6 +600,43 @@ public class BarBillingService {
      * <p>projectId 取操作者的综合体 scope（平台管理员为空 = 全局默认口径），与本类退款分级授权
      * （AUD-008「由调用方从原账单/操作者 scope 推导」）取值方式一致；merchantId 取账单归属商户（权威、不来自请求体）。
      */
+    /**
+     * G/V349 提成角色档 = 销售归属人的员工岗位。
+     *
+     * <p>业务 HTML 真源：「设有『销售岗』标识的员工按销售人员费率计提，其余按非销售人员费率计提……
+     * 员工是否为销售岗在员工档案里维护，不按单次是否指派销售人员临时判断。」
+     *
+     * <p>三种情形：①这单没挂销售归属人 → 无人可判岗 → 非销售档；②挂了人但员工档案里查无此人 → 「其余」→ 非销售档；
+     * ③挂了人且档案标了销售岗 → 销售档。解析键 = staff_profiles.user_id（bar_bills.sales_staff_id 与
+     * access_users.id 同名值空间，提成应付/薪酬各表也都按 user_id 归集）。
+     *
+     * <p>档案仓储缺失（仅未注入的旧构造/单测，生产恒注入）时<b>拒绝开单</b>而非默认非销售档：
+     * 判不出岗位却照发提成，正是本批要根除的那类静默错档。
+     */
+    private String resolveSalesRoleType(String salesStaffId) {
+        String staffId = trimToNull(salesStaffId);
+        if (staffId == null) {
+            return "non_sales";
+        }
+        if (staffRepository == null) {
+            throw ApiException.badRequest("STAFF_PROFILE_LOOKUP_UNAVAILABLE",
+                    "员工档案不可用，无法判定销售归属人是否为销售岗，提成角色档不可确定");
+        }
+        return staffRepository.findProfileByUserId(staffId)
+                .filter(com.complex.platform.access.staff.StaffProfileRecord::salesPosition)
+                .isPresent() ? "sales" : "non_sales";
+    }
+
+    /** G/V349：计提只认账单上快照的角色档；缺失/非法（非本系统开出的单）即拒绝计提，不猜。 */
+    private static String requireSalesRoleType(BarBillRecord bill) {
+        String roleType = trimToNull(bill.salesRoleType());
+        if (!"sales".equals(roleType) && !"non_sales".equals(roleType)) {
+            throw ApiException.badRequest("BAR_BILL_SALES_ROLE_UNKNOWN",
+                    "账单未记录销售角色档，无法计提；请核对该账单的销售归属与员工档案后重新开单");
+        }
+        return roleType;
+    }
+
     private int requireCommissionRateBp(String merchantId, String roleType) {
         if (commissionRateConfigPort == null) {
             throw ApiException.badRequest("COMMISSION_RATE_CONFIG_UNAVAILABLE",

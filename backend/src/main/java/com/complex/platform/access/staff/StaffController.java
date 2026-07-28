@@ -64,6 +64,14 @@ public class StaffController {
         return ApiResponse.ok(service.archiveProfile(id, false, null));
     }
 
+    // ── V349 销售岗标识（卡座提成按员工岗位判档的唯一依据）────────────────
+    @PostMapping("/profiles/{id}/sales-position")
+    public ApiResponse<StaffProfileRecord> setSalesPosition(
+            @PathVariable String id,
+            @RequestBody(required = false) com.complex.platform.access.staff.dto.StaffSalesPositionRequest request) {
+        return ApiResponse.ok(service.setSalesPosition(id, request));
+    }
+
     @PostMapping("/profiles/{id}/delete-request")
     public ApiResponse<StaffProfileRecord> requestDeleteProfile(
             @PathVariable String id,

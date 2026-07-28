@@ -347,6 +347,11 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public List<BarCommissionCalculationRecord> listCommissionsByBillIds(List<String> billIds) {
+        return billing.listCommissionsByBillIds(billIds);
+    }
+
+    @Override
     public int markBillSettlementsReversed(String billId) {
         return billing.markBillSettlementsReversed(billId);
     }

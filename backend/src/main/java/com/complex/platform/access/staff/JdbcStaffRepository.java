@@ -638,12 +638,13 @@ class JdbcStaffRepository implements StaffRepository {
                 INSERT INTO staff_profiles (
                     id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
                     registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position
                 )
                 VALUES (
                     :id, :project_id, :merchant_id, :user_id, :name, :phone_hash, :id_doc_hash, :staff_level_id,
                     :registration_status, :approved_by, :approved_at, :reject_reason, :status, :created_at, :updated_at,
-                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
+                    :is_sales_position
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = EXCLUDED.project_id,
@@ -664,7 +665,8 @@ class JdbcStaffRepository implements StaffRepository {
                     delete_status = EXCLUDED.delete_status,
                     delete_requested_by = EXCLUDED.delete_requested_by,
                     delete_requested_at = EXCLUDED.delete_requested_at,
-                    delete_reason = EXCLUDED.delete_reason
+                    delete_reason = EXCLUDED.delete_reason,
+                    is_sales_position = EXCLUDED.is_sales_position
                 """, new MapSqlParameterSource()
                 .addValue("id", profile.id())
                 .addValue("project_id", profile.projectId())
@@ -686,7 +688,8 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("delete_status", profile.deleteStatus() == null ? "none" : profile.deleteStatus())
                 .addValue("delete_requested_by", profile.deleteRequestedBy())
                 .addValue("delete_requested_at", timestampWithTimeZone(profile.deleteRequestedAt()))
-                .addValue("delete_reason", profile.deleteReason()));
+                .addValue("delete_reason", profile.deleteReason())
+                .addValue("is_sales_position", profile.salesPosition()));
         return profile;
     }
 
@@ -695,7 +698,7 @@ class JdbcStaffRepository implements StaffRepository {
         List<StaffProfileRecord> result = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position
                   FROM staff_profiles
                  WHERE id = :id
                    AND delete_status <> 'approved'
@@ -709,7 +712,7 @@ class JdbcStaffRepository implements StaffRepository {
             return jdbcTemplate.query("""
                     SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
                            registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                           archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                           archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position
                       FROM staff_profiles
                      WHERE delete_status <> 'approved'
                      ORDER BY created_at DESC, id
@@ -718,7 +721,7 @@ class JdbcStaffRepository implements StaffRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position
                   FROM staff_profiles
                  WHERE delete_status <> 'approved'
                    AND merchant_id = :merchant_id
@@ -731,7 +734,7 @@ class JdbcStaffRepository implements StaffRepository {
         StringBuilder sql = new StringBuilder("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position
                   FROM staff_profiles
                  WHERE delete_status <> 'approved'
                 """);
@@ -771,7 +774,7 @@ class JdbcStaffRepository implements StaffRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position
                   FROM staff_profiles
                  WHERE delete_status <> 'approved'
                    AND project_id = :project_id
@@ -927,7 +930,7 @@ class JdbcStaffRepository implements StaffRepository {
         java.util.List<StaffProfileRecord> result = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
                        registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, is_sales_position
                   FROM staff_profiles
                  WHERE user_id = :user_id
                    AND delete_status <> 'approved'
@@ -981,7 +984,8 @@ class JdbcStaffRepository implements StaffRepository {
                 rs.getString("delete_status"),
                 rs.getString("delete_requested_by"),
                 nullableInstant(rs, "delete_requested_at"),
-                rs.getString("delete_reason")
+                rs.getString("delete_reason"),
+                rs.getBoolean("is_sales_position")
         );
     }
 

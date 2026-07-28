@@ -48,6 +48,7 @@ class BarServiceTests {
     private BarBillingService billingService;
     private BarOrderService barOrderService;
     private StubCommissionRateConfigPort commissionRateStub;
+    private com.complex.platform.access.staff.StaffRepository staffRepositoryStub;
     private StubVoidApprovalConfigPort voidThresholdStub;
 
     /**
@@ -117,6 +118,17 @@ class BarServiceTests {
         // 既有提成用例的期望数字一字未改仍全绿 = 本次改造【零行为改变】的单测侧证据。
         commissionRateStub = new StubCommissionRateConfigPort(1500, 1000);
         billingService.commissionRateConfigPort = commissionRateStub;
+        // G/V349：提成角色档改按【员工岗位】判。员工档案桩：
+        //   staff_sales     = 员工档案里标了「销售岗」    → 按销售人员费率；
+        //   staff_non_sales = 员工档案里没标销售岗        → 按非销售人员费率（改前这人挂上归属就拿 15%，方向是反的）；
+        //   其余 id         = 档案里查无此人             → 「其余」→ 非销售人员费率。
+        staffRepositoryStub = mock(com.complex.platform.access.staff.StaffRepository.class);
+        when(staffRepositoryStub.findProfileByUserId(anyString())).thenReturn(Optional.empty());
+        when(staffRepositoryStub.findProfileByUserId("staff_sales"))
+                .thenReturn(Optional.of(staffProfile("staff_sales", true)));
+        when(staffRepositoryStub.findProfileByUserId("staff_non_sales"))
+                .thenReturn(Optional.of(staffProfile("staff_non_sales", false)));
+        billingService.staffRepository = staffRepositoryStub;
         // AUD-007 退款额度闸 fail-closed 常在：默认注入宽松引擎，令既有退款调账用例（平台管理员操作）仍额度内放行；
         // 超额拒绝 / 引擎缺失场景各用例自行覆盖。
         billingService.refundAuthorizationService =
@@ -928,13 +940,15 @@ class BarServiceTests {
     }
 
     @Test
-    void commissionUsesFifteenPercentForSalesAndTenPercentForNonSalesInBasisPoints() {
+    void commissionUsesSalesRateForSalesPositionStaffAndNonSalesRateForEveryoneElse() {
+        // G/V349：档位按【员工岗位】判——员工档案里标了销售岗 → 销售人员费率(15%)。
         BarBillRecord salesBill = billForOrder("sales-order", "staff_sales");
         BarCommissionCalculationRecord salesCommission = service.calculateCommission(
                 salesBill.id(),
                 new CommissionCalculateRequest("commission-sales", salesBill.id(), true, false)
         );
 
+        // 这单没有销售归属人 → 无人可判岗 → 非销售人员费率(10%)。
         BarBillRecord nonSalesBill = billForOrder("service-order", null);
         BarCommissionCalculationRecord nonSalesCommission = service.calculateCommission(
                 nonSalesBill.id(),
@@ -943,10 +957,11 @@ class BarServiceTests {
 
         assertThat(salesCommission)
                 .extracting(
+                        BarCommissionCalculationRecord::salesRoleType,
                         BarCommissionCalculationRecord::commissionRateBp,
                         BarCommissionCalculationRecord::commissionAmountCent
                 )
-                .containsExactly(1500, 19320L);
+                .containsExactly("sales", 1500, 19320L);
         assertThat(nonSalesCommission)
                 .extracting(
                         BarCommissionCalculationRecord::salesRoleType,
@@ -954,6 +969,93 @@ class BarServiceTests {
                         BarCommissionCalculationRecord::commissionAmountCent
                 )
                 .containsExactly("non_sales", 1000, 12880L);
+    }
+
+    @Test
+    void nonSalesPositionStaffAssignedAsTableSellerGetsNonSalesRate() {
+        // G/V349 本批的病根用例（改前方向是反的）：非销售岗员工【被归属为】卡座销售。
+        // 改前按「挂没挂 salesStaffId」判 → 挂了人就 sales 拿 15%，多发 5 个点；
+        // 改后按员工档案的销售岗标识判 → 这人没标销售岗 → 非销售人员费率 10%。
+        BarBillRecord bill = billForOrder("assigned-non-sales-order", "staff_non_sales");
+        BarCommissionCalculationRecord commission = service.calculateCommission(
+                bill.id(), new CommissionCalculateRequest("commission-assigned-non-sales", bill.id(), true, false));
+
+        assertThat(bill.salesStaffId()).isEqualTo("staff_non_sales");   // 归属人确实挂上了
+        assertThat(bill.salesRoleType()).isEqualTo("non_sales");        // 开单即按岗位落档
+        assertThat(commission)
+                .extracting(
+                        BarCommissionCalculationRecord::salesRoleType,
+                        BarCommissionCalculationRecord::commissionRateBp,
+                        BarCommissionCalculationRecord::commissionAmountCent
+                )
+                .containsExactly("non_sales", 1000, 12880L);
+    }
+
+    @Test
+    void unknownSalesStaffFallsBackToNonSalesRate() {
+        // 「其余按非销售人员费率」：归属人在员工档案里查无此人 → 非销售档，不因判不出岗就按高档发钱。
+        BarBillRecord bill = billForOrder("unknown-staff-order", "staff_not_in_hr");
+        BarCommissionCalculationRecord commission = service.calculateCommission(
+                bill.id(), new CommissionCalculateRequest("commission-unknown-staff", bill.id(), true, false));
+        assertThat(commission.salesRoleType()).isEqualTo("non_sales");
+        assertThat(commission.commissionRateBp()).isEqualTo(1000);
+    }
+
+    @Test
+    void salesRoleIsSnapshotAtBillCreationSoLaterPositionChangeDoesNotRewriteHistory() {
+        // 开单时快照角色档；此后人事把这人改成销售岗，已开账单的计提仍按开单时的档——不悄悄改写历史提成。
+        BarBillRecord bill = billForOrder("snapshot-order", "staff_non_sales");
+        when(staffRepositoryStub.findProfileByUserId("staff_non_sales"))
+                .thenReturn(Optional.of(staffProfile("staff_non_sales", true)));
+
+        BarCommissionCalculationRecord commission = service.calculateCommission(
+                bill.id(), new CommissionCalculateRequest("commission-snapshot", bill.id(), true, false));
+        assertThat(commission.salesRoleType()).isEqualTo("non_sales");
+        assertThat(commission.commissionRateBp()).isEqualTo(1000);
+
+        // 改岗之后【新开】的单才走销售档。
+        BarBillRecord afterChange = billForOrder("snapshot-order-after", "staff_non_sales");
+        assertThat(afterChange.salesRoleType()).isEqualTo("sales");
+    }
+
+    @Test
+    void commissionFailsLoudWhenStaffProfileLookupMissing() {
+        // 资金级 fail-closed：判不出岗位时【拒绝开单】，绝不默认一个档照发提成。
+        billingService.staffRepository = null;
+        assertThatThrownBy(() -> billForOrder("staff-lookup-missing", "staff_sales"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("员工档案不可用");
+    }
+
+    @Test
+    void orderListCarriesRealPersistedCommissionRateForReconciliation() {
+        // 对账铁律：后台页面显示的计提比例必须 == 提成台账里真实落库的 commission_rate_bp。
+        // 页面此前把 15%/10% 写死在文案里，配置中心改成 20% 后页面照旧显示 15%，页面与台账对不上。
+        commissionRateStub.salesBp = 2000;
+        BarBillRecord bill = billForOrder("reconcile-order", "staff_sales");
+        BarCommissionCalculationRecord commission = service.calculateCommission(
+                bill.id(), new CommissionCalculateRequest("commission-reconcile", bill.id(), true, false));
+
+        BarBillSummary summary = service.listOrders().items().stream()
+                .filter(view -> view.id().equals(bill.orderId()))
+                .findFirst().orElseThrow()
+                .bills().stream().filter(b -> b.id().equals(bill.id())).findFirst().orElseThrow();
+
+        assertThat(summary.salesRoleType()).isEqualTo("sales");
+        assertThat(summary.commissionRateBp()).isEqualTo(commission.commissionRateBp()).isEqualTo(2000);
+        assertThat(summary.commissionAmountCent()).isEqualTo(commission.commissionAmountCent());
+    }
+
+    @Test
+    void orderListShowsNoCommissionRateBeforeCalculation() {
+        // 未计提的账单不编数字：费率/金额为空，页面显示「未计提」。
+        BarBillRecord bill = billForOrder("uncalculated-order", "staff_sales");
+        BarBillSummary summary = service.listOrders().items().stream()
+                .filter(view -> view.id().equals(bill.orderId()))
+                .findFirst().orElseThrow()
+                .bills().stream().filter(b -> b.id().equals(bill.id())).findFirst().orElseThrow();
+        assertThat(summary.commissionRateBp()).isNull();
+        assertThat(summary.commissionAmountCent()).isNull();
     }
 
     @Test
@@ -3570,6 +3672,15 @@ class BarServiceTests {
         assertThat(view.salesStaffId()).isEqualTo("staff_sales");
     }
 
+    /** G/V349 员工档案桩：只有「销售岗」标识对提成有意义，其余字段取默认。 */
+    private static com.complex.platform.access.staff.StaffProfileRecord staffProfile(String userId, boolean salesPosition) {
+        java.time.Instant now = java.time.Instant.now();
+        return new com.complex.platform.access.staff.StaffProfileRecord(
+                "sp_" + userId, "project_1", null, userId, userId, null, null, null,
+                "approved", "usr_admin", now, null, "active", now, now,
+                null, null, "none", null, null, null, salesPosition);
+    }
+
     private BarBillRecord billForOrder(String key, String salesStaffId) {
         BarReservationRecord reservation = createReservation("reservation-" + key, "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
@@ -3892,6 +4003,11 @@ class BarServiceTests {
         @Override
         public Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId) {
             return commissions.stream().filter(c -> billId.equals(c.billId())).findFirst();
+        }
+
+        @Override
+        public List<BarCommissionCalculationRecord> listCommissionsByBillIds(List<String> billIds) {
+            return commissions.stream().filter(c -> billIds.contains(c.billId())).toList();
         }
 
         @Override
