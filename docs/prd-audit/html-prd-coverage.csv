@@ -566,7 +566,7 @@ BEQ-0025,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合�
 BEQ-0026,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0027,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,PARTIAL,P2,TX-BEQ-0027-DIM,已有部分承接，但缺少: cross_period,补齐缺失维度（逆向/过期退出/跨周期/权限/证据）,,04-transaction-member-ticket-bar
 BEQ-0028,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
-BEQ-0029,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,会员忠诚度与储值产品 PRD V0.1,PARTIAL,P0,ADV-TX-003,储值本金与赠送金混退、账户注销和余额迁移 => GAP: 本金/赠送金区分不足; 混退顺序与赠送金可否退未明确; ,固定退款顺序、赠送金是否可退、注销/迁移时本金赠金处理,DEFERRED-DOCS-FOLLOWUP,04-transaction-member-ticket-bar
+BEQ-0029,docs/member-loyalty-and-stored-value-product-prd-v0.1.md,§7.2–7.6 DEC-SV-*,FULL,P0,ADV-TX-003,,,DEC-SV-LEDGER-001,04-transaction-member-ticket-bar
 BEQ-0030,docs/bar-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0031,docs/bar-business-operations-product-prd-v0.1.md,6. 账单状态,FULL,,,,,,04-transaction-member-ticket-bar
 BEQ-0032,docs/bar-business-operations-product-prd-v0.1.md,5. 桌台状态,FULL,,,,,,04-transaction-member-ticket-bar
