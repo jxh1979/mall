@@ -374,7 +374,17 @@ public class JdbcSettlementConfigWriteRepository {
 
     // ================= §5 待复核草案聚合(各配置表 is_draft=TRUE AND status='active' 的 UNION)=================
 
-    /** 全部结算配置表的待复核草案(供 overview 草案队列)。giveaway(废)/settlement_tax(零消费)不入。 */
+    /**
+     * 全部结算配置表的待复核草案(供 overview 草案队列)。giveaway(废)/settlement_tax(零消费)不入。
+     *
+     * <p><b>本方法是有意的平台级全量读(无 project scope 过滤),不是隔离缺口</b>:唯一调用方
+     * {@code SettlementConfigService.overview()} → {@code GET /api/v1/settlement/config/overview},
+     * 该端点强制 {@code settlement.config.view} + {@code requirePlatformScope()}——平台管理员专属,
+     * 项目级操作者在 controller 层就 403、到不了这里。「平台管理员跨项目审所有配置草案」正是本队列的语义。
+     * 静态扫描器(verify:tenant-isolation)不识别端点级 scope 闸,同 revenue_stream_attribution 的
+     * SEC-P2-TENANT-ISOLATION-BATCH1-PLATFORM-READ-001 台账口径;本表族的 scoped 读通道由
+     * {@link JdbcCommissionPointsConfigRepository} / {@link JdbcSettlementBillRepository} 的 finder 提供。
+     */
     public List<PendingConfigDraft> listPendingConfigDrafts() {
         return jdbcTemplate.query("""
                 SELECT id, config_group, summary FROM (
