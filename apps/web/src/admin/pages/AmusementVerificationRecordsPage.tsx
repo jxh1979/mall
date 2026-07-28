@@ -60,6 +60,18 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// 现场最关心的一问「还能进多少」：上限 - 当前在场，下限 0（超容时显示 0 而非负数）。
+// 未配上限（limit<=0）= 该维度不控容，返回 null → 显示「不限」。
+function remainingSeats(row: AmusementCapacitySnapshotRow): number | null {
+  const limit = num(row.capacityLimit);
+  if (limit <= 0) return null;
+  return Math.max(limit - num(row.occupiedCount), 0);
+}
+function remainingLabel(row: AmusementCapacitySnapshotRow): string {
+  const left = remainingSeats(row);
+  return left === null ? "不限" : String(left);
+}
+
 type TabKey = "records" | "capacity" | "reconcile";
 
 export function AmusementVerificationRecordsPage({ api, setGlobalError, navigateTo, effectivePermissions }: AdminPageProps) {
@@ -196,6 +208,7 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
         { label: "设备", value: display(row.deviceId) },
         { label: "当前在场 / 已用", value: display(row.occupiedCount) },
         { label: "上限", value: display(row.capacityLimit) },
+        { label: "剩余可进", value: remainingLabel(row) },
         { label: "占用率", value: `${rate}%` },
         { label: "更新时间", value: cnDate(row.updatedAt) },
       ],
@@ -292,11 +305,11 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="amu-verif-capacity-table">
         <thead>
-          <tr><th>维度</th><th>项目</th><th>场次</th><th>点位/设备</th><th>在场/已用</th><th>上限</th><th>占用率</th><th>详情</th></tr>
+          <tr><th>维度</th><th>项目</th><th>场次</th><th>点位/设备</th><th>在场/已用</th><th>上限</th><th>剩余可进</th><th>占用率</th><th>详情</th></tr>
         </thead>
         <tbody>
           {snapshots.length === 0 ? (
-            <tr data-testid="amu-verif-capacity-empty"><td colSpan={8}>暂无在场容量快照</td></tr>
+            <tr data-testid="amu-verif-capacity-empty"><td colSpan={9}>暂无在场容量快照</td></tr>
           ) : (
             snapshots.map((row) => {
               const over = num(row.occupiedCount) > num(row.capacityLimit);
@@ -316,6 +329,7 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
                   <td>{display(row.locationPointId ?? row.deviceId)}</td>
                   <td>{display(row.occupiedCount)}</td>
                   <td>{display(row.capacityLimit)}</td>
+                  <td data-testid={`amu-capacity-left-${row.id}`} style={remainingSeats(row) === 0 ? { color: "var(--adm-danger, #c0392b)", fontWeight: 600 } : undefined}>{remainingLabel(row)}</td>
                   <td style={over ? { color: "var(--adm-danger, #c0392b)", fontWeight: 600 } : undefined}>{rate}%{over ? " · 超容" : ""}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看容量详情" onClick={(event) => { event.stopPropagation(); openSnapshotDetail(row); }}>查看详情</button></td></tr>
               );
