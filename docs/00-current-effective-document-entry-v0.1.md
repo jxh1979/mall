@@ -520,3 +520,5 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 - 决策索引：业务决策日志中 DEC-VALIDITY-001 等 R3 P0 裁决
 - 旧会员 PRD 积分/等级冲突条款让位上述主 PRD；储值章节仍有效
 
+
+- 实现切片：`docs/superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`

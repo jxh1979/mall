@@ -93,3 +93,10 @@
 - **UI 验收**：`full-admin-ui-acceptance-matrix` 与客人端 UI 验收矩阵均缺会员/储值/签到/订阅行（后端有、验收未单列）。
 - **客人端页面**：`customer-app-miniapp-development-design` 缺签到页、储值充值/余额页、付费会员开通/权益页的页面→API 映射（能力已在 OpenAPI `customer/*`）。
 - 积分获取规则（按金额/张数/签到/生日/活动）与等级升降的**产品规则文档**此前薄弱，本文已据实现回填核心口径，细则仍以后台 `customer_points_rules` 配置为准。
+
+
+## 重构切片（2026-07-28）
+
+- 实现切片与差距矩阵：`docs/superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`
+- 产品主 PRD：`docs/member-points-tier-and-clearing-prd-v1.0.md`
+- 注意：等级倍率乘算、batch 过期、账户级冻结等现网语义需按切片迁移，不得与新 PRD 长期双轨并行。
