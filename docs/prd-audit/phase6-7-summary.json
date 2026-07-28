@@ -1,0 +1,102 @@
+{
+  "baseline": "31f262c5",
+  "phase6_rules": 111,
+  "phase6_status": {
+    "PARTIAL": 12,
+    "FULL": 99
+  },
+  "coverage_total": 844,
+  "ledger_total": 844,
+  "open_high": 46,
+  "status_all": {
+    "FULL": 788,
+    "NOT_APPLICABLE": 2,
+    "PARTIAL": 48,
+    "MISSING": 6
+  },
+  "auth_hashes": {
+    "business-system-map-for-operations-v0.1.html": "0492b9112fec7ac03366f8c69a7a948f7706e9483b70370396359197f2ca087e",
+    "platform-governance-map-for-operations-v0.1.html": "a18cfff21c9cfbaf68d48ec6a0d68eeaa9afd3ae462dff76093c0a56dc31572b",
+    "business-enum-quick-reference-v0.1.html": "3e2071d8b740aea43df8a4685871c307a4185591ced4f1ced279ffa202e39648"
+  },
+  "code_changes": false,
+  "phase6_adv": [
+    {
+      "id": "ADV-ED-001",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-ED-002",
+      "result": "COVERED",
+      "severity": "P1"
+    },
+    {
+      "id": "ADV-ED-003",
+      "result": "PARTIAL",
+      "severity": "P1"
+    },
+    {
+      "id": "ADV-ED-004",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-ED-005",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-ED-006",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-ED-007",
+      "result": "PARTIAL",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-ED-008",
+      "result": "PARTIAL",
+      "severity": "P1"
+    },
+    {
+      "id": "ADV-ED-009",
+      "result": "COVERED",
+      "severity": "P1"
+    }
+  ],
+  "phase7_xd": [
+    {
+      "id": "XD-001",
+      "result": "COVERED",
+      "severity": "P1"
+    },
+    {
+      "id": "XD-002",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "XD-003",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "XD-004",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "XD-005",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "XD-006",
+      "result": "PARTIAL",
+      "severity": "P1"
+    }
+  ]
+}

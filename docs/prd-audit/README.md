@@ -58,3 +58,11 @@
 - `appendix-crosscheck-findings.csv`：交叉复核机器表
 - `rounds/2026-07-27-b3-scope-crosscheck-report.md`：本轮总报告
 
+## 全量文档审计状态（2026-07-28）
+
+- 状态：**phase1–7 文档审计完成**
+- 最终报告：`prd-audit-report.md`
+- 阶段 6/7：`phases/06-amusement-terminal-thirdparty-data.md`、`phases/07-cross-domain-closure.md`
+- 覆盖：`html-prd-coverage.csv`（与 authority-rule-ledger 全量对齐）
+- 约束：仅文档；不改代码；HTML 未改
+
