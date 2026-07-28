@@ -1025,6 +1025,20 @@
       "column": "cash_diff_cent",
       "expected": "present",
       "note": "V095：现金差异 = 实点 -（备用金 + 系统现金应收）；超阈值标记 needs_review 进复核"
+    },
+    {
+      "req": "REQ-STL-4B-1",
+      "table": "settlement_invoice_items",
+      "column": "amount_cent",
+      "expected": "present",
+      "note": "V362 开票清单条目(批 4b·底稿 23_开票清单模板粒度)已落"
+    },
+    {
+      "req": "REQ-STL-4B-2",
+      "table": "invoice_subject_rules",
+      "column": "invoice_item_name",
+      "expected": "present",
+      "note": "V362 开票主体×收入类型→发票项目名称/税目口径/凭证要件映射规则已落"
     }
   ]
 }

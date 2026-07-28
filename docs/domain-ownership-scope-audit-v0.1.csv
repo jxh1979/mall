@@ -178,6 +178,7 @@ inventory_trace_ownership_history,single_complex_default,P0_SINGLE_COMPLEX,singl
 inventory_transfer_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 inventory_transfer_orders,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 inventory_variance,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+invoice_subject_rules,direct,project_id,project_id column on invoice_subject_rules,ready for project/merchant scoped query enforcement,covered
 issued_entitlements,direct,venue_id,venue_id column on issued_entitlements,ready for project/merchant scoped query enforcement,covered
 leasing_brands,direct,project_id,project_id column on leasing_brands,ready for project/merchant scoped query enforcement,covered
 leasing_follow_ups,direct,project_id,project_id column on leasing_follow_ups,ready for project/merchant scoped query enforcement,covered
@@ -239,6 +240,7 @@ service_pay_config,single_complex_default,P0_SINGLE_COMPLEX,single-complex defau
 service_responsibility_records,direct,merchant_id,merchant_id column on service_responsibility_records,ready for project/merchant scoped query enforcement,covered
 settlement_bill_format_shares,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 settlement_bills,direct,project_id,project_id column on settlement_bills,ready for project/merchant scoped query enforcement,covered
+settlement_invoice_items,direct,project_id,project_id column on settlement_invoice_items,ready for project/merchant scoped query enforcement,covered
 settlement_items,direct,merchant_id,merchant_id column on settlement_items,ready for project/merchant scoped query enforcement,covered
 settlement_reconciliation_status,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 settlement_tax_configs,direct,project_id,project_id column on settlement_tax_configs,ready for project/merchant scoped query enforcement,covered

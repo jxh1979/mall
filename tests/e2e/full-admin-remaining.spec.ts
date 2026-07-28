@@ -35,6 +35,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", route: "/admin/customers/loyalty-config" },
   { pageId: "ADM-CUS-005", label: "储值规则配置", route: "/admin/customers/stored-value-rules" },
   { pageId: "ADM-STL-001", label: "结算配置中心", route: "/admin/settlement/config" },
+  { pageId: "ADM-STL-002", label: "开票清单", route: "/admin/settlement/invoice-items" },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", route: "/admin/terminals/switch-matrix" },
   { pageId: "ADM-TKT-002", label: "动态定价", route: "/admin/ticketing/dynamic-pricing" },
   { pageId: "ADM-TKT-003", label: "出票与核销追踪", route: "/admin/ticketing/orders" },
@@ -158,6 +159,10 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await page.getByRole("tab", { name: "通票分账" }).click();
     await expect(page.getByTestId("settlement-config-block-retention")).toBeVisible();
     await expect(page.getByTestId("settlement-config-edit-retention")).toBeVisible();
+  } else if (spec.pageId === "ADM-STL-002") {
+    await expect(page.getByTestId("settlement-invoice-page")).toBeVisible();
+    await expect(page.getByTestId("settlement-invoice-subject-table")).toBeVisible();
+    await expect(page.getByTestId("settlement-invoice-rule-table")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-002") {
     await expect(page.getByTestId("reconciliation-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-003") {

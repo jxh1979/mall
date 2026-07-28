@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 703 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 323 | 人工权限矩阵正文未覆盖 221 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1406 | 人工事件矩阵正文未覆盖 1364 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 703 | 人工任务映射正文未逐项覆盖 697 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 424 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 707 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 325 | 人工权限矩阵正文未覆盖 223 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1414 | 人工事件矩阵正文未覆盖 1372 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 707 | 人工任务映射正文未逐项覆盖 701 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 426 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -300,6 +300,8 @@
 | `settlement.bill.post` | staff-token | platform | 1 | settlementPostBill | OpenAPI 补充，以本附录为准 |
 | `settlement.config.manage` | staff-token | platform | 15 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
 | `settlement.config.view` | staff-token | platform | 1 | settlementConfigOverview | OpenAPI 补充，以本附录为准 |
+| `settlement.invoice.manage` | staff-token | platform | 2 | generateSettlementInvoiceItems, changeSettlementInvoiceItemStatus | OpenAPI 补充，以本附录为准 |
+| `settlement.invoice.view` | staff-token | platform | 2 | listSettlementInvoiceItems, settlementInvoiceSummary | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.punch` | staff-token | platform | 1 | punchStaffAttendance | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.view` | staff-token | platform | 1 | listStaffAttendance | OpenAPI 补充，以本附录为准 |
 | `staff.device.bind` | device-credential, staff-token | project | 2 | bindStaffDeviceCredential, reportStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
@@ -1512,6 +1514,14 @@
 | `settlement.config.ticket_distribution_merchant_rates.updated` | success | `settlementConfigUpsertMerchantRate` | `POST` | `/api/v1/settlement/config/merchant-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.ticket_distribution_rank_tiers.update_failed` | failure | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.ticket_distribution_rank_tiers.updated` | success | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.invoice.generate_failed` | failure | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
+| `settlement.invoice.generated` | success | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
+| `settlement.invoice.list` | success | `listSettlementInvoiceItems` | `GET` | `/api/v1/settlement/invoice-items` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
+| `settlement.invoice.list_failed` | failure | `listSettlementInvoiceItems` | `GET` | `/api/v1/settlement/invoice-items` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
+| `settlement.invoice.status_change_failed` | failure | `changeSettlementInvoiceItemStatus` | `POST` | `/api/v1/settlement/invoice-items/{id}/status` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
+| `settlement.invoice.status_changed` | success | `changeSettlementInvoiceItemStatus` | `POST` | `/api/v1/settlement/invoice-items/{id}/status` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
+| `settlement.invoice.summary` | success | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
+| `settlement.invoice.summary_failed` | failure | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
 | `space_type.update_failed` | failure | `createSpaceType` | `POST` | `/api/v1/platform/space-types` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
 | `space_type.updated` | success | `createSpaceType` | `POST` | `/api/v1/platform/space-types` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
 | `space_type.view_failed` | failure | `listSpaceTypes` | `GET` | `/api/v1/platform/space-types` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
@@ -2243,6 +2253,7 @@
 | P0-待归类 | `blacklistLeasingBrand` | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | 品牌拉黑/解黑(高危需审批) | `leasing.brand.blacklist` | `leasing.brand.blacklist_changed` / `leasing.brand.blacklist_change_failed` | web | operation 级补充 |
 | P0-待归类 | `cancelServiceOrder` | `POST` | `/api/v1/services/orders/{id}/cancel` | 取消服务单(履约前;留原因) | `service.order.create` | `service.order.cancelled` / `service.order.cancel_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `changeFacilityEquipmentStatus` | `POST` | `/api/v1/facility/equipment/{equipment_id}/status` | 变更设备状态/上报告警 | `facility.equipment.manage` | `facility.equipment_status_changed` / `facility.equipment_status_change_failed` | web | operation 级补充 |
+| P0-待归类 | `changeSettlementInvoiceItemStatus` | `POST` | `/api/v1/settlement/invoice-items/{id}/status` | 流转开票状态 | `settlement.invoice.manage` | `settlement.invoice.status_changed` / `settlement.invoice.status_change_failed` | web | operation 级补充 |
 | P0-待归类 | `closeMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | Close merchant service work order | `merchant.service_work_order.close` | `merchant_service.closeMerchantServiceWorkOrder.succeeded` / `merchant_service.closeMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | 月结(定格全员薪资单) | `staff.payroll.manage` | `staff.payroll.month_closed` / `staff.payroll.month_close_failed` | web | operation 级补充 |
 | P0-待归类 | `completeContractSettlement` | `POST` | `/api/v1/contracts/settlements/{settlement_id}/complete` | 结清退租结算→已结清+终止合同 | `contract.settlement.manage` | `contract.settlement_completed` / `contract.settlement_complete_failed` | web | operation 级补充 |
@@ -2274,6 +2285,7 @@
 | P0-待归类 | `exportAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events/export` | 导出操作留痕（敏感） | `audit.operation_log.export` | `audit.operation_log.exported` / `audit.operation_log.export_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractPeriodBills` | `POST` | `/api/v1/contracts/{contract_id}/period-bills` | 某期全费目挂账(租金+物业费+能源费) | `finance.ar_ap.manage` | `contract.fee_billed` / `contract.period_bill_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractRentBill` | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | 生成某期合同租金应收(base+递增−免租) | `finance.ar_ap.manage` | `contract.rent_billed` / `contract.rent_bill_failed` | web | operation 级补充 |
+| P0-待归类 | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | 按结算单生成开票清单 | `settlement.invoice.manage` | `settlement.invoice.generated` / `settlement.invoice.generate_failed` | web | operation 级补充 |
 | P0-待归类 | `getEnergyMeterDifference` | `GET` | `/api/v1/energy/meters/{meter_id}/difference` | 查询总分表差异 | `energy.reading.manage` | `energy.meter_difference.viewed` / `energy.meter_difference.view_failed` | web | operation 级补充 |
 | P0-待归类 | `getFacilityInspectionTask` | `GET` | `/api/v1/facility/inspections/tasks/{task_id}` | 巡检任务详情 | `facility.inspection.manage` | `facility.inspection_task.viewed` / `facility.inspection_task.view_failed` | web | operation 级补充 |
 | P0-待归类 | `getFacilityWorkOrder` | `GET` | `/api/v1/facility/work-orders/{work_order_id}` | 工单详情 | `facility.work_order.manage` | `facility.work_order.viewed` / `facility.work_order.view_failed` | web | operation 级补充 |
@@ -2322,6 +2334,7 @@
 | P0-待归类 | `listServiceCatalog` | `GET` | `/api/v1/services/catalog` | 服务目录(上架项,下单用) | `service.order.create` | `service.catalog.viewed` / `service.catalog.view_failed` | staff_private_phone, web, tablet, app | operation 级补充 |
 | P0-待归类 | `listServiceCatalogAll` | `GET` | `/api/v1/services/catalog/all` | 服务目录全量(含下架,后台维护) | `service.catalog.manage` | `service.catalog.viewed` / `service.catalog.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listServiceOrders` | `GET` | `/api/v1/services/orders` | 服务单列表(后台) | `service.catalog.manage` | `service.order.listed` / `service.order.list_failed` | web | operation 级补充 |
+| P0-待归类 | `listSettlementInvoiceItems` | `GET` | `/api/v1/settlement/invoice-items` | 开票清单列表 | `settlement.invoice.view` | `settlement.invoice.list` / `settlement.invoice.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listSiteEntryReports` | `GET` | `/api/v1/facility/site-entry-reports` | 查看进场报备/验收单列表（外包只见本机构，平台全量） | `facility.site_entry.view_assigned` | `facility.site_entry.viewed` / `facility.site_entry.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listSpaceExpiryColorRules` | `GET` | `/api/v1/contracts/expiry-color-rules` | 查到期着色分类 | `contract.space.color.manage` | `contract.color_rules_viewed` / `contract.color_rules_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listSpaceRentalStatus` | `GET` | `/api/v1/contracts/space-rental-status` | 铺位平面图着色数据源(可租/已租/即将到期) | `contract.draft.manage` | `contract.space_rental_viewed` / `contract.space_rental_view_failed` | web | operation 级补充 |
@@ -2383,6 +2396,7 @@
 | P0-待归类 | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | 维护排名档位梯子(草案·整套替换) | `settlement.config.manage` | `settlement.config.ticket_distribution_rank_tiers.updated` / `settlement.config.ticket_distribution_rank_tiers.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRetention` | `POST` | `/api/v1/settlement/config/retention` | 维护项目公司留存比例(草案) | `settlement.config.manage` | `settlement.config.platform_retention_rules.updated` / `settlement.config.platform_retention_rules.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRevenueStreamAttribution` | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | 维护业态收入归属(草案) | `settlement.config.manage` | `settlement.config.revenue_stream_attribution.updated` / `settlement.config.revenue_stream_attribution.update_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | 开票清单按主体汇总 | `settlement.invoice.view` | `settlement.invoice.summary` / `settlement.invoice.summary_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementPostBill` | `POST` | `/api/v1/settlement/bills/{id}/post` | 结算单过账(挂应付台账) | `settlement.bill.post` | `settlement.bill.posted` / `settlement.bill.post_failed` | web | operation 级补充 |
 | P0-待归类 | `signLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/sign` | 意向签约→转商户+喂入合同 draft | `leasing.convert` | `leasing.intent.signed` / `leasing.intent.sign_failed` | web | operation 级补充 |
 | P0-待归类 | `startFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/start` | 开始巡检任务 | `facility.inspection.manage` | `facility.inspection_task_started` / `facility.inspection_task_start_failed` | web | operation 级补充 |
