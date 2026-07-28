@@ -13,9 +13,12 @@ public class SettlementQueryService {
     private static final int MAX_SIZE = 100;
 
     private final JdbcSettlementTransactionRepository repository;
+    private final JdbcSettlementBillRepository billRepository;
 
-    public SettlementQueryService(JdbcSettlementTransactionRepository repository) {
+    public SettlementQueryService(JdbcSettlementTransactionRepository repository,
+                                  JdbcSettlementBillRepository billRepository) {
         this.repository = repository;
+        this.billRepository = billRepository;
     }
 
     public PageResponse<JdbcSettlementTransactionRepository.SettlementTransactionView> listSettlements(
@@ -27,6 +30,18 @@ public class SettlementQueryService {
         long total = repository.countVerificationSettled(project, merchant);
         var items = repository.listVerificationSettled(project, merchant, safeSize, (safePage - 1) * safeSize);
         return new PageResponse<>(items, safePage, safeSize, total);
+    }
+
+    /**
+     * S4 财务对账:月度结算单头列表(最多近 24 单)。回答三个问题——这单收了多少门票综合服务费、
+     * 池链支与专属支各多少、归了谁(收款主体中文名)。金额带符号:负数月 = 当月净追回。
+     */
+    public java.util.List<JdbcSettlementBillRepository.BillSummary> listBills(String projectId, String month) {
+        java.time.LocalDate periodStart = null;
+        if (month != null && !month.isBlank()) {
+            periodStart = java.time.YearMonth.parse(month.trim()).atDay(1);
+        }
+        return billRepository.listBills(blankToNull(projectId), periodStart, 24);
     }
 
     private static String blankToNull(String v) {

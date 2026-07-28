@@ -46,6 +46,18 @@ public class SettlementController {
     }
 
     /**
+     * S4 财务对账:月度结算单头列表(含门票综合服务费两支与收款主体)。只读;权限同结算流水审阅。
+     * month 形如 2026-06(留空 = 近 24 单)。
+     */
+    @GetMapping("/bills")
+    public ApiResponse<java.util.List<JdbcSettlementBillRepository.BillSummary>> listBills(
+            @RequestParam(name = "projectId", required = false) String projectId,
+            @RequestParam(name = "month", required = false) String month) {
+        authorizationService.requirePermission("finance.settlement.view");
+        return ApiResponse.ok(service.listBills(projectId, month));
+    }
+
+    /**
      * 过账网关(②):把某 confirmed 结算单的各酒吧分账挂 finance 应付台账。仅 confirmed 单(draft/settled 由 postBill 拒);
      * 幂等(重复过账不重复挂);返回本次过账明细笔数。高敏权限 settlement.bill.post + 平台域。
      */

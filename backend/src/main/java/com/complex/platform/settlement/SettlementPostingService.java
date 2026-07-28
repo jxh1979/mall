@@ -30,8 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       PK=arap_&lt;明细 id&gt; 双保险，重复过账不产生第二条应付。</li>
  * </ul>
  *
- * <p><b>D7 超额 C 口径（甲标签法）</b>：仅当 bill <b>超池</b>（池分账合计 poolDistributed &gt; spvPool）时，
- * 对<b>池明细</b>（method≠exclusive_full）两段拆——池内额 {@code pool_i = a_i*spvPool/poolDistributed}
+ * <p><b>D7 超额 C 口径（甲标签法）</b>：仅当 bill <b>超池</b>（池分账合计 poolDistributed &gt; availablePool）时，
+ * 对<b>池明细</b>（method≠exclusive_full）两段拆——池内额 {@code pool_i = a_i*availablePool/poolDistributed}
  * 过 {@code ticket_distribution}（项目公司承担）、超额 {@code excess_i = a_i-pool_i} 过
  * {@code platform_incentive_subsidy}（L3 娱乐平台公司承担，独立幂等前缀 {@code settle-pis-} 防与 td 行撞）。
  * 专属直付 item（exclusive_full）永不拆、全额 ticket_distribution；未超池 bill 完全现状（单条）。
@@ -109,7 +109,7 @@ public class SettlementPostingService {
                 "settlement.bill.special_approved", "settlement.bill.special_approve", "settlement_bill", billId,
                 "req_" + java.util.UUID.randomUUID(), null,
                 java.util.Map.of("special_approval_ref", ref,
-                        "spv_pool_cent", ctx.spvPoolCent(),
+                        "available_pool_cent", ctx.availablePoolCent(),
                         "pooled_distributed_cent", ctx.pooledDistributedCent(),
                         "term", term.label(),
                         "valid_until", validUntil.toString()));
@@ -151,9 +151,20 @@ public class SettlementPostingService {
                             + "请重新结算该月后由平台负责人重新特批");
         }
 
+        // S4/R-3 负额守卫(fail-loud,钱不许丢):放开带符号后冲正月明细可为负(向商户追回)。
+        //   「负额挂应收」的过账口径属过账激活批次另行拍板;在那之前对含负额明细的单直接拒绝过账——
+        //   否则负额行被「final>0」过滤静默跳过、整单却被标 settled,追回的钱就从账上消失了。
+        if (repository.hasNegativeDraftItems(billId)) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_NEGATIVE_ITEMS_UNPOSTABLE",
+                    "该结算单存在负额分账明细(冲正月向商户追回),负额过账口径(挂应收)尚未启用,拒绝过账以防丢账;"
+                            + "请留在待过账状态,待负额过账批次上线后处理");
+        }
+
         boolean overPool = ctx.overPool();
-        long spvPool = ctx.spvPoolCent();
-        long poolDistributed = ctx.pooledDistributedCent(); // overPool ⇒ poolDistributed > spvPool ≥ 0 ⇒ >0，除法安全
+        long availablePool = ctx.availablePoolCent();
+        // 除法安全:两段拆的除法只对「final>0 的池明细」执行,该明细存在 ⇒ poolDistributed ≥ 该明细 final > 0
+        //   (上面负额守卫已排除负额明细,poolDistributed 不会被负行拉低)。
+        long poolDistributed = ctx.pooledDistributedCent();
 
         List<JdbcSettlementBillRepository.PostableItem> items = repository.findPostableItems(billId);
         LocalDate dueDate = LocalDate.now().plusDays(30);
@@ -163,10 +174,10 @@ public class SettlementPostingService {
             if (overPool && !METHOD_EXCLUSIVE_FULL.equals(item.distributionMethod())) {
                 // 超额 C 口径两段拆：pool_i(项目公司承担) + excess_i(L3 平台承担)，pool_i+excess_i=a_i 精确。
                 long a = item.finalAmountCent();
-                // 溢出护栏(对抗复核 risk1):a×spvPool 可超 Long.MAX(大场馆高营业月单笔×池),long 直乘会反转
-                //   → poolI 负、excessI 灌爆。用 BigInteger 中间乘;结果 ⌊a·spvPool/poolDistributed⌋ ≤ a 恒在 long 内(longValueExact 兜底)。
+                // 溢出护栏(对抗复核 risk1):a×availablePool 可超 Long.MAX(大场馆高营业月单笔×池),long 直乘会反转
+                //   → poolI 负、excessI 灌爆。用 BigInteger 中间乘;结果 ⌊a·availablePool/poolDistributed⌋ ≤ a 恒在 long 内(longValueExact 兜底)。
                 long poolI = java.math.BigInteger.valueOf(a)
-                        .multiply(java.math.BigInteger.valueOf(spvPool))
+                        .multiply(java.math.BigInteger.valueOf(availablePool))
                         .divide(java.math.BigInteger.valueOf(poolDistributed))
                         .longValueExact();
                 long excessI = a - poolI;
@@ -178,7 +189,7 @@ public class SettlementPostingService {
                         ? createPayable(item.itemId(), item.merchantId(), excessI, dueDate,
                                 SOURCE_PLATFORM_INCENTIVE_SUBSIDY, "settle-pis-", ctx.projectId())
                         : null;
-                // 明细一列 ar_ap_item_id 回写以池内行为主键；spvPool=0 全超额时回写补贴行（tdId=null）。
+                // 明细一列 ar_ap_item_id 回写以池内行为主键；availablePool=0 全超额时回写补贴行（tdId=null）。
                 primaryArApId = tdId != null ? tdId : pisId;
             } else {
                 // 未超池 or 专属直付：完全现状，单条 ticket_distribution 全额。

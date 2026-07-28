@@ -33,8 +33,8 @@ public class SettlementConfigService {
     /** 平台默认口径概览 + 待复核草案队列(批1 起草案源=全部结算配置表 UNION,见 {@link JdbcSettlementConfigWriteRepository#listPendingConfigDrafts})。 */
     public SettlementConfigOverview overview() {
         List<ConfigItem> defaults = new ArrayList<>();
-        defaults.add(new ConfigItem("通票分账", "platform_retention_bps", "项目公司留存比例(万分比)",
-                String.valueOf(configRepository.findRetentionBps(null))));
+        // S4:原「项目公司留存比例」卡片已下线——与门票综合服务费为同一项、只扣一次(业务 HTML),
+        //   费率统一看下面的「门票综合服务费」。
         defaults.add(new ConfigItem("通票分账", "distribution_method", "各酒吧分配方式",
                 configRepository.findDistributionMethod(null)));
         // S9:超池特批(平台负责人短期激励)有效期,到期自动失效不再允许超池过账。

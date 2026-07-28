@@ -17,7 +17,6 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRat
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTierInput;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
-import com.complex.platform.settlement.SettlementConfigWriteRequests.RetentionRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -62,18 +61,6 @@ public class SettlementConfigWriteService {
     }
 
     // ================= §2 落草案(audit business_id 用仓储 RETURNING 的真实落地 id)=================
-
-    public void saveRetention(RetentionRequest request, String actorId) {
-        RetentionRequest req = requireRequest(request);
-        String idem = requireText(req.idempotencyKey(), "idempotency_key");
-        rejectSentinel(req.projectId(), "project_id");
-        int bps = requireBps(req.retentionBps(), "retention_bps");
-        String scopeKey = defaultScope(req.projectId());
-        String landedId = writeRepository.upsertRetentionDraft(draftId("prr_d_", scopeKey, idem),
-                req.projectId(), bps, actorId);
-        audit("settlement.config.platform_retention_rules.updated", "platform_retention_rules", landedId, idem,
-                Map.of("project_scope", scopeKey, "retention_bps", String.valueOf(bps)));
-    }
 
     public void saveDistributionMethod(DistributionMethodRequest request, String actorId) {
         DistributionMethodRequest req = requireRequest(request);

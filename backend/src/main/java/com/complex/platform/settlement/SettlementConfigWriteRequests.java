@@ -15,10 +15,6 @@ public final class SettlementConfigWriteRequests {
     private SettlementConfigWriteRequests() {
     }
 
-    /** platform_retention_rules:项目公司留存万分比 bps∈[0,10000]。 */
-    public record RetentionRequest(String idempotencyKey, String projectId, Integer retentionBps) {
-    }
-
     /**
      * ticket_distribution_configs:分配方式 ∈{by_venue_per_guest,by_rank_tier,by_fixed_amount} + S9 超池特批有效期。
      *

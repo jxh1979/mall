@@ -25,7 +25,7 @@ public class JdbcSettlementConfigWriteRepository {
 
     /** 单行 scope 配置类型 → 白名单表名 + scope 列(用于通用转正换行的「同 scope」匹配)。 */
     public enum SingleRowConfig {
-        RETENTION("platform_retention_rules", "retention", List.of("project_id")),
+        // S4:原 RETENTION(platform_retention_rules)已下线——留存与门票综合服务费为同一项,表随 V370 停用。
         DISTRIBUTION_METHOD("ticket_distribution_configs", "distribution_method", List.of("project_id")),
         MERCHANT_RATE("ticket_distribution_merchant_rates", "merchant_rate", List.of("project_id", "merchant_id")),
         // S2(V365):第三维换成票种(原权益类型)——业务人员按票种谈费率、按票种对账。
@@ -79,21 +79,6 @@ public class JdbcSettlementConfigWriteRepository {
     }
 
     // ================= §2 落草案(Path 2 upsert:草案槽覆盖,不动生效行;RETURNING 真实 id)=================
-
-    public String upsertRetentionDraft(String id, String projectId, int retentionBps, String updatedBy) {
-        return jdbcTemplate.queryForObject("""
-                INSERT INTO platform_retention_rules
-                    (id, project_id, retention_bps, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :retention_bps, 'active', TRUE, :updated_by, now())
-                ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), is_draft) WHERE status = 'active' DO UPDATE SET
-                    retention_bps = EXCLUDED.retention_bps,
-                    updated_by = EXCLUDED.updated_by,
-                    updated_at = now()
-                RETURNING id
-                """, new MapSqlParameterSource()
-                .addValue("id", id).addValue("project_id", projectId).addValue("retention_bps", retentionBps)
-                .addValue("updated_by", updatedBy), String.class);
-    }
 
     public String upsertDistributionMethodDraft(String id, String projectId, String methodType,
                                                 int specialApprovalTermValue, String specialApprovalTermUnit,
@@ -435,15 +420,10 @@ public class JdbcSettlementConfigWriteRepository {
     public List<PendingConfigDraft> listPendingConfigDrafts() {
         return jdbcTemplate.query("""
                 SELECT id, config_group, summary FROM (
-                    SELECT id, 'retention' AS config_group,
-                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 留存 ' || retention_bps || 'bps' AS summary,
-                           updated_at
-                      FROM platform_retention_rules WHERE is_draft = TRUE AND status = 'active'
-                    UNION ALL
-                    SELECT id, 'distribution_method',
+                    SELECT id, 'distribution_method' AS config_group,
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 分配方式 ' || method_type
                                || ' 超池特批有效期 ' || special_approval_term_value
-                               || CASE special_approval_term_unit WHEN 'day' THEN ' 天' ELSE ' 个月' END,
+                               || CASE special_approval_term_unit WHEN 'day' THEN ' 天' ELSE ' 个月' END AS summary,
                            updated_at
                       FROM ticket_distribution_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

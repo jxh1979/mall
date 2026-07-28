@@ -94,7 +94,9 @@ public class JdbcSettlementInvoiceRepository {
 
     public InvoiceSource findBillSource(String billId) {
         String sql = """
-                SELECT id, project_id, period_start, period_end, status, comp_service_fee_cent
+                SELECT id, project_id, period_start, period_end, status,
+                       -- S4:综合服务费拆两支(池链/专属,同一道费都归娱乐平台公司),开票应开额=两支合计。
+                       comp_service_fee_pooled_cent + comp_service_fee_exclusive_cent AS comp_service_fee_cent
                   FROM settlement_bills WHERE id = :id
                 """;
         var params = new MapSqlParameterSource().addValue("id", billId);
@@ -290,7 +292,7 @@ public class JdbcSettlementInvoiceRepository {
         String sql = """
                 SELECT s.bill_id, s.income_type, s.settlement_item_id,
                        MIN(s.subject_name) AS subject_name,
-                       COALESCE(i.final_amount_cent, b.comp_service_fee_cent) AS due_amount_cent,
+                       COALESCE(i.final_amount_cent, b.comp_service_fee_pooled_cent + b.comp_service_fee_exclusive_cent) AS due_amount_cent,
                        SUM(s.amount_cent) AS open_amount_cent
                   FROM settlement_invoice_items s
                   JOIN settlement_bills b ON b.id = s.bill_id
@@ -299,8 +301,8 @@ public class JdbcSettlementInvoiceRepository {
                    AND (CAST(:project_id AS VARCHAR) IS NULL OR s.project_id = CAST(:project_id AS VARCHAR))
                    AND (CAST(:period_start AS DATE) IS NULL OR s.period_start = CAST(:period_start AS DATE))
                  GROUP BY s.bill_id, s.income_type, s.settlement_item_id,
-                          i.final_amount_cent, b.comp_service_fee_cent
-                HAVING SUM(s.amount_cent) > COALESCE(i.final_amount_cent, b.comp_service_fee_cent)
+                          i.final_amount_cent, b.comp_service_fee_pooled_cent, b.comp_service_fee_exclusive_cent
+                HAVING SUM(s.amount_cent) > COALESCE(i.final_amount_cent, b.comp_service_fee_pooled_cent + b.comp_service_fee_exclusive_cent)
                  ORDER BY s.bill_id, s.income_type
                 """;
         var params = new MapSqlParameterSource()
