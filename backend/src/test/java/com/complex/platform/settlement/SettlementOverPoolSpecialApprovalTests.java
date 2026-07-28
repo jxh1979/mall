@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.support.TestSecurityActors;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -28,6 +29,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>造超池：<b>项目级</b> by_fixed_amount 配置 + 商户固定额（更隔离，不碰全局默认）。spvPool=800、两家池分配
  * a=600+400=1000&gt;800 → overPool。retention 用全局默认 20%（同 SettlementComboDiscountTests 口径）。
+ *
+ * <p><b>S9 短期激励期限（V357）</b>四件套：④ 期限后台可配（项目配 2 月 → 到期日 = 特批日 + 2 月）；
+ * ⑤ 到期回收·过账闸——过期特批的超池单过账 409 {@code SPECIAL_APPROVAL_EXPIRED} 且零应付落地；
+ * ⑥ 到期回收·冻结解除——过期后月结重跑不再冻结、仍超池即打回 draft，须重新特批（新有效期重新起算）；
+ * ⑦ 逐分不变判据——<b>无特批单时期限配 1 月 / 36 月，结算单各金额列逐分一致、生效期留空、过账行为不变</b>。
  *
  * <p>非 @Transactional（settleMonth/postBill 内部各自 @Transactional 真提交）；@AfterEach 按项目清理；
  * 远离今日的确定月 2011-04；每用例独立 projectId 隔离。ar_ap_items 为不可变台账（触发器禁 DELETE），
@@ -79,9 +85,11 @@ class SettlementOverPoolSpecialApprovalTests {
         assertThat(specialRef(bill)).isNull();
         assertThat(num(bill(pid), "spv_pool_cent")).isEqualTo(800L);
 
-        String returned = postingService.specialApprove(bill, "SA-2026-04-001");
+        var returned = postingService.specialApprove(bill, "SA-2026-04-001");
 
-        assertThat(returned).isEqualTo("SA-2026-04-001");
+        assertThat(returned.specialApprovalRef()).isEqualTo("SA-2026-04-001");
+        // S9：特批必带到期日（出厂默认 3 个月）——R-2「生效期强制字段」。
+        assertThat(returned.validUntil()).isEqualTo(LocalDate.now().plusMonths(3));
         assertThat(billStatus(bill)).isEqualTo("confirmed");
         assertThat(specialRef(bill)).isEqualTo("SA-2026-04-001");
     }
@@ -269,6 +277,90 @@ class SettlementOverPoolSpecialApprovalTests {
         assertThat(projectIdCol).isNull();
     }
 
+    // ─── S9 短期激励期限：生效期 + 到期回收 + 无特批单零变更 ─────────────────────
+
+    /** 期限后台可配：项目配 2 个月 → 到期日 = 特批当日 + 2 个月（不是写死的 3）。 */
+    @Test
+    void specialApprovalValidUntilFollowsConfiguredTerm() {
+        String pid = overPoolProject();
+        setProjectSpecialApprovalTermMonths(pid, 2);
+        String bill = settlementService.settleMonth(pid, MONTH);
+
+        var result = postingService.specialApprove(bill, "SA-TERM-2");
+
+        assertThat(result.validUntil()).isEqualTo(LocalDate.now().plusMonths(2));
+        assertThat(validUntil(bill)).isEqualTo(LocalDate.now().plusMonths(2));
+    }
+
+    /** 到期回收①：特批过期后超池单不可过账（fail-closed），且一分钱没落台账。 */
+    @Test
+    void expiredSpecialApprovalBlocksOverPoolPosting() {
+        String pid = overPoolProject();
+        String bill = settlementService.settleMonth(pid, MONTH);
+        postingService.specialApprove(bill, "SA-EXPIRE");
+        expireApproval(bill); // 时间快进到到期日之后
+
+        assertThatThrownBy(() -> postingService.postBill(bill))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("SPECIAL_APPROVAL_EXPIRED"));
+
+        // 拒绝即止：明细仍 draft、无任何应付落地（超池部分不会溜进台账）。
+        String m1Item = poolItem(pid, "m1");
+        assertThat(payableCount(m1Item, "ticket_distribution")).isZero();
+        assertThat(payableCount(m1Item, "platform_incentive_subsidy")).isZero();
+        assertThat(billStatus(bill)).isEqualTo("confirmed");
+    }
+
+    /** 到期回收②：过期特批不再冻结月结重跑 → 单被打回 draft 待重新特批；重新特批即拿到新有效期。 */
+    @Test
+    void expiredSpecialApprovalNoLongerFreezesResettleAndRequiresReapproval() {
+        String pid = overPoolProject();
+        String bill = settlementService.settleMonth(pid, MONTH);
+        postingService.specialApprove(bill, "SA-OLD");
+        expireApproval(bill);
+
+        // 特批有效期内重跑会被冻结（见 specialApprovedBillFrozenAgainstNewTransactions）；过期后照常重算。
+        seedPooled(pid, "m1", 1, 1, 100L); // 收入 1100 → 池 1100 − 留存 220 = 880 < 固定额分配 1000（仍超池）
+        String again = settlementService.settleMonth(pid, MONTH);
+
+        assertThat(again).isEqualTo(bill);
+        assertThat(num(bill(pid), "spv_pool_cent")).isEqualTo(880L); // 800→880：确实重算了，不是被冻结
+        assertThat(billStatus(bill)).isEqualTo("draft"); // 仍超池 → 打回待特批 = 回收后不再允许超池
+        assertThat(specialRef(bill)).isEqualTo("SA-OLD"); // 过期引用留痕不清空
+
+        // 回收后要继续，只能由平台负责人按当期金额重新特批 → 新有效期从今天重新起算。
+        var renewed = postingService.specialApprove(bill, "SA-RENEW");
+        assertThat(renewed.validUntil()).isEqualTo(LocalDate.now().plusMonths(3));
+        assertThat(billStatus(bill)).isEqualTo("confirmed");
+    }
+
+    /** 逐分不变判据：无特批单时，期限配成多少都不改结算单任何金额列，也不改过账行为。 */
+    @Test
+    void withoutSpecialApprovalTermConfigChangesNothing() {
+        String pidShort = nonOverPoolProject();
+        setProjectSpecialApprovalTermMonths(pidShort, 1);
+        String billShort = settlementService.settleMonth(pidShort, MONTH);
+
+        String pidLong = nonOverPoolProject();
+        setProjectSpecialApprovalTermMonths(pidLong, 36);
+        String billLong = settlementService.settleMonth(pidLong, MONTH);
+
+        // ① 金额列逐分一致（期限只管特批出口，不进任何金额公式）。
+        for (String col : List.of("ticket_revenue_cent", "channel_fee_cent", "giveaway_cost_cent",
+                "available_pool_cent", "retention_cent", "spv_pool_cent", "distributed_cent",
+                "comp_service_fee_cent", "combo_discount_cent", "rounding_residual_cent")) {
+            assertThat(num(bill(pidShort), col)).as(col).isEqualTo(num(bill(pidLong), col));
+        }
+        // ② 无特批 → 无生效期（列留空，CHECK 只在有特批引用时要求非空）。
+        assertThat(specialRef(billShort)).isNull();
+        assertThat(validUntil(billShort)).isNull();
+        // ③ 过账照常（未超池永不进到期判定分支）。
+        assertThat(postingService.postBill(billShort)).isEqualTo(2);
+        assertThat(postingService.postBill(billLong)).isEqualTo(2);
+        assertThat(billStatus(billShort)).isEqualTo("settled");
+        assertThat(billStatus(billLong)).isEqualTo("settled");
+    }
+
     // ─── 造数据 ───────────────────────────────────────────────────────────────
 
     /** 溢出用超池项目：固定额 5e9×2、营收 5e9×2=1e10 → spvPool=8e9、poolDistributed=1e10（a×spvPool 越 long 上限）。 */
@@ -369,6 +461,24 @@ class SettlementOverPoolSpecialApprovalTests {
     private String specialRef(String billId) {
         return jdbcTemplate.queryForObject(
                 "SELECT special_approval_ref FROM settlement_bills WHERE id = ?", String.class, billId);
+    }
+
+    private LocalDate validUntil(String billId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT special_approval_valid_until FROM settlement_bills WHERE id = ?", LocalDate.class, billId);
+    }
+
+    /** 时间快进：把到期日推到昨天（不动系统时钟，只改这张单的有效期，等价于「已到期」）。 */
+    private void expireApproval(String billId) {
+        jdbcTemplate.update(
+                "UPDATE settlement_bills SET special_approval_valid_until = CURRENT_DATE - 1 WHERE id = ?", billId);
+    }
+
+    /** 项目级超池特批有效期（月）；不配则回落全局默认 3。 */
+    private void setProjectSpecialApprovalTermMonths(String projectId, int months) {
+        jdbcTemplate.update(
+                "UPDATE ticket_distribution_configs SET special_approval_term_months = ? WHERE project_id = ?",
+                months, projectId);
     }
 
     private Map<String, Object> bill(String projectId) {

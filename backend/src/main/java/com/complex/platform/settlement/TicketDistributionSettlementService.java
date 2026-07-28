@@ -81,8 +81,9 @@ public class TicketDistributionSettlementService {
         // D7(对抗复核 risk2):已超池特批的 confirmed 单视同冻结——special_approval_ref 是对「该次超池特定金额」的批准,
         //   重跑会改分配/超额额、使批准额与实际过账额脱钩且无二次审批门。故命中已特批单直接返回现有 id、不重算(保住批准快照);
         //   如需重算须先撤批(清 ref)。月度作业据此天然跳过(不抛异常、不 crash 批次),迟到核销并入须走人工撤批重算。
+        // S9 到期回收:冻结只认【仍在有效期内】的特批;到期后本单回到普通单待遇——照常重算,仍超池即打回 draft。
         if ("confirmed".equals(existingStatus)
-                && repository.findBillSpecialApprovalRefByPeriod(projectId, periodStart, periodEnd) != null) {
+                && repository.findActiveSpecialApprovalRefByPeriod(projectId, periodStart, periodEnd) != null) {
             return repository.findBillId(projectId, periodStart, periodEnd);
         }
         Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);

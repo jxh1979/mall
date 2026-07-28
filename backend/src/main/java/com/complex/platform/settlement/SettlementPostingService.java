@@ -66,12 +66,15 @@ public class SettlementPostingService {
      * D7 超池特批出口：把某<b>超池 draft</b> 结算单填 special_approval_ref 并置 confirmed（可再走 postBill 过账）。
      * 仅超池 draft 单可特批；非超池 draft 或已 confirmed/settled/reversed → 409 {@code BILL_NOT_OVERPOOL_DRAFT}。
      *
+     * <p>S9 短期激励期限：特批同时落<b>到期日</b> = 特批当日 + 配置期限（后台可配，出厂默认 3 个月，
+     * 业务口径「短期激励，默认不超过 3 个月」）。到期后本次特批自动失效（见 {@link #postBill}）。
+     *
      * @param billId             结算单 id
      * @param specialApprovalRef 特批引用（平台负责人特批短期激励凭据），非空
-     * @return 落库的特批引用（回显）
+     * @return 落库的特批引用 + 到期日
      */
     @Transactional
-    public String specialApprove(String billId, String specialApprovalRef) {
+    public SpecialApprovalResult specialApprove(String billId, String specialApprovalRef) {
         String ref = specialApprovalRef == null ? null : specialApprovalRef.trim();
         if (ref == null || ref.isEmpty()) {
             throw com.complex.platform.common.api.ApiException.badRequest(
@@ -89,20 +92,30 @@ public class SettlementPostingService {
                     "only over-pool draft bills can be special-approved; status=" + ctx.status()
                             + ", overPool=" + ctx.overPool());
         }
-        int rows = repository.markBillSpecialApproved(billId, ref);
-        if (rows == 0) {
+        // S9：期限后台可配(ticket_distribution_configs.special_approval_term_months·出厂默认 3 个月),
+        //   到期日在 DB 侧按 CURRENT_DATE + N 月算,与到期判定同一时钟。
+        int termMonths = repository.findSpecialApprovalTermMonths(ctx.projectId());
+        LocalDate validUntil = repository.markBillSpecialApproved(billId, ref, termMonths);
+        if (validUntil == null) {
             // 并发下状态已被改（另一次特批/过账）→ 与上同义，再抛一次防竞态。
             throw com.complex.platform.common.api.ApiException.conflict(
                     "BILL_NOT_OVERPOOL_DRAFT", "bill is no longer a draft: " + billId);
         }
-        // 治理留痕(对抗复核补):超池特批是资金级审批,记 billId/ref/超池额供追溯——谁批的短期激励超额、批了多大缺口。
+        // 治理留痕(对抗复核补):超池特批是资金级审批,记 billId/ref/超池额/到期日供追溯——
+        //   谁批的短期激励超额、批了多大缺口、批到哪天为止。
         auditEventService.recordSuccess(
-                "settlement.bill.special_approved", "settlement.bill.post", "settlement_bill", billId,
+                "settlement.bill.special_approved", "settlement.bill.special_approve", "settlement_bill", billId,
                 "req_" + java.util.UUID.randomUUID(), null,
                 java.util.Map.of("special_approval_ref", ref,
                         "spv_pool_cent", ctx.spvPoolCent(),
-                        "pooled_distributed_cent", ctx.pooledDistributedCent()));
-        return ref;
+                        "pooled_distributed_cent", ctx.pooledDistributedCent(),
+                        "term_months", termMonths,
+                        "valid_until", validUntil.toString()));
+        return new SpecialApprovalResult(ref, validUntil);
+    }
+
+    /** S9 特批回执：特批引用 + 到期日（业务方据此知道这次短期激励批到哪天为止）。 */
+    public record SpecialApprovalResult(String specialApprovalRef, LocalDate validUntil) {
     }
 
     /**
@@ -124,6 +137,16 @@ public class SettlementPostingService {
             throw com.complex.platform.common.api.ApiException.conflict(
                     "SETTLEMENT_BILL_NOT_CONFIRMED",
                     "only confirmed bills can be posted; current status=" + ctx.status());
+        }
+
+        // S9 到期回收(惰性判定,无定时作业):超池单过账必须有【仍在有效期内】的特批。
+        //   到期即失效 → 这里 fail-closed 拒绝,不再允许超池分账落账本;要继续须先重跑该月结算
+        //   (过期特批不再冻结该单 → 仍超池即打回 draft),再由平台负责人按当期金额重新特批。
+        //   未超池单永不进本分支 → 无特批单场景逐分零变更。
+        if (ctx.overPool() && !ctx.specialApprovalActive()) {
+            throw com.complex.platform.common.api.ApiException.conflict("SPECIAL_APPROVAL_EXPIRED",
+                    "超池特批已到期或缺失(到期日=" + ctx.specialApprovalValidUntil() + "),不可过账超池结算单;"
+                            + "请重新结算该月后由平台负责人重新特批");
         }
 
         boolean overPool = ctx.overPool();

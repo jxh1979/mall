@@ -123,6 +123,7 @@ type Form = {
   projectId: string;
   retentionBps: string;
   methodType: string;
+  specialApprovalTermMonths: string;
   merchantId: string;
   perGuestCent: string;
   fixedAmountCent: string;
@@ -138,7 +139,7 @@ type Form = {
   amountCentPerPoint: string;
 };
 const EMPTY_FORM: Form = {
-  projectId: "", retentionBps: "", methodType: "by_venue_per_guest", merchantId: "",
+  projectId: "", retentionBps: "", methodType: "by_venue_per_guest", specialApprovalTermMonths: "3", merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", entitlementType: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", revenueStream: "all_pass_ticket", managementEntityId: "",
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
@@ -469,6 +470,10 @@ function editSteps(
           <select data-testid="settlement-config-field-methodType" value={form.methodType} onChange={setField("methodType")}>
             {METHOD_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
+        </label>
+        <label>超池特批有效期（月，默认 3）
+          <input data-testid="settlement-config-field-specialApprovalTermMonths" type="number" min={1}
+                 value={form.specialApprovalTermMonths} onChange={setField("specialApprovalTermMonths")} />
         </label></>);
       break;
     case "merchant_rate":
@@ -553,7 +558,7 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[]): GuidedSummaryI
   const scope: GuidedSummaryItem = { label: "项目", value: form.projectId.trim() || "全平台默认" };
   switch (key) {
     case "retention": return [scope, { label: "留存万分比", value: form.retentionBps || "—" }];
-    case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }];
+    case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期（月）", value: form.specialApprovalTermMonths || "3" }];
     case "merchant_rate": return [scope, { label: "商户", value: form.merchantId || "—" }, { label: "每客单价（分）", value: form.perGuestCent || "—" }, { label: "固定额（分）", value: form.fixedAmountCent || "—" }];
     case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: form.entitlementType.trim() || "通用" }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
     case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }];
@@ -571,7 +576,9 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
     case "retention":
       return isIntInRange(form.retentionBps, 0, 10000) ? null : "留存万分比需为 0~10000 的整数。";
     case "distribution_method":
-      return null;
+      // S9：超池特批有效期（月）——业务口径「短期激励，默认不超过 3 个月」，留空按 3 落库。
+      return isIntInRange(form.specialApprovalTermMonths || "3", 1, Number.MAX_SAFE_INTEGER)
+        ? null : "超池特批有效期需为不小于 1 的整数（月）。";
     case "merchant_rate":
       if (orUndef(form.merchantId) === undefined) return "商户 id 必填。";
       if (orUndef(form.perGuestCent) === undefined && orUndef(form.fixedAmountCent) === undefined) return "每客单价与固定额至少填一项。";
@@ -613,7 +620,10 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
     case "retention":
       return { idempotencyKey, projectId: project, retentionBps: Number(form.retentionBps) };
     case "distribution_method":
-      return { idempotencyKey, projectId: project, methodType: form.methodType };
+      return {
+        idempotencyKey, projectId: project, methodType: form.methodType,
+        specialApprovalTermMonths: Number(form.specialApprovalTermMonths || "3"),
+      };
     case "merchant_rate":
       return {
         idempotencyKey, projectId: project, merchantId: form.merchantId.trim(),

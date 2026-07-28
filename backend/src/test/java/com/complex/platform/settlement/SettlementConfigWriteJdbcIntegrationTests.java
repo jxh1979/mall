@@ -112,10 +112,13 @@ class SettlementConfigWriteJdbcIntegrationTests {
     /** 分配方式/渠道费/综合服务费/套票折扣:草案期读侧不变,转正后切换(逐类型证伪 Path 2)。 */
     @Test
     void otherSingleRowTypesDraftThenActivate() {
-        writeService.saveDistributionMethod(new DistributionMethodRequest("d1", PROJECT, "by_fixed_amount"), DRAFTER);
+        // S9:超池特批有效期与分配方式同表同草案闸——草案期读侧仍是全局默认 3 个月,转正后才切 6。
+        writeService.saveDistributionMethod(new DistributionMethodRequest("d1", PROJECT, "by_fixed_amount", 6), DRAFTER);
         assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_rank_tier");
+        assertThat(billRepository.findSpecialApprovalTermMonths(PROJECT)).isEqualTo(3);
         writeService.activateDraft("distribution_method", draftRowId("ticket_distribution_configs"), APPROVER);
         assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_fixed_amount");
+        assertThat(billRepository.findSpecialApprovalTermMonths(PROJECT)).isEqualTo(6);
 
         writeService.saveChannelFee(new ChannelFeeRequest("c1", PROJECT, null, 500), DRAFTER);
         assertThat(billRepository.findChannelFeeBps(PROJECT)).isZero();

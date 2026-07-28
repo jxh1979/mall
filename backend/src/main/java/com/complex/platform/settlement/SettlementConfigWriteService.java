@@ -80,11 +80,17 @@ public class SettlementConfigWriteService {
         rejectSentinel(req.projectId(), "project_id");
         String method = requireOneOf(req.methodType(), "method_type",
                 "by_venue_per_guest", "by_rank_tier", "by_fixed_amount");
+        // S9：超池特批有效期(月)。留空 = 出厂默认 3(业务口径「短期激励，默认不超过 3 个月」)；须 ≥1 个月。
+        int termMonths = req.specialApprovalTermMonths() == null ? 3 : req.specialApprovalTermMonths();
+        if (termMonths < 1) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "special_approval_term_months must be >= 1");
+        }
         String scopeKey = defaultScope(req.projectId());
         String landedId = writeRepository.upsertDistributionMethodDraft(draftId("tdc_d_", scopeKey, idem),
-                req.projectId(), method, actorId);
+                req.projectId(), method, termMonths, actorId);
         audit("settlement.config.ticket_distribution_configs.updated", "ticket_distribution_configs", landedId, idem,
-                Map.of("project_scope", scopeKey, "method_type", method));
+                Map.of("project_scope", scopeKey, "method_type", method,
+                        "special_approval_term_months", String.valueOf(termMonths)));
     }
 
     public void saveMerchantRate(MerchantRateRequest request, String actorId) {

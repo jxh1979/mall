@@ -68,6 +68,22 @@ public class JdbcSettlementBillRepository {
         return requireConfigured(method, "ticket_distribution_configs.method_type", projectId);
     }
 
+    /**
+     * S9 超池特批有效期（月）：项目特例优先，否则全局默认（建表默认 3 = 业务口径「短期激励，默认不超过 3 个月」）。
+     * 与分配方式同表同维度——超池特批就是该分配方式的溢出出口，同一业务对象同一处配。
+     */
+    public int findSpecialApprovalTermMonths(String projectId) {
+        Integer months = jdbcTemplate.query("""
+                SELECT special_approval_term_months FROM ticket_distribution_configs
+                 WHERE status = 'active' AND is_draft = FALSE
+                   AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
+                 ORDER BY (project_id IS NOT NULL) DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource().addValue("project_id", projectId),
+                rs -> rs.next() ? rs.getInt("special_approval_term_months") : null);
+        return requireConfigured(months, "ticket_distribution_configs.special_approval_term_months", projectId);
+    }
+
     /** by_rank_tier 排名档位：项目特例整套优先，无项目档位则回退全局默认档位。 */
     public List<RankTier> findRankTiers(String projectId) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_id", projectId);
@@ -336,8 +352,11 @@ public class JdbcSettlementBillRepository {
                     distribution_method = EXCLUDED.distribution_method,
                     -- D7 防覆盖：已填的特批引用不被 settleMonth 重跑清 null（引擎恒写 null）；status 一旦特批过
                     --   （special_approval_ref 非空）就锁死不被重跑打回 draft，其余（未特批）单照常按引擎新算态覆盖。
+                    -- S9 到期回收：冻结只在【特批仍在有效期内】时成立；到期后本单回到普通单待遇——按引擎新算态
+                    --   覆盖 status（仍超池即打回 draft，须平台负责人重新特批才能再过账）。过期引用不清空（留痕保全）。
                     special_approval_ref = COALESCE(settlement_bills.special_approval_ref, EXCLUDED.special_approval_ref),
                     status              = CASE WHEN settlement_bills.special_approval_ref IS NOT NULL
+                                                AND settlement_bills.special_approval_valid_until >= CURRENT_DATE
                                                THEN settlement_bills.status ELSE EXCLUDED.status END,
                     attributed_entity_id = EXCLUDED.attributed_entity_id,
                     combo_discount_cent = EXCLUDED.combo_discount_cent,
@@ -422,13 +441,19 @@ public class JdbcSettlementBillRepository {
                 rs -> rs.next() ? rs.getString("status") : null);
     }
 
-    /** D7(对抗复核 risk2):该月份结算单的 special_approval_ref(未特批/无单返 null);供 settleMonth 冻结已特批单防重算漂移。 */
-    public String findBillSpecialApprovalRefByPeriod(String projectId, java.time.LocalDate periodStart,
+    /**
+     * D7(对抗复核 risk2):该月份结算单【仍在有效期内】的 special_approval_ref(未特批/已过期/无单返 null);
+     * 供 settleMonth 冻结已特批单防重算漂移。
+     *
+     * <p>S9 到期回收:过期特批不再冻结——引擎照常重算,仍超池就打回 draft 待重新特批。
+     */
+    public String findActiveSpecialApprovalRefByPeriod(String projectId, java.time.LocalDate periodStart,
             java.time.LocalDate periodEnd) {
         return jdbcTemplate.query("""
                 SELECT special_approval_ref FROM settlement_bills
                  WHERE COALESCE(project_id, '__DEFAULT__') = COALESCE(:project_id, '__DEFAULT__')
                    AND period_start = :period_start AND period_end = :period_end
+                   AND special_approval_valid_until >= CURRENT_DATE
                 """, new MapSqlParameterSource()
                 .addValue("project_id", projectId)
                 .addValue("period_start", java.sql.Date.valueOf(periodStart))
@@ -490,6 +515,9 @@ public class JdbcSettlementBillRepository {
     public OverPoolContext findOverPoolContext(String billId) {
         return jdbcTemplate.query("""
                 SELECT b.status, b.project_id, b.spv_pool_cent,
+                       b.special_approval_valid_until,
+                       (b.special_approval_ref IS NOT NULL
+                        AND b.special_approval_valid_until >= CURRENT_DATE) AS special_approval_active,
                        COALESCE((SELECT SUM(i.final_amount_cent) FROM settlement_items i
                                   WHERE i.bill_id = b.id
                                     AND i.distribution_method <> 'exclusive_full'), 0) AS pooled_distributed_cent
@@ -498,25 +526,37 @@ public class JdbcSettlementBillRepository {
                 """, new MapSqlParameterSource().addValue("id", billId),
                 rs -> rs.next()
                         ? new OverPoolContext(rs.getString("status"), rs.getString("project_id"),
-                                rs.getLong("spv_pool_cent"), rs.getLong("pooled_distributed_cent"))
+                                rs.getLong("spv_pool_cent"), rs.getLong("pooled_distributed_cent"),
+                                rs.getBoolean("special_approval_active"),
+                                rs.getObject("special_approval_valid_until", java.time.LocalDate.class))
                         : null);
     }
 
     /**
      * D7 特批出口：填 special_approval_ref 并把 status draft→confirmed（仅当仍 draft，防重复特批/并发覆盖）。
-     * 返回更新行数（0=非 draft，调用方据此判 409）。特批后可走既有 postBill 过账。
+     * S9：同时按配置期限落到期日 = 特批当日 + termMonths 月（DB 单一时钟，与到期判定 CURRENT_DATE 同源）。
+     *
+     * @return 落库的到期日；null = 未更新任何行（非 draft，调用方据此判 409）
      */
-    public int markBillSpecialApproved(String billId, String specialApprovalRef) {
-        return jdbcTemplate.update("""
+    public java.time.LocalDate markBillSpecialApproved(String billId, String specialApprovalRef, int termMonths) {
+        return jdbcTemplate.query("""
                 UPDATE settlement_bills
-                   SET special_approval_ref = :ref, status = 'confirmed', updated_at = now()
+                   SET special_approval_ref = :ref,
+                       special_approval_valid_until = (CURRENT_DATE + make_interval(months => :months))::date,
+                       status = 'confirmed', updated_at = now()
                  WHERE id = :id AND status = 'draft'
+                RETURNING special_approval_valid_until
                 """, new MapSqlParameterSource()
-                .addValue("id", billId).addValue("ref", specialApprovalRef));
+                .addValue("id", billId).addValue("ref", specialApprovalRef).addValue("months", termMonths),
+                rs -> rs.next() ? rs.getObject("special_approval_valid_until", java.time.LocalDate.class) : null);
     }
 
-    /** D7 超池上下文读投影：overPool = pooledDistributedCent > spvPoolCent。 */
-    public record OverPoolContext(String status, String projectId, long spvPoolCent, long pooledDistributedCent) {
+    /**
+     * D7 超池上下文读投影：overPool = pooledDistributedCent &gt; spvPoolCent。
+     * S9：specialApprovalActive = 有特批引用且到期日 ≥ 今日（DB 侧算，单一时钟）。
+     */
+    public record OverPoolContext(String status, String projectId, long spvPoolCent, long pooledDistributedCent,
+                                  boolean specialApprovalActive, java.time.LocalDate specialApprovalValidUntil) {
         public boolean overPool() {
             return pooledDistributedCent > spvPoolCent;
         }

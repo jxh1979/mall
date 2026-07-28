@@ -94,18 +94,22 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("updated_by", updatedBy), String.class);
     }
 
-    public String upsertDistributionMethodDraft(String id, String projectId, String methodType, String updatedBy) {
+    public String upsertDistributionMethodDraft(String id, String projectId, String methodType,
+                                                int specialApprovalTermMonths, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO ticket_distribution_configs
-                    (id, project_id, method_type, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :method_type, 'active', TRUE, :updated_by, now())
+                    (id, project_id, method_type, special_approval_term_months, status, is_draft,
+                     updated_by, updated_at)
+                VALUES (:id, :project_id, :method_type, :term_months, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     method_type = EXCLUDED.method_type,
+                    special_approval_term_months = EXCLUDED.special_approval_term_months,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("method_type", methodType)
+                .addValue("term_months", specialApprovalTermMonths)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
@@ -420,7 +424,8 @@ public class JdbcSettlementConfigWriteRepository {
                       FROM platform_retention_rules WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
                     SELECT id, 'distribution_method',
-                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 分配方式 ' || method_type,
+                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 分配方式 ' || method_type
+                               || ' 超池特批有效期 ' || special_approval_term_months || ' 个月',
                            updated_at
                       FROM ticket_distribution_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

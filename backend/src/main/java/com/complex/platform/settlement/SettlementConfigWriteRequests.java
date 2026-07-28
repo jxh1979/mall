@@ -19,8 +19,12 @@ public final class SettlementConfigWriteRequests {
     public record RetentionRequest(String idempotencyKey, String projectId, Integer retentionBps) {
     }
 
-    /** ticket_distribution_configs:分配方式 ∈{by_venue_per_guest,by_rank_tier,by_fixed_amount}。 */
-    public record DistributionMethodRequest(String idempotencyKey, String projectId, String methodType) {
+    /**
+     * ticket_distribution_configs:分配方式 ∈{by_venue_per_guest,by_rank_tier,by_fixed_amount} + S9 超池特批有效期(月)。
+     * specialApprovalTermMonths 留空 = 沿用出厂默认 3 个月(业务口径「短期激励,默认不超过 3 个月」)。
+     */
+    public record DistributionMethodRequest(String idempotencyKey, String projectId, String methodType,
+                                            Integer specialApprovalTermMonths) {
     }
 
     /** ticket_distribution_merchant_rates:某商户每客单价/固定额(分),两额至少配一、各≥0。 */
