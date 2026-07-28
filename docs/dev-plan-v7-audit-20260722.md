@@ -60,7 +60,7 @@
 |---|---|---|---|
 | **P0-A** | **多主体 PII 明文**(★GAP-07/SEC-04) | E域实证 merchants 59/59明文;商户/供应商/招商/费用通知电话写入路径未接 PiiCipher | 写入路径接 PiiCipher + 迁移回填历史明文 |
 | **P0-B** | **资金台账 append-only 破防** | ar_ap_items补录改原行金额;settlement_transactions(最高价值账本)漏触发器;points_ledger就地UPDATE | 改红冲(不改原行)+ 补触发器族 + points 改追加 |
-| **P0-C** | **高价值退酒先生效后审批**(FLOW-07) | `BarOrderService.java:962` approvalRequired=true + javadoc自认先生效后审批;无阈值/证据可空 | 阈值配置化 + 高价值先审后行 + 双证据分类 |
+| **P0-C** | **高价值退酒先生效后审批**(FLOW-07) | `BarOrderService` 仍先生效后审；**文档口径已于 2026-07-27 收口 A1**：仅已出品、默认阈值超过5000元可配、高价值先审后行+双证据、低价值可即时生效（见 bar PRD §10.2.1 / business-decision-log BAR-VOID-A1）。编码未改。 | 按文档实现：阈值配置 + 已出品高价值先审后行 + 双证据；低价值 A1 即时生效 |
 | **P0-D** | **提成/积分硬编码**(CFG-01) | `BarBillingService.java:529` 15%/10%写死;积分每元1分 | 建配置表 + 引擎读配置(违"业务策略一律可配"母铁律) |
 | **P0-E** | **对账旁路手填 + 抽成无草案闸** | `IntegrationReconciliationService.java:112`手填平台金额 vs `FinanceService.java:491`强制系统取数;turnover_rent_rules单人直改进结算 | 改系统取数禁手填 + 抽成规则纳入配置中心草案转正 |
 | 另 P0 | 综合服务费重建(=R-3/专项①)、四舍五入(=R-7)、游乐绑定软删(=R-12)、端开关取最严(=R-10) | 见上 | 见上 |

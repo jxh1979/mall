@@ -12,7 +12,7 @@ phase3 覆盖行：302
 | CC-GOV-DENY-PRIORITY | 显式拒绝优先 | ALIGNED_OR_SUPPORTED | P3 | 12 | 7 | 51 | 0 |
 | CC-GOV-TEMP-AUTH | 临时授权到期/单次 | ALIGNED_OR_SUPPORTED | P3 | 13 | 7 | 73 | 0 |
 | CC-GOV-SELF-APPROVE | 禁止自审自批 | ALIGNED_OR_SUPPORTED | P3 | 2 | 1 | 10 | 0 |
-| CC-GOV-HIGH-RISK-AUTH | 高危授权先审后生效 | KNOWN_DRIFT_RECORDED_IN_APPENDIX | P1 | 1 | 1 | 84 | 1 |
+| CC-GOV-HIGH-RISK-AUTH | 高危授权先审后生效 | DOC_RULE_DECIDED_CODE_PENDING | P1 | 1 | 1 | 84 | 1 |
 | CC-GOV-OUTSOURCE-SCOPE | 外包最小够用 | ALIGNED_OR_SUPPORTED | P3 | 6 | 4 | 94 | 0 |
 | CC-GOV-AUDITOR-RO | 审计只读+敏感留痕 | ALIGNED_OR_SUPPORTED | P3 | 7 | 3 | 86 | 0 |
 | CC-GOV-ORG-CHANGE-RESIDUAL | 组织变化权限残留 | ALIGNED_OR_SUPPORTED | P3 | 8 | 5 | 52 | 0 |
@@ -64,3 +64,10 @@ phase3 覆盖行：302
 
 - 未发现 APPENDIX 系统性主张“职级覆盖显式拒绝 / 可自批 / 外包默认可看全局 / 审计可改业务 / 九类终端”等与 phase3 已修口径硬对着干的成体系反向立法。
 - 唯一高优先级附录信号是实现漂移被审计文档记录，不是文档权威层冲突。
+
+### 更新（2026-07-27）文档收口
+
+- 用户确认方案 **A1**：仅已出品；默认阈值超过 **5000 元**可配；高价值先审后行+双证据；低价值可即时生效。
+- 写入：`bar-business-operations-product-prd-v0.1.md` §10.2.1、`business-decision-log` `BAR-VOID-A1`。
+- 状态改为 **DOC_RULE_DECIDED_CODE_PENDING**（本轮不动编码）。
+- `PGM-0089` phase3 FULL 保持不回滚。
