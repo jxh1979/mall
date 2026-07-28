@@ -41,6 +41,10 @@ type EntitlementTemplateRow = {
   name: string;
   entitlementType: string;
   status: string;
+  // 配置中心批5：签约价（=内部结算价）与结算类别贯通到列表/详情，改价前运营先看得见现值。
+  entitlementKind?: string | null;
+  agreementPriceCent?: number | null;
+  requireFacePhoto?: boolean;
 };
 type PriceRuleRow = {
   id: string;
@@ -55,6 +59,9 @@ type PriceRuleRow = {
 };
 type MerchantRow = { id: string; merchantName: string; merchantType: string | null };
 type AmusementProjectRow = { id: string; projectName: string };
+
+// V230：票种资格/定价档分类的中文名（全终端零英文）。
+const TICKET_CATEGORY_LABELS: Record<string, string> = { standard: "标准票", new_person: "新人票", student: "学生票" };
 
 const MANAGE = ["ticket.product.manage"];
 // #172(2026-07-19 拍板)：全场统一动态码刷新间隔——5 秒为单位、最长 60 秒。
@@ -124,6 +131,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   // #172：全场统一动态码刷新间隔（秒）——页级配置，不再按票种各配一套。
   const [qrRefresh, setQrRefresh] = React.useState<number>(15);
   const [refundable, setRefundable] = React.useState(false);
+  // 结算重构批4（V230）：票种资格/定价档分类（标准/新人/学生）。仅分类与报表口径，不碰定价。
+  const [ticketCategory, setTicketCategory] = React.useState("standard");
   const [barId, setBarId] = React.useState("");
   // AUD-015：建票=草稿→绑权益→带理由发布，一个向导内完成；createKey 固定一次，失败重试幂等复用同一草稿。
   const [createTemplateId, setCreateTemplateId] = React.useState("");
@@ -135,7 +144,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [createOpen, setCreateOpen] = React.useState(false);
 
   // 区2 新建权益模板
-  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "" });
+  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", requireFacePhoto: false });
+  // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
+  const [priceForm, setPriceForm] = React.useState({ templateId: "", priceYuan: "", reason: "" });
   // 区3 通票组装（票种绑权益）
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1" });
   // 区4 派生价规则
@@ -211,6 +222,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       fields: [
         { label: "模板名称", value: row.name },
         { label: "权益类型", value: formatBusinessStatus(row.entitlementType) },
+        { label: "签约价", value: row.agreementPriceCent != null ? `¥${yuan(row.agreementPriceCent)}` : "未设（按面值结算）" },
+        { label: "需要人脸照", value: row.requireFacePhoto ? "需要" : "不需要" },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "模板编号", value: row.id },
       ],
@@ -369,6 +382,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         validity_days: Number(validityDays) || 1,
         refundable,
         bar_id: barId || null,
+        // V230：资格/定价档分类（新人票/学生票等）。仅分类与报表用，价照样在本页三档价与派生价规则里配。
+        ticket_category: ticketCategory,
       });
       const ticketId = ticket.id ?? "ticket-1";
       await api.post(`/api/v1/ticketing/ticket-types/${ticketId}/entitlements`, {
@@ -404,9 +419,29 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       default_total_times: Number(tplForm.totalTimes) || 1,
       default_value_cent: tplForm.valueYuan.trim() ? Math.round(Number(tplForm.valueYuan) * 100) : null,
       status: "active",
+      // 批3-6（V229）：拍脸照存档开关——建模板时就能勾，不必事后改库。
+      require_face_photo: tplForm.requireFacePhoto,
     });
     setActionResult({ action: "entitlement_template_created", name: tplForm.name.trim() });
-    setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "" });
+    setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", requireFacePhoto: false });
+    reload();
+  }
+
+  /**
+   * 配置中心批5：改虚拟权益签约价（=内部结算价）。
+   * 只对之后发放的权益生效——已发放/已核销的按发放当时的价，后端结构性保证（快照链）。
+   */
+  async function updateAgreementPrice() {
+    if (!priceForm.templateId) { setGlobalError("请选择要改签约价的权益模板"); return; }
+    if (!priceForm.priceYuan.trim()) { setGlobalError("新签约价必填"); return; }
+    if (!priceForm.reason.trim()) { setGlobalError("改签约价必须填写理由"); return; }
+    await api.put(`/api/v1/ticketing/entitlement-templates/${priceForm.templateId}/agreement-price`, {
+      idempotency_key: crypto.randomUUID(),
+      agreement_price_cent: Math.round(Number(priceForm.priceYuan) * 100),
+      reason: priceForm.reason.trim(),
+    });
+    setActionResult({ action: "entitlement_agreement_price_updated", templateId: priceForm.templateId });
+    setPriceForm({ templateId: "", priceYuan: "", reason: "" });
     reload();
   }
 
@@ -748,6 +783,13 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                     <option value="365">年票（365天）</option>
                   </select>
                 </label>
+                <label>票种分类
+                  <select data-testid="ticket-category" aria-label="票种分类" value={ticketCategory} onChange={(event) => setTicketCategory(event.target.value)}>
+                    <option value="standard">标准票</option>
+                    <option value="new_person">新人票</option>
+                    <option value="student">学生票</option>
+                  </select>
+                </label>
                 <label>
                   <input data-testid="ticket-refundable" type="checkbox" checked={refundable} onChange={(event) => setRefundable(event.target.checked)} aria-label="可退票" />
                   可退票（客人可申请整票退款、到期未用自动退；不勾=不可退）
@@ -796,6 +838,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           { label: "节假日价（元）", value: holiday || "未填写" },
           { label: "限量", value: stock.trim() || "不限" },
           { label: "有效期（天）", value: validityDays },
+          { label: "票种分类", value: TICKET_CATEGORY_LABELS[ticketCategory] ?? "标准票" },
           { label: "可退票", value: refundable ? "可退" : "不可退" },
           { label: "单店酒吧", value: barId ? (merchants.find((m) => m.id === barId)?.merchantName ?? barId) : "通票" },
           { label: "权益模板", value: createTemplateId ? (templates.find((t) => t.id === createTemplateId)?.name ?? createTemplateId) : "未选择" },
@@ -950,6 +993,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
             <tr>
               <th>模板名称</th>
               <th>权益类型</th>
+              <th>签约价</th>
+              <th>需要人脸照</th>
               <th>状态</th>
               <th>详情</th>
             </tr>
@@ -961,6 +1006,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTemplateDetail(row); } }}>
                 <td>{row.name}</td>
                 <td>{formatBusinessStatus(row.entitlementType)}</td>
+                <td>{row.agreementPriceCent != null ? `¥${yuan(row.agreementPriceCent)}` : "未设（按面值结算）"}</td>
+                <td>{row.requireFacePhoto ? "需要" : "不需要"}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看权益模板详情" onClick={(event) => { event.stopPropagation(); openTemplateDetail(row); }}>查看详情</button></td>
               </tr>
@@ -977,8 +1024,36 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </select>
         <input aria-label="默认次数" type="number" min={1} value={tplForm.totalTimes} onChange={(event) => setTplForm({ ...tplForm, totalTimes: event.target.value })} placeholder="默认次数" />
         <input aria-label="默认面值（元）" type="number" min={0} step="0.01" value={tplForm.valueYuan} onChange={(event) => setTplForm({ ...tplForm, valueYuan: event.target.value })} placeholder="默认面值（元，可空）" />
+        <label>
+          <input data-testid="entitlement-template-require-face-photo" type="checkbox" aria-label="需要人脸照"
+            checked={tplForm.requireFacePhoto} onChange={(event) => setTplForm({ ...tplForm, requireFacePhoto: event.target.checked })} />
+          需要人脸照（购票时拍一张存档，核销时核销员比对本人，防转票；游乐票建议勾）
+        </label>
         <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid="entitlement-template-create" onClick={() => void createTemplate()}>
           新建模板
+        </PermissionButton>
+      </div>
+
+      <h3>改签约价（虚拟权益 · 内部结算价）</h3>
+      <p style={{ color: "var(--adm-text-3)", fontSize: 13 }} data-testid="agreement-price-scope-hint">
+        签约价决定客人核销这张权益时平台结算给商户多少钱。改后<strong>只对之后发放的权益生效</strong>：已发放的票按发放当时的价、已核销的按核销当时的价，都不会被改动。改价必须填理由，全程留痕。实物权益（酒水等）不在这里改——改吧台商品的内部结算价。
+      </p>
+      <div className="admin-inline-form" data-testid="agreement-price-form">
+        <select aria-label="改签约价-权益模板" data-testid="agreement-price-template" value={priceForm.templateId}
+          onChange={(event) => setPriceForm({ ...priceForm, templateId: event.target.value })}>
+          <option value="">选择权益模板</option>
+          {templates.filter((t) => t.entitlementKind === "virtual").map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}（现价 {t.agreementPriceCent != null ? `¥${yuan(t.agreementPriceCent)}` : "未设"}）
+            </option>
+          ))}
+        </select>
+        <input aria-label="新签约价（元）" data-testid="agreement-price-value" type="number" min={0} step="0.01"
+          value={priceForm.priceYuan} onChange={(event) => setPriceForm({ ...priceForm, priceYuan: event.target.value })} placeholder="新签约价（元）" />
+        <input aria-label="改价理由" data-testid="agreement-price-reason" value={priceForm.reason}
+          onChange={(event) => setPriceForm({ ...priceForm, reason: event.target.value })} placeholder="改价理由（必填，如：签约价录入笔误更正）" />
+        <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid="agreement-price-submit" onClick={() => void updateAgreementPrice()}>
+          保存签约价
         </PermissionButton>
       </div>
 

@@ -9758,6 +9758,103 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/ticketing/entitlement-templates/{id}/agreement-price": {
+      "put": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "updateEntitlementTemplateAgreementPrice",
+        "summary": "改虚拟权益签约价",
+        "description": "配置中心批5:签约价(=内部结算价)决定客人核销该权益时平台结算给商户多少钱。此前只能建不能改,填错只能作废重建。改价只对**之后发放**的权益生效——已发放的按发放当时的价、已核销的按核销当时的价,由快照链(issued_entitlements.agreement_price_cent → ticket_verifications.settlement_price_cent)结构性锁死,本端点碰不到。仅虚拟权益适用(实物权益走吧台商品内部结算价);已存档/待删除模板拒改;理由必填并进审计留痕。",
+        "x-permission": "ticket.entitlement.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_entitlement_template.agreement_price_changed",
+        "x-audit-event-failure": "ticket_entitlement_template.agreement_price_change_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "agreement_price_cent",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "operator_note": {
+                    "type": "string",
+                    "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+                    "maxLength": 1000
+                  },
+                  "evidence_attachment_ids": {
+                    "type": "array",
+                    "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "maxItems": 50
+                  },
+                  "agreement_price_cent": {
+                    "type": "integer",
+                    "description": "新签约价(分)，必填非负；不接受留空清价(清价会静默退回按面值结算)。",
+                    "minimum": 0,
+                    "maximum": 999999999999
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "改价理由，必填；动的是钱的口径，审计要能答“谁、何时、为什么”。",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/ticketing/entitlement-templates/{id}/unarchive": {
       "post": {
         "tags": [

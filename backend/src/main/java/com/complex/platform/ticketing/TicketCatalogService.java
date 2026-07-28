@@ -2,6 +2,7 @@ package com.complex.platform.ticketing;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
+import com.complex.platform.ticketing.dto.EntitlementAgreementPriceRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
@@ -29,6 +30,8 @@ public class TicketCatalogService {
     private static final Set<String> PRICE_MODES = Set.of("derive_from_calendar_price", "fixed_price");
     // 结算重构批4（V230）：票种资格/定价档分类；null/standard=标准（与 DB CHECK 一致）。
     private static final Set<String> TICKET_CATEGORIES = Set.of("standard", "new_person", "student");
+    // 结算重构批3-1（V225）：签约价只对虚拟权益取用（实物走吧台商品内部结算价）。
+    private static final String KIND_VIRTUAL = "virtual";
 
     private final TicketingRepository repository;
     // AUD-076：按 id 取酒吧商户（判业态/存档/取名）。可为 null=兼容既有单测（不校验酒吧、不解析名称）。
@@ -186,6 +189,44 @@ public class TicketCatalogService {
                 // 批3-6(用户2026-07-04)：拍脸照开关由请求透传(可空=false)；游乐模板走 V229 种子回填默认开，新建按请求。
                 Boolean.TRUE.equals(actual.requireFacePhoto())
         ));
+    }
+
+    /**
+     * 改虚拟权益签约价（= 内部结算价, agreement_price_cent）。此前只能建不能改——填错只能作废重建。
+     *
+     * <p><b>历史不受影响（结构性，非自律）</b>：签约价一路快照——
+     * 发放时 {@code TicketOrderService} 把 {@code template.agreementPriceCent()} 复制进
+     * {@code issued_entitlements.agreement_price_cent}；核销时
+     * {@code TicketVerificationService#resolveSettlementPrice} 读的是**已发权益那一份**，并把结果再落进
+     * {@code ticket_verifications.settlement_price_cent}。本方法只写 {@code entitlement_templates} 一行，
+     * 已发放/已核销的钱按各自快照走，改价改不动它们 —— 即「已发生的不可改」。
+     * 代价：改价只对**之后发放**的权益生效（见 PRD §6.1 改价口径）。
+     *
+     * <p>三道闸（都是资金口径，不是排场）：
+     * <ol>
+     *   <li>已存档/待删除模板不可改价——否则「存档=软下线」名存实亡（同 createPriceRule 复核§3）。</li>
+     *   <li>仅 virtual 适用——实物权益结算价走吧台商品内部结算价，在此改是无声空转，最坏骗运营以为改好了。</li>
+     *   <li>价必填非负 + 理由必填——钱的口径改一次要能答"谁、何时、为什么"。</li>
+     * </ol>
+     */
+    EntitlementTemplateRecord updateAgreementPrice(String id, EntitlementAgreementPriceRequest request, String actorId) {
+        EntitlementTemplateRecord tpl = requireTemplate(id);
+        if (tpl.archivedAt() != null || !"none".equals(tpl.deleteStatus())) {
+            throw ApiException.conflict("ENTITLEMENT_TEMPLATE_NOT_CONFIGURABLE",
+                    "已存档或待删除的权益模板不可改签约价");
+        }
+        if (!KIND_VIRTUAL.equals(tpl.entitlementKind())) {
+            throw ApiException.badRequest("ENTITLEMENT_AGREEMENT_PRICE_NOT_APPLICABLE",
+                    "签约价仅虚拟权益适用；实物权益的结算价请改吧台商品的内部结算价");
+        }
+        Long price = request == null ? null : request.agreementPriceCent();
+        if (price == null) {
+            // 不接受"不填=清空"：清空会静默退回按面值结算，商户拿到的钱变了却没人说过要变。
+            throw ApiException.badRequest("VALIDATION_FAILED", "agreement_price_cent is required");
+        }
+        requireText(request.reason(), "reason");
+        return repository.saveEntitlementTemplate(
+                tpl.withAgreementPrice(nonNegativeOrNull(price, "agreement_price_cent"), Instant.now()));
     }
 
     // ================= V253 数据存档与审批后删除范式（试点） =================

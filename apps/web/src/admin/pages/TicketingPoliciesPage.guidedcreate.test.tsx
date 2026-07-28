@@ -10,7 +10,8 @@ function makeApi(postSpy: ReturnType<typeof vi.fn>, putSpy?: ReturnType<typeof v
   return {
     get: vi.fn(async (path: string) => {
       if (path.includes("/entitlement-templates")) {
-        return { items: [{ id: "tpl-1", name: "门票权益", entitlementType: "entry", status: "active" }] } as unknown;
+        return { items: [{ id: "tpl-1", name: "门票权益", entitlementType: "entry", status: "active",
+          entitlementKind: "virtual", agreementPriceCent: 8000, requireFacePhoto: false }] } as unknown;
       }
       if (path.includes("/qr-refresh-config")) {
         return { refreshIntervalSeconds: 15 } as unknown;
@@ -113,5 +114,66 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
       expect(putCall).toBeTruthy();
       expect(((putCall?.[1] ?? {}) as { refreshIntervalSeconds?: number }).refreshIntervalSeconds).toBe(20);
     });
+  });
+
+  // 配置中心批5三个尾项：后端早就有、运营在后台点不到的三个配置项补上入口。
+  it("建票能选分类、建权益模板能勾人脸照、签约价能改", async () => {
+    const postSpy = vi.fn(async (path: string, _body?: unknown) => {
+      if (path.endsWith("/ticketing/ticket-types")) return { id: "tt-new" } as unknown;
+      return {} as unknown;
+    });
+    const putSpy = vi.fn(async (_path: string, _body?: unknown) => ({} as unknown));
+    renderPage(postSpy, putSpy);
+    await waitFor(() => expect(screen.getByTestId("ticket-create-open")).toBeTruthy());
+
+    // ① 建票种选分类：默认标准票，可选新人/学生，随建票载荷发到后端（V230 ticket_category）。
+    fireEvent.click(screen.getByTestId("ticket-create-open"));
+    const category = screen.getByTestId("ticket-category") as HTMLSelectElement;
+    expect(category.value).toBe("standard");
+    expect(Array.from(category.options).map((o) => o.value)).toEqual(["standard", "new_person", "student"]);
+    fireEvent.change(category, { target: { value: "student" } });
+    fireEvent.change(screen.getByTestId("ticket-weekday-price"), { target: { value: "100" } });
+    fireEvent.change(screen.getByTestId("ticket-weekend-price"), { target: { value: "120" } });
+    fireEvent.change(screen.getByTestId("ticket-holiday-price"), { target: { value: "150" } });
+    fireEvent.click(screen.getByTestId("ticket-policy-next"));
+    await waitFor(() => expect(screen.getByTestId("ticket-create-template")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("ticket-create-template"), { target: { value: "tpl-1" } });
+    fireEvent.change(screen.getByTestId("ticket-publish-reason"), { target: { value: "学生票上架" } });
+    fireEvent.click(screen.getByTestId("ticket-policy-next"));
+    fireEvent.click(screen.getByTestId("ticket-publish"));
+    await waitFor(() => {
+      const createCall = postSpy.mock.calls.find((c) => String(c[0]).endsWith("/ticketing/ticket-types"));
+      expect(((createCall?.[1] ?? {}) as Record<string, unknown>).ticket_category).toBe("student");
+    });
+
+    // ② 建权益模板勾「需要人脸照」：随建模板载荷发到后端（V229 require_face_photo）。
+    fireEvent.change(screen.getByLabelText("模板名称"), { target: { value: "游乐入场" } });
+    fireEvent.click(screen.getByTestId("entitlement-template-require-face-photo"));
+    fireEvent.click(screen.getByTestId("entitlement-template-create"));
+    await waitFor(() => {
+      const tplCall = postSpy.mock.calls.find((c) => String(c[0]).endsWith("/ticketing/entitlement-templates"));
+      expect(((tplCall?.[1] ?? {}) as Record<string, unknown>).require_face_photo).toBe(true);
+    });
+
+    // ③ 改签约价：只列虚拟权益模板并显示现价；理由必填；提交走 PUT 改价端点（分为单位）。
+    const tplSelect = screen.getByTestId("agreement-price-template") as HTMLSelectElement;
+    expect(Array.from(tplSelect.options).map((o) => o.value)).toEqual(["", "tpl-1"]);
+    expect(tplSelect.options[1]?.textContent).toContain("¥80.00");
+    fireEvent.change(tplSelect, { target: { value: "tpl-1" } });
+    fireEvent.change(screen.getByTestId("agreement-price-value"), { target: { value: "30" } });
+    // 缺理由不提交——动的是钱的口径。
+    fireEvent.click(screen.getByTestId("agreement-price-submit"));
+    await waitFor(() => expect(putSpy.mock.calls.some((c) => String(c[0]).includes("/agreement-price"))).toBe(false));
+    fireEvent.change(screen.getByTestId("agreement-price-reason"), { target: { value: "签约价录入笔误更正" } });
+    fireEvent.click(screen.getByTestId("agreement-price-submit"));
+    await waitFor(() => {
+      const call = putSpy.mock.calls.find((c) => String(c[0]).includes("/agreement-price"));
+      expect(String(call?.[0])).toBe("/api/v1/ticketing/entitlement-templates/tpl-1/agreement-price");
+      const body = (call?.[1] ?? {}) as Record<string, unknown>;
+      expect(body.agreement_price_cent).toBe(3000);
+      expect(body.reason).toBe("签约价录入笔误更正");
+    });
+    // 页面明说改价只对之后发放的生效，运营不会以为历史也跟着变。
+    expect(screen.getByTestId("agreement-price-scope-hint").textContent).toContain("只对之后发放的权益生效");
   });
 });
