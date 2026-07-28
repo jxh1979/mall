@@ -299,6 +299,26 @@ public class JdbcSettlementBillRepository {
         return sum == null ? 0L : sum;
     }
 
+    /**
+     * S3「一张票只收一道门票综合服务费」判定:该父票<b>迄今</b>已落的综合服务费净额(核销正 + 冲正负)。
+     *
+     * <p>业务上回答的是一句话:<b>这张票收过这道费了吗</b>。收过(净额非零)→ 本次核销不再收;
+     * 若那笔核销后来被冲掉,冲正行取原行之反把净额抵回 0 → <b>锚点自动复位</b>,这张票下一次核销可以重新收一道
+     * (票还在、费该收,不能因为退过一次核销就永远免单)。
+     *
+     * <p>不切月窗:「一张票一道」是<b>票的属性</b>,不是月的属性 —— 跨月多次核销的票只该收一道,
+     * 与月度封顶({@link #sumMonthToDateServiceFee},按「商户×规则」按月)是两件事,两道闸并行不冲突。
+     */
+    public long sumTicketServiceFeeCent(String parentTicketId) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(comp_service_fee_cent), 0)
+                  FROM settlement_transactions
+                 WHERE parent_ticket_id = :parent_ticket_id
+                   AND transaction_type IN ('verification_settled','verification_reversed')
+                """, new MapSqlParameterSource().addValue("parent_ticket_id", parentTicketId), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
     private MapSqlParameterSource monthWindow(String projectId, Instant monthStart, Instant nextMonthStart) {
         return new MapSqlParameterSource()
                 .addValue("project_id", projectId)

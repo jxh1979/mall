@@ -34,6 +34,10 @@ import java.time.Instant;
  *                             平台级操作者=null=平台默认口径。<b>消费者用它同时做两件事</b>：解析综合服务费费率规则的项目维度、
  *                             写入 {@code settlement_transactions.project_id}——两处同一个值,不再各写各的常量,
  *                             项目级费率特例这才有可能命中（原先调用处硬编码 null，项目级规则永远解析不到）。
+ * @param parentTicketId       S3：本次核销的权益属于哪一张票（{@code issued_entitlements.parent_ticket_id}）。
+ *                             「门票综合服务费一张票只收一道」的判定锚点——消费者据此判断该票是否已收过这道费。
+ *                             为空 = 不合规发放数据（V285 起每次出票都建父票实例，新发放恒有）→ 消费者<b>拒绝计提</b>，
+ *                             不退化成「按核销笔数各收一道」。
  */
 public record SettlementSettledEvent(
         String verificationId,
@@ -51,6 +55,7 @@ public record SettlementSettledEvent(
         String exclusiveMerchantId,
         Long settlementPriceCent,
         Long fullPriceCent,
-        String projectId
+        String projectId,
+        String parentTicketId
 ) {
 }

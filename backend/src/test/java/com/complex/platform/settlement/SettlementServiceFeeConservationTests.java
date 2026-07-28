@@ -64,7 +64,7 @@ class SettlementServiceFeeConservationTests {
         // ① 核销(专属·毛额 500)→ 真消费者算触顶实收 fee = min(800,500) = 500。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 vid, m, "ent_" + vid, "ord_x", "tt_x", "entry", merchant, 1, 1, 1, 500L,
-                m.plusSeconds(3600), merchant, null, null, null));
+                m.plusSeconds(3600), merchant, null, null, null, "tkt_" + vid));
         assertThat(feeOf("ST-VS-" + vid)).isEqualTo(500L); // 触顶实收 500(非 800)
 
         // ② 原月标记已过账 → 红冲跨月落当月(now)。
@@ -91,13 +91,14 @@ class SettlementServiceFeeConservationTests {
         Instant m = Instant.parse("2010-09-15T10:00:00Z");
         seedFee(merchant, 0, 300L, 400L); // 固定额 300/张 + 封顶 400(票种留空=该商户所有票种通用)
 
-        // ① 两笔核销(同月同商户同规则)→ 增量封顶:v1=300、v2=min(300,剩余100)=100。
+        // ① 两笔核销(同月同商户同规则,S3:固定额是「每张票 300」故两笔来自【两张不同的票】)
+        //   → 增量封顶:v1=300、v2=min(300,剩余100)=100。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 v1, m, "ent_" + v1, "ord_x", "tt_x", "entry", merchant, 1, 1, 1, 1000L,
-                m.plusSeconds(3600), merchant, null, null, null));
+                m.plusSeconds(3600), merchant, null, null, null, "tkt_" + v1));
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 v2, m.plusSeconds(60), "ent_" + v2, "ord_x", "tt_x", "entry", merchant, 1, 1, 1, 1000L,
-                m.plusSeconds(3660), merchant, null, null, null));
+                m.plusSeconds(3660), merchant, null, null, null, "tkt_" + v2));
         assertThat(feeOf("ST-VS-" + v1)).isEqualTo(300L);
         assertThat(feeOf("ST-VS-" + v2)).isEqualTo(100L); // 增量封顶:剩余额度 100
         assertThat(feeOf("ST-VS-" + v1) + feeOf("ST-VS-" + v2)).isEqualTo(400L); // 当月合计=封顶

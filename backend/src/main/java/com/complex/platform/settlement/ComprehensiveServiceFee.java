@@ -19,6 +19,11 @@ final class ComprehensiveServiceFee {
      * 本笔未封顶实收综合服务费:固定额=min(fixedAmount×verifiedCount, gross)(上限本笔毛额防净额为负);
      * 否则比例=<b>四舍五入到分</b>(gross×feeBps/10000)。默认比例 0 / gross<=0 → 0(保值)。
      *
+     * <p><b>S3(2026-07-28)「一张票只收一道」不在本类实现</b>:本类只算「本笔该收多少」,不知道这张票之前收过没有。
+     * 生产链路上 {@code verifiedCount} 恒为 1（消费者每次核销落一行、每行本笔一次），固定额「一张票收一道」的闸
+     * 建在 {@link SettlementSettledConsumer}（按父票 {@code parent_ticket_id} 判该票是否已有净额非零的费行）。
+     * 比例模式不设闸:逐笔按核销增量抽,Σ 恒 = 费率 × 该票总收入,本就是同一道费的线性拆分。
+     *
      * <p>R-7(2026-07-22 用户拍板 D15.1):旧 {@code gross * feeBps / 10000} 是整除截断,项目公司恒少收、
      * 差额悄悄留在商户侧且不留痕,与「四舍五入」字面口径不符;改 {@link MoneyRounding#bpsOf} HALF_UP。
      * 商户净额 = 毛额 − 本费(取补数),两侧相加恒 = 毛额,不产生尾差。
