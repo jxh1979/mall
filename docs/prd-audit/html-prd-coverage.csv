@@ -757,7 +757,7 @@ BSM-0243,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,
 BSM-0244,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0245,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0246,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0247,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0247,docs/data-analysis-layer-spec-v0.2.md,§F DEC-DATA-FRESH-PRAGMATIC-001,FULL,P1,ADV-ED-008,,,DEC-DATA-FRESH-PRAGMATIC-001,06-amusement-terminal-thirdparty-data
 BSM-0248,docs/amusement-business-operations-product-prd-v0.1.md,5. 项目状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0249,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0250,docs/amusement-business-operations-product-prd-v0.1.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
@@ -790,7 +790,7 @@ BSM-0334,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接
 BSM-0335,docs/third-party-business-access-product-prd-v0.1.md,11. 已确认规则和后续供应商依赖,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0336,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0337,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0429,docs/business-dashboard-metrics-product-prd-v0.1.md,1. 文档定位,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0429,docs/data-analysis-layer-spec-v0.2.md,§F DEC-DATA-FRESH-PRAGMATIC-001,FULL,P1,ADV-ED-008,,,DEC-DATA-FRESH-PRAGMATIC-001,06-amusement-terminal-thirdparty-data
 BSM-0430,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0431,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0432,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-amusement-terminal-thirdparty-data
@@ -801,15 +801,15 @@ BSM-0436,docs/data-analysis-layer-spec-v0.2.md,全文/综合条款,FULL,,,,,,06-
 BSM-0437,docs/business-dashboard-metrics-product-prd-v0.1.md,2. 指标分类（8 类，HTML 授权口径）,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0438,docs/data-analysis-layer-spec-v0.2.md,2. 合并来源,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0439,docs/business-dashboard-metrics-product-prd-v0.1.md,2. 指标分类（8 类，HTML 授权口径）,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0440,docs/business-dashboard-metrics-product-prd-v0.1.md,2. 指标分类（8 类，HTML 授权口径）,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0440,docs/data-analysis-layer-spec-v0.2.md,§F DEC-DATA-FRESH-PRAGMATIC-001,FULL,P1,ADV-ED-008,,,DEC-DATA-FRESH-PRAGMATIC-001,06-amusement-terminal-thirdparty-data
 BSM-0441,docs/data-analysis-layer-spec-v0.2.md,2. 合并来源,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0442,docs/business-dashboard-metrics-product-prd-v0.1.md,7. 经营异常处置流转（2026-07-19 现行）,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0443,docs/business-dashboard-metrics-product-prd-v0.1.md,7. 经营异常处置流转（2026-07-19 现行）,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0443,docs/data-analysis-layer-spec-v0.2.md,§F DEC-DATA-FRESH-PRAGMATIC-001,FULL,P1,ADV-ED-008,,,DEC-DATA-FRESH-PRAGMATIC-001,06-amusement-terminal-thirdparty-data
 BSM-0444,docs/business-dashboard-metrics-product-prd-v0.1.md,7. 经营异常处置流转（2026-07-19 现行）,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0445,docs/data-analysis-layer-spec-v0.2.md,2. 合并来源,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0446,docs/business-dashboard-metrics-product-prd-v0.1.md,4. 口径与落地承接,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0446,docs/data-analysis-layer-spec-v0.2.md,§F DEC-DATA-FRESH-PRAGMATIC-001,FULL,P1,ADV-ED-008,,,DEC-DATA-FRESH-PRAGMATIC-001,06-amusement-terminal-thirdparty-data
 BSM-0447,docs/business-dashboard-metrics-product-prd-v0.1.md,8.1 P0 经营总览卡片可下钻对账（现行）,FULL,,,,,,06-amusement-terminal-thirdparty-data
-BSM-0448,docs/data-analysis-layer-spec-v0.2.md,2. 合并来源,PARTIAL,P1,ADV-ED-008,无数据、延迟数据、回补数据和跨项目聚合被呈现为实时真实值=>PARTIAL:缺回补;无数据;新鲜,展示层标注数据新鲜度/回补状态,DEFERRED-DOCS-FOLLOWUP,06-amusement-terminal-thirdparty-data
+BSM-0448,docs/data-analysis-layer-spec-v0.2.md,§F DEC-DATA-FRESH-PRAGMATIC-001,FULL,P1,ADV-ED-008,,,DEC-DATA-FRESH-PRAGMATIC-001,06-amusement-terminal-thirdparty-data
 BSM-0449,docs/data-analysis-layer-spec-v0.2.md,6. 页面范围,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0450,docs/data-analysis-layer-spec-v0.2.md,6. 页面范围,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BSM-0451,docs/data-analysis-layer-spec-v0.2.md,6. 页面范围,FULL,,,,,,06-amusement-terminal-thirdparty-data
