@@ -121,6 +121,15 @@ public interface FinanceRepository {
 
     ArApItemRecord saveArApItem(ArApItemRecord item);
 
+    /**
+     * P0-B（V344）红冲专用纯追加写入：锁定后补录审批通过时落「冲正行 / 重述行」。
+     * 与 {@link #saveArApItem} 的 upsert 不同，命中既有 id 一律不改写（append-only）。
+     * default 委派 saveArApItem，供内存测试双子零改动兼容。
+     */
+    default ArApItemRecord appendArApItem(ArApItemRecord item) {
+        return saveArApItem(item);
+    }
+
     ArApItemSourceRecord saveArApItemSource(ArApItemSourceRecord source);
 
     List<ArApItemRecord> listArApItems();

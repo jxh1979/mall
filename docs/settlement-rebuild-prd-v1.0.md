@@ -316,6 +316,17 @@
 - `refund_orders`:加手续费预扣字段
 - `integration_order_syncs`:加 `merchant_id`/`management_company_id` 映射(§13)
 - `settlement_transactions`(审计 AUD-012/013/017):转不可变账务事件账本——加 `business_at`(业务时间,account 按此落月窗)、`chk_st_type` 增 `verification_reversed`、`chk_st_amount` 令冲正行恒 ≤0(资金守恒 DB 守卫)、删「每权益一行」`uq_st_entitlement_verified`(改按 `verification_id`/全局 `transaction_no` 幂等 append)
+- `settlement_transactions`(**P0-B 资金台账 append-only 破防·V344**):补齐 **append-only 触发器族**——该表自建表起就没有任何 DB 层防护,
+  V323 已把它定性为「每业务事件一行不可变资金事实」、应用侧只 `INSERT ... ON CONFLICT DO NOTHING` 永不 UPDATE,但一条裸 `UPDATE`/`DELETE`
+  就能悄悄改掉/抹掉分账事实(通票分账链最高价值账本)。V344 按 V140 **immutable** 口径贴 `trg_append_only_ud`
+  (`BEFORE UPDATE OR DELETE FOR EACH ROW` → `complex_block_mutation()`,异常 `COMPLEX_APPEND_ONLY_VIOLATION`/23514),
+  并对生产受限运行时角色 `complex_app` `REVOKE UPDATE, DELETE`(触发器挡全环境含 owner,REVOKE 是第二层纵深)。
+  - **前向兼容(后续「通票分账瀑布重建」加字段必读)**:触发器是**整行级**拦截、函数体**不引用任何列名、无允许列白名单**,
+    故继续往该表 `ADD COLUMN` 完全不受影响(DDL 不触发 DML 行触发器)。唯一要留意的是「加列后回填历史行」的迁移(V323 曾这么做):
+    那类回填 `UPDATE` 会被挡下,迁移内须显式摘挂 `ALTER TABLE settlement_transactions DISABLE TRIGGER trg_append_only_ud; …; ENABLE TRIGGER …`。
+    `DISABLE TRIGGER` 需**表 owner** 权限——迁移以 owner 身份跑得通,而运行时角色 `complex_app` 既非 owner 又已被 REVOKE 掉 UPDATE/DELETE,
+    两层都堵死,该回填口子不构成运行期敞口。
+  - 集成测试的 `@AfterEach` 清场 DELETE 同理走测试专用旁路 `com.complex.platform.support.AppendOnlyTestBypass`(仅测试源码树,生产构件不含)。
 - `ticket_refunds`(审计 AUD-018):加 `succeeded_at`(有效退款生效时刻)+ 权威枚举 `chk_ticket_refunds_status`(已申请/审批中/已通过/已驳回/处理中/成功/失败/已取消);财务/分析/分红仅统计 `status='success'` 按 `succeeded_at` 落窗
 
 ### 10.3 批1(配置中心)迁移清单(2026-07-21)
