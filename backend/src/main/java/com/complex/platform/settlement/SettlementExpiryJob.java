@@ -103,7 +103,8 @@ public class SettlementExpiryJob {
                     null, // exclusive_merchant_id：过期未核销归项目，非专属直付，置 NULL
                     row.validTo(), // business_at：到期业务时刻=有效期截止（归项目落该月）
                     0L,  // D6 discount_amount_cent：到期归项目非核销销售，无套票折扣
-                    0L, null)); // P6:到期归项目非专属核销，无综合服务费(fee=0/config=null)
+                    0L, null,   // P6:到期归项目非专属核销，无综合服务费(fee=0/config=null)
+                    null));     // V355 beneficiary_entity_id:本刀未核销款仍归项目公司(口径改归娱乐平台公司/游乐公司在 S8 切换)
             count++;
         }
         return count;

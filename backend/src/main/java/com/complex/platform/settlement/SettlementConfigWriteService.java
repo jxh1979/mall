@@ -276,13 +276,22 @@ public class SettlementConfigWriteService {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "revenue_stream must be one of " + RevenueStreamAttributionRepository.REVENUE_STREAMS);
         }
-        String entityId = requireText(req.managementEntityId(), "management_entity_id");
+        String kind = req.beneficiaryKind() == null || req.beneficiaryKind().isBlank()
+                ? "entity" : req.beneficiaryKind().trim();
+        if (!RevenueStreamAttributionRepository.BENEFICIARY_KINDS.contains(kind)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "beneficiary_kind must be one of " + RevenueStreamAttributionRepository.BENEFICIARY_KINDS);
+        }
+        // 归「各商户自己」的收入流(订台低消/二次消费/额外酒水、非散台服务费)没有单一收款主体,主体列必须留空。
+        String entityId = "entity".equals(kind) ? requireText(req.managementEntityId(), "management_entity_id") : null;
         String scopeKey = defaultScope(req.projectId()) + "|" + stream;
         String landedId = attributionRepository.upsertDraft(new RevenueStreamAttributionRecord(
-                draftId("rsa_d_", scopeKey, idem), req.projectId(), stream, entityId, "active", actorId, Instant.now()));
+                draftId("rsa_d_", scopeKey, idem), req.projectId(), stream, entityId, "active",
+                actorId, Instant.now(), kind));
         audit("settlement.config.revenue_stream_attribution.updated", "revenue_stream_attribution", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()), "revenue_stream", stream,
-                        "management_entity_id", entityId));
+                        "beneficiary_kind", kind,
+                        "management_entity_id", entityId == null ? "(归各商户自己)" : entityId));
     }
 
     // ================= §3 复核转正(差人守卫 + Path 2 软替换)=================

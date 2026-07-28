@@ -642,8 +642,8 @@ paths:
       tags:
         - settlement
       operationId: settlementConfigUpsertRevenueStreamAttribution
-      summary: 维护六业态收入归属(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      summary: 维护业态收入归属(草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。V355:收入流扩到 9 类;beneficiary_kind=entity 时须填 management_entity_id,=per_merchant(归各商户自己)时不得填。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -666,10 +666,14 @@ paths:
                   type: string
                 management_entity_id:
                   type: string
+                beneficiary_kind:
+                  type: string
+                  enum:
+                    - entity
+                    - per_merchant
               required:
                 - idempotency_key
                 - revenue_stream
-                - management_entity_id
       responses: *a1
   /api/v1/settlement/config/rank-tiers/activate:
     post:

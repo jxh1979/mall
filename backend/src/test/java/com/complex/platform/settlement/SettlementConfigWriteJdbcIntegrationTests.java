@@ -228,13 +228,13 @@ class SettlementConfigWriteJdbcIntegrationTests {
     void revenueStreamPath2PreservesEffectiveUntilActivated() {
         // 建生效归属 ent_A
         writeService.saveRevenueStreamAttribution(
-                new RevenueStreamAttributionRequest("r1", PROJECT, "all_pass_ticket", "ent_A"), DRAFTER);
+                new RevenueStreamAttributionRequest("r1", PROJECT, "all_pass_ticket", "ent_A", null), DRAFTER);
         writeService.activateDraft("revenue_stream_attribution", rsDraftId(), APPROVER);
         assertThat(attributionRepository.resolveManagementEntity(PROJECT, "all_pass_ticket")).isEqualTo("ent_A");
 
         // 编辑为 ent_B(草案);生效仍 ent_A(保值:Path 2 不动生效行)
         writeService.saveRevenueStreamAttribution(
-                new RevenueStreamAttributionRequest("r2", PROJECT, "all_pass_ticket", "ent_B"), DRAFTER);
+                new RevenueStreamAttributionRequest("r2", PROJECT, "all_pass_ticket", "ent_B", null), DRAFTER);
         assertThat(attributionRepository.resolveManagementEntity(PROJECT, "all_pass_ticket")).isEqualTo("ent_A");
 
         // 转正 → ent_B;旧生效行软替换 inactive
@@ -253,7 +253,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertThat(statusOf("ticket_distribution_merchant_rates", mrId)).isEqualTo("inactive");
 
         writeService.saveRevenueStreamAttribution(
-                new RevenueStreamAttributionRequest("rs1", PROJECT, "all_pass_ticket", "ent_scw_it"), DRAFTER);
+                new RevenueStreamAttributionRequest("rs1", PROJECT, "all_pass_ticket", "ent_scw_it", null), DRAFTER);
         String rsId = rsDraftId();
         writeService.activateDraft("revenue_stream_attribution", rsId, APPROVER);
         writeService.archive("revenue_stream_attribution", rsId, new ArchiveRequest("a2", "归属下线"), DRAFTER);

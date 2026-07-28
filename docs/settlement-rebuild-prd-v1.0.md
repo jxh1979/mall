@@ -46,7 +46,7 @@
 |---|---|---|---|
 | L1 | **平台** | 最大管理实体,可辖多城市多项目 | ⚠️ 代码无干净独立实体,"平台"一词混用 |
 | L2 | **项目公司** | 某城市的项目(如长沙 NEXT PARK);平台下辖多个 | = 代码 `projects` 表;文档中"项目/综合体/集团"混用需统一 |
-| L3 | **管理公司**(业态主体/SPV) | 项目公司与商户间的分账主体:娱乐平台公司、中央餐饮公司、游乐公司、传媒公司(**资产业态不单设主体、由长沙项目公司兼任**;**各酒吧为 L4 独立商户、娱乐平台公司参股**,不再作为 L3 单列) | ✅ 层级已落库(V318):复用 `business_entities`(entity_role=management_company/spv…)+ 新增 `parent_entity_id` 挂 L3→L2 项目公司父链;实例数据后台录入 |
+| L3 | **管理公司**(业态主体/SPV) | 项目公司与商户间的分账主体:娱乐平台公司、中央餐饮公司、游乐公司、传媒公司(**资产业态不单设主体、由长沙项目公司兼任**;**各酒吧为 L4 独立商户、娱乐平台公司参股**,不再作为 L3 单列) | ✅ 层级已落库(V318)+ **六层主体骨架已 seed(V355 同批的 V354)**:复用 `business_entities`(entity_role=management_company/spv…)+ `parent_entity_id` 挂 L3→L2 父链;稳定 id `be_platform` / `be_proj_changsha` / `be_ent_platform` / `be_central_catering` / `be_amusement` / `be_media`;`entity_role` 已加白名单 CHECK;工商信息(统一社会信用代码/法人/银行账户)一律留空由运营后台补 |
 | L4 | **商户** | 具体经营单位 | = `merchants` 表,叫法统一 |
 
 ### 2.2 术语统一规则(§12 展开)
@@ -59,7 +59,9 @@
 - 表设计一次到位,实例数据先录必需的。
 
 #### 2.3A 组织主数据登记(2026-07-28 用户口头拍板)
-> 权威登记表见 `terminology-canonical-v1.0.md` §六;此处只列结算侧需要的主体,建档一律走主数据后台,**不写死在代码/迁移**。
+> 权威登记表见 `terminology-canonical-v1.0.md` §六;此处只列结算侧需要的主体。
+>
+> **落地方式(2026-07-28 S1 定案)**:迁移(V354)只落**六个主体的骨架 + 稳定 id + 角色 + 父链 + status**——因为收入归属配置必须能引用一个不会变的主体 id,否则「这笔钱归谁」在系统里写不下来;**统一社会信用代码 / 法人 / 银行账户一律留空由运营在后台补**(工商信息不得由代码编造)。**10 家酒吧商户不进迁移**:酒吧＝`merchant_type='bar'` 的商户,建商户是招商的业务动作、走后台正路才有审批与留痕;开发环境要造数用 `ops/160/seed-dev-bars.sh`(**家数是参数**,默认 10)。用户口径「酒吧数量必须可配 —— 可能七八家,也可能二三十家」:已实查确认 Java / SQL / 前端**无任何写死的酒吧家数**,唯一隐含 10 家假设的是排名档位出厂梯子(V223 四段之和恰为 100%),该项由 S8「池分光 + 档位归一化为相对权重」处置。
 
 | 层 | 主体 | 结算侧作用 |
 |---|---|---|
@@ -440,7 +442,8 @@
 | `refund_fee_rules` | 退款手续费预扣 | ADM-STL-004 |
 | `ticket_discount_rules` | 套票折扣归属 | ADM-STL-005 |
 | `giveaway_cost_configs` | 赠酒单价/点位/上限 | ADM-STL-006 |
-| `revenue_stream_attribution`(V319,已落库) | 6 业态收入流 → 对应 L3 管理公司主体(all_pass_ticket/table_dining/bar_service_fee/amusement_ticket/performance_ticket/venue_rent);项目特例 > 平台默认 > 未配置 null,后台可配 | ADM-STL-007 |
+| `revenue_stream_attribution`(V319 建表,**V355 扩容**) | **9 类收入流 → 收款方**:`all_pass_ticket` 通票收入 / `ticket_service_fee` 门票综合服务费 / `pass_gift_cost` 通票赠送权益预估成本 / `table_dining` 订台低消·二次消费·额外酒水 / `bar_service_fee` 非散台服务费 / `supply_goods` 向商户供货的货款 / `amusement_ticket` 游乐票与游乐核销收入 / `performance_ticket` 演出票 / `venue_rent` 场地租金。新增 **`beneficiary_kind`**:`entity`=归某个经营主体(`management_entity_id` 必填,可指 L2 项目公司或 L3 业态主体)、`per_merchant`=归产生该笔收入的各商户自己(订台低消 / 非散台服务费,主体列须为空,DB CHECK 强制)。项目特例 > 平台默认 > 未配置;后台可配(草案 → 差人复核转正) | ADM-STL-007 |
+| ↳ 归属缺失的失败语义(V355) | 解析器新增阻断开关 `settlement.attribution.fail-loud.enabled`(**默认 false·不进任何 profile**):关时未配置返 null 并告警(与改造前逐字一致,引擎逐分不变);开时未配置直接拒绝结算 `REVENUE_STREAM_ATTRIBUTION_MISSING`(对齐「宁可阻断不可近似」)。G/F 的收款方就是这个解析结果,故 **S2/S6 上线前须先把 9 条归属配齐再由用户拍板翻开关** | — |
 | ↳ 通票结算标注 | `settlement_bills.attributed_entity_id`(V319):settleMonth 按 (项目, all_pass_ticket) 解析归属主体并标注,不改任何金额 | — |
 | ~~`revenue_attribution_rules`(扩 V221)~~ | ⚠️ V221 `merchant_revenue_attribution_rules` 是商户级 net 口径(ticket/bar/rent 计入方式),粒度不同,非 6 主体归属;后者由上表 `revenue_stream_attribution` 承载 | — |
 | `tax_config`(税务全可配,2026-07-04) | 每主体×收入类型的 增值税/文化事业建设费/附加税(**有无 + 费率**均后台填) | ADM-STL-010 |
@@ -543,6 +546,7 @@
   - **2026-07-19 落库(V318/V319)**:①`business_entities.parent_entity_id`(V318)显式挂 L3→L2 项目公司父链(「一个项目公司下多个管理公司主体」= 多行 parent 指向同一项目公司);②`revenue_stream_attribution`(V319)承载 6 业态收入流→管理公司主体映射(可配,项目特例 > 平台默认);③`settlement_bills.attributed_entity_id`(V319)通票分账已接:settleMonth 解析并标注归属主体。其余 5 类收入流(餐饮/服务费/游乐/演出/租金)复用同一 `RevenueStreamAttributionRepository.resolveManagementEntity` 解析,随各自结算路径上线时接入。
 - `venue_sessions`(场次/开歇业周期)+ `entitlement_entry_records`(入场记录)
 - `settlement_transactions`(按核销的结算流水:票→权益→核销→主体→金额→税务属性)
+  - **V355(B-7)**:原表只有 `beneficiary_type` 且死在 `('merchant','project')`、**连主体 id 列都没有**,「未核销权益款归娱乐平台公司 / 游乐通票未核销款归游乐公司」在账本层一行都落不下。已加 `beneficiary_entity_id` 列 + CHECK 扩到 `('merchant','project','entity')`,且 `type='entity'` 时主体 id 必须非空(不许留白、更不许塞进 `project` 语义里蒙混)。冲正读投影同步带回主体 id,否则冲正行会撞 CHECK 落不下、正向永不冲销。**本刀只开列不改写入口径**:未核销款仍落 `beneficiary_type='project'`,归属切换在 S8。
 - `settlement_bills` / `settlement_items`(结算单 + 明细,对齐底稿口径)
 - `unused_entitlement_reversals`(未用权益归平台的回收记录)
 - §9 配置表族
@@ -568,6 +572,10 @@
     两层都堵死,该回填口子不构成运行期敞口。
   - 集成测试的 `@AfterEach` 清场 DELETE 同理走测试专用旁路 `com.complex.platform.support.AppendOnlyTestBypass`(仅测试源码树,生产构件不含)。
 - `ticket_refunds`(审计 AUD-018):加 `succeeded_at`(有效退款生效时刻)+ 权威枚举 `chk_ticket_refunds_status`(已申请/审批中/已通过/已驳回/处理中/成功/失败/已取消);财务/分析/分红仅统计 `status='success'` 按 `succeeded_at` 落窗
+
+### 10.2A 瀑布重建 S1(主体与归属层)迁移清单(2026-07-28)
+- **V354** `business_entities`:补 `archive_reason` 软删留痕列;测试残留主体按软删铁律归档(`status=inactive` + 理由,**不物理删**);seed 六层主体骨架(平台公司 / 长沙项目公司 / 娱乐平台公司 / 中央餐饮公司 / 游乐公司 / 传媒公司,工商信息留空);`entity_role` 加白名单 CHECK。**资产公司不建行**(资产业态不单设主体、由长沙项目公司兼任,场地租金直接归 L2)。
+- **V355** ① `revenue_stream_attribution` 加 `beneficiary_kind`、`management_entity_id` 改可空(配 CHECK 二选一强制)、收入流 CHECK 扩到 9 类、显式重发 GRANT(该表 owner 是 `complex_owner`,按 owner 批量授权的脚本会漏掉它);② `settlement_transactions` 加 `beneficiary_entity_id` + `chk_st_beneficiary` 扩 `entity`(B-7)。**只加列 / 放宽约束 / 扩枚举,不写入任何归属配置行 → 归属仍为空 → 引擎逐分不变**(验收断言见 `SettlementEntityAttributionS1Tests`)。
 
 ### 10.3 批1(配置中心)迁移清单(2026-07-21)
 - **V327** `channel_fee_configs`(渠道费率配置,消灭写死 0)

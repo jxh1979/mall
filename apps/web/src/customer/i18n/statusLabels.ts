@@ -175,8 +175,12 @@ const STATUS_LABELS: Record<string, string> = {
   web: "网页端",
   miniapp: "小程序",
   channel: "第三方渠道",
-  // 经营主体角色（platform 域 entity_role）
+  // 经营主体角色（platform 域 entity_role；V354 四层组织落库后补齐，零英文铁律）
+  // 注：platform 键在本表上方「平台」已有（跨域共用），此处不再重复定义。
   operation: "运营主体",
+  project_company: "项目公司",
+  management_company: "业态主体（管理公司）",
+  spv: "项目专营主体",
   // 商户合作形式（platform 域 cooperation_form）
   fixed_rent_plus_commission: "固定租金+抽成",
   revenue_share: "收入分成",

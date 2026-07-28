@@ -13,6 +13,18 @@ public record RevenueStreamAttributionRecord(
         String managementEntityId,
         String status,
         String updatedBy,
-        Instant updatedAt
+        Instant updatedAt,
+        /**
+         * V355 收款方类型:{@code entity}=归某个经营主体(managementEntityId 必填);
+         * {@code per_merchant}=归产生该笔收入的各商户自己(订台低消/二次消费/额外酒水、非散台服务费,
+         * managementEntityId 须为 null)。缺省 entity,与 DB DEFAULT 一致。
+         */
+        String beneficiaryKind
 ) {
+    /** 归主体的简写构造(beneficiaryKind=entity),与 V355 之前的调用点等价。 */
+    public RevenueStreamAttributionRecord(String id, String projectId, String revenueStream,
+                                          String managementEntityId, String status,
+                                          String updatedBy, Instant updatedAt) {
+        this(id, projectId, revenueStream, managementEntityId, status, updatedBy, updatedAt, "entity");
+    }
 }

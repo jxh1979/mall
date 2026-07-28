@@ -4,8 +4,10 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { GuidedFlowModal, type GuidedStep, type GuidedSummaryItem } from "../components/GuidedFlowModal";
 import { PermissionButton } from "../security/Can";
+import { hasPermissions } from "../security/PermissionGate";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { ApiError } from "../../shared/apiError";
-import type { AdminPageProps } from "../types";
+import type { AdminPageProps, BusinessEntityRow } from "../types";
 
 // 结算配置中心（新立项）总控页 —— PRD settlement-rebuild §9（ADM-STL-001）。
 // 批0：①「看全局」当前生效配置一览；②草案待复核队列 + 复核转正。
@@ -79,13 +81,34 @@ const BEARER_OPTIONS: [string, string][] = [
   ["merchant_absorb", "商户承担"],
   ["split_by_ratio", "按比例分摊"],
 ];
+// V355：收入流 6 → 9，名称按业务速查表「六业态收入归属」与系统地图「通票收入分账全流程」逐字对齐。
 const REVENUE_STREAM_OPTIONS: [string, string][] = [
-  ["all_pass_ticket", "通票"],
-  ["table_dining", "餐饮"],
-  ["bar_service_fee", "酒吧服务费"],
-  ["amusement_ticket", "游乐门票"],
-  ["performance_ticket", "演出门票"],
-  ["venue_rent", "场地租金"],
+  ["all_pass_ticket", "通票收入"],
+  ["ticket_service_fee", "门票综合服务费"],
+  ["pass_gift_cost", "通票赠送权益预估成本"],
+  ["table_dining", "订台低消 / 二次消费 / 额外酒水"],
+  ["bar_service_fee", "非散台服务费（包厢 / 卡座）"],
+  ["supply_goods", "向商户供货的货款"],
+  ["amusement_ticket", "游乐票与游乐核销收入"],
+  ["performance_ticket", "演出票"],
+  ["venue_rent", "场地租金 / 商业租金"],
+];
+// 每条收入流「按业务约定该归谁」的口径提示（照抄业务口径，防止运营配反了钱的去向）。
+const REVENUE_STREAM_HINT: Record<string, string> = {
+  all_pass_ticket: "业务约定：归「娱乐平台公司」。",
+  ticket_service_fee: "业务约定：归「娱乐平台公司」（即项目管理费 / 娱乐平台公司留存，同一项只扣一次）。",
+  pass_gift_cost: "业务约定：归「娱乐平台公司」（票里加赠权益的预估成本，先扣后与提供商户结算）。",
+  table_dining: "业务约定：归「各酒吧商户自己」→ 收款方类型请选「各商户自己」。",
+  bar_service_fee: "业务约定：归「各酒吧商户自己」→ 收款方类型请选「各商户自己」。",
+  supply_goods: "业务约定：归「中央餐饮公司」（供应链主体，向商户供货收货款）。",
+  amusement_ticket: "业务约定：归「游乐公司」（游乐票与游乐核销收入统一归此主体，不分给各商户）。",
+  performance_ticket: "业务约定：归「传媒公司」。",
+  venue_rent: "业务约定：归「长沙项目公司」（资产公司即长沙项目公司，资产业态不单设主体）。",
+};
+// 收款方类型：有些收入流没有单一收款主体，钱归产生它的各商户自己（订台低消、非散台服务费）。
+const BENEFICIARY_KIND_OPTIONS: [string, string][] = [
+  ["entity", "某个经营主体"],
+  ["per_merchant", "各商户自己"],
 ];
 // configGroup → 中文（草案队列展示用；未列出的原样显示）。
 const GROUP_LABELS: Record<string, string> = {
@@ -134,6 +157,7 @@ type Form = {
   splitPlatformBps: string;
   revenueStream: string;
   managementEntityId: string;
+  beneficiaryKind: string;
   roleType: string;
   rateBp: string;
   amountCentPerPoint: string;
@@ -142,6 +166,7 @@ const EMPTY_FORM: Form = {
   projectId: "", retentionBps: "", methodType: "by_venue_per_guest", specialApprovalTermMonths: "3", merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", entitlementType: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", revenueStream: "all_pass_ticket", managementEntityId: "",
+  beneficiaryKind: "entity",
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
 };
 
@@ -201,6 +226,11 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
   const [tiers, setTiers] = React.useState<TierRow[]>([{ rankFrom: "1", rankTo: "", shareBps: "" }]);
   const [formError, setFormError] = React.useState<string>("");
 
+  // 归因主体下拉数据源。该端点要 entity.binding.view（与本页 settlement.config.manage 是两个权限），
+  // 缺权限就别请求（403 会污染整页），降级成手填主体 id —— 与改造前行为一致。
+  const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
+  const canEntityView = hasPermissions(effectivePermissions, ["entity.binding.view"]);
+
   const reload = React.useCallback(() => {
     setLoading(true);
     setError(null);
@@ -211,6 +241,12 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
   }, [api]);
 
   React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => {
+    if (!canEntityView) return;
+    api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities")
+      .then((rows) => setEntities(Array.isArray(rows) ? rows.filter((r) => r.status !== "inactive") : []))
+      .catch(() => setEntities([]));  // 主体列表拿不到不阻断配置页，回落手填
+  }, [api, canEntityView]);
 
   function openEdit(key: EditKey) {
     setForm(EMPTY_FORM);
@@ -435,7 +471,7 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
           error={formError || undefined}
           onClose={() => setEditing(null)}
           onSubmit={() => void submitEdit()}
-          steps={editSteps(editing, form, setField, tiers, setTiers)}
+          steps={editSteps(editing, form, setField, tiers, setTiers, entities, canEntityView)}
           summary={editSummary(editing, form, tiers)}
         />
       ) : null}
@@ -450,6 +486,8 @@ function editSteps(
   setField: (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void,
   tiers: TierRow[],
   setTiers: React.Dispatch<React.SetStateAction<TierRow[]>>,
+  entities: BusinessEntityRow[],
+  canEntityView: boolean,
 ): GuidedStep[] {
   const projectField = (
     <label>项目（留空 = 全平台默认）
@@ -510,7 +548,32 @@ function editSteps(
             {REVENUE_STREAM_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
-        <label>归因管理公司 / 业态主体 id<input data-testid="settlement-config-field-managementEntityId" value={form.managementEntityId} onChange={setField("managementEntityId")} /></label></>);
+        <div style={{ fontSize: 12 }} data-testid="settlement-config-revenue-stream-hint">{REVENUE_STREAM_HINT[form.revenueStream] ?? ""}</div>
+        <label>收款方类型
+          <select data-testid="settlement-config-field-beneficiaryKind" value={form.beneficiaryKind} onChange={setField("beneficiaryKind")}>
+            {BENEFICIARY_KIND_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+        {form.beneficiaryKind === "per_merchant" ? (
+          <div style={{ fontSize: 12 }} data-testid="settlement-config-per-merchant-hint">
+            这笔收入归产生它的各商户自己，没有单一收款主体，无需选主体。
+          </div>
+        ) : canEntityView ? (
+          <label>收款主体
+            <select data-testid="settlement-config-field-managementEntityId" value={form.managementEntityId} onChange={setField("managementEntityId")}>
+              <option value="">请选择收款主体</option>
+              {entities.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {(e.entityName ?? e.id) + (e.entityRole ? `（${formatBusinessStatus(e.entityRole)}）` : "")}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label>收款主体 id（无经营主体查看权限，暂按 id 手填）
+            <input data-testid="settlement-config-field-managementEntityId" value={form.managementEntityId} onChange={setField("managementEntityId")} />
+          </label>
+        )}</>);
       break;
     case "commission_rate":
       content = (<>{projectField}
@@ -563,7 +626,7 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[]): GuidedSummaryI
     case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: form.entitlementType.trim() || "通用" }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
     case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }];
     case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }];
-    case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "归因主体", value: form.managementEntityId || "—" }];
+    case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "收款方类型", value: BENEFICIARY_KIND_OPTIONS.find(([v]) => v === form.beneficiaryKind)?.[1] ?? form.beneficiaryKind }, { label: "收款主体", value: form.beneficiaryKind === "per_merchant" ? "各商户自己" : (form.managementEntityId || "—") }];
     case "rank_tiers": return [scope, { label: "档位数", value: String(tiers.length) }, { label: "区间校验", value: rankTierHint(tiers).msg }];
     case "commission_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "该项目通用" }, { label: "角色档", value: ROLE_TYPE_OPTIONS.find(([v]) => v === form.roleType)?.[1] ?? form.roleType }, { label: "提成率万分比", value: form.rateBp || "—" }];
     case "points_accrual_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "每积1分所需消费（分）", value: form.amountCentPerPoint || "—" }];
@@ -599,7 +662,8 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
     case "channel_fee":
       return isIntInRange(form.feeBps, 0, 10000) ? null : "渠道抽成万分比需为 0~10000 的整数。";
     case "revenue_stream_attribution":
-      return orUndef(form.managementEntityId) === undefined ? "归因管理公司 / 业态主体 id 必填。" : null;
+      if (form.beneficiaryKind === "per_merchant") return null;  // 归各商户自己，无单一主体
+      return orUndef(form.managementEntityId) === undefined ? "收款主体必选。" : null;
     case "rank_tiers":
       return rankTierHint(tiers).ok ? null : rankTierHint(tiers).msg;
     case "commission_rate":
@@ -642,7 +706,12 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
     case "channel_fee":
       return { idempotencyKey, projectId: project, channel: null, feeBps: Number(form.feeBps) };
     case "revenue_stream_attribution":
-      return { idempotencyKey, projectId: project, revenueStream: form.revenueStream, managementEntityId: form.managementEntityId.trim() };
+      return {
+        idempotencyKey, projectId: project, revenueStream: form.revenueStream,
+        beneficiaryKind: form.beneficiaryKind,
+        // 归各商户自己时不得带主体 id（后端 CHECK 强制主体列为空）。
+        managementEntityId: form.beneficiaryKind === "per_merchant" ? undefined : form.managementEntityId.trim(),
+      };
     case "rank_tiers":
       return { idempotencyKey, projectId: project, tiers: tiers.map((t) => ({ rankFrom: Number(t.rankFrom), rankTo: Number(t.rankTo), shareBps: Number(t.shareBps) })) };
     case "commission_rate":

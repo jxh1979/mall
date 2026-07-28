@@ -116,7 +116,8 @@ public class SettlementSettledConsumer {
                 event.verifiedAt(),      // business_at：核销业务时刻（account 月窗聚合基准）
                 discountIncrement,       // D6 折扣额增量（>=0；下传账本供结算按归属应用）
                 compServiceFeeCent,      // P6 本笔实收综合服务费（>=0；增量封顶后）
-                compServiceFeeConfigId   // P6 解析到的费率规则 id（供增量封顶月累计 + 冲正沿用）
+                compServiceFeeConfigId,  // P6 解析到的费率规则 id（供增量封顶月累计 + 冲正沿用）
+                null                     // V355 beneficiary_entity_id：核销归商户，无主体受益方
         ));
     }
 }
