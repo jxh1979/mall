@@ -1,0 +1,98 @@
+{
+  "baseline": "b433fda2",
+  "phase_rules": 299,
+  "status_counts": {
+    "PARTIAL": 35,
+    "FULL": 258,
+    "MISSING": 6
+  },
+  "severity_counts": {
+    "P0": 14,
+    "P2": 7,
+    "P1": 20
+  },
+  "domain_counts": {
+    "ticketing": 74,
+    "customer": 22,
+    "bar": 83,
+    "terminal": 14,
+    "service": 8,
+    "merchant": 7,
+    "finance": 54,
+    "dividend": 26,
+    "member": 11
+  },
+  "issue_count": 41,
+  "full_count": 258,
+  "adversarial": [
+    {
+      "id": "ADV-TX-001",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-TX-002",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-TX-003",
+      "result": "GAP",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-TX-004",
+      "result": "PARTIAL",
+      "severity": "P0",
+      "decision": "POINTS-VOUCHER-ACCRUAL-002"
+    },
+    {
+      "id": "ADV-TX-005",
+      "result": "COVERED",
+      "severity": "P1"
+    },
+    {
+      "id": "ADV-TX-006",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-TX-007",
+      "result": "GAP",
+      "severity": "P1"
+    },
+    {
+      "id": "ADV-TX-008",
+      "result": "PARTIAL",
+      "severity": "P1"
+    },
+    {
+      "id": "ADV-TX-009",
+      "result": "COVERED",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-TX-010",
+      "result": "PARTIAL",
+      "severity": "P0"
+    },
+    {
+      "id": "ADV-TX-011",
+      "result": "COVERED",
+      "severity": "P0"
+    }
+  ],
+  "auth_hashes": {
+    "business-system-map-for-operations-v0.1.html": "0492b9112fec7ac03366f8c69a7a948f7706e9483b70370396359197f2ca087e",
+    "platform-governance-map-for-operations-v0.1.html": "a18cfff21c9cfbaf68d48ec6a0d68eeaa9afd3ae462dff76093c0a56dc31572b",
+    "business-enum-quick-reference-v0.1.html": "3e2071d8b740aea43df8a4685871c307a4185591ced4f1ced279ffa202e39648"
+  },
+  "closeout": {
+    "date": "2026-07-28",
+    "pr": 218,
+    "status": "docs_closeout_complete",
+    "accrual": "POINTS-VOUCHER-ACCRUAL-002",
+    "code_changes": false,
+    "note": "Merged with main member-points PRD/P1; ACCRUAL-001 superseded"
+  }
+}
