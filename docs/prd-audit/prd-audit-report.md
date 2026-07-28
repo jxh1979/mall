@@ -7,6 +7,7 @@
 - 阶段 1：完成。
 - 阶段 2：完成。
 - 阶段 3：完成。
+- 范围 B+3 返工与 phase3 附录交叉复核：完成（产物见 `method-b3-scope-and-tracks.md`、`document-scope-manifest.csv`、`phases/01b-scope-rework-b3.md`、`phases/03b-appendix-crosscheck.md`、`rounds/2026-07-27-b3-scope-crosscheck-report.md`）。
 - 阶段 4–7：未开始。
 
 ## 权威事实源
@@ -15,8 +16,8 @@
 
 ## 当前已确认结论
 
-1. 正式审计范围已限定为现行 PRD及直接相关业务文档。
-2. 开发设计、实现、OpenAPI、数据库、测试、运行证据和运维文档不属于本轮正式审计。
+1. 正式审计主轨（MAIN）限定为现行 PRD及直接相关业务文档；OpenAPI/设计/ops/交付等纳入 APPENDIX 附录轨（B+3）。
+2. 开发设计、OpenAPI、运维文档等进入 APPENDIX（登记+漂移/冲突），不做与 PRD 同级原子规则全量覆盖；代码/数据库/测试/运行证据仍非本轮正式审计对象。
 3. 历史备份可提供分析线索和用户裁决，但不是当前事实源。
 4. 备份快照中的业务枚举 HTML 已变化，必须按当前版本重新解析。
 5. 当前三个 HTML 共提取 `844` 条可定位原子规则：业务系统地图 `530` 条、平台治理地图 `192` 条、业务枚举速查 `122` 条。

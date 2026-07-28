@@ -48,3 +48,13 @@
 
 - `docs/superpowers/specs/2026-07-27-prd-audit-design.md`
 - `docs/superpowers/plans/2026-07-27-prd-audit.md`
+
+## B+3 范围与附录轨（2026-07-27）
+
+- `method-b3-scope-and-tracks.md`：方法与三轨定义
+- `document-scope-manifest.csv`：现行三轨清单（旧版见 `document-scope-manifest.pre-b3.csv`）
+- `phases/01b-scope-rework-b3.md`：范围返工
+- `phases/03b-appendix-crosscheck.md`：phase3 附录交叉复核
+- `appendix-crosscheck-findings.csv`：交叉复核机器表
+- `rounds/2026-07-27-b3-scope-crosscheck-report.md`：本轮总报告
+
