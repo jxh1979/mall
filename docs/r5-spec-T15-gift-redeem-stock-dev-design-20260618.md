@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS bar_gift_redemptions (
 - `TicketVerificationService`：赠饮权益核销成功后发 `ticket.gift_verified`（避免与 T4/T5 核销主链耦合）。
 - `BarGiftConsumer`（bar 域）：消费事件 → 建 0 元 bar_order + bar_production_ticket → 出品 `deliver` 时调 `atomicDecreaseStock(movement_type=redeem_consume)` → 回填 `inventory_movement_id` 到 event 与 `bar_gift_redemptions`。**幂等**：`uq_bar_gift_redemption_verification` 防一次核销重复生成单。
 - **冲正联动**（接 T5）：若该核销被 reverse，`bar_gift_redemptions.status=reversed` 并回补库存（反向 movement）。
-- 赠酒成本归平台承担（不计商户应收）。
+- 赠送权益成本归**娱乐平台公司**承担（2026-07-28 口径，原写「平台」；不计商户应收）。
 
 ## 4. API / 事件 / 权限
 - 主路径事件驱动，无新增对外端点（核销端点复用 T4/T5）；运营查询：`GET /api/v1/bar/gift-redemptions`。
