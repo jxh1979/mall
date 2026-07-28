@@ -270,9 +270,11 @@ class SettlementServiceFeeDimensionS2Tests {
 
     private void settleViaConsumer(String projectId, String tag, String merchantId, String exclusiveMerchantId,
                                    long allocatedCent, String ticketTypeId, String entitlementType) {
+        // S3：每笔各自一张票（本类证的是费率维度/覆盖面，不是「一张票一道」）——锚点非空，计提照常。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 tag, AT, "ent_" + tag, "ord_" + tag, ticketTypeId, entitlementType, merchantId,
-                1, 1, 1, allocatedCent, AT.plusSeconds(86400), exclusiveMerchantId, null, null, projectId));
+                1, 1, 1, allocatedCent, AT.plusSeconds(86400), exclusiveMerchantId, null, null, projectId,
+                "tkt_" + tag));
     }
 
     /** 平台口径(无项目 scope)的一笔核销;不落任何项目,清场按 verification_id 走。 */
@@ -280,7 +282,8 @@ class SettlementServiceFeeDimensionS2Tests {
         looseVerificationIds.add(tag);
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 tag, AT, "ent_" + tag, "ord_" + tag, "tt_s2_default", "entry", merchantId,
-                1, 1, 1, allocatedCent, AT.plusSeconds(86400), exclusiveMerchantId, null, null, null));
+                1, 1, 1, allocatedCent, AT.plusSeconds(86400), exclusiveMerchantId, null, null, null,
+                "tkt_" + tag));
     }
 
     /**

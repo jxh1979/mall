@@ -62,7 +62,7 @@ class SettlementComboDiscountTests {
         // 满额=1000、实付净额(allocated)=800、total=1、used=1 → 折扣总额=满额−净额=200，全额分配到唯一一笔 → 折扣=200。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 "vc_full_" + ent, t, ent, "order_x", "tt_x", "entry", "mch_x", 1, 1, 1, 800L,
-                t.plusSeconds(3600), null, null, 1000L, null));
+                t.plusSeconds(3600), null, null, 1000L, null, "tkt_" + ent));
 
         assertThat(discountOf("ST-VS-vc_full_" + ent)).isEqualTo(200L);
         assertThat(verifiedOf("ST-VS-vc_full_" + ent)).isEqualTo(800L);
@@ -75,7 +75,7 @@ class SettlementComboDiscountTests {
         // fullPriceCent 为空（component_price 全空/direct 出票）→ 折扣恒 0（零行为变更）。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 "vc_none_" + ent, t, ent, "order_x", "tt_x", "entry", "mch_x", 1, 1, 1, 800L,
-                t.plusSeconds(3600), null, null, null, null));
+                t.plusSeconds(3600), null, null, null, null, "tkt_" + ent));
 
         assertThat(discountOf("ST-VS-vc_none_" + ent)).isZero();
         assertThat(verifiedOf("ST-VS-vc_none_" + ent)).isEqualTo(800L);
@@ -90,7 +90,7 @@ class SettlementComboDiscountTests {
         for (int used = 1; used <= 10; used++) {
             settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                     "vr_ramp_" + ent + "_" + used, t, ent, "order_x", "tt_x", "entry", "mch_x", 10, used, 1, 8L,
-                    t.plusSeconds(3600), null, null, 9L, null));
+                    t.plusSeconds(3600), null, null, 9L, null, "tkt_" + ent));
         }
         assertThat(sumVerifiedOfEnt(ent)).isEqualTo(8L);   // Σ净额 = allocated
         assertThat(sumDiscountOfEnt(ent)).isEqualTo(1L);   // Σ折扣 = 满额−净额 = 1（精确，不泄漏舍入分）
@@ -103,7 +103,7 @@ class SettlementComboDiscountTests {
         // 专属含结算价(exclusiveByPrice)→ 按内部价 500 直付，即便带满额价 1000 也无套票折扣（复核硬约束②）。
         settledConsumer.onSettlementSettled(new SettlementSettledEvent(
                 "vc_excl_" + ent, t, ent, "order_x", "tt_x", "bar_drink", "barX", 1, 1, 1, null,
-                t.plusSeconds(3600), "barX", 500L, 1000L, null));
+                t.plusSeconds(3600), "barX", 500L, 1000L, null, "tkt_" + ent));
 
         assertThat(verifiedOf("ST-VS-vc_excl_" + ent)).isEqualTo(500L); // 按结算价直付
         assertThat(discountOf("ST-VS-vc_excl_" + ent)).isZero();        // 专属路径折扣恒 0
