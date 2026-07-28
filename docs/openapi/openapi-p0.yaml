@@ -10249,6 +10249,13 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Id"
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - name: include_archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: include_archived 查询参数；true 时连同已存档与已删除（墓碑）绑定一并返回，默认只返回生效中绑定。
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -10292,6 +10299,134 @@ paths:
       operationId: removeAmusementProjectEntitlement
       summary: 解除游乐项目权益绑定
       x-permission: amusement.project_entitlement.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.project_entitlement.changed
+      x-audit-event-failure: amusement.project_entitlement.change_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - $ref: "#/components/parameters/EntitlementType"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/StatusChangeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/amusement/projects/{id}/entitlements/{entitlementType}/archive:
+    post:
+      tags:
+        - amusement
+      operationId: archiveAmusementProjectEntitlement
+      summary: 存档（停用）游乐项目权益绑定
+      x-permission: amusement.project_entitlement.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.project_entitlement.changed
+      x-audit-event-failure: amusement.project_entitlement.change_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - $ref: "#/components/parameters/EntitlementType"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/StatusChangeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/amusement/projects/{id}/entitlements/{entitlementType}/unarchive:
+    post:
+      tags:
+        - amusement
+      operationId: unarchiveAmusementProjectEntitlement
+      summary: 恢复游乐项目权益绑定
+      x-permission: amusement.project_entitlement.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.project_entitlement.changed
+      x-audit-event-failure: amusement.project_entitlement.change_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - $ref: "#/components/parameters/EntitlementType"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/StatusChangeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/amusement/projects/{id}/entitlements/{entitlementType}/delete-request:
+    post:
+      tags:
+        - amusement
+      operationId: requestDeleteAmusementProjectEntitlement
+      summary: 发起游乐项目权益绑定删除申请
+      x-permission: amusement.project_entitlement.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.project_entitlement.changed
+      x-audit-event-failure: amusement.project_entitlement.change_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - $ref: "#/components/parameters/EntitlementType"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/StatusChangeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/amusement/projects/{id}/entitlements/{entitlementType}/delete-approve:
+    post:
+      tags:
+        - amusement
+      operationId: approveDeleteAmusementProjectEntitlement
+      summary: 审批游乐项目权益绑定删除申请
+      x-permission: amusement.project_entitlement.approve
       x-data-scope: project-amusement
       x-terminal-allowed:
         - web

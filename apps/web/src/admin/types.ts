@@ -396,6 +396,21 @@ export type AmusementProjectRow = {
   status?: string;
 };
 
+/** 游乐项目↔权益类型绑定（V341 软删范式：存档轴 + 删除轴，delete_status='approved' 为墓碑）。 */
+export type AmusementProjectEntitlementRow = {
+  id: string;
+  projectId?: string;
+  entitlementType: string;
+  createdAt?: string;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
+  deleteStatus?: string | null;
+  deleteRequestedBy?: string | null;
+  deleteRequestedAt?: string | null;
+  deleteReason?: string | null;
+};
+
 export type AmusementSessionRow = {
   id: string;
   projectId?: string;

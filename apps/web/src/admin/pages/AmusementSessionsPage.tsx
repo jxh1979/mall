@@ -8,24 +8,44 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
 import { hasPermissions } from "../security/PermissionGate";
-import type { AdminPageProps, AmusementProjectRow, AmusementSessionRow, AmusementVerificationRow } from "../types";
+import type { AdminPageProps, AmusementProjectRow, AmusementProjectEntitlementRow, AmusementSessionRow, AmusementVerificationRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { RowActions, type RowAction } from "../components/RowActions";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
 const SESSION_MANAGE = ["amusement.session.manage"];
+// V341（R-12 软删）：权益绑定停用/恢复走 manage；删除审批走 approve（只授平台最高管理员）。
+const ENTITLEMENT_MANAGE = ["amusement.project_entitlement.manage"];
+const ENTITLEMENT_APPROVE = ["amusement.project_entitlement.approve"];
 
 const TEXT = {
   title: "项目与场次",
   description: "管理游乐项目与场次容量，后续串联预约、核销和安全规则。",
-  evidence: "接口证据：读取 /api/v1/amusement/projects、/api/v1/amusement/sessions；新建项目调用 /api/v1/amusement/projects；新增场次调用 /api/v1/amusement/sessions。",
+  evidence: "接口证据：读取 /api/v1/amusement/projects、/api/v1/amusement/sessions、/api/v1/amusement/projects/{id}/entitlements；新建项目调用 /api/v1/amusement/projects；新增场次调用 /api/v1/amusement/sessions；权益绑定停用/恢复/申请删除/审批删除调用 /api/v1/amusement/projects/{id}/entitlements/{权益类型}/archive|unarchive|delete-request|delete-approve。",
   boundary: "项目与场次是预约、核销和安全规则的基础资源；本页只维护项目/场次资源，不替代安全巡检和事故闭环。",
   loadFailed: "游乐项目与场次读取失败",
   nameRequired: "场次名称不能为空。",
   projectNameRequired: "项目名称不能为空。",
   focusClear: "清除筛选，返回全部",
+  entitlementTitle: "项目权益绑定",
+  entitlementHint: "绑定决定该项目现场核销接受哪些权益类型。停用即存档：记录留库、前台不再显示、随时可恢复；彻底删除须填理由并由平台最高管理员批准。",
+  entitlementArchivePrompt: "停用（存档）理由：",
+  entitlementDeletePrompt: "删除理由（提交后需平台最高管理员批准）：",
+  entitlementReasonRequired: "存档理由不能为空",
+  entitlementDeleteReasonRequired: "删除理由不能为空",
+  entitlementEmpty: "该项目暂无权益绑定",
+  entitlementShowArchived: "查看已归档",
 };
+
+/** V341：绑定状态中文口径（生效中 / 已存档 / 待审批删除 / 已删除）。 */
+function entitlementStatusLabel(row: AmusementProjectEntitlementRow): string {
+  if (row.deleteStatus === "approved") return "已删除（可恢复）";
+  if (row.deleteStatus === "pending") return "待审批删除";
+  if (row.archivedAt) return "已存档";
+  return "生效中";
+}
 
 function display(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
@@ -84,6 +104,90 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     window.history.pushState(window.history.state, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
     setKpiFocus(null);
     (document.querySelector(".admin-content") ?? window).scrollTo({ top: 0 });
+  }
+
+  // V341（R-12 软删）：项目↔权益绑定管理区（默认只显示生效中；「查看已归档」才带出已存档/已删除行）。
+  const [entitlementProjectId, setEntitlementProjectId] = React.useState("");
+  const [entitlements, setEntitlements] = React.useState<AmusementProjectEntitlementRow[]>([]);
+  const [showArchivedEntitlements, setShowArchivedEntitlements] = React.useState(false);
+  const [entitlementNotice, setEntitlementNotice] = React.useState<string | null>(null);
+  const canManageEntitlements = hasPermissions(effectivePermissions, ENTITLEMENT_MANAGE);
+
+  const loadEntitlements = React.useCallback(async (projectId: string, includeArchived: boolean) => {
+    if (!projectId || !canManageEntitlements) {
+      setEntitlements([]);
+      return;
+    }
+    try {
+      const rows = await api.get<AmusementProjectEntitlementRow[]>(
+        `/api/v1/amusement/projects/${projectId}/entitlements${includeArchived ? "?include_archived=true" : ""}`,
+      );
+      setEntitlements(rows);
+      setEntitlementNotice(null);
+    } catch (loadError) {
+      // 副资源容错：权益绑定另需 amusement.project_entitlement.manage，读不到只降级为区块提示，不拖垮主内容。
+      setEntitlements([]);
+      setEntitlementNotice(loadError instanceof Error ? loadError.message : "权益绑定读取失败");
+    }
+  }, [api, canManageEntitlements]);
+
+  React.useEffect(() => {
+    if (!entitlementProjectId && projects.length > 0) {
+      setEntitlementProjectId(String(projects[0]?.id ?? ""));
+    }
+  }, [projects, entitlementProjectId]);
+
+  React.useEffect(() => {
+    void loadEntitlements(entitlementProjectId, showArchivedEntitlements);
+  }, [entitlementProjectId, showArchivedEntitlements, loadEntitlements]);
+
+  async function postEntitlementAction(entitlementType: string, suffix: string, body: Record<string, unknown>, action: string) {
+    try {
+      await api.post(
+        `/api/v1/amusement/projects/${entitlementProjectId}/entitlements/${encodeURIComponent(entitlementType)}/${suffix}`,
+        body,
+      );
+      setActionResult({ action, projectId: entitlementProjectId, entitlementType });
+      await loadEntitlements(entitlementProjectId, showArchivedEntitlements);
+    } catch (actionError) {
+      setGlobalError(actionError instanceof Error ? actionError.message : "操作失败");
+    }
+  }
+
+  /** 停用=存档：理由必填（前端先拦，后端再强校验）。 */
+  async function archiveEntitlement(entitlementType: string) {
+    const input = window.prompt(TEXT.entitlementArchivePrompt);
+    if (input === null) return;
+    if (!input.trim()) {
+      setGlobalError(TEXT.entitlementReasonRequired);
+      return;
+    }
+    await postEntitlementAction(entitlementType, "archive",
+      { action: "archive", reason: input.trim() }, "amusement_project_entitlement_archived");
+  }
+
+  /** 恢复：清存档/删除标记，绑定重新生效。 */
+  async function restoreEntitlement(entitlementType: string) {
+    await postEntitlementAction(entitlementType, "unarchive",
+      { action: "unarchive" }, "amusement_project_entitlement_restored");
+  }
+
+  /** 申请删除：须先存档，删除理由必填。 */
+  async function requestDeleteEntitlement(entitlementType: string) {
+    const input = window.prompt(TEXT.entitlementDeletePrompt);
+    if (input === null) return;
+    if (!input.trim()) {
+      setGlobalError(TEXT.entitlementDeleteReasonRequired);
+      return;
+    }
+    await postEntitlementAction(entitlementType, "delete-request",
+      { action: "delete_request", reason: input.trim() }, "amusement_project_entitlement_delete_requested");
+  }
+
+  /** 审批删除：approved=落墓碑（仍留库可恢复）/ rejected=退回已存档。 */
+  async function decideDeleteEntitlement(entitlementType: string, decision: "approved" | "rejected") {
+    await postEntitlementAction(entitlementType, "delete-approve",
+      { action: decision }, `amusement_project_entitlement_delete_${decision}`);
   }
 
   const { loading, error, reload } = useAdminResource(
@@ -216,6 +320,71 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     </>
   );
 
+  // V341（R-12）：项目权益绑定区——默认只列生效中；「查看已归档」勾选后带出已存档/已删除行并给「恢复」入口。
+  const entitlementsSection = (
+    <>
+      <div className="admin-section-title">{TEXT.entitlementTitle}</div>
+      <div className="admin-generic-evidence" data-testid="amusement-entitlements-hint">{TEXT.entitlementHint}</div>
+      <div className="admin-form-row">
+        <label>所属项目
+          <select
+            data-testid="amusement-entitlement-project"
+            aria-label="选择项目"
+            value={entitlementProjectId}
+            onChange={(event) => setEntitlementProjectId(event.target.value)}
+          >
+            {projects.map((row) => <option key={row.id} value={row.id}>{display(row.projectName)}（{row.id}）</option>)}
+          </select>
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            data-testid="amusement-entitlement-show-archived"
+            checked={showArchivedEntitlements}
+            onChange={(event) => setShowArchivedEntitlements(event.target.checked)}
+          />
+          {TEXT.entitlementShowArchived}
+        </label>
+      </div>
+      {entitlementNotice ? (
+        <div className="admin-state" data-testid="amusement-entitlements-degraded">{entitlementNotice}</div>
+      ) : (
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="amusement-entitlements-table">
+            <thead><tr><th>权益类型</th><th>状态</th><th>存档理由</th><th>删除理由</th><th>操作</th></tr></thead>
+            <tbody>
+              {entitlements.length === 0 ? (
+                <tr data-testid="amusement-entitlements-empty-row"><td colSpan={5} className="admin-empty-cell">{TEXT.entitlementEmpty}</td></tr>
+              ) : entitlements.map((row) => (
+                <tr key={row.id ?? row.entitlementType} data-testid={`amusement-entitlement-row-${row.entitlementType}`}>
+                  <td>{display(row.entitlementType)}</td>
+                  <td>{entitlementStatusLabel(row)}</td>
+                  <td>{display(row.archiveReason)}</td>
+                  <td>{display(row.deleteReason)}</td>
+                  <td>{(() => {
+                    const acts: RowAction[] = [];
+                    if (row.deleteStatus === "pending") {
+                      acts.push({ key: "approve", label: "批准删除", permissions: ENTITLEMENT_APPROVE, onClick: () => void decideDeleteEntitlement(row.entitlementType, "approved"), testId: `amusement-entitlement-delete-approve-${row.entitlementType}` });
+                      acts.push({ key: "reject", label: "驳回", permissions: ENTITLEMENT_APPROVE, danger: true, onClick: () => void decideDeleteEntitlement(row.entitlementType, "rejected"), testId: `amusement-entitlement-delete-reject-${row.entitlementType}` });
+                    } else if (row.deleteStatus === "approved") {
+                      acts.push({ key: "restore", label: "恢复", permissions: ENTITLEMENT_APPROVE, onClick: () => void restoreEntitlement(row.entitlementType), testId: `amusement-entitlement-restore-${row.entitlementType}` });
+                    } else if (row.archivedAt) {
+                      acts.push({ key: "restore", label: "恢复", permissions: ENTITLEMENT_MANAGE, onClick: () => void restoreEntitlement(row.entitlementType), testId: `amusement-entitlement-restore-${row.entitlementType}` });
+                      acts.push({ key: "delete-request", label: "申请删除", permissions: ENTITLEMENT_MANAGE, danger: true, onClick: () => void requestDeleteEntitlement(row.entitlementType), testId: `amusement-entitlement-delete-request-${row.entitlementType}` });
+                    } else {
+                      acts.push({ key: "archive", label: "停用（存档）", permissions: ENTITLEMENT_MANAGE, onClick: () => void archiveEntitlement(row.entitlementType), testId: `amusement-entitlement-archive-${row.entitlementType}` });
+                    }
+                    return <RowActions actions={acts} permissionsState={effectivePermissions} testId={`amusement-entitlement-actions-${row.entitlementType}`} />;
+                  })()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+
   // V232 补时间第2批：游乐核销记录展示「核销时间 + 对应场次」（场次以名称呈现，取自本页场次表）。
   const sessionNameById = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -264,6 +433,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-project-create-open" disabled={projectSubmitting} onClick={() => { setFormError(""); setProjectOpen(true); }}>＋ 新建项目</PermissionButton></div>
             <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-session-create-open" disabled={submitting} onClick={() => { setFormError(""); setSessionOpen(true); }}>＋ 新增场次</PermissionButton><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
             {projectsSection}
+            {canManageEntitlements ? entitlementsSection : null}
             {sessionsSection}
             {verificationsSection}
           </>

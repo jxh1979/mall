@@ -270,6 +270,32 @@ pending --reject[需 approve 权限]--> none
 - 前端:服务目录表加「存档状态」列 + RowActions(存档/取消存档/申请删除/批准/驳回)。真机验证:建项生效中→存档已存档。
 - **剩余同类缺口**:游乐配置(amusement_projects/safety_templates/sessions/devices)仍缺软删,可仿此补。
 
+### 14.4a 游乐项目↔权益绑定软删(V341 · v7 审计 R-12 · 2026-07-27)
+补 §14.4 列出的游乐缺口第一项(也是该域唯一一处**真物理删**):`amusement_project_entitlements` 原
+`deleteProjectEntitlement` 直接 `DELETE FROM`,解绑即抹行——运营解错绑定无痕可查、无从恢复。改法完全照本范式,零自创:
+
+- **迁移 V341**:字段族与 V271 一字不差(`archived_at`/`archived_by`/`archive_reason`/`delete_status`/
+  `delete_requested_by`/`delete_requested_at`/`delete_reason`)+ `chk_amusement_project_entitlement_delete_status` CHECK
+  + 生效偏索引 `(project_id, entitlement_type) WHERE archived_at IS NULL AND delete_status <> 'approved'`;
+  权限码 `amusement.project_entitlement.approve`(`critical` + `requires_approval`)**只授 `role_platform_admin`**
+  (照 V255/V260 口径,非 V272 的"随 manage 一并授")。
+- **后端**:存档必填理由 / 恢复(墓碑恢复再要 approve 权限) / 删除须先存档 + 填理由 / 审批禁自审 /
+  `delete_status='approved'` 作墓碑不物理删;四端点 archive|unarchive|delete-request|delete-approve,
+  旧 `/remove` 保留但语义由物理删改为存档(不断链)。
+- **约束一(引用校验)的适配**:本表是**配置绑定表**,全仓无任何下游表以外键引用它(引用面 grep 只落在 `JdbcAmusementRepository`),
+  故"删前引用计数"不适用;取而代之的必查项是**唯一业务键复活**——`uq_amusement_project_entitlements (project_id, entitlement_type)`
+  让已存档/墓碑行继续占位,若沿用 `ON CONFLICT DO NOTHING`,运营"重新绑定"会**静默失效**;
+  改为 `DO UPDATE` 清空存档/删除标记(复绑=恢复,保留原 id/created_at)。**软删铺到带唯一业务键的表时都要查这一条。**
+- **约束二(引用侧守卫)**:核销绑定校验读取路径 `listProjectEntitlementTypes` 已改为只认生效绑定——
+  已存档绑定不再收紧核销、也不留幽灵绑定,与"存档=软下线"语义一致。
+- **约束三(留痕)**:存档/恢复/申请/审批全部走 `executeWrite`(幂等 + `audit_events` 成功/失败双事件
+  `amusement.project_entitlement.changed` / `change_failed`)。
+- **前端**:后台「项目与场次」页新增「项目权益绑定」区(按项目筛选 + 默认不显示已归档 + 「查看已归档」开关 +
+  行内「停用(存档)/恢复/申请删除/批准删除/驳回」+ 停用与申请删除强制填理由)。
+- **剩余游乐缺口(诚实标注,本批未做)**:`amusement_projects` / `amusement_safety_templates` / `amusement_sessions` /
+  `amusement_devices` 仍无存档轴与删除轴;但这四张表**当前无任何物理删除代码路径**(只有状态位流转),
+  属"缺存档能力"而非"违规硬删",不触删除铁律红线,按 §9 路线图排后续批次。
+
 ### 14.5 部署注意
 - 后端 `deploy-api.sh` 有 prod 安全闸(禁开发默认 DB 密码 complex_dev_pwd);.160 测试实例正是 prod profile + 该密码,故走手动热替换(mvn package → 新 release → 切 current → 重启,Flyway 自动应用迁移;回滚锚点保留旧 release)。
 - web 部署 predeploy 有 `verify:data-isolation-spec`;加迁移后须 `npm run docs:data-isolation-spec` 重生成隔离规范基线,否则闸红拒部署。

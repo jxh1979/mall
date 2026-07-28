@@ -335,9 +335,43 @@ class AmusementJdbcIntegrationTests {
         repository.saveProjectEntitlement(new AmusementProjectEntitlementRecord(
                 "ament_jdbc_dup", "project_jdbc", "amusement_pass", now)); // 幂等：同 type 不重复
         assertThat(repository.listProjectEntitlementTypes("project_jdbc")).containsExactly("amusement_pass");
-        assertThat(repository.listProjectEntitlements("project_jdbc"))
+        assertThat(repository.listProjectEntitlements("project_jdbc", false))
                 .extracting(AmusementProjectEntitlementRecord::entitlementType).containsExactly("amusement_pass");
-        assertThat(repository.deleteProjectEntitlement("project_jdbc", "amusement_pass")).isTrue();
+
+        // V341（R-12）软删：存档不删行——生效清单清空、默认列表清空，但 includeArchived 仍读得到且理由/存档人留痕。
+        assertThat(repository.archiveProjectEntitlement("project_jdbc", "amusement_pass", "配错权益", "usr_admin")).isEqualTo(1);
+        assertThat(repository.listProjectEntitlementTypes("project_jdbc")).isEmpty();
+        assertThat(repository.listProjectEntitlements("project_jdbc", false)).isEmpty();
+        assertThat(repository.listProjectEntitlements("project_jdbc", true))
+                .extracting(AmusementProjectEntitlementRecord::archiveReason).containsExactly("配错权益");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM amusement_project_entitlements WHERE project_id = 'project_jdbc'", Integer.class))
+                .isEqualTo(1);
+
+        // 申请删除须先存档；审批通过=墓碑（行仍在库、读取路径过滤）。
+        assertThat(repository.requestDeleteProjectEntitlement("project_jdbc", "amusement_pass", "不再使用", "usr_admin")).isEqualTo(1);
+        assertThat(repository.findProjectEntitlement("project_jdbc", "amusement_pass"))
+                .get().extracting(AmusementProjectEntitlementRecord::deleteStatus).isEqualTo("pending");
+        assertThat(repository.decideDeleteProjectEntitlement("project_jdbc", "amusement_pass", true)).isEqualTo(1);
+        assertThat(repository.listProjectEntitlementTypes("project_jdbc")).isEmpty();
+        assertThat(repository.listProjectEntitlements("project_jdbc", false)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT delete_status FROM amusement_project_entitlements WHERE project_id = 'project_jdbc'", String.class))
+                .isEqualTo("approved");
+
+        // 可恢复：恢复后清空存档/删除标记，绑定重新生效。
+        assertThat(repository.restoreProjectEntitlement("project_jdbc", "amusement_pass")).isEqualTo(1);
+        assertThat(repository.listProjectEntitlementTypes("project_jdbc")).containsExactly("amusement_pass");
+
+        // 复绑=复活既有行（唯一键占位不再让重新绑定静默失效）。
+        assertThat(repository.archiveProjectEntitlement("project_jdbc", "amusement_pass", "再次下线", "usr_admin")).isEqualTo(1);
+        repository.saveProjectEntitlement(new AmusementProjectEntitlementRecord(
+                "ament_jdbc_rebind", "project_jdbc", "amusement_pass", now));
+        assertThat(repository.listProjectEntitlementTypes("project_jdbc")).containsExactly("amusement_pass");
+        assertThat(repository.findProjectEntitlement("project_jdbc", "amusement_pass"))
+                .get().extracting(AmusementProjectEntitlementRecord::id).isEqualTo("ament_jdbc");
+        // 收尾：还原为存档态不影响后续断言（本用例后续只查容量配置）。
+        repository.archiveProjectEntitlement("project_jdbc", "amusement_pass", "收尾下线", "usr_admin");
         assertThat(repository.listProjectEntitlementTypes("project_jdbc")).isEmpty();
 
         // 清单#6：点位/设备并发容量配置 CRUD（amusement_capacity_config）。

@@ -67,9 +67,14 @@ class AmusementControllerTests {
         when(service.createProject(any(AmusementProjectRequest.class))).thenReturn(project());
         when(service.getOpenEligibility("project_1")).thenReturn(new AmusementOpenEligibilityResponse("project_1", null, true, List.of()));
         when(service.createProjectRule(eq("project_1"), any(AmusementProjectRuleRequest.class))).thenReturn(projectRule());
-        when(service.listProjectEntitlements("project_1")).thenReturn(new PageResponse<>(List.of(projectEntitlement()), 1, 50, 1));
+        when(service.listProjectEntitlements(eq("project_1"), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(new PageResponse<>(List.of(projectEntitlement()), 1, 50, 1));
         when(service.createProjectEntitlement(eq("project_1"), any(AmusementProjectEntitlementRequest.class))).thenReturn(projectEntitlement());
-        when(service.deleteProjectEntitlement(eq("project_1"), eq("amusement_pass"), any())).thenReturn(projectEntitlement());
+        // V341（R-12）软删四端点：存档 / 恢复 / 申请删除 / 审批删除。
+        when(service.archiveProjectEntitlement(eq("project_1"), eq("amusement_pass"), any(), any())).thenReturn(projectEntitlement());
+        when(service.restoreProjectEntitlement(eq("project_1"), eq("amusement_pass"), any())).thenReturn(projectEntitlement());
+        when(service.requestDeleteProjectEntitlement(eq("project_1"), eq("amusement_pass"), any(), any())).thenReturn(projectEntitlement());
+        when(service.decideDeleteProjectEntitlement(eq("project_1"), eq("amusement_pass"), any(), any())).thenReturn(projectEntitlement());
         when(service.listCapacityConfigs("project_1")).thenReturn(new PageResponse<>(List.of(capacityConfig()), 1, 50, 1));
         when(service.createCapacityConfig(eq("project_1"), any(AmusementCapacityConfigRequest.class))).thenReturn(capacityConfig());
         when(service.disableCapacityConfig(eq("amcap_1"), any())).thenReturn(capacityConfig());
@@ -117,6 +122,10 @@ class AmusementControllerTests {
             "GET,/api/v1/amusement/projects/project_1/entitlements,amusement.project_entitlement.manage",
             "POST,/api/v1/amusement/projects/project_1/entitlements,amusement.project_entitlement.manage",
             "POST,/api/v1/amusement/projects/project_1/entitlements/amusement_pass/remove,amusement.project_entitlement.manage",
+            "POST,/api/v1/amusement/projects/project_1/entitlements/amusement_pass/archive,amusement.project_entitlement.manage",
+            "POST,/api/v1/amusement/projects/project_1/entitlements/amusement_pass/unarchive,amusement.project_entitlement.manage",
+            "POST,/api/v1/amusement/projects/project_1/entitlements/amusement_pass/delete-request,amusement.project_entitlement.manage",
+            "POST,/api/v1/amusement/projects/project_1/entitlements/amusement_pass/delete-approve,amusement.project_entitlement.approve",
             "GET,/api/v1/amusement/projects/project_1/capacity-config,amusement.capacity_config.manage",
             "POST,/api/v1/amusement/projects/project_1/capacity-config,amusement.capacity_config.manage",
             "POST,/api/v1/amusement/capacity-config/amcap_1/disable,amusement.capacity_config.manage",
@@ -188,6 +197,10 @@ class AmusementControllerTests {
             "/api/v1/amusement/projects/project_1/rules",
             "/api/v1/amusement/projects/project_1/entitlements",
             "/api/v1/amusement/projects/project_1/entitlements/amusement_pass/remove",
+            "/api/v1/amusement/projects/project_1/entitlements/amusement_pass/archive",
+            "/api/v1/amusement/projects/project_1/entitlements/amusement_pass/unarchive",
+            "/api/v1/amusement/projects/project_1/entitlements/amusement_pass/delete-request",
+            "/api/v1/amusement/projects/project_1/entitlements/amusement_pass/delete-approve",
             "/api/v1/amusement/projects/project_1/capacity-config",
             "/api/v1/amusement/capacity-config/amcap_1/disable",
             "/api/v1/amusement/entitlement-sessions",
@@ -235,8 +248,13 @@ class AmusementControllerTests {
                     "rule_type":"safety_notice","rule_value":"operator briefing required","effective_from":"2026-06-14","blocking":true}
                     """;
         }
-        if (path.endsWith("/remove") || path.endsWith("/disable")) {
+        if (path.endsWith("/remove") || path.endsWith("/disable")
+                || path.endsWith("/archive") || path.endsWith("/unarchive") || path.endsWith("/delete-request")) {
+            // V341（R-12）：存档/删除申请必填理由（服务层 requireText），此处随体带上。
             return "{" + idempotency + "\"action\":\"remove\",\"reason\":\"operator config change\"}";
+        }
+        if (path.endsWith("/delete-approve")) {
+            return "{" + idempotency + "\"action\":\"approved\",\"reason\":\"approved by platform admin\"}";
         }
         if (path.endsWith("/entitlements")) {
             return "{" + idempotency + "\"entitlement_type\":\"amusement_pass\",\"operator_note\":\"bind pass\"}";

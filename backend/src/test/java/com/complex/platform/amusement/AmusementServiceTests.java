@@ -45,6 +45,8 @@ class AmusementServiceTests {
     private InMemorySafetyRepository safetyRepository;
     private AmusementService service;
     private AuthorizationService authorizationService;
+    // V341（R-12）：软删审批闸测试需要按权限码打桩 permissionExists，故把 mock 留成字段。
+    private AccessRepository accessRepository;
     private RiskAlertService riskAlertService;
 
     @BeforeEach
@@ -55,7 +57,8 @@ class AmusementServiceTests {
         auditEventRepository = new InMemoryAuditEventRepository();
         entitlementGateway = new InMemoryAmusementEntitlementGateway();
         safetyRepository = new InMemorySafetyRepository();
-        authorizationService = new AuthorizationService(mock(AccessRepository.class));
+        accessRepository = mock(AccessRepository.class);
+        authorizationService = new AuthorizationService(accessRepository);
         riskAlertService = mock(RiskAlertService.class);
         TestSecurityActors.asPlatformAdmin();
         service = new AmusementService(
@@ -1391,13 +1394,182 @@ class AmusementServiceTests {
         AmusementSessionRecord session = createSession("ent-rm-session", project.id(), 5, "open");
         service.createProjectEntitlement(project.id(),
                 new AmusementProjectEntitlementRequest("ent-rm-key", null, List.of(), "amusement_pass"));
-        service.deleteProjectEntitlement(project.id(), "amusement_pass", "ent-rm-del-key");
+        // V341（R-12）：解绑=存档软删（必填理由），行留库不物理删。
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "配错权益类型", "ent-rm-del-key");
+        // 默认列表不显示已存档绑定（删除铁律「前台不显」）。
         assertThat(service.listProjectEntitlements(project.id()).items()).isEmpty();
         registerAmusementEntitlement("credential-ent-rm", 1);
 
-        // 解绑后无任何绑定 → 回退按游乐类放行（向后兼容）。
+        // 存档后无任何生效绑定 → 回退按游乐类放行（向后兼容）。
         assertThat(service.createVerification(verification("v-ent-rm", project.id(), session.id(), "credential-ent-rm"))
                 .verificationResult()).isEqualTo("success");
+    }
+
+    // ================= V341（v7 审计 R-12）游乐权益绑定软删范式 =================
+
+    @Test
+    void archivedProjectEntitlementStaysInStoreAndIsRecoverable() {
+        AmusementProjectRecord project = projectWithTemplate("ent-soft");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-soft-key", null, List.of(), "amusement_pass"));
+
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "赛季结束下线", "ent-soft-arch");
+
+        // 存库：includeArchived=true 仍能读到该行，且理由/存档时间留痕（不是物理删）。
+        List<AmusementProjectEntitlementRecord> archived = service.listProjectEntitlements(project.id(), true).items();
+        assertThat(archived).hasSize(1);
+        assertThat(archived.get(0).archivedAt()).isNotNull();
+        assertThat(archived.get(0).archiveReason()).isEqualTo("赛季结束下线");
+        // 前台不显：默认视图为空。
+        assertThat(service.listProjectEntitlements(project.id()).items()).isEmpty();
+
+        // 可恢复：恢复后回到生效中，默认视图重新可见。
+        service.restoreProjectEntitlement(project.id(), "amusement_pass", "ent-soft-restore");
+        assertThat(service.listProjectEntitlements(project.id()).items())
+                .extracting(AmusementProjectEntitlementRecord::entitlementType)
+                .containsExactly("amusement_pass");
+        assertThat(service.listProjectEntitlements(project.id()).items().get(0).archiveReason()).isNull();
+    }
+
+    @Test
+    void archiveProjectEntitlementRejectsBlankReason() {
+        AmusementProjectRecord project = projectWithTemplate("ent-noreason");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-noreason-key", null, List.of(), "amusement_pass"));
+
+        assertThatThrownBy(() -> service.archiveProjectEntitlement(project.id(), "amusement_pass", "   ", "ent-noreason-arch"))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+        // 理由为空被拒后绑定仍生效（未被误存档）。
+        assertThat(service.listProjectEntitlements(project.id()).items()).hasSize(1);
+    }
+
+    @Test
+    void archivedProjectEntitlementNoLongerGatesVerification() {
+        // 读取路径①核销绑定校验：存档后该绑定不再被采信（既不收紧核销、也不留幽灵绑定）。
+        AmusementProjectRecord project = projectWithTemplate("ent-gate");
+        submitPassingInspection(project, "ent-gate");
+        AmusementSessionRecord session = createSession("ent-gate-session", project.id(), 5, "open");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-gate-key", null, List.of(), "amusement_pass"));
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "改配", "ent-gate-arch");
+        registerAmusementEntitlement("credential-ent-gate", 1);
+
+        assertThat(service.createVerification(verification("v-ent-gate", project.id(), session.id(), "credential-ent-gate"))
+                .verificationResult()).isEqualTo("success");
+    }
+
+    @Test
+    void deleteProjectEntitlementRequiresArchiveThenApprovalAndKeepsTombstone() {
+        AmusementProjectRecord project = projectWithTemplate("ent-del");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-del-key", null, List.of(), "amusement_pass"));
+
+        // 未存档不得申请删除。
+        assertThatThrownBy(() -> service.requestDeleteProjectEntitlement(
+                project.id(), "amusement_pass", "配错了", "ent-del-req0"))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("PROJECT_ENTITLEMENT_NOT_ARCHIVED");
+
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-del-arch");
+        // 删除理由必填。
+        assertThatThrownBy(() -> service.requestDeleteProjectEntitlement(
+                project.id(), "amusement_pass", null, "ent-del-req-blank"))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+
+        AmusementProjectEntitlementRecord pending = service.requestDeleteProjectEntitlement(
+                project.id(), "amusement_pass", "配错了不再用", "ent-del-req");
+        assertThat(pending.deleteStatus()).isEqualTo("pending");
+        assertThat(pending.deleteReason()).isEqualTo("配错了不再用");
+
+        // 审批通过 = 落墓碑，行仍在库（includeArchived 可见），默认视图不显示。
+        // 职责分离：换一名平台管理员审批（同人审批见 selfApprove 用例）。
+        TestSecurityActors.asPlatformAdmin("usr_admin_approver");
+        AmusementProjectEntitlementRecord tomb = service.decideDeleteProjectEntitlement(
+                project.id(), "amusement_pass", "approved", "ent-del-appr");
+        assertThat(tomb.deleteStatus()).isEqualTo("approved");
+        assertThat(service.listProjectEntitlements(project.id()).items()).isEmpty();
+        assertThat(service.listProjectEntitlements(project.id(), true).items()).hasSize(1);
+        assertThat(amusementRepository.listProjectEntitlementTypes(project.id())).isEmpty();
+    }
+
+    @Test
+    void rejectedDeleteProjectEntitlementFallsBackToArchivedOnly() {
+        AmusementProjectRecord project = projectWithTemplate("ent-rej");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-rej-key", null, List.of(), "amusement_pass"));
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-rej-arch");
+        service.requestDeleteProjectEntitlement(project.id(), "amusement_pass", "误提", "ent-rej-req");
+
+        TestSecurityActors.asPlatformAdmin("usr_admin_approver");
+        AmusementProjectEntitlementRecord decided = service.decideDeleteProjectEntitlement(
+                project.id(), "amusement_pass", "rejected", "ent-rej-dec");
+        assertThat(decided.deleteStatus()).isEqualTo("none");
+        assertThat(decided.archivedAt()).isNotNull();
+    }
+
+    @Test
+    void deleteRequesterCannotApproveOwnProjectEntitlementDeletion() {
+        AmusementProjectRecord project = projectWithTemplate("ent-self");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-self-key", null, List.of(), "amusement_pass"));
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-self-arch");
+        service.requestDeleteProjectEntitlement(project.id(), "amusement_pass", "误配", "ent-self-req");
+
+        // 发起人=当前主体（usr_admin）→ 禁自审。
+        assertThatThrownBy(() -> service.decideDeleteProjectEntitlement(
+                project.id(), "amusement_pass", "approved", "ent-self-appr"))
+                .isInstanceOf(ApiException.class).extracting("code")
+                .isEqualTo("PROJECT_ENTITLEMENT_SELF_APPROVE_FORBIDDEN");
+    }
+
+    @Test
+    void tombstonedProjectEntitlementRestoreRequiresApprovePermission() {
+        AmusementProjectRecord project = projectWithTemplate("ent-tomb");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-tomb-key", null, List.of(), "amusement_pass"));
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-tomb-arch");
+        service.requestDeleteProjectEntitlement(project.id(), "amusement_pass", "作废", "ent-tomb-req");
+        TestSecurityActors.asPlatformAdmin("usr_admin_approver");
+        service.decideDeleteProjectEntitlement(project.id(), "amusement_pass", "approved", "ent-tomb-appr");
+
+        // 权限库里没有 amusement.project_entitlement.approve（permissionExists=false）→ 墓碑恢复被拒。
+        assertThatThrownBy(() -> service.restoreProjectEntitlement(project.id(), "amusement_pass", "ent-tomb-res1"))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("PERMISSION_DENIED");
+
+        // 授予审批权（最高权限 role_platform_admin 持有）后墓碑可恢复——删除铁律「可恢复」。
+        when(accessRepository.permissionExists("amusement.project_entitlement.approve")).thenReturn(true);
+        AmusementProjectEntitlementRecord restored =
+                service.restoreProjectEntitlement(project.id(), "amusement_pass", "ent-tomb-res2");
+        assertThat(restored.deleteStatus()).isEqualTo("none");
+        assertThat(restored.archivedAt()).isNull();
+        assertThat(amusementRepository.listProjectEntitlementTypes(project.id())).containsExactly("amusement_pass");
+    }
+
+    @Test
+    void decideDeleteProjectEntitlementRejectsUnknownDecision() {
+        AmusementProjectRecord project = projectWithTemplate("ent-dec");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-dec-key", null, List.of(), "amusement_pass"));
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "先下线", "ent-dec-arch");
+        service.requestDeleteProjectEntitlement(project.id(), "amusement_pass", "待定", "ent-dec-req");
+
+        assertThatThrownBy(() -> service.decideDeleteProjectEntitlement(
+                project.id(), "amusement_pass", "maybe", "ent-dec-bad"))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void rebindingArchivedProjectEntitlementRevivesSameRow() {
+        // 唯一键 (project_id, entitlement_type) 使已存档行占位；复绑必须复活既有行而非静默失效。
+        AmusementProjectRecord project = projectWithTemplate("ent-revive");
+        AmusementProjectEntitlementRecord created = service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-revive-key", null, List.of(), "amusement_pass"));
+        service.archiveProjectEntitlement(project.id(), "amusement_pass", "临时下线", "ent-revive-arch");
+
+        AmusementProjectEntitlementRecord rebound = service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-revive-key2", null, List.of(), "amusement_pass"));
+        assertThat(rebound.id()).isEqualTo(created.id());
+        assertThat(rebound.archivedAt()).isNull();
+        assertThat(amusementRepository.listProjectEntitlementTypes(project.id())).containsExactly("amusement_pass");
     }
 
     @Test
@@ -2111,7 +2283,7 @@ class AmusementServiceTests {
         // 供应链供应商主数据（inventory_suppliers）镜像：vendorId → status（检修单位存在性/可用性校验）。
         private final Map<String, String> maintenanceVendors = new LinkedHashMap<>();
         private final List<AmusementSafetyActionRecord> safetyActions = new ArrayList<>();
-        private final Map<String, List<String>> projectEntitlementTypes = new LinkedHashMap<>();
+        // V341（R-12 软删）：绑定行是唯一真源，存档/删除只改标记不移除；生效绑定由 active() 派生。
         private final Map<String, AmusementProjectEntitlementRecord> projectEntitlements = new LinkedHashMap<>();
         private final Map<String, AmusementCapacityConfigRecord> capacityConfigs = new LinkedHashMap<>();
         // §6.4 三维度容量：点位/设备维容量配置（key=projectId|pointId|deviceId）与维度快照在场计数。
@@ -2119,7 +2291,8 @@ class AmusementServiceTests {
         private final Map<String, Integer> snapshotOccupied = new LinkedHashMap<>();
 
         void bindProjectEntitlementType(String projectId, String entitlementType) {
-            projectEntitlementTypes.computeIfAbsent(projectId, key -> new ArrayList<>()).add(entitlementType);
+            projectEntitlements.put(projectId + "|" + entitlementType, new AmusementProjectEntitlementRecord(
+                    "ament_" + projectId + "_" + entitlementType, projectId, entitlementType, Instant.now()));
         }
 
         /** 测试夹具：为项目的点位/设备维配置最大并发上限（落地点位·设备维度受控）。 */
@@ -2160,35 +2333,95 @@ class AmusementServiceTests {
 
         @Override
         public List<String> listProjectEntitlementTypes(String projectId) {
-            return new ArrayList<>(projectEntitlementTypes.getOrDefault(projectId, List.of()));
+            // 核销绑定校验只认生效绑定（已存档/墓碑视同不存在）。
+            return projectEntitlements.values().stream()
+                    .filter(record -> projectId.equals(record.projectId()))
+                    .filter(AmusementProjectEntitlementRecord::active)
+                    .map(AmusementProjectEntitlementRecord::entitlementType)
+                    .sorted()
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         }
 
         @Override
         public AmusementProjectEntitlementRecord saveProjectEntitlement(AmusementProjectEntitlementRecord entitlement) {
-            List<String> types = projectEntitlementTypes.computeIfAbsent(entitlement.projectId(), key -> new ArrayList<>());
-            if (!types.contains(entitlement.entitlementType())) {
-                types.add(entitlement.entitlementType());
-            }
-            projectEntitlements.put(entitlement.projectId() + "|" + entitlement.entitlementType(), entitlement);
-            return entitlement;
+            String key = entitlement.projectId() + "|" + entitlement.entitlementType();
+            AmusementProjectEntitlementRecord existing = projectEntitlements.get(key);
+            // 复绑=恢复：命中既有行时保留原 id/created_at，清空存档/删除标记（对齐 JDBC 的 ON CONFLICT DO UPDATE）。
+            AmusementProjectEntitlementRecord saved = existing == null
+                    ? entitlement
+                    : new AmusementProjectEntitlementRecord(existing.id(), existing.projectId(),
+                            existing.entitlementType(), existing.createdAt());
+            projectEntitlements.put(key, saved);
+            return saved;
         }
 
         @Override
-        public List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId) {
+        public List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId, boolean includeArchived) {
             return projectEntitlements.values().stream()
                     .filter(record -> projectId.equals(record.projectId()))
+                    .filter(record -> includeArchived || record.active())
                     .sorted(java.util.Comparator.comparing(AmusementProjectEntitlementRecord::entitlementType))
                     .toList();
         }
 
         @Override
-        public boolean deleteProjectEntitlement(String projectId, String entitlementType) {
-            boolean removed = projectEntitlements.remove(projectId + "|" + entitlementType) != null;
-            List<String> types = projectEntitlementTypes.get(projectId);
-            if (types != null) {
-                types.remove(entitlementType);
+        public Optional<AmusementProjectEntitlementRecord> findProjectEntitlement(String projectId, String entitlementType) {
+            return Optional.ofNullable(projectEntitlements.get(projectId + "|" + entitlementType));
+        }
+
+        @Override
+        public int archiveProjectEntitlement(String projectId, String entitlementType, String reason, String actorId) {
+            String key = projectId + "|" + entitlementType;
+            AmusementProjectEntitlementRecord existing = projectEntitlements.get(key);
+            if (existing == null || existing.archivedAt() != null || !"none".equals(existing.deleteStatus())) {
+                return 0;
             }
-            return removed;
+            projectEntitlements.put(key, new AmusementProjectEntitlementRecord(
+                    existing.id(), existing.projectId(), existing.entitlementType(), existing.createdAt(),
+                    Instant.now(), actorId, reason,
+                    existing.deleteStatus(), existing.deleteRequestedBy(), existing.deleteRequestedAt(), existing.deleteReason()));
+            return 1;
+        }
+
+        @Override
+        public int restoreProjectEntitlement(String projectId, String entitlementType) {
+            String key = projectId + "|" + entitlementType;
+            AmusementProjectEntitlementRecord existing = projectEntitlements.get(key);
+            if (existing == null) {
+                return 0;
+            }
+            projectEntitlements.put(key, new AmusementProjectEntitlementRecord(
+                    existing.id(), existing.projectId(), existing.entitlementType(), existing.createdAt()));
+            return 1;
+        }
+
+        @Override
+        public int requestDeleteProjectEntitlement(String projectId, String entitlementType, String reason, String actorId) {
+            String key = projectId + "|" + entitlementType;
+            AmusementProjectEntitlementRecord existing = projectEntitlements.get(key);
+            if (existing == null || existing.archivedAt() == null || !"none".equals(existing.deleteStatus())) {
+                return 0;
+            }
+            projectEntitlements.put(key, new AmusementProjectEntitlementRecord(
+                    existing.id(), existing.projectId(), existing.entitlementType(), existing.createdAt(),
+                    existing.archivedAt(), existing.archivedBy(), existing.archiveReason(),
+                    "pending", actorId, Instant.now(), reason));
+            return 1;
+        }
+
+        @Override
+        public int decideDeleteProjectEntitlement(String projectId, String entitlementType, boolean approved) {
+            String key = projectId + "|" + entitlementType;
+            AmusementProjectEntitlementRecord existing = projectEntitlements.get(key);
+            if (existing == null || !"pending".equals(existing.deleteStatus())) {
+                return 0;
+            }
+            projectEntitlements.put(key, new AmusementProjectEntitlementRecord(
+                    existing.id(), existing.projectId(), existing.entitlementType(), existing.createdAt(),
+                    existing.archivedAt(), existing.archivedBy(), existing.archiveReason(),
+                    approved ? "approved" : "none",
+                    existing.deleteRequestedBy(), existing.deleteRequestedAt(), existing.deleteReason()));
+            return 1;
         }
 
         @Override
