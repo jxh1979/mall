@@ -18,6 +18,8 @@ const BRANDS = [
 const FOLLOW_UPS = [
   { id: "fu-1", ref_type: "lead", ref_id: "l-1", method: "phone", content: "已沟通", next_plan_at: "2026-07-10" },
 ];
+// 后端 /leasing/leads/follow-up-due 的返回：超过约定天数没跟进的线索（天数口径在后端，前端不复刻）。
+const DUE_LEADS = [LEADS[0]];
 
 function envelope(items: unknown[]): Response {
   return new Response(
@@ -31,6 +33,8 @@ function makeApi(): AdminApi {
     "fetch",
     vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
+      // 到期待跟进：后端独立端点，先于 /leasing/leads 匹配（前者是后者的前缀）。
+      if (url.includes("/leasing/leads/follow-up-due")) return Promise.resolve(envelope(DUE_LEADS));
       if (url.includes("/leasing/leads")) return Promise.resolve(envelope(LEADS));
       if (url.includes("/leasing/intents")) return Promise.resolve(envelope(INTENTS));
       if (url.includes("/leasing/brands")) return Promise.resolve(envelope(BRANDS));
@@ -72,6 +76,20 @@ describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
     expect(screen.queryByTestId("leasing-summary")).toBeNull();
     expect(screen.queryByTestId("leasing-lead-create-open")).toBeNull();
     expect(screen.queryByTestId("leasing-intents-table")).toBeNull();
+  });
+
+  it("到期跟进提醒接进工作台：进页就看见提醒条，点进去只剩该跟进的线索", async () => {
+    renderPage();
+    // 一进工作台先看见提醒（不用点任何按钮）——这是「招商人员登录就能收到提醒」的证伪点。
+    await waitFor(() => expect(screen.getByTestId("leasing-follow-up-due-banner")).toBeTruthy());
+    expect(screen.getByTestId("leasing-follow-up-due-banner").textContent).toContain("有 1 条线索超过约定天数没跟进");
+    expect(screen.getByTestId("leasing-kpi-due").textContent).toBe("1");
+
+    fireEvent.click(screen.getByTestId("leasing-follow-up-due-open"));
+    expect(window.location.search).toContain("subset=due");
+    expect(screen.getByTestId("leasing-kpi-focus-banner").textContent).toContain("正在查看：该跟进的线索（1）");
+    expect(screen.getByTestId("leasing-lead-select-l-1")).toBeTruthy();
+    expect(screen.queryByTestId("leasing-lead-select-l-2")).toBeNull();
   });
 
   it("点“品牌库”数字 → 聚焦只剩品牌表", async () => {

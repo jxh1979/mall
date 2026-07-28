@@ -16,11 +16,11 @@
 
 | 绑定项 | 当前值 |
 |---|---|
-| 生成时的 Git HEAD | `f855c7ffcb8b626dc604e1c84ccf0364a1fb6cf0`（main） |
-| 生成时工作树 | 干净 |
-| 源码指纹 sha256 | `7f58db75ffbce5ca5d9674e8a39639e4d114c3a630e78bb7d85b49ce08fb47f5` |
-| 指纹覆盖文件数 | 2059 |
-| 生成时间 | 2026-07-22T07:04:55.757Z |
+| 生成时的 Git HEAD | `2ec37f0f770f55579a1acae83f28300784264f11`（feat/misc-config-and-workbench） |
+| 生成时工作树 | 有未提交改动 |
+| 源码指纹 sha256 | `c92b4fa55fde188892fa5ce8cb86206d487e3bf9da35d857e435d2e1775d7cbd` |
+| 指纹覆盖文件数 | 2085 |
+| 生成时间 | 2026-07-28T12:33:06.963Z |
 | 最大有效天数 | 30 |
 
 > 校验规则（`--check`）：若当前源码指纹与本文记录不一致（源码已变更），或本证据超过最大有效天数，则立即 FAIL；陈旧证据不再自欺 PASS。
@@ -29,9 +29,9 @@
 
 | 判断项 | 当前值 |
 |---|---|
-| 运行时证据支持进入联调/业务验收 | 是 |
+| 运行时证据支持进入联调/业务验收 | 否 |
 | 可以宣称生产上线就绪 | 否 |
-| 结论说明 | Runtime evidence supports integration and business acceptance; production readiness remains blocked by external production evidence and NAS current mount state. |
+| 结论说明 | Runtime evidence is incomplete or stale; rerun the closed-loop runtime command and regenerate this evidence. |
 
 刷新规则：After backend, web, Playwright, OpenAPI, or runtime script changes, rerun npm run verify:closed-loop-runtime, then npm run docs:runtime-acceptance-evidence.
 
@@ -50,25 +50,25 @@
 
 | 指标 | 当前值 |
 |---|---:|
-| Surefire suites | 228 |
-| tests | 2583 |
+| Surefire suites | 236 |
+| tests | 2944 |
 | failures | 0 |
 | errors | 0 |
 | skipped | 0 |
-| latest_mtime | 2026-07-22T06:46:54.809Z |
+| latest_mtime | 2026-07-28T12:32:32.936Z |
 
 ## 4. Web 与 UI 验收证据
 
 | 证据 | 当前值 |
 |---|---|
-| Web dist index | 存在 |
-| Web main JS | `apps/web/dist/assets/main-DjeFogQ0.js` 3532 bytes |
-| 最大静态资源 | `apps/web/dist/assets/vendor-antd-CBmYl4fp.js` 538825 bytes |
+| Web dist index | 缺失 |
+| Web main JS | - |
+| 最大静态资源 | - |
 | 主包过大 warning 预期 | 无 |
-| 前端单元测试源文件 | 185 个文件，741 条测试定义 |
-| Playwright 常规 UI | 报告存在，39 条测试定义 |
-| Playwright 真实后端 UI | 报告存在，3 条测试定义 |
-| Playwright last-run | passed |
+| 前端单元测试源文件 | 185 个文件，746 条测试定义 |
+| Playwright 常规 UI | 报告缺失，39 条测试定义 |
+| Playwright 真实后端 UI | 报告缺失，3 条测试定义 |
+| Playwright last-run | not passed / missing |
 
 ## 5. 安全扫描与生产边界
 

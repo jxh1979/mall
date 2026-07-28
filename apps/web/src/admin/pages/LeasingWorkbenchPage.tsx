@@ -55,7 +55,7 @@ interface LeasingFollowUpRow {
 
 const TEXT = {
   title: "招商工作台",
-  description: "招商获客前漏斗：线索建档 → 跟进 → 租赁意向推进 → 签约转商户合同草稿；品牌库与黑名单维护。所有写动作带幂等键，签约直接生成合同草稿进入合同生命周期。",
+  description: "招商获客前漏斗：线索建档 → 跟进 → 租赁意向推进 → 签约转商户合同草稿；品牌库与黑名单维护。超过约定天数没跟进的线索在页首直接提醒（天数在「提醒与留存天数配置」页可改）。所有写动作带幂等键，签约直接生成合同草稿进入合同生命周期。",
   evidence: "接口证据：线索 /api/v1/leasing/leads（含 assign/status/follow-up-due）；意向 /api/v1/leasing/intents（advance/sign→合同草稿）；品牌 /api/v1/leasing/brands（blacklist）；跟进 /api/v1/leasing/follow-ups。",
   loadFailed: "招商前漏斗读取失败",
   actionFailed: "招商前漏斗操作失败",
@@ -84,8 +84,9 @@ function label(map: Record<string, string>, code: string | null | undefined): st
   return map[code] ?? code;
 }
 
-// KPI 聚焦（照样板）：?kpi=<leads|intents|brands>[&subset=following]。
-// 线索总数→leads，跟进中→leads subset=following（未签约/未流失客户端过滤），意向数→intents，品牌库→brands。
+// KPI 聚焦（照样板）：?kpi=<leads|intents|brands>[&subset=following|due]。
+// 线索总数→leads，跟进中→leads subset=following（未签约/未流失客户端过滤），
+// 待跟进→leads subset=due（后端 /leads/follow-up-due 按可配天数判定，不在前端算），意向数→intents，品牌库→brands。
 type KpiTable = "leads" | "intents" | "brands";
 type KpiFocus = { table: KpiTable; subset: string | null };
 
@@ -114,6 +115,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [intents, setIntents] = React.useState<LeasingIntentRow[]>([]);
   const [brands, setBrands] = React.useState<LeasingBrandRow[]>([]);
   const [followUps, setFollowUps] = React.useState<LeasingFollowUpRow[]>([]);
+  // 到期待跟进线索（V219 提醒窗天数后台可配，判定在后端 /leads/follow-up-due，前端只展示）。
+  const [dueLeads, setDueLeads] = React.useState<LeasingLeadRow[]>([]);
   // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -183,16 +186,18 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [l, i, b, f] = await Promise.all([
+      const [l, i, b, f, d] = await Promise.all([
         api.get<LeasingLeadRow[]>("/api/v1/leasing/leads"),
         api.get<LeasingIntentRow[]>("/api/v1/leasing/intents"),
         api.get<LeasingBrandRow[]>("/api/v1/leasing/brands"),
         api.get<LeasingFollowUpRow[]>("/api/v1/leasing/follow-ups"),
+        api.get<LeasingLeadRow[]>("/api/v1/leasing/leads/follow-up-due"),
       ]);
       setLeads(l);
       setIntents(i);
       setBrands(b);
       setFollowUps(f);
+      setDueLeads(d ?? []);
       try {
         const [sp, mc, en, us] = await Promise.all([
           api.get<GovernanceSpaceRow[]>("/api/v1/platform/spaces"),
@@ -214,8 +219,13 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
     fallbackMessage: TEXT.actionFailed,
   });
 
-  // 聚焦时线索客户端子集过滤（跟进中）。搜索/排序在完整视图内保留原逻辑。
-  const focusLeads = kpiFocus?.table === "leads" && kpiFocus.subset === "following" ? leads.filter(isFollowing) : leads;
+  // 聚焦时线索子集过滤：跟进中=客户端按状态过滤；待跟进=后端 /leads/follow-up-due 的结果（天数口径在后端，
+  // 前端不复刻判定，改后台提醒窗天数即刻改变这张单子）。搜索/排序在完整视图内保留原逻辑。
+  const focusLeads = kpiFocus?.table === "leads" && kpiFocus.subset === "following"
+    ? leads.filter(isFollowing)
+    : kpiFocus?.table === "leads" && kpiFocus.subset === "due"
+      ? dueLeads
+      : leads;
   const filteredLeads = focusLeads.filter((row) => rowMatchesKeyword(row, query));
   const leadSort = useSortedRows(filteredLeads, {
     contactName: (row) => row.contactName ?? row.id,
@@ -471,7 +481,11 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
 
   function kpiFocusTitle(): string {
     if (!kpiFocus) return "";
-    if (kpiFocus.table === "leads") return kpiFocus.subset === "following" ? "跟进中线索" : "线索总数";
+    if (kpiFocus.table === "leads") {
+      if (kpiFocus.subset === "following") return "跟进中线索";
+      if (kpiFocus.subset === "due") return "该跟进的线索";
+      return "线索总数";
+    }
     if (kpiFocus.table === "intents") return "租赁意向";
     return "品牌库";
   }
@@ -499,9 +513,18 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
           </>
         ) : (
           <>
+            {/* 到期跟进提醒：招商人员一进工作台就先看见「该跟进几条」，点进去直接是那几条线索。
+                判定天数在后台「提醒与留存天数配置」可改（leasing.lead_follow_up），前端不复刻口径。 */}
+            {dueLeads.length > 0 && (
+              <div className="admin-state" data-testid="leasing-follow-up-due-banner">
+                有 {dueLeads.length} 条线索超过约定天数没跟进，请尽快联系。
+                <button type="button" data-testid="leasing-follow-up-due-open" onClick={() => enterKpiFocus("leads", "due")}>查看该跟进的线索</button>
+              </div>
+            )}
             <div className="admin-kpi-grid" data-testid="leasing-summary">
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>线索总数</span><button type="button" className="admin-kpi-value" data-testid="leasing-kpi-leads" onClick={() => enterKpiFocus("leads")}>{leads.length}</button><small>招商前漏斗</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>跟进中</span><button type="button" className="admin-kpi-value" data-testid="leasing-kpi-following" onClick={() => enterKpiFocus("leads", "following")}>{followingCount}</button><small>未签约/未流失</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>该跟进</span><button type="button" className="admin-kpi-value" data-testid="leasing-kpi-due" onClick={() => enterKpiFocus("leads", "due")}>{dueLeads.length}</button><small>超过约定天数没跟进</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>意向数</span><button type="button" className="admin-kpi-value" data-testid="leasing-kpi-intents" onClick={() => enterKpiFocus("intents")}>{intents.length}</button><small>租赁意向</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>品牌库</span><button type="button" className="admin-kpi-value" data-testid="leasing-kpi-brands" onClick={() => enterKpiFocus("brands")}>{brands.length}</button><small>含黑名单</small></div>
             </div>

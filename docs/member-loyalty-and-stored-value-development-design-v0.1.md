@@ -33,7 +33,10 @@
 
 ## 3. 积分获取引擎（earn / confirm / deduct / 过期）
 
-落 `customer_points_ledger`（V100/V025，幂等 `uq_customer_points_ledger_source_doc`）+ `customer_points_rules`（V060 规则）：
+落 `customer_points_ledger`（V100/V025，幂等 `uq_customer_points_ledger_source_doc`）。
+> ⚠️ 更正（2026-07-28，V352）：本节原写「+ `customer_points_rules`（V060 规则）」，与代码不符——引擎从未读过该表。
+> 积分累计率读 `points_accrual_rate_configs`（V340），等级读 `customer_member_levels`，签到读 `customer_check_in_tiers`，
+> 生日读 `customer_birthday_rules`。`customer_points_rules` 与后台页 ADM-CUS-003 已停用下线（表留库不物删）。
 - `earnPoints` / `earnPointsPending`：获取/挂起（pending）；按消费金额或按核销张数等规则。
 - `confirmPoints(sourceDoc, verifiedUnits, totalUnits)`：**按已核销张数比例确认**；退款按已确认份额冲减（reversed）。 **AUD-014（2026-07-20）：算 delta 前对 earn 行加 `FOR UPDATE` 行锁（锁序 earn→account），串行化同一订单的并发确认/冲正 → 后到事务读到已提交的已确认份额，delta=0 幂等，杜绝两事务基于同一旧值重复给账户加钱（余额>明细的账实分叉）。**
   - **✅ P0-B 积分台账改追加（2026-07-28，迁移 V344）**：确认份额**不再就地改写 earn 行的 `confirmed_amount`**（旧值被覆盖、变动无痕，属资金台账 append-only 破防）。
@@ -95,7 +98,7 @@
 | `customer_points_accounts`（+V089 扩列） | V009/V089 | 两本账（balance 可用 / keep_threshold_progress 成长）+ 冻结 + 保级周期 + 签到 |
 | `customer_member_levels` | V089 | 等级配置（升级/保级门槛/周期/宽限/倍率） |
 | `customer_points_ledger` | V025/V100/V151/**V344** | 积分流水（获取/确认/扣减/过期，幂等）。**V344 起改追加**：已确认份额 = `change_type='confirm'` 分录的 `points_delta` 之和；事实列被触发器冻结，`confirmed_amount` 仅作历史列不再回写 |
-| `customer_points_rules` | V060 | 积分获取规则 |
+| `customer_points_rules` | V060 / **V352** | ~~积分获取规则~~ **已停用（2026-07-28）**：零读取方，后台页 ADM-CUS-003 同批下线；表留库不物删（全表 `archived_at` 存档） |
 | `customer_check_ins`（+ tiers） | V089 | 连续签到 + 阶梯 |
 | `customer_birthday_rules` / `customers.birth_date` | V089 | 生日加倍 |
 | `customer_stored_value_accounts` / `_transactions` | V090 | 储值预付卡 |
@@ -108,7 +111,7 @@
 
 - **UI 验收**：`full-admin-ui-acceptance-matrix` 与客人端 UI 验收矩阵均缺会员/储值/签到/订阅行（后端有、验收未单列）。
 - **客人端页面**：`customer-app-miniapp-development-design` 缺签到页、储值充值/余额页、付费会员开通/权益页的页面→API 映射（能力已在 OpenAPI `customer/*`）。
-- 积分获取规则（按金额/张数/签到/生日/活动）与等级升降的**产品规则文档**此前薄弱，本文已据实现回填核心口径，细则仍以后台 `customer_points_rules` 配置为准。
+- 积分获取规则（按金额/张数/签到/生日/活动）与等级升降的**产品规则文档**此前薄弱，本文已据实现回填核心口径；细则以各真身配置表为准——累计率 `points_accrual_rate_configs`（ADM-STL-001 结算配置中心）、等级 `customer_member_levels`、签到 `customer_check_in_tiers`、生日 `customer_birthday_rules`（均在 ADM-CUS-004）。原文此处写的 `customer_points_rules` 已于 2026-07-28 停用（V352）。
 
 
 ## 重构切片（2026-07-28）

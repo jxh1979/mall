@@ -36,9 +36,6 @@ class CustomerJdbcIntegrationTests {
     @Autowired
     private CustomerService customerService;
 
-    @Autowired
-    private CustomerPointsRuleAdminService pointsRuleAdminService;
-
     @Test
     void bindStoredValueTopupIntentRejectsRebindToDifferentScope() {
         // AUD 复核 P1-1②：同一支付意图绑定后，同 customer 换商户再绑同一意图 → 返回 0（冲突），不静默改绑；完全一致才幂等放过。
@@ -126,10 +123,36 @@ class CustomerJdbcIntegrationTests {
         assertThat(regclass("customer_points_ledger")).isEqualTo("customer_points_ledger");
         assertThat(regclass("customer_redemption_catalog_items")).isEqualTo("customer_redemption_catalog_items");
         assertThat(regclass("customer_points_redemptions")).isEqualTo("customer_points_redemptions");
+        // V352 停用后表仍在（删除铁律：存库不物删，随时可查可恢复）。
         assertThat(regclass("customer_points_rules")).isEqualTo("customer_points_rules");
         assertThat(regclass("bar_tables")).isEqualTo("bar_tables");
         assertThat(regclass("bar_reservations")).isEqualTo("bar_reservations");
         assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
+    }
+
+    @Test
+    void pointsRulesPageRetiredKeepsTableButRevokesPermissions() {
+        // V352 停用旧积分规则表与旧页（用户 2026-07-28 拍板）。证伪点：
+        //   ① 存档三列在（可分类、可填理由、可恢复）；② 两个权限点已从所有角色解绑、本体置 inactive
+        //      —— 任何人再也进不去 ADM-CUS-003；③ 权限行本身留库不物删。
+        assertThat(columnExists("customer_points_rules", "archived_at")).isTrue();
+        assertThat(columnExists("customer_points_rules", "archive_reason")).isTrue();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM role_permissions WHERE permission_code LIKE 'customer.points_rule.%'",
+                Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM permissions"
+                        + " WHERE permission_code LIKE 'customer.points_rule.%' AND status = 'inactive'",
+                Integer.class)).isEqualTo(2);
+    }
+
+    private boolean columnExists(String tableName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns"
+                        + " WHERE table_name = '" + tableName + "' AND column_name = '" + columnName + "'",
+                Integer.class);
+        return count != null && count > 0;
     }
 
     @Test
@@ -262,36 +285,6 @@ class CustomerJdbcIntegrationTests {
                         StoredValueMerchantRefundRuleRecord::fundOwnership,
                         StoredValueMerchantRefundRuleRecord::refundRatioBps)
                 .containsExactly(true, "platform_collect", 8000);
-    }
-
-    @Test
-    void customerPointsRulePersistsAndReadsBack() {
-        Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        repository.savePointsRule(new CustomerPointsRuleRecord(
-                "rule_1", "prj_1", "消费积分", "consume_amount", 1L, "{\"silver\":1000}",
-                "fixed_days", 365, "fifo_batch", null, "active", now, now));
-
-        assertThat(repository.findPointsRuleById("rule_1")).get()
-                .extracting(CustomerPointsRuleRecord::earnMethod, CustomerPointsRuleRecord::validityType,
-                        CustomerPointsRuleRecord::status)
-                .containsExactly("consume_amount", "fixed_days", "active");
-        assertThat(repository.listPointsRules())
-                .extracting(CustomerPointsRuleRecord::id)
-                .contains("rule_1");
-        // P2 多综合体 project_id scoped 读通道：按 project_id 行级隔离。
-        assertThat(repository.listPointsRulesByProject("prj_1"))
-                .extracting(CustomerPointsRuleRecord::id)
-                .contains("rule_1");
-        assertThat(repository.listPointsRulesByProject("prj_nonexistent")).isEmpty();
-    }
-
-    @Test
-    void customerPointsRuleRejectsInvalidValidityTypeAtDatabaseLevel() {
-        Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        assertThatThrownBy(() -> repository.savePointsRule(new CustomerPointsRuleRecord(
-                "rule_bad", null, "bad", "consume_amount", 1L, "{}", "calendar_year", null,
-                "fifo_batch", null, "draft", now, now)))
-                .isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 
     @Test
@@ -527,36 +520,6 @@ class CustomerJdbcIntegrationTests {
         assertThat(repository.listPointsRedemptionsByCustomerId("customer_points_jdbc"))
                 .extracting(CustomerPointsRedemptionRecord::id, CustomerPointsRedemptionRecord::status)
                 .containsExactly(tuple("redemption_jdbc", "pending_pickup"));
-    }
-
-    @Test
-    void pointsRuleAdminEndpointsCreateListGetUpdateAsPlatformAdmin() {
-        // item6 后台积分规则 CRUD 端到端（真 DB + 真 AuthorizationService，平台管理员上下文）。
-        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
-        try {
-            CustomerPointsRuleRecord created = pointsRuleAdminService.create(
-                    new com.complex.platform.customer.dto.CustomerPointsRuleRequest(
-                            "prj_rule_jdbc", "JDBC earn rule", "consume_amount", 5L, "{\"silver\":1000}",
-                            "fixed_days", 365, "fifo_batch", null, "active"));
-            assertThat(created.id()).startsWith("points_rule_");
-            assertThat(created.projectId()).isEqualTo("prj_rule_jdbc");
-
-            assertThat(pointsRuleAdminService.list().items())
-                    .extracting(CustomerPointsRuleRecord::id)
-                    .contains(created.id());
-
-            assertThat(pointsRuleAdminService.get(created.id()).earnRatio()).isEqualTo(5L);
-
-            CustomerPointsRuleRecord updated = pointsRuleAdminService.update(created.id(),
-                    new com.complex.platform.customer.dto.CustomerPointsRuleRequest(
-                            null, null, null, 8L, null, null, null, null, null, "paused"));
-            assertThat(updated.earnRatio()).isEqualTo(8L);
-            assertThat(updated.status()).isEqualTo("paused");
-            // project_id 不因 update 改动（更新沿用既有归属）。
-            assertThat(updated.projectId()).isEqualTo("prj_rule_jdbc");
-        } finally {
-            org.springframework.security.core.context.SecurityContextHolder.clearContext();
-        }
     }
 
         private String regclass(String tableName) {

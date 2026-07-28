@@ -1,6 +1,7 @@
 package com.complex.platform.ticketing;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.NotificationWindowConfig;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.evidence.AuditEventService;
@@ -22,14 +23,16 @@ import org.springframework.stereotype.Service;
  * <p><b>加密</b>：复用 {@link PiiCipher}(AES-GCM+KeyVault)，不自己写加密。base64 图串经 PiiCipher.encrypt 得信封串，
  * 其 UTF-8 字节存 BYTEA；取时字节→String→PiiCipher.decrypt→base64 图串。生物识别敏感=存必加密、取必授权+审计。
  *
- * <p><b>保留期</b>：purge_after = 票 valid_to + 30 天(PIPL 越短越安全)；到期由 {@link TicketFacePhotoPurgeJob} 硬删。
+ * <p><b>保留期</b>：purge_after = 票 valid_to + 留存天数(后台可配，默认 30 天；PIPL 越短越安全)；
+ * 到期由 {@link TicketFacePhotoPurgeJob} 硬删。
  */
 @Service
 public class TicketFacePhotoService {
 
-    // 拍脸照存档保留期：票失效后 30 天自清。ponytail: purge_after=valid_to+30 一次定死；
-    //   核销完更早清是优化(核销点可提前置 purge_after=今日)，升级路径=核销成功事件里改 purge_after。
+    // 拍脸照存档保留期：票失效后 N 天自清，N 落 notification_windows(key=ticketing.face_photo_retention)后台可改，
+    //   缺配置兜底 30(行为不变)。涉个人信息保护：改这个数=改生物识别照片的销毁时点，改动经 OperatingParamsService 留审计。
     private static final int RETENTION_DAYS_AFTER_VALID_TO = 30;
+    private static final String RETENTION_WINDOW_KEY = "ticketing.face_photo_retention";
 
     // 取照查看权限：复用既有核销查看权限码(核销/运营角色持有)，无权 403。
     private static final String VIEW_PERMISSION = "verification.view";
@@ -38,17 +41,32 @@ public class TicketFacePhotoService {
     private final PiiCipher piiCipher;
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
+    private final NotificationWindowConfig windowConfig;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public TicketFacePhotoService(TicketFacePhotoRepository repository, PiiCipher piiCipher,
-                                  AuthorizationService authorizationService, AuditEventService auditEventService) {
+                                  AuthorizationService authorizationService, AuditEventService auditEventService,
+                                  NotificationWindowConfig windowConfig) {
         this.repository = repository;
         this.piiCipher = piiCipher;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
+        this.windowConfig = windowConfig;
+    }
+
+    /** 测试便捷构造:留存天数回落默认 30。 */
+    public TicketFacePhotoService(TicketFacePhotoRepository repository, PiiCipher piiCipher,
+                                  AuthorizationService authorizationService, AuditEventService auditEventService) {
+        this(repository, piiCipher, authorizationService, auditEventService, new NotificationWindowConfig());
+    }
+
+    /** 当前生效的人脸照留存天数(后台可配，缺配置 30)。 */
+    int retentionDays() {
+        return windowConfig.days(RETENTION_WINDOW_KEY, RETENTION_DAYS_AFTER_VALID_TO);
     }
 
     /**
-     * 购买捕获：把发放请求带来的人脸照 base64 加密后存 ticket_face_photos，purge_after=valid_to+30 天。
+     * 购买捕获：把发放请求带来的人脸照 base64 加密后存 ticket_face_photos，purge_after=valid_to+留存天数(后台可配)。
      * 由 {@link TicketOrderService} 在 require_face_photo=TRUE 的权益发放后调用；photoBase64 缺失应在调用前已拒。
      */
     void capture(String entitlementId, String photoBase64, String contentType, Instant capturedAt, Instant validTo) {
@@ -60,7 +78,7 @@ public class TicketFacePhotoService {
         // 复用 PiiCipher(AES-GCM)：base64 图串 → 信封串 → UTF-8 字节存 BYTEA（禁明文存）。
         byte[] ciphertext = piiCipher.encrypt(payload).getBytes(StandardCharsets.UTF_8);
         LocalDate purgeAfter = (validTo == null ? Instant.now() : validTo)
-                .atOffset(ZoneOffset.UTC).toLocalDate().plusDays(RETENTION_DAYS_AFTER_VALID_TO);
+                .atOffset(ZoneOffset.UTC).toLocalDate().plusDays(retentionDays());
         repository.save("tfp_" + UUID.randomUUID().toString().replace("-", ""),
                 entitlementId, ciphertext, contentType == null ? "image/jpeg" : contentType,
                 capturedAt == null ? Instant.now() : capturedAt, purgeAfter);
