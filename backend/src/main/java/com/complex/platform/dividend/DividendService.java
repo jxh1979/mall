@@ -4,6 +4,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
 import com.complex.platform.dividend.DividendRecords.DividendComputeSkipRecord;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
@@ -564,8 +565,14 @@ public class DividendService {
     }
 
     /**
-     * V309 自定义扣除项原始扣除额（分，未封顶）：fixed 取固定额；ratio 取基数（净利润/营收）× 比例，
+     * V309 自定义扣除项原始扣除额（分，未封顶）：fixed 取固定额；ratio 取<b>四舍五入</b>(基数（净利润/营收）× 比例)，
      * 基数按 max(figure,0) 取（亏损/负基数不倒扣）。封顶（不透支税后余额）由 {@link DividendMath#clampDeductions} 处理。
+     *
+     * <p>R-7（2026-07-28 裁决口径「分红改、个税不改」——自定义扣除在分红域、非代扣税，落在「改」的一侧）：
+     * 旧 {@code basis * ratioBps / 10000} 整除截断使扣除方恒少扣、差额白留主理人且不留痕，改
+     * {@link MoneyRounding#bpsOf} HALF_UP。<b>不影响守恒</b>：本值只决定「扣多少」的大小，
+     * 链条结构不变（{@code afterCustom := afterArrears − custom} 仍取补数），
+     * 故 {@code 平台分成 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 ≡ 可分配额} 依旧逐分成立。
      */
     private static long resolveDeductionRaw(
             DividendRecords.DividendCustomDeductionRecord item, long netProfit, long revenue) {
@@ -573,7 +580,7 @@ public class DividendService {
             return Math.max(item.amountCent(), 0L);
         }
         long basis = "revenue".equals(item.ratioBasis()) ? revenue : netProfit;
-        return Math.max(basis, 0L) * item.ratioBps() / DividendMath.BPS_DENOMINATOR;
+        return MoneyRounding.bpsOf(Math.max(basis, 0L), item.ratioBps());
     }
 
     /** 自定义扣除项来源的中文口径说明（供算式明细行 detail 留痕）。 */
@@ -582,7 +589,7 @@ public class DividendService {
             return "固定额 " + item.amountCent() + " 分";
         }
         String basis = "revenue".equals(item.ratioBasis()) ? "营收" : "净利润";
-        return "比例 " + item.ratioBps() + " 万分比 × " + basis;
+        return "比例 " + item.ratioBps() + " 万分比 × " + basis + "（四舍五入到分）";
     }
 
     // ── 查询 ──────────────────────────────────────────────────

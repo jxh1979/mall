@@ -88,13 +88,16 @@
 ```
 
 - **取整口径（2026-07-28 用户拍板 · R-7/D15.1 收尾 · 两种口径刻意混用）**：
-  - **改四舍五入（HALF_UP，走公共入口 `MoneyRounding.bpsOf`）**：**平台分成**、**风险准备金留存**（发放保护线比例额）。
-    旧整除截断使平台恒少收/少留、差额白送主理人且不留痕，与「金额一律四舍五入到分」的全局口径不符。
+  - **改四舍五入（HALF_UP，走公共入口 `MoneyRounding.bpsOf`）**：**平台分成**、**风险准备金留存**（发放保护线比例额）、
+    **自定义扣除项按比例算的原始额**（`sourceType=ratio`，基数 net_profit/revenue —— 在分红域、非代扣税，落在「改」的一侧）。
+    旧整除截断使平台/扣除方恒少收少扣、差额白留主理人且不留痕，与「金额一律四舍五入到分」的全局口径不符。
   - **保持整除截断（不得改）**：**代扣股息红利个税**，以及薪资域个税税表整除链（`JdbcStaffRepository` V217）。
     理由：**与税局申报口径对齐**，改成四舍五入会使代扣申报对不上。
   - **混用不破坏守恒**：链上每一步的另一半均取**补数**定义（`principal_gross := distributable − platform_share`、
     `principal_net := principal_gross − tax`、`payout := after_custom − reserve`），故
     `平台分成 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 ≡ 可分配额` 逐分严格相等。
+    自定义扣除改口径同理只改「扣多少」的**大小**、不改链条结构（`after_custom := after_arrears − custom` 仍取补数），
+    故守恒不受影响（`DividendServiceTests#customDeductionHalfUpKeepsFullChainConservation` 端到端断言）。
   - **分红链尾差恒为 0**，故**不设**尾差单列列（与通票分账不同——那边各家份额各自独立按比例算才产生尾差，
     落 `settlement_bills.rounding_residual_cent`/V343）。已按 R-7 既有尾差范式用 `MoneyRounding.residual` 实算断言为 0。
   - **风险准备金「释放」额**（`DividendReserveReleaseMath.releasableCent`）**保持向下取整**：
