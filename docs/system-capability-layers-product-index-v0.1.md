@@ -32,6 +32,8 @@
 | `member-and-tier-product-prd-v1.0.md` | 会员身份、成长值与等级的跨项目领域权威 | 现行·业务经营层 |
 | `points-and-voucher-product-prd-v1.0.md` | 积分账本、冻结、有效期、兑换与虚拟券的跨层领域权威 | 现行·业务经营层/终端展示层 |
 | `merchant-points-settlement-rules-v1.0.md` | 商户积分价格、费用、补偿、账单与税务边界的跨层领域权威 | 现行·业务经营层/数据分析层 |
+| `prd-audit/member-points-related-doc-audit-2026-07-28.md` | 会员积分跨层 PRD 逐文件顺从性与对抗性审计 | Phase 3 已完成：22 份审计、8 份同步 |
+| `prd-audit/html-prd-coverage.csv` | 三份领域权威与三个业务 HTML 的待对齐关系 | 9 组关系已登记·HTML 未修改 |
 | `prototype-deprecation-and-technology-baseline-v0.1.md` | 原型废止与正式技术栈基线，明确旧 TypeScript/SQLite 后端原型不得作为正式开发依据 | 已完成 |
 | `p0-coding-entry-pack-v0.1.md` | P0 编码、联调、测试和供应商 mock 的统一入口包，集中说明正式工程、契约、权限、留痕、验收和旧原型阻断规则 | 已完成 |
 | `p0-api-contract-pack-v0.1.md` | P0 API 契约基线，覆盖统一路径、鉴权、响应、错误码、幂等、Webhook 和接口目录 | 已完成 |
@@ -239,3 +241,4 @@ flowchart TD
 | 2026-06-11 | 增/改 | §2 / §10 / §12 | 补入 P0 operation 级验收矩阵和代码契约迁移审计；明确旧原型、旧 Web/Android 路径不得作为正式 Java/OpenAPI 后端依据 | 用户要求直接修改到尽快可编码 |
 | 2026-06-08 三轮收口 | 改 | §业务规则表 | "员工私人手机读取手机 NFC 唯一标识"改为"安装期 Keystore 设备公钥/不可逆设备指纹（device_key_fingerprint）" | residual-scan-7、D8/A6 |
 | 2026-06-08 三轮收口 | 改 | §业务规则表 | "企业微信工作会话永久保存"改为"留存期限可配置（非永久），到期归档/销毁/匿名化（按 A7/合规C3、data-risk §11.5）" | residual-scan-4、A7/C3 |
+| 2026-08-01 | 增 | §2 跨层总图 | 登记会员积分逐文件审计与 HTML 覆盖矩阵；明确 22 份 PRD 已审计、8 份已同步且 HTML 未修改 | 会员积分重构 Phase 3 |

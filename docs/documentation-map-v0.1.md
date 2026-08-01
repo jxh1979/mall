@@ -203,6 +203,9 @@
 
 | 文件 | 用途 | 状态 |
 |---|---|---|
+| `prd-audit/member-points-rebuild-scope-2026-07-28.md` | 会员、积分与商户积分结算重构范围基线 | 现行·Phase 1 基线 |
+| `prd-audit/member-points-related-doc-audit-2026-07-28.md` | 全部现行 PRD 的逐文件顺从性与对抗性审计 | 现行·Phase 3 完成：22 份审计、8 份同步 |
+| `prd-audit/html-prd-coverage.csv` | 三份新权威与三个业务 HTML 的覆盖关系登记 | 现行·9 组关系登记、Phase 4 待逐条定位 |
 | `development-documentation-audit-v0.2.md` | 开发文档审计（取代 adversarial-audit-v0.1） | 现行 |
 | `development-documentation-audit-map-v0.1.csv` | 开发文档全量审计地图 | 现行 |
 | `development-documentation-adversarial-audit-v0.1.md` | 开发文档对抗式审计 | 归档（已被 v0.2 取代） |

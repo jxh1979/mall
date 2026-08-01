@@ -528,6 +528,8 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 - 旧混合 PRD：`docs/member-points-tier-and-clearing-prd-v1.0.md` 已被替代，只保留历史入口。
 - 批准设计：`docs/superpowers/specs/2026-07-28-member-points-settlement-redesign-design.md`
 - 审计范围：`docs/prd-audit/member-points-rebuild-scope-2026-07-28.md`
+- 逐文件正式审计：`docs/prd-audit/member-points-related-doc-audit-2026-07-28.md`；以审计时 22 份现行 PRD 为基线，8 份精准同步、14 份无需修改。
+- HTML 覆盖关系：`docs/prd-audit/html-prd-coverage.csv` 已登记三份新权威与三个业务 HTML 的 9 组待逐条映射关系；具体替代文本由 Phase 4 只读审计产生。
 - HTML 边界：三个业务 HTML 中相关条款只读，须先完成逐条替代清单并获用户批准；未涉及业务仍由 HTML 最终解释。
 
 

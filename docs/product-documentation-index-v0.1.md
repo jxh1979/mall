@@ -30,6 +30,8 @@
 | `member-and-tier-product-prd-v1.0.md` | 会员身份、成长值、会员等级、升级、保护与降级唯一权威 | 现行·领域权威 |
 | `points-and-voucher-product-prd-v1.0.md` | 积分产生、冻结、退款、有效期、兑换与虚拟券唯一权威 | 现行·领域权威 |
 | `merchant-points-settlement-rules-v1.0.md` | 商户积分价格、费用、补偿、账单、冲正与税务边界唯一权威 | 现行·领域权威 |
+| `prd-audit/member-points-related-doc-audit-2026-07-28.md` | 全部现行 PRD 的会员积分相关性、冲突、对抗性反例与处置结论 | Phase 3 已完成：22 份审计、8 份同步、14 份无需修改 |
+| `prd-audit/html-prd-coverage.csv` | 三份新权威与三个业务 HTML 的覆盖关系登记；不承载 HTML 替代文本 | 9 组关系已登记·Phase 4 待逐条定位 |
 | `business-functional-topology-v0.1.md` | 综合体管理系统业务功能拓扑图 | 已完成 |
 | `business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html` | 当前业务最终解释权：经营地图、治理地图和枚举速查 | 已完成·最高业务口径 |
 | `compliance-and-personal-information-protection-requirements-v0.1.md` | 合规与个人信息保护要求（P0 前置约束） | 已纳入当前复核；留存、文本和实名范围按最终执行口径处理，仅国家法令强制事项实施复核 |
