@@ -106,3 +106,11 @@
 8. `docs/ticketing-entitlement-checkin-product-prd-v0.1.md`
 
 每份文件只修改本报告列明的相关段落。出现额外文件或相邻业务规则变化时立即停止。
+
+## 7. Phase 3 收口记录
+
+- 阶段分支最终提交：`b093f26b2634970065c1b297589b3e8e92add1f3`。
+- 合并到唯一最终工作区 `main` 的提交：`d5458563b8f17946f981eb331409552a4f4c6881`。
+- 逐文件结果：审计时 22 份现行 PRD 全部有结论；8 份按本报告授权精准同步，14 份保持不变。
+- 覆盖登记：三份新权威与三个业务 HTML 的 9 组关系已写入 `docs/prd-audit/html-prd-coverage.csv`，逐条 HTML 锚点与拟替代文本留给 Phase 4 只读审计。
+- HTML 只读证明：三个文件的 SHA-256 仍分别为 `0704db9a80ac8a3235caf4cbf13024109257d3e04c5a0ffce55b83cf68d09e21`、`56edf0e902730ec2387e58dbb3e2fde4560bb043318cb2b250be5d36d3744ad8`、`0cb85d605b04f7d933d7d27eec6f3c7f98f3389e9dc11c6ee7e3686cd9da71d4`，与 Phase 1 基线一致。
