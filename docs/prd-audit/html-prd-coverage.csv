@@ -843,3 +843,12 @@ BEQ-0065,docs/third-party-business-access-product-prd-v0.1.md,3.1 入站回流�
 BEQ-0066,docs/third-party-business-access-product-prd-v0.1.md,第三方业务接入产品 PRD V0.1,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BEQ-0067,docs/third-party-business-access-product-prd-v0.1.md,5. 接入状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
 BEQ-0068,docs/third-party-business-access-product-prd-v0.1.md,6. 回流记录状态,FULL,,,,,,06-amusement-terminal-thirdparty-data
+BSM-MPS-0001,docs/member-and-tier-product-prd-v1.0.md,全文：会员身份与等级权威,PARTIAL,P0,MPS-HTML-PHASE4,业务系统地图中的会员等级相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-01~09,member-points-redesign-phase4-pending
+BSM-MPS-0002,docs/points-and-voucher-product-prd-v1.0.md,全文：积分与虚拟券权威,PARTIAL,P0,MPS-HTML-PHASE4,业务系统地图中的积分兑换相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-10~17,member-points-redesign-phase4-pending
+BSM-MPS-0003,docs/merchant-points-settlement-rules-v1.0.md,全文：商户积分结算权威,PARTIAL,P0,MPS-HTML-PHASE4,业务系统地图中的商户积分结算相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-18~25,member-points-redesign-phase4-pending
+PGM-MPS-0001,docs/member-and-tier-product-prd-v1.0.md,全文：会员身份与等级权威,PARTIAL,P0,MPS-HTML-PHASE4,平台治理地图中的会员等级治理相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-01~09,member-points-redesign-phase4-pending
+PGM-MPS-0002,docs/points-and-voucher-product-prd-v1.0.md,全文：积分与虚拟券权威,PARTIAL,P0,MPS-HTML-PHASE4,平台治理地图中的积分配置和虚拟券治理相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-10~17,member-points-redesign-phase4-pending
+PGM-MPS-0003,docs/merchant-points-settlement-rules-v1.0.md,全文：商户积分结算权威,PARTIAL,P0,MPS-HTML-PHASE4,平台治理地图中的项目价格费用审批和结算相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-18~25,member-points-redesign-phase4-pending
+BEQ-MPS-0001,docs/member-and-tier-product-prd-v1.0.md,全文：会员身份与等级权威,PARTIAL,P0,MPS-HTML-PHASE4,业务枚举速查中的会员等级状态相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-01~09,member-points-redesign-phase4-pending
+BEQ-MPS-0002,docs/points-and-voucher-product-prd-v1.0.md,全文：积分与虚拟券权威,PARTIAL,P0,MPS-HTML-PHASE4,业务枚举速查中的积分和虚拟券状态相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-10~17,member-points-redesign-phase4-pending
+BEQ-MPS-0003,docs/merchant-points-settlement-rules-v1.0.md,全文：商户积分结算权威,PARTIAL,P0,MPS-HTML-PHASE4,业务枚举速查中的积分结算和账单状态相关旧条款尚未逐条映射,Phase 4 只读审计后按稳定编号提交替代文本,DEC-MPS-2026-07-28-18~25,member-points-redesign-phase4-pending
