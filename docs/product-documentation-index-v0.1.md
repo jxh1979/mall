@@ -8,7 +8,7 @@
 
 > 当前第一阅读入口为 `00-current-effective-document-entry-v0.1.md`。新接手的产品、开发、测试、运营、供应商和外部机器智能体必须先阅读该文档，再进入本文档和各模块 PRD/开发设计。
 >
-> 业务事实源顺序：三份业务 HTML 拥有最终解释权；本索引、原始需求、决策日志、PRD、开发设计和实现均为承接或追溯材料。任何下游材料与 HTML 冲突时，先按 HTML 标记并修正文档，不以当前实现反向解释 HTML。
+> 业务事实源：三个业务 HTML 对未被批准重构替代的领域拥有最终解释权；会员、成长值、积分、兑换券和商户积分结算由 `member-and-tier-product-prd-v1.0.md`、`points-and-voucher-product-prd-v1.0.md`、`merchant-points-settlement-rules-v1.0.md` 承接已批准的新权威。HTML 相关旧条款在逐条替代清单获批前保持原文，不以实现反向解释业务规则。
 
 ## 2. 上层总纲
 
@@ -27,6 +27,9 @@
 | `original-requirements-capture-v0.1.md` | 历史原始需求汇总（用于追溯，不是当前业务最终解释权） | 已收录 |
 | `business-decision-log-v0.1.md` | 业务决策追溯日志 | 已收录 |
 | `product-requirements-v0.1.md` | 综合体管理系统产品需求总纲 | 已同步到本地 |
+| `member-and-tier-product-prd-v1.0.md` | 会员身份、成长值、会员等级、升级、保护与降级唯一权威 | 现行·领域权威 |
+| `points-and-voucher-product-prd-v1.0.md` | 积分产生、冻结、退款、有效期、兑换与虚拟券唯一权威 | 现行·领域权威 |
+| `merchant-points-settlement-rules-v1.0.md` | 商户积分价格、费用、补偿、账单、冲正与税务边界唯一权威 | 现行·领域权威 |
 | `business-functional-topology-v0.1.md` | 综合体管理系统业务功能拓扑图 | 已完成 |
 | `business-system-map-for-operations-v0.1.html`、`platform-governance-map-for-operations-v0.1.html`、`business-enum-quick-reference-v0.1.html` | 当前业务最终解释权：经营地图、治理地图和枚举速查 | 已完成·最高业务口径 |
 | `compliance-and-personal-information-protection-requirements-v0.1.md` | 合规与个人信息保护要求（P0 前置约束） | 已纳入当前复核；留存、文本和实名范围按最终执行口径处理，仅国家法令强制事项实施复核 |
@@ -207,7 +210,7 @@
 | 票务二维码按票种有效期设置，30 秒或 60 秒刷新，截图无效，必须在线核验 | 影响核销体验、风险识别和事后核对 |
 | 员工私人手机 App 安装期在设备 Keystore 生成设备公钥/不可逆设备指纹（device_key_fingerprint）作为可信标识，换机解绑重绑，Root/异常失效复核，寄存柜流动使用；工作手机通过摄像头扫码读取外部客人二维码，NFC 仅读取外部 NFC 腕带/标签/卡，不读取二维码<!-- 修订说明（2026-06-10 收口）：纠正"NFC 读取二维码"的技术错误表述，二维码=摄像头扫码，NFC=外部 NFC 介质。依据技术可行性复核。 --> | 影响员工注册、设备可信和现场合规 |
 | 员工职级可按 M1-M10 并细分上/中/下；职级只绑定薪资大范围，具体薪资单独填写 | 影响权限、审批层级和后续 HR/薪资对接 |
-| 会员积分、等级成长和兑换规则由后台定义 | 影响会员中心和积分结算口径 |
+| 会员、成长值、积分、兑换券和商户积分结算分别由三份领域权威文档定义；全部参数、审批和版本由系统承载 | 影响会员中心、积分商城、商户合同与结算口径 |
 | Web 前端 P0 允许少量业务确认动作 | 影响业务人员操作边界 |
 | 新人优惠、学生票、多人票由后台配置规则并自动判断 | 影响票务规则和购票体验 |
 | 酒吧最低消费按时间、卡座和位置配置，不按人数 | 影响平板点酒和账单校验 |
