@@ -239,7 +239,10 @@ npm run verify:production-evidence-crosslinks` |
 | 游乐项目、场次、容量、安全巡检 | `amusement-business-operations-product-prd-v0.1.md` | `amusement-operations-development-design.md` |
 | 商户、主体、合同、权限、设备 | `platform-governance-prd-v0.1.md` | `platform-governance-product-spec-v0.2.md` |
 | 应收应付、日结、对账、结算 | `finance-settlement-product-prd-v0.1.md` | `finance-ar-ap-ledger-development-design-v0.1.md` |
-| 会员忠诚度、积分两本账、签到、生日、储值（付费会员已退役，V290 下线，仅历史文档留档） | `member-loyalty-and-stored-value-product-prd-v0.1.md` | `member-loyalty-and-stored-value-development-design-v0.1.md` |
+| 会员身份、成长值与等级 | `member-and-tier-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
+| 积分获取、冻结、有效期、兑换与虚拟券 | `points-and-voucher-product-prd-v1.0.md` | 本轮只发布 PRD，技术承接另行审计 |
+| 商户积分价格、费用、补偿、账单与税务边界 | `merchant-points-settlement-rules-v1.0.md` | 本轮只发布业务规则，技术承接另行审计 |
+| 储值（付费会员已退役） | `member-loyalty-and-stored-value-product-prd-v0.1.md` | 现有开发设计只作实现追溯，不得反向解释三份新权威 PRD |
 | 经营看板、8 类指标、下钻 | `business-dashboard-metrics-product-prd-v0.1.md` | `r5-spec-T12-dashboard-aggregation-dev-design-20260618.md` |
 | 客人端 App/小程序、订台定金、订卡邀请函 | `customer-app-miniapp-product-prd-v0.1.md` | `customer-app-miniapp-development-design-v0.1.md` |
 
@@ -514,15 +517,18 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 - Boundary: MOCK_IS_NOT_PRODUCTION_EVIDENCE. Mock, adapter, page, backend test and E2E evidence can support integration/business acceptance, but cannot replace production evidence manifest.
 
 
-## 会员积分重构入口（2026-07-28）
+## 会员、积分与商户积分结算重构入口（2026-08-01）
 
-- 主 PRD：`docs/member-points-tier-and-clearing-prd-v1.0.md`
-- 决策索引：业务决策日志中 DEC-VALIDITY-001 等 R3 P0 裁决
-- 旧会员 PRD 积分/等级冲突条款让位上述主 PRD；储值章节仍有效
-
-
-- 实现切片：`docs/superpowers/plans/2026-07-28-member-points-tier-clearing-implementation-slices.md`
-- P1 运营参数表（待裁）：`docs/member-points-p1-ops-parameter-tables-v0.1.md`
+- 会员与等级唯一权威：`docs/member-and-tier-product-prd-v1.0.md`
+- 积分与虚拟券唯一权威：`docs/points-and-voucher-product-prd-v1.0.md`
+- 商户积分结算唯一权威：`docs/merchant-points-settlement-rules-v1.0.md`
+- 储值现行职责：`docs/member-loyalty-and-stored-value-product-prd-v0.1.md`
+- 签到与生日边界：`docs/stored-value-membership-checkin-birthday-prd-v0.1.md`
+- 系统配置覆盖检查：`docs/member-points-p1-ops-parameter-tables-v0.1.md`，只检查系统是否承载，不是运行时配置真源。
+- 旧混合 PRD：`docs/member-points-tier-and-clearing-prd-v1.0.md` 已被替代，只保留历史入口。
+- 批准设计：`docs/superpowers/specs/2026-07-28-member-points-settlement-redesign-design.md`
+- 审计范围：`docs/prd-audit/member-points-rebuild-scope-2026-07-28.md`
+- HTML 边界：三个业务 HTML 中相关条款只读，须先完成逐条替代清单并获用户批准；未涉及业务仍由 HTML 最终解释。
 
 
 ## 通票分账与组织主体口径入口（2026-07-28）
