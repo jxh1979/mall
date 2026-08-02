@@ -35,7 +35,7 @@ public class SystemHealthController {
             dbUp = false;
         }
         if (!dbUp) {
-            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "DB_UNAVAILABLE", "database not reachable");
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "DB_UNAVAILABLE", "数据库连接失败，请稍后重试或联系管理员");
         }
         return ApiResponse.ok(new SystemHealthResponse(
                 true,
