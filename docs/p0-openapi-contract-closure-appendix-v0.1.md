@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 714 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 326 | 人工权限矩阵正文未覆盖 224 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1428 | 人工事件矩阵正文未覆盖 1386 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 714 | 人工任务映射正文未逐项覆盖 708 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 430 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 717 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 328 | 人工权限矩阵正文未覆盖 226 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1434 | 人工事件矩阵正文未覆盖 1392 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 717 | 人工任务映射正文未逐项覆盖 711 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 432 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -212,6 +212,8 @@
 | `governance.supervisor_review.approve` | staff-token | project-entity | 1 | approveSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.manage` | staff-token | project-entity | 1 | evaluateSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.view` | staff-token | project-entity | 1 | listSupervisorReviewPolicies | OpenAPI 补充，以本附录为准 |
+| `integration.channel_store_map.manage` | staff-token | platform | 2 | saveIntegrationChannelTicketTypeMap, archiveIntegrationChannelTicketTypeMap | OpenAPI 补充，以本附录为准 |
+| `integration.channel_store_map.view` | staff-token | platform | 1 | listIntegrationChannelTicketTypeMaps | OpenAPI 补充，以本附录为准 |
 | `integration.compensation.manage` | staff-token | platform | 2 | createCompensationTask, resolveCompensationTask | OpenAPI 补充，以本附录为准 |
 | `integration.order_sync.manage` | staff-token | platform | 1 | createOrderSync | OpenAPI 补充，以本附录为准 |
 | `integration.provider_adapter.create` | staff-token | project-provider | 1 | createProviderAdapter | 已在权限矩阵正文出现 |
@@ -1128,6 +1130,12 @@
 | `governance.supervisor_review.policies_viewed` | success | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `integration.channel_reconciliation.execute_failed` | failure | `runChannelAutoReconciliation` | `POST` | `/api/v1/integration/reconciliation/channel-auto` | INT-第三方集成 | `integration.reconciliation.manage` | 接口级事件，以本附录为准 |
 | `integration.channel_reconciliation.executed` | success | `runChannelAutoReconciliation` | `POST` | `/api/v1/integration/reconciliation/channel-auto` | INT-第三方集成 | `integration.reconciliation.manage` | 接口级事件，以本附录为准 |
+| `integration.channel_ticket_type_map.archive_failed` | failure | `archiveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps/{id}/archive` | INT-第三方集成 | `integration.channel_store_map.manage` | 接口级事件，以本附录为准 |
+| `integration.channel_ticket_type_map.archived` | success | `archiveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps/{id}/archive` | INT-第三方集成 | `integration.channel_store_map.manage` | 接口级事件，以本附录为准 |
+| `integration.channel_ticket_type_map.save_failed` | failure | `saveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps` | INT-第三方集成 | `integration.channel_store_map.manage` | 接口级事件，以本附录为准 |
+| `integration.channel_ticket_type_map.saved` | success | `saveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps` | INT-第三方集成 | `integration.channel_store_map.manage` | 接口级事件，以本附录为准 |
+| `integration.channel_ticket_type_map.view_failed` | failure | `listIntegrationChannelTicketTypeMaps` | `GET` | `/api/v1/integration/channel-ticket-type-maps` | INT-第三方集成 | `integration.channel_store_map.view` | 接口级事件，以本附录为准 |
+| `integration.channel_ticket_type_map.viewed` | success | `listIntegrationChannelTicketTypeMaps` | `GET` | `/api/v1/integration/channel-ticket-type-maps` | INT-第三方集成 | `integration.channel_store_map.view` | 接口级事件，以本附录为准 |
 | `integration.compensation_task.create_failed` | failure | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | INT-第三方集成 | `integration.compensation.manage` | 接口级事件，以本附录为准 |
 | `integration.compensation_task.created` | success | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | INT-第三方集成 | `integration.compensation.manage` | 接口级事件，以本附录为准 |
 | `integration.compensation_task.resolve_failed` | failure | `resolveCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks/{id}/resolve` | INT-第三方集成 | `integration.compensation.manage` | 接口级事件，以本附录为准 |
@@ -2152,12 +2160,14 @@
 | GOV-平台治理 | `listVenueBusinessHours` | `GET` | `/api/v1/platform/venue-business-hours` | 查询场地营业时间 | `governance.space.view` | `venue_business_hours.viewed` / `venue_business_hours.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `saveVenueBusinessHours` | `POST` | `/api/v1/platform/venue-business-hours` | 配置场地营业时间 | `governance.space.manage` | `venue_business_hours.updated` / `venue_business_hours.update_failed` | web | operation 级补充 |
 | GOV-平台治理 | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | 修改商户 | `merchant.profile.manage` | `merchant.updated` / `merchant.update_failed` | web | operation 级补充 |
+| INT-第三方集成 | `archiveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps/{id}/archive` | 停用渠道票种映射 | `integration.channel_store_map.manage` | `integration.channel_ticket_type_map.archived` / `integration.channel_ticket_type_map.archive_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | 创建补偿任务 | `integration.compensation.manage` | `integration.compensation_task.created` / `integration.compensation_task.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createIntegrationReconciliationBatch` | `POST` | `/api/v1/integration/reconciliation/batches` | 创建对账批次 | `integration.reconciliation.manage` | `integration.reconciliation_batch.created` / `integration.reconciliation_batch.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createIntegrationReconciliationDifference` | `POST` | `/api/v1/integration/reconciliation/differences` | 创建对账差异 | `integration.reconciliation.manage` | `integration.reconciliation_difference.created` / `integration.reconciliation_difference.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createOrderSync` | `POST` | `/api/v1/integration/order-syncs` | 创建订单同步 | `integration.order_sync.manage` | `integration.order_sync.created` / `integration.order_sync.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createProviderAdapter` | `POST` | `/api/v1/integration/provider-adapters` | 创建供应商适配器占位或 mock adapter | `integration.provider_adapter.create` | `provider_adapter.created` / `provider_adapter.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createRetryTask` | `POST` | `/api/v1/integration/retry-tasks` | 创建重试任务 | `integration.retry.manage` | `integration.retry_task.created` / `integration.retry_task.create_failed` | web | operation 级补充 |
+| INT-第三方集成 | `listIntegrationChannelTicketTypeMaps` | `GET` | `/api/v1/integration/channel-ticket-type-maps` | 查询渠道票种映射 | `integration.channel_store_map.view` | `integration.channel_ticket_type_map.viewed` / `integration.channel_ticket_type_map.view_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationCompensationTasks` | `GET` | `/api/v1/integration/compensation-tasks` | 查询第三方集成补偿任务 | `integration.provider_adapter.view` | `integration.compensation_task.viewed` / `integration.compensation_task.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationDeviceEvents` | `GET` | `/api/v1/integration/devices/events` | 查询第三方集成设备事件 | `integration.provider_adapter.view` | `integration.device_event.viewed` / `integration.device_event.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationDevices` | `GET` | `/api/v1/integration/devices` | 查询第三方集成设备 | `integration.provider_adapter.view` | `integration.device.viewed` / `integration.device.viewed_failed` | web | operation 级补充 |
@@ -2185,6 +2195,7 @@
 | INT-第三方集成 | `resolveIntegrationReconciliationDifference` | `POST` | `/api/v1/integration/reconciliation/differences/{id}/resolve` | 处理对账差异 | `integration.reconciliation.resolve` | `integration.reconciliation_difference.resolved` / `integration.reconciliation_difference.resolve_failed` | web | operation 级补充 |
 | INT-第三方集成 | `runChannelAutoReconciliation` | `POST` | `/api/v1/integration/reconciliation/channel-auto` | 渠道自动对账 | `integration.reconciliation.manage` | `integration.channel_reconciliation.executed` / `integration.channel_reconciliation.execute_failed` | web | operation 级补充 |
 | INT-第三方集成 | `runRetryTaskNow` | `POST` | `/api/v1/integration/retry-tasks/{id}/run-now` | 立即执行重试任务 | `integration.retry.manage` | `integration.retry_task.run_now` / `integration.retry_task.run_now_failed` | web | operation 级补充 |
+| INT-第三方集成 | `saveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps` | 登记/改绑渠道票种映射 | `integration.channel_store_map.manage` | `integration.channel_ticket_type_map.saved` / `integration.channel_ticket_type_map.save_failed` | web | operation 级补充 |
 | INT-第三方集成 | `testProviderAdapterMock` | `POST` | `/api/v1/integration/provider-adapters/{id}/test-mock` | mock adapter 契约测试 | `integration.provider_adapter.test` | `provider_adapter.tested` / `provider_adapter.test_failed` | web | operation 级补充 |
 | INT-第三方集成 | `updateProviderAdapter` | `PUT` | `/api/v1/integration/provider-adapters/{id}` | 更新供应商适配器配置 | `integration.provider_adapter.update` | `open_mapping.changed` / `provider_adapter.update_failed` | web | operation 级补充 |
 | INV-库存存酒 | `approvePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/approve` | 采购单审批(created/submitted→approved/rejected) | `inventory.purchase.approve` | `inventory.purchase_status_changed` / `inventory.purchase_status_change_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |

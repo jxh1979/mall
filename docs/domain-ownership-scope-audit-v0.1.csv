@@ -146,6 +146,7 @@ high_value_thresholds,direct,project_id,project_id column on high_value_threshol
 holiday_calendar,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 idempotency_records,inherited,operation_key,operation_key -> request route + actor + business operation,must join through scope path before multi-complex rollout,covered
 integration_channel_store_map,direct,merchant_id,merchant_id column on integration_channel_store_map,ready for project/merchant scoped query enforcement,covered
+integration_channel_ticket_type_map,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 integration_compensation_tasks,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 integration_order_syncs,direct,merchant_id,merchant_id column on integration_order_syncs,ready for project/merchant scoped query enforcement,covered
 integration_provider_adapter_tests,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
