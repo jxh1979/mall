@@ -151,7 +151,7 @@ public class LeasingService {
         String status = requireEnum(actual.status(), LEAD_STATUSES, "status");
         String reason = trimToNull(actual.reason());
         if (LEAD_REASON_REQUIRED.contains(status) && reason == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "reason is required for status " + status);
+            throw ApiException.badRequest("VALIDATION_FAILED", "流转到该状态必须填写理由：" + status);
         }
         LeasingLeadRecord ex = requireLead(leadId);
         LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(ex.id(), ex.contactName(),
@@ -205,7 +205,7 @@ public class LeasingService {
         String supervisor = trimToNull(actual.supervisorUserId());
         if (INTENT_KEY_STAGES.contains(target) && supervisor == null) {
             throw ApiException.conflict("LEASING_INTENT_SUPERVISOR_REQUIRED",
-                    "advancing to " + target + " requires supervisor confirmation");
+                    "推进到 " + target + " 状态需要主管确认");
         }
         LeasingIntentRecord ex = requireIntent(intentId);
         Instant now = Instant.now();
@@ -231,7 +231,7 @@ public class LeasingService {
         LeasingIntentRecord intent = requireIntent(intentId);
         if (!"pending_signing".equals(intent.stage())) {
             throw ApiException.conflict("LEASING_INTENT_NOT_PENDING_SIGNING",
-                    "only pending_signing intent can be signed");
+                    "只有待签约状态的意向才能签约");
         }
         String contractSubjectId = requireText(actual.contractSubjectId(), "contract_subject_id");
         String operationSubjectId = trimToNull(actual.operationSubjectId());
@@ -340,7 +340,7 @@ public class LeasingService {
         authorizationService.requirePlatformScope();
         LeasingBrandBlacklistRequest actual = requireRequest(request);
         LeasingBrandRecord ex = repository.findBrandById(requireText(brandId, "brand_id"))
-                .orElseThrow(() -> ApiException.notFound("LEASING_BRAND_NOT_FOUND", "brand not found"));
+                .orElseThrow(() -> ApiException.notFound("LEASING_BRAND_NOT_FOUND", "品牌不存在或已被删除"));
         Instant now = Instant.now();
         LeasingBrandRecord saved;
         if (actual.blacklist()) {
@@ -412,7 +412,7 @@ public class LeasingService {
         repository.findBrandById(brandId).ifPresent(b -> {
             if ("blacklist".equals(b.brandType())) {
                 throw ApiException.conflict("LEASING_BRAND_BLACKLISTED",
-                        "brand is blacklisted; new lead blocked, needs higher authority to override");
+                        "该品牌已列入黑名单，不能新建招商线索，如需继续需更高权限审批");
             }
         });
     }
@@ -420,23 +420,23 @@ public class LeasingService {
     /** 3.13：意向空间传了就必须真实存在（空间=地产主数据，不允许挂空编号；不传=尚未定位，放行）。 */
     private void requireSpaceExistsIfPresent(String spaceId) {
         if (spaceId != null && !platformService.spaceExists(spaceId)) {
-            throw ApiException.badRequest("LEASING_SPACE_NOT_FOUND", "intended space does not exist: " + spaceId);
+            throw ApiException.badRequest("LEASING_SPACE_NOT_FOUND", "意向铺位不存在：" + spaceId);
         }
     }
 
     private LeasingLeadRecord requireLead(String leadId) {
         return repository.findLeadById(requireText(leadId, "lead_id"))
-                .orElseThrow(() -> ApiException.notFound("LEASING_LEAD_NOT_FOUND", "lead not found"));
+                .orElseThrow(() -> ApiException.notFound("LEASING_LEAD_NOT_FOUND", "招商线索不存在或已被删除"));
     }
 
     private LeasingIntentRecord requireIntent(String intentId) {
         return repository.findIntentById(requireText(intentId, "intent_id"))
-                .orElseThrow(() -> ApiException.notFound("LEASING_INTENT_NOT_FOUND", "intent not found"));
+                .orElseThrow(() -> ApiException.notFound("LEASING_INTENT_NOT_FOUND", "签约意向不存在或已被删除"));
     }
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
