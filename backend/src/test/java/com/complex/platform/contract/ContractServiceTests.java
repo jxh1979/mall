@@ -3,7 +3,10 @@ package com.complex.platform.contract;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessActor;
@@ -20,8 +23,10 @@ import com.complex.platform.contract.dto.ContractResolveDisputeRequest;
 import com.complex.platform.contract.dto.ContractScopeRequestRequest;
 import com.complex.platform.contract.dto.ContractSettleRequest;
 import com.complex.platform.evidence.AuditEventService;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,6 +52,18 @@ class ContractServiceTests {
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
         terminationPort = new RecordingTerminationPort();
         service = new ContractService(repo, mock(AuditEventService.class), authz, null, null, terminationPort);
+    }
+
+    @Test
+    void renewalJobScheduledUsesBeijingCalendarDayNotUtc() {
+        // 所在地时间口径(2026-08-02 用户拍板):续约提醒扫描基准日按北京日历日,不按 UTC。
+        // 固定时刻 = 北京 2026-08-03 02:00(= UTC 2026-08-02 18:00):北京口径 asOf=08-03,旧 UTC 口径为 08-02。
+        ContractService mockService = mock(ContractService.class);
+        new ContractRenewalNotificationJob(mockService,
+                Clock.fixed(Instant.parse("2026-08-02T18:00:00Z"), ZoneOffset.UTC), true)
+                .scheduledNotifyRenewals();
+        verify(mockService).processMerchantFeeRenewalNotifications(
+                eq(LocalDate.parse("2026-08-03")), anyInt());
     }
 
     // 3.13：草稿带意向空间——被生效合同占用即起草拒(409)；未占用则预绑定；提交审批时被占同样拒。

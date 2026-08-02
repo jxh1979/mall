@@ -2,7 +2,7 @@ package com.complex.platform.contract;
 
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import com.complex.platform.common.NotificationWindowConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +17,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class ContractRenewalNotificationJob {
+
+    // 判定基准日按所在地(北京)日历日取,不按 UTC(2026-08-02 用户拍板)。
+    // 业务人员按北京时间日历日理解"合同到期日";服务器时区 America/Los_Angeles,
+    // 旧的 UTC 取法会让提醒扫描比北京日历日晚最多 8 小时,与合同到期批转错开半天。
+    // 合同域无门店维度,故固定 Asia/Shanghai;考勤域若改为按门店所在地动态取,两者取法不同属预期。
+    private static final ZoneId LOCAL_ZONE = ZoneId.of("Asia/Shanghai");
 
     // V219:续约提醒窗天数迁入 notification_windows(key=contract.renewal),缺配置兜底 30(行为不变)。
     static final int RENEWAL_NOTICE_DAYS = 30;
@@ -59,7 +65,7 @@ public class ContractRenewalNotificationJob {
         if (!scheduledEnabled) {
             return;
         }
-        runOnce(LocalDate.now(clock.withZone(ZoneOffset.UTC)));
+        runOnce(LocalDate.now(clock.withZone(LOCAL_ZONE)));
     }
 
     public void runOnce(LocalDate asOf) {
