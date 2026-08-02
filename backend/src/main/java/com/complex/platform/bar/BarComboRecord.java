@@ -23,7 +23,7 @@ public record BarComboRecord(
         String deleteRequestedBy,
         Instant deleteRequestedAt,
         String deleteReason
-) {
+) implements BarCatalogLifecycle<BarComboRecord> {
     // ponytail: V262 前的构造点（既有代码/测试）不带存档/删除字段，默认未存档 + delete_status=none。
     public BarComboRecord(
             String id, String barId, String merchantId, String comboName, long priceCent,
