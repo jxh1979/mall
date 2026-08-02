@@ -44,6 +44,14 @@ public class SettlementConfigService {
         var svcFee = configRepository.findComprehensiveServiceFee(null, null, null);
         defaults.add(new ConfigItem("门票综合服务费", "comprehensive_service_fee", "综合服务费(比例或固定额)",
                 svcFee.fixedAmountCent() != null ? "固定额 " + svcFee.fixedAmountCent() + " 分" : svcFee.feeBps() + " 万分比"));
+        // S6:赠送权益预估成本预扣(池前扣、归娱乐平台公司)。平台默认生效值:两模式二选一。
+        var giftCost = configRepository.findPassGiftCostConfig(null, null);
+        defaults.add(new ConfigItem("赠送权益预估成本", "pass_gift_cost", "预扣模式(按件计/按票计)",
+                "by_item".equals(giftCost.predeductMode())
+                        ? "按件计(票面各权益数量 × 内部结算价之和)"
+                        : "按票计 整额 " + giftCost.ticketGiftAmountCent() + " 分"
+                                + (giftCost.monthlyCapAmountCent() == null ? ""
+                                        : ",每月封顶 " + giftCost.monthlyCapAmountCent() + " 分")));
         JdbcSettlementBillRepository.ComboDiscountConfig combo = configRepository.findComboDiscountConfig(null);
         defaults.add(new ConfigItem("通票分账", "combo_discount_bearer", "套票折扣归属",
                 combo.discountBearer()));
