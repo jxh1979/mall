@@ -7,8 +7,6 @@ logging:
     com.complex.platform: INFO
 
 spring:
-  jpa:
-    show-sql: false
   # 生产 append-only 硬强制（V140）：运行时连接改用受限角色 complex_app（被 REVOKE 掉 append-only 表的 UPDATE/DELETE，
   # 且无 DDL 权限，无法 DROP 触发器 / SET session_replication_role 绕过）；Flyway 仍以 owner 身份跑 DDL/迁移。
   # 运维须先 ALTER ROLE complex_app PASSWORD '...' 并下发 COMPLEX_DATABASE_APP_PASSWORD。
