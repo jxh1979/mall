@@ -16,6 +16,22 @@ public interface VoucherRepository {
     /** 幂等插入（ON CONFLICT DO NOTHING）；false＝已存在。 */
     boolean insertDefinition(VoucherDefinitionRecord definition);
 
+    // ---------- 批10/E 内部结算 SKU 目录(V379/V380) ----------
+
+    /** 目录条目(生效或草案)的绑定商户:建券设引用时校验「条目商家 = 结算商户」。空 = 无此条目。default 空兼容测试替身。 */
+    default Optional<String> findCatalogItemMerchant(String itemCode) {
+        return Optional.empty();
+    }
+
+    /** 目录生效价(is_draft=FALSE):建券快照来源。空 = 条目仅草案/已归档。default 空兼容测试替身。 */
+    default Optional<Long> findActiveCatalogPriceCent(String itemCode) {
+        return Optional.empty();
+    }
+
+    /** 券定义挂目录引用(定向 UPDATE;internal_price_cent 快照由 insertDefinition 落、目录转正传播维护)。 */
+    default void setDefinitionCatalogRef(String definitionId, String itemCode) {
+    }
+
     PageResponse<VoucherDefinitionRecord> listDefinitions(
             String merchantScope, String status, String voucherKind, int page, int pageSize);
 

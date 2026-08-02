@@ -12,23 +12,26 @@ import org.springframework.stereotype.Component;
  * 谁也说不清（业务 HTML §通票分账全流程「每个权益的成本按提供方的内部结算价计」、
  * §赠送权益结算「预扣与核销实付的差额留在娱乐平台公司」）。
  *
- * <p><b>解析顺序</b>：
+ * <p><b>解析顺序（批10/E·V379 起两支统一改读内部结算 SKU 目录，PRD §3B 预告的收编即本处）</b>：
  * <ol>
  *   <li>模板绑了提供方商品（{@code bar_item_ref}，语义定死 = {@code bar_products.id}）
- *       → 取该商品的内部结算价；且该商品必须属于本权益的提供方商户
- *       （{@code bar_products.bar_id} = 权益提供方），否则视为未解析；</li>
- *   <li>否则取模板上的签约内部结算价 {@code agreement_price_cent}（餐饮/零售/服务类提供方）；</li>
+ *       → 经该商品的目录引用（{@code catalog_item_code}）取<b>目录生效价</b>；商品必须属于本权益的提供方商户
+ *       （{@code bar_products.bar_id} = 权益提供方），且目录条目的绑定商户也必须等于提供方，否则视为未解析；</li>
+ *   <li>否则经模板的目录引用（{@code catalog_item_code}）取<b>目录生效价</b>（餐饮/零售/服务类提供方；
+ *       模板上的 {@code agreement_price_cent} 自 V380 起只是快照，不再是取价来源）；</li>
  *   <li>否则**未解析** → 调用方一律 fail-closed，<b>绝不回退票面价</b>。</li>
  * </ol>
+ *
+ * <p><b>改价生效时点（业务 HTML「内部结算价目录」节）</b>：目录草案须他人复核转正后才有生效价，
+ * 转正只对<b>后续</b>核销/结算生效；核销/结算发生时把当时的目录价固化到该笔流水
+ * （{@code ticket_verifications.settlement_price_cent} 等），已发生的账目录价怎么变都不受影响。
  *
  * <p><b>为什么不许回退票面价</b>：业务 HTML §综合／联合通票收入分账原文——「每个权益同时带票面原价与
  * 内部结算价：前者用于定价与拆份额，后者用于与提供商户结算成本，<b>两者不可混用</b>」。回退面值会让
  * 「按件计」的预扣基数悄悄用成售价，账面对得上、钱却全错，且无声无息。
  *
  * <p><b>0 与 NULL 语义分开</b>：内部结算价 = 0 是合法的（商户让利型的免费权益，平台不出钱）；
- * NULL 才是「没配价」→ 拒绝。与 S11 对 {@code component_price_cent} 的 NULL/0 收紧同一套语义。
- *
- * <p>待 PRD §9.7「内部结算 SKU 目录」建成后，①②两支改读目录即可，所有调用方无感。
+ * 「没配价」= 无目录引用或目录无生效行 → 拒绝。与 S11 对 {@code component_price_cent} 的 NULL/0 收紧同一套语义。
  */
 @Component
 public class InternalSettlementPriceResolver {
@@ -58,29 +61,41 @@ public class InternalSettlementPriceResolver {
     }
 
     /**
-     * 解析内部结算价（分）。
+     * 解析内部结算价（分）。批10/E：两支统一收口到目录生效价。
      *
-     * @param barItemRef          提供方商品 id（= {@code bar_products.id}）；空则走 agreement 分支
-     * @param providerMerchantId  该权益的提供方商户；商品必须属于它，否则不解析
-     * @param agreementPriceCent  模板签约内部结算价（餐饮/零售提供方）
-     * @return 解析到的价（可为 0）；空 = 未配价，调用方 fail-closed
+     * @param barItemRef          提供方商品 id（= {@code bar_products.id}）；空则走模板目录引用分支
+     * @param providerMerchantId  该权益的提供方商户；商品与目录条目都必须属于它，否则不解析
+     * @param catalogItemCode     模板的目录引用（{@code entitlement_templates.catalog_item_code}，餐饮/零售提供方）
+     * @return 解析到的目录生效价（可为 0）；空 = 未配价/无生效行，调用方 fail-closed
      */
-    public Optional<Long> resolve(String barItemRef, String providerMerchantId, Long agreementPriceCent) {
+    public Optional<Long> resolve(String barItemRef, String providerMerchantId, String catalogItemCode) {
         if (barItemRef != null) {
             // 提供方归属必须对得上：A 吧的商品不能给 B 吧的权益当成本口径，否则钱结给谁全凭巧合。
             // 提供方为空 = 该权益没绑提供方 → 无从校验 → 不解析（自营吧同样不豁免，见 S5）。
+            // 商品无目录引用 = 没录内部价（V380 后录价唯一入口是目录）→ 不解析。
             return repository.findBarProductRef(barItemRef)
                     .filter(product -> providerMerchantId != null && providerMerchantId.equals(product.barId()))
-                    .map(BarProductRefRecord::internalSettlementPriceCent);
+                    .map(BarProductRefRecord::catalogItemCode)
+                    .flatMap(code -> activeCatalogPrice(code, providerMerchantId));
         }
-        return Optional.ofNullable(agreementPriceCent);
+        return activeCatalogPrice(catalogItemCode, providerMerchantId);
+    }
+
+    /** 目录生效价 + 条目归属校验（条目绑定商户必须 = 提供方，跨商户/跨项目引用在此断路）。 */
+    private Optional<Long> activeCatalogPrice(String itemCode, String providerMerchantId) {
+        if (itemCode == null) {
+            return Optional.empty();
+        }
+        return repository.findActiveCatalogPrice(itemCode)
+                .filter(ref -> providerMerchantId != null && providerMerchantId.equals(ref.merchantId()))
+                .map(TicketingRepository.CatalogPriceRef::priceCent);
     }
 
     /** 解析不到即抛 —— fail-closed 统一出口，错误码/文案只此一份。 */
-    public long require(String barItemRef, String providerMerchantId, Long agreementPriceCent) {
-        return resolve(barItemRef, providerMerchantId, agreementPriceCent)
+    public long require(String barItemRef, String providerMerchantId, String catalogItemCode) {
+        return resolve(barItemRef, providerMerchantId, catalogItemCode)
                 .orElseThrow(() -> ApiException.badRequest("ENTITLEMENT_PRICE_UNRESOLVED",
-                        "该赠送权益未配置提供方的内部结算价，无法核销结算"));
+                        "该赠送权益未配置提供方的内部结算价（目录无生效价），无法核销结算"));
     }
 
     /**
@@ -118,7 +133,9 @@ public class InternalSettlementPriceResolver {
                     template.entitlementType(), template.entitlementKind(), template.exclusiveMerchantId())) {
                 continue; // 非提供方兑付类（如免费入场资格）：无内部成本概念。
             }
-            long price = require(template.barItemRef(), template.merchantId(), template.agreementPriceCent());
+            // 提供方口径与 V380 收编一致:归属商户,专属直付类回退专属商户(目录条目绑定商户按同一 COALESCE 建)。
+            String provider = template.merchantId() != null ? template.merchantId() : template.exclusiveMerchantId();
+            long price = require(template.barItemRef(), provider, template.catalogItemCode());
             total += (long) binding.quantity() * Math.max(1, binding.numPeople()) * price;
         }
         return total;

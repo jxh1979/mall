@@ -6,7 +6,6 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
-import com.complex.platform.ticketing.dto.EntitlementAgreementPriceRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
@@ -496,24 +495,7 @@ public class TicketingService {
         );
     }
 
-    /**
-     * 配置中心批5：改虚拟权益签约价（= 内部结算价）。走 executeWrite 拿幂等 + 审计留痕。
-     * 只写模板一行——已发放/已核销的按各自快照，改价碰不到（见 TicketCatalogService#updateAgreementPrice）。
-     */
-    @com.complex.platform.gate.GuardedAction(capability = "ticket.entitlement.manage")
-    @Transactional
-    public EntitlementTemplateRecord updateEntitlementTemplateAgreementPrice(
-            String id, EntitlementAgreementPriceRequest request) {
-        String templateId = operations.requireText(id, "id");
-        return operations.executeWrite(
-                "updateEntitlementTemplateAgreementPrice:" + templateId,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                EntitlementTemplateRecord.class,
-                TicketingWriteOperation.UPDATE_ENTITLEMENT_TEMPLATE_AGREEMENT_PRICE,
-                () -> catalogService.updateAgreementPrice(templateId, request, actorId())
-        );
-    }
+    // 批10/E：updateEntitlementTemplateAgreementPrice(配置中心批5/PR#274)已下线——改价收编进内部结算 SKU 目录。
 
     @com.complex.platform.gate.GuardedAction(capability = "ticket.entitlement.manage")
     @Transactional

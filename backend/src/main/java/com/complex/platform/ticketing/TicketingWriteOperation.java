@@ -22,7 +22,7 @@ enum TicketingWriteOperation implements AuditedOperation {
     REQUEST_DELETE_ENTITLEMENT_TEMPLATE("ticket_entitlement_template.delete_requested", "ticket_entitlement_template.delete_request_failed", "ticket.entitlement.manage", "entitlement_template"),
     APPROVE_DELETE_ENTITLEMENT_TEMPLATE("ticket_entitlement_template.delete_approved", "ticket_entitlement_template.delete_approve_failed", "ticket.entitlement.approve", "entitlement_template"),
     // 配置中心批5：改虚拟权益签约价（资金口径，理由必填；只对之后发放的权益生效，历史按快照不动）。
-    UPDATE_ENTITLEMENT_TEMPLATE_AGREEMENT_PRICE("ticket_entitlement_template.agreement_price_changed", "ticket_entitlement_template.agreement_price_change_failed", "ticket.entitlement.manage", "entitlement_template"),
+    // 批10/E：UPDATE_ENTITLEMENT_TEMPLATE_AGREEMENT_PRICE 已下线(改价收编进内部结算 SKU 目录)。
     BIND_TICKET_TYPE_ENTITLEMENT("ticket_product_entitlement.bound", "ticket_product_entitlement.bound_failed", "ticket.product.manage", "ticket_type_entitlement"),
     CREATE_TICKET_ORDER("ticket_order.created", "ticket_order.create_failed", "ticket.order.create", "ticket_order"),
     CREATE_TICKET_ORDER_PAY_INTENT("payment.intent_created", "payment.intent_failed", "finance.payment_intent.create", "ticket_payment_intent"),

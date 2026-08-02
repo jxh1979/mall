@@ -195,13 +195,39 @@ public class VoucherService implements VoucherIssuePort {
                 throw ApiException.badRequest("VALIDATION_FAILED", "in_store_goods requires stock_quantity > 0");
             }
         }
+        // 批10/E(V380)：内部结算价唯一可编辑处 = SKU 目录。直填一律拒绝(静默忽略会骗运营"以为配好了")。
+        if (request.internalPriceCent() != null) {
+            throw ApiException.badRequest("VOUCHER_INTERNAL_PRICE_CATALOG_ONLY",
+                    "内部结算价已收编进内部结算 SKU 目录：请引用目录条目，改价到目录走草案复核");
+        }
+        String catalogItemCode = blankToNull(request.catalogItemCode());
+        Long internalPriceSnapshot = null;
         if ("internal_price".equals(mode)) {
-            if (request.internalPriceCent() == null || request.internalPriceCent() <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "internal_price requires internal_price_cent > 0");
-            }
             if (merchantId == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "internal_price requires merchant_id (结算商户)");
             }
+            if (catalogItemCode == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "internal_price 结算口径须引用内部结算 SKU 目录条目(catalog_item_code)");
+            }
+            String boundMerchant = repository.findCatalogItemMerchant(catalogItemCode)
+                    .orElseThrow(() -> ApiException.badRequest("CATALOG_ITEM_NOT_FOUND",
+                            "所引用的内部结算 SKU 目录条目不存在"));
+            if (!boundMerchant.equals(merchantId)) {
+                throw ApiException.badRequest("CATALOG_ITEM_MERCHANT_MISMATCH",
+                        "目录条目的绑定商户与本券结算商户不一致，不得跨商户/跨项目引用");
+            }
+            // 券口径(V301 形状约束)要求建券即有 >0 内部价:目录条目须已复核转正且价 >0,草案态先转正再建券。
+            internalPriceSnapshot = repository.findActiveCatalogPriceCent(catalogItemCode)
+                    .orElseThrow(() -> ApiException.badRequest("CATALOG_ITEM_NOT_EFFECTIVE",
+                            "所引用的目录条目还没有复核转正的生效价，请先在结算配置中心完成复核"));
+            if (internalPriceSnapshot <= 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "internal_price 结算口径要求目录生效价 > 0(0 价属商户让利,不该按内部价挂应付)");
+            }
+        } else if (catalogItemCode != null) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "仅 internal_price 结算口径可引用内部结算 SKU 目录条目");
         }
         if (request.validDays() != null && request.validDays() <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "valid_days must be positive when present");
@@ -216,9 +242,13 @@ public class VoucherService implements VoucherIssuePort {
                 id, name, kind, method, mode, merchantId,
                 request.faceValueCent(),
                 blankToNull(request.inventoryItemId()), blankToNull(request.stockLocationId()), request.stockQuantity(),
-                request.internalPriceCent(), request.validDays(), request.validUntil(),
+                // 批10/E:快照列(只读)——建券落当刻目录生效价,此后由目录转正传播维护;券侧无任何改价入口。
+                internalPriceSnapshot, request.validDays(), request.validUntil(),
                 "active", transferable, now, now);
         repository.insertDefinition(definition);
+        if (catalogItemCode != null) {
+            repository.setDefinitionCatalogRef(id, catalogItemCode);
+        }
         return repository.findDefinitionById(id)
                 .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "voucher definition insert lost race"));
     }

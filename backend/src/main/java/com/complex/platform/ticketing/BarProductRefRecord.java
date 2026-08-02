@@ -11,10 +11,11 @@ package com.complex.platform.ticketing;
  *
  * @param id                           商品 id（即权益模板的 bar_item_ref）
  * @param barId                        提供方商户 id（须与权益模板的提供方商户一致）
- * @param internalSettlementPriceCent  内部结算价（分）；空=未录入 → 解析器判为未解析 → 调用方 fail-closed
+ * @param internalSettlementPriceCent  内部结算价快照（分）；V380 起唯一真源在目录，本列由系统同步、只读展示用
  * @param inventoryItemId              库存物料 id（可空；仅 stockDeductionRequired 时必需）
  * @param stockDeductionRequired       售出/兑付是否需扣库存
  * @param status                       商品状态
+ * @param catalogItemCode              批10/E：内部结算 SKU 目录引用；空=该商品未挂目录（无内部价）→ 解析 fail-closed
  */
 public record BarProductRefRecord(
         String id,
@@ -22,6 +23,12 @@ public record BarProductRefRecord(
         Long internalSettlementPriceCent,
         String inventoryItemId,
         boolean stockDeductionRequired,
-        String status
+        String status,
+        String catalogItemCode
 ) {
+    /** V380 前的 6 参构造（既有测试/构造点）：默认未挂目录。 */
+    public BarProductRefRecord(String id, String barId, Long internalSettlementPriceCent, String inventoryItemId,
+                               boolean stockDeductionRequired, String status) {
+        this(id, barId, internalSettlementPriceCent, inventoryItemId, stockDeductionRequired, status, null);
+    }
 }

@@ -116,10 +116,24 @@ public class BarOrderService {
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         boolean stockManaged = Boolean.TRUE.equals(actual.stockDeductionRequired());
-        // V152 内部结算价（可空；非空须 >=0，DB CHECK 兜底，应用层先验给明确错误码）。
-        Long internalPrice = actual.internalSettlementPriceCent();
-        if (internalPrice != null && internalPrice < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "internal_settlement_price_cent must be >= 0");
+        // 批10/E(V380)：内部结算价唯一可编辑处 = SKU 目录。直填一律拒绝(静默忽略会骗运营"以为配好了");
+        // 要配价请引用目录条目(catalog_item_code,可先在目录「就地新建」再引用)。
+        if (actual.internalSettlementPriceCent() != null) {
+            throw ApiException.badRequest("BAR_INTERNAL_PRICE_CATALOG_ONLY",
+                    "内部结算价已收编进内部结算 SKU 目录：请引用目录条目，改价到目录走草案复核");
+        }
+        String catalogItemCode = trimToNull(actual.catalogItemCode());
+        Long snapshotInternalPrice = null;
+        if (catalogItemCode != null && catalogRepository != null) {
+            String boundMerchant = catalogRepository.findCatalogItemMerchant(catalogItemCode)
+                    .orElseThrow(() -> ApiException.badRequest("CATALOG_ITEM_NOT_FOUND",
+                            "所引用的内部结算 SKU 目录条目不存在"));
+            if (!boundMerchant.equals(requireText(actual.barId(), "bar_id"))) {
+                throw ApiException.badRequest("CATALOG_ITEM_MERCHANT_MISMATCH",
+                        "目录条目的绑定商户与本商品所属酒吧不一致，不得跨商户/跨项目引用");
+            }
+            // 快照 = 当前目录生效价;条目还只有草案(未复核转正)时快照为空,转正传播时由系统补上。
+            snapshotInternalPrice = catalogRepository.findActiveCatalogPriceCent(catalogItemCode).orElse(null);
         }
         // V262 引用侧守卫（saveProduct 路径）：新商品不可挂到已存档/待删除分类（与 assignCategory 同口径）。
         String categoryId = trimToNull(actual.categoryId());
@@ -131,7 +145,7 @@ public class BarOrderService {
                         "cannot assign product to an archived or delete-pending category");
             }
         }
-        return repository.saveProduct(new BarProductRecord(
+        BarProductRecord saved = repository.saveProduct(new BarProductRecord(
                 "product_" + slug(actual.idempotencyKey()),
                 requireText(actual.barId(), "bar_id"),
                 merchantId,
@@ -151,10 +165,16 @@ public class BarOrderService {
                 false,
                 null,
                 null,
-                internalPrice,
+                // 批10/E:快照列(只读)——saveProduct 落当刻生效价,随后 setProductCatalogRef 落引用;
+                // 此后由目录转正传播维护,商品侧无任何改价入口。
+                snapshotInternalPrice,
                 categoryId,
                 trimToNull(actual.imageUrl())
         ));
+        if (catalogItemCode != null && catalogRepository != null) {
+            catalogRepository.setProductCatalogRef(saved.id(), catalogItemCode, snapshotInternalPrice);
+        }
+        return saved;
     }
 
     BarOrderRecord createOrder(BarOrderRequest request) {

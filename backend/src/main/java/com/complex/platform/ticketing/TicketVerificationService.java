@@ -1067,11 +1067,14 @@ public class TicketVerificationService {
     private Long resolveSettlementPrice(IssuedEntitlementRecord entitlement) {
         if (InternalSettlementPriceResolver.providerRedeemed(
                 entitlement.entitlementType(), entitlement.entitlementKind(), entitlement.exclusiveMerchantId())) {
-            String barItemRef = repository.findEntitlementTemplateById(entitlement.entitlementTemplateId())
-                    .map(EntitlementTemplateRecord::barItemRef)
-                    .orElse(null);
+            // 批10/E:两支取价统一收口目录——商品支经商品的目录引用,餐饮/零售支经模板的目录引用;
+            // 核销时固化的即「当时的目录生效价」(改价转正只影响此后核销,已核销流水一分不动)。
+            EntitlementTemplateRecord template = repository
+                    .findEntitlementTemplateById(entitlement.entitlementTemplateId()).orElse(null);
             return priceResolver.require(
-                    barItemRef, providerMerchantId(entitlement), entitlement.agreementPriceCent());
+                    template == null ? null : template.barItemRef(),
+                    providerMerchantId(entitlement),
+                    template == null ? null : template.catalogItemCode());
         }
         if (KIND_VIRTUAL.equals(entitlement.entitlementKind()) && entitlement.agreementPriceCent() != null) {
             return entitlement.agreementPriceCent();

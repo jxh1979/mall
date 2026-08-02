@@ -128,6 +128,27 @@ public interface TicketingRepository {
     }
 
     /**
+     * 批10/E(V379)：内部结算 SKU 目录生效价(is_draft=FALSE + status=active)。
+     * 解析器两支自此统一从目录取价：草案不生效、下线归档无生效行 → 空 → 调用方 fail-closed。
+     * default 返回空：内存测试替身若要跑内部价解析，须自行覆写。
+     */
+    default Optional<CatalogPriceRef> findActiveCatalogPrice(String itemCode) {
+        return Optional.empty();
+    }
+
+    /** 目录生效价投影：绑定商户(引用归属校验用) + 价(分,0 合法=商户让利型)。 */
+    record CatalogPriceRef(String merchantId, long priceCent) {
+    }
+
+    /**
+     * 批10/E：目录条目(生效或草案)的绑定商户——建模板设引用时校验「条目商家 = 模板提供方」用。
+     * 草案态条目也可被引用(转正前解析 fail-closed)，故本查询不限定 is_draft。空 = 无此条目。
+     */
+    default Optional<String> findCatalogItemMerchant(String itemCode) {
+        return Optional.empty();
+    }
+
+    /**
      * S5 K16 跨提供方核销守卫：按核销设备定位「本次核销发生在哪家商户」（terminal_devices.merchant_id，V007）。
      * 设备未绑商户 → 空 → 调用方 fail-closed（说不清这杯酒在哪家核销的，就不能核销）。
      * default 返回空：内存测试替身若要跑提供方兑付类权益的核销，须自行覆写并绑好设备归属。

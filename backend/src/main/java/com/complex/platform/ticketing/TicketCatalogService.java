@@ -2,7 +2,6 @@ package com.complex.platform.ticketing;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
-import com.complex.platform.ticketing.dto.EntitlementAgreementPriceRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
@@ -216,6 +215,26 @@ public class TicketCatalogService {
                         "该商品需要扣库存但还没绑定库存物料，不能用作赠送权益");
             }
         }
+        // 批10/E(V380)：内部结算价唯一可编辑处 = SKU 目录。直填签约价一律拒绝(静默忽略会骗运营"以为配好了")；
+        // 要配价请引用目录条目(catalog_item_code,可就地新建后引用),条目绑定商户必须 = 本模板提供方。
+        if (actual.agreementPriceCent() != null) {
+            throw ApiException.badRequest("AGREEMENT_PRICE_CATALOG_ONLY",
+                    "内部结算价（签约价）已收编进内部结算 SKU 目录：请引用目录条目，改价到目录走草案复核");
+        }
+        String catalogItemCode = trimToNull(actual.catalogItemCode());
+        Long snapshotPriceCent = null;
+        if (catalogItemCode != null) {
+            String boundMerchant = repository.findCatalogItemMerchant(catalogItemCode)
+                    .orElseThrow(() -> ApiException.badRequest("CATALOG_ITEM_NOT_FOUND",
+                            "所引用的内部结算 SKU 目录条目不存在"));
+            if (!templateMerchantId.equals(boundMerchant)) {
+                throw ApiException.badRequest("CATALOG_ITEM_MERCHANT_MISMATCH",
+                        "目录条目的绑定商户与本权益的提供方商户不一致，不得跨商户/跨项目引用");
+            }
+            // 快照 = 当前目录生效价;条目还只有草案(未复核转正)时快照为空,转正传播时由系统补上。
+            snapshotPriceCent = repository.findActiveCatalogPrice(catalogItemCode)
+                    .map(TicketingRepository.CatalogPriceRef::priceCent).orElse(null);
+        }
         return repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_" + slug(actual.idempotencyKey()),
                 requireText(actual.name(), "name"),
@@ -237,9 +256,9 @@ public class TicketCatalogService {
                 // 结算重构批3-1(PRD §6.1)：新建模板结算类别与 V225 回填口径一致——gift_drink=实物(走内部结算价)，
                 // 其余=虚拟(走签约单价/内部结算价)。餐饮(dining,用户2026-07-06)属虚拟——内部结算价复用 agreement_price_cent 承载。
                 "gift_drink".equals(entitlementType) ? "physical" : "virtual",
-                // 餐饮结算(用户2026-07-06)：内部结算价由请求透传(可空)；餐饮 virtual 核销取 agreement_price_cent 作结算价归商户。
-                //   非餐饮调用点不带此字段=null，判定层回退 value_amount(行为同现状)。
-                nonNegativeOrNull(actual.agreementPriceCent(), "agreement_price_cent"),
+                // 批10/E(V380)：agreement_price_cent 自此为目录价快照(只读)——上方已按目录引用取当前生效价;
+                //   未挂引用/条目未转正=null,判定层对提供方兑付类 fail-closed、其余回退 value_amount(行为同现状)。
+                snapshotPriceCent,
                 // 结算重构批3-2(PRD §6.2)：新建模板默认逐次扣(per_use，行为同现状)；入场资格「场次规则」(per_session)
                 // 暂无配置入口，待运营后台补 consumption_window 编辑项（判定层对 NULL/per_use 走现状）。
                 "per_use",
@@ -247,46 +266,13 @@ public class TicketCatalogService {
                 trimToNull(actual.exclusiveMerchantId()),
                 // 批3-6(用户2026-07-04)：拍脸照开关由请求透传(可空=false)；游乐模板走 V229 种子回填默认开，新建按请求。
                 Boolean.TRUE.equals(actual.requireFacePhoto())
-        ));
+        // 批10/E：挂目录引用(withCatalogRef 同步写快照;code 为空时等价于原构造,快照亦空)。
+        ).withCatalogRef(catalogItemCode, snapshotPriceCent, now));
     }
 
-    /**
-     * 改虚拟权益签约价（= 内部结算价, agreement_price_cent）。此前只能建不能改——填错只能作废重建。
-     *
-     * <p><b>历史不受影响（结构性，非自律）</b>：签约价一路快照——
-     * 发放时 {@code TicketOrderService} 把 {@code template.agreementPriceCent()} 复制进
-     * {@code issued_entitlements.agreement_price_cent}；核销时
-     * {@code TicketVerificationService#resolveSettlementPrice} 读的是**已发权益那一份**，并把结果再落进
-     * {@code ticket_verifications.settlement_price_cent}。本方法只写 {@code entitlement_templates} 一行，
-     * 已发放/已核销的钱按各自快照走，改价改不动它们 —— 即「已发生的不可改」。
-     * 代价：改价只对**之后发放**的权益生效（见 PRD §6.1 改价口径）。
-     *
-     * <p>三道闸（都是资金口径，不是排场）：
-     * <ol>
-     *   <li>已存档/待删除模板不可改价——否则「存档=软下线」名存实亡（同 createPriceRule 复核§3）。</li>
-     *   <li>仅 virtual 适用——实物权益结算价走吧台商品内部结算价，在此改是无声空转，最坏骗运营以为改好了。</li>
-     *   <li>价必填非负 + 理由必填——钱的口径改一次要能答"谁、何时、为什么"。</li>
-     * </ol>
-     */
-    EntitlementTemplateRecord updateAgreementPrice(String id, EntitlementAgreementPriceRequest request, String actorId) {
-        EntitlementTemplateRecord tpl = requireTemplate(id);
-        if (tpl.archivedAt() != null || !"none".equals(tpl.deleteStatus())) {
-            throw ApiException.conflict("ENTITLEMENT_TEMPLATE_NOT_CONFIGURABLE",
-                    "已存档或待删除的权益模板不可改签约价");
-        }
-        if (!KIND_VIRTUAL.equals(tpl.entitlementKind())) {
-            throw ApiException.badRequest("ENTITLEMENT_AGREEMENT_PRICE_NOT_APPLICABLE",
-                    "签约价仅虚拟权益适用；实物权益的结算价请改吧台商品的内部结算价");
-        }
-        Long price = request == null ? null : request.agreementPriceCent();
-        if (price == null) {
-            // 不接受"不填=清空"：清空会静默退回按面值结算，商户拿到的钱变了却没人说过要变。
-            throw ApiException.badRequest("VALIDATION_FAILED", "agreement_price_cent is required");
-        }
-        requireText(request.reason(), "reason");
-        return repository.saveEntitlementTemplate(
-                tpl.withAgreementPrice(nonNegativeOrNull(price, "agreement_price_cent"), Instant.now()));
-    }
+    // 批10/E：原「改虚拟权益签约价」端点（PR#274 updateAgreementPrice）已下线——内部结算价唯一可编辑处收编为
+    // SKU 目录（草案 → 他人复核转正 → 快照传播），模板侧不再保留任何改价入口。「历史不受影响」不变且更强：
+    // 核销固化（ticket_verifications.settlement_price_cent）照旧，改价只对转正之后的核销/结算生效。
 
     // ================= V253 数据存档与审批后删除范式（试点） =================
 

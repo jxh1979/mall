@@ -15,7 +15,6 @@ import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
-import com.complex.platform.ticketing.dto.EntitlementAgreementPriceRequest;
 import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
@@ -283,15 +282,8 @@ public class TicketingController {
         return ApiResponse.ok(service.listGiftCoverage(id));
     }
 
-    /** 配置中心批5：改虚拟权益签约价（= 内部结算价）。理由必填；只对之后发放的权益生效，历史按快照不动。 */
-    @PutMapping("/ticketing/entitlement-templates/{id}/agreement-price")
-    public ApiResponse<EntitlementTemplateRecord> updateEntitlementTemplateAgreementPrice(
-            @PathVariable("id") String id,
-            @RequestBody @jakarta.validation.Valid EntitlementAgreementPriceRequest request) {
-        authorizationService.requirePermission("ticket.entitlement.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.updateEntitlementTemplateAgreementPrice(id, request));
-    }
+    // 批10/E：原「改虚拟权益签约价」端点(配置中心批5/PR#274)已下线——内部结算价唯一可编辑处收编为
+    // 内部结算 SKU 目录(POST /api/v1/settlement/config/internal-price-item 落草案 → 他人复核转正 → 快照传播)。
 
     @PostMapping("/ticketing/ticket-types/{id}/entitlements")
     public ApiResponse<TicketTypeEntitlementRecord> bindTicketTypeEntitlement(

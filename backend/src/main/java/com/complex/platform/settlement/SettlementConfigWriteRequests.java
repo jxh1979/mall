@@ -130,6 +130,16 @@ public final class SettlementConfigWriteRequests {
     public record RankTiersActivateRequest(String projectId) {
     }
 
+    /**
+     * 批10/E internal_price_catalog:内部结算 SKU 目录条目(草案)。
+     * itemCode 留空=新建条目(服务层生成稳定码,业务表引用它);非空=对既有条目改价/改名/改类。
+     * merchantId 必填(HTML:每条必须绑定提供它的商家,业态随商家带出);category/itemName 必填;
+     * priceCent 必填 ≥0(0=商户让利型合法价,S5 同一套 0/NULL 语义)。
+     */
+    public record InternalPriceItemRequest(String idempotencyKey, String itemCode, String merchantId,
+                                           String category, String itemName, Long priceCent) {
+    }
+
     /** 软删 body(§2 软删铁律):archive_reason 必填。 */
     public record ArchiveRequest(String idempotencyKey, String archiveReason) {
     }

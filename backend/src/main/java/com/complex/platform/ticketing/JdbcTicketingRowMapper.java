@@ -82,7 +82,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("delete_status"),
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
-                resultSet.getString("delete_reason")
+                resultSet.getString("delete_reason"),
+                resultSet.getString("catalog_item_code")
         );
     }
 
