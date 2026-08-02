@@ -53,6 +53,22 @@ public interface IntegrationRepository {
     /** 落商户解析器存在性校验（P1 资金复核）：非空商户号须指向真实 merchants 行，否则解析器置未归属。 */
     boolean merchantExists(String merchantId);
 
+    // ── 批6 渠道票种映射（第三方商品 id → 本地票种）───────────────────────────────
+    IntegrationChannelTicketTypeMapRecord saveChannelTicketTypeMap(IntegrationChannelTicketTypeMapRecord record);
+
+    List<IntegrationChannelTicketTypeMapRecord> listChannelTicketTypeMaps();
+
+    Optional<IntegrationChannelTicketTypeMapRecord> findChannelTicketTypeMapById(String id);
+
+    Optional<IntegrationChannelTicketTypeMapRecord> findChannelTicketTypeMapByNaturalKey(
+            String providerCode, String channel, String externalProductId);
+
+    Optional<IntegrationChannelTicketTypeMapRecord> findActiveChannelTicketTypeMap(
+            String providerCode, String channel, String externalProductId);
+
+    /** 批6 核销回传：按本地票订单 id 反查回流行（payload.local_ticket_order_id，仅渠道单命中）。 */
+    Optional<IntegrationOrderSyncRecord> findTicketOrderSyncByLocalOrderId(String localTicketOrderId);
+
     List<IntegrationOrderSyncRecord> listUnattributedOrderSyncs();
 
     IntegrationTaskRecord saveRetryTask(IntegrationTaskRecord record);

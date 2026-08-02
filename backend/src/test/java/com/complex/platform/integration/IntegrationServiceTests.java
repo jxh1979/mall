@@ -1200,6 +1200,7 @@ class IntegrationServiceTests {
         private final List<IntegrationLedgerRecord> ledgers = new ArrayList<>();
         private final Map<String, IntegrationOrderSyncRecord> orderSyncs = new LinkedHashMap<>();
         private final Map<String, IntegrationChannelStoreMapRecord> channelStoreMaps = new LinkedHashMap<>();
+        private final Map<String, IntegrationChannelTicketTypeMapRecord> channelTicketTypeMaps = new LinkedHashMap<>();
         private final java.util.Set<String> merchants = new java.util.LinkedHashSet<>();
         private final Map<String, IntegrationTaskRecord> retryTasks = new LinkedHashMap<>();
         private final Map<String, IntegrationTaskRecord> compensationTasks = new LinkedHashMap<>();
@@ -1360,6 +1361,47 @@ class IntegrationServiceTests {
         @Override
         public boolean merchantExists(String merchantId) {
             return merchantId != null && merchants.contains(merchantId);
+        }
+
+        @Override
+        public IntegrationChannelTicketTypeMapRecord saveChannelTicketTypeMap(IntegrationChannelTicketTypeMapRecord record) {
+            channelTicketTypeMaps.put(record.id(), record);
+            return record;
+        }
+
+        @Override
+        public List<IntegrationChannelTicketTypeMapRecord> listChannelTicketTypeMaps() {
+            return new ArrayList<>(channelTicketTypeMaps.values());
+        }
+
+        @Override
+        public Optional<IntegrationChannelTicketTypeMapRecord> findChannelTicketTypeMapById(String id) {
+            return Optional.ofNullable(channelTicketTypeMaps.get(id));
+        }
+
+        @Override
+        public Optional<IntegrationChannelTicketTypeMapRecord> findChannelTicketTypeMapByNaturalKey(
+                String providerCode, String channel, String externalProductId) {
+            return channelTicketTypeMaps.values().stream()
+                    .filter(record -> record.providerCode().equals(providerCode))
+                    .filter(record -> record.channel().equals(channel))
+                    .filter(record -> record.externalProductId().equals(externalProductId))
+                    .findFirst();
+        }
+
+        @Override
+        public Optional<IntegrationChannelTicketTypeMapRecord> findActiveChannelTicketTypeMap(
+                String providerCode, String channel, String externalProductId) {
+            return findChannelTicketTypeMapByNaturalKey(providerCode, channel, externalProductId)
+                    .filter(record -> "active".equals(record.status()));
+        }
+
+        @Override
+        public Optional<IntegrationOrderSyncRecord> findTicketOrderSyncByLocalOrderId(String localTicketOrderId) {
+            return orderSyncs.values().stream()
+                    .filter(record -> "ticket".equals(record.businessType()))
+                    .filter(record -> localTicketOrderId.equals(record.providerPayload().get("local_ticket_order_id")))
+                    .findFirst();
         }
 
         @Override

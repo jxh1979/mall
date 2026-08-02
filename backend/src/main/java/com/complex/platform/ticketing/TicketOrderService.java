@@ -27,7 +27,10 @@ import static com.complex.platform.common.Strings.requireText;
 public class TicketOrderService {
 
     private static final String CURRENCY_CNY = "CNY";
-    private static final Set<String> SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web", "channel");
+    // 批6：第三方渠道回流出票的订单 sales_channel=具体渠道码（与 IntegrationValidation.CHANNELS 对齐），
+    // 结算 S11 渠道费按 ticket_orders.sales_channel 解析（channel_fee_configs 渠道专属>通用）才拿得到该渠道费率。
+    private static final Set<String> SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web", "channel",
+            "meituan", "dianping", "douyin", "koubei", "eleme", "alipay", "wechat");
 
     private final TicketingRepository repository;
     private final TicketPricingService pricingService;

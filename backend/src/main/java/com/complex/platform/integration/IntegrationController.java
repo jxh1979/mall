@@ -124,6 +124,32 @@ public class IntegrationController {
         return ApiResponse.ok(service.archiveChannelStoreMap(id, request));
     }
 
+    // ── 批6 渠道票种映射（第三方商品 id → 本地票种；复用渠道映射维护权限）────────────
+
+    @GetMapping("/channel-ticket-type-maps")
+    public ApiResponse<PageResponse<IntegrationChannelTicketTypeMapRecord>> listChannelTicketTypeMaps() {
+        authorizationService.requirePermission(CHANNEL_STORE_MAP_VIEW_PERMISSION);
+        return ApiResponse.ok(service.listChannelTicketTypeMaps());
+    }
+
+    @PostMapping("/channel-ticket-type-maps")
+    public ApiResponse<IntegrationChannelTicketTypeMapRecord> saveChannelTicketTypeMap(
+            @RequestBody @jakarta.validation.Valid IntegrationChannelTicketTypeMapRequest request) {
+        authorizationService.requirePermission(CHANNEL_STORE_MAP_MANAGE_PERMISSION);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.saveChannelTicketTypeMap(request));
+    }
+
+    @PostMapping("/channel-ticket-type-maps/{id}/archive")
+    public ApiResponse<IntegrationChannelTicketTypeMapRecord> archiveChannelTicketTypeMap(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission(CHANNEL_STORE_MAP_MANAGE_PERMISSION);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archiveChannelTicketTypeMap(id, request));
+    }
+
     @GetMapping("/provider-adapters")
     public ApiResponse<PageResponse<ProviderAdapterRecord>> listProviderAdapters() {
         authorizationService.requirePermission(VIEW_PERMISSION);

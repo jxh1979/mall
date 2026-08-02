@@ -22,7 +22,8 @@ final class IntegrationValidation {
     private static final Set<String> MODES = Set.of("mock", "sandbox", "production");
     private static final Set<String> STATUSES = Set.of("draft", "mock_ready", "test_ready", "production_ready", "disabled");
     private static final Set<String> TEST_SCENARIOS = Set.of("auth", "webhook", "polling", "reconcile", "field_mapping", "failure_retry");
-    private static final Set<String> BUSINESS_TYPES = Set.of("catering", "retail");
+    // 批6：ticket=第三方渠道（美团/抖音…）售出的通票回流（订单回流→本地出票→核销回传→对账）。
+    private static final Set<String> BUSINESS_TYPES = Set.of("catering", "retail", "ticket");
     // 第三方回流渠道（third-party §14.11b/§2B）。资料未到时取占位集合，开关 off 仍允许识别但不伪造对账。
     private static final Set<String> CHANNELS = Set.of(
             "meituan", "dianping", "douyin", "koubei", "eleme", "alipay", "wechat", "internal", "unknown");
@@ -122,6 +123,17 @@ final class IntegrationValidation {
         channel(request.channel());
         requireText(request.externalStoreId(), "external_store_id");
         requireText(request.merchantId(), "merchant_id");
+    }
+
+    static void validateChannelTicketTypeMapRequest(IntegrationChannelTicketTypeMapRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        requireText(request.idempotencyKey(), "idempotency_key");
+        requireText(request.providerCode(), "provider_code");
+        channel(request.channel());
+        requireText(request.externalProductId(), "external_product_id");
+        requireText(request.ticketTypeId(), "ticket_type_id");
     }
 
     static void validateTaskRequest(IntegrationTaskRequest request) {

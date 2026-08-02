@@ -38,11 +38,14 @@ public class IntegrationService {
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             SecretResolver secretResolver,
-            com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard
+            com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard,
+            ChannelTicketIssuePort channelTicketIssuePort
     ) {
-        this(repository, idempotencyService, auditEventService, Clock.systemUTC(), secretResolver, terminalSwitchGuard);
+        this(repository, idempotencyService, auditEventService, Clock.systemUTC(), secretResolver,
+                terminalSwitchGuard, channelTicketIssuePort);
     }
 
+    // 兼容构造（既有单测/无出票端口场景）：ticket 回流 fail-closed 拒收，其余能力不变。
     IntegrationService(
             IntegrationRepository repository,
             IdempotencyService idempotencyService,
@@ -51,13 +54,26 @@ public class IntegrationService {
             SecretResolver secretResolver,
             com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard
     ) {
+        this(repository, idempotencyService, auditEventService, clock, secretResolver, terminalSwitchGuard, null);
+    }
+
+    IntegrationService(
+            IntegrationRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            Clock clock,
+            SecretResolver secretResolver,
+            com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard,
+            ChannelTicketIssuePort channelTicketIssuePort
+    ) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.clock = clock;
         this.secretResolver = secretResolver;
         this.operationSupport = new IntegrationOperationSupport(idempotencyService, auditEventService);
         this.providerAdapterService = new ProviderAdapterService(repository, clock, operationSupport);
-        this.orderSyncService = new IntegrationOrderSyncService(repository, clock, operationSupport);
+        this.orderSyncService = new IntegrationOrderSyncService(
+                repository, clock, operationSupport, terminalSwitchGuard, channelTicketIssuePort);
         this.reconciliationService = new IntegrationReconciliationService(repository, clock, operationSupport);
         this.thirdPartyService = new ThirdPartyScaffoldingService(
                 repository, clock, auditEventService, terminalSwitchGuard, openPlatformCrypto, secretResolver);
@@ -352,8 +368,23 @@ public class IntegrationService {
         return orderSyncService.listOrderSyncs();
     }
 
+    // 批6 事务边界：ticket 回流分支内含本地下单/支付/出票多写路径，与回流台账落库同一事务——
+    // 出票链任一步失败整体回滚，不留「出了票没台账 / 有台账没票」的半截状态。
+    @Transactional
     public IntegrationOrderSyncRecord createOrderSync(IntegrationOrderSyncRequest request) {
         return orderSyncService.createOrderSync(request);
+    }
+
+    public PageResponse<IntegrationChannelTicketTypeMapRecord> listChannelTicketTypeMaps() {
+        return orderSyncService.listChannelTicketTypeMaps();
+    }
+
+    public IntegrationChannelTicketTypeMapRecord saveChannelTicketTypeMap(IntegrationChannelTicketTypeMapRequest request) {
+        return orderSyncService.saveChannelTicketTypeMap(request);
+    }
+
+    public IntegrationChannelTicketTypeMapRecord archiveChannelTicketTypeMap(String id, StatusChangeRequest request) {
+        return orderSyncService.archiveChannelTicketTypeMap(id, request);
     }
 
     public PageResponse<IntegrationOrderSyncRecord> listUnattributedOrderSyncs() {
