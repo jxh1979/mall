@@ -78,7 +78,7 @@ public class SettlementConfigWriteService {
                 ? "month"
                 : requireOneOf(req.specialApprovalTermUnit(), "special_approval_term_unit", "day", "month");
         if (termValue < 1) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "special_approval_term_value must be >= 1");
+            throw ApiException.badRequest("VALIDATION_FAILED", "特批期数（special_approval_term_value）必须大于等于 1");
         }
         String scopeKey = defaultScope(req.projectId());
         String landedId = writeRepository.upsertDistributionMethodDraft(draftId("tdc_d_", scopeKey, idem),
@@ -134,7 +134,7 @@ public class SettlementConfigWriteService {
             requireNonNegative(fixed, "fixed_amount_cent");
             if (feeBps != 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED",
-                        "fee_bps must be 0 when fixed_amount_cent is set (fee mode is either-or)");
+                        "比例费率（fee_bps）与固定金额（fixed_amount_cent）只能二选一：设置固定金额时比例必须为 0");
             }
         }
         // V336 月度封顶(可选·默认不封顶):非空则 ≥0(对齐 chk_csfc_monthly_cap);比例与固定额两模式共用。
@@ -230,7 +230,7 @@ public class SettlementConfigWriteService {
         rejectSentinel(req.merchantId(), "merchant_id");
         Long unit = req.amountCentPerPoint();
         if (unit == null || unit <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent_per_point must be > 0");
+            throw ApiException.badRequest("VALIDATION_FAILED", "每积分金额（amount_cent_per_point）必须大于 0");
         }
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId());
         String landedId = writeRepository.upsertPointsAccrualRateDraft(draftId("parc_d_", scopeKey, idem),
@@ -301,7 +301,7 @@ public class SettlementConfigWriteService {
         rejectSentinel(req.merchantId(), "merchant_id");
         Long threshold = req.highValueThresholdCent();
         if (threshold == null || threshold < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "high_value_threshold_cent must be >= 0");
+            throw ApiException.badRequest("VALIDATION_FAILED", "高额阈值（high_value_threshold_cent）必须大于等于 0");
         }
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId());
         String landedId = writeRepository.upsertHighValueThresholdDraft(draftId("hvt_d_", scopeKey, idem),
@@ -318,13 +318,13 @@ public class SettlementConfigWriteService {
         rejectSentinel(req.projectId(), "project_id");
         List<RankTierInput> tiers = req.tiers();
         if (tiers == null || tiers.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "tiers must be non-empty");
+            throw ApiException.badRequest("VALIDATION_FAILED", "档位列表不能为空");
         }
         String scopeKey = defaultScope(req.projectId());
         List<TierRow> rows = new ArrayList<>();
         for (RankTierInput t : tiers) {
             if (t.rankFrom() == null || t.rankTo() == null || t.shareBps() == null) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "rank_from/rank_to/share_bps are required");
+                throw ApiException.badRequest("VALIDATION_FAILED", "档位必须填写 rank_from/rank_to/share_bps");
             }
             rows.add(new TierRow(draftId("trt_d_", scopeKey + ":" + t.rankFrom(), idem),
                     t.rankFrom(), t.rankTo(), t.shareBps()));
@@ -343,13 +343,13 @@ public class SettlementConfigWriteService {
         String stream = req.revenueStream();
         if (stream == null || !RevenueStreamAttributionRepository.REVENUE_STREAMS.contains(stream)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "revenue_stream must be one of " + RevenueStreamAttributionRepository.REVENUE_STREAMS);
+                    "收入流必须为以下之一：" + RevenueStreamAttributionRepository.REVENUE_STREAMS);
         }
         String kind = req.beneficiaryKind() == null || req.beneficiaryKind().isBlank()
                 ? "entity" : req.beneficiaryKind().trim();
         if (!RevenueStreamAttributionRepository.BENEFICIARY_KINDS.contains(kind)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "beneficiary_kind must be one of " + RevenueStreamAttributionRepository.BENEFICIARY_KINDS);
+                    "受益方类型必须为以下之一：" + RevenueStreamAttributionRepository.BENEFICIARY_KINDS);
         }
         // 归「各商户自己」的收入流(订台低消/二次消费/额外酒水、非散台服务费)没有单一收款主体,主体列必须留空。
         String entityId = "entity".equals(kind) ? requireText(req.managementEntityId(), "management_entity_id") : null;
@@ -550,22 +550,21 @@ public class SettlementConfigWriteService {
         long weightedSum = 0;
         for (TierRow t : sorted) {
             if (t.shareBps() < 0 || t.shareBps() > 10000) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "share_bps must be in [0,10000]");
+                throw ApiException.badRequest("VALIDATION_FAILED", "分账比例（share_bps）必须在 0 到 10000 基点之间");
             }
             if (t.rankTo() < t.rankFrom()) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "each tier requires rank_from <= rank_to");
+                throw ApiException.badRequest("VALIDATION_FAILED", "每个档位的起始名次不能大于结束名次");
             }
             if (t.rankFrom() != expectedFrom) {
                 throw ApiException.badRequest("VALIDATION_FAILED",
-                        "rank tiers must be contiguous with no gap/overlap: expected rank_from=" + expectedFrom
-                                + " but got " + t.rankFrom());
+                        "排名档位必须连续且不重叠：期望起始名次为 " + expectedFrom + "，实际为 " + t.rankFrom());
             }
             weightedSum += (long) (t.rankTo() - t.rankFrom() + 1) * t.shareBps();
             expectedFrom = t.rankTo() + 1;
         }
         if (weightedSum != 10000L) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "rank tier weighted share must sum to exactly 10000 bps, got " + weightedSum);
+                    "排名档位加权分账比例合计必须恰为 10000 基点，当前为 " + weightedSum);
         }
     }
 
@@ -629,34 +628,34 @@ public class SettlementConfigWriteService {
     private void rejectSentinel(String value, String field) {
         if (value != null && SCOPE_SENTINELS.contains(value.trim())) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    field + " must not be a reserved sentinel literal (" + String.join("/", SCOPE_SENTINELS) + ")");
+                    field + " 不能使用保留占位值（" + String.join("/", SCOPE_SENTINELS) + "）");
         }
     }
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private int requireBps(Integer value, String field) {
         if (value == null || value < 0 || value > 10000) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be in [0,10000]");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须在 0 到 10000 之间");
         }
         return value;
     }
 
     private void requireNonNegative(Long value, String field) {
         if (value != null && value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be >= 0");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于等于 0");
         }
     }
 
     private String requireOneOf(String value, String field, String... allowed) {
         Set<String> set = Set.of(allowed);
         if (value == null || !set.contains(value)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be one of " + String.join(", ", allowed));
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须为以下之一：" + String.join(", ", allowed));
         }
         return value;
     }

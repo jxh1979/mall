@@ -83,14 +83,13 @@ public class SettlementPostingService {
         JdbcSettlementBillRepository.OverPoolContext ctx = repository.findOverPoolContext(billId);
         if (ctx == null) {
             throw com.complex.platform.common.api.ApiException.notFound(
-                    "SETTLEMENT_BILL_NOT_FOUND", "settlement bill not found: " + billId);
+                    "SETTLEMENT_BILL_NOT_FOUND", "结算账单不存在：" + billId);
         }
         // 特批出口只对「超池 draft」开：非超池的 draft 不需特批、任何已推进态(confirmed/settled/reversed)不可再特批。
         if (!STATUS_DRAFT.equals(ctx.status()) || !ctx.overPool()) {
             throw com.complex.platform.common.api.ApiException.conflict(
                     "BILL_NOT_OVERPOOL_DRAFT",
-                    "only over-pool draft bills can be special-approved; status=" + ctx.status()
-                            + ", overPool=" + ctx.overPool());
+                    "只有超出可分配池的草稿账单才能特批；当前状态：" + ctx.status() + "，是否超池：" + ctx.overPool());
         }
         // S9：期限后台可配(ticket_distribution_configs.special_approval_term_value/_unit·出厂默认 3 个月),
         //   到期日在 DB 侧按 CURRENT_DATE + N 天/月算,与到期判定同一时钟。
@@ -101,7 +100,7 @@ public class SettlementPostingService {
         if (validUntil == null) {
             // 并发下状态已被改（另一次特批/过账）→ 与上同义，再抛一次防竞态。
             throw com.complex.platform.common.api.ApiException.conflict(
-                    "BILL_NOT_OVERPOOL_DRAFT", "bill is no longer a draft: " + billId);
+                    "BILL_NOT_OVERPOOL_DRAFT", "账单已不是草稿状态：" + billId);
         }
         // 治理留痕(对抗复核补):超池特批是资金级审批,记 billId/ref/超池额/到期日供追溯——
         //   谁批的短期激励超额、批了多大缺口、批到哪天为止。
@@ -132,13 +131,13 @@ public class SettlementPostingService {
         JdbcSettlementBillRepository.OverPoolContext ctx = repository.findOverPoolContext(billId);
         if (ctx == null) {
             throw com.complex.platform.common.api.ApiException.notFound(
-                    "SETTLEMENT_BILL_NOT_FOUND", "settlement bill not found: " + billId);
+                    "SETTLEMENT_BILL_NOT_FOUND", "结算账单不存在：" + billId);
         }
         // 仅 confirmed 过账：draft=超总池待特批（特批确认→confirmed 后再过）；settled/reversed=不重复过。
         if (!STATUS_CONFIRMED.equals(ctx.status())) {
             throw com.complex.platform.common.api.ApiException.conflict(
                     "SETTLEMENT_BILL_NOT_CONFIRMED",
-                    "only confirmed bills can be posted; current status=" + ctx.status());
+                    "只有已确认的账单才能过账；当前状态：" + ctx.status());
         }
 
         // S9 到期回收(惰性判定,无定时作业):超池单过账必须有【仍在有效期内】的特批。
