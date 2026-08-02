@@ -2,7 +2,7 @@ package com.complex.platform.ticketing;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
-import com.complex.platform.amusement.AmusementVerificationPort;
+import com.complex.platform.amusement.AmusementService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.terminal.MdmService;
 import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
@@ -49,12 +49,13 @@ public class TicketVerificationService {
     // P0-3/X-01 门票二维码 HMAC 签名器：签发时对凭证关键字段签名、核销时校验。可为 null=旧构造/兼容测试
     // （不签名不校验，沿用 signature_value/signature_valid 占位 NULL 语义）；生产由 Spring 注入 @Component 后一律签名+校验。
     private final TicketCredentialSigner credentialSigner;
-    // 阶段1（2026-07-05 用户拍板）游乐核销分流端口：检出游乐类权益 → 调此端口走游乐正路
+    // 阶段1（2026-07-05 用户拍板）游乐核销分流：检出游乐类权益 → 直调 AmusementService 走游乐正路
     // （定位项目/当前场次 + 三维容量原子扣减 + 写 amusement_verifications，并在同事务内消费本权益）。
+    // 原为单实现、单消费者的分流端口，2026-08-02 收编为 @Lazy 直注，语义不变。
     // 可为 null=旧构造/兼容测试（不分流，游乐权益走通用逐次扣旧路）；生产由 Spring 注入 @Service AmusementService。
     // @Lazy 破除潜在初始化环（ticketing→amusement→TicketingAmusementEntitlementGateway→TicketingRepository 本无环，
     // @Lazy 仅为稳妥）。
-    private final AmusementVerificationPort amusementVerificationPort;
+    private final AmusementService amusementService;
     // S5：赠送权益内部结算价的唯一解析口径（预扣与兑付同源）。由 repository 直接构造——它无状态、无外部依赖，
     // 各兼容构造点无须逐个补参，且永不为 null（免掉一层空判分支）。
     private final InternalSettlementPriceResolver priceResolver;
@@ -66,14 +67,14 @@ public class TicketVerificationService {
             MdmService mdmService,
             AuthorizationService authorizationService,
             TicketCredentialSigner credentialSigner,
-            @org.springframework.context.annotation.Lazy AmusementVerificationPort amusementVerificationPort) {
+            @org.springframework.context.annotation.Lazy AmusementService amusementService) {
         this.priceResolver = new InternalSettlementPriceResolver(repository);
         this.repository = repository;
         this.eventPublisher = eventPublisher;
         this.mdmService = mdmService;
         this.authorizationService = authorizationService;
         this.credentialSigner = credentialSigner;
-        this.amusementVerificationPort = amusementVerificationPort;
+        this.amusementService = amusementService;
     }
 
     /**
@@ -540,7 +541,7 @@ public class TicketVerificationService {
         // 赠饮 gift_drink 的分流范式）→ 分流进游乐正路（定位项目/当前场次 + 三维容量原子扣减 + 写 amusement_verifications，
         // 并在同事务内消费本权益）。成功即在本方法内落一条带交叉引用的 ticket_verifications success 记录并短路返回，
         // 不再走下方通用逐次扣（避免双扣通票）。端口未注入（旧构造/兼容测试）时不分流，游乐权益退回通用旧路（向后兼容）。
-        if (amusementVerificationPort != null && isAmusementEntitlement(entitlement)) {
+        if (amusementService != null && isAmusementEntitlement(entitlement)) {
             VerificationResponse amusementResponse = verifyAmusementEntitlement(entitlement, request, sourceType,
                     clientTaskId, windowValid, signatureValid, now);
             if (amusementResponse != null) {
@@ -686,7 +687,7 @@ public class TicketVerificationService {
     /**
      * 阶段1（2026-07-05 用户拍板）游乐核销分流主体：
      * <ol>
-     *   <li>调 {@link AmusementVerificationPort#verifyAmusementEntry} 走游乐正路——【同事务内】完成
+     *   <li>调 {@link AmusementService#verifyAmusementEntry} 走游乐正路——【同事务内】完成
      *       point/device→项目定位、当前 open 场次定位、项目 open+巡检准入、三维容量原子扣减、
      *       消费本票务权益（used_times+1，容量失败补偿回补）、写 amusement_verifications；返回其 id。
      *       任一步失败（定位不到项目/场次、项目未开、本场满等）即抛 ApiException，本方法原样上抛——
@@ -713,7 +714,7 @@ public class TicketVerificationService {
         String amusementIdemKey = "amuse-verify:" + entitlement.id() + ":"
                 + requireText(request.pointId(), "point_id") + ":"
                 + (clientTaskId != null ? clientTaskId : "online");
-        Optional<String> amusementResult = amusementVerificationPort.verifyAmusementEntry(new AmusementEntryRequest(
+        Optional<String> amusementResult = amusementService.verifyAmusementEntry(new AmusementEntryRequest(
                 credentialPayload,
                 request.pointId(),
                 request.deviceId(),

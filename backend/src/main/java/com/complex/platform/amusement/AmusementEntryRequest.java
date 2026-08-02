@@ -3,7 +3,7 @@ package com.complex.platform.amusement;
 import java.time.Instant;
 
 /**
- * 阶段1 游乐核销分流入参（ticketing → {@link AmusementVerificationPort}）。
+ * 阶段1 游乐核销分流入参（ticketing → {@link AmusementService#verifyAmusementEntry}）。
  *
  * @param credentialPayload 核销凭证 payload（动态二维码 token 或权益码）——游乐正路据此识别票/权益实例
  * @param pointId           核销点位（用于 point→项目定位、点位维度容量）；可空

@@ -5,7 +5,7 @@ package com.complex.platform.bar;
  *
  * <p>依赖方向 bar → 本端口 ← settlement(实现方 {@code JdbcCommissionPointsConfigRepository} 落在结算配置中心侧):
  * 酒吧域只声明「我要一个可配的提成率」,费率的作用域优先级/草案闸/复核转正一律由结算配置中心统一承接,
- * 酒吧域不感知配置表结构 —— 与 {@code AmusementVerificationPort} 同一套端口范式。
+ * 酒吧域不感知配置表结构 —— 与 {@code ComboPriceToleranceConfigPort} 同一套端口范式。
  *
  * <p>本端口消灭的硬编码:{@code BarBillingService.calculateCommission} 原
  * {@code int rateBp = "sales".equals(roleType) ? 1500 : 1000;}(bar PRD 早写「后台可配」而代码写死)。

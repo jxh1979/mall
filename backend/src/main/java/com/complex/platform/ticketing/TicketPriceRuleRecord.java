@@ -26,7 +26,7 @@ public record TicketPriceRuleRecord(
         String deleteRequestedBy,
         Instant deleteRequestedAt,
         String deleteReason
-) {
+) implements ArchivableRecord<TicketPriceRuleRecord> {
     /** 向后兼容构造：V260 前 14 参全签名 → 存档/删除字段取默认（未存档、none）。 */
     public TicketPriceRuleRecord(
             String id, String ticketTypeId, String variantType, String priceMode, Long weekdayPriceCent,
