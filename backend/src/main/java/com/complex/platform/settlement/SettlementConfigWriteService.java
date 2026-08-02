@@ -67,8 +67,9 @@ public class SettlementConfigWriteService {
         DistributionMethodRequest req = requireRequest(request);
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
         rejectSentinel(req.projectId(), "project_id");
-        String method = requireOneOf(req.methodType(), "method_type",
-                "by_venue_per_guest", "by_rank_tier", "by_fixed_amount");
+        // S8 语义收窄(V374):method_type 仅指【第二段】的分配方式,只有 by_rank_tier 有意义;
+        //   by_venue_per_guest / by_fixed_amount 已由商户级固定规则(每客单价/固定额,第一段)取代,写入口下线。
+        String method = requireOneOf(req.methodType(), "method_type", "by_rank_tier");
         // S9/V368：超池特批有效期 = 数值 + 单位。两项留空 = 出厂默认 3 个月(业务口径「期限可配，默认不超过 3 个月」)。
         //   下限只到「1 个单位」——配 3 天的短期激励是合法的(用户 2026-07-28 纠正「也可以三天」)；没有上限。
         int termValue = req.specialApprovalTermValue() == null ? 3 : req.specialApprovalTermValue();
@@ -94,18 +95,21 @@ public class SettlementConfigWriteService {
         rejectSentinel(merchantId, "merchant_id");
         Long perGuest = req.perGuestCent();
         Long fixed = req.fixedAmountCent();
-        if (perGuest == null && fixed == null) {
+        // S8/V374 二选一:同行双值无从消歧(两段化后没有项目级 method 兜底),落库前拦住并直说该怎么填。
+        if ((perGuest == null) == (fixed == null)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "per_guest_cent / fixed_amount_cent must configure at least one");
+                    "每客单价(per_guest_cent)与固定额(fixed_amount_cent)必须二选一:该酒吧按哪种固定规则拿第一段,只能配一种");
         }
         requireNonNegative(perGuest, "per_guest_cent");
         requireNonNegative(fixed, "fixed_amount_cent");
+        String ruleType = perGuest != null ? "per_guest" : "fixed";
         String scopeKey = defaultScope(req.projectId()) + "|" + merchantId;
         String landedId = writeRepository.upsertMerchantRateDraft(draftId("tdmr_d_", scopeKey, idem),
-                req.projectId(), merchantId, perGuest, fixed, actorId);
+                req.projectId(), merchantId, ruleType, perGuest, fixed, actorId);
         audit("settlement.config.ticket_distribution_merchant_rates.updated",
                 "ticket_distribution_merchant_rates", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()), "merchant_id", merchantId,
+                        "rule_type", ruleType,
                         "per_guest_cent", perGuest == null ? "-" : String.valueOf(perGuest),
                         "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed)));
     }

@@ -730,12 +730,13 @@ class JdbcTicketingRepository implements TicketingRepository {
     public TicketDistributionMerchantRateRecord saveDistributionMerchantRate(TicketDistributionMerchantRateRecord rate) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_distribution_merchant_rates (
-                    id, project_id, merchant_id, per_guest_cent, fixed_amount_cent, status, is_draft, updated_by, updated_at
+                    id, project_id, merchant_id, rule_type, per_guest_cent, fixed_amount_cent, status, is_draft, updated_by, updated_at
                 )
                 VALUES (
-                    :id, :project_id, :merchant_id, :per_guest_cent, :fixed_amount_cent, :status, :is_draft, :updated_by, :updated_at
+                    :id, :project_id, :merchant_id, :rule_type, :per_guest_cent, :fixed_amount_cent, :status, :is_draft, :updated_by, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
+                    rule_type = EXCLUDED.rule_type,
                     per_guest_cent = EXCLUDED.per_guest_cent,
                     fixed_amount_cent = EXCLUDED.fixed_amount_cent,
                     status = EXCLUDED.status,
@@ -746,6 +747,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                 .addValue("id", rate.id())
                 .addValue("project_id", rate.projectId())
                 .addValue("merchant_id", rate.merchantId())
+                .addValue("rule_type", rate.ruleType())
                 .addValue("per_guest_cent", rate.perGuestCent())
                 .addValue("fixed_amount_cent", rate.fixedAmountCent())
                 .addValue("status", rate.status())

@@ -383,14 +383,16 @@ public class TicketingService {
         if (request == null || request.merchantId() == null || request.merchantId().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id is required");
         }
-        if (request.perGuestCent() == null && request.fixedAmountCent() == null) {
-            throw ApiException.badRequest(
-                    "VALIDATION_FAILED", "per_guest_cent or fixed_amount_cent is required");
+        // S8/V374 二选一:同行双值无从消歧(两段化后没有项目级 method 兜底),落库前拦住并直说该怎么填。
+        if ((request.perGuestCent() == null) == (request.fixedAmountCent() == null)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "每客单价(per_guest_cent)与固定额(fixed_amount_cent)必须二选一:该商户按哪种固定规则分账,只能配一种");
         }
+        String ruleType = request.perGuestCent() != null ? "per_guest" : "fixed";
         java.time.Instant now = java.time.Instant.now();
         String id = "dmr_" + distributionRateHash(request.projectId(), request.merchantId());
         return repository.saveDistributionMerchantRate(new TicketDistributionMerchantRateRecord(
-                id, request.projectId(), request.merchantId(), request.perGuestCent(), request.fixedAmountCent(),
+                id, request.projectId(), request.merchantId(), ruleType, request.perGuestCent(), request.fixedAmountCent(),
                 request.status() == null || request.status().isBlank() ? "active" : request.status(),
                 Boolean.TRUE.equals(request.isDraft()), actorId(), now));
     }
