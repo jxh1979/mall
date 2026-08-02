@@ -280,8 +280,10 @@ class TicketingServiceTests {
             EntitlementTemplateRecord gift = service.createEntitlementTemplate(new EntitlementTemplateRequest(
                     "k17-tpl-gift-" + tag, "gift", List.of(), tag + " 赠酒", "gift_drink", 1, 0L, "active",
                     "k17-prod-" + tag, barMerchantId, null, null));
+            // V376：赠送类绑定必须显式标成本承担方（漏标拒保存），夹具按改造前唯一行为标平台出资型。
             service.bindTicketTypeEntitlement(ticketTypeId, new TicketTypeEntitlementRequest(
-                    "k17-bind-gift-" + tag, "bind", List.of(), gift.id(), giftCups, 1, 0L, "default", 1, 0L));
+                    "k17-bind-gift-" + tag, "bind", List.of(), gift.id(), giftCups, 1, 0L, "default", 1, 0L,
+                    "platform_funded"));
         }
     }
 
@@ -325,6 +327,69 @@ class TicketingServiceTests {
 
         assertThat(service.publishTicketType(ticket.id(),
                 new StatusChangeRequest("k17-pub-3", "publish", "ready", List.of())).status())
+                .isEqualTo("published");
+    }
+
+    // ===== V376（2026-08-01 拍板）：赠送权益成本承担方必填，漏标拒保存/拒发布 =====
+
+    @Test
+    void bindRejectsGiftEntitlementMissingCostBearerAndAcceptsTaggedOne() {
+        // 漏标不再默认平台出资型——否则运营漏标一个商户让利型赠品，平台就替商户多付一笔预估成本。
+        TicketTypeRecord tt = createTicketType("cb-bind");
+        ticketingRepository.barProducts.put("cb-prod",
+                new BarProductRefRecord("cb-prod", "mch_cb_bar", 4200L, null, false, "active"));
+        EntitlementTemplateRecord gift = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cb-tpl-gift", "gift", List.of(), "赠酒一杯", "gift_drink", 1, 0L, "active",
+                "cb-prod", "mch_cb_bar", null, null));
+
+        // 赠送类（票面原价 0 + 提供方兑付类）漏标 → 中文 400 点名是哪条权益没标。
+        assertThatThrownBy(() -> service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                "cb-bind-miss", "bind", List.of(), gift.id(), 1, 1, 0L, "default", 1, 0L)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TICKET_COST_BEARER_REQUIRED"))
+                .hasMessageContaining("赠酒一杯");
+
+        // 标了（商户让利型）即可保存，存的就是标的值。
+        assertThat(service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                "cb-bind-tagged", "bind", List.of(), gift.id(), 1, 1, 0L, "default", 1, 0L,
+                "merchant_concession")).costBearer()).isEqualTo("merchant_concession");
+
+        // 非赠送类（入场，票面价 >0）没有成本承担概念：不带承担方照常绑，存 NULL 不再悄悄落平台出资型。
+        EntitlementTemplateRecord entry = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cb-tpl-entry", "entry", List.of(), "普通入场", "admission", 1, 5000L, "active",
+                null, "mch_cb_bar", null, null));
+        assertThat(service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
+                "cb-bind-entry", "bind", List.of(), entry.id(), 1, 1, 5000L, "default", 1, 5000L))
+                .costBearer()).isNull();
+    }
+
+    @Test
+    void publishBlocksGiftEntitlementWhoseCostBearerWasNeverTagged() {
+        // 发布闸兜底：绑定后模板被补上专属商户等而「变成」赠送类的旧绑定，绑定面拦不到 → 发布前逐行再查、点名拒发布。
+        Instant now = Instant.now();
+        TicketTypeRecord tt = createTicketType("cb-pub");
+        // 专属商户餐饮权益（providerRedeemed 第三判据）+ 票面原价 0 = 赠送类；cost_bearer 未标（NULL）。
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_cb_free", "免费小食", "dining", 1, 0L, "active", "mch_cb_rest", null, null, null, now, now,
+                "virtual", 2000L, null, "mch_cb_rest", false));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_cb_free", tt.id(), "tpl_cb_free", 1, 1, 0L, "default", 1, 0L, null, now, now));
+
+        assertThatThrownBy(() -> service.publishTicketType(tt.id(),
+                new StatusChangeRequest("cb-pub-1", "publish", "ready", List.of())))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TICKET_COST_BEARER_REQUIRED"))
+                .hasMessageContaining("免费小食");
+
+        // 非赠送类（入场）cost_bearer 为 NULL 不受影响：照常发布，别误伤普通票。
+        TicketTypeRecord plain = createTicketType("cb-pub-plain");
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_cb_entry", "普通入场", "admission", 1, 5000L, "active", "mch_cb_rest", null, null, null, now, now,
+                "virtual", null, null, null, false));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_cb_entry", plain.id(), "tpl_cb_entry", 1, 1, 5000L, "default", 1, 5000L, null, now, now));
+        assertThat(service.publishTicketType(plain.id(),
+                new StatusChangeRequest("cb-pub-2", "publish", "ready", List.of())).status())
                 .isEqualTo("published");
     }
 

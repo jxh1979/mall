@@ -17,9 +17,10 @@ public record TicketTypeEntitlementRecord(
         // 联合票（酒吧分项 + 游乐分项）按各分项单价比例拆分订单实付到每张权益；
         // 全空时回退按数量均摊或全归票务（见 TicketOrderService.issueEntitlements 注释）。
         Long componentPriceCent,
-        // S6(V372)免费/赠送权益的成本承担方(HTML:737「每个权益必须在票种配置里标明成本承担方」)：
-        // platform_funded=平台出资型(进 G 预扣·核销按内部结算价与提供商户结算)；
-        // merchant_concession=商户让利型(平台不承担成本·不与商户结算·不进 G)。仅对票面原价为 0 的权益有业务含义。
+        // S6(V372)/V376 免费/赠送权益的成本承担方(HTML:737「每个权益必须在票种配置里标明成本承担方」，
+        // 2026-08-01 拍板改必填)：platform_funded=平台出资型(进 G 预扣·核销按内部结算价与提供商户结算)；
+        // merchant_concession=商户让利型(平台不承担成本·不与商户结算·不进 G)；
+        // NULL=未标——赠送类(票面原价 0 且提供方兑付类)未标拒保存/拒发布，非赠送类无此概念可为 NULL。
         String costBearer,
         Instant createdAt,
         Instant updatedAt
