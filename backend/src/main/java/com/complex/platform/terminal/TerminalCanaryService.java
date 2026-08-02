@@ -162,7 +162,7 @@ public class TerminalCanaryService {
         String id = requireText(rolloutId, "rollout_id");
         CanaryTargetRequest actual = requireRequest(request);
         TerminalCanaryRolloutRecord rollout = repository.findRolloutById(id)
-                .orElseThrow(() -> ApiException.notFound("CANARY_ROLLOUT_NOT_FOUND", "canary rollout not found"));
+                .orElseThrow(() -> ApiException.notFound("CANARY_ROLLOUT_NOT_FOUND", "灰度发布不存在或已被删除"));
         String targetType = requireEnum(
                 requireText(actual.targetType(), "target_type"), TARGET_TYPES, "target_type");
         String targetId = requireText(actual.targetId(), "target_id");
@@ -226,7 +226,7 @@ public class TerminalCanaryService {
         CanaryTargetRequest actual = requireRequest(request);
         String reason = requireText(actual.reason(), "reason");
         TerminalCanaryTargetRecord existing = repository.findTargetById(id)
-                .orElseThrow(() -> ApiException.notFound("CANARY_TARGET_NOT_FOUND", "canary target not found"));
+                .orElseThrow(() -> ApiException.notFound("CANARY_TARGET_NOT_FOUND", "灰度目标不存在或已被删除"));
         if (existing.archivedAt() != null) {
             return existing;
         }
@@ -269,7 +269,7 @@ public class TerminalCanaryService {
 
     private static <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -277,7 +277,7 @@ public class TerminalCanaryService {
     private static String requireEnum(String value, Set<String> allowed, String field) {
         String trimmed = trimToNull(value);
         if (trimmed == null || !allowed.contains(trimmed)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is not supported: " + value);
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 不支持该取值：" + value);
         }
         return trimmed;
     }

@@ -181,7 +181,7 @@ public class MdmService {
                     MdmDeviceEnrollRequest actual = requireRequest(request);
                     String deviceId = requireText(actual.deviceId(), "device_id");
                     MdmDeviceManagementRecord existing = mdmRepository.findDeviceManagement(deviceId)
-                            .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+                            .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "设备不存在或已被删除"));
                     String policyStatus = trimToDefault(actual.policyStatus(), "applied");
                     if (!POLICY_STATUSES.contains(policyStatus)) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "policy_status is invalid");
@@ -238,7 +238,7 @@ public class MdmService {
                 // 留痕失败不得掩盖拒绝结果
             }
             throw ApiException.forbidden("DEVICE_BLOCKED",
-                    "device is blocked or lost: " + id);
+                    "设备已被封禁或挂失：" + id);
         }
 
         if (enabled && !managed) {
@@ -249,7 +249,7 @@ public class MdmService {
                 // 留痕失败不得掩盖拒绝结果
             }
             throw ApiException.forbidden("DEVICE_NOT_MANAGED",
-                    "device is not managed by MDM: " + id);
+                    "设备未纳入 MDM 管理：" + id);
         }
         // 开关关（代偿）或已纳管：记录校验通过留痕，不阻断。
         try {
@@ -394,9 +394,9 @@ public class MdmService {
                         throw ApiException.badRequest("VALIDATION_FAILED", "disposition is invalid");
                     }
                     MdmPolicyViolationRecord existing = mdmRepository.findViolationById(id)
-                            .orElseThrow(() -> ApiException.notFound("VIOLATION_NOT_FOUND", "violation not found"));
+                            .orElseThrow(() -> ApiException.notFound("VIOLATION_NOT_FOUND", "违规记录不存在或已被删除"));
                     if (existing.handled()) {
-                        throw ApiException.conflict("VIOLATION_ALREADY_HANDLED", "violation is already handled");
+                        throw ApiException.conflict("VIOLATION_ALREADY_HANDLED", "该违规记录已处理");
                     }
                     Instant now = Instant.now();
                     Instant blockedAt = "device_blocked".equals(chosen) ? now : null;
@@ -406,7 +406,7 @@ public class MdmService {
                     // 杜绝重复 block/撤凭证——只有夺得该行的那一笔才会执行后续封禁联动。
                     int affected = mdmRepository.markViolationHandled(id, chosen, trimToNull(handledNote), blockedAt);
                     if (affected == 0) {
-                        throw ApiException.conflict("VIOLATION_ALREADY_HANDLED", "violation is already handled");
+                        throw ApiException.conflict("VIOLATION_ALREADY_HANDLED", "该违规记录已处理");
                     }
                     if ("device_blocked".equals(chosen)) {
                         blockDeviceAndRevokeCredential(existing.deviceId(), now);
@@ -514,7 +514,7 @@ public class MdmService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
