@@ -118,7 +118,7 @@ public class FacilityInspectionService {
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
         FacilityInspectionTaskRecord cur = loadTask(id);
         enforceAssignedScope(actor, cur);
-        requireStatus(cur, "pending", "can only start a pending inspection task");
+        requireStatus(cur, "pending", "只有待巡检的任务才能开始");
         Instant now = Instant.now();
         FacilityInspectionTaskRecord started = withTaskState(cur, "in_progress", now, cur.completedAt(), now);
         repository.updateTask(started);
@@ -133,7 +133,7 @@ public class FacilityInspectionService {
         FacilityInspectionRecordSubmitRequest r = requireRecord(request);
         FacilityInspectionTaskRecord cur = loadTask(taskId);
         enforceAssignedScope(actor, cur);
-        requireStatus(cur, "in_progress", "can only submit a started inspection task");
+        requireStatus(cur, "in_progress", "只有已开始的巡检任务才能提交");
         String result = normalizeAllowed(r.result(), "result", RESULTS);
         String abnormalNote = trimToNull(r.abnormalNote());
         if ("abnormal".equals(result) && abnormalNote == null) {
@@ -161,7 +161,7 @@ public class FacilityInspectionService {
         FacilityInspectionTaskRecord cur = loadTask(taskId);
         enforceAssignedScope(actor, cur);
         if (!Set.of("pending", "in_progress").contains(cur.status())) {
-            throw ApiException.badRequest("INVALID_STATE", "can only report exception on a pending or started inspection task");
+            throw ApiException.badRequest("INVALID_STATE", "只有待巡检或巡检中的任务才能上报异常");
         }
         validateGps(r.gpsLat(), r.gpsLng());
         String abnormalNote = requireText(r.abnormalNote(), "abnormal_note");
@@ -188,7 +188,7 @@ public class FacilityInspectionService {
         authorizationService.requirePlatformScope();
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
         FacilityInspectionTaskRecord cur = loadTask(id);
-        requireStatus(cur, "rectifying", "can only recheck a rectifying inspection task");
+        requireStatus(cur, "rectifying", "只有整改中的巡检任务才能复检");
         Instant now = Instant.now();
         FacilityInspectionTaskRecord rechecked = withTaskState(cur, "rechecked", cur.startedAt(), cur.completedAt(), now);
         repository.updateTask(rechecked);
@@ -202,7 +202,7 @@ public class FacilityInspectionService {
         authorizationService.requirePlatformScope();
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
         FacilityInspectionTaskRecord cur = loadTask(id);
-        requireStatus(cur, "rechecked", "can only confirm a rechecked inspection task");
+        requireStatus(cur, "rechecked", "只有已复检的巡检任务才能确认");
         Instant now = Instant.now();
         FacilityInspectionTaskRecord closed = withTaskState(cur, "closed", cur.startedAt(), now, now);
         repository.updateTask(closed);
@@ -249,14 +249,14 @@ public class FacilityInspectionService {
                 : template.inspectionType();
         String scheduleMode = normalizeAllowed(defaultValue(r.scheduleMode(), "manual"), "schedule_mode", SCHEDULE_MODES);
         if ("template".equals(scheduleMode) && template == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "template_id is required for template schedule");
+            throw ApiException.badRequest("VALIDATION_FAILED", "模板排程必须指定模板（template_id）");
         }
         List<Map<String, Object>> routePoints = listOrEmpty(r.routePoints());
         if ("route".equals(scheduleMode) && routePoints.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "route_points is required for route schedule");
+            throw ApiException.badRequest("VALIDATION_FAILED", "路线排程必须填写巡检点位（route_points）");
         }
         if (r.scheduledDate() != null && r.dueDate() != null && r.dueDate().isBefore(r.scheduledDate())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "due_date cannot be before scheduled_date");
+            throw ApiException.badRequest("VALIDATION_FAILED", "截止日期不能早于计划日期");
         }
         LocalDate dueDate = r.dueDate() == null ? r.scheduledDate() : r.dueDate();
         String title = trimToNull(r.title());
@@ -313,12 +313,12 @@ public class FacilityInspectionService {
 
     private FacilityInspectionTemplateRecord loadTemplate(String id) {
         return repository.findTemplateById(id)
-                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "facility inspection template not found"));
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "巡检模板不存在或已被删除"));
     }
 
     private FacilityInspectionTaskRecord loadTask(String id) {
         return repository.findTaskById(id)
-                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "facility inspection task not found"));
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "巡检任务不存在或已被删除"));
     }
 
     private AccessActor requireScopeActor() {
@@ -335,35 +335,35 @@ public class FacilityInspectionService {
 
     private FacilityInspectionTemplateRequest requireTemplate(FacilityInspectionTemplateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private FacilityInspectionTaskRequest requireTask(FacilityInspectionTaskRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private FacilityInspectionRecordSubmitRequest requireRecord(FacilityInspectionRecordSubmitRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private FacilityInspectionExceptionReportRequest requireException(FacilityInspectionExceptionReportRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private FacilityInspectionRecheckConfirmRequest requireAction(FacilityInspectionRecheckConfirmRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -376,7 +376,7 @@ public class FacilityInspectionService {
 
     private Integer validateCycle(Integer cycleDays) {
         if (cycleDays != null && cycleDays <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "cycle_days must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "周期天数必须大于 0");
         }
         return cycleDays;
     }

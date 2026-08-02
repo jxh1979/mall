@@ -122,7 +122,7 @@ public class FacilityEquipmentService {
         String decision = request == null || request.decision() == null
                 ? null : request.decision().trim().toLowerCase(java.util.Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         String actor = archiveActorId();
         if (actor != null && actor.equals(cur.deleteRequestedBy())) {
@@ -208,7 +208,7 @@ public class FacilityEquipmentService {
         Instant alarmRaisedAt = null;
         if ("alarm".equals(target)) {
             if (request.alarmSource() == null || !ALARM_SOURCES.contains(request.alarmSource())) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "alarm_source must be manual or iot");
+                throw ApiException.badRequest("VALIDATION_FAILED", "告警来源必须为手工（manual）或物联网（iot）");
             }
             alarmSource = request.alarmSource();
             alarmNote = request.alarmNote();
@@ -242,7 +242,7 @@ public class FacilityEquipmentService {
 
     private FacilityEquipmentRecord load(String id) {
         return repository.findEquipmentById(id)
-                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "facility equipment not found"));
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "设施设备不存在或已被删除"));
     }
 
     private void validateType(String type) {
@@ -253,7 +253,7 @@ public class FacilityEquipmentService {
 
     private FacilityEquipmentRequest require(FacilityEquipmentRequest r) {
         if (r == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return r;
     }
