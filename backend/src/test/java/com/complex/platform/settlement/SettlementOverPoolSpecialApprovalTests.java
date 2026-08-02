@@ -49,6 +49,7 @@ class SettlementOverPoolSpecialApprovalTests {
 
     @Autowired private TicketDistributionSettlementService settlementService;
     @Autowired private SettlementPostingService postingService;
+    @Autowired private JdbcSettlementBillRepository billRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
 
     private static final YearMonth MONTH = YearMonth.of(2011, 4);
@@ -108,6 +109,47 @@ class SettlementOverPoolSpecialApprovalTests {
         // 拒绝后不改单：仍 confirmed、ref 仍空。
         assertThat(billStatus(bill)).isEqualTo("confirmed");
         assertThat(specialRef(bill)).isNull();
+    }
+
+    /** 理由为空拒：特批引用是审计留痕的凭据，null/空串/纯空白一律 400，且不动单。 */
+    @Test
+    void blankSpecialApprovalRefRejected() {
+        String pid = overPoolProject();
+        String bill = settlementService.settleMonth(pid, MONTH);
+
+        for (String blank : new String[]{null, "", "   "}) {
+            assertThatThrownBy(() -> postingService.specialApprove(bill, blank))
+                    .isInstanceOf(ApiException.class)
+                    .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("SPECIAL_APPROVAL_REF_REQUIRED"));
+        }
+        assertThat(billStatus(bill)).isEqualTo("draft"); // 拒绝后不动单：仍 draft 待特批
+        assertThat(specialRef(bill)).isNull();
+    }
+
+    /** 后台入口读投影：listBills 带特批三列——超池 draft 单看得出超了多少，特批后看得到 ref + 有效期。 */
+    @Test
+    void listBillsExposesOverPoolAndSpecialApprovalColumns() {
+        String pid = overPoolProject();
+        String bill = settlementService.settleMonth(pid, MONTH);
+
+        var summary = billSummary(pid, bill);
+        assertThat(summary.status()).isEqualTo("draft");
+        assertThat(summary.availablePoolCent()).isEqualTo(800L);
+        assertThat(summary.pooledDistributedCent()).isEqualTo(1000L); // 超池 200 分,前端据此显示「超了多少」
+        assertThat(summary.specialApprovalRef()).isNull();
+        assertThat(summary.specialApprovalValidUntil()).isNull();
+
+        postingService.specialApprove(bill, "SA-UI-1");
+
+        summary = billSummary(pid, bill);
+        assertThat(summary.status()).isEqualTo("confirmed");
+        assertThat(summary.specialApprovalRef()).isEqualTo("SA-UI-1");
+        assertThat(summary.specialApprovalValidUntil()).isEqualTo(LocalDate.now().plusMonths(3));
+    }
+
+    private JdbcSettlementBillRepository.BillSummary billSummary(String pid, String billId) {
+        return billRepository.listBills(pid, null, 24).stream()
+                .filter(b -> b.id().equals(billId)).findFirst().orElseThrow();
     }
 
     // ─── ② 防覆盖：特批后 settleMonth 重跑不打回 ──────────────────────────────

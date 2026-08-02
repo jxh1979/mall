@@ -818,6 +818,10 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     /**
      * S4 财务对账读投影:月度结算单头列表(倒序,最多 limit 单)。回答财务三个问题:
      * 这单收了多少综合服务费、池链支与专属支各多少、归了谁(收款主体中文名一并带出)。
+     *
+     * <p>超池特批入口(S9 遗留补齐):加带 special_approval_ref / special_approval_valid_until 与
+     * pooled_distributed_cent(池分配合计,同 {@link #findOverPoolContext} 口径)——平台负责人在结算审阅页
+     * 直接看到哪些单因超池停在 draft、超了多少、特批后有效到哪天。
      */
     public List<BillSummary> listBills(String projectId, java.time.LocalDate periodStart, int limit) {
         return jdbcTemplate.query("""
@@ -826,7 +830,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                        b.comp_service_fee_pooled_cent, b.comp_service_fee_exclusive_cent,
                        b.fee_beneficiary_entity_id, be.entity_name AS fee_beneficiary_entity_name,
                        b.available_pool_cent, b.distributed_cent, b.combo_discount_cent,
-                       b.rounding_residual_cent, b.distribution_method, b.status
+                       b.rounding_residual_cent, b.distribution_method, b.status,
+                       b.special_approval_ref, b.special_approval_valid_until,
+                       COALESCE((SELECT SUM(i.final_amount_cent) FROM settlement_items i
+                                  WHERE i.bill_id = b.id
+                                    AND i.distribution_method <> 'exclusive_full'), 0) AS pooled_distributed_cent
                   FROM settlement_bills b
                   LEFT JOIN business_entities be ON be.id = b.fee_beneficiary_entity_id
                  WHERE (:project_id::text IS NULL OR b.project_id = :project_id)
@@ -846,16 +854,25 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                         rs.getString("fee_beneficiary_entity_id"), rs.getString("fee_beneficiary_entity_name"),
                         rs.getLong("available_pool_cent"), rs.getLong("distributed_cent"),
                         rs.getLong("combo_discount_cent"), rs.getLong("rounding_residual_cent"),
-                        rs.getString("distribution_method"), rs.getString("status")));
+                        rs.getString("distribution_method"), rs.getString("status"),
+                        rs.getString("special_approval_ref"),
+                        rs.getObject("special_approval_valid_until", java.time.LocalDate.class),
+                        rs.getLong("pooled_distributed_cent")));
     }
 
-    /** S4 结算单头读投影(财务对账用,金额带符号:负数月=当月净追回)。 */
+    /**
+     * S4 结算单头读投影(财务对账用,金额带符号:负数月=当月净追回)。
+     * 特批三列:specialApprovalRef/specialApprovalValidUntil(已特批单)、pooledDistributedCent(池分配合计,
+     * 与 availablePoolCent 比对即知是否超池、超了多少;超池判定与 {@link OverPoolContext#overPool()} 同口径)。
+     */
     public record BillSummary(String id, String projectId, java.time.LocalDate periodStart,
                               java.time.LocalDate periodEnd, long ticketRevenueCent, long channelFeeCent,
                               long compServiceFeePooledCent, long compServiceFeeExclusiveCent,
                               String feeBeneficiaryEntityId, String feeBeneficiaryEntityName,
                               long availablePoolCent, long distributedCent, long comboDiscountCent,
-                              long roundingResidualCent, String distributionMethod, String status) {
+                              long roundingResidualCent, String distributionMethod, String status,
+                              String specialApprovalRef, java.time.LocalDate specialApprovalValidUntil,
+                              long pooledDistributedCent) {
     }
 
     /**
