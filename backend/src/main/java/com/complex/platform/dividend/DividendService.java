@@ -193,7 +193,7 @@ public class DividendService {
         // V309 自定义扣除项：新建时按请求整表落地（空/缺省=无自定义扣除）。
         repository.replaceCustomDeductions(plan.id(), parseCustomDeductions(plan.id(), request.customDeductions()));
         return repository.findPlanById(plan.id())
-                .orElseThrow(() -> ApiException.conflict("DIVIDEND_PLAN_EXISTS", "dividend plan insert lost race"));
+                .orElseThrow(() -> ApiException.conflict("DIVIDEND_PLAN_EXISTS", "分红方案创建时发生并发冲突，请重试"));
     }
 
     /** 修改方案配置（比例/税率/周期/基数构成开关/停用）；改动经审计事件留痕，历史分红单按单内快照追溯。 */
@@ -217,10 +217,10 @@ public class DividendService {
     private DividendPlanRecord updatePlanInternal(String planId, DividendPlanRequest request) {
         DividendPlanRecord existing = repository.findPlanById(planId)
                 .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND",
-                        "dividend plan not found: " + planId));
+                        "分红方案不存在：" + planId));
         if (request.merchantId() != null && !request.merchantId().isBlank()
                 && !existing.merchantId().equals(request.merchantId().trim())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id of a dividend plan cannot be changed");
+            throw ApiException.badRequest("VALIDATION_FAILED", "分红方案的所属商户不能变更");
         }
         DividendPlanRecord updated = new DividendPlanRecord(
                 existing.id(),
@@ -272,7 +272,7 @@ public class DividendService {
             repository.replaceCustomDeductions(planId, parseCustomDeductions(planId, request.customDeductions()));
         }
         return repository.findPlanById(planId)
-                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "dividend plan lost race"));
+                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "分红方案已被并发修改，请刷新后重试"));
     }
 
     /** V309 请求项 → 校验 + 落地记录（sort_order=输入序）。fixed 用固定额；ratio 用比例+基数。 */
@@ -285,7 +285,7 @@ public class DividendService {
         int order = 0;
         for (DividendPlanRequest.CustomDeductionItem item : items) {
             if (item == null) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "custom_deduction item must not be null");
+                throw ApiException.badRequest("VALIDATION_FAILED", "自定义扣减项不能为空");
             }
             String name = requireText(item.name(), "custom_deduction.name");
             String sourceType = requireEnum(orDefault(item.sourceType(), "fixed"),
@@ -603,10 +603,10 @@ public class DividendService {
                         VIEW_PERM, STMT_TYPE),
                 () -> {
                     if (kind != null && !kind.isBlank() && !KINDS.contains(kind)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "unknown kind: " + kind);
+                        throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的类型：" + kind);
                     }
                     if (status != null && !status.isBlank() && !STATEMENT_STATUSES.contains(status)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "unknown status: " + status);
+                        throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的状态：" + status);
                     }
                     int safePage = Math.max(page, 1);
                     int safeSize = Math.min(Math.max(pageSize, 1), 200);
@@ -763,7 +763,7 @@ public class DividendService {
     private DividendStatementRecord requireStatement(String id) {
         return repository.findStatementById(id)
                 .orElseThrow(() -> ApiException.notFound("DIVIDEND_STATEMENT_NOT_FOUND",
-                        "dividend statement not found: " + id));
+                        "分红结算单不存在：" + id));
     }
 
     private static void requireStatus(DividendStatementRecord statement, String expected, String message) {
@@ -788,7 +788,7 @@ public class DividendService {
                 () -> {
                     String filter = blankToNull(releasedFilter);
                     if (filter != null && !"pending".equals(filter) && !"released".equals(filter)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "unknown released filter: " + filter);
+                        throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的发放状态筛选：" + filter);
                     }
                     int safePage = Math.max(page, 1);
                     int safeSize = Math.min(Math.max(pageSize, 1), 200);
@@ -896,7 +896,7 @@ public class DividendService {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "access to another merchant's resource is not allowed");
+                    "无权操作其他商户的数据");
         }
     }
 
@@ -922,7 +922,7 @@ public class DividendService {
 
     private static void requireRequest(Object request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
     }
 
@@ -940,21 +940,21 @@ public class DividendService {
 
     private static int requireBps(int value, String field) {
         if (value < 0 || value > DividendMath.BPS_DENOMINATOR) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be within [0,10000]");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须在 0 到 10000 之间");
         }
         return value;
     }
 
     private static long requireNonNegLong(long value, String field) {
         if (value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be >= 0");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于等于 0");
         }
         return value;
     }
 
     private static int requirePositiveInt(int value, String field) {
         if (value < 1) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be >= 1");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于等于 1");
         }
         return value;
     }
@@ -962,20 +962,20 @@ public class DividendService {
     private static String requireEnum(String value, Set<String> allowed, String field) {
         String trimmed = requireText(value, field);
         if (!allowed.contains(trimmed)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unknown " + field + ": " + trimmed);
+            throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的 " + field + "：" + trimmed);
         }
         return trimmed;
     }
 
     private static List<String> requireTokens(List<String> values, Set<String> allowed, String field) {
         if (values == null || values.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must not be empty");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 不能为空");
         }
         LinkedHashSet<String> distinct = new LinkedHashSet<>();
         for (String value : values) {
             String token = requireText(value, field);
             if (!allowed.contains(token)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "unknown " + field + " token: " + token);
+                throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的 " + field + " 取值：" + token);
             }
             distinct.add(token);
         }
@@ -989,7 +989,7 @@ public class DividendService {
         try {
             return LocalDate.parse(value.trim());
         } catch (java.time.format.DateTimeParseException e) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be an ISO date (yyyy-MM-dd)");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须为日期格式（yyyy-MM-dd）");
         }
     }
 
