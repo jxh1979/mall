@@ -367,12 +367,12 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     @Transactional
     public PaymentIntentRecord markPaymentIntentSucceeded(String paymentIntentId) {
         PaymentIntentRecord intent = repository.findPaymentIntentById(paymentIntentId)
-                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "payment intent not found"));
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在或已被删除"));
         if ("succeeded".equals(intent.status())) {
             return intent;
         }
         if (!"created".equals(intent.status())) {
-            throw ApiException.conflict("PAYMENT_INTENT_NOT_PENDING", "payment intent is not pending");
+            throw ApiException.conflict("PAYMENT_INTENT_NOT_PENDING", "支付意向不在待支付状态");
         }
         // F2 内部核算归集：支付意图确认成功（created→succeeded，本方法早返回保证单次）即为收入确认点——
         // 票务/储值/会员（及经票务权益的游乐）收入按 direction=internal_accounting 写内部核算台账，供对账/内部核算下钻。
@@ -417,7 +417,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         java.time.LocalDate businessDate = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
         if (repository.lockedDailyCloseExistsForDate(businessDate, null)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
-                    "business date " + businessDate + " is locked; use the backfill adjustment workflow");
+                    "营业日 " + businessDate + " 已锁定，请走补录调整流程");
         }
         repository.saveArApItem(new ArApItemRecord(
                 itemId,
@@ -496,7 +496,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         if (authorizationService.currentMerchantScope().isPresent()) {
             throw ApiException.forbidden(
                     "RECONCILIATION_PLATFORM_ONLY",
-                    "reconciliation data is platform-scoped and not available to merchant-scoped users");
+                    "对账数据为平台级数据，商户账号无权查看");
         }
     }
 
@@ -537,15 +537,14 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
 
         // 校验批次存在（差异必须挂在已建对账批次下）。
         repository.findReconciliationBatchById(batchId)
-                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_BATCH_NOT_FOUND", "reconciliation batch not found"));
+                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_BATCH_NOT_FOUND", "对账批次不存在或已被删除"));
 
         // 平台侧 expected 一律系统取数（不接受请求体手填）。0=无系统取数支撑。
         long expectedAmountCent = repository.aggregatePlatformExpectedForBusinessRef(businessRef);
         if (expectedAmountCent <= 0) {
             // 纯手填差异（无平台侧系统取数支撑）一律拒绝，无论 source。
             throw ApiException.badRequest("RECONCILIATION_NO_SYSTEM_EXPECTED",
-                    "difference rejected: no platform-side system takings for business_ref " + businessRef
-                            + "; manual-only differences are not allowed");
+                    "差异登记被拒绝：业务单号 " + businessRef + " 无平台侧系统收款，不允许仅手工登记的差异");
         }
 
         // source=manual（第三方侧未接入）强制进复核；source=system 仍以系统取数与申报值比对，差额为 0 不应建差异。
@@ -556,7 +555,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         } else {
             if (differenceAmountCent == 0) {
                 throw ApiException.badRequest("RECONCILIATION_NO_DIFFERENCE",
-                        "expected equals actual; no reconciliation difference to record");
+                        "应收与实收一致，无差异可登记");
             }
             status = "open";
         }
@@ -617,7 +616,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         ReconciliationDifferenceRecord difference = repository
                 .findReconciliationDifferenceById(requireText(differenceId, "difference_id"))
                 .orElseThrow(() -> ApiException.notFound(
-                        "RECONCILIATION_DIFFERENCE_NOT_FOUND", "reconciliation difference not found"));
+                        "RECONCILIATION_DIFFERENCE_NOT_FOUND", "对账差异不存在或已被删除"));
         // 幂等：已关闭直接返回（executeWrite 幂等键层亦兜底）。
         if ("closed".equals(difference.status())) {
             return difference;
@@ -819,7 +818,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // 遵守日结锁：已封账经营日禁止新增应付，走补录审批（按该商户 scope 判锁，与内部核算/createItem 同口径）。
         if (repository.lockedDailyCloseExistsForDate(businessDate, mid)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
-                    "business date " + businessDate + " is locked; use the backfill adjustment workflow");
+                    "营业日 " + businessDate + " 已锁定，请走补录调整流程");
         }
         ArApItemRecord saved = repository.saveArApItem(new ArApItemRecord(
                 itemId,
@@ -852,14 +851,14 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 "finance_daily_close_summary",
                 () -> {
                     DailyCloseRecord dailyClose = repository.findDailyCloseById(id)
-                            .orElseThrow(() -> ApiException.notFound("DAILY_CLOSE_NOT_FOUND", "daily close not found"));
+                            .orElseThrow(() -> ApiException.notFound("DAILY_CLOSE_NOT_FOUND", "日结记录不存在或已被删除"));
                     // 隔离：商户角色只能看自身 scope 的日结汇总。
                     Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent()
                             && "merchant".equals(dailyClose.scopeType())
                             && !scope.get().equals(dailyClose.scopeId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "access to another merchant's daily close is not allowed");
+                                "无权查看其他商户的日结记录");
                     }
                     return repository.listDailyCloseSummaries(id);
                 });
@@ -905,14 +904,14 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         String reason = requireText(actual.reason(), "reason");
 
         ArApItemRecord item = repository.findArApItemById(itemId)
-                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         checkMerchantOwnership(item.merchantId());
         checkProjectScope(item.projectId());
 
         // 补录只针对已锁定台账（未锁定应直接改账，不走审批）。
         String lockedDayCloseId = repository.findArApItemLockedDayCloseId(itemId)
                 .orElseThrow(() -> ApiException.badRequest("AR_AP_ITEM_NOT_LOCKED",
-                        "AR/AP item is not locked; modify it directly instead of requesting a backfill"));
+                        "该应收应付款项未被锁定，请直接修改，无需补录调整"));
 
         Instant now = Instant.now();
         return repository.saveArApAdjustment(new ArApAdjustmentRecord(
@@ -930,14 +929,14 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
 
     private ArApAdjustmentRecord decideAdjustment(String adjustmentId, boolean approve) {
         ArApAdjustmentRecord adjustment = repository.findArApAdjustmentByIdForUpdate(adjustmentId)
-                .orElseThrow(() -> ApiException.notFound("ADJUSTMENT_NOT_FOUND", "adjustment not found"));
+                .orElseThrow(() -> ApiException.notFound("ADJUSTMENT_NOT_FOUND", "调整单不存在或已被删除"));
         if (!"pending".equals(adjustment.approvalStatus())) {
             throw ApiException.conflict("ADJUSTMENT_ALREADY_DECIDED",
-                    "adjustment is already " + adjustment.approvalStatus());
+                    "调整单当前状态已为：" + adjustment.approvalStatus());
         }
 
         ArApItemRecord item = repository.findArApItemByIdForUpdate(adjustment.arApItemId())
-                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         checkMerchantOwnership(item.merchantId());
         checkProjectScope(item.projectId());
 
@@ -950,7 +949,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // 发起人信息可得：requestedBy 在 createAdjustment 时由 currentActor().id() 写入、永不为空。
         if (approver != null && approver.equals(adjustment.requestedBy())) {
             throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
-                    "the requester of a backfill adjustment cannot decide it; a different approver is required");
+                    "补录调整的申请人不能自行审批，须由其他审批人处理");
         }
 
         if (approve) {
@@ -961,11 +960,11 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             //   真库会落出 paid+unpaid<>amount 从而被 V159 账平 CHECK 拒绝——该路径在真库从未跑通。）
             long restatedAmountCent = item.amountCent() + adjustment.adjustmentAmountCent();
             if (restatedAmountCent <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "adjustment would drive amount negative");
+                throw ApiException.badRequest("VALIDATION_FAILED", "调整后金额将为负数，不允许");
             }
             long restatedUnpaidCent = restatedAmountCent - item.paidAmountCent();
             if (restatedUnpaidCent < 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "adjustment would drive unpaid amount negative");
+                throw ApiException.badRequest("VALIDATION_FAILED", "调整后未付金额将为负数，不允许");
             }
             // ① 冲正行：原行三个金额列的严格取反（DB 侧 chk_ar_ap_items_amount_balance 对正负两侧同样成立）。
             repository.appendArApItem(correctionItem(item, adjustment, now, true,
@@ -1034,7 +1033,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
     private void requireNotLocked(String arApItemId) {
         if (repository.findArApItemLockedDayCloseId(arApItemId).isPresent()) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
-                    "AR/AP item is locked by a daily close; use the backfill adjustment workflow");
+                    "该应收应付款项已被日结锁定，请走补录调整流程");
         }
     }
 
@@ -1043,7 +1042,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
         }
         if (value == 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-zero");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为 0");
         }
         return value;
     }
@@ -1068,7 +1067,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // R5 T7 硬拦截：禁止向已锁定经营日新增/回填台账，必须走补录审批。
         if (repository.lockedDailyCloseExistsForDate(dueDate, scope.orElse(null))) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
-                    "business date " + dueDate + " is locked; use the backfill adjustment workflow");
+                    "营业日 " + dueDate + " 已锁定，请走补录调整流程");
         }
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
@@ -1130,7 +1129,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             String arApItemId, long amountCent, String paymentMethod,
             Instant paymentTime, String bankFlowRef, String idempotencyKey) {
         ArApItemRecord current = repository.findArApItemByIdForUpdate(arApItemId)
-                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         // 跨商户写入拒绝。
         checkMerchantOwnership(current.merchantId());
         // P1-A 跨项目写入拒绝(两维并存)。
@@ -1144,7 +1143,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                     "该应付为分红发放保护线留存（待释放），需先释放才能发放给主理人");
         }
         if (amountCent > current.unpaidAmountCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "payment amount exceeds unpaid amount");
+            throw ApiException.badRequest("VALIDATION_FAILED", "支付金额超过未付金额");
         }
         Instant now = Instant.now();
         // 主键纳入 arApItemId，同一幂等键用于不同台账项产生不同 paymentId，避免 ON CONFLICT 覆盖。
@@ -1190,7 +1189,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // P1 fix: prevent duplicate locks for the same date + scope using different keys
         if (repository.dailyCloseExists(businessDate, scopeType, scopeId)) {
             throw ApiException.conflict("DAILY_CLOSE_EXISTS",
-                    "daily close already locked for date " + businessDate + " scope " + scopeType + "/" + scopeId);
+                    "该营业日已完成日结锁定：日期 " + businessDate + "，范围 " + scopeType + "/" + scopeId);
         }
         Instant now = Instant.now();
         String dailyCloseId = "daily_close_" + slug(actual.idempotencyKey());
@@ -1298,16 +1297,16 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         OfflinePaymentConfirmRequest actual = requireRequest(request);
         String bodyPaymentId = requireText(actual.paymentId(), "payment_id");
         if (!pathPaymentId.equals(bodyPaymentId)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "payment_id must match path");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求体中的支付编号必须与路径一致");
         }
         // 2d-2 修复（用户裁定：必须关联内部支付意图）：确认线下收款必须对应一个真实支付意图，
         // 且金额一致——堵"凭空对任意 paymentId 字符串伪造已确认线下收款（任意金额）"。
         // 归属为平台财务口径（payment_intents 无 merchant 列），靠 finance.payment.register 权限治理不授商户角色。
         PaymentIntentRecord intent = repository.findPaymentIntentById(bodyPaymentId)
-                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "payment intent not found"));
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在或已被删除"));
         long confirmedAmount = requirePositive(actual.amountCent(), "amount_cent");
         if (confirmedAmount != intent.amountCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "confirmed amount must equal payment intent amount");
+            throw ApiException.badRequest("VALIDATION_FAILED", "确认金额必须等于支付意向金额");
         }
         Instant now = Instant.now();
         String paymentMethod = requireEnum(actual.paymentMethod(), OFFLINE_PAYMENT_METHODS, "payment_method");
@@ -1376,14 +1375,14 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         //   （仅旧兼容/单测构造，生产恒注入）时拒绝而非放行。管理员更高额度走同一显式额度配置 + 审计。
         if (refundAuthorizationService == null) {
             throw ApiException.forbidden("REFUND_AUTHORIZATION_UNAVAILABLE",
-                    "refund tiered authorization engine is unavailable; over-limit refunds cannot be self-processed");
+                    "退款分级授权引擎不可用，超限退款不能自助处理");
         }
         var actor = authorizationService.currentActor();
         // AUD-008：projectId 由调用方从原支付/单据的权威综合体归属传入，不信任请求体。
         if (refundAuthorizationService.classify(domain, amountCent, actor.id(), null, projectId)
                 == RefundAuthorizationService.RefundTier.REVIEW_REQUIRED) {
             throw ApiException.forbidden("REFUND_REVIEW_REQUIRED",
-                    "refund amount exceeds the self-service authorization limit; an authorized approver must process it");
+                    "退款金额超过自助授权限额，须由有权限的审批人处理");
         }
     }
 
@@ -1401,11 +1400,11 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // P1 修复（TOCTOU）：对 target payment 行加 FOR UPDATE 行锁后再做累计校验，使并发退款串行化，
         // 避免多笔退款各读旧的 sumRefundedAmount 合计后均通过校验、最终退款合计超过 payment 金额。
         ArApPaymentRecord payment = repository.findArApPaymentByIdForUpdate(targetId)
-                .orElseThrow(() -> ApiException.notFound("PAYMENT_NOT_FOUND", "payment not found: " + targetId));
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_NOT_FOUND", "支付记录不存在：" + targetId));
 
         // P1 fix: reject cross-merchant refund attempts
         ArApItemRecord item = repository.findArApItemById(payment.arApItemId())
-                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         checkMerchantOwnership(item.merchantId());
         // P1-A 跨项目退款拒绝(两维并存)。
         checkProjectScope(item.projectId());
@@ -1417,8 +1416,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         long alreadyRefunded = repository.sumRefundedAmountByTargetId(targetId);
         if (alreadyRefunded + refundAmountCent > payment.amountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "refund amount exceeds refundable balance (payment: " + payment.amountCent()
-                            + ", already refunded: " + alreadyRefunded + ")");
+                    "退款金额超过可退余额（支付金额：" + payment.amountCent() + "，已退：" + alreadyRefunded + "）");
         }
 
         // Stage B 分级授权（功能标志默认关）：超额度财务退款须复核。财务退款为单步台账动作、无独立审批环节，
@@ -1463,22 +1461,22 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         String counterpartyId = requireText(actual.counterpartyId(), "counterparty_id");
 
         InventoryVarianceRecord variance = repository.findInventoryVarianceById(varianceId)
-                .orElseThrow(() -> ApiException.notFound("INVENTORY_VARIANCE_NOT_FOUND", "inventory variance not found"));
+                .orElseThrow(() -> ApiException.notFound("INVENTORY_VARIANCE_NOT_FOUND", "库存差异不存在或已被删除"));
         checkMerchantOwnership(variance.merchantId());
 
         // 幂等：已入账直接返回原台账项，不重复生成。
         if (variance.postedArApItemId() != null) {
             return repository.findArApItemById(variance.postedArApItemId())
                     .orElseThrow(() -> ApiException.conflict("INVENTORY_VARIANCE_ALREADY_POSTED",
-                            "inventory variance already posted but ledger item missing"));
+                            "库存差异已过账但缺少台账条目，请联系管理员"));
         }
         // 只有复核通过的差异才能入账。
         if (!"approved".equals(variance.reviewStatus())) {
             throw ApiException.badRequest("INVENTORY_VARIANCE_NOT_APPROVED",
-                    "inventory variance must be reviewed (approved) before posting; current=" + variance.reviewStatus());
+                    "库存差异须审核通过后才能过账，当前状态：" + variance.reviewStatus());
         }
         if (!INVENTORY_VARIANCE_REASONS.contains(variance.reason())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "inventory variance reason is invalid");
+            throw ApiException.badRequest("VALIDATION_FAILED", "库存差异原因不正确");
         }
         // 科目方向（用户裁定 C3 对齐 §6D）：
         //   supplier_fault → 向供应商挂应付索赔 payable（真实对外债务）；
@@ -1492,7 +1490,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         }
         long amountCent = Math.abs(variance.varianceAmountCent());
         if (amountCent <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "inventory variance amount must be non-zero to post");
+            throw ApiException.badRequest("VALIDATION_FAILED", "库存差异金额为 0，无需过账");
         }
 
         ArApItemRecord saved = persistDerivedArApItem(
@@ -1508,7 +1506,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         boolean posted = repository.markInventoryVariancePostedIfUnposted(variance.id(), saved.id());
         if (!posted) {
             throw ApiException.conflict("INVENTORY_VARIANCE_ALREADY_POSTED",
-                    "inventory variance already posted by a concurrent request");
+                    "库存差异已被并发请求过账，请勿重复操作");
         }
         return saved;
     }
@@ -1521,11 +1519,11 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         LocalDate effectiveFrom = requireDate(actual.effectiveFrom(), "effective_from");
         LocalDate effectiveTo = actual.effectiveTo();
         if (effectiveTo != null && effectiveTo.isBefore(effectiveFrom)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "effective_to must not be before effective_from");
+            throw ApiException.badRequest("VALIDATION_FAILED", "生效结束日期不能早于生效开始日期");
         }
         List<TurnoverRentRuleRequest.TierInput> tierInputs = actual.tiers();
         if (tierInputs == null || tierInputs.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "at least one tier is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "至少需要一个阶梯");
         }
         long prevUpper = 0L;
         for (int i = 0; i < tierInputs.size(); i++) {
@@ -1533,16 +1531,16 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             boolean last = i == tierInputs.size() - 1;
             Integer rate = t.rateBps();
             if (rate == null || rate < 0 || rate > 10000) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "tier rate_bps must be within 0..10000");
+                throw ApiException.badRequest("VALIDATION_FAILED", "阶梯费率（rate_bps）必须在 0 到 10000 之间");
             }
             if (last) {
                 if (t.upperBoundCent() != null) {
-                    throw ApiException.badRequest("VALIDATION_FAILED", "the top tier must have no upper bound");
+                    throw ApiException.badRequest("VALIDATION_FAILED", "最高阶梯不能设置上限");
                 }
             } else {
                 Long upper = t.upperBoundCent();
                 if (upper == null || upper <= prevUpper) {
-                    throw ApiException.badRequest("VALIDATION_FAILED", "tier upper_bound_cent must be ascending and positive");
+                    throw ApiException.badRequest("VALIDATION_FAILED", "阶梯上限金额必须为正且逐级递增");
                 }
                 prevUpper = upper;
             }
@@ -1739,11 +1737,11 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         LocalDate periodEnd = requireDate(actual.periodEnd(), "period_end");
         LocalDate dueDate = requireDate(actual.dueDate(), "due_date");
         if (periodEnd.isBefore(periodStart)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period_end must not be before period_start");
+            throw ApiException.badRequest("VALIDATION_FAILED", "期间结束日期不能早于开始日期");
         }
 
         TurnoverRentRuleRecord rule = repository.findTurnoverRentRuleById(ruleId)
-                .orElseThrow(() -> ApiException.notFound("TURNOVER_RENT_RULE_NOT_FOUND", "turnover rent rule not found"));
+                .orElseThrow(() -> ApiException.notFound("TURNOVER_RENT_RULE_NOT_FOUND", "营业额抽成规则不存在或已被删除"));
         // P0-E：未转正草案 / 已下线规则一律不得计费（fail-loud，不静默按旧规则算）。
         if (repository.isTurnoverRentRuleDraft(ruleId)) {
             throw ApiException.badRequest("TURNOVER_RENT_RULE_NOT_ACTIVATED",
@@ -1755,7 +1753,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         }
         checkMerchantOwnership(rule.merchantId());
         if (!"active".equals(rule.status())) {
-            throw ApiException.badRequest("TURNOVER_RENT_RULE_INACTIVE", "turnover rent rule is not active");
+            throw ApiException.badRequest("TURNOVER_RENT_RULE_INACTIVE", "营业额抽成规则未启用");
         }
 
         // 回流营业额只读取数：[periodStart 00:00 经营日起, periodEnd+1 经营日起) 半开窗口。
@@ -1770,7 +1768,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
                 : TurnoverRentMath.tieredRent(turnover, tiers, rule.minAmountCent());
         if (rent <= 0) {
             throw ApiException.badRequest("TURNOVER_RENT_ZERO",
-                    "computed turnover rent is zero (turnover=" + turnover + "); nothing to bill");
+                    "计算出的营业额抽成为 0（营业额：" + turnover + "），无需生成账单");
         }
         // 营业额抽成应收：counterparty=商户。V299 起落 accounting_period=期间起始月——
         // 租金自动挂接（费用台账→分红基数）按 accounting_period 归期；历史行无期间标记不挂接（如实边界）。
@@ -1819,7 +1817,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             // refund / deduct / forfeit 均减少余额，不得超额（不可为负）。
             if (amountCent > balance) {
                 throw ApiException.badRequest("DEPOSIT_INSUFFICIENT",
-                        "deposit action " + action + " amount " + amountCent + " exceeds balance " + balance);
+                        "押金操作 " + action + " 金额 " + amountCent + " 超过余额 " + balance);
             }
             newBalance = balance - amountCent;
         }
@@ -1894,7 +1892,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // merchantId 为空（平台口径派生）则受任一封账约束。
         if (repository.lockedDailyCloseExistsForDate(dueDate, merchantId)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
-                    "business date " + dueDate + " is locked; use the backfill adjustment workflow");
+                    "营业日 " + dueDate + " 已锁定，请走补录调整流程");
         }
         Instant now = Instant.now();
         String slug = boundedArApSlug(slug(sourceType + "_" + idempotencyKey));
@@ -1939,7 +1937,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         String projectId = requireText(actual.projectId(), "project_id");
         Long rateBoxed = actual.ratePerSquareMeterCent();
         if (rateBoxed == null || rateBoxed < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "rate_per_square_meter_cent must be >= 0");
+            throw ApiException.badRequest("VALIDATION_FAILED", "每平米费率必须大于等于 0");
         }
         String effectivePeriod = trimToNull(actual.effectivePeriod());   // null=该项目默认费率
         String status = requireEnum(trimToDefault(actual.status(), "active"),
@@ -1959,7 +1957,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         try {
             java.time.YearMonth.parse(period);
         } catch (java.time.format.DateTimeParseException e) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period must be yyyy-MM, e.g. 2026-07");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 yyyy-MM（如 2026-07）");
         }
         List<String> merchantIds = actual.merchantIds();
         if (merchantIds == null || merchantIds.isEmpty()) {
@@ -1968,7 +1966,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         // 费率按 项目+期 解析一次（精确期优先、回退默认）；无生效费率直接拒绝整批。
         PropertyFeeRateRecord rate = repository.findEffectivePropertyFeeRate(projectId, period)
                 .orElseThrow(() -> ApiException.badRequest("PROPERTY_FEE_RATE_NOT_FOUND",
-                        "no active property fee rate configured for project " + projectId + " period " + period));
+                        "项目 " + projectId + " 在账期 " + period + " 未配置生效的物业费率"));
         long rateCent = rate.ratePerSquareMeterCent();
         Instant now = Instant.now();
         List<PropertyFeeBillRecord> result = new java.util.ArrayList<>();
@@ -2027,7 +2025,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "access to another merchant's resource is not allowed");
+                    "无权操作其他商户的数据");
         }
     }
 
@@ -2040,7 +2038,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         Optional<String> scope = authorizationService.currentProjectScopeQuietly();
         if (scope.isPresent() && resourceProjectId != null && !scope.get().equals(resourceProjectId)) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
-                    "access to another project's finance resource is not allowed");
+                    "无权操作其他项目的财务数据");
         }
     }
 
@@ -2057,7 +2055,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
         if (channel != null && ONSITE_REFUND_CHANNELS.contains(channel.toLowerCase())
                 && trimToNull(deviceId) == null) {
             throw ApiException.forbidden("DEVICE_CONTEXT_REQUIRED",
-                    "on-site channel refund requires an operating device context (deviceId)");
+                    "现场渠道退款必须在运营设备上操作（缺少设备标识）");
         }
     }
 
@@ -2099,7 +2097,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -2116,7 +2114,7 @@ public class FinanceService implements TurnoverRentPort, PartnerVoucherSettlemen
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
         }
         if (value <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
         }
         return value;
     }

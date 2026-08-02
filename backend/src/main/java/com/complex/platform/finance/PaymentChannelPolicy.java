@@ -43,7 +43,7 @@ public final class PaymentChannelPolicy {
     public static String requirePaymentIntentChannel(String channel) {
         String value = canonicalizeRequired(channel, "channel");
         if (!PAYMENT_INTENT_CHANNELS.contains(value)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unsupported payment intent channel: " + value);
+            throw ApiException.badRequest("VALIDATION_FAILED", "不支持的支付渠道：" + value);
         }
         return value;
     }
@@ -57,7 +57,7 @@ public final class PaymentChannelPolicy {
             default -> value;
         };
         if (!SETTLEMENT_CHANNELS.contains(value)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unsupported settle_channel: " + value);
+            throw ApiException.badRequest("VALIDATION_FAILED", "不支持的结算渠道：" + value);
         }
         return value;
     }
