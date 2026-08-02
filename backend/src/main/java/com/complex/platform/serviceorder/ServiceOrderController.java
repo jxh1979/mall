@@ -35,11 +35,11 @@ public class ServiceOrderController {
     static void requireCompanyTerminal(String terminalType, java.util.Set<String> allowed) {
         if (terminalType == null || terminalType.isBlank()) {
             throw ApiException.forbidden("TERMINAL_NOT_ALLOWED",
-                    "on-site money operations require a company terminal (missing X-Terminal-Type)");
+                    "现场收银操作必须使用公司终端（缺少 X-Terminal-Type 标识）");
         }
         if (!allowed.contains(terminalType)) {
             throw ApiException.forbidden("TERMINAL_NOT_ALLOWED",
-                    "terminal '" + terminalType + "' is not allowed for on-site money operations");
+                    "终端「" + terminalType + "」不允许进行现场收银操作");
         }
     }
 
