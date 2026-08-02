@@ -136,7 +136,7 @@ public class PlatformService {
         String format = trimToNull(businessFormat);
         if (format != null && !MERCHANT_BUSINESS_FORMATS.contains(format)) {
             throw ApiException.badRequest("MERCHANT_BUSINESS_FORMAT_INVALID",
-                    "merchant_type must be one of bar/catering/retail/amusement/other");
+                    "商户业态必须为 bar/catering/retail/amusement/other 之一");
         }
         PageResponse<MerchantRecord> result = repository.listMerchantsPaged(includeArchived, format, page, size);
         auditEventService.recordSuccess(
@@ -291,7 +291,7 @@ public class PlatformService {
                     String decision = request == null || request.decision() == null
                             ? null : request.decision().trim().toLowerCase(Locale.ROOT);
                     if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
                     }
                     // 职责分离：删除申请发起人不能审批自己的申请。actorId 为 null（无鉴权/测试）时跳过该闸。
                     String actor = actorId();
@@ -318,7 +318,7 @@ public class PlatformService {
 
     private MerchantRecord requireMerchant(String id) {
         return repository.findMerchantById(id)
-                .orElseThrow(() -> ApiException.notFound("MERCHANT_NOT_FOUND", "merchant not found"));
+                .orElseThrow(() -> ApiException.notFound("MERCHANT_NOT_FOUND", "商户不存在或已被删除"));
     }
 
     public PageResponse<ProjectRecord> listProjects() {
@@ -440,7 +440,7 @@ public class PlatformService {
                     // 条目3 硬校验：space_type 必须是空间类型字典中处于 active 的取值（前端走下拉、后台可维护字典）。
                     if (!repository.listActiveSpaceTypeCodes().contains(spaceType)) {
                         throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED",
-                                "space_type must be an active value in the space type dictionary");
+                                "铺位类型必须是铺位类型字典中的启用值");
                     }
                     Instant now = Instant.now();
                     return repository.saveSpace(new SpaceRecord(
@@ -511,8 +511,7 @@ public class PlatformService {
                             .ifPresent(existing -> {
                                 throw ApiException.conflict(
                                         "ACTIVE_BINDING_EXISTS",
-                                        "active business entity binding already exists for merchant"
-                                );
+                                        "该商户已存在生效中的主体绑定，不能重复绑定");
                             });
                     Instant now = Instant.now();
                     return repository.saveBusinessEntityBinding(new BusinessEntityBindingRecord(
@@ -548,19 +547,18 @@ public class PlatformService {
                     StatusChangeRequest actual = requireRequest(request);
                     String status = requireText(actual.action(), "action");
                     if (!Set.of("active", "inactive", "suspended").contains(status)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "action must be active, inactive, or suspended");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "操作必须为启用（active）、停用（inactive）或暂停（suspended）");
                     }
                     String reason = requireText(actual.reason(), "reason");
                     BusinessEntityBindingRecord existing = repository.findBusinessEntityBindingById(bindingId)
-                            .orElseThrow(() -> ApiException.notFound("BINDING_NOT_FOUND", "business entity binding not found"));
+                            .orElseThrow(() -> ApiException.notFound("BINDING_NOT_FOUND", "主体绑定不存在或已被删除"));
                     if ("active".equals(status)) {
                         repository.findActiveBusinessEntityBindingByMerchantId(existing.merchantId())
                                 .filter(active -> !active.id().equals(existing.id()))
                                 .ifPresent(active -> {
                                     throw ApiException.conflict(
                                             "ACTIVE_BINDING_EXISTS",
-                                            "active business entity binding already exists for merchant"
-                                    );
+                                            "该商户已存在生效中的主体绑定，不能重复绑定");
                                 });
                     }
                     Instant now = Instant.now();
@@ -589,7 +587,7 @@ public class PlatformService {
         String value = requireText(raw, "merchant_type");
         if (!MERCHANT_BUSINESS_FORMATS.contains(value)) {
             throw ApiException.badRequest("MERCHANT_BUSINESS_FORMAT_INVALID",
-                    "merchant_type must be one of bar/catering/retail/amusement/other");
+                    "商户业态必须为 bar/catering/retail/amusement/other 之一");
         }
         return value;
     }
@@ -671,7 +669,7 @@ public class PlatformService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

@@ -43,7 +43,7 @@ public class VenueBusinessHoursService {
 
     public VenueBusinessHoursRecord save(VenueBusinessHoursRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         String venueId = trimToNull(request.venueId());
         if (venueId == null) {
@@ -51,13 +51,13 @@ public class VenueBusinessHoursService {
         }
         Integer dayOfWeek = request.dayOfWeek();
         if (dayOfWeek == null || dayOfWeek < 0 || dayOfWeek > 6) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "day_of_week must be 0(Sunday)..6(Saturday)");
+            throw ApiException.badRequest("VALIDATION_FAILED", "星期取值必须为 0（周日）到 6（周六）");
         }
         LocalTime openTime = parseTime(request.openTime(), "open_time");
         LocalTime closeTime = parseTime(request.closeTime(), "close_time");
         // 开歇同刻 = 零长营业窗口 = 这一天谁都进不来，但页面上看着像配好了。宁可拒，不留这种静默坑。
         if (openTime.equals(closeTime)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "open_time must differ from close_time");
+            throw ApiException.badRequest("VALIDATION_FAILED", "开始营业时间与结束营业时间不能相同");
         }
         boolean disabled = Boolean.TRUE.equals(request.disabled());
         Instant now = Instant.now();
@@ -78,12 +78,12 @@ public class VenueBusinessHoursService {
     private LocalTime parseTime(String raw, String field) {
         String value = trimToNull(raw);
         if (value == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required (HH:mm)");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须填写，格式 HH:mm");
         }
         try {
             return LocalTime.parse(value.length() == 5 ? value : value.substring(0, 5));
         } catch (DateTimeParseException | IndexOutOfBoundsException exception) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be HH:mm");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 格式不正确，应为 HH:mm");
         }
     }
 
