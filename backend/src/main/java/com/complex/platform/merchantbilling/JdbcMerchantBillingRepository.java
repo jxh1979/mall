@@ -20,6 +20,12 @@ class JdbcMerchantBillingRepository implements MerchantBillingRepository {
 
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
     };
+    private static final String MERCHANT_BILL_SELECT = """
+            SELECT id, merchant_id, ar_ap_item_id, bill_no, bill_period_start, bill_period_end,
+                   due_date, total_amount_cent, currency, status, aging_days, source_type,
+                   source_id, created_at, updated_at
+              FROM merchant_bills
+            """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -31,11 +37,7 @@ class JdbcMerchantBillingRepository implements MerchantBillingRepository {
 
     @Override
     public List<MerchantBillRecord> findAllBills() {
-        return queryBillsWithLines("""
-                SELECT id, merchant_id, ar_ap_item_id, bill_no, bill_period_start, bill_period_end,
-                       due_date, total_amount_cent, currency, status, aging_days, source_type,
-                       source_id, created_at, updated_at
-                  FROM merchant_bills
+        return queryBillsWithLines(MERCHANT_BILL_SELECT + """
                  ORDER BY created_at DESC, id
                  LIMIT 200
                 """, new MapSqlParameterSource());
@@ -43,11 +45,7 @@ class JdbcMerchantBillingRepository implements MerchantBillingRepository {
 
     @Override
     public List<MerchantBillRecord> findBillsByMerchantId(String merchantId) {
-        return queryBillsWithLines("""
-                SELECT id, merchant_id, ar_ap_item_id, bill_no, bill_period_start, bill_period_end,
-                       due_date, total_amount_cent, currency, status, aging_days, source_type,
-                       source_id, created_at, updated_at
-                  FROM merchant_bills
+        return queryBillsWithLines(MERCHANT_BILL_SELECT + """
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
                  LIMIT 200
@@ -56,11 +54,7 @@ class JdbcMerchantBillingRepository implements MerchantBillingRepository {
 
     @Override
     public Optional<MerchantBillRecord> findBillById(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, merchant_id, ar_ap_item_id, bill_no, bill_period_start, bill_period_end,
-                       due_date, total_amount_cent, currency, status, aging_days, source_type,
-                       source_id, created_at, updated_at
-                  FROM merchant_bills
+        return jdbcTemplate.query(MERCHANT_BILL_SELECT + """
                  WHERE id = :id
                 """, Map.of("id", id), this::mapBill).stream().findFirst();
     }

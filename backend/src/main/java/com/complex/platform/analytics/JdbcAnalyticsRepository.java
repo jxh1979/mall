@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -40,6 +41,16 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     };
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
+    private static final String METRIC_ANOMALY_SELECT = """
+            SELECT id, metric_key, domain, risk_level, observed_value, expected_value,
+                   summary, status, detected_at, resolved_at,
+                   disposition_note, disposed_by, disposed_at, escalated_alert_id
+              FROM analytics_metric_anomalies
+            """;
+    private static final String SAVED_BOTTLE_SELECT = """
+            SELECT id, bottle_name, initial_quantity, remaining_quantity, unit, status, created_at, expire_at
+              FROM saved_bottles
+            """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -222,22 +233,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public List<MetricAnomalyRecord> listMetricAnomalies() {
-        return jdbcTemplate.query("""
-                SELECT id, metric_key, domain, risk_level, observed_value, expected_value,
-                       summary, status, detected_at, resolved_at,
-                       disposition_note, disposed_by, disposed_at, escalated_alert_id
-                  FROM analytics_metric_anomalies
+        return jdbcTemplate.query(METRIC_ANOMALY_SELECT + """
                  ORDER BY detected_at DESC, id
                 """, this::mapMetricAnomaly);
     }
 
     @Override
     public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyById(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, metric_key, domain, risk_level, observed_value, expected_value,
-                       summary, status, detected_at, resolved_at,
-                       disposition_note, disposed_by, disposed_at, escalated_alert_id
-                  FROM analytics_metric_anomalies
+        return jdbcTemplate.query(METRIC_ANOMALY_SELECT + """
                  WHERE id = :id
                 """, new MapSqlParameterSource("id", id), this::mapMetricAnomaly)
                 .stream().findFirst();
@@ -245,11 +248,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public java.util.Optional<MetricAnomalyRecord> findMetricAnomalyByIdForUpdate(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, metric_key, domain, risk_level, observed_value, expected_value,
-                       summary, status, detected_at, resolved_at,
-                       disposition_note, disposed_by, disposed_at, escalated_alert_id
-                  FROM analytics_metric_anomalies
+        return jdbcTemplate.query(METRIC_ANOMALY_SELECT + """
                  WHERE id = :id
                  FOR UPDATE
                 """, new MapSqlParameterSource("id", id), this::mapMetricAnomaly)
@@ -405,18 +404,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 .addValue("segment_type", segmentType)
                 .addValue("segment_id", scope);
         String segmentFilter = scope == null ? "segment_id IS NULL" : "segment_id = :segment_id";
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT metric_key, actual_value
                   FROM analytics_business_metric_snapshots
                  WHERE business_date = :business_date
                    AND period_type = 'daily'
                    AND segment_type = :segment_type
                    AND %s
-                """.formatted(segmentFilter), params, (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("actual_value"))
-        );
-        return result;
+                """.formatted(segmentFilter), params);
     }
 
     @Override
@@ -548,25 +543,20 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT merchant_id, COALESCE(SUM(settlement_amount_cent), 0) AS total
                   FROM bar_bill_settlements
                  WHERE settled_at >= :start
                    AND settled_at < :end
                    AND reversed = FALSE
                  GROUP BY merchant_id
-                """, dayRange(windowDomain, businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
-        );
-        return result;
+                """, dayRange(windowDomain, businessDate));
     }
 
     @Override
     public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate, String windowDomain) {
         // 待确认#2：酒吧结账后退款（adjustment_type='refund'）按 refunded_at 落经营日窗口，经 bar_bills 取 merchant_id。
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT b.merchant_id AS merchant_id, COALESCE(SUM(a.amount_cent), 0) AS total
                   FROM bar_bill_adjustments a
                   JOIN bar_bills b ON b.id = a.bill_id
@@ -574,10 +564,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND a.refunded_at >= :start
                    AND a.refunded_at < :end
                  GROUP BY b.merchant_id
-                """, dayRange(windowDomain, businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
-        );
-        return result;
+                """, dayRange(windowDomain, businessDate));
     }
 
     @Override
@@ -601,8 +588,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     private Map<String, BigDecimal> sumAllocatedRevenueByMerchant(LocalDate businessDate, String windowDomain, String entitlementTypeFilter) {
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT merchant_id, COALESCE(SUM(allocated_revenue_cent), 0) AS total
                   FROM issued_entitlements
                  WHERE allocated_revenue_cent IS NOT NULL
@@ -610,9 +596,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND created_at < :end
                 """ + entitlementTypeFilter + """
                  GROUP BY merchant_id
-                """, dayRange(windowDomain, businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
-        );
+                """, dayRange(windowDomain, businessDate));
+    }
+
+    /** 两列聚合查询通用收集：调用方 SELECT 恰好两列（键、值），按列序读取。 */
+    private Map<String, BigDecimal> keyTotals(String sql, SqlParameterSource params) {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, params, (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                result.put(rs.getString(1), rs.getBigDecimal(2)));
         return result;
     }
 
@@ -620,26 +611,21 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate, String windowDomain) {
         // 清单#4：本商户售票分量——当日发放（created_at 落经营日窗口）权益的 allocated_revenue_cent 按商户汇总。
         // allocated_revenue_cent IS NULL（direct 出票/无订单）不计，保守不归任何商户。
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT merchant_id, COALESCE(SUM(allocated_revenue_cent), 0) AS total
                   FROM issued_entitlements
                  WHERE allocated_revenue_cent IS NOT NULL
                    AND created_at >= :start
                    AND created_at < :end
                  GROUP BY merchant_id
-                """, dayRange(windowDomain, businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
-        );
-        return result;
+                """, dayRange(windowDomain, businessDate));
     }
 
     @Override
     public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate, String windowDomain) {
         // V220：ticket_refunds 已直挂 merchant_id（受理退款的销售商户），直接 GROUP BY 汇总。
         // created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径；merchant_id 为 null（平台直营单）不归任何商户。
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT merchant_id, COALESCE(SUM(refund_amount_cent), 0) AS total
                   FROM ticket_refunds
                  WHERE merchant_id IS NOT NULL
@@ -647,28 +633,21 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND succeeded_at >= :start
                    AND succeeded_at < :end
                  GROUP BY merchant_id
-                """, dayRange(windowDomain, businessDate),
-                (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total")));
-        return result;
+                """, dayRange(windowDomain, businessDate));
     }
 
     @Override
     public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate, String windowDomain) {
         // P1-C：合同租金/物业/能源应收按 due_date 当日（期首）逐期确认收入，并入商户行级 revenue.net 租金分量。
         // 用 amount_cent（已挂账应收，权责发生制确认），与酒吧/售票的现金口径合并入 net（任务要求接 ar_ap receivable）。
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT merchant_id, COALESCE(SUM(amount_cent), 0) AS total
                   FROM ar_ap_items
                  WHERE direction = 'receivable'
                    AND source_type IN ('contract_rent', 'contract_property_fee', 'contract_energy_fee')
                    AND due_date = :business_date
                  GROUP BY merchant_id
-                """, new MapSqlParameterSource("business_date", businessDate),
-                (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total")));
-        return result;
+                """, new MapSqlParameterSource("business_date", businessDate));
     }
 
 
@@ -686,18 +665,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate) {
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT merchant_id, COUNT(*) AS total
                   FROM ticket_verifications
                  WHERE status = 'success'
                    AND created_at >= :start
                    AND created_at < :end
                  GROUP BY merchant_id
-                """, dayRange("ticketing", businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
-        );
-        return result;
+                """, dayRange("ticketing", businessDate));
     }
 
     @Override
@@ -738,17 +713,13 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     public Map<String, BigDecimal> countTicketIssuedByMerchant(LocalDate businessDate) {
         // 清单#18：券发放数（核销率分母）——issued_entitlements 当日发放（created_at 落经营日窗口）按 merchant 分组计数，
         // 与 countTicketVerificationSuccessByMerchant 同口径（merchant_id 可空：归入平台口径合计）。
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT merchant_id, COUNT(*) AS total
                   FROM issued_entitlements
                  WHERE created_at >= :start
                    AND created_at < :end
                  GROUP BY merchant_id
-                """, dayRange("ticketing", businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
-        );
-        return result;
+                """, dayRange("ticketing", businessDate));
     }
 
     @Override
@@ -766,23 +737,18 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, BigDecimal> sumInventoryBalanceByMerchant() {
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT merchant_id, COALESCE(SUM(quantity), 0) AS total
                   FROM inventory_stock_balances
                  GROUP BY merchant_id
-                """, new MapSqlParameterSource(), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
-        );
-        return result;
+                """, new MapSqlParameterSource());
     }
 
     @Override
     public Map<String, BigDecimal> countLowStockByMerchant() {
         // 缺货预警（财务确认：绝对值阈值/SKU 可配）：按 SKU 汇总各库位可用量，低于该 SKU 的安全库存阈值则计一个预警。
         // 阈值取 inventory_items.min_quantity（绝对值/SKU），阈值 ≤ 0 视为不预警（与 InventoryService.safety_stock_low 一致）。
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT i.merchant_id AS merchant_id, COUNT(*) AS total
                   FROM inventory_items i
                   JOIN (
@@ -793,10 +759,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE i.min_quantity > 0
                    AND b.available < i.min_quantity
                  GROUP BY i.merchant_id
-                """, new MapSqlParameterSource(), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
-        );
-        return result;
+                """, new MapSqlParameterSource());
     }
 
     @Override
@@ -850,18 +813,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("business_date", businessDate)
                 .addValue("segment_id", projectId);
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT metric_key, actual_value
                   FROM analytics_business_metric_snapshots
                  WHERE business_date = :business_date
                    AND period_type = 'daily'
                    AND segment_type = 'project'
                    AND segment_id = :segment_id
-                """, params, (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
-                result.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("actual_value"))
-        );
-        return result;
+                """, params);
     }
 
     @Override
@@ -1504,15 +1463,12 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, BigDecimal> readMonthlySnapshots(LocalDate monthFirst) {
-        Map<String, BigDecimal> result = new LinkedHashMap<>();
-        jdbcTemplate.query("""
+        return keyTotals("""
                 SELECT metric_key, actual_value
                   FROM analytics_business_metric_snapshots
                  WHERE period_type = 'monthly' AND segment_type = 'platform' AND segment_id IS NULL
                    AND business_date = :month_first
-                """, new MapSqlParameterSource().addValue("month_first", monthFirst), resultSet ->
-                { result.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("actual_value")); });
-        return result;
+                """, new MapSqlParameterSource().addValue("month_first", monthFirst));
     }
 
     @Override
@@ -2360,9 +2316,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         MapSqlParameterSource params = start == null
                 ? pagedParams(limit, offset)
                 : pagedRangeParams(start, end, limit, offset);
-        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
-                SELECT id, bottle_name, initial_quantity, remaining_quantity, unit, status, created_at, expire_at
-                  FROM saved_bottles
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query(SAVED_BOTTLE_SELECT + """
                  %s
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
@@ -2379,9 +2333,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         // 与存酒页「在存」同谓词：status='stored'（状态按台账当前值；截至日仅限制存入时间）。
         MapSqlParameterSource params = pagedParams(limit, offset)
                 .addValue("as_of_end", timestampWithTimeZone(asOfEnd));
-        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
-                SELECT id, bottle_name, initial_quantity, remaining_quantity, unit, status, created_at, expire_at
-                  FROM saved_bottles
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query(SAVED_BOTTLE_SELECT + """
                  WHERE status = 'stored'
                    AND created_at < :as_of_end
                  ORDER BY created_at DESC, id
@@ -2400,9 +2352,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         // 与存酒页「剩余数量」同口径：全部登记行当前 remaining_quantity 直加（含已领完=0行）。
         MapSqlParameterSource params = pagedParams(limit, offset)
                 .addValue("as_of_end", timestampWithTimeZone(asOfEnd));
-        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
-                SELECT id, bottle_name, initial_quantity, remaining_quantity, unit, status, created_at, expire_at
-                  FROM saved_bottles
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query(SAVED_BOTTLE_SELECT + """
                  WHERE created_at < :as_of_end
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
