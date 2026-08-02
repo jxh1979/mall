@@ -35935,6 +35935,171 @@
           }
         }
       }
+    },
+    "/api/v1/integration/channel-ticket-type-maps": {
+      "get": {
+        "tags": [
+          "integration"
+        ],
+        "operationId": "listIntegrationChannelTicketTypeMaps",
+        "summary": "查询渠道票种映射",
+        "description": "批6 第三方通票适配：第三方渠道商品 id → 本地票种映射列表（渠道售出的通票回流按此落成本地票）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "integration.channel_store_map.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "integration.channel_ticket_type_map.viewed",
+        "x-audit-event-failure": "integration.channel_ticket_type_map.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "integration"
+        ],
+        "operationId": "saveIntegrationChannelTicketTypeMap",
+        "summary": "登记/改绑渠道票种映射",
+        "description": "自然键(provider_code,channel,external_product_id)幂等 upsert；映射缺失时该渠道通票回流拒收（fail-closed）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "integration.channel_store_map.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "integration.channel_ticket_type_map.saved",
+        "x-audit-event-failure": "integration.channel_ticket_type_map.save_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "idempotency_key",
+                  "provider_code",
+                  "channel",
+                  "external_product_id",
+                  "ticket_type_id"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
+                    "maxLength": 128
+                  },
+                  "provider_code": {
+                    "type": "string",
+                    "description": "渠道供应商编码。",
+                    "maxLength": 255
+                  },
+                  "channel": {
+                    "type": "string",
+                    "description": "回流渠道（meituan/dianping/douyin/…）。",
+                    "maxLength": 32
+                  },
+                  "external_product_id": {
+                    "type": "string",
+                    "description": "第三方渠道商品编号（团购套餐 id）。",
+                    "maxLength": 160
+                  },
+                  "ticket_type_id": {
+                    "type": "string",
+                    "description": "本地票种 id。",
+                    "maxLength": 64
+                  },
+                  "price_rule_id": {
+                    "type": "string",
+                    "description": "价格规则 id（选填=渠道团购价；空=按票种门市价出票）。",
+                    "maxLength": 64
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/integration/channel-ticket-type-maps/{id}/archive": {
+      "post": {
+        "tags": [
+          "integration"
+        ],
+        "operationId": "archiveIntegrationChannelTicketTypeMap",
+        "summary": "停用渠道票种映射",
+        "description": "软删（status=inactive）；停用后该渠道商品回流按未配置处理（拒收），可重录复活。",
+        "x-auth-context": "staff-token",
+        "x-permission": "integration.channel_store_map.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "integration.channel_ticket_type_map.archived",
+        "x-audit-event-failure": "integration.channel_ticket_type_map.archive_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键。",
+                    "maxLength": 128
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "停用理由；进入审计。",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {

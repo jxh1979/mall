@@ -740,6 +740,11 @@ public class TicketingService {
         return repository.listTicketOrdersByCustomerId(operations.requireText(customerId, "customer_id"));
     }
 
+    /** 批6：按 id 取票订单（只读，供第三方通票回流适配层对账系统取数；范式同 resolveBarName 跨域只读口）。 */
+    public java.util.Optional<TicketOrderRecord> findTicketOrderById(String orderId) {
+        return repository.findTicketOrderById(operations.requireText(orderId, "order_id"));
+    }
+
     /** 1.8 客人端我的票：校验订单归属后列该订单全部票实例（安全投影，含票种名）。 */
     public List<CustomerTicketResponse> listCustomerOrderTickets(String orderId, String customerId) {
         String resolvedOrderId = operations.requireText(orderId, "order_id");

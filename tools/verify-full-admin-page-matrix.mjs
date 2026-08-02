@@ -34,6 +34,7 @@ const bespokePages = new Set([
   "ADM-GOV-008",
   "ADM-VND-004",
   "ADM-INT-004",
+  "ADM-INT-005",
   "ADM-CUS-001",
   "ADM-CUS-002",
   // ADM-CUS-003「积分规则配置」已停用下线（2026-07-28 用户拍板，V352）：该页四个配置维度全被活表接管，

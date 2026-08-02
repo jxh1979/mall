@@ -84,6 +84,7 @@ const BarProductsPage = React.lazy(() => import("./pages/BarProductsPage").then(
 const BarCombosPage = React.lazy(() => import("./pages/BarCombosPage").then((m) => ({ default: m.BarCombosPage })));
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
+const IntegrationChannelMapsPage = React.lazy(() => import("./pages/IntegrationChannelMapsPage").then((m) => ({ default: m.IntegrationChannelMapsPage })));
 const TerminalSwitchMatrixPage = React.lazy(() => import("./pages/TerminalSwitchMatrixPage").then((m) => ({ default: m.TerminalSwitchMatrixPage })));
 const TerminalDevicesPage = React.lazy(() => import("./pages/TerminalDevicesPage").then((m) => ({ default: m.TerminalDevicesPage })));
 const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPage").then((m) => ({ default: m.CustomerAccountsPage })));
@@ -359,6 +360,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <IntegrationAdaptersPage {...props} />;
     case "ADM-INT-003":
       return <IntegrationSwitchesPage {...props} />;
+    case "ADM-INT-005":
+      return <IntegrationChannelMapsPage {...props} />;
     case "ADM-OPS-001":
       return <OpsReadinessPage {...props} />;
     case "ADM-OPS-002":

@@ -134,6 +134,20 @@ final class JdbcIntegrationRowMapper {
         );
     }
 
+    IntegrationChannelTicketTypeMapRecord mapChannelTicketTypeMap(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new IntegrationChannelTicketTypeMapRecord(
+                resultSet.getString("id"),
+                resultSet.getString("provider_code"),
+                resultSet.getString("channel"),
+                resultSet.getString("external_product_id"),
+                resultSet.getString("ticket_type_id"),
+                resultSet.getString("price_rule_id"),
+                resultSet.getString("status"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
+    }
+
     IntegrationTaskRecord mapTask(ResultSet resultSet, int rowNumber, String taskCategory) throws SQLException {
         return new IntegrationTaskRecord(
                 resultSet.getString("id"),

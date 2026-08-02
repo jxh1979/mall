@@ -21,11 +21,23 @@ final class IntegrationOrderSyncService {
     private final IntegrationRepository repository;
     private final Clock clock;
     private final IntegrationOperationSupport support;
+    // 批6：ticket 回流能力开关（integration.ticket_channel.sync，V071 全局默认关）+ 本地出票端口。
+    // 二者可空=未接线（旧构造/单测），ticket 回流 fail-closed 拒收，绝不静默跳过出票。
+    private final com.complex.platform.gate.TerminalSwitchGuard switchGuard;
+    private final ChannelTicketIssuePort ticketIssuePort;
 
     IntegrationOrderSyncService(IntegrationRepository repository, Clock clock, IntegrationOperationSupport support) {
+        this(repository, clock, support, null, null);
+    }
+
+    IntegrationOrderSyncService(IntegrationRepository repository, Clock clock, IntegrationOperationSupport support,
+                                com.complex.platform.gate.TerminalSwitchGuard switchGuard,
+                                ChannelTicketIssuePort ticketIssuePort) {
         this.repository = repository;
         this.clock = clock;
         this.support = support;
+        this.switchGuard = switchGuard;
+        this.ticketIssuePort = ticketIssuePort;
     }
 
     PageResponse<IntegrationOrderSyncRecord> listOrderSyncs() {
@@ -155,6 +167,92 @@ final class IntegrationOrderSyncService {
     }
 
     private record ChannelStoreMapArchiveFingerprint(String id, StatusChangeRequest request) {
+    }
+
+    // ── 批6 渠道票种映射维护（范式照渠道门店映射）──────────────────────────────
+
+    PageResponse<IntegrationChannelTicketTypeMapRecord> listChannelTicketTypeMaps() {
+        return support.readPage("integration.channel_ticket_type_map.viewed",
+                "integration.channel_ticket_type_map.view_failed",
+                "integration.channel_store_map.view", "integration_channel_ticket_type_map",
+                repository::listChannelTicketTypeMaps);
+    }
+
+    IntegrationChannelTicketTypeMapRecord saveChannelTicketTypeMap(IntegrationChannelTicketTypeMapRequest request) {
+        return support.executeWrite(
+                "saveIntegrationChannelTicketTypeMap",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                IntegrationChannelTicketTypeMapRecord.class,
+                "integration.channel_ticket_type_map.saved",
+                "integration.channel_ticket_type_map.save_failed",
+                "integration.channel_store_map.manage",
+                "integration_channel_ticket_type_map",
+                () -> saveChannelTicketTypeMapOnce(request)
+        );
+    }
+
+    IntegrationChannelTicketTypeMapRecord archiveChannelTicketTypeMap(String id, StatusChangeRequest request) {
+        String mapId = requireTextValue(id, "id");
+        return support.executeWrite(
+                "archiveIntegrationChannelTicketTypeMap:" + mapId,
+                request == null ? null : request.idempotencyKey(),
+                new ChannelTicketTypeMapArchiveFingerprint(mapId, request),
+                IntegrationChannelTicketTypeMapRecord.class,
+                "integration.channel_ticket_type_map.archived",
+                "integration.channel_ticket_type_map.archive_failed",
+                "integration.channel_store_map.manage",
+                "integration_channel_ticket_type_map",
+                () -> archiveChannelTicketTypeMapOnce(mapId, request)
+        );
+    }
+
+    private IntegrationChannelTicketTypeMapRecord saveChannelTicketTypeMapOnce(
+            IntegrationChannelTicketTypeMapRequest request) {
+        validateChannelTicketTypeMapRequest(request);
+        Instant now = clock.instant();
+        String channel = channel(request.channel());
+        // 自然键 upsert：重录同一渠道商品复用既有 id（改绑票种 / 复活），返回值与 DB 一致。
+        String id = repository.findChannelTicketTypeMapByNaturalKey(
+                        request.providerCode(), channel, request.externalProductId())
+                .map(IntegrationChannelTicketTypeMapRecord::id)
+                .orElse("channel_ticket_map_" + UUID.randomUUID());
+        String priceRuleId = request.priceRuleId() == null || request.priceRuleId().isBlank()
+                ? null : request.priceRuleId();
+        IntegrationChannelTicketTypeMapRecord record = new IntegrationChannelTicketTypeMapRecord(
+                id,
+                request.providerCode(),
+                channel,
+                request.externalProductId(),
+                request.ticketTypeId(),
+                priceRuleId,
+                "active",
+                now,
+                now
+        );
+        return repository.saveChannelTicketTypeMap(record);
+    }
+
+    private IntegrationChannelTicketTypeMapRecord archiveChannelTicketTypeMapOnce(String id, StatusChangeRequest request) {
+        validateStatusChange(request);
+        IntegrationChannelTicketTypeMapRecord existing = repository.findChannelTicketTypeMapById(id)
+                .orElseThrow(() -> ApiException.notFound(
+                        "INTEGRATION_CHANNEL_TICKET_MAP_NOT_FOUND", "channel ticket type map not found"));
+        IntegrationChannelTicketTypeMapRecord updated = new IntegrationChannelTicketTypeMapRecord(
+                existing.id(),
+                existing.providerCode(),
+                existing.channel(),
+                existing.externalProductId(),
+                existing.ticketTypeId(),
+                existing.priceRuleId(),
+                "inactive",
+                existing.createdAt(),
+                clock.instant()
+        );
+        return repository.saveChannelTicketTypeMap(updated);
+    }
+
+    private record ChannelTicketTypeMapArchiveFingerprint(String id, StatusChangeRequest request) {
     }
 
     PageResponse<IntegrationTaskRecord> listRetryTasks() {
@@ -293,6 +391,12 @@ final class IntegrationOrderSyncService {
 
         List<ChannelReconciliationRequest.ExpectedEntry> expected =
                 request.expectedEntries() == null ? List.of() : request.expectedEntries();
+        // 批6 ticket 自动对账系统取数（P0-E 同口径）：未显式给期望明细时，平台侧期望=回流行对应的
+        // 本地票订单实收（直读 ticket_orders 真源，不抄 payload 快照）。漏出票的回流行无期望 → count 差异；
+        // 渠道实收 ≠ 本地订单额 → amount 差异。
+        if ("ticket".equals(request.businessType()) && expected.isEmpty()) {
+            expected = deriveTicketExpectedEntries(actualByExternalId);
+        }
         int expectedCount = expected.size();
         int actualCount = actualByExternalId.values().stream().mapToInt(List::size).sum();
 
@@ -387,6 +491,37 @@ final class IntegrationOrderSyncService {
                 batchId, false, expectedCount, actualCount, drafts.size(), totalDifferenceCent, persisted);
     }
 
+    /** 批6：从回流行反查本地票订单实收作平台侧期望（系统取数）。出票通道未接线 → 响亮拒绝，不伪造期望。 */
+    private List<ChannelReconciliationRequest.ExpectedEntry> deriveTicketExpectedEntries(
+            Map<String, List<IntegrationOrderSyncRecord>> actualByExternalId) {
+        if (ticketIssuePort == null) {
+            throw ApiException.conflict("INTEGRATION_TICKET_CHANNEL_DISABLED",
+                    "渠道未启用：通票出票通道未接线，无法系统取数生成平台侧期望明细");
+        }
+        List<ChannelReconciliationRequest.ExpectedEntry> entries = new ArrayList<>();
+        for (Map.Entry<String, List<IntegrationOrderSyncRecord>> group : actualByExternalId.entrySet()) {
+            for (IntegrationOrderSyncRecord record : group.getValue()) {
+                Object localOrderId = record.providerPayload().get("local_ticket_order_id");
+                if (localOrderId == null) {
+                    continue; // 未出票的回流行：无平台侧期望 → 留给 count 差异如实暴露。
+                }
+                Optional<Long> localAmount = ticketIssuePort.findOrderAmountCent(localOrderId.toString());
+                if (localAmount.isEmpty()) {
+                    continue; // 本地订单查无（脏引用）：同样留给 count 差异，不伪造期望金额。
+                }
+                entries.add(new ChannelReconciliationRequest.ExpectedEntry(
+                        group.getKey(),
+                        localAmount.get(),
+                        null,
+                        1,
+                        Map.of("local_ticket_order_id", localOrderId.toString())
+                ));
+                break; // 每个外部单号一条期望（expectedCount=1，多行重复由 duplicate 口径吐差异）。
+            }
+        }
+        return List.copyOf(entries);
+    }
+
     private Map<String, Object> autoReconcilePayload(String channel, DiffDraft draft) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("channel", channel);
@@ -419,20 +554,43 @@ final class IntegrationOrderSyncService {
             providerPayload.put("standard_model", Map.copyOf(mapping.projection()));
         }
         providerPayload.put("channel_map_status", mapping.processStatus());
+        Optional<IntegrationOrderSyncRecord> existing = repository.findOrderSyncByProviderAndExternalId(
+                request.providerCode(),
+                request.businessType(),
+                request.syncType(),
+                request.externalBusinessId()
+        );
+        String recordStatus = request.status();
+        // ── 批6 ticket 分支：第三方渠道售出的通票回流 → 本地出票（走既有出票主链）────────────
+        if ("ticket".equals(request.businessType())) {
+            // 幂等（同渠道订单号只出一次票）：既有行已出过票 → 原样返回，不再触发出票链。
+            if (existing.isPresent() && existing.get().providerPayload().containsKey("local_ticket_order_id")) {
+                return existing.get();
+            }
+            // 能力开关闸（默认关，设计性 gating）：开关关 → 拒收，不落库不出票。
+            requireTicketChannelEnabled();
+            if ("order".equals(request.syncType())) {
+                ChannelTicketIssuePort.IssueResult issued = issueLocalTicket(request, channel, providerPayload);
+                providerPayload.put("local_ticket_order_id", issued.ticketOrderId());
+                providerPayload.put("local_order_no", issued.orderNo());
+                providerPayload.put("local_amount_cent", issued.amountCent());
+                providerPayload.put("issued_ticket_count", issued.issuedTicketCount());
+                providerPayload.put("issued_entitlement_count", issued.issuedEntitlementCount());
+                // 渠道实收 vs 本地口径金额：不一致不拦（客人已在渠道付讫、票必须出），进自动对账吐 amount 差异。
+                providerPayload.put("amount_matched",
+                        nonNegative(request.amountCent(), "amount_cent") == issued.amountCent());
+                recordStatus = "synced";
+            }
+            // refund / voucher_verification：首批只落台账进对账（HTML 首批四项）；本地退款必须走既有
+            // 退款审批链（先审后行），绝不因渠道回流一条退款记录就自动退票退钱。
+        }
         IntegrationOrderSyncRecord record = new IntegrationOrderSyncRecord(
-                repository.findOrderSyncByProviderAndExternalId(
-                                request.providerCode(),
-                                request.businessType(),
-                                request.syncType(),
-                                request.externalBusinessId()
-                        )
-                        .map(IntegrationOrderSyncRecord::id)
-                        .orElse("order_sync_" + UUID.randomUUID()),
+                existing.map(IntegrationOrderSyncRecord::id).orElse("order_sync_" + UUID.randomUUID()),
                 request.providerCode(),
                 request.businessType(),
                 request.syncType(),
                 request.externalBusinessId(),
-                request.status(),
+                recordStatus,
                 nonNegative(request.amountCent(), "amount_cent"),
                 currency(request.currency()),
                 channel,
@@ -443,6 +601,95 @@ final class IntegrationOrderSyncService {
                 now
         );
         return repository.saveOrderSync(record);
+    }
+
+    // ── 批6 通票回流本地出票 ────────────────────────────────────────────────────
+
+    /** 能力开关闸：integration.ticket_channel.sync（V071 全局默认关）。关/未接线 → 拒收（渠道未启用）。 */
+    private void requireTicketChannelEnabled() {
+        if (switchGuard == null || ticketIssuePort == null) {
+            throw ApiException.forbidden("INTEGRATION_TICKET_CHANNEL_DISABLED",
+                    "渠道未启用：第三方通票回流通道未接线，无法受理通票回流");
+        }
+        try {
+            switchGuard.check("integration.ticket_channel.sync");
+        } catch (ApiException exception) {
+            // 开关闸已写 terminal.access_rejected 审计；对外统一报「渠道未启用」（明确中文口径）。
+            throw ApiException.forbidden("INTEGRATION_TICKET_CHANNEL_DISABLED",
+                    "渠道未启用：团购/渠道售票能力开关（integration.ticket_channel.sync）为关闭状态，"
+                            + "请在「第三方开关」页开启后重试");
+        }
+    }
+
+    /** 渠道商品 → 本地票种映射解析 + 走既有出票主链出票。映射缺失 fail-closed 拒收（不落半截数据）。 */
+    private ChannelTicketIssuePort.IssueResult issueLocalTicket(
+            IntegrationOrderSyncRequest request, String channel, Map<String, Object> payload) {
+        Object externalProductId = payload.get("external_product_id");
+        if (externalProductId == null || externalProductId.toString().isBlank()) {
+            throw ApiException.badRequest("INTEGRATION_TICKET_PRODUCT_ID_REQUIRED",
+                    "通票回流缺少渠道商品编号（payload.external_product_id），无法匹配本地票种");
+        }
+        IntegrationChannelTicketTypeMapRecord map = repository.findActiveChannelTicketTypeMap(
+                        request.providerCode(), channel, externalProductId.toString())
+                .orElseThrow(() -> ApiException.conflict("INTEGRATION_CHANNEL_TICKET_MAP_MISSING",
+                        "渠道票种映射缺失：渠道 " + channel + " 商品 " + externalProductId
+                                + " 未配置对应本地票种，请在「渠道映射维护」页录入后重试"));
+        int quantity = ticketQuantity(payload.get("quantity"));
+        java.time.LocalDate visitDate = ticketVisitDate(payload.get("visit_date"));
+        Object buyerPhone = payload.get("buyer_phone");
+        return ticketIssuePort.issue(new ChannelTicketIssuePort.IssueCommand(
+                ticketIdempotencyBase(request, channel),
+                map.ticketTypeId(),
+                map.priceRuleId(),
+                quantity,
+                visitDate,
+                channel,
+                buyerPhone == null || buyerPhone.toString().isBlank() ? null : buyerPhone.toString(),
+                "第三方渠道回流出票：" + channel + " " + request.externalBusinessId()
+        ));
+    }
+
+    /**
+     * 出票链幂等基（同渠道订单号只出一次票）：锚定 (provider, channel, externalBusinessId) 的哈希——
+     * 重复回流（不同 idempotency_key）派生同一组下单/支付/出票幂等键，全链重放同一结果；
+     * 哈希前置保证派生的 ticket_order id（slug 截 40 字符）不因外部单号超长而撞车。
+     */
+    private String ticketIdempotencyBase(IntegrationOrderSyncRequest request, String channel) {
+        String natural = request.providerCode() + "|" + channel + "|" + request.externalBusinessId();
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(natural.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return "tpk" + java.util.HexFormat.of().formatHex(digest, 0, 12);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
+    }
+
+    private int ticketQuantity(Object raw) {
+        if (raw == null) {
+            return 1;
+        }
+        int quantity;
+        try {
+            quantity = raw instanceof Number number ? number.intValue() : Integer.parseInt(raw.toString());
+        } catch (NumberFormatException exception) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "通票回流 payload.quantity 不是有效数字");
+        }
+        if (quantity < 1 || quantity > 100) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "通票回流 payload.quantity 必须在 1~100 之间");
+        }
+        return quantity;
+    }
+
+    private java.time.LocalDate ticketVisitDate(Object raw) {
+        if (raw == null || raw.toString().isBlank()) {
+            return null; // 出票链回落当天（与后台直接下单同口径）。
+        }
+        try {
+            return java.time.LocalDate.parse(raw.toString());
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "通票回流 payload.visit_date 不是有效日期(YYYY-MM-DD)");
+        }
     }
 
     // ── 回流渠道 payload → 标准订单/券核销模型映射（mapPayload，复用适配器投影框架口径）─────────

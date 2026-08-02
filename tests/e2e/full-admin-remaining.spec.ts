@@ -69,6 +69,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-INT-002", label: "回调/轮询/补偿", route: "/admin/integrations/events" },
   { pageId: "ADM-INT-003", label: "第三方开关", route: "/admin/integrations/switches" },
   { pageId: "ADM-INT-004", label: "短信通知开关", route: "/admin/integrations/sms-switches" },
+  { pageId: "ADM-INT-005", label: "渠道映射维护", route: "/admin/integrations/channel-maps" },
   { pageId: "ADM-RISK-001", label: "风控预警", route: "/admin/risk/alerts" },
   { pageId: "ADM-EVD-001", label: "审计事件", route: "/admin/audit/events" },
   { pageId: "ADM-ANA-001", label: "经营分析", route: "/admin/analytics/business" },
@@ -224,6 +225,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("integration-events-page")).toBeVisible();
   } else if (spec.pageId === "ADM-INT-003") {
     await expect(page.getByTestId("integration-switches-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-INT-005") {
+    await expect(page.getByTestId("integration-channel-maps-page")).toBeVisible();
   } else if (spec.pageId === "ADM-EVD-001") {
     await expect(page.getByTestId("audit-events-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-001") {

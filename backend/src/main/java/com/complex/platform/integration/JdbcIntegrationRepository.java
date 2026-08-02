@@ -360,6 +360,107 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return Boolean.TRUE.equals(exists);
     }
 
+    // ── 批6 渠道票种映射（范式照 channel_store_map）─────────────────────────────
+
+    @Override
+    public IntegrationChannelTicketTypeMapRecord saveChannelTicketTypeMap(IntegrationChannelTicketTypeMapRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_channel_ticket_type_map (
+                    id, provider_code, channel, external_product_id, ticket_type_id,
+                    price_rule_id, status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :provider_code, :channel, :external_product_id, :ticket_type_id,
+                    :price_rule_id, :status, :created_at, :updated_at
+                )
+                ON CONFLICT (provider_code, channel, external_product_id) DO UPDATE SET
+                    ticket_type_id = EXCLUDED.ticket_type_id,
+                    price_rule_id = EXCLUDED.price_rule_id,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", record.id())
+                .addValue("provider_code", record.providerCode())
+                .addValue("channel", record.channel())
+                .addValue("external_product_id", record.externalProductId())
+                .addValue("ticket_type_id", record.ticketTypeId())
+                .addValue("price_rule_id", record.priceRuleId())
+                .addValue("status", record.status())
+                .addValue("created_at", timestampWithTimeZone(record.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(record.updatedAt())));
+        return record;
+    }
+
+    @Override
+    public List<IntegrationChannelTicketTypeMapRecord> listChannelTicketTypeMaps() {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, channel, external_product_id, ticket_type_id,
+                       price_rule_id, status, created_at, updated_at
+                  FROM integration_channel_ticket_type_map
+                 ORDER BY updated_at DESC, id
+                 LIMIT 200
+                """, rowMapper::mapChannelTicketTypeMap);
+    }
+
+    @Override
+    public Optional<IntegrationChannelTicketTypeMapRecord> findChannelTicketTypeMapById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, channel, external_product_id, ticket_type_id,
+                       price_rule_id, status, created_at, updated_at
+                  FROM integration_channel_ticket_type_map
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapChannelTicketTypeMap).stream().findFirst();
+    }
+
+    @Override
+    public Optional<IntegrationChannelTicketTypeMapRecord> findChannelTicketTypeMapByNaturalKey(
+            String providerCode, String channel, String externalProductId) {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, channel, external_product_id, ticket_type_id,
+                       price_rule_id, status, created_at, updated_at
+                  FROM integration_channel_ticket_type_map
+                 WHERE provider_code = :provider_code
+                   AND channel = :channel
+                   AND external_product_id = :external_product_id
+                """, Map.of(
+                "provider_code", providerCode,
+                "channel", channel,
+                "external_product_id", externalProductId
+        ), rowMapper::mapChannelTicketTypeMap).stream().findFirst();
+    }
+
+    @Override
+    public Optional<IntegrationChannelTicketTypeMapRecord> findActiveChannelTicketTypeMap(
+            String providerCode, String channel, String externalProductId) {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, channel, external_product_id, ticket_type_id,
+                       price_rule_id, status, created_at, updated_at
+                  FROM integration_channel_ticket_type_map
+                 WHERE provider_code = :provider_code
+                   AND channel = :channel
+                   AND external_product_id = :external_product_id
+                   AND status = 'active'
+                """, Map.of(
+                "provider_code", providerCode,
+                "channel", channel,
+                "external_product_id", externalProductId
+        ), rowMapper::mapChannelTicketTypeMap).stream().findFirst();
+    }
+
+    @Override
+    public Optional<IntegrationOrderSyncRecord> findTicketOrderSyncByLocalOrderId(String localTicketOrderId) {
+        return jdbcTemplate.query("""
+                SELECT id, provider_code, business_type, sync_type, external_business_id,
+                       status, amount_cent, currency, channel, external_channel_order_id,
+                       merchant_id, provider_payload_json, created_at, updated_at
+                  FROM integration_order_syncs
+                 WHERE business_type = 'ticket'
+                   AND provider_payload_json->>'local_ticket_order_id' = :local_order_id
+                 ORDER BY created_at, id
+                 LIMIT 1
+                """, Map.of("local_order_id", localTicketOrderId), rowMapper::mapOrderSync).stream().findFirst();
+    }
+
     @Override
     public List<IntegrationOrderSyncRecord> listUnattributedOrderSyncs() {
         return jdbcTemplate.query("""

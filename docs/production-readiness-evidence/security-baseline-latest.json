@@ -6,8 +6,8 @@
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 714,
+  "openapi_operation_count": 717,
   "security_baseline_version": "V1",
   "plaintext_secret_present": false,
-  "notes": "Re-synced to 713 operations: K16 设备商户归属写入面 —— 新增 GET /api/v1/terminals/devices (listTerminalDevices, terminal.switch.view 终端模块视图) 与 PUT /api/v1/terminals/devices/{id}/merchant (updateTerminalDeviceMerchant, terminal.device.lifecycle 高危·仅平台管理员, 审计 terminal.device.merchant_changed / merchant_change_failed)。设备归属决定 K16 核销上下文(terminal_devices.merchant_id), 此前 bind 硬编码写 null、无任何业务写入面; 本批补台账读+改绑写(理由必填留痕·目标商户须存在且未归档·终态设备拒改), bind 顺带支持初始归属且复领用不再抹归属。"
+  "notes": "Re-synced to 717 operations: 批6 第三方通票适配 —— 新增 GET/POST /api/v1/integration/channel-ticket-type-maps 与 POST /api/v1/integration/channel-ticket-type-maps/{id}/archive (渠道票种映射登记/改绑/停用, 复用 integration.channel_store_map.view/manage 权限, 审计 integration.channel_ticket_type_map.saved/archived)。渠道售出的通票回流按映射落成本地票; 映射缺失 fail-closed 拒收; 能力开关 integration.ticket_channel.sync 默认关。"
 }
