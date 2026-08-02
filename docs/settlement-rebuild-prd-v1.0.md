@@ -336,7 +336,13 @@
   - **计提落账**:该票**首笔进池核销**一次性计提(锚点 `parent_ticket_id`,净额闸「一张票一道」;无锚点=不合规数据拒绝计提;专属直付行不计提——G 是池链扣项);冲正取原行之反、规则 id 沿用 → 净额抵回 0 锚点复位、封顶额度自动释放;可选**每月封顶**按「项目 × 规则」增量应用,绝不月末 clamp。
   - **瀑布**:`P = R − C − G − F_pool`;**G 按业态跟核销走**(照 S4 的 F 同一范式,常态首笔核销=入场→G 落酒吧行,即 HTML:742「酒吧份额再依次扣掉赠送权益预估成本、门票综合服务费」);月结线性求和落 `settlement_bills.gift_cost_cent` + 收款主体快照 `gift_beneficiary_entity_id`(解析自 `pass_gift_cost` 归属流,种子=娱乐平台公司)与业态份额行 `gift_cost_cent`;K20 守恒扩三重(Σ各业态 G ≡ G 合计等)。
   - **成本承担方**:`ticket_type_entitlements.cost_bearer`(platform_funded 平台出资型/merchant_concession 商户让利型,**V376 起必填无默认**——赠送类漏标拒保存/拒发布,见 §6.6),票种绑定写入面配;让利型**不进 G 预扣**、兑付**不挂商户应付**(冲正侧由「原应付存在性守卫」对称保护:从未挂出的应付冲正 no-op)。
-- **遗留(待开发,见 backlog)**:① 预扣与实付差额在娱乐平台公司侧的**调账留痕**(`variance_handling` 规则快照已随 V373 落库,消费方未建);② **兑付成本按提供方商户业态分记**(兑付台账;预扣侧 G 已按业态分记,兑付侧未拆)——两项即原 S7 范围,S1–S11 收官时未开刀。门票综合服务费归属主体改娱乐平台公司**已由 S4/V370 落地**(收款方快照 `fee_beneficiary_entity_id`,归属流 `ticket_service_fee` 种子 → `be_ent_platform`),不再是缺口。
+- **✅ 已实装(S7 赠付差额调账留痕 + 兑付成本按业态分记,V377,2026-08-01)**:
+  - **差额调账台账** `pass_gift_cost_variance_ledger`:月结(`settleMonth`)同一事务、同一月窗,按「项目 × 规则(`pass_gift_cost_configs`)」每期结出一行——预扣合计 G(计提行落库时快照的规则 id 分组、线性求和)、实付合计 A(`ar_ap_items` `pass_drink_settlement` 对冲净额;月窗/项目/票种锚定该核销的**结算事实行**:应付联核销行、对冲联冲正行 → 跨月红冲与 G 落同一个月,K12 不被跨月错位打破;票种再走与计提**同一个**规则解析器归到规则——预扣关零仍有兑付时差额为负,财务看得见)、差额 V = G − A。**差额恒等式写进 DB CHECK**(`chk_pgcv_identity`),代码算错插不进去;台账 **append-only**(V344 触发器族 + 运行时角色 REVOKE),幂等重算走「冲正取反 + 重述」两行追加,结论没变零追加,历史结论永在。
+  - **三种处理规则**(V373 快照语义,月结时按解析到的生效规则处理并快照进行):`platform_absorb` 差额留娱乐平台公司仅留痕(默认,HTML 口径);`carry_forward` 结转下期(往期滚存 = Σ往期结转 − Σ往期拾起,中间漏结月自愈拾起,随本期差额一并按本期规则处理);`true_up_pool` 回补当期可分配池(池 = 酒吧净份额 + Σ回补,净份额公式不动)。
+  - **兑付成本按提供方业态分记**:`settlement_bill_format_shares.gift_actual_paid_cent`——业态 = 提供方商户(应付对手方)的 `merchant_type`,与收入侧份额归堆同一取法;只有兑付、没有进池收入的业态补零份额行,「给餐厅/零售兑付了多少」不丢行;纯留痕**不进净份额**(兑付由娱乐平台公司承担,不动各业态分账,K11 不变)。K14:Σ各业态实付 ≡ 台账实付合计(测试断言)。
+  - **K12 接线守卫**:Σ各规则 G ≡ 进池 G 合计(fail-loud)——G 计提行必带规则 id,否则差额表悄悄少一块,宁可当场拒绝出账。
+  - **结算审阅页**补「赠付差额」四列:赠付预扣/赠付实付/赠付差额/差额规则(中文规则名),财务四问一屏可答。
+  - **已知边界**:①核销无结算事实行(direct 出票无分摊快照被消费者跳过)时其兑付无月窗/项目锚点、不进差额聚合,由结算重建任务补建事实行后自然并入;②上月重算改变结转额后,下月单须重结才拾起新滚存(与月度封顶等既有跨月依赖同性质);③`ar_ap_items.accounting_period` 仍为挂账当日月(全表统一口径)——差额月窗不依赖它(锚结算事实行 `business_at`),故设计稿 §8.1 的「前置修」不再必要,未改以保 ar_ap 全源一致。门票综合服务费归属主体改娱乐平台公司**已由 S4/V370 落地**(收款方快照 `fee_beneficiary_entity_id`,归属流 `ticket_service_fee` 种子 → `be_ent_platform`),不再是缺口。
 
 > ⚠️ **口径沿革(勿再引用旧文)**
 > - 2026-07-04「两段式赠酒(3 元/点位先留 + 剩余按每客分账)」**作废**。
@@ -668,6 +674,9 @@
 - **V366** `settlement_bill_format_shares`(结算单 × 业态份额留痕):每个业态一行,记 毛额 / 项目承担的折扣补回 / 摊到的渠道费 / 净份额 / 收款方(`entity` 或 `per_merchant` + 主体 id)。**只建留痕表,不改任何既有列**。业态词表沿用 `merchants.merchant_type` 五值(V348 已 CHECK 封口),不新建业态字段;金额**带符号**(跨月红冲某业态当月份额可为负=向该业态追回),故不加 ≥0 CHECK(照 V335 先例)。表末显式 `GRANT ... TO complex_app`。
 - **不新建票面原价表**:`ticket_type_entitlements.component_price_cent`(票种 × 权益绑定级)已够用,本刀只收紧它的语义并补配置面。
 
+### 10.2E 瀑布重建 S7(赠付差额留痕 + 兑付成本按业态分记)迁移清单(2026-08-01)
+- **V377** `pass_gift_cost_variance_ledger`(赠付差额调账台账):月结按「项目 × 规则」每期一行(预扣 G/实付 A/差额 V/往期结转拾起/结转下期/回补当期池/处理规则与收款主体快照)。**append-only**(V344 `complex_block_mutation` 触发器 + 运行时角色 REVOKE UPDATE/DELETE),幂等重算「冲正取反 + 重述」追加;`chk_pgcv_identity` 把 **V = G − A 锁进 DB CHECK**;三规则词表 `chk_pgcv_handling` 与 V373 `chk_pgc_variance` 同源。同迁移给 `settlement_bill_format_shares` 加 `gift_actual_paid_cent`(兑付实付按提供方业态分记,纯留痕不进净份额)。表末显式 `GRANT SELECT, INSERT ... TO complex_app`(不授改删)。
+
 ---
 
 ## 10.2D 联合/综合通票的分账口径(S11,2026-07-28)
@@ -789,7 +798,7 @@
 | S9 特批期限 | 超池特批期限可配(数值+单位,默认 3 个月)、专属权限点 `settlement.bill.special_approve`;契约收编+后台入口 = PR #287 | #268(V368 纠正在 #280;入口 #287) | V357/V368 |
 | S11 业态份额拆分 | 票面原价占比拆份额、渠道费整单前移、排名池业态过滤、守恒 K20/价线 K21 | #277 | V366 |
 | 配套 | 凑整闸 V369(#282)、业态五值 V348(#263)、开票清单 V362(#276) | — | — |
-| S7(未开刀) | 差额调账留痕 + 兑付成本按业态分记 → **遗留**,见 `pending-development-backlog` | — | — |
+| S7 差额留痕+业态分记 | `pass_gift_cost_variance_ledger` 差额台账(append-only+CHECK 恒等)、三处理规则、兑付实付按业态分记、K12/K14 | 本 PR | V377 |
 | S10 口径收官 | 本次纯文档同步(PRD/台账/backlog 终态化) | 本 PR | — |
 
 > 🔒部署前核对(状态机加固·复核提示):①`ticket_refunds` 加 status CHECK 前先 `SELECT DISTINCT status FROM ticket_refunds` 确认无八值外脏值;②重建 `rebuildMissingSettlements` 为本 PR 全新、生产从未跑过(基线 d577fc4b 无此方法),库内不应有「同权益既有遗留累计行 verification_id IS NULL、又有 per-verification 行」的双计残留——部署前核对下句应返回 0 行(非 0 先排查、勿开 `settlement.reconciliation.scheduled` 重建):`SELECT s.entitlement_id FROM settlement_transactions s WHERE s.transaction_type='verification_settled' AND s.verification_id IS NOT NULL AND EXISTS(SELECT 1 FROM settlement_transactions leg WHERE leg.entitlement_id=s.entitlement_id AND leg.transaction_type='verification_settled' AND leg.verification_id IS NULL) GROUP BY s.entitlement_id;`。注:`settlement.reconciliation.scheduled.enabled` 生产=true(application-prod.yml:31),重建首夜即跑,故上述前置校验为部署闸。

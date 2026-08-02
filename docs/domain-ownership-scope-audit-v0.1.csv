@@ -208,6 +208,7 @@ open_endpoint_configs,inherited,open app/endpoint key,open app/endpoint key -> p
 partner_voucher_configs,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 partner_voucher_redemptions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 pass_gift_cost_configs,direct,project_id,project_id column on pass_gift_cost_configs,ready for project/merchant scoped query enforcement,covered
+pass_gift_cost_variance_ledger,direct,project_id,project_id column on pass_gift_cost_variance_ledger,ready for project/merchant scoped query enforcement,covered
 payroll_tax_brackets,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 permission_template_applications,inherited,template_id,template_id -> permission_templates -> organization/global scope,must join through scope path before multi-complex rollout,covered
 permission_template_items,inherited,template_id,template_id -> permission_templates -> organization/global scope,must join through scope path before multi-complex rollout,covered
