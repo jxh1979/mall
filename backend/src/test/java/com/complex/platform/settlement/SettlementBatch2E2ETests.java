@@ -114,11 +114,12 @@ class SettlementBatch2E2ETests {
         assertThat(num(bill, "available_pool_cent")).isEqualTo(availablePool);
         assertThat(bill.get("distribution_method")).isEqualTo("by_rank_tier");
 
-        // ---- 断言 settlement_items 各酒吧按排名命中档位 → available_pool × share_bps/10000 ----
-        long a1 = availablePool * 1600 / 10000; // 19200
-        long a2 = availablePool * 1200 / 10000; // 14400
-        long a3 = availablePool * 1200 / 10000; // 14400
-        long a4 = availablePool * 1200 / 10000; // 14400
+        // ---- 断言 settlement_items:S8 第二段归一化分尽——默认档位命中 1600/1200/1200/1200(Σ=5200),
+        //      各家 = round_half_up(P2 × w / Σw),池 120000 一次分光、尾差单列。 ----
+        long a1 = 36923L; // round(120000×1600/5200) = round(36923.08)
+        long a2 = 27692L; // round(120000×1200/5200) = round(27692.31)
+        long a3 = 27692L;
+        long a4 = 27692L;
         assertThat(itemAmount(pid, "bar1")).isEqualTo(a1);
         assertThat(itemAmount(pid, "bar2")).isEqualTo(a2);
         assertThat(itemAmount(pid, "bar3")).isEqualTo(a3);
@@ -128,7 +129,7 @@ class SettlementBatch2E2ETests {
         assertThat(itemRank(pid, "bar3")).isEqualTo(3);
         assertThat(itemRank(pid, "bar4")).isEqualTo(4);
 
-        long distributed = a1 + a2 + a3 + a4; // 62400
+        long distributed = a1 + a2 + a3 + a4; // 119999(池 120000 − 尾差 1)
         assertThat(num(bill, "distributed_cent")).isEqualTo(distributed);
         assertThat(distributed).isLessThanOrEqualTo(availablePool);  // Σitems.final ≤ 可分配池
         assertThat(bill.get("status")).isEqualTo("confirmed");  // 未越池 → confirmed，可过账
@@ -166,10 +167,11 @@ class SettlementBatch2E2ETests {
         // ---- ④ 全链对账断言(整数分无漂移) ----
         // 收入 − 渠道费 − 池链综合服务费 = 可分配池(D5:赠酒不入此式;S4:池内不再二次扣任何留存)
         assertThat(ticketRevenue - 0L - pooledServiceFee).isEqualTo(availablePool);
-        // Σ各酒吧分账 + 余数 = 可分配池(余数=档位未铺满沉淀，天然 ≥0)
-        long remainder = availablePool - distributed;
-        assertThat(distributed + remainder).isEqualTo(availablePool);
-        assertThat(remainder).isGreaterThanOrEqualTo(0L);
+        // S8 K18:Σ各酒吧分账 + 尾差 = 可分配池(第二段归一化分尽,不再有「档位未铺满」的隐式沉淀)。
+        long residual = ((Number) bill(pid).get("rounding_residual_cent")).longValue();
+        assertThat(residual).isEqualTo(1L); // 119999 + 1 = 120000
+        assertThat(distributed + residual).isEqualTo(availablePool);
+        assertThat(((Number) bill(pid).get("pool_undistributed_cent")).longValue()).isZero();
         long sumItemsFinal = jdbcTemplate.queryForObject(
                 "SELECT COALESCE(SUM(final_amount_cent), 0) FROM settlement_items WHERE bill_id = ?",
                 Long.class, billId);
@@ -212,12 +214,13 @@ class SettlementBatch2E2ETests {
 
         String billId = settlementService.settleMonth(pid, MONTH);
 
-        // 引擎(S4)：收入 50000,池链综合服务费 = 每笔 20% = 10000 → 可分配池 40000;rank1 16% = 6400。
+        // 引擎(S4)：收入 50000,池链综合服务费 = 每笔 20% = 10000 → 可分配池 40000;
+        // S8 归一化分尽:单家在场,rank1 档位 1600 只是相对权重 → 独享整池 40000。
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(50000L);
         assertThat(num(bill, "comp_service_fee_pooled_cent")).isEqualTo(10000L);
         assertThat(num(bill, "available_pool_cent")).isEqualTo(40000L);
-        long expected = 40000L * 1600 / 10000; // 6400
+        long expected = 40000L; // prorate(40000, 1600, 1600) = 整池
         assertThat(itemAmount(pid, "b")).isEqualTo(expected);
         assertThat(itemRank(pid, "b")).isEqualTo(1);
         assertThat(bill.get("status")).isEqualTo("confirmed");

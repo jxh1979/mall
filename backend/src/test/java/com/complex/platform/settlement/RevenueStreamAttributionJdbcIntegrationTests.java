@@ -58,6 +58,12 @@ class RevenueStreamAttributionJdbcIntegrationTests {
 
     private void cleanup() {
         jdbcTemplate.update("DELETE FROM revenue_stream_attribution WHERE id LIKE 'rsa_it_%'");
+        // S8/V375:全局 all_pass_ticket 归属是种子行——本类对「平台默认」的 upsert 会按唯一键原地改写该行
+        //   (id 不变),DELETE 按 id 清不掉 → 显式还原指回娱乐平台公司,不让改写泄漏给后续测试类。
+        jdbcTemplate.update("UPDATE revenue_stream_attribution"
+                + " SET management_entity_id = 'be_ent_platform', beneficiary_kind = 'entity'"
+                + " WHERE revenue_stream = 'all_pass_ticket' AND project_id IS NULL"
+                + "   AND status = 'active' AND is_draft = FALSE");
         jdbcTemplate.update(
                 "DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)",
                 PROJECT);
@@ -67,8 +73,9 @@ class RevenueStreamAttributionJdbcIntegrationTests {
 
     @Test
     void resolvePrefersProjectOverrideThenDefaultThenNull() {
-        // 未配置 → null
-        assertThat(attributionRepository.resolveManagementEntity(PROJECT, "all_pass_ticket")).isNull();
+        // 项目未配置 → 回落 V375 全局种子(通票收入 → 娱乐平台公司),S8 起不再是 null
+        assertThat(attributionRepository.resolveManagementEntity(PROJECT, "all_pass_ticket"))
+                .isEqualTo("be_ent_platform");
 
         // 平台默认
         attributionRepository.upsert(new RevenueStreamAttributionRecord(

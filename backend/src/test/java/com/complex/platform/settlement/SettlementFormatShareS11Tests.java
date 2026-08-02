@@ -103,7 +103,8 @@ class SettlementFormatShareS11Tests {
         String billId = settlementService.settleMonth(pid, MONTH);
 
         // 手算：收入 99999 → 渠道费 0 → 池链综合服务费 Σ=19999 → 可分配池 80000；
-        //   三家各 3333‱ = 26664（80000×0.3333 恰整），Σ=79992=应分总额 → 尾差 0。
+        //   S8 第二段归一化分尽:三家权重各 3333(Σ=9999) → 各 round(80000×3333/9999)=26667,
+        //   Σ=80001;应分总额=池 80000 → 尾差 −1 单列(平台承担的追回),无未分余额。
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("id", billId);
         expected.put("project_id", pid);
@@ -112,7 +113,7 @@ class SettlementFormatShareS11Tests {
         expected.put("ticket_revenue_cent", 99999L);
         expected.put("channel_fee_cent", 0L);
         expected.put("available_pool_cent", 80000L);
-        expected.put("distributed_cent", 79992L);
+        expected.put("distributed_cent", 80001L);
         expected.put("comp_service_fee_pooled_cent", 19999L);
         expected.put("comp_service_fee_exclusive_cent", 0L);
         expected.put("fee_beneficiary_entity_id", "be_ent_platform"); // V370 全局归属种子:归娱乐平台公司
@@ -124,9 +125,11 @@ class SettlementFormatShareS11Tests {
         expected.put("status", "confirmed");
         expected.put("confirmed_at", null);
         expected.put("settled_at", null);
-        expected.put("attributed_entity_id", null);
+        expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
-        expected.put("rounding_residual_cent", 0L);
+        expected.put("rounding_residual_cent", -1L);
+        expected.put("pool_undistributed_cent", 0L);        // S8:第二段有参与者 → 恒 0
+        expected.put("pool_undistributed_entity_id", null);
 
         Map<String, Object> actual = new HashMap<>(bill(pid));
         actual.remove("created_at");   // 落库时刻，非业务口径
@@ -190,6 +193,8 @@ class SettlementFormatShareS11Tests {
         assertThat(shares.get("catering").get("comp_service_fee_cent")).isEqualTo(2000L);
         assertThat(shares.get("catering").get("net_revenue_cent")).isEqualTo(8000L);
         assertThat(shares.get("amusement").get("beneficiary_kind")).as("游乐份额归游乐公司这个主体").isEqualTo("entity");
+        assertThat(shares.get("amusement").get("beneficiary_entity_id"))
+                .as("V375 全局种子:amusement_ticket 流 → 游乐公司").isEqualTo("be_amusement");
         assertThat(shares.get("catering").get("beneficiary_kind")).as("餐饮份额归提供这份餐的商户自己").isEqualTo("per_merchant");
         assertThat(shares.get("catering").get("beneficiary_entity_id")).isNull();
         assertThat(sumOf(shares, "net_revenue_cent") + (Long) b.get("channel_fee_cent")

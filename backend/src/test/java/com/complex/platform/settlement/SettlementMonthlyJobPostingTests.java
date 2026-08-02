@@ -27,10 +27,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li><b>重跑幂等</b>:已 settled 月被 job 状态预检跳过(不重结/不双过),ar_ap 不翻倍;draft 月重算仍 draft、仍不过。</li>
  * </ul>
  *
- * <p>作业口径固定用 {@code settleMonth(null, month)}=平台默认口径,读<b>全局</b>分配配置。默认全局方式
- * by_rank_tier 的档位份额和 ≤100% 天然不越池、造不出 draft,故本类 @BeforeEach 临时把<b>全局默认</b>方式
- * 切 by_fixed_amount(唯一全局行,UPDATE+@AfterEach 还原;Surefire 顺序跑无并发,还原保证零泄漏),
- * 再配唯一商户全局固定额造「未越池/超池」两月。全局配置改动仅本方法窗口内、结束即还原。
+ * <p>作业口径固定用 {@code settleMonth(null, month)}=平台默认口径,读<b>全局</b>分配配置。
+ * S8 两段化后不再需要切全局方式:给唯一商户配<b>全局第一段固定额规则</b>(V374 rule_type=fixed)
+ * 即可造「未越池(固定额 ≤ 池)/超池(固定额 &gt;&gt; 池)」两月;第二段无参与者的余额显式归娱乐平台公司
+ * (bill.pool_undistributed_cent 留痕),不影响过账断言。
  *
  * <p>月窗选 2009 年远离其它用例(2013-05)与今日,避免 null 口径聚合(跨项目)误吸其它用例遗留核销。
  * 非 @Transactional(settleMonth/postBill 内部各自 @Transactional 真提交);@AfterEach 清窗口内落地行 + 还原全局方式。
@@ -64,30 +64,18 @@ class SettlementMonthlyJobPostingTests {
     private final String mdMerchant = "jd" + suffix; // 超池:固定额 >> 总池 → draft
     private final String seedProject = "jobtst_" + suffix;
 
-    private String originalGlobalMethod;
-
     @BeforeEach
     void setUp() {
         // 🔴 P1(2026-07-21):【故意不再注入登录主体】——生产调度线程(SettlementMonthlyJob.scheduledSettle)
         //   跑在无主体上下文,过账走 FinanceService.createArApItem(@GuardedAction)靠 currentActor() 必抛 UNAUTHENTICATED。
         //   旧测试在此 setUp 注入 asPlatformAdmin() 掩盖了该生产缺陷(测试绿、生产必挂)。现去掉注入=让测试真实复现调度线程无主体,
         //   由作业【自身装配系统主体 SCHEDULER_ACTOR】(照 FacilityInspectionScheduleJob 范式)使过账在生产真能落账。
-        // 临时把全局默认分配方式切 by_fixed_amount(唯一全局行),使 settleMonth(null,月) 能按固定额造 未越池/超池 两态。
-        originalGlobalMethod = jdbcTemplate.queryForObject(
-                "SELECT method_type FROM ticket_distribution_configs"
-                        + " WHERE project_id IS NULL AND is_draft = FALSE AND status = 'active'",
-                String.class);
-        jdbcTemplate.update("UPDATE ticket_distribution_configs SET method_type = 'by_fixed_amount'"
-                + " WHERE project_id IS NULL AND is_draft = FALSE AND status = 'active'");
+        // S8:不再需要临时切全局方式——固定额已是商户级第一段规则(V374),全局方式保持 by_rank_tier,
+        //   setGlobalMerchantFixed 配的固定规则即可造「未越池/超池」两态(第二段无参与者,余额显式归平台)。
     }
 
     @AfterEach
     void cleanup() {
-        // 还原全局默认方式(顺序跑,还原后下一用例恢复 by_rank_tier 默认;guard null 防 setUp 半途失败)。
-        if (originalGlobalMethod != null) {
-            jdbcTemplate.update("UPDATE ticket_distribution_configs SET method_type = ?"
-                    + " WHERE project_id IS NULL AND is_draft = FALSE AND status = 'active'", originalGlobalMethod);
-        }
         jdbcTemplate.update("DELETE FROM ticket_distribution_merchant_rates WHERE merchant_id IN (?, ?)",
                 mcMerchant, mdMerchant);
         // 窗口内 null 口径结算单 id 恒为 sb_default_2009-XX(仅本用例产出),先清明细再清单。
@@ -169,12 +157,12 @@ class SettlementMonthlyJobPostingTests {
 
     // ---- helpers ----
 
-    /** 全局(project_id NULL)商户固定额费率:by_fixed_amount 方式下 settleMonth(null,月) 据此给该商户直分。 */
+    /** S8:全局(project_id NULL)商户第一段固定额规则(rule_type=fixed),settleMonth(null,月) 据此给该商户直分。 */
     private void setGlobalMerchantFixed(String merchantId, long fixedCent) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_distribution_merchant_rates (id, project_id, merchant_id,
-                    per_guest_cent, fixed_amount_cent, status, is_draft)
-                VALUES (?, NULL, ?, NULL, ?, 'active', FALSE)
+                    rule_type, per_guest_cent, fixed_amount_cent, status, is_draft)
+                VALUES (?, NULL, ?, 'fixed', NULL, ?, 'active', FALSE)
                 """, "tdmr_g_" + merchantId, merchantId, fixedCent);
     }
 
