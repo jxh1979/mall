@@ -39,6 +39,9 @@ facility.inspection.scheduled.enabled: true                  # 设施定期巡�
 voucher.reservation.expiry.scheduled.enabled: true           # 实物券过期预占库存自动释放(防冻结量单调累积挡合法发券)
 inventory.saved-bottle.notification.scheduled.enabled: true  # 存酒到期状态自动流转+临期提醒(真发短信另需供应商适配器)
 
+# 2026-08-02 合同到期批转接线(旧 governance ContractExpiryJob 删除后调用方缺位→过期合同停留 effective,变更/结算入口照常放行):
+contract.expiry.scheduled.enabled: true                      # 合同过 expiry_date 日度批转 effective→expired(审计事件 contract.expired_batch)
+
 # AUD-010: web 通道翻 enforce——拒「Authorization: Bearer 自报 web」走资金端点旁路
 # (合法后台走 Cookie 会话·无客户端依赖·可独立翻;设备绑定型/app 仍 grace 待 BYOD二期客户端签名)
 access.device_credential.enforcement.web: enforce

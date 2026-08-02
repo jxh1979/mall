@@ -31,6 +31,9 @@ class ContractJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private ContractExpiryJob expiryJob;
+
     @Test
     void listContractsPagedReturnsRealTotalAndReachesNextPage() {
         // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET——total 取真值, 第二页可达首页之后的合同。
@@ -213,6 +216,29 @@ class ContractJdbcIntegrationTests {
         Map<String, Object> dep = back.settlementItems().stream()
                 .filter(i -> "deposit_disposal".equals(i.get("item"))).findFirst().orElseThrow();
         assertThat(dep).containsEntry("netRefundCent", 500000);
+    }
+
+    @Test
+    void contractExpiryJobTransitionsOnlyPastExpiryEffectiveContracts() {
+        // 合同到期批转接线（2026-08-02）：expiry_date < asOf 的 effective 合同批转 expired；
+        // expiry_date == asOf 当日尚未到期不动——对拍 markContractsExpired 严格小于语义。
+        Instant now = Instant.parse("2026-08-01T00:00:00Z");
+        repository.saveContract(new ContractRecord("ctr_expjob_past", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-06-30"), Map.of("propertyFeeCent", 88800),
+                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                null, null, null, now, now));
+        repository.saveContract(new ContractRecord("ctr_expjob_today", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-08-02"), Map.of("propertyFeeCent", 88800),
+                "fixed_ratio", "by_area", 0L, Map.of(), List.of(), null, null, List.of(), "effective", "proj_1",
+                null, null, null, now, now));
+        int count = expiryJob.runOnce(LocalDate.parse("2026-08-02"));
+        assertThat(count).isGreaterThanOrEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT lifecycle_status FROM contracts WHERE id='ctr_expjob_past'", String.class))
+                .isEqualTo("expired");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT lifecycle_status FROM contracts WHERE id='ctr_expjob_today'", String.class))
+                .isEqualTo("effective");
     }
 
     private String regclass(String tableName) {
