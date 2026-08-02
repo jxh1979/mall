@@ -1,5 +1,6 @@
 package com.complex.platform.merchantbilling;
 
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -639,17 +640,6 @@ class MerchantBillingServiceTests {
         private String key(String operationId, String idempotencyKey) {
             return operationId + ":" + idempotencyKey;
         }
-    }
-
-    private static final class InMemoryAuditEventRepository implements AuditEventRepository {
-        private final List<AuditEvent> events = new ArrayList<>();
-
-        @Override
-        public AuditEvent save(AuditEvent event) {
-            events.add(event);
-            return event;
-        }
-
     }
 
     private AuthorizationService noScopeAuth() {

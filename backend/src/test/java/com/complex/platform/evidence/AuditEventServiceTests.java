@@ -1,5 +1,6 @@
 package com.complex.platform.evidence;
 
+import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
@@ -53,15 +54,5 @@ class AuditEventServiceTests {
         assertThat(event.idempotencyKey()).isEqualTo("update-1");
         assertThat(event.metadata()).containsEntry("error_code", "SECRET_VALUE_REJECTED");
         assertThat(repository.events).containsExactly(event);
-    }
-
-    private static final class InMemoryAuditEventRepository implements AuditEventRepository {
-        private final List<AuditEvent> events = new ArrayList<>();
-
-        @Override
-        public AuditEvent save(AuditEvent event) {
-            events.add(event);
-            return event;
-        }
     }
 }

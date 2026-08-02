@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+import com.complex.platform.support.InMemoryAuditEventRepository;
+import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -639,40 +641,5 @@ class MetricDetailServiceTests {
             map.put((String) kv[i], kv[i + 1]);
         }
         return map;
-    }
-
-    private static final class InMemoryIdempotencyRepository implements IdempotencyRepository {
-        private final Map<String, IdempotencyRecord> records = new LinkedHashMap<>();
-
-        @Override
-        public Optional<IdempotencyRecord> findByOperationIdAndIdempotencyKey(String operationId, String idempotencyKey) {
-            return Optional.ofNullable(records.get(operationId + ":" + idempotencyKey));
-        }
-
-        @Override
-        public boolean tryReserve(IdempotencyRecord record) {
-            String key = record.operationId() + ":" + record.idempotencyKey();
-            if (records.containsKey(key)) {
-                return false;
-            }
-            records.put(key, record);
-            return true;
-        }
-
-        @Override
-        public IdempotencyRecord complete(IdempotencyRecord record) {
-            records.put(record.operationId() + ":" + record.idempotencyKey(), record);
-            return record;
-        }
-    }
-
-    private static final class InMemoryAuditEventRepository implements AuditEventRepository {
-        private final List<AuditEvent> events = new ArrayList<>();
-
-        @Override
-        public AuditEvent save(AuditEvent event) {
-            events.add(event);
-            return event;
-        }
     }
 }
