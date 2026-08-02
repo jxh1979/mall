@@ -399,6 +399,182 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("end", Timestamp.from(nextMonthStart));
     }
 
+    // ---- S7 赠付差额结算(HTML:962「预扣与核销实付的差额留在娱乐平台公司,按可配规则调账留痕」)----
+
+    /**
+     * S7 当月<b>预扣 G 按规则</b>聚合:与 {@link #sumPooledTotals} 完全相同的进池过滤,只对
+     * gift_cost_config_id 非空的行分组(计提/冲正行才带规则 id;非计提行 G 恒 0,不进和也不丢钱)。
+     * 引擎用「Σ各规则 G ≡ 进池 G 合计」互核——若有 G 落库却没带规则 id,月结当场响亮停,
+     * 而不是差额表悄悄少一块、财务月底对不上。
+     */
+    public List<ConfigGiftCost> aggregateGiftCostByConfig(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return jdbcTemplate.query("""
+                SELECT gift_cost_config_id                    AS config_id,
+                       COALESCE(SUM(gift_cost_cent), 0)       AS gift_cost_cent
+                  FROM settlement_transactions
+                 WHERE transaction_type IN ('verification_settled','verification_reversed')
+                   AND verification_id IS NOT NULL
+                   AND exclusive_merchant_id IS NULL
+                   AND gift_cost_config_id IS NOT NULL
+                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
+                   AND (:project_id::text IS NULL OR project_id = :project_id)
+                 GROUP BY 1
+                 ORDER BY 1
+                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                new ConfigGiftCost(rs.getString("config_id"), rs.getLong("gift_cost_cent")));
+    }
+
+    /**
+     * S7 当月<b>兑付实付 A</b> 按(票种 × 提供方业态)聚合:
+     * A = ar_ap_items(source_type='pass_drink_settlement') 的应付净额(payable 为正、对冲 receivable 为负,
+     * V344 红冲行金额自带符号随 direction 归并)。月窗/项目/票种锚点取该核销在
+     * settlement_transactions 里的结算事实行——应付联原核销行(verification_settled)、
+     * 对冲联冲正行(verification_reversed):跨月红冲的对冲与 G 的冲正行落<b>同一个月</b>,K12 不被跨月错位打破。
+     * 业态 = 提供方商户(应付对手方)的 merchant_type,与 {@link #aggregateFormatRevenue} 同一取法
+     * (解析不到按酒吧计,同一 COALESCE 口径,不静默丢钱)。
+     * 票种维度供引擎按「项目 × 票种」解析差额规则(与 G 计提用同一个 {@link #findPassGiftCostConfig})。
+     *
+     * <p>ponytail: 核销无结算事实行(direct 出票无分摊快照被消费者跳过)时其兑付不进本聚合——
+     * 该场景无月窗/项目锚点可依;真出现由结算重建任务补建事实行后自然并入。
+     */
+    public List<GiftPaid> aggregateGiftPaid(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return jdbcTemplate.query("""
+                SELECT st.ticket_type_id,
+                       COALESCE(m.merchant_type, 'bar')       AS business_format,
+                       COALESCE(SUM(CASE WHEN a.direction = 'payable' THEN a.amount_cent
+                                         ELSE -a.amount_cent END), 0) AS paid_cent
+                  FROM ar_ap_items a
+                  JOIN settlement_transactions st
+                    ON st.verification_id = a.source_id
+                   AND st.transaction_type = CASE a.direction WHEN 'payable' THEN 'verification_settled'
+                                                              ELSE 'verification_reversed' END
+                  LEFT JOIN merchants m ON m.id = a.counterparty_id
+                 WHERE a.source_type = 'pass_drink_settlement'
+                   AND COALESCE(st.business_at, st.created_at) >= :start
+                   AND COALESCE(st.business_at, st.created_at) < :end
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                 GROUP BY 1, 2
+                 ORDER BY 1, 2
+                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                new GiftPaid(rs.getString("ticket_type_id"), rs.getString("business_format"),
+                        rs.getLong("paid_cent")));
+    }
+
+    /**
+     * S7 按规则 id 读差额处理规则(快照读:不过滤 status/is_draft——G 计提行引用的规则可能已被
+     * 软替换/软删,差额结算仍须按当时那条规则的口径处理;软删铁律保证行永在,查无此行=数据被物理
+     * 删=响亮停)。
+     */
+    public String findVarianceHandling(String configId) {
+        String handling = jdbcTemplate.query(
+                "SELECT variance_handling FROM pass_gift_cost_configs WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", configId),
+                rs -> rs.next() ? rs.getString("variance_handling") : null);
+        return requireConfigured(handling, "pass_gift_cost_configs.variance_handling / id=" + configId, null);
+    }
+
+    /**
+     * S7 carry_forward 跨期滚动:该「项目 × 规则」在本期之前【结转下期且尚未被处理】的净额
+     * = Σ往期 carried_forward − Σ往期 carried_in(往期行含冲正行,取反后天然净额正确)。
+     * 不逐期链式取上一期——中间某期无单/漏结时,滚存额在下一次结算被一并拾起,不丢不重。
+     */
+    public long sumPriorCarry(String projectId, String configId, java.time.LocalDate periodStart) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(carried_forward_cent - carried_in_cent), 0)
+                  FROM pass_gift_cost_variance_ledger
+                 WHERE config_id = :config_id
+                   AND project_id IS NOT DISTINCT FROM :project_id
+                   AND period_start < :period_start
+                """, new MapSqlParameterSource()
+                .addValue("config_id", configId)
+                .addValue("project_id", projectId)
+                .addValue("period_start", java.sql.Date.valueOf(periodStart)), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    /** S7 本单台账现状:按规则聚合净额(append-only 全行相加,冲正行自带负号) + 最新非冲正行 id(供冲正指认)。 */
+    public java.util.Map<String, VarianceNet> findVarianceNetByBill(String billId) {
+        java.util.Map<String, VarianceNet> out = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT config_id,
+                       COALESCE(SUM(accrued_cost_cent), 0)    AS accrued,
+                       COALESCE(SUM(actual_paid_cent), 0)     AS paid,
+                       COALESCE(SUM(carried_in_cent), 0)      AS carried_in,
+                       COALESCE(SUM(carried_forward_cent), 0) AS carried_forward,
+                       COALESCE(SUM(pool_true_up_cent), 0)    AS pool_true_up,
+                       MAX(id) FILTER (WHERE reversal_of IS NULL) AS latest_statement_id
+                  FROM pass_gift_cost_variance_ledger
+                 WHERE bill_id = :bill_id
+                 GROUP BY config_id
+                """, new MapSqlParameterSource().addValue("bill_id", billId), rs -> {
+            out.put(rs.getString("config_id"), new VarianceNet(
+                    rs.getLong("accrued"), rs.getLong("paid"), rs.getLong("carried_in"),
+                    rs.getLong("carried_forward"), rs.getLong("pool_true_up"),
+                    rs.getString("latest_statement_id")));
+        });
+        return out;
+    }
+
+    /** S7 追加一行差额台账(append-only,只 INSERT;更正由调用方追加冲正行,绝不 UPDATE)。 */
+    public void insertVarianceRow(VarianceLedgerRow row) {
+        jdbcTemplate.update("""
+                INSERT INTO pass_gift_cost_variance_ledger (
+                    id, bill_id, project_id, period_start, period_end, config_id, variance_handling,
+                    accrued_cost_cent, actual_paid_cent, variance_cent,
+                    carried_in_cent, carried_forward_cent, pool_true_up_cent,
+                    beneficiary_entity_id, reversal_of)
+                VALUES (:id, :bill_id, :project_id, :period_start, :period_end, :config_id, :variance_handling,
+                        :accrued, :paid, :variance, :carried_in, :carried_forward, :pool_true_up,
+                        :beneficiary_entity_id, :reversal_of)
+                """, new MapSqlParameterSource()
+                .addValue("id", row.id())
+                .addValue("bill_id", row.billId())
+                .addValue("project_id", row.projectId())
+                .addValue("period_start", java.sql.Date.valueOf(row.periodStart()))
+                .addValue("period_end", java.sql.Date.valueOf(row.periodEnd()))
+                .addValue("config_id", row.configId())
+                .addValue("variance_handling", row.varianceHandling())
+                .addValue("accrued", row.accruedCostCent())
+                .addValue("paid", row.actualPaidCent())
+                .addValue("variance", row.varianceCent())
+                .addValue("carried_in", row.carriedInCent())
+                .addValue("carried_forward", row.carriedForwardCent())
+                .addValue("pool_true_up", row.poolTrueUpCent())
+                .addValue("beneficiary_entity_id", row.beneficiaryEntityId())
+                .addValue("reversal_of", row.reversalOf()));
+    }
+
+    /** S7 当月某规则的 G 聚合行(预扣合计,带符号)。 */
+    public record ConfigGiftCost(String configId, long giftCostCent) {
+    }
+
+    /** S7 当月(票种 × 提供方业态)的兑付实付净额(带符号;票种供按「项目×票种」解析差额规则)。 */
+    public record GiftPaid(String ticketTypeId, String businessFormat, long paidCent) {
+    }
+
+    /** S7 本单台账某规则的净额现状(append-only 聚合;latestStatementId 供冲正行回指)。 */
+    public record VarianceNet(long accruedCostCent, long actualPaidCent, long carriedInCent,
+                              long carriedForwardCent, long poolTrueUpCent, String latestStatementId) {
+
+        public long varianceCent() {
+            return accruedCostCent - actualPaidCent;
+        }
+
+        boolean isZero() {
+            return accruedCostCent == 0L && actualPaidCent == 0L && carriedInCent == 0L
+                    && carriedForwardCent == 0L && poolTrueUpCent == 0L;
+        }
+    }
+
+    /** S7 差额台账一行(冲正行=全金额取反 + reversalOf 指向被冲行)。 */
+    public record VarianceLedgerRow(String id, String billId, String projectId,
+                                    java.time.LocalDate periodStart, java.time.LocalDate periodEnd,
+                                    String configId, String varianceHandling,
+                                    long accruedCostCent, long actualPaidCent, long varianceCent,
+                                    long carriedInCent, long carriedForwardCent, long poolTrueUpCent,
+                                    String beneficiaryEntityId, String reversalOf) {
+    }
+
     /**
      * 门票综合服务费费率规则(= 娱乐平台公司留存 / 项目管理费):按【项目 × 商户 × 票种】范围可配,默认 0(不抽)。
      * 查询精度:商户+票种特例 &gt; 商户特例 &gt; 票种特例 &gt; 项目默认(留空=该层通用,ORDER 让更具体的优先)。
@@ -608,21 +784,23 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 new MapSqlParameterSource().addValue("bill_id", billId));
     }
 
-    /** S11：写一行结算单 × 业态份额留痕（V366;S4 补本业态综合服务费列;S6 补本业态赠送权益预估成本列）。 */
+    /** S11：写一行结算单 × 业态份额留痕（V366;S4 补本业态综合服务费列;S6 补本业态赠送权益预估成本列;
+     *  S7 补本业态兑付实付列 gift_actual_paid_cent——纯留痕不进净份额）。 */
     public void upsertFormatShare(SettlementBillFormatShareRecord share) {
         jdbcTemplate.update("""
                 INSERT INTO settlement_bill_format_shares (
                     bill_id, business_format, gross_revenue_cent, platform_borne_discount_cent,
-                    channel_fee_cent, comp_service_fee_cent, gift_cost_cent, net_revenue_cent,
-                    beneficiary_kind, beneficiary_entity_id)
+                    channel_fee_cent, comp_service_fee_cent, gift_cost_cent, gift_actual_paid_cent,
+                    net_revenue_cent, beneficiary_kind, beneficiary_entity_id)
                 VALUES (:bill_id, :business_format, :gross, :discount, :channel_fee, :comp_service_fee,
-                        :gift_cost, :net, :beneficiary_kind, :beneficiary_entity_id)
+                        :gift_cost, :gift_actual_paid, :net, :beneficiary_kind, :beneficiary_entity_id)
                 ON CONFLICT (bill_id, business_format) DO UPDATE SET
                     gross_revenue_cent           = EXCLUDED.gross_revenue_cent,
                     platform_borne_discount_cent = EXCLUDED.platform_borne_discount_cent,
                     channel_fee_cent             = EXCLUDED.channel_fee_cent,
                     comp_service_fee_cent        = EXCLUDED.comp_service_fee_cent,
                     gift_cost_cent               = EXCLUDED.gift_cost_cent,
+                    gift_actual_paid_cent        = EXCLUDED.gift_actual_paid_cent,
                     net_revenue_cent             = EXCLUDED.net_revenue_cent,
                     beneficiary_kind             = EXCLUDED.beneficiary_kind,
                     beneficiary_entity_id        = EXCLUDED.beneficiary_entity_id,
@@ -635,6 +813,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("channel_fee", share.channelFeeCent())
                 .addValue("comp_service_fee", share.compServiceFeeCent())
                 .addValue("gift_cost", share.giftCostCent())
+                .addValue("gift_actual_paid", share.giftActualPaidCent())
                 .addValue("net", share.netRevenueCent())
                 .addValue("beneficiary_kind", share.beneficiaryKind())
                 .addValue("beneficiary_entity_id", share.beneficiaryEntityId()));
@@ -858,9 +1037,24 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                        b.special_approval_ref, b.special_approval_valid_until,
                        COALESCE((SELECT SUM(i.final_amount_cent) FROM settlement_items i
                                   WHERE i.bill_id = b.id
-                                    AND i.distribution_method <> 'exclusive_full'), 0) AS pooled_distributed_cent
+                                    AND i.distribution_method <> 'exclusive_full'), 0) AS pooled_distributed_cent,
+                       b.gift_cost_cent,
+                       COALESCE(v.paid, 0)     AS gift_actual_paid_cent,
+                       COALESCE(v.variance, 0) AS gift_variance_cent,
+                       COALESCE(v.carried, 0)  AS gift_carried_forward_cent,
+                       COALESCE(v.true_up, 0)  AS gift_pool_true_up_cent,
+                       v.handlings             AS gift_variance_handling
                   FROM settlement_bills b
                   LEFT JOIN business_entities be ON be.id = b.fee_beneficiary_entity_id
+                  -- S7 赠付差额(台账 append-only 净额:冲正行自带负号,SUM 即现值;handlings 通常单值)
+                  LEFT JOIN LATERAL (
+                       SELECT SUM(l.actual_paid_cent)     AS paid,
+                              SUM(l.variance_cent)        AS variance,
+                              SUM(l.carried_forward_cent) AS carried,
+                              SUM(l.pool_true_up_cent)    AS true_up,
+                              string_agg(DISTINCT l.variance_handling, ',') AS handlings
+                         FROM pass_gift_cost_variance_ledger l
+                        WHERE l.bill_id = b.id) v ON TRUE
                  WHERE (:project_id::text IS NULL OR b.project_id = :project_id)
                    AND (:period_start::date IS NULL OR b.period_start = :period_start)
                  ORDER BY b.period_start DESC, b.id
@@ -881,7 +1075,10 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                         rs.getString("distribution_method"), rs.getString("status"),
                         rs.getString("special_approval_ref"),
                         rs.getObject("special_approval_valid_until", java.time.LocalDate.class),
-                        rs.getLong("pooled_distributed_cent")));
+                        rs.getLong("pooled_distributed_cent"),
+                        rs.getLong("gift_cost_cent"), rs.getLong("gift_actual_paid_cent"),
+                        rs.getLong("gift_variance_cent"), rs.getLong("gift_carried_forward_cent"),
+                        rs.getLong("gift_pool_true_up_cent"), rs.getString("gift_variance_handling")));
     }
 
     /**
@@ -896,7 +1093,13 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                               long availablePoolCent, long distributedCent, long comboDiscountCent,
                               long roundingResidualCent, String distributionMethod, String status,
                               String specialApprovalRef, java.time.LocalDate specialApprovalValidUntil,
-                              long pooledDistributedCent) {
+                              long pooledDistributedCent,
+                              // S7 赠付差额四数 + 处理规则(giftVarianceHandling 通常单值;多规则以逗号并列):
+                              // 财务四问——这个月预扣了多少(giftCost)、实际付出去多少(giftActualPaid)、
+                              // 差额多少(giftVariance=预扣−实付)、走的哪条规则。
+                              long giftCostCent, long giftActualPaidCent, long giftVarianceCent,
+                              long giftCarriedForwardCent, long giftPoolTrueUpCent,
+                              String giftVarianceHandling) {
     }
 
     /**
