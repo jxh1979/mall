@@ -331,11 +331,11 @@ public class RiskAlertService {
     /** 存在性 + 商户隔离：商户用户只能操作自己的预警。 */
     private RiskAlertRecord requireScopedAlert(String alertId) {
         RiskAlertRecord alert = repository.findById(alertId)
-                .orElseThrow(() -> ApiException.notFound("RISK_ALERT_NOT_FOUND", "risk alert not found"));
+                .orElseThrow(() -> ApiException.notFound("RISK_ALERT_NOT_FOUND", "风险预警不存在或已被删除"));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(alert.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "risk alert does not belong to current merchant");
+                    "风险预警不属于当前商户");
         }
         return alert;
     }
@@ -348,7 +348,7 @@ public class RiskAlertService {
             }
         }
         throw ApiException.conflict("INVALID_STATE",
-                "cannot " + action + " a risk alert in state: " + alert.status());
+                "风险预警当前状态不可执行 " + action + " 操作：" + alert.status());
     }
 
     private <T> T execute(
@@ -412,7 +412,7 @@ public class RiskAlertService {
     private String requireDomain(String value) {
         String domain = requireText(value, "source_domain").toLowerCase(Locale.ROOT);
         if (!SOURCE_DOMAINS.contains(domain)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unsupported source_domain: " + domain);
+            throw ApiException.badRequest("VALIDATION_FAILED", "不支持的来源域：" + domain);
         }
         return domain;
     }
@@ -420,14 +420,14 @@ public class RiskAlertService {
     private String requireRiskLevel(String value) {
         String level = requireText(value, "risk_level").toLowerCase(Locale.ROOT);
         if (!RISK_LEVELS.contains(level)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unsupported risk_level: " + level);
+            throw ApiException.badRequest("VALIDATION_FAILED", "不支持的风险等级：" + level);
         }
         return level;
     }
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

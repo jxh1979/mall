@@ -102,7 +102,7 @@ public class TraceabilityService {
         int threshold = thresholdPercent == null ? 80 : thresholdPercent;
         if (threshold < 0 || threshold > 100) {
             throw com.complex.platform.common.api.ApiException.badRequest(
-                    "VALIDATION_FAILED", "threshold_percent must be between 0 and 100");
+                    "VALIDATION_FAILED", "阈值百分比必须在 0 到 100 之间");
         }
         return repository.autoCaptureRate(currentScope(), threshold);
     }

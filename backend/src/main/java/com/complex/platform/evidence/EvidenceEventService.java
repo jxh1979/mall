@@ -231,19 +231,19 @@ public class EvidenceEventService {
                 () -> {
                     EvidenceAttachmentBindRequest actual = requireRequest(request);
                     EvidenceAttachmentRecord existing = repository.findAttachmentById(id)
-                            .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "attachment not found"));
+                            .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "附件不存在或已被删除"));
 
                     // P1: state machine guard — can only bind a pending attachment
                     if (!"pending".equals(existing.status())) {
                         throw ApiException.conflict("INVALID_STATE",
-                                "attachment cannot be bound in state: " + existing.status());
+                                "附件当前状态不可绑定：" + existing.status());
                     }
 
                     // P0: ownership check — merchant users can only bind their own attachments
                     Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(existing.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "attachment does not belong to current merchant");
+                                "附件不属于当前商户");
                     }
 
                     return repository.saveAttachment(new EvidenceAttachmentRecord(
@@ -282,19 +282,19 @@ public class EvidenceEventService {
                 () -> {
                     EvidenceAttachmentCompleteRequest actual = requireRequest(request);
                     EvidenceAttachmentRecord existing = repository.findAttachmentById(id)
-                            .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "attachment not found"));
+                            .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "附件不存在或已被删除"));
 
                     // P1: state machine guard — can only complete a pending or bound attachment
                     if (!"pending".equals(existing.status()) && !"bound".equals(existing.status())) {
                         throw ApiException.conflict("INVALID_STATE",
-                                "attachment cannot be completed in state: " + existing.status());
+                                "附件当前状态不可完成上传：" + existing.status());
                     }
 
                     // P0: ownership check — merchant users can only complete their own attachments
                     Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(existing.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "attachment does not belong to current merchant");
+                                "附件不属于当前商户");
                     }
 
                     return repository.saveAttachment(new EvidenceAttachmentRecord(
@@ -347,21 +347,21 @@ public class EvidenceEventService {
                     for (String attachmentId : attachmentIds) {
                         EvidenceAttachmentRecord att = repository.findAttachmentById(attachmentId)
                                 .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
-                                        "attachment not found: " + attachmentId));
+                                        "附件不存在：" + attachmentId));
                         // P1 越权修复：评审引用附件此前不校验附件归属（bindAttachment/completeAttachment 均有），
                         // 可把他商户 attachment_id 写入自己 review，跨租户引用/泄露证据。
                         Optional<String> attScope = authorizationService.currentMerchantScope();
                         if (attScope.isPresent() && !attScope.get().equals(att.merchantId())) {
                             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                    "attachment belongs to another merchant: " + attachmentId);
+                                    "附件属于其他商户：" + attachmentId);
                         }
                         if (!reqBusinessType.equals(att.businessType()) || !reqBusinessId.equals(att.businessId())) {
                             throw ApiException.badRequest("VALIDATION_FAILED",
-                                    "attachment does not belong to the specified business object: " + attachmentId);
+                                    "附件不属于指定的业务对象：" + attachmentId);
                         }
                         if (!"uploaded".equals(att.status())) {
                             throw ApiException.badRequest("VALIDATION_FAILED",
-                                    "attachment is not in uploaded state: " + attachmentId);
+                                    "附件不在已上传状态：" + attachmentId);
                         }
                     }
 
@@ -574,7 +574,7 @@ public class EvidenceEventService {
         if (!SHA256_CHECKSUM.matcher(normalized).matches()) {
             throw ApiException.badRequest(
                     "EVIDENCE_CHECKSUM_INVALID",
-                    "checksum must be a sha256 digest of the form 'sha256:<64 hex chars>'");
+                    "校验和格式不正确，应为 sha256:<64位十六进制> 形式");
         }
         return normalized;
     }
@@ -588,7 +588,7 @@ public class EvidenceEventService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
