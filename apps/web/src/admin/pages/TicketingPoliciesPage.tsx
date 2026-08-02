@@ -108,7 +108,7 @@ type GiftCoverageRow = {
 //   结算按【内部结算价】全额归餐厅商户(exclusive_merchant_id + agreement_price_cent，走 §6.4 不分摊直付)；
 //   价格(面值,可0)与折扣仅为售卖/展示口径，不参与结算(核销结算价=内部结算价，不再把折扣当面值乱记)。
 // costBearer：价格 0（纯赠送）时必选——这份赠品的成本谁出（V376）。
-type DiningLine = { merchantId: string; valueYuan: string; discount: string; internalYuan: string; costBearer: string };
+type DiningLine = { merchantId: string; valueYuan: string; discount: string; catalogCode: string; costBearer: string };
 
 function toRows<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
@@ -179,7 +179,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   // 区2 新建权益模板
   const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", requireFacePhoto: false });
   // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
-  const [priceForm, setPriceForm] = React.useState({ templateId: "", priceYuan: "", reason: "" });
   // 区3 通票组装（票种绑权益）
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "" });
   // 区4 派生价规则
@@ -466,24 +465,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     reload();
   }
 
-  /**
-   * 配置中心批5：改虚拟权益签约价（=内部结算价）。
-   * 只对之后发放的权益生效——已发放/已核销的按发放当时的价，后端结构性保证（快照链）。
-   */
-  async function updateAgreementPrice() {
-    if (!priceForm.templateId) { setGlobalError("请选择要改签约价的权益模板"); return; }
-    if (!priceForm.priceYuan.trim()) { setGlobalError("新签约价必填"); return; }
-    if (!priceForm.reason.trim()) { setGlobalError("改签约价必须填写理由"); return; }
-    await api.put(`/api/v1/ticketing/entitlement-templates/${priceForm.templateId}/agreement-price`, {
-      idempotency_key: crypto.randomUUID(),
-      agreement_price_cent: Math.round(Number(priceForm.priceYuan) * 100),
-      reason: priceForm.reason.trim(),
-    });
-    setActionResult({ action: "entitlement_agreement_price_updated", templateId: priceForm.templateId });
-    setPriceForm({ templateId: "", priceYuan: "", reason: "" });
-    reload();
-  }
-
   async function bindEntitlement() {
     if (!bindForm.ticketTypeId || !bindForm.templateId) {
       setGlobalError("请选择票种与权益模板");
@@ -624,7 +605,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     if (merchantId) void loadBarProducts(merchantId);
   }
   function addDiningLine() {
-    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", internalYuan: "", costBearer: "" }]);
+    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", catalogCode: "", costBearer: "" }]);
   }
 
   // 创建单条权益模板并绑定到目标通票。merchantId 必填（后端强制）。
@@ -634,8 +615,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     totalTimes: number;
     valueCent: number | null;
     merchantId: string;
-    // 餐饮结算(用户2026-07-06)：内部结算价 + 专属餐厅商户(可选，仅餐饮传)。核销按内部结算价全额归餐厅。
-    agreementPriceCent?: number | null;
+    // 批10/E：内部结算价收编进 SKU 目录——此处只挂目录条目引用；专属餐厅商户(可选，仅餐饮传)。核销按目录生效价全额归餐厅。
+    catalogItemCode?: string | null;
     exclusiveMerchantId?: string | null;
     // 酒水兑换：提供方商品（成本按该商品的内部结算价与这家酒吧结算）。
     barItemRef?: string | null;
@@ -653,7 +634,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       default_value_cent: payload.valueCent,
       status: "active",
       merchant_id: payload.merchantId,
-      agreement_price_cent: payload.agreementPriceCent ?? null,
+      catalog_item_code: payload.catalogItemCode ?? null,
       exclusive_merchant_id: payload.exclusiveMerchantId ?? null,
       bar_item_ref: payload.barItemRef ?? null,
     });
@@ -753,8 +734,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           // 价格(面值)可为 0：留空=0（纯赠送/兑换）。
           valueCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
           merchantId: line.merchantId,
-          // 内部结算价(可空)：核销按此价结算归餐厅；留空则回退面值。
-          agreementPriceCent: line.internalYuan.trim() ? Math.round(Number(line.internalYuan) * 100) : null,
+          // 批10/E：内部结算价唯一可编辑处 = 内部结算 SKU 目录；此处只挂目录条目引用（留空=未配价）。
+          catalogItemCode: line.catalogCode.trim() || null,
           // 专属餐厅商户：使核销结算全额归该餐厅、不进池分摊。
           exclusiveMerchantId: line.merchantId,
           // 票面原价 = 这一行填的价格（0=纯赠送，不参与分钱）。内部结算价是另一条线，不能拿来当票面原价。
@@ -1179,7 +1160,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                   <input aria-label="折扣" type="number" min={0} max={10} step="0.5" value={line.discount} placeholder="选填，如 8" onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, discount: event.target.value } : l))} />
                 </td>
                 <td>
-                  <input aria-label="内部结算价（元）" type="number" min={0} step="0.01" value={line.internalYuan} placeholder="归餐厅的结算价" onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, internalYuan: event.target.value } : l))} />
+                  <input aria-label="内部结算价目录条目编码" value={line.catalogCode} placeholder="目录条目编码（结算→内部结算价目录）" onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, catalogCode: event.target.value } : l))} />
                 </td>
                 <td>
                   <select aria-label="餐饮成本承担方" data-testid={`combo-dining-cost-bearer-${index}`} value={line.costBearer} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, costBearer: event.target.value } : l))}>
@@ -1252,28 +1233,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </PermissionButton>
       </div>
 
-      <h3>改签约价（虚拟权益 · 内部结算价）</h3>
+      <h3>签约价（虚拟权益 · 内部结算价）</h3>
       <p style={{ color: "var(--adm-text-3)", fontSize: 13 }} data-testid="agreement-price-scope-hint">
-        签约价决定客人核销这张权益时平台结算给商户多少钱。改后<strong>只对之后发放的权益生效</strong>：已发放的票按发放当时的价、已核销的按核销当时的价，都不会被改动。改价必须填理由，全程留痕。实物权益（酒水等）不在这里改——改吧台商品的内部结算价。
+        签约价（内部结算价）已收编进「结算 → 内部结算价目录」，那里是唯一可改价处：改价先存草案、由具备高敏权限的他人复核转正后才对<strong>之后的核销/结算</strong>生效；已核销的账按核销当时固化的价，一分不会被改动。本页列表里的签约价是目录价快照，只读展示。
       </p>
-      <div className="admin-inline-form" data-testid="agreement-price-form">
-        <select aria-label="改签约价-权益模板" data-testid="agreement-price-template" value={priceForm.templateId}
-          onChange={(event) => setPriceForm({ ...priceForm, templateId: event.target.value })}>
-          <option value="">选择权益模板</option>
-          {templates.filter((t) => t.entitlementKind === "virtual").map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}（现价 {t.agreementPriceCent != null ? `¥${yuan(t.agreementPriceCent)}` : "未设"}）
-            </option>
-          ))}
-        </select>
-        <input aria-label="新签约价（元）" data-testid="agreement-price-value" type="number" min={0} step="0.01"
-          value={priceForm.priceYuan} onChange={(event) => setPriceForm({ ...priceForm, priceYuan: event.target.value })} placeholder="新签约价（元）" />
-        <input aria-label="改价理由" data-testid="agreement-price-reason" value={priceForm.reason}
-          onChange={(event) => setPriceForm({ ...priceForm, reason: event.target.value })} placeholder="改价理由（必填，如：签约价录入笔误更正）" />
-        <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid="agreement-price-submit" onClick={() => void updateAgreementPrice()}>
-          保存签约价
-        </PermissionButton>
-      </div>
 
       <h3>第三方券（餐厅券 · 通票包含）</h3>
       <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>把某个权益模板配成第三方券：免费营销券核销不结算；内部价采购券每核销一张按内部结算价给第三方挂应付。客人买含该权益的通票即附赠此券，到餐厅由餐厅自己系统核销，再经对账文件回流。</p>

@@ -35,6 +35,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", route: "/admin/customers/loyalty-config" },
   { pageId: "ADM-CUS-005", label: "储值规则配置", route: "/admin/customers/stored-value-rules" },
   { pageId: "ADM-STL-001", label: "结算配置中心", route: "/admin/settlement/config" },
+  { pageId: "ADM-STL-003", label: "内部结算价目录", route: "/admin/settlement/internal-price-catalog" },
   { pageId: "ADM-STL-002", label: "开票清单", route: "/admin/settlement/invoice-items" },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", route: "/admin/terminals/switch-matrix" },
   { pageId: "ADM-TER-002", label: "终端设备", route: "/admin/terminals/devices" },
@@ -160,6 +161,12 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await page.getByRole("tab", { name: "通票分账" }).click();
     await expect(page.getByTestId("settlement-config-block-retention")).toBeVisible();
     await expect(page.getByTestId("settlement-config-edit-retention")).toBeVisible();
+  } else if (spec.pageId === "ADM-STL-003") {
+    // 批10/E：内部结算 SKU 目录——三维筛选 + 草案队列 + 生效条目表可见。
+    await expect(page.getByTestId("internal-price-catalog-page")).toBeVisible();
+    await expect(page.getByTestId("ipc-filters")).toBeVisible();
+    await expect(page.getByTestId("ipc-draft-table")).toBeVisible();
+    await expect(page.getByTestId("ipc-active-table")).toBeVisible();
   } else if (spec.pageId === "ADM-STL-002") {
     await expect(page.getByTestId("settlement-invoice-page")).toBeVisible();
     await expect(page.getByTestId("settlement-invoice-subject-table")).toBeVisible();

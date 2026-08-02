@@ -72,7 +72,7 @@ const TEXT = {
   faceValueRequired: "商户折扣券必须填写面额（元，大于 0）。",
   merchantRequired: "该券类型/结算口径必须选择归属商户。",
   goodsRequired: "店内实物券必须填写货品、库位与每张券件数。",
-  internalPriceRequired: "内部结算必须填写内部结算价（元，大于 0）。",
+  internalPriceRequired: "内部结算必须引用内部结算价目录条目（条目须已复核转正且生效价大于 0）。",
   customerRequired: "请填写客人 ID。",
   definitionRequired: "请选择券定义。",
   quantityInvalid: "发放张数必须是 1-100 的整数。",
@@ -116,7 +116,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
   const [defItemId, setDefItemId] = React.useState("");
   const [defLocationId, setDefLocationId] = React.useState("");
   const [defStockQty, setDefStockQty] = React.useState("1");
-  const [defInternalYuan, setDefInternalYuan] = React.useState("");
+  const [defCatalogCode, setDefCatalogCode] = React.useState("");
   const [defValidDays, setDefValidDays] = React.useState("");
   // V313 券种级"可转让"开关，默认开（可转让）；关闭则该券种发出的券不可会员间转赠。
   const [defTransferable, setDefTransferable] = React.useState(true);
@@ -184,7 +184,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
     setDefItemId("");
     setDefLocationId("");
     setDefStockQty("1");
-    setDefInternalYuan("");
+    setDefCatalogCode("");
     setDefValidDays("");
     setCreateDefOpen(true);
   }
@@ -202,8 +202,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
       if (!Number.isInteger(qty) || qty <= 0) return TEXT.goodsRequired;
     }
     if (defMode === "internal_price") {
-      const price = Number(defInternalYuan);
-      if (!Number.isFinite(price) || price <= 0) return TEXT.internalPriceRequired;
+      if (!defCatalogCode.trim()) return TEXT.internalPriceRequired;
       if (!defMerchant.trim()) return TEXT.merchantRequired;
     }
     return null;
@@ -226,7 +225,8 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
       inventoryItemId: defKind === "in_store_goods" ? defItemId.trim() : null,
       stockLocationId: defKind === "in_store_goods" ? defLocationId.trim() : null,
       stockQuantity: defKind === "in_store_goods" ? Number(defStockQty) : null,
-      internalPriceCent: defMode === "internal_price" ? Math.round(Number(defInternalYuan) * 100) : null,
+      // 批10/E：内部结算价唯一可编辑处 = 内部结算 SKU 目录；建券只挂目录条目引用，快照由后端按生效价落。
+      catalogItemCode: defMode === "internal_price" ? defCatalogCode.trim() : null,
       validDays: defValidDays.trim() ? Number(defValidDays) : null,
       validUntil: null,
       transferable: defTransferable,
@@ -536,7 +536,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
                   </>
                 )}
                 {defMode === "internal_price" ? (
-                  <label>内部结算价（元）<input data-testid="voucher-create-def-internal" type="number" step="0.01" value={defInternalYuan} onChange={(event) => setDefInternalYuan(event.target.value)} placeholder="核销时按此价给商户挂应付" /></label>
+                  <label>内部结算价目录条目编码<input data-testid="voucher-create-def-internal" value={defCatalogCode} onChange={(event) => setDefCatalogCode(event.target.value)} placeholder="在「结算 → 内部结算价目录」页新建/查询（须已复核转正）" /></label>
                 ) : null}
               </>
             ),
@@ -576,7 +576,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
           { label: "结算口径", value: MODE_LABELS[defMode] ?? defMode },
           { label: "归属商户", value: defMerchant.trim() || "平台通用" },
           { label: defKind === "merchant_discount" ? "面额" : "货品/库位/件数", value: defKind === "merchant_discount" ? (defFaceYuan ? `¥${defFaceYuan}` : "未填写") : `${defItemId || "?"} / ${defLocationId || "?"} / ${defStockQty || "?"} 件` },
-          { label: "内部结算价", value: defMode === "internal_price" ? (defInternalYuan ? `¥${defInternalYuan}` : "未填写") : "不适用" },
+          { label: "内部结算价目录条目", value: defMode === "internal_price" ? (defCatalogCode.trim() || "未填写") : "不适用" },
           { label: "有效期", value: defValidDays.trim() ? `发放起 ${defValidDays} 天` : "不过期" },
           { label: "可转让", value: defTransferable ? "允许转赠" : "不可转赠" },
         ]}

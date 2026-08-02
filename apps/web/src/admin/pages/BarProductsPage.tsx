@@ -47,10 +47,10 @@ type ProductForm = {
   productName: string;
   category: string;
   priceYuan: string;
-  internalPriceYuan: string;
+  catalogItemCode: string;
 };
 
-const EMPTY_FORM: ProductForm = { barId: "", productName: "", category: "spirit", priceYuan: "", internalPriceYuan: "" };
+const EMPTY_FORM: ProductForm = { barId: "", productName: "", category: "spirit", priceYuan: "", catalogItemCode: "" };
 
 type CategoryForm = { barId: string; categoryName: string; sortOrder: string };
 const EMPTY_CATEGORY_FORM: CategoryForm = { barId: "", categoryName: "", sortOrder: "0" };
@@ -230,17 +230,14 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     const productName = form.productName.trim();
     const category = form.category.trim();
     const priceCent = toCent(form.priceYuan);
-    const internalSettlementPriceCent = toCent(form.internalPriceYuan);
+    // 批10/E：内部结算价唯一可编辑处 = 内部结算 SKU 目录；商品侧只挂目录条目引用（可空=不参与结算/提成扣减）。
+    const catalogItemCode = form.catalogItemCode.trim();
     if (!barId || !productName || !category) {
       setFormError("酒吧、商品名、类别必填");
       return;
     }
     if (priceCent === null || priceCent < 0) {
       setFormError("售价必须为非负数字");
-      return;
-    }
-    if (form.internalPriceYuan.trim() !== "" && (internalSettlementPriceCent === null || internalSettlementPriceCent < 0)) {
-      setFormError("内部结算价必须为非负数字（留空=不录入，该商品不参与结算/提成扣减）");
       return;
     }
     try {
@@ -250,7 +247,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         category,
         priceCent,
         status: "active",
-        internalSettlementPriceCent,
+        catalogItemCode: catalogItemCode || null,
       });
       setForm(EMPTY_FORM);
       setProductOpen(false);
@@ -399,18 +396,17 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
             },
             {
               title: "定价与图片",
-              description: "售价必填（非负），内部结算价可空（留空=不参与结算/提成扣减）；商品图片在录入后于下方列表按行上传。",
+              description: "售价必填（非负）。内部结算价已收编进「内部结算价目录」：此处只填目录条目编码建立引用（可空=不参与结算/提成扣减），改价一律回目录走草案复核；商品图片在录入后于下方列表按行上传。",
               validate: () => {
                 const priceCent = toCent(form.priceYuan);
                 if (priceCent === null || priceCent < 0) return "售价必须为非负数字";
-                const internal = toCent(form.internalPriceYuan);
-                if (form.internalPriceYuan.trim() !== "" && (internal === null || internal < 0)) return "内部结算价必须为非负数字（留空=不录入）";
                 return null;
               },
               content: (
                 <>
                   <label><span>售价（元）</span><input data-testid="bar-product-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setField("priceYuan", e.target.value)} /></label>
-                  <label><span>内部结算价（元，可空）</span><input data-testid="bar-product-internal-price" inputMode="decimal" value={form.internalPriceYuan} onChange={(e) => setField("internalPriceYuan", e.target.value)} /></label>
+                  <label><span>内部结算价目录条目编码（可空）</span><input data-testid="bar-product-catalog-code" value={form.catalogItemCode} onChange={(e) => setField("catalogItemCode", e.target.value)} placeholder="在「结算 → 内部结算价目录」页新建/查询条目编码" /></label>
+                  <div className="admin-preview">内部结算价快照由系统按目录生效价自动写入并随目录复核转正同步，本页只读展示、不可手改。</div>
                   <div className="admin-preview" data-testid="bar-product-image-hint">图片：商品录入后在下方列表对应行上传（按商品挂图）。</div>
                 </>
               ),
@@ -421,7 +417,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
             { label: "商品名", value: form.productName.trim() || "未填写" },
             { label: "类别", value: categoryLabel(form.category) },
             { label: "售价（元）", value: form.priceYuan.trim() || "未填写" },
-            { label: "内部结算价（元）", value: form.internalPriceYuan.trim() || "不录入" },
+            { label: "内部结算价目录条目", value: form.catalogItemCode.trim() || "不引用（不参与结算/提成扣减）" },
           ]}
         />
       </div>

@@ -27,10 +27,10 @@ type ComboForm = {
   barId: string;
   comboName: string;
   priceYuan: string;
-  internalPriceYuan: string;
+  catalogItemCode: string;
   items: ComboItemForm[];
 };
-const EMPTY_COMBO_FORM: ComboForm = { barId: "", comboName: "", priceYuan: "", internalPriceYuan: "", items: [{ productId: "", quantity: "1" }] };
+const EMPTY_COMBO_FORM: ComboForm = { barId: "", comboName: "", priceYuan: "", catalogItemCode: "", items: [{ productId: "", quantity: "1" }] };
 
 /**
  * 酒吧套餐管理页（ADM-BAR-006，V257 图形化点单 POS 阶段1）：
@@ -180,7 +180,8 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
     const barId = form.barId.trim();
     const comboName = form.comboName.trim();
     const priceCent = toCent(form.priceYuan);
-    const internalSettlementPriceCent = toCent(form.internalPriceYuan);
+    // 批10/E：内部结算价唯一可编辑处 = 内部结算 SKU 目录；套餐侧只挂目录条目引用（更新留空 = 保留既有引用）。
+    const catalogItemCode = form.catalogItemCode.trim();
     if (!barId || !comboName) {
       setFormError("酒吧、套餐名必填");
       return;
@@ -205,7 +206,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
         barId,
         comboName,
         priceCent,
-        internalSettlementPriceCent,
+        catalogItemCode: catalogItemCode || null,
         status: "active",
         items,
       });
@@ -258,7 +259,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
           },
           {
             title: "定价与商品",
-            description: "售价必填（非负），内部结算价可空；从既有商品挑至少一件组成套餐，数量为正整数。",
+            description: "售价必填（非负）。内部结算价已收编进「内部结算价目录」：此处只填目录条目编码建立引用（可空），改价一律回目录走草案复核；从既有商品挑至少一件组成套餐，数量为正整数。",
             validate: () => {
               const priceCent = toCent(form.priceYuan);
               if (priceCent === null || priceCent < 0) return "售价必须为非负数字";
@@ -272,7 +273,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
             content: (
               <>
                 <label><span>售价（元）</span><input data-testid="bar-combo-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setField("priceYuan", e.target.value)} /></label>
-                <label><span>内部结算价（元，可空）</span><input data-testid="bar-combo-internal-price" inputMode="decimal" value={form.internalPriceYuan} onChange={(e) => setField("internalPriceYuan", e.target.value)} /></label>
+                <label><span>内部结算价目录条目编码（可空）</span><input data-testid="bar-combo-catalog-code" value={form.catalogItemCode} onChange={(e) => setField("catalogItemCode", e.target.value)} placeholder="在「结算 → 内部结算价目录」页新建/查询条目编码" /></label>
                 <div data-testid="bar-combo-items">
                   <span>组合商品</span>
                   {form.items.map((it, index) => (
@@ -299,7 +300,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
           { label: "酒吧 ID", value: form.barId.trim() || "未填写" },
           { label: "套餐名", value: form.comboName.trim() || "未填写" },
           { label: "售价（元）", value: form.priceYuan.trim() || "未填写" },
-          { label: "内部结算价（元）", value: form.internalPriceYuan.trim() || "不录入" },
+          { label: "内部结算价目录条目", value: form.catalogItemCode.trim() || "不引用" },
           { label: "组合商品数", value: String(form.items.filter((it) => it.productId.trim() !== "").length) },
         ]}
       />
