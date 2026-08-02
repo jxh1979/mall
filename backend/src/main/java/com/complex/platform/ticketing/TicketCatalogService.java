@@ -523,9 +523,12 @@ public class TicketCatalogService {
                 positiveOrDefault(actual.numPeople(), 1, "num_people"),
                 // 待确认项#1 配置入口：分项标准单价/手动单价（可选，可空回退）。联合票各分项配单价以按比例拆分订单实付。
                 nonNegativeOrNull(actual.componentPriceCent(), "component_price_cent"),
-                // S6 配置入口(HTML:737「每个权益必须在票种配置里标明成本承担方」)：缺省 platform_funded=平台出资型
-                //   (改造前唯一行为)；merchant_concession=商户让利型(不进 G 预扣、核销不与商户结算)。坏值拒绝。
-                requireCostBearer(actual.costBearer()),
+                // S6/V376 配置入口(HTML:737「每个权益必须在票种配置里标明成本承担方」，2026-08-01 拍板改必填)：
+                //   赠送类权益（票面原价 0 且提供方兑付类）漏标当场拒绝——不再默认 platform_funded，
+                //   否则运营漏标一个商户让利型赠品，平台就替商户多付一笔预估成本。非赠送类无此概念，允许留空。
+                requireCostBearer(actual.costBearer(),
+                        isGiftClass(nonNegativeOrNull(actual.componentPriceCent(), "component_price_cent"), template),
+                        template.name()),
                 now,
                 now
         );
@@ -539,11 +542,29 @@ public class TicketCatalogService {
         return repository.saveTicketTypeEntitlement(binding);
     }
 
-    /** S6：成本承担方取值校验（缺省 platform_funded；坏值中文 400，不落到 DB CHECK 抛 500）。 */
-    private String requireCostBearer(String costBearer) {
+    /**
+     * S6/V376：赠送类判定——票面原价 0/未配 且 提供方兑付类。谓词与 S5
+     * {@link InternalSettlementPriceResolver#providerRedeemed} / S6 {@code byItemGiftCostCent} 同源不另造：
+     * 只有这类权益有「成本承担方」概念（入场/付费组成无内部成本，别误伤）。
+     */
+    private static boolean isGiftClass(Long componentPriceCent, EntitlementTemplateRecord template) {
+        return (componentPriceCent == null || componentPriceCent == 0L)
+                && InternalSettlementPriceResolver.providerRedeemed(
+                        template.entitlementType(), template.entitlementKind(), template.exclusiveMerchantId());
+    }
+
+    /**
+     * S6/V376：成本承担方校验（2026-08-01 拍板：必填、无默认）。赠送类漏标 → 中文 400 点名权益；
+     * 非赠送类留空合法（存 NULL）；坏值中文 400，不落到 DB CHECK 抛 500。
+     */
+    private String requireCostBearer(String costBearer, boolean giftClass, String templateName) {
         String value = trimToNull(costBearer);
         if (value == null) {
-            return TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED;
+            if (giftClass) {
+                throw ApiException.badRequest("TICKET_COST_BEARER_REQUIRED",
+                        "赠送权益「" + templateName + "」还没标成本承担方（商户让利型/平台出资型），不能保存");
+            }
+            return null;
         }
         if (!TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED.equals(value)
                 && !TicketTypeEntitlementRecord.COST_BEARER_MERCHANT_CONCESSION.equals(value)) {
@@ -577,6 +598,7 @@ public class TicketCatalogService {
                     "ticket type must have at least one entitlement binding before publish");
         }
         requireComponentPrices(current.id());
+        requireCostBearers(current.id());
         requireBarGiftCoverage(current.id());
         // V369 凑整误差闸：填的售价与系统算出的售价差太多就不许开卖（HTML:741「超出即拒绝发布」）。
         requirePriceWithinTolerance(current, repository.listTicketTypeEntitlements(current.id()));
@@ -802,6 +824,31 @@ public class TicketCatalogService {
         if (!missing.isEmpty()) {
             throw ApiException.badRequest("TICKET_COMPONENT_PRICE_REQUIRED",
                     "这些权益还没填票面原价，票不能开卖（免费的请填 0）：" + String.join("、", missing));
+        }
+    }
+
+    /**
+     * S6/V376 发布闸兜底（HTML:737「每个权益必须在票种配置里标明成本承担方」，2026-08-01 拍板：漏标拒发布）。
+     * 绑定时已拦，但绑完还能改模板（补专属商户等）让一条旧绑定「变成」赠送类——发布前逐行再查一遍，
+     * 漏标的点名报出来让运营当场补，而不是开卖后平台默默替商户垫成本。
+     */
+    private void requireCostBearers(String ticketTypeId) {
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        for (TicketTypeEntitlementRecord binding : repository.listTicketTypeEntitlements(ticketTypeId)) {
+            if (binding.costBearer() != null) {
+                continue;
+            }
+            EntitlementTemplateRecord template =
+                    repository.findEntitlementTemplateById(binding.entitlementTemplateId()).orElse(null);
+            if (template == null || !isGiftClass(binding.componentPriceCent(), template)) {
+                continue; // 非赠送类无成本承担概念，别误伤。
+            }
+            missing.add(template.name());
+        }
+        if (!missing.isEmpty()) {
+            throw ApiException.badRequest("TICKET_COST_BEARER_REQUIRED",
+                    "这些赠送权益还没标成本承担方（商户让利型/平台出资型），票不能发布："
+                            + missing.stream().sorted().distinct().collect(java.util.stream.Collectors.joining("、")));
         }
     }
 
