@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 709 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 710 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 325 | 人工权限矩阵正文未覆盖 223 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1418 | 人工事件矩阵正文未覆盖 1376 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 709 | 人工任务映射正文未逐项覆盖 703 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 427 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1420 | 人工事件矩阵正文未覆盖 1378 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 710 | 人工任务映射正文未逐项覆盖 704 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 428 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -298,7 +298,7 @@
 | `service.order.create` | staff-token | platform | 7 | listServiceCatalog, createServiceOrder, completeServiceOrder, cancelServiceOrder, serviceOrderPaymentCode, markServiceOrderPaid, getServicePayConfig | OpenAPI 补充，以本附录为准 |
 | `service.order.perform` | staff-token | platform | 5 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.post` | staff-token | platform | 1 | settlementPostBill | OpenAPI 补充，以本附录为准 |
-| `settlement.config.manage` | staff-token | platform | 15 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
+| `settlement.config.manage` | staff-token | platform | 16 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
 | `settlement.config.view` | staff-token | platform | 1 | settlementConfigOverview | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.manage` | staff-token | platform | 2 | generateSettlementInvoiceItems, changeSettlementInvoiceItemStatus | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.view` | staff-token | platform | 2 | listSettlementInvoiceItems, settlementInvoiceSummary | OpenAPI 补充，以本附录为准 |
@@ -1500,6 +1500,8 @@
 | `settlement.config.high_value_thresholds.updated` | success | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.overview.view_failed` | failure | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `settlement.config.overview.viewed` | success | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `settlement.config.pass_gift_cost_configs.update_failed` | failure | `settlementConfigUpsertPassGiftCost` | `POST` | `/api/v1/settlement/config/pass-gift-cost` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.pass_gift_cost_configs.updated` | success | `settlementConfigUpsertPassGiftCost` | `POST` | `/api/v1/settlement/config/pass-gift-cost` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.platform_retention_rules.update_failed` | failure | `settlementConfigUpsertRetention` | `POST` | `/api/v1/settlement/config/retention` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.platform_retention_rules.updated` | success | `settlementConfigUpsertRetention` | `POST` | `/api/v1/settlement/config/retention` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.points_accrual_rate_configs.update_failed` | failure | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
@@ -2396,6 +2398,7 @@
 | P0-待归类 | `settlementConfigUpsertDistributionMethod` | `POST` | `/api/v1/settlement/config/distribution-method` | 维护通票分配方式(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_configs.updated` / `settlement.config.ticket_distribution_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | 维护高价值判定阈值(草案) | `settlement.config.manage` | `settlement.config.high_value_thresholds.updated` / `settlement.config.high_value_thresholds.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertMerchantRate` | `POST` | `/api/v1/settlement/config/merchant-rate` | 维护每客单价/固定额(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_merchant_rates.updated` / `settlement.config.ticket_distribution_merchant_rates.update_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigUpsertPassGiftCost` | `POST` | `/api/v1/settlement/config/pass-gift-cost` | 维护赠送权益预估成本预扣规则(草案) | `settlement.config.manage` | `settlement.config.pass_gift_cost_configs.updated` / `settlement.config.pass_gift_cost_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | 维护积分累计率(草案) | `settlement.config.manage` | `settlement.config.points_accrual_rate_configs.updated` / `settlement.config.points_accrual_rate_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | 维护排名档位梯子(草案·整套替换) | `settlement.config.manage` | `settlement.config.ticket_distribution_rank_tiers.updated` / `settlement.config.ticket_distribution_rank_tiers.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRetention` | `POST` | `/api/v1/settlement/config/retention` | 维护项目公司留存比例(草案) | `settlement.config.manage` | `settlement.config.platform_retention_rules.updated` / `settlement.config.platform_retention_rules.update_failed` | web | operation 级补充 |

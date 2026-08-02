@@ -34929,6 +34929,87 @@
         }
       }
     },
+    "/api/v1/settlement/config/pass-gift-cost": {
+      "post": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "settlementConfigUpsertPassGiftCost",
+        "summary": "维护赠送权益预估成本预扣规则(草案)",
+        "description": "结算配置中心 S6(V373)：按 项目公司 × 票种 配置通票分账池前预扣的「赠送权益预估成本」(归娱乐平台公司)。两模式二选一：by_item 按件计＝票面各权益数量 × 提供方内部结算价之和(金额由票面推导,不接受手填整额)；by_ticket_amount 按票计＝该票种赠送部分的售价整额(必填,0=预扣关闭)。可选每月封顶与差额处理规则。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。",
+        "x-auth-context": "staff-token",
+        "x-permission": "settlement.config.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "settlement.config.pass_gift_cost_configs.updated",
+        "x-audit-event-failure": "settlement.config.pass_gift_cost_configs.update_failed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "ticket_type_id": {
+                    "type": "string"
+                  },
+                  "prededuct_mode": {
+                    "type": "string",
+                    "enum": [
+                      "by_item",
+                      "by_ticket_amount"
+                    ]
+                  },
+                  "ticket_gift_amount_cent": {
+                    "type": "integer"
+                  },
+                  "monthly_cap_amount_cent": {
+                    "type": "integer"
+                  },
+                  "variance_handling": {
+                    "type": "string",
+                    "enum": [
+                      "platform_absorb",
+                      "carry_forward",
+                      "true_up_pool"
+                    ]
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "prededuct_mode"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/bar/void-reason-codes": {
       "get": {
         "tags": [
