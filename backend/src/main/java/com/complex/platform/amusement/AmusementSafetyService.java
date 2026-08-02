@@ -425,23 +425,23 @@ public class AmusementSafetyService {
 
     private AmusementIncidentRecord findIncident(String id) {
         return repository.findIncidentById(id)
-                .orElseThrow(() -> ApiException.notFound("INCIDENT_NOT_FOUND", "amusement incident not found"));
+                .orElseThrow(() -> ApiException.notFound("INCIDENT_NOT_FOUND", "游乐事件不存在或已被删除"));
     }
 
     private void ensureNoticeExists(String id) {
         AmusementSafetyNoticeRecord notice = repository.findSafetyNoticeById(id)
-                .orElseThrow(() -> ApiException.notFound("SAFETY_NOTICE_NOT_FOUND", "safety notice not found"));
+                .orElseThrow(() -> ApiException.notFound("SAFETY_NOTICE_NOT_FOUND", "安全告示不存在或已被删除"));
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             if (!merchantId.equals(notice.merchantId())) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "safety notice does not belong to your merchant");
+                        "CROSS_MERCHANT_FORBIDDEN", "该安全告示不属于当前商户");
             }
         });
     }
 
     private void validateNoticeRequest(AmusementSafetyNoticeCreateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.projectId(), "project_id");
@@ -455,7 +455,7 @@ public class AmusementSafetyService {
 
     private void validateAcknowledgementRequest(AmusementWaiverAcknowledgementRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.projectId(), "project_id");
@@ -469,7 +469,7 @@ public class AmusementSafetyService {
 
     private void validateIncidentCreateRequest(AmusementIncidentCreateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.projectId(), "project_id");
@@ -482,7 +482,7 @@ public class AmusementSafetyService {
 
     private void validateIncidentActionRequest(AmusementIncidentActionRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.operatorNote(), "operator_note");
@@ -492,7 +492,7 @@ public class AmusementSafetyService {
 
     private void validateIncidentCloseRequest(AmusementIncidentCloseRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.resolution(), "resolution");
@@ -611,14 +611,14 @@ public class AmusementSafetyService {
 
     private void rejectClosed(AmusementIncidentRecord incident) {
         if (TERMINAL_STATUSES.contains(incident.status())) {
-            throw ApiException.conflict("INCIDENT_CLOSED", "closed or cancelled incident cannot be changed");
+            throw ApiException.conflict("INCIDENT_CLOSED", "已关闭或已取消的事件不能再变更");
         }
     }
 
     private void checkIncidentOwnership(AmusementIncidentRecord incident) {
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             if (!merchantId.equals(incident.merchantId())) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "incident does not belong to your merchant");
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该事件不属于当前商户");
             }
         });
     }

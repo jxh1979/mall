@@ -164,14 +164,14 @@ final class AmusementInspectionService {
         AmusementSafetyInspectionRequest actual = requireRequest(request);
         String projectId = requireText(actual.projectId(), "project_id");
         repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         // P1 越权修复：创建巡检此前唯独漏 checkProjectOwnership（submit/rectify/recheck 均有），
         // 可对他商户项目造巡检并经 evaluateOpenEligibility 干预其开放状态。
         checkProjectOwnership(projectId);
         String templateId = trimToNull(actual.templateId());
         if (templateId != null) {
             repository.findSafetyTemplateById(templateId)
-                    .orElseThrow(() -> ApiException.notFound("SAFETY_TEMPLATE_NOT_FOUND", "safety template not found"));
+                    .orElseThrow(() -> ApiException.notFound("SAFETY_TEMPLATE_NOT_FOUND", "安检模板不存在或已被删除"));
         }
         if (actual.items() == null || actual.items().isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "items is required");
@@ -184,11 +184,11 @@ final class AmusementInspectionService {
                     .anyMatch(item -> item != null && "fail".equals(String.valueOf(item.get("result"))));
             if (anyItemFailed) {
                 throw ApiException.conflict("SAFETY_INSPECTION_PASS_CONFLICTS_ITEMS",
-                        "overall_result cannot be pass when any inspection item result is fail");
+                        "存在不合格检查项时，总体结论不能为通过");
             }
             if (actual.evidenceAttachmentIds() == null || actual.evidenceAttachmentIds().isEmpty()) {
                 throw ApiException.badRequest("SAFETY_INSPECTION_EVIDENCE_REQUIRED",
-                        "pass inspection requires evidence attachments");
+                        "检查通过必须上传证据附件");
             }
         }
         Instant now = Instant.now();
@@ -233,7 +233,7 @@ final class AmusementInspectionService {
         AmusementSafetyInspectionRecord existing = findInspection(inspectionId);
         checkProjectOwnership(existing.projectId());
         if (!"created".equals(existing.inspectionStatus())) {
-            throw ApiException.conflict("INSPECTION_ALREADY_SUBMITTED", "inspection already submitted");
+            throw ApiException.conflict("INSPECTION_ALREADY_SUBMITTED", "该检查已提交，请勿重复提交");
         }
         Instant now = Instant.now();
         repository.saveSafetyAction(new AmusementSafetyActionRecord(
@@ -295,7 +295,7 @@ final class AmusementInspectionService {
         AmusementSafetyInspectionRecord existing = findInspection(inspectionId);
         checkProjectOwnership(existing.projectId());
         if (!"submitted".equals(existing.inspectionStatus()) || "not_required".equals(existing.rectificationStatus())) {
-            throw ApiException.conflict("RECTIFICATION_NOT_REQUIRED", "rectification is not required");
+            throw ApiException.conflict("RECTIFICATION_NOT_REQUIRED", "该检查无需整改");
         }
         Instant now = Instant.now();
         repository.saveSafetyAction(new AmusementSafetyActionRecord(
@@ -336,12 +336,12 @@ final class AmusementInspectionService {
         AmusementSafetyActionRequest actual = requireRequest(request);
         String result = requireText(actual.actionResult(), "action_result").toLowerCase(java.util.Locale.ROOT);
         if (!Set.of("pass", "fail").contains(result)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "action_result must be pass or fail");
+            throw ApiException.badRequest("VALIDATION_FAILED", "处理结果必须为通过（pass）或不通过（fail）");
         }
         AmusementSafetyInspectionRecord existing = findInspection(inspectionId);
         checkProjectOwnership(existing.projectId());
         if (!"submitted".equals(existing.rectificationStatus())) {
-            throw ApiException.conflict("RECTIFICATION_NOT_SUBMITTED", "rectification must be submitted before recheck");
+            throw ApiException.conflict("RECTIFICATION_NOT_SUBMITTED", "复检前必须先提交整改");
         }
         // 2b 防伪造 pass（与 submit 路径一致）：复检判 pass 翻转 overallResult、解锁恢复营业，必须有影像证据留痕，
         // 不得凭空空证据复检通过开放高风险设备。证据可经动作附件或巡检证据任一提供。
@@ -349,7 +349,7 @@ final class AmusementInspectionService {
                 && (actual.attachmentIds() == null || actual.attachmentIds().isEmpty())
                 && (actual.evidenceAttachmentIds() == null || actual.evidenceAttachmentIds().isEmpty())) {
             throw ApiException.badRequest("SAFETY_INSPECTION_EVIDENCE_REQUIRED",
-                    "pass recheck requires evidence attachments");
+                    "复检通过必须上传证据附件");
         }
         Instant now = Instant.now();
         repository.saveSafetyAction(new AmusementSafetyActionRecord(
@@ -393,7 +393,7 @@ final class AmusementInspectionService {
         AmusementSafetyInspectionRecord existing = findInspection(inspectionId);
         checkProjectOwnership(existing.projectId());
         if (!"pending_approval".equals(existing.reopenStatus()) || !"pass".equals(existing.overallResult())) {
-            throw ApiException.conflict("RECHECK_PASS_REQUIRED", "recheck pass is required before reopen approval");
+            throw ApiException.conflict("RECHECK_PASS_REQUIRED", "复检通过后才能审批重新开放");
         }
         Instant now = Instant.now();
         // 断链修复（清单#18）：原"批准恢复营业"仅置 reopen_status=approved，不联动 amusement_projects.open_status，
@@ -437,7 +437,7 @@ final class AmusementInspectionService {
      */
     private void reopenProjectIfBlocked(String projectId) {
         AmusementProjectRecord project = repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         String current = project.openStatus();
         if ("maintenance".equals(current) || "closed".equals(current)) {
             repository.updateProjectOpenStatus(projectId, current, "open");
@@ -446,15 +446,15 @@ final class AmusementInspectionService {
 
     private AmusementSafetyInspectionRecord findInspection(String inspectionId) {
         return repository.findSafetyInspectionById(inspectionId)
-                .orElseThrow(() -> ApiException.notFound("SAFETY_INSPECTION_NOT_FOUND", "safety inspection not found"));
+                .orElseThrow(() -> ApiException.notFound("SAFETY_INSPECTION_NOT_FOUND", "安全检查不存在或已被删除"));
     }
 
     private void checkProjectOwnership(String projectId) {
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             AmusementProjectRecord project = repository.findProjectById(projectId)
-                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
             if (!merchantId.equals(project.merchantId())) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "project does not belong to your merchant");
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该游乐项目不属于当前商户");
             }
         });
     }
@@ -546,7 +546,7 @@ final class AmusementInspectionService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
