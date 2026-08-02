@@ -42,16 +42,16 @@ public class BarEntryService {
     BarReservationRecord createReservation(BarReservationRequest request, String customerId, String orderSource, String terminal) {
         BarReservationRequest actual = requireRequest(request);
         BarTableRecord table = repository.findTableById(requireText(actual.tableId(), "table_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除"));
         String barId = requireText(actual.barId(), "bar_id");
         if (!barId.equals(table.barId())) {
-            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "reservation table is not in this bar");
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "订台台位不在本酒吧");
         }
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         // 跨商户写守卫(与 BarOrderService.createOrderInternal 一致):桌位须属调用方商户,
         // 否则恶意商户可把预订写到他人物理桌位。barId==table.barId() 自洽无用,须校验 merchant。
         if (merchantId != null && !merchantId.equals(table.merchantId())) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "bar table belongs to another merchant");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该台位属于其他商户");
         }
         Instant now = Instant.now();
         // T16：按 bar_deposit_rules（table_type/time_slot 优先于 bar）解析定金。无匹配规则保持向后兼容（0/not_required）。
@@ -134,7 +134,7 @@ public class BarEntryService {
         BarReservationRecord reservation = requireReservation(reservationId);
         if (!"pending".equals(reservation.depositStatus())) {
             throw ApiException.conflict("BAR_DEPOSIT_NOT_PAYABLE",
-                    "deposit must be in pending status to be paid");
+                    "只有待支付状态的订金才能支付");
         }
         Instant now = Instant.now();
         BarReservationRecord updated = withDeposit(reservation, "paid", reservation.depositSettlement(),
@@ -151,11 +151,11 @@ public class BarEntryService {
         BarReservationDepositActionRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
         if ("cancelled".equals(reservation.status())) {
-            throw ApiException.conflict("BAR_RESERVATION_NOT_CHECKINABLE", "reservation is cancelled");
+            throw ApiException.conflict("BAR_RESERVATION_NOT_CHECKINABLE", "该订台已取消");
         }
         if (!"paid".equals(reservation.depositStatus())) {
             throw ApiException.conflict("BAR_DEPOSIT_NOT_DEDUCTIBLE",
-                    "deposit must be paid before it can be deducted at check-in");
+                    "订金须先支付才能在到店时抵扣");
         }
         Instant now = Instant.now();
         // 到店核销：定金转抵扣进账单（落账由 BarBillingService.createBill 按 reservation.depositAmountCent 抵扣），
@@ -173,11 +173,11 @@ public class BarEntryService {
         BarReservationCancelRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
         if ("cancelled".equals(reservation.status())) {
-            throw ApiException.conflict("BAR_RESERVATION_ALREADY_CANCELLED", "reservation is already cancelled");
+            throw ApiException.conflict("BAR_RESERVATION_ALREADY_CANCELLED", "该订台已取消，请勿重复操作");
         }
         if ("settled".equals(reservation.depositStatus())) {
             throw ApiException.conflict("BAR_DEPOSIT_ALREADY_SETTLED",
-                    "deposit already settled; reservation cannot be cancelled");
+                    "订金已结算，订台不能再取消");
         }
         Instant now = Instant.now();
         boolean noShow = actual.noShow() != null && actual.noShow();
@@ -255,19 +255,19 @@ public class BarEntryService {
         String barId = requireText(actual.barId(), "bar_id");
         String mode = requireText(actual.mode(), "mode");
         if (!"fixed".equals(mode) && !"min_consumption_ratio".equals(mode)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "mode must be fixed or min_consumption_ratio");
+            throw ApiException.badRequest("VALIDATION_FAILED", "模式必须为固定金额（fixed）或低消比例（min_consumption_ratio）");
         }
         Long fixedAmountCent = actual.fixedAmountCent();
         Integer ratioBps = actual.ratioBps();
         if ("fixed".equals(mode)) {
             if (fixedAmountCent == null || fixedAmountCent < 0L) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "fixed_amount_cent is required for fixed mode");
+                throw ApiException.badRequest("VALIDATION_FAILED", "固定金额模式必须填写固定金额");
             }
             ratioBps = null;
         } else {
             if (ratioBps == null || ratioBps < 0 || ratioBps > 100_000) {
                 throw ApiException.badRequest("VALIDATION_FAILED",
-                        "ratio_bps in [0,100000] is required for min_consumption_ratio mode");
+                        "低消比例模式必须填写 0 到 100000 基点内的比例");
             }
             fixedAmountCent = null;
         }
@@ -295,13 +295,13 @@ public class BarEntryService {
 
     private BarReservationRecord requireReservation(String reservationId) {
         BarReservationRecord reservation = repository.findReservationById(requireText(reservationId, "reservation_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
         // P0 越权修复：预订全链（pay-deposit/checkin/cancel/verify）此前不校验归属，可枚举他商户 reservationId
         // 取消订台、触发他商户定金没收/退款。平台管理员 scope 为空=放行；商户用户须匹配预订 merchant_id。
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(reservation.merchantId())) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's reservation is not allowed");
+                        "CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的订台记录");
             }
         });
         return reservation;
@@ -375,13 +375,13 @@ public class BarEntryService {
         BarReservationRecord reservation = (lockReservation
                 ? repository.findReservationByIdForUpdate(reservationId)
                 : repository.findReservationById(reservationId))
-                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
         // 2c-4 越权修复：入场核验子链（verify/check-in-guest）此前绕过 requireReservation，仅信客户端 bar_id，
         // 可枚举他商户 reservationId 跨商户核销入场、耗尽其免费名额。补与 requireReservation 一致的归属校验。
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(reservation.merchantId())) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's reservation is not allowed");
+                        "CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的订台记录");
             }
         });
         Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
@@ -421,10 +421,10 @@ public class BarEntryService {
 
     private void throwDeniedAllowance(String reasonCode) {
         switch (reasonCode) {
-            case "BAR_RESERVATION_NOT_CHECKINABLE" -> throw ApiException.conflict(reasonCode, "reservation is cancelled");
-            case "BAR_SCOPE_MISMATCH" -> throw ApiException.conflict(reasonCode, "card-seat free entry is limited to the reserved bar");
-            case "FREE_GUEST_QUOTA_EXHAUSTED" -> throw ApiException.conflict(reasonCode, "card-seat free guest quota is exhausted");
-            default -> throw ApiException.conflict(reasonCode, "card-seat free entry is not allowed");
+            case "BAR_RESERVATION_NOT_CHECKINABLE" -> throw ApiException.conflict(reasonCode, "该订台已取消");
+            case "BAR_SCOPE_MISMATCH" -> throw ApiException.conflict(reasonCode, "卡座免入仅限预订的酒吧使用");
+            case "FREE_GUEST_QUOTA_EXHAUSTED" -> throw ApiException.conflict(reasonCode, "卡座免入客人名额已用完");
+            default -> throw ApiException.conflict(reasonCode, "不允许卡座免入");
         }
     }
 
@@ -437,18 +437,18 @@ public class BarEntryService {
         BarInvitationActionRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
         if ("cancelled".equals(reservation.status())) {
-            throw ApiException.conflict("BAR_RESERVATION_NOT_CHECKINABLE", "reservation is cancelled");
+            throw ApiException.conflict("BAR_RESERVATION_NOT_CHECKINABLE", "该订台已取消");
         }
         // 已签发且未吊销 → 幂等返回现有邀请函（不重置 token，避免已转发二维码失效）。
         if ("active".equals(reservation.invitationStatus()) && reservation.invitationToken() != null) {
             return buildInvitationView(reservation);
         }
         BarTableRecord table = repository.findTableById(reservation.tableId())
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除"));
         int capacity = table.capacity();
         if (capacity <= 0) {
             throw ApiException.conflict("BAR_INVITATION_CAPACITY_REQUIRED",
-                    "card-seat capacity must be configured before issuing an invitation");
+                    "发出邀请前须先配置卡座容量");
         }
         Instant now = Instant.now();
         String token = "inv_" + java.util.UUID.randomUUID().toString().replace("-", "");
@@ -478,7 +478,7 @@ public class BarEntryService {
         BarInvitationActionRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
         if (!"active".equals(reservation.invitationStatus())) {
-            throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "no active invitation to revoke");
+            throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "没有生效中的邀请可撤销");
         }
         BarReservationRecord revoked = withInvitation(reservation, reservation.invitationToken(),
                 reservation.invitationSignature(), reservation.invitationCapacity(), "revoked",
@@ -504,14 +504,14 @@ public class BarEntryService {
         // T1.1 并发超员修复：按预订行 FOR UPDATE 加锁（仿 evaluateGuestEntryAllowance 既有范式，入场流程在上层事务内），
         // 序列化并发入场核验，防超员入场（与确认路径一致的防御纵深；逻辑上 entered⊆confirmed≤capacity）。
         reservation = repository.findReservationByIdForUpdate(reservation.id())
-                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
         if (!"active".equals(reservation.invitationStatus())) {
-            throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "invitation is not active");
+            throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "该邀请已失效");
         }
         Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
         String verificationBarId = trimToDefault(textFromMap(context, "bar_id", "barId"), actual.pointId());
         if (!reservation.barId().equals(verificationBarId)) {
-            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "card-seat invitation entry is limited to the reserved bar");
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "卡座邀请入场仅限预订的酒吧");
         }
         // B2⑥ 邀请函 HMAC 入场闸强制核验（此前只签不验、matches() 为死代码）：按权威预订字段重算规范串、常量时间比对
         // 存储签名。失配=邀请函绑定（容量/卡座/令牌）被篡改（如绕过签发直改库提容量），拒绝入场、不放行免通票。
@@ -521,7 +521,7 @@ public class BarEntryService {
                         signedCapacity, reservation.invitationToken()),
                 reservation.invitationSignature())) {
             throw ApiException.forbidden("BAR_INVITATION_SIGNATURE_INVALID",
-                    "card-seat invitation signature is invalid (tampered binding)");
+                    "卡座邀请签名无效（绑定信息被篡改）");
         }
         String memberIdentifier = requireText(actual.credentialPayload(), "credential_payload");
         List<BarReservationInvitationMemberRecord> members = repository.listInvitationMembers(reservation.id());
@@ -529,14 +529,14 @@ public class BarEntryService {
                 .filter(item -> memberIdentifier.equals(item.memberIdentifier()) && !"revoked".equals(item.status()))
                 .findFirst()
                 .orElseThrow(() -> ApiException.conflict("BAR_INVITATION_MEMBER_NOT_CONFIRMED",
-                        "guest has not confirmed this invitation"));
+                        "客人尚未确认该邀请"));
         if ("entered".equals(member.status())) {
             return member; // 幂等：已入场重复扫码返回原记录
         }
         int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
         long enteredCount = members.stream().filter(item -> "entered".equals(item.status())).count();
         if (enteredCount >= capacity) {
-            throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "card-seat capacity is exhausted");
+            throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "卡座名额已满");
         }
         Instant now = Instant.now();
         BarReservationInvitationMemberRecord entered = new BarReservationInvitationMemberRecord(

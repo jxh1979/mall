@@ -100,10 +100,10 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord assign(String id, FacilityWorkOrderAssignRequest request) {
         authorizationService.requirePlatformScope();
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         FacilityWorkOrderRecord cur = load(id);
-        requireStatus(cur, "pending_assign", "can only assign a pending work order");
+        requireStatus(cur, "pending_assign", "只有待派单的工单才能派单");
         Instant now = Instant.now();
         FacilityWorkOrderRecord assigned = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
                 cur.priority(), "assigned", cur.title(), cur.description(), cur.source(), cur.spaceId(),
@@ -123,7 +123,7 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderActionRequest r = requireAction(request);
         FacilityWorkOrderRecord cur = load(id);
         enforceAssignedScope(actor, cur);
-        requireStatus(cur, "assigned", "can only start an assigned work order");
+        requireStatus(cur, "assigned", "只有已派单的工单才能开始处理");
         Instant now = Instant.now();
         FacilityWorkOrderRecord processing = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
                 cur.priority(), "processing", cur.title(), cur.description(), cur.source(), cur.spaceId(),
@@ -142,7 +142,7 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderActionRequest r = requireAction(request);
         FacilityWorkOrderRecord cur = load(id);
         enforceAssignedScope(actor, cur);
-        requireStatus(cur, "processing", "can only complete a processing work order");
+        requireStatus(cur, "processing", "只有处理中的工单才能完成");
         String acceptanceBy = policy(cur.workOrderType(), cur.priority()).acceptanceBy();
         String nextStatus = switch (acceptanceBy) {
             case "handler" -> "closed";
@@ -169,7 +169,7 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderActionRequest r = requireAction(request);
         validateSatisfaction(r.satisfaction());
         FacilityWorkOrderRecord cur = load(id);
-        requireStatus(cur, "pending_acceptance", "can only accept a work order pending acceptance");
+        requireStatus(cur, "pending_acceptance", "只有待验收的工单才能验收");
         FacilityWorkOrderRecord closed = verifyClosed(cur, r);
         repository.updateWorkOrder(closed);
         resetEquipmentIfClosed(cur, closed);
@@ -183,7 +183,7 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderActionRequest r = requireAction(request);
         validateSatisfaction(r.satisfaction());
         FacilityWorkOrderRecord cur = load(id);
-        requireStatus(cur, "pending_review", "can only review a work order pending review");
+        requireStatus(cur, "pending_review", "只有待审核的工单才能审核");
         FacilityWorkOrderRecord closed = verifyClosed(cur, r);
         repository.updateWorkOrder(closed);
         resetEquipmentIfClosed(cur, closed);
@@ -197,7 +197,7 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderActionRequest r = requireAction(request);
         FacilityWorkOrderRecord cur = load(id);
         if (!ACTIVE_STATUSES.contains(cur.status())) {
-            throw ApiException.badRequest("INVALID_STATE", "can only suspend an active work order");
+            throw ApiException.badRequest("INVALID_STATE", "只有进行中的工单才能挂起");
         }
         FacilityWorkOrderRecord suspended = withStatus(cur, "suspended", Instant.now());
         repository.updateWorkOrder(suspended);
@@ -210,7 +210,7 @@ public class FacilityWorkOrderService {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
         FacilityWorkOrderRecord cur = load(id);
-        requireStatus(cur, "suspended", "can only resume a suspended work order");
+        requireStatus(cur, "suspended", "只有已挂起的工单才能恢复");
         FacilityWorkOrderRecord processing = withStatus(cur, "processing", Instant.now());
         repository.updateWorkOrder(processing);
         audit("facility.work_order_resumed", processing.id(), r.idempotencyKey(), metadata(processing, r.note()));
@@ -239,7 +239,7 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderPolicyRecord savePolicy(FacilityWorkOrderPolicyRequest request) {
         authorizationService.requirePlatformScope();
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         String type = normalizeAllowed(request.workOrderType(), "work_order_type", TYPES);
         String priority = normalizeAllowed(request.priority(), "priority", PRIORITIES);
@@ -294,7 +294,7 @@ public class FacilityWorkOrderService {
         String source = normalizeAllowed(defaultValue(request.source(), "platform"), "source", SOURCES);
         if ("merchant_self".equals(source) && !MERCHANT_SELF_TYPES.contains(type)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "merchant_self can only create repair, cleaning, complaint or other work orders");
+                    "商户自助只能创建报修、保洁、投诉或其他类工单");
         }
         FacilityWorkOrderPolicyRecord policy = policy(type, priority);
         Instant now = Instant.now();
@@ -342,7 +342,7 @@ public class FacilityWorkOrderService {
 
     private FacilityWorkOrderRecord load(String id) {
         return repository.findById(id)
-                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "facility work order not found"));
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "设施工单不存在或已被删除"));
     }
 
     private AccessActor requireScopeActor() {
@@ -359,19 +359,19 @@ public class FacilityWorkOrderService {
 
     private FacilityWorkOrderPolicyRecord policy(String type, String priority) {
         return repository.findPolicy(type, priority)
-                .orElseThrow(() -> ApiException.badRequest("POLICY_NOT_FOUND", "facility work order policy not found"));
+                .orElseThrow(() -> ApiException.badRequest("POLICY_NOT_FOUND", "设施工单策略不存在或已被删除"));
     }
 
     private FacilityWorkOrderRequest require(FacilityWorkOrderRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private FacilityWorkOrderActionRequest requireAction(FacilityWorkOrderActionRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -384,13 +384,13 @@ public class FacilityWorkOrderService {
 
     private void validateSatisfaction(Integer satisfaction) {
         if (satisfaction != null && (satisfaction < 1 || satisfaction > 5)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "satisfaction must be between 1 and 5");
+            throw ApiException.badRequest("VALIDATION_FAILED", "满意度评分必须在 1 到 5 之间");
         }
     }
 
     private int positive(Integer value, String field) {
         if (value == null || value <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于 0");
         }
         return value;
     }

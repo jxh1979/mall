@@ -91,7 +91,7 @@ final class IntegrationReconciliationService {
         int differenceCount = nonNegative(request.differenceCount(), "difference_count");
         if (expectedCount != actualCount && differenceCount == 0) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "difference_count must be positive when expected_count differs from actual_count");
+                    "期望笔数与实际笔数不一致时，差异笔数必须大于 0");
         }
         Instant now = clock.instant();
         return repository.saveReconciliationBatch(new ReconciliationBatchRecord(
@@ -135,9 +135,9 @@ final class IntegrationReconciliationService {
         validateReconciliationDifferenceRequest(request);
         rejectManualAmounts(request);
         ReconciliationBatchRecord batch = repository.findReconciliationBatchById(request.batchId())
-                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_BATCH_NOT_FOUND", "reconciliation batch not found"));
+                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_BATCH_NOT_FOUND", "对账批次不存在或已被删除"));
         if (!batch.providerCode().equals(request.providerCode()) || !batch.businessType().equals(request.businessType())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "difference scope must match reconciliation batch");
+            throw ApiException.badRequest("VALIDATION_FAILED", "差异范围必须与对账批次一致");
         }
 
         // 第三方侧一律系统取数；无回流支撑 → 拒绝（纯手填差异不存在合法入口）。
@@ -145,9 +145,7 @@ final class IntegrationReconciliationService {
                 request.providerCode(), request.businessType(), request.externalBusinessId());
         if (providerAmountCent <= 0) {
             throw ApiException.badRequest("RECONCILIATION_NO_SYSTEM_TAKINGS",
-                    "difference rejected: no third-party system takings for external_business_id "
-                            + request.externalBusinessId()
-                            + "; register the provider reflow first, manual-only differences are not allowed");
+                    "差异登记被拒绝：外部业务单号 " + request.externalBusinessId() + " 无第三方系统收款，请先登记渠道回流数据，不允许仅手工登记的差异");
         }
         // 平台侧无按外部单号可查的取数源 → 恒 0（= 平台侧无对应取数），差额即第三方回流全额。
         long internalAmountCent = 0L;
@@ -183,8 +181,7 @@ final class IntegrationReconciliationService {
                 || request.providerAmountCent() != null
                 || request.differenceAmountCent() != null) {
             throw ApiException.badRequest("RECONCILIATION_MANUAL_AMOUNT_FORBIDDEN",
-                    "reconciliation amounts are system-derived only: "
-                            + "internal_amount_cent / provider_amount_cent / difference_amount_cent must not be supplied");
+                    "对账金额只能由系统计算得出：" + "内部金额/渠道金额/差异金额不允许手工填写");
         }
     }
 
@@ -200,7 +197,7 @@ final class IntegrationReconciliationService {
     ) {
         validateReconciliationDifferenceResolveRequest(request);
         ReconciliationDifferenceRecord existing = repository.findReconciliationDifferenceById(id)
-                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_DIFFERENCE_NOT_FOUND", "reconciliation difference not found"));
+                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_DIFFERENCE_NOT_FOUND", "对账差异不存在或已被删除"));
         requireDifferentReviewer(existing, actorUserId);
         ReconciliationDifferenceRecord updated = new ReconciliationDifferenceRecord(
                 existing.id(),

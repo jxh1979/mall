@@ -207,7 +207,7 @@ class AmusementExitReleaseJdbcIntegrationTests {
         assertThatThrownBy(() -> amusementService.exitVerification(new AmusementExitRequest(
                 "exit-noentry-" + suffix, code, pointId, deviceCode, "staff", List.of())))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("no active amusement entry");
+                .hasMessageContaining("没有进行中的游乐入场");
         assertThat(exitCount(projectId)).isEqualTo(0);                 // 不写脏 exit
     }
 

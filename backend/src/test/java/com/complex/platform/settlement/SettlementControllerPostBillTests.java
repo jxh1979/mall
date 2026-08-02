@@ -143,7 +143,7 @@ class SettlementControllerPostBillTests {
     @Test
     void postBillConflictWhenNotConfirmed() throws Exception {
         when(postingService.postBill("draft_bill")).thenThrow(ApiException.conflict(
-                "SETTLEMENT_BILL_NOT_CONFIRMED", "only confirmed bills can be posted; current status=draft"));
+                "SETTLEMENT_BILL_NOT_CONFIRMED", "只有已确认的账单才能过账；当前状态：draft"));
 
         mockMvc.perform(post("/api/v1/settlement/bills/draft_bill/post").with(user("admin").roles("P0_SMOKE")))
                 .andExpect(status().isConflict())

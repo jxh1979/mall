@@ -54,7 +54,7 @@ public class BarShiftService {
         // 防重复开班：同一吧台同一收银员仅允许一个 open 班次。
         if (repository.findOpenShift(barId, cashierUserId).isPresent()) {
             throw ApiException.conflict("BAR_SHIFT_ALREADY_OPEN",
-                    "an open shift already exists for this cashier and bar");
+                    "该收银员在本酒吧已有未交接的班次");
         }
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         String actor = authorizationService.currentActor().id();
@@ -92,10 +92,10 @@ public class BarShiftService {
     BarShiftRecord closeShift(String shiftId, BarShiftCloseRequest request) {
         BarShiftCloseRequest actual = requireRequest(request);
         BarShiftRecord shift = repository.findShiftById(shiftId)
-                .orElseThrow(() -> ApiException.notFound("BAR_SHIFT_NOT_FOUND", "bar shift not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_SHIFT_NOT_FOUND", "班次不存在或已被删除"));
         checkMerchantOwnership(shift.merchantId());
         if (!"open".equals(shift.status())) {
-            throw ApiException.conflict("BAR_SHIFT_NOT_OPEN", "only an open bar shift can be closed");
+            throw ApiException.conflict("BAR_SHIFT_NOT_OPEN", "只有开班中的班次才能交班");
         }
         // F-OPS-06 现金交接持有人校验：班结如指定交接下一班，接班持有人必须是「另一个人」——
         // 现金钱箱责任链须真实移交，禁止把钱箱「交接」给本班收银员自己（伪交接规避对账责任）。
@@ -103,7 +103,7 @@ public class BarShiftService {
         String handoverToUserId = trimToNull(actual.handoverToUserId());
         if (handoverToUserId != null && handoverToUserId.equals(shift.cashierUserId())) {
             throw ApiException.conflict("BAR_SHIFT_HANDOVER_TO_SELF",
-                    "cash drawer handover must target a different holder, not the outgoing cashier");
+                    "钱箱交接对象必须是他人，不能是交班收银员本人");
         }
         long declaredCash = nonNegative(actual.declaredCashCent(), "declared_cash_cent");
         Instant now = Instant.now();
@@ -162,7 +162,7 @@ public class BarShiftService {
     private void checkMerchantOwnership(String resourceMerchantId) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "access to another merchant's resource is not allowed");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
         }
     }
 }

@@ -381,7 +381,7 @@ public class CustomerController {
     private String requireCustomerToken(String customerToken, String authorization) {
         String resolved = resolveCustomerToken(customerToken, authorization);
         if (resolved == null) {
-            throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "customer token is required");
+            throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "缺少客人登录凭证，请重新登录");
         }
         return resolved;
     }

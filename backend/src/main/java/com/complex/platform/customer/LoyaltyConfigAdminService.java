@@ -80,7 +80,7 @@ public class LoyaltyConfigAdminService {
                     && repository.listMemberLevelsByProject(projectId).stream()
                             .anyMatch(x -> levelCode.equals(x.levelCode()))) {
                 throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE",
-                        "member level code already exists in this project");
+                        "该会员等级编码在本项目已存在");
             }
             Instant now = Instant.now();
             String id = resolveId(r.id(), "member_level_", projectId, this::findLevelInProject);
@@ -129,7 +129,7 @@ public class LoyaltyConfigAdminService {
                     && repository.listCheckInTiersByProject(projectId).stream()
                             .anyMatch(x -> x.streakDays() == streakDays)) {
                 throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE",
-                        "check-in tier for this streak already exists in this project");
+                        "该连续签到档位在本项目已存在");
             }
             Instant now = Instant.now();
             String id = resolveId(r.id(), "check_in_tier_", projectId, this::findTierInProject);
@@ -172,7 +172,7 @@ public class LoyaltyConfigAdminService {
                     && repository.listBirthdayRulesByProject(projectId).stream()
                             .anyMatch(x -> ruleName.equals(x.ruleName()))) {
                 throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE",
-                        "birthday rule name already exists in this project");
+                        "该生日规则名称在本项目已存在");
             }
             Instant now = Instant.now();
             String id = resolveId(r.id(), "birthday_rule_", projectId, this::findBirthdayInProject);
@@ -224,7 +224,7 @@ public class LoyaltyConfigAdminService {
         }
         String id = requestedId.trim();
         if (!existsInProject.test(id, projectId)) {
-            throw ApiException.notFound("LOYALTY_CONFIG_NOT_FOUND", "config record not found in scope");
+            throw ApiException.notFound("LOYALTY_CONFIG_NOT_FOUND", "当前范围内未找到该配置记录");
         }
         return id;
     }
@@ -250,21 +250,21 @@ public class LoyaltyConfigAdminService {
 
     private <T> T require(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private long requireMin(Integer value, int min, String field) {
         if (value == null || value < min) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be >= " + min);
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于等于 " + min);
         }
         return value;
     }
 
     private long requireMinLong(Long value, long min, String field) {
         if (value == null || value < min) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be >= " + min);
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于等于 " + min);
         }
         return value;
     }
@@ -279,7 +279,7 @@ public class LoyaltyConfigAdminService {
     private String requireEnum(String value, Set<String> allowed, String field) {
         String v = requireText(value, field);
         if (!allowed.contains(v)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be one of " + allowed);
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须为以下之一：" + allowed);
         }
         return v;
     }

@@ -121,7 +121,7 @@ class SessionEntryPassJdbcIntegrationTests {
         // 今天(营业中)再核销 → 今日场次 != 旧场次 → 过场作废。
         assertThatThrownBy(() -> verify(suffix, code))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("entry pass voided");
+                .hasMessageContaining("入场凭证已失效");
         assertThat(usedTimes(code)).isEqualTo(0);  // 未消耗
     }
 
@@ -136,7 +136,7 @@ class SessionEntryPassJdbcIntegrationTests {
 
         assertThatThrownBy(() -> verify(suffix, code))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("open business session");
+                .hasMessageContaining("营业场次");
         assertThat(usedTimes(code)).isEqualTo(0);
     }
 

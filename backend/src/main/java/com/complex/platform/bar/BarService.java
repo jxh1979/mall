@@ -250,11 +250,11 @@ public class BarService {
     private BarReservationRecord requireReservationInScope(String id) {
         BarReservationRecord reservation = repository.findReservationById(operations.requireText(id, "reservation_id"))
                 .orElseThrow(() -> com.complex.platform.common.api.ApiException.notFound(
-                        "BAR_RESERVATION_NOT_FOUND", "reservation not found"));
+                        "BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(reservation.merchantId())) {
                 throw com.complex.platform.common.api.ApiException.forbidden(
-                        "BAR_MERCHANT_SCOPE", "reservation belongs to another merchant");
+                        "BAR_MERCHANT_SCOPE", "该订台记录属于其他商户");
             }
         });
         return reservation;
@@ -285,11 +285,11 @@ public class BarService {
         BarReservationRecord reservation = requireReservationInScope(reservationId);
         if (reservation.archivedAt() == null) {
             throw com.complex.platform.common.api.ApiException.badRequest(
-                    "BAR_RESERVATION_NOT_ARCHIVED", "reservation must be archived before requesting deletion");
+                    "BAR_RESERVATION_NOT_ARCHIVED", "订台记录须先存档才能申请删除");
         }
         if ("pending".equals(reservation.deleteStatus())) {
             throw com.complex.platform.common.api.ApiException.conflict(
-                    "BAR_RESERVATION_DELETE_ALREADY_PENDING", "a delete request is already pending");
+                    "BAR_RESERVATION_DELETE_ALREADY_PENDING", "已有待审批的删除申请");
         }
         java.time.Instant now = java.time.Instant.now();
         String reason = requireText(request == null ? null : request.reason(), "reason");
@@ -308,18 +308,18 @@ public class BarService {
         BarReservationRecord reservation = requireReservationInScope(reservationId);
         if (!"pending".equals(reservation.deleteStatus())) {
             throw com.complex.platform.common.api.ApiException.badRequest(
-                    "BAR_RESERVATION_DELETE_NOT_PENDING", "no pending delete request");
+                    "BAR_RESERVATION_DELETE_NOT_PENDING", "没有待审批的删除申请");
         }
         String decision = request == null || request.decision() == null
                 ? null : request.decision().trim().toLowerCase(java.util.Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
             throw com.complex.platform.common.api.ApiException.badRequest(
-                    "VALIDATION_FAILED", "decision must be approved or rejected");
+                    "VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         String actor = reservationActorId();
         if (actor != null && actor.equals(reservation.deleteRequestedBy())) {
             throw com.complex.platform.common.api.ApiException.forbidden(
-                    "BAR_RESERVATION_SELF_APPROVE_FORBIDDEN", "the initiator of a delete request cannot approve it");
+                    "BAR_RESERVATION_SELF_APPROVE_FORBIDDEN", "删除申请的发起人不能审批自己的申请");
         }
         if ("rejected".equals(decision)) {
             repository.saveReservation(reservation.withDelete("none", null, null, null, java.time.Instant.now()));
@@ -328,8 +328,7 @@ public class BarService {
         long refs = repository.countReservationReferences(reservationId);
         if (refs > 0) {
             throw com.complex.platform.common.api.ApiException.conflict(
-                    "BAR_RESERVATION_IN_USE", "reservation is still referenced by " + refs
-                            + " orders/bills/adjustments/invitation members");
+                    "BAR_RESERVATION_IN_USE", "该订台记录仍被 " + refs + " 条订单/账单/调整/邀请成员引用");
         }
         repository.deleteReservation(reservationId);
         return new BarCatalogDeleteDecision(reservationId, "approved", true);

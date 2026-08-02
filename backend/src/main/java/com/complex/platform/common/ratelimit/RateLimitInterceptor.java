@@ -74,7 +74,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         RateLimiter.Decision decision = limiter.tryAcquire(key, rule.getLimit(), rule.getWindow());
         if (!decision.allowed()) {
             throw ApiException.tooManyRequests("RATE_LIMITED",
-                    "too many requests, please retry later", decision.retryAfterSeconds());
+                    "请求过于频繁，请稍后再试", decision.retryAfterSeconds());
         }
         return true;
     }

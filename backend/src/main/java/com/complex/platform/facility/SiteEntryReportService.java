@@ -67,14 +67,14 @@ public class SiteEntryReportService {
         SiteEntryReportRequest r = requireCreate(request);
         AccessActor actor = authorizationService.currentActor();
         if (!authorizationService.isOutsourcedVendor(actor)) {
-            throw ApiException.forbidden("FORBIDDEN", "only outsourced vendors can create site entry reports");
+            throw ApiException.forbidden("FORBIDDEN", "只有外包供应商才能创建进场报备");
         }
         String projectId = requireText(r.projectId(), "project_id");
         authorizationService.enforceOutsourcedAssigneeScope(actor, actor.id(), projectId);
         LocalDate plannedStart = requireDate(r.plannedStartDate(), "planned_start_date");
         LocalDate plannedEnd = requireDate(r.plannedEndDate(), "planned_end_date");
         if (plannedEnd.isBefore(plannedStart)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "planned_end_date cannot be before planned_start_date");
+            throw ApiException.badRequest("VALIDATION_FAILED", "计划结束日期不能早于计划开始日期");
         }
         int crewCount = positive(r.crewCount(), "crew_count");
         Instant now = Instant.now();
@@ -93,11 +93,11 @@ public class SiteEntryReportService {
         SiteEntryReportSubmitRequest r = requireSubmit(request);
         AccessActor actor = authorizationService.currentActor();
         if (!authorizationService.isOutsourcedVendor(actor)) {
-            throw ApiException.forbidden("FORBIDDEN", "only outsourced vendors can submit site entry reports");
+            throw ApiException.forbidden("FORBIDDEN", "只有外包供应商才能提交进场报备");
         }
         SiteEntryReportRecord cur = load(id);
         enforceRecordScope(actor, cur);
-        requireStatus(cur, "approved", "can only submit an approved site entry report into progress");
+        requireStatus(cur, "approved", "只有审批通过的进场报备才能提交进场");
         SiteEntryReportRecord inProgress = withStatus(cur, "in_progress", null, null, Instant.now());
         repository.update(inProgress);
         audit("facility.site_entry_report_submitted", SUBMIT_PERM, inProgress.id(), r.idempotencyKey(),
@@ -110,12 +110,12 @@ public class SiteEntryReportService {
         SiteEntryCompletionUploadRequest r = requireUpload(request);
         AccessActor actor = authorizationService.currentActor();
         if (!authorizationService.isOutsourcedVendor(actor)) {
-            throw ApiException.forbidden("FORBIDDEN", "only outsourced vendors can upload completion materials");
+            throw ApiException.forbidden("FORBIDDEN", "只有外包供应商才能上传完工材料");
         }
         SiteEntryReportRecord cur = load(id);
         enforceRecordScope(actor, cur);
         if (!Set.of("in_progress", "rectifying").contains(cur.status())) {
-            throw ApiException.badRequest("INVALID_STATE", "can only upload completion materials before acceptance");
+            throw ApiException.badRequest("INVALID_STATE", "只有验收前才能上传完工材料");
         }
         List<String> attachmentIds = strings(r.attachmentIds(), "attachment_ids");
         SiteEntryReportRecord uploaded = new SiteEntryReportRecord(cur.id(), cur.projectId(), cur.spaceId(),
@@ -136,7 +136,7 @@ public class SiteEntryReportService {
         String decision = normalizeAllowed(r.decision(), "decision", Set.of("approve", "reject"));
         SiteEntryReportRecord cur = load(id);
         enforceRecordScope(actor, cur);
-        requireStatus(cur, "submitted", "can only review a submitted site entry report");
+        requireStatus(cur, "submitted", "只有已提交的进场报备才能审核");
         String nextStatus = "approve".equals(decision) ? "approved" : "rejected";
         SiteEntryReportRecord reviewed = withStatus(cur, nextStatus, trimToNull(r.reviewComment()),
                 cur.acceptanceComment(), Instant.now());
@@ -153,7 +153,7 @@ public class SiteEntryReportService {
         String result = normalizeAllowed(r.result(), "result", Set.of("pass", "rectify"));
         SiteEntryReportRecord cur = load(id);
         enforceRecordScope(actor, cur);
-        requireStatus(cur, "in_progress", "can only accept a site entry report in progress");
+        requireStatus(cur, "in_progress", "只有进行中的进场报备才能验收");
         String nextStatus = "pass".equals(result) ? "accepted" : "rectifying";
         SiteEntryReportRecord accepted = withStatus(cur, nextStatus, cur.reviewComment(),
                 trimToNull(r.acceptanceComment()), Instant.now());
@@ -184,13 +184,13 @@ public class SiteEntryReportService {
         }
         String scopeProjectId = authorizationService.requireProjectScope(actor);
         if (!scopeProjectId.equals(record.projectId())) {
-            throw ApiException.forbidden("FORBIDDEN", "site entry report is not in caller project scope");
+            throw ApiException.forbidden("FORBIDDEN", "进场报备不在当前项目范围内");
         }
     }
 
     private SiteEntryReportRecord load(String id) {
         return repository.findById(id)
-                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "site entry report not found"));
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "进场报备不存在或已被删除"));
     }
 
     private SiteEntryReportRecord withStatus(SiteEntryReportRecord cur, String status, String reviewComment,
@@ -204,35 +204,35 @@ public class SiteEntryReportService {
 
     private SiteEntryReportRequest requireCreate(SiteEntryReportRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private SiteEntryReportSubmitRequest requireSubmit(SiteEntryReportSubmitRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private SiteEntryCompletionUploadRequest requireUpload(SiteEntryCompletionUploadRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private SiteEntryReportReviewRequest requireReview(SiteEntryReportReviewRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
 
     private SiteEntryReportAcceptanceRequest requireAcceptance(SiteEntryReportAcceptanceRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -260,7 +260,7 @@ public class SiteEntryReportService {
 
     private int positive(Integer value, String field) {
         if (value == null || value <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于 0");
         }
         return value;
     }

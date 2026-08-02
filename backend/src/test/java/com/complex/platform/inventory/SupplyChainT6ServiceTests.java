@@ -106,7 +106,7 @@ class SupplyChainT6ServiceTests {
                 "ck-nomerchant", "supplier_1", "proj_1", null, "merchant_self_purchase",
                 null, null, null, null, null, null, List.of())))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("merchant_id");
+                .hasMessageContaining("商户自采必须指定商户");
     }
 
     // ── 合同：审批流转 ──────────────────────────────────────────────────────────
@@ -143,7 +143,7 @@ class SupplyChainT6ServiceTests {
         assertThatThrownBy(() -> contractService.approveSupplyContract(
                 draft.id(), new SupplyContractApproveRequest("ak-4b", "approved", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("draft");
+                .hasMessageContaining("草稿");
     }
 
     // ── 合同：可采购范围卡控 ────────────────────────────────────────────────────
@@ -163,7 +163,7 @@ class SupplyChainT6ServiceTests {
                 draft.id(), new SupplyContractApproveRequest("ak-scope-bad", "approved", null));
         assertThatThrownBy(() -> contractService.requirePurchasable(draft.id(), "item_999"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("purchasable scope");
+                .hasMessageContaining("可采购范围");
     }
 
     @Test
@@ -171,7 +171,7 @@ class SupplyChainT6ServiceTests {
         SupplyContractRecord draft = createDraft("ck-scope-draft", null, List.of("item_1"));
         assertThatThrownBy(() -> contractService.requirePurchasable(draft.id(), "item_1"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("approved");
+                .hasMessageContaining("尚未审批通过");
     }
 
     @Test
@@ -184,7 +184,7 @@ class SupplyChainT6ServiceTests {
                 draft.id(), new SupplyContractApproveRequest("ak-expired", "approved", null));
         assertThatThrownBy(() -> contractService.requirePurchasable(draft.id(), "item_1"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("expired");
+                .hasMessageContaining("已过期");
     }
 
     // ── 合同：商户隔离 ──────────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ class SupplyChainT6ServiceTests {
         assertThatThrownBy(() -> contractService.approveSupplyContract(
                 draft.id(), new SupplyContractApproveRequest("ak-iso", "approved", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("scope");
+                .hasMessageContaining("权限范围");
     }
 
     // ── 库房：CRUD ──────────────────────────────────────────────────────────────
@@ -322,19 +322,19 @@ class SupplyChainT6ServiceTests {
         assertThatThrownBy(() -> purchaseRequestService.order("pr_bad",
                 new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("b1", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("cannot transition");
+                .hasMessageContaining("不能流转");
         // created → receive 非法。
         assertThatThrownBy(() -> purchaseRequestService.receive("pr_bad",
                 new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest("b2", "loc", null, List.of(), null, null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("cannot transition");
+                .hasMessageContaining("不能流转");
         // rejected 后不能 order。
         purchaseRequestService.approve("pr_bad",
                 new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("b3", "rejected", null, null));
         assertThatThrownBy(() -> purchaseRequestService.order("pr_bad",
                 new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("b4", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("cannot transition");
+                .hasMessageContaining("不能流转");
     }
 
     @Test
@@ -347,7 +347,7 @@ class SupplyChainT6ServiceTests {
         assertThatThrownBy(() -> purchaseRequestService.approve("pr_scope_bad",
                 new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("s1", "approved", null, null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("purchasable scope");
+                .hasMessageContaining("可采购范围");
         // 物料在 scope 内 → 放行。
         seedPurchase("pr_scope_ok", "item_1", null, draft.id());
         PurchaseRequestRecord ok = purchaseRequestService.approve("pr_scope_ok",
@@ -364,7 +364,7 @@ class SupplyChainT6ServiceTests {
         assertThatThrownBy(() -> purchaseRequestService.approve("pr_iso",
                 new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("i1", "approved", null, null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("scope");
+                .hasMessageContaining("权限范围");
     }
 
     // ── P1#18：供应商资质 CRUD + 进货查验过期卡控 ────────────────────────────────
@@ -396,7 +396,7 @@ class SupplyChainT6ServiceTests {
         assertThatThrownBy(() -> qualificationService.createQualification(new SupplierQualificationRequest(
                 "qk-nosup", "supplier_404", "business_license", null, null, null, null, List.of(), null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("supplier");
+                .hasMessageContaining("供应商不存在");
     }
 
     @Test
@@ -406,7 +406,7 @@ class SupplyChainT6ServiceTests {
                 java.time.Instant.now(), java.time.Instant.now(), null));
         assertThatThrownBy(() -> qualificationService.requireQualified("supplier_noqual"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("no active qualification");
+                .hasMessageContaining("没有生效中的资质");
     }
 
     @Test
@@ -419,7 +419,7 @@ class SupplyChainT6ServiceTests {
                 LocalDate.now().minusYears(2), LocalDate.now().minusDays(1), List.of(), null));
         assertThatThrownBy(() -> qualificationService.requireQualified("supplier_expired"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("expired");
+                .hasMessageContaining("已过期");
     }
 
     @Test
@@ -437,7 +437,7 @@ class SupplyChainT6ServiceTests {
         assertThatThrownBy(() -> purchaseRequestService.approve("pr_qual_bad",
                 new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("q1", "approved", null, null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("expired");
+                .hasMessageContaining("已过期");
         // rejected 决议不触发进货查验卡控（仍可驳回过期供应商采购）。
         PurchaseRequestRecord rejected = purchaseRequestService.approve("pr_qual_bad",
                 new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("q2", "rejected", null, null));

@@ -39,7 +39,7 @@ public class MerchantFeeNotificationRecipientService {
     @Transactional
     public MerchantFeeNotificationRecipientRecord upsert(MerchantFeeNotificationRecipientRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         Instant now = Instant.now();
         return repository.upsertFeeNotificationRecipient(new MerchantFeeNotificationRecipientRecord(
@@ -77,6 +77,6 @@ public class MerchantFeeNotificationRecipientService {
     private ApiException notFound() {
         return ApiException.notFound(
                 "MERCHANT_FEE_NOTIFICATION_RECIPIENT_NOT_FOUND",
-                "merchant fee notification recipient not found");
+                "费用通知接收人不存在或已被删除");
     }
 }

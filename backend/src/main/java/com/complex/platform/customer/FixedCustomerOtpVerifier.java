@@ -18,7 +18,7 @@ class FixedCustomerOtpVerifier implements CustomerOtpVerifier {
     @Override
     public void verify(String phone, String smsCode, String scene) {
         if (!expectedCode.equals(smsCode)) {
-            throw ApiException.unauthorized("CUSTOMER_OTP_INVALID", "customer sms code is invalid");
+            throw ApiException.unauthorized("CUSTOMER_OTP_INVALID", "短信验证码不正确或已过期");
         }
     }
 }

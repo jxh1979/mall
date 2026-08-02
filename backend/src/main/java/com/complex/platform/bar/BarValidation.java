@@ -15,7 +15,7 @@ final class BarValidation {
 
     static <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -45,7 +45,7 @@ final class BarValidation {
     static long positive(Long value, String fieldName) {
         long resolved = value == null ? 0L : value;
         if (resolved <= 0L) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
         }
         return resolved;
     }
@@ -53,7 +53,7 @@ final class BarValidation {
     static long nonNegative(Long value, String fieldName) {
         long resolved = value == null ? 0L : value;
         if (resolved < 0L) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return resolved;
     }
@@ -61,7 +61,7 @@ final class BarValidation {
     static int nonNegative(Integer value, String fieldName) {
         int resolved = value == null ? 0 : value;
         if (resolved < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return resolved;
     }
@@ -82,7 +82,7 @@ final class BarValidation {
         Object value = item == null ? null : item.get(name);
         int quantity = value instanceof Number number ? number.intValue() : Integer.parseInt(String.valueOf(value));
         if (quantity <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", name + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", name + " 必须大于 0");
         }
         return quantity;
     }

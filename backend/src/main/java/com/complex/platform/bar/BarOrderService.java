@@ -139,10 +139,10 @@ public class BarOrderService {
         String categoryId = trimToNull(actual.categoryId());
         if (categoryId != null && catalogRepository != null) {
             BarProductCategoryRecord assignTarget = catalogRepository.findCategory(categoryId)
-                    .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "category not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_CATEGORY_NOT_FOUND", "分类不存在或已被删除"));
             if (assignTarget.archivedAt() != null || !"none".equals(assignTarget.deleteStatus())) {
                 throw ApiException.conflict("BAR_CATEGORY_NOT_ASSIGNABLE",
-                        "cannot assign product to an archived or delete-pending category");
+                        "不能将商品归入已存档或待删除的分类");
             }
         }
         BarProductRecord saved = repository.saveProduct(new BarProductRecord(
@@ -193,18 +193,18 @@ public class BarOrderService {
                 ? merchantIdOverride
                 : authorizationService.currentMerchantScope().orElse(null);
         BarTableRecord table = repository.findTableById(requireText(actual.tableId(), "table_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除"));
         if (!barId.equals(table.barId())) {
-            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "order table is not in this bar");
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "订单台位不在本酒吧");
         }
         // B1d④ 跨商户下单防护：桌位/预定/商品须属订单商户（裁决：资源皆属某商户，平台直营亦为特殊商户）。
         requireResourceInOrderMerchant(merchantId, table.merchantId(), "bar table");
         BarReservationRecord reservation = null;
         if (trimToNull(actual.reservationId()) != null) {
             reservation = repository.findReservationById(actual.reservationId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
             if (!barId.equals(reservation.barId())) {
-                throw ApiException.conflict("BAR_SCOPE_MISMATCH", "order reservation is not in this bar");
+                throw ApiException.conflict("BAR_SCOPE_MISMATCH", "订单关联的订台不在本酒吧");
             }
             requireResourceInOrderMerchant(merchantId, reservation.merchantId(), "bar reservation");
         }
@@ -233,7 +233,7 @@ public class BarOrderService {
             }
             String productId = requireItemText(item, "product_id", "sku_id", "skuId");
             BarProductRecord product = repository.findProductById(productId)
-                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "酒吧商品不存在或已被删除"));
             requireResourceInOrderMerchant(merchantId, product.merchantId(), "bar product");
             requireProductSellable(product);
             scopeCategories.add(product.productType());
@@ -331,18 +331,18 @@ public class BarOrderService {
             String barId, String orderId, int lineSeq, Instant now, Set<String> scopeCategoriesOut) {
         int comboQty = requirePositiveItemQuantity(item, "quantity");
         BarComboRecord combo = catalogRepository.findCombo(comboId)
-                .orElseThrow(() -> ApiException.notFound("BAR_COMBO_NOT_FOUND", "bar combo not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_COMBO_NOT_FOUND", "套餐不存在或已被删除"));
         requireResourceInOrderMerchant(merchantId, combo.merchantId(), "bar combo");
         if (!barId.equals(combo.barId())) {
-            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "combo is not in this bar");
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "该套餐不在本酒吧");
         }
         // V262 引用侧守卫：停用、已存档或待删除的套餐都不可下单（直传 combo_id 也拒）。
         if (!"active".equals(combo.status()) || combo.archivedAt() != null
                 || (combo.deleteStatus() != null && !"none".equals(combo.deleteStatus()))) {
-            throw ApiException.conflict("BAR_COMBO_NOT_SELLABLE", "bar combo is not sellable");
+            throw ApiException.conflict("BAR_COMBO_NOT_SELLABLE", "该套餐当前不可售卖");
         }
         if (combo.items() == null || combo.items().isEmpty()) {
-            throw ApiException.conflict("BAR_COMBO_EMPTY", "bar combo has no items");
+            throw ApiException.conflict("BAR_COMBO_EMPTY", "该套餐没有商品明细");
         }
         long comboTotal = combo.priceCent() * comboQty;
         // 各 SKU 权重 = 售价 × 数量；权重全 0（都免费/未定价）时退化为按数量均摊。
@@ -352,7 +352,7 @@ public class BarOrderService {
         long weightSum = 0L;
         for (BarComboItemRecord ci : combo.items()) {
             BarProductRecord product = repository.findProductById(ci.productId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "combo product not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "套餐内商品不存在或已被删除"));
             requireResourceInOrderMerchant(merchantId, product.merchantId(), "bar product");
             requireProductSellable(product);
             scopeCategoriesOut.add(product.productType());
@@ -462,21 +462,21 @@ public class BarOrderService {
             String sessionId, BarOrderRequest request, boolean enforceStaffMerchantScope, String customerIdOverride) {
         if (!scanOrderEnabled) {
             throw ApiException.conflict("BAR_SCAN_ORDER_DISABLED",
-                    "scan-to-order is not enabled (feature flag bar.scan_order.enabled is off)");
+                    "扫码点单未开启（功能开关 bar.scan_order.enabled 为关）");
         }
         BarOrderRequest actual = requireRequest(request);
         BarTableSessionRecord session = repository.findTableSessionById(requireText(sessionId, "session_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "bar table session not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "台位就餐会话不存在或已结束"));
         // 仅「开台中」会话可扫码下单（已关/已并台不可）。
         if (!"open".equals(session.status())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "scan order requires an open table session");
+            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "扫码点单须在开台状态下进行");
         }
         // 员工路径：商户用户只能在本商户会话下单（平台管理员 scope 空放行）。客人路径不校验（会话商户即权威）。
         if (enforceStaffMerchantScope) {
             authorizationService.currentMerchantScope().ifPresent(scope -> {
                 if (!scope.equals(session.merchantId())) {
                     throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                            "access to another merchant's table session is not allowed");
+                            "无权操作其他商户的台位会话");
                 }
             });
         }
@@ -498,7 +498,7 @@ public class BarOrderService {
     BarOrderItemRecord addOrderItem(String orderId, BarOrderRequest request) {
         BarOrderRequest actual = requireRequest(request);
         BarOrderRecord order = repository.findOrderById(orderId)
-                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
         checkMerchantOwnership(order.merchantId());
         // 合同经营范围拦截（加菜同口径）：明细保存在循环内，先预查全部品类过合同范围，越界整批拒、零落库。
         // ponytail: 商品查两次（预查+落库），加菜明细通常个位数，可接受；要省这一次就得重排保存结构。
@@ -519,7 +519,7 @@ public class BarOrderService {
         for (Map<String, Object> item : requireItems(actual.items(), "items")) {
             String productId = requireItemText(item, "product_id", "sku_id", "skuId");
             BarProductRecord product = repository.findProductById(productId)
-                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "酒吧商品不存在或已被删除"));
             requireResourceInOrderMerchant(order.merchantId(), product.merchantId(), "bar product");
             requireProductSellable(product);
             int quantity = requirePositiveItemQuantity(item, "quantity");
@@ -567,7 +567,7 @@ public class BarOrderService {
     BarOrderRecord deliverOrder(String orderId, BarOrderDeliveryRequest request) {
         BarOrderDeliveryRequest actual = requireRequest(request);
         BarOrderRecord order = repository.findOrderById(orderId)
-                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
         checkMerchantOwnership(order.merchantId());
         String actorId = authorizationService.currentActor().id();
         Instant now = Instant.now();
@@ -576,10 +576,10 @@ public class BarOrderService {
         for (Map<String, Object> delivered : deliveredItems) {
             String itemId = requireItemText(delivered, "order_item_id", "orderItemId", "item_id", "itemId");
             BarOrderItemRecord item = repository.findOrderItemById(itemId)
-                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "bar order item not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "订单明细不存在或已被删除"));
             requireDeliverableOrderItem(order, item);
             BarProductRecord product = repository.findProductById(item.productId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "酒吧商品不存在或已被删除"));
             int quantity = requirePositiveItemQuantity(delivered, "quantity");
             requireCompleteDeliveryQuantity(item, quantity);
             if (product.stockDeductionRequired()) {
@@ -672,7 +672,7 @@ public class BarOrderService {
             if (pourCostStrictMode) {
                 throw ApiException.badRequest(
                         "POUR_VOLUME_REQUIRED",
-                        "by-glass delivery requires actual_pour_volume");
+                        "按杯出品必须填写实际出酒量");
             }
             // 标准量兜底：按标准量计、loss=0，但落异常事件标记 needs_review 留痕（严禁静默）。
             int standardTotal = product.standardPourVolume() * quantity;
@@ -724,14 +724,14 @@ public class BarOrderService {
         try {
             return Integer.parseInt(value.toString().trim());
         } catch (NumberFormatException exception) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "actual_pour_volume must be an integer");
+            throw ApiException.badRequest("VALIDATION_FAILED", "实际出酒量必须为整数");
         }
     }
 
     BarProductionTicketRecord transitionProductionTicket(String ticketId, BarProductionTicketTransitionRequest request) {
         BarProductionTicketTransitionRequest actual = requireRequest(request);
         BarProductionTicketRecord current = repository.findProductionTicketById(ticketId)
-                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCTION_TICKET_NOT_FOUND", "bar production ticket not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCTION_TICKET_NOT_FOUND", "出品单不存在或已被删除"));
         checkMerchantOwnership(current.merchantId());
         String idempotencyKey = requireText(actual.idempotencyKey(), "idempotency_key");
         String actorId = authorizationService.currentActor().id();
@@ -775,26 +775,25 @@ public class BarOrderService {
 
     private void requireDeliverableOrderItem(BarOrderRecord order, BarOrderItemRecord item) {
         if (!order.id().equals(item.orderId())) {
-            throw ApiException.conflict("BAR_ORDER_ITEM_SCOPE_MISMATCH", "bar order item does not belong to order");
+            throw ApiException.conflict("BAR_ORDER_ITEM_SCOPE_MISMATCH", "该明细不属于此订单");
         }
         if ("delivered".equals(item.deliveryStatus())) {
-            throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_DELIVERED", "bar order item is already delivered");
+            throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_DELIVERED", "该明细已出品，请勿重复操作");
         }
         // P1-6 修复：已撤单(voided)明细不得再次出品（此前仅拦 delivered，撤单后换幂等键可二次扣库存并复活为 delivered）。
         if ("voided".equals(item.deliveryStatus())) {
-            throw ApiException.conflict("BAR_ORDER_ITEM_VOIDED", "voided bar order item cannot be delivered");
+            throw ApiException.conflict("BAR_ORDER_ITEM_VOIDED", "已作废的明细不能出品");
         }
     }
 
     private void requireCompleteDeliveryQuantity(BarOrderItemRecord item, int quantity) {
         if (quantity > item.quantity()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "delivery quantity exceeds ordered quantity");
+            throw ApiException.badRequest("VALIDATION_FAILED", "出品数量超过下单数量");
         }
         if (quantity != item.quantity()) {
             throw ApiException.badRequest(
                     "BAR_ORDER_PARTIAL_DELIVERY_UNSUPPORTED",
-                    "partial bar order delivery is not supported yet"
-            );
+                    "暂不支持部分出品");
         }
     }
 
@@ -842,7 +841,7 @@ public class BarOrderService {
     private void atomicDecreaseStock(String itemId, String locationId, int quantity, String orderId, List<String> evidenceAttachmentIds) {
         boolean decreased = repository.atomicDecreaseStock(itemId, locationId, quantity);
         if (!decreased) {
-            throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
+            throw ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足");
         }
         repository.saveStockMovement(new StockMovementSnapshot(
                 "movement_" + slug(orderId + ":" + itemId + ":" + quantity),
@@ -867,11 +866,11 @@ public class BarOrderService {
     BarProductRecord markSoldOut(String productId, BarProductSoldOutRequest request) {
         BarProductSoldOutRequest actual = requireRequest(request);
         BarProductRecord product = repository.findProductById(requireText(productId, "product_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "酒吧商品不存在或已被删除"));
         checkMerchantOwnership(product.merchantId());
         boolean targetSoldOut = actual.soldOut() == null || Boolean.TRUE.equals(actual.soldOut());
         if (targetSoldOut == product.soldOut()) {
-            throw ApiException.conflict("BAR_PRODUCT_SOLD_OUT_UNCHANGED", "bar product sold-out state is unchanged");
+            throw ApiException.conflict("BAR_PRODUCT_SOLD_OUT_UNCHANGED", "商品沽清状态没有变化");
         }
         Instant now = Instant.now();
         BarProductRecord updated = new BarProductRecord(
@@ -910,14 +909,14 @@ public class BarOrderService {
 
     private void requireProductSellable(BarProductRecord product) {
         if (product.soldOut()) {
-            throw ApiException.conflict("PRODUCT_SOLD_OUT", "bar product is sold out (86) and cannot be ordered");
+            throw ApiException.conflict("PRODUCT_SOLD_OUT", "商品已沽清，不能下单");
         }
         // V262 引用侧守卫：已存档/待删除商品不可再被下单——扫码菜单隐藏之外，直传 product_id 也拒。
         // 所有下单入口（createOrder/addOrderItem/套餐 expandCombo 逐 SKU）都汇到此处，单点收口。
         if (product.archivedAt() != null
                 || (product.deleteStatus() != null && !"none".equals(product.deleteStatus()))) {
             throw ApiException.conflict("BAR_PRODUCT_NOT_SELLABLE",
-                    "bar product is archived or pending deletion and cannot be ordered");
+                    "商品已存档或待删除，不能下单");
         }
     }
 
@@ -929,15 +928,15 @@ public class BarOrderService {
     BarOrderItemVoidRecord voidOrderItem(String orderId, BarOrderItemVoidRequest request) {
         BarOrderItemVoidRequest actual = requireRequest(request);
         BarOrderRecord order = repository.findOrderById(requireText(orderId, "order_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
         checkMerchantOwnership(order.merchantId());
         BarOrderItemRecord item = repository.findOrderItemById(requireText(actual.orderItemId(), "order_item_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "bar order item not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "订单明细不存在或已被删除"));
         if (!order.id().equals(item.orderId())) {
-            throw ApiException.conflict("BAR_ORDER_ITEM_SCOPE_MISMATCH", "bar order item does not belong to order");
+            throw ApiException.conflict("BAR_ORDER_ITEM_SCOPE_MISMATCH", "该明细不属于此订单");
         }
         if (item.voided()) {
-            throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_VOIDED", "bar order item is already voided");
+            throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_VOIDED", "该明细已作废，请勿重复操作");
         }
         // V345：先审后行模式下明细在审批前【不】被标 voided，上面那条 already-voided 守卫拦不住
         // 「同一明细重复发起高价值申请」——两笔 pending 各自被批 = 双倍退款 + 双倍回库。此处补守卫。
@@ -1109,7 +1108,7 @@ public class BarOrderService {
         }
         checkMerchantOwnership(bill.merchantId());
         if (!bill.orderId().equals(item.orderId())) {
-            throw ApiException.conflict("BAR_BILL_ORDER_MISMATCH", "bill does not belong to the voided item's order");
+            throw ApiException.conflict("BAR_BILL_ORDER_MISMATCH", "账单与被作废明细的订单不一致");
         }
         if ("settled".equals(bill.settlementStatus())) {
             authorizationService.requirePermission("bar.bill.refund");
@@ -1137,7 +1136,7 @@ public class BarOrderService {
             Instant now
     ) {
         BarProductRecord product = repository.findProductById(item.productId())
-                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "酒吧商品不存在或已被删除"));
 
         // 已出品退酒 + 选择回补库存：原子加回 + inbound 库存流水留痕。
         String inventoryMovementId = null;
@@ -1146,7 +1145,7 @@ public class BarOrderService {
             String stockLocationId = requireText(product.stockLocationId(), "stock_location_id");
             boolean increased = repository.atomicIncreaseStock(inventoryItemId, stockLocationId, item.quantity());
             if (!increased) {
-                throw ApiException.conflict("STOCK_BALANCE_NOT_FOUND", "stock balance not found for return-to-stock");
+                throw ApiException.conflict("STOCK_BALANCE_NOT_FOUND", "退回库存时未找到库存余额记录");
             }
             inventoryMovementId = boundedAdjustmentId("movement_", order.id() + ":void:" + item.id() + ":" + idempotencyKey);
             repository.saveStockMovement(new StockMovementSnapshot(
@@ -1220,10 +1219,10 @@ public class BarOrderService {
         // V125 P1-1：对该 void 流水行加 FOR UPDATE 行锁后再读，使 status==pending 守卫与状态翻转串行化，
         // 不同 idempotencyKey 的并发第二次 reject 读到已非 pending 被拒，杜绝库存/账单冲销双扣。
         BarOrderItemVoidRecord current = repository.findOrderItemVoidByIdForUpdate(requireText(voidId, "void_id"))
-                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_VOID_NOT_FOUND", "bar order item void not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_VOID_NOT_FOUND", "明细作废申请不存在或已被删除"));
         checkMerchantOwnership(current.merchantId());
         if (!"pending".equals(current.status())) {
-            throw ApiException.conflict("BAR_ORDER_ITEM_VOID_NOT_PENDING", "bar order item void is not pending review");
+            throw ApiException.conflict("BAR_ORDER_ITEM_VOID_NOT_PENDING", "明细作废申请不在待审核状态");
         }
         String decision = normalizeVoidDecision(actual.decision());
         String reviewer = authorizationService.currentActor().id();
@@ -1245,11 +1244,11 @@ public class BarOrderService {
         // V345 A1 先审后行：审批通过才施加库存/账单/明细副作用（此前一律未动，故也从未进过分账）。
         if ("approved".equals(decision) && approvalFirst && effectsAppliedAt == null) {
             BarOrderRecord order = repository.findOrderById(current.orderId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
             BarOrderItemRecord item = repository.findOrderItemById(current.orderItemId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "bar order item not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "订单明细不存在或已被删除"));
             if (item.voided()) {
-                throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_VOIDED", "bar order item is already voided");
+                throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_VOIDED", "该明细已作废，请勿重复操作");
             }
             // 操作人一律记申请人：同一业务事件在两条路径（即时 / 审批后）留同一责任人，
             // 审批人另由本流水的 reviewed_by_user_id 独立承载，二者不混。
@@ -1313,7 +1312,7 @@ public class BarOrderService {
         String value = requireText(decision, "decision");
         return switch (value) {
             case "approved", "rejected" -> value;
-            default -> throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            default -> throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         };
     }
 
@@ -1334,18 +1333,18 @@ public class BarOrderService {
      */
     private void reverseVoidSideEffects(BarOrderItemVoidRecord current, String reviewer, Instant now) {
         BarOrderItemRecord item = repository.findOrderItemById(current.orderItemId())
-                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "bar order item not found"));
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "订单明细不存在或已被删除"));
 
         // 1) 库存回滚：void 回补过库存 → 重新扣减并落 outbound 冲销流水。
         if (current.returnToStock() && current.inventoryMovementId() != null) {
             BarProductRecord product = repository.findProductById(item.productId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "酒吧商品不存在或已被删除"));
             if (product.stockDeductionRequired()) {
                 String inventoryItemId = requireText(product.inventoryItemId(), "inventory_item_id");
                 String stockLocationId = requireText(product.stockLocationId(), "stock_location_id");
                 boolean decreased = repository.atomicDecreaseStock(inventoryItemId, stockLocationId, current.quantity());
                 if (!decreased) {
-                    throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
+                    throw ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足");
                 }
                 repository.saveStockMovement(new StockMovementSnapshot(
                         boundedAdjustmentId("movement_", current.id() + ":void_reject:" + item.id() + ":" + current.idempotencyKey()),
@@ -1381,7 +1380,7 @@ public class BarOrderService {
                 String reversalAdjustmentId = boundedAdjustmentId("bill_adjustment_void_reject_", bill.id() + ":" + item.id() + ":" + reversalIdempotencyKey);
                 if (settled) {
                     BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
-                            .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                            .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
                     reversalArApItemId = receivableLedgerService.reverseRefundPayable(
                             bill, refundOrder, reversalAdjustmentId, amount,
                             reversalIdempotencyKey, "void rejected: " + current.reason(),
@@ -1465,7 +1464,7 @@ public class BarOrderService {
         checkMerchantOwnership(bill.merchantId());
         // P1-4 修复：billId 由客户端提供，此前仅校验同商户、未校验账单归属本订单，可把退款/冲减作用到任意同商户他单账单。
         if (!bill.orderId().equals(item.orderId())) {
-            throw ApiException.conflict("BAR_BILL_ORDER_MISMATCH", "bill does not belong to the voided item's order");
+            throw ApiException.conflict("BAR_BILL_ORDER_MISMATCH", "账单与被作废明细的订单不一致");
         }
         boolean settled = "settled".equals(bill.settlementStatus());
         long amount = item.amountCent();
@@ -1481,7 +1480,7 @@ public class BarOrderService {
             // (applyBillAdjustment refund) 口径一致，堵住凭「退酒」权限绕过退款审批把关的暗道。
             authorizationService.requirePermission("bar.bill.refund");
             BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
-                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
             arApItemId = receivableLedgerService.createRefundPayable(
                     bill, refundOrder,
                     boundedAdjustmentId("bill_adjustment_void_", bill.id() + ":" + item.id() + ":" + idempotencyKey),
@@ -1534,7 +1533,7 @@ public class BarOrderService {
     private void checkMerchantOwnership(String resourceMerchantId) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "access to another merchant's resource is not allowed");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
         }
     }
 
@@ -1546,7 +1545,7 @@ public class BarOrderService {
     private void requireResourceInOrderMerchant(String orderMerchantId, String resourceMerchantId, String resourceLabel) {
         if (orderMerchantId != null && !orderMerchantId.equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    resourceLabel + " belongs to another merchant");
+                    resourceLabel + " 属于其他商户");
         }
     }
 
@@ -1554,13 +1553,13 @@ public class BarOrderService {
         String status = requireText(targetStatus, "target_status");
         return switch (status) {
             case "accepted", "preparing", "ready", "delivered", "cancelled", "exception" -> status;
-            default -> throw ApiException.badRequest("VALIDATION_FAILED", "unsupported production ticket target status");
+            default -> throw ApiException.badRequest("VALIDATION_FAILED", "不支持的出品单目标状态");
         };
     }
 
     private String productionActionType(String fromStatus, String toStatus) {
         if (fromStatus.equals(toStatus)) {
-            throw ApiException.conflict("BAR_PRODUCTION_STATUS_UNCHANGED", "production ticket status is unchanged");
+            throw ApiException.conflict("BAR_PRODUCTION_STATUS_UNCHANGED", "出品单状态没有变化");
         }
         return switch (fromStatus + "->" + toStatus) {
             case "created->accepted" -> "accept";
@@ -1569,7 +1568,7 @@ public class BarOrderService {
             case "ready->delivered" -> "deliver";
             case "created->cancelled", "accepted->cancelled", "preparing->cancelled", "ready->cancelled" -> "cancel";
             case "created->exception", "accepted->exception", "preparing->exception", "ready->exception" -> "exception";
-            default -> throw ApiException.conflict("BAR_PRODUCTION_INVALID_TRANSITION", "invalid production ticket transition");
+            default -> throw ApiException.conflict("BAR_PRODUCTION_INVALID_TRANSITION", "出品单状态流转不合法");
         };
     }
 

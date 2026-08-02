@@ -139,22 +139,22 @@ public class SupervisorReviewService {
                 () -> {
                     String decision = normalize(requireText(request.decision(), "decision"));
                     if (!List.of("approved", "rejected").contains(decision)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
                     }
                     // Reviewer level comes from the authenticated principal, never from the request body.
                     int reviewerLevel = authorizationService.currentSupervisorLevel();
                     SupervisorReviewDecisionRecord pending = supervisorReviewRepository
                             .findPendingSupervisorReviewById(id)
-                            .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "supervisor review is not pending or does not exist"));
+                            .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
                     int requiredLevel = pending.requiredLevel();
                     if (reviewerLevel < requiredLevel) {
-                        throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "reviewer level is lower than required level");
+                        throw ApiException.forbidden("SUPERVISOR_LEVEL_TOO_LOW", "复核人级别低于要求的复核级别");
                     }
                     // Segregation of duties: the supervisor who initiated the action cannot approve it.
                     String reviewerId = authorizationService.currentActor().id();
                     if (reviewerId != null && reviewerId.equals(pending.initiatedBy())) {
                         throw ApiException.forbidden(
-                                "SUPERVISOR_SELF_REVIEW_FORBIDDEN", "the initiator of an action cannot approve its own review");
+                                "SUPERVISOR_SELF_REVIEW_FORBIDDEN", "操作发起人不能复核自己发起的操作");
                     }
                     // REQ-69 逐级上提：当本次复核记录有按 rank 计算的所需审批人 rank 时，
                     // 审批人的 level_rank 必须不低于该 rank（在主管级校验之上的管理职级门槛）。
@@ -163,7 +163,7 @@ public class SupervisorReviewService {
                         if (reviewerRank < pending.requiredApproverRank()) {
                             throw ApiException.forbidden(
                                     "SUPERVISOR_RANK_TOO_LOW",
-                                    "reviewer management level rank is lower than the required approver rank");
+                                    "复核人管理级别低于要求的审批级别");
                         }
                     }
                     // 双轨收口的角色闸/范围闸仅在可解析角色与隔离键时强制；不可解析时回退既有 level 闸（向后兼容）。
@@ -178,7 +178,7 @@ public class SupervisorReviewService {
                                 && !authorizationService.holdsPermissionViaRole(reviewerId, policy.requiredApproverPermission())) {
                             throw ApiException.forbidden(
                                     "SUPERVISOR_ROLE_NOT_AUTHORIZED",
-                                    "reviewer does not hold the required approver role for this review");
+                                    "复核人不具备该复核要求的审批角色");
                         }
                         // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（或平台管理员越权）。
                         Optional<String> initiatorMerchant = authorizationService.merchantIdOf(pending.initiatedBy());
@@ -188,7 +188,7 @@ public class SupervisorReviewService {
                             if (reviewerMerchant.isEmpty() || !reviewerMerchant.get().equals(initiatorMerchant.get())) {
                                 throw ApiException.forbidden(
                                         "SUPERVISOR_MERCHANT_SCOPE_MISMATCH",
-                                        "reviewer must belong to the same merchant scope as the initiator");
+                                        "复核人必须与发起人属于同一商户范围");
                             }
                         }
                     }
@@ -296,7 +296,7 @@ public class SupervisorReviewService {
         return policies.stream()
                 .filter(policy -> policy.actionType().equals(actionType))
                 .min(Comparator.comparing(SupervisorReviewPolicyRecord::policyCode))
-                .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REVIEW_ACTION", "unknown review action type"));
+                .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REVIEW_ACTION", "无法识别的复核操作类型"));
     }
 
     /** 审批时按 policy_code 复原策略（取 specific_role 角色权限）；未知策略返回 {@code null}（按非 specific_role 处理）。 */

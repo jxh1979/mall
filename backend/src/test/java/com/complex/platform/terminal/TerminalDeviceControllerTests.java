@@ -130,7 +130,7 @@ class TerminalDeviceControllerTests {
     @Test
     void returnWithPendingTasksReturnsOpenApiConflictCode() throws Exception {
         when(service.returnDevice(any(DeviceReturnRequest.class)))
-                .thenThrow(ApiException.conflict("RETURN_BLOCKED_PENDING_TASKS", "device has pending tasks"));
+                .thenThrow(ApiException.conflict("RETURN_BLOCKED_PENDING_TASKS", "设备还有未完成的任务"));
 
         mockMvc.perform(post("/api/v1/terminals/devices/return")
                         .with(user("ops").roles("P0_SMOKE"))
@@ -270,7 +270,7 @@ class TerminalDeviceControllerTests {
     @Test
     void kioskConfigRejectsMissingDeviceTokenThroughService() throws Exception {
         when(service.getKioskConfig("device_ticketing_1", null))
-                .thenThrow(ApiException.unauthorized("DEVICE_CREDENTIAL_REQUIRED", "X-Device-Token is required"));
+                .thenThrow(ApiException.unauthorized("DEVICE_CREDENTIAL_REQUIRED", "缺少设备令牌（X-Device-Token）"));
 
         mockMvc.perform(get("/api/v1/terminals/kiosks/device_ticketing_1/config"))
                 .andExpect(status().isUnauthorized())
@@ -283,7 +283,7 @@ class TerminalDeviceControllerTests {
     @Test
     void kioskConfigPropagatesInvalidDeviceTokenAsForbidden() throws Exception {
         when(service.getKioskConfig("device_ticketing_1", "wrong-token"))
-                .thenThrow(ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "device token is invalid"));
+                .thenThrow(ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "设备令牌无效"));
 
         mockMvc.perform(get("/api/v1/terminals/kiosks/device_ticketing_1/config")
                         .header("X-Device-Token", "wrong-token"))
@@ -329,7 +329,7 @@ class TerminalDeviceControllerTests {
     @Test
     void kioskHeartbeatRejectsMissingDeviceTokenThroughService() throws Exception {
         when(service.recordKioskHeartbeat(eq("device_ticketing_1"), eq(null), any(KioskHeartbeatRequest.class)))
-                .thenThrow(ApiException.unauthorized("DEVICE_CREDENTIAL_REQUIRED", "X-Device-Token is required"));
+                .thenThrow(ApiException.unauthorized("DEVICE_CREDENTIAL_REQUIRED", "缺少设备令牌（X-Device-Token）"));
 
         mockMvc.perform(post("/api/v1/terminals/kiosks/device_ticketing_1/heartbeat")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -350,7 +350,7 @@ class TerminalDeviceControllerTests {
     @Test
     void kioskHeartbeatPropagatesInvalidDeviceTokenAsForbidden() throws Exception {
         when(service.recordKioskHeartbeat(eq("device_ticketing_1"), eq("wrong-token"), any(KioskHeartbeatRequest.class)))
-                .thenThrow(ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "device token is invalid"));
+                .thenThrow(ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "设备令牌无效"));
 
         mockMvc.perform(post("/api/v1/terminals/kiosks/device_ticketing_1/heartbeat")
                         .header("X-Device-Token", "wrong-token")

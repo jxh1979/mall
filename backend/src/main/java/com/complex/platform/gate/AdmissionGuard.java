@@ -126,7 +126,7 @@ public class AdmissionGuard {
         throw new ApiException(
                 org.springframework.http.HttpStatus.CONFLICT,
                 "ADMISSION_BLOCKED",
-                "action blocked pending supervisor review: " + pending.reviewId());
+                "操作已被拦截，等待主管复核，复核单号：" + pending.reviewId());
     }
 
 

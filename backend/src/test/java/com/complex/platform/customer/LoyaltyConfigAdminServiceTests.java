@@ -70,7 +70,7 @@ class LoyaltyConfigAdminServiceTests {
         assertThatThrownBy(() -> service.saveMemberLevel(new MemberLevelConfigRequest(
                 "member_level_ghost", "prj_A", "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active")))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("not found");
+                .hasMessageContaining("未找到");
     }
 
     @Test

@@ -186,7 +186,7 @@ public class MerchantBillingService {
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(merchantId)) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "creating a bill for another merchant is not allowed");
+                        "CROSS_MERCHANT_FORBIDDEN", "不能为其他商户创建账单");
             }
         });
         ArApItemRecord item = findArApItem(request.arApItemId());
@@ -231,7 +231,7 @@ public class MerchantBillingService {
     private MerchantBillRecord confirmBillOnce(String billId, MerchantBillConfirmRequest request) {
         MerchantBillRecord existing = findBill(billId);
         if (!CONFIRMABLE_STATUSES.contains(existing.status())) {
-            throw ApiException.conflict("BILL_NOT_CONFIRMABLE", "merchant bill cannot be confirmed in current status");
+            throw ApiException.conflict("BILL_NOT_CONFIRMABLE", "商户账单当前状态不可确认");
         }
         MerchantBillRecord confirmed = repository.saveBill(existing.withStatus("confirmed", Instant.now()));
         auditEventService.recordSuccess(
@@ -249,7 +249,7 @@ public class MerchantBillingService {
     private MerchantBillDisputeRecord submitDisputeOnce(String billId, MerchantBillDisputeRequest request) {
         MerchantBillRecord existing = findBill(billId);
         if (!DISPUTABLE_STATUSES.contains(existing.status())) {
-            throw ApiException.conflict("BILL_NOT_DISPUTABLE", "merchant bill cannot be disputed in current status");
+            throw ApiException.conflict("BILL_NOT_DISPUTABLE", "商户账单当前状态不可发起异议");
         }
         Instant now = Instant.now();
         MerchantBillDisputeRecord dispute = repository.saveDispute(new MerchantBillDisputeRecord(
@@ -280,7 +280,7 @@ public class MerchantBillingService {
     private MerchantBillDunningRecord recordDunningOnce(String billId, MerchantBillDunningRequest request) {
         MerchantBillRecord existing = findBill(billId);
         if ("closed".equals(existing.status())) {
-            throw ApiException.conflict("BILL_CLOSED", "closed merchant bill cannot be dunned");
+            throw ApiException.conflict("BILL_CLOSED", "已关闭的商户账单不能催缴");
         }
         MerchantBillDunningRecord record = repository.saveDunningRecord(new MerchantBillDunningRecord(
                 "mbill_dunning_" + slug(request.idempotencyKey()),
@@ -514,7 +514,7 @@ public class MerchantBillingService {
 
     private void validateCreateRequest(MerchantBillCreateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.merchantId(), "merchant_id");
@@ -522,7 +522,7 @@ public class MerchantBillingService {
         LocalDate start = requireDate(request.billPeriodStart(), "bill_period_start");
         LocalDate end = requireDate(request.billPeriodEnd(), "bill_period_end");
         if (end.isBefore(start)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "bill period end must be on or after start");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账单周期的结束日期不能早于开始日期");
         }
         requireDate(request.dueDate(), "due_date");
         requirePositive(request.totalAmountCent(), "total_amount_cent");
@@ -532,7 +532,7 @@ public class MerchantBillingService {
 
     private void validateConfirmRequest(MerchantBillConfirmRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.operatorUserId(), "operator_user_id");
@@ -540,7 +540,7 @@ public class MerchantBillingService {
 
     private void validateDisputeRequest(MerchantBillDisputeRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.reasonCode(), "reason_code");
@@ -550,7 +550,7 @@ public class MerchantBillingService {
 
     private void validateDunningRequest(MerchantBillDunningRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         normalizeAllowed(request.dunningChannel(), "dunning_channel", DUNNING_CHANNELS);
@@ -561,7 +561,7 @@ public class MerchantBillingService {
 
     private void validateLines(List<MerchantBillLineRequest> lines, Long totalAmountCent) {
         if (lines == null || lines.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "lines are required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账单明细不能为空");
         }
         long sum = 0L;
         Set<String> seenFeeTypes = new HashSet<>();
@@ -571,25 +571,25 @@ public class MerchantBillingService {
             }
             String feeType = normalizeAllowed(line.feeType(), "fee_type", FEE_TYPES);
             if (!seenFeeTypes.add(feeType)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "duplicate fee_type: " + feeType);
+                throw ApiException.badRequest("VALIDATION_FAILED", "费用类型重复：" + feeType);
             }
             requireText(line.description(), "description");
             sum += requirePositive(line.amountCent(), "line.amount_cent");
         }
         if (totalAmountCent != null && sum != totalAmountCent) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "line amount sum must equal total_amount_cent");
+            throw ApiException.badRequest("VALIDATION_FAILED", "明细金额合计必须等于账单总金额");
         }
     }
 
     private void validateArApReference(MerchantBillCreateRequest request, ArApItemRecord item) {
         if (!"receivable".equals(item.direction())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "merchant bill must reference receivable ar_ap_item");
+            throw ApiException.badRequest("VALIDATION_FAILED", "商户账单必须关联应收款项（ar_ap_item）");
         }
         if (!requireText(request.merchantId(), "merchant_id").equals(item.counterpartyId())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id must match ar_ap counterparty_id");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账单商户必须与应收应付往来方一致");
         }
         if (requirePositive(request.totalAmountCent(), "total_amount_cent") != item.amountCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "total_amount_cent must match ar_ap amount_cent");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账单总金额必须与应收应付金额一致");
         }
     }
 
@@ -617,16 +617,16 @@ public class MerchantBillingService {
 
     private ArApItemRecord findArApItem(String id) {
         return financeRepository.findArApItemById(requireText(id, "ar_ap_item_id"))
-                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
     }
 
     private MerchantBillRecord findBill(String id) {
         MerchantBillRecord bill = repository.findBillById(requireText(id, "id"))
-                .orElseThrow(() -> ApiException.notFound("MERCHANT_BILL_NOT_FOUND", "merchant bill not found"));
+                .orElseThrow(() -> ApiException.notFound("MERCHANT_BILL_NOT_FOUND", "商户账单不存在或已被删除"));
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(bill.merchantId())) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's bill is not allowed");
+                        "CROSS_MERCHANT_FORBIDDEN", "无权查看其他商户的账单");
             }
         });
         return bill;
@@ -682,7 +682,7 @@ public class MerchantBillingService {
 
     private long requirePositive(Long value, String field) {
         if (value == null || value <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于 0");
         }
         return value;
     }

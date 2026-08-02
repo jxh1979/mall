@@ -107,7 +107,7 @@ public class SupplierQualificationService {
                             actual.status(), QUALIFICATION_STATUSES, "active", "status");
                     if (actual.validFrom() != null && actual.validTo() != null
                             && actual.validTo().isBefore(actual.validFrom())) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "valid_to must be on or after valid_from");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "有效期结束日期不能早于开始日期");
                     }
                     String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     Instant now = Instant.now();
@@ -202,14 +202,14 @@ public class SupplierQualificationService {
                 .toList();
         if (qualifications.isEmpty()) {
             throw ApiException.conflict(
-                    "SUPPLIER_QUALIFICATION_MISSING", "supplier has no active qualification for inbound check");
+                    "SUPPLIER_QUALIFICATION_MISSING", "供应商没有生效中的资质，入库检查不通过");
         }
         LocalDate today = LocalDate.now();
         boolean anyExpired = qualifications.stream()
                 .anyMatch(q -> q.validTo() != null && q.validTo().isBefore(today));
         if (anyExpired) {
             throw ApiException.conflict(
-                    "SUPPLIER_QUALIFICATION_EXPIRED", "supplier has an expired qualification; inbound is blocked");
+                    "SUPPLIER_QUALIFICATION_EXPIRED", "供应商资质已过期，入库被拦截");
         }
     }
 
@@ -218,10 +218,10 @@ public class SupplierQualificationService {
         InventorySupplierRecord supplier = scopedSuppliers().stream()
                 .filter(s -> s.id().equals(supplierId))
                 .findFirst()
-                .orElseThrow(() -> ApiException.notFound("SUPPLIER_NOT_FOUND", "inventory supplier not found"));
+                .orElseThrow(() -> ApiException.notFound("SUPPLIER_NOT_FOUND", "供应商不存在或已被删除"));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(supplier.merchantId())) {
-            throw ApiException.forbidden("SUPPLIER_FORBIDDEN", "inventory supplier is out of merchant scope");
+            throw ApiException.forbidden("SUPPLIER_FORBIDDEN", "该供应商不在当前商户权限范围内");
         }
     }
 
@@ -322,7 +322,7 @@ public class SupplierQualificationService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -345,7 +345,7 @@ public class SupplierQualificationService {
 
     private Integer nonNegativeOrNull(Integer value, String fieldName) {
         if (value != null && value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return value;
     }

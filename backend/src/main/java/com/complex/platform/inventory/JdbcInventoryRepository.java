@@ -463,7 +463,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                 || !java.util.Objects.equals(row.sourceLocationId(), movement.sourceLocationId())
                 || !java.util.Objects.equals(row.targetLocationId(), movement.targetLocationId())) {
             throw com.complex.platform.common.api.ApiException.conflict("STOCK_MOVEMENT_REPLAY_MISMATCH",
-                    "stock movement id already exists with different item/quantity/direction");
+                    "库存变动编号已存在且商品/数量/方向不一致");
         }
         // 一致性通过：更新其余字段（既有 upsert 语义），成本列与状态行保持不动（不二次滚动）。
         jdbcTemplate.update("""

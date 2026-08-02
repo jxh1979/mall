@@ -173,12 +173,12 @@ class MerchantExpenseServiceTests {
                 .isInstanceOf(ApiException.class).hasMessageContaining("note");
         assertThatThrownBy(() -> service.createManual(
                 new MerchantExpenseEntryRequest("k2", "merchant-1", "2026-13", "labor", 100_00L, "七月人工")))
-                .isInstanceOf(ApiException.class).hasMessageContaining("period");
+                .isInstanceOf(ApiException.class).hasMessageContaining("账期");
         assertThatThrownBy(() -> service.createManual(manualRequest("k3", 0L, "七月人工")))
-                .isInstanceOf(ApiException.class).hasMessageContaining("amount_cent");
+                .isInstanceOf(ApiException.class).hasMessageContaining("金额");
         assertThatThrownBy(() -> service.createManual(
                 new MerchantExpenseEntryRequest("k4", "merchant-1", "2026-07", "unknown_type", 100_00L, "七月人工")))
-                .isInstanceOf(ApiException.class).hasMessageContaining("expense_type");
+                .isInstanceOf(ApiException.class).hasMessageContaining("费用类型");
         assertThat(repository.rows).isEmpty();
     }
 
@@ -315,11 +315,11 @@ class MerchantExpenseServiceTests {
     @Test
     void listRejectsUnknownFilterValues() {
         assertThatThrownBy(() -> service.listEntries(null, null, "bad-type", null, 1, 50))
-                .isInstanceOf(ApiException.class).hasMessageContaining("expense_type");
+                .isInstanceOf(ApiException.class).hasMessageContaining("费用类型");
         assertThatThrownBy(() -> service.listEntries(null, null, null, "bad-source", 1, 50))
                 .isInstanceOf(ApiException.class).hasMessageContaining("source");
         assertThatThrownBy(() -> service.listEntries(null, "2026/07", null, null, 1, 50))
-                .isInstanceOf(ApiException.class).hasMessageContaining("period");
+                .isInstanceOf(ApiException.class).hasMessageContaining("账期");
     }
 
     @Test
@@ -327,7 +327,7 @@ class MerchantExpenseServiceTests {
         assertThatThrownBy(() -> service.syncAuto(new MerchantExpenseSyncRequest(null, "2026-07")))
                 .isInstanceOf(ApiException.class).hasMessageContaining("idempotency_key");
         assertThatThrownBy(() -> service.syncAuto(new MerchantExpenseSyncRequest("k", "202607")))
-                .isInstanceOf(ApiException.class).hasMessageContaining("period");
+                .isInstanceOf(ApiException.class).hasMessageContaining("账期");
         MerchantExpenseSyncResultRecord result = service.syncAuto(new MerchantExpenseSyncRequest("k2", "2026-07"));
         assertThat(result.energyInserted()).isZero();
         assertThat(result.propertyInserted()).isZero();

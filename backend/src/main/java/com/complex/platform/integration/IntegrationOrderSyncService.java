@@ -152,7 +152,7 @@ final class IntegrationOrderSyncService {
         validateStatusChange(request);
         IntegrationChannelStoreMapRecord existing = repository.findChannelStoreMapById(id)
                 .orElseThrow(() -> ApiException.notFound(
-                        "INTEGRATION_CHANNEL_STORE_MAP_NOT_FOUND", "channel store map not found"));
+                        "INTEGRATION_CHANNEL_STORE_MAP_NOT_FOUND", "渠道门店映射不存在或已被删除"));
         IntegrationChannelStoreMapRecord updated = new IntegrationChannelStoreMapRecord(
                 existing.id(),
                 existing.providerCode(),
@@ -237,7 +237,7 @@ final class IntegrationOrderSyncService {
         validateStatusChange(request);
         IntegrationChannelTicketTypeMapRecord existing = repository.findChannelTicketTypeMapById(id)
                 .orElseThrow(() -> ApiException.notFound(
-                        "INTEGRATION_CHANNEL_TICKET_MAP_NOT_FOUND", "channel ticket type map not found"));
+                        "INTEGRATION_CHANNEL_TICKET_MAP_NOT_FOUND", "渠道票种映射不存在或已被删除"));
         IntegrationChannelTicketTypeMapRecord updated = new IntegrationChannelTicketTypeMapRecord(
                 existing.id(),
                 existing.providerCode(),
@@ -818,7 +818,7 @@ final class IntegrationOrderSyncService {
     private IntegrationTaskRecord runRetryTaskNowOnce(String id, StatusChangeRequest request) {
         validateStatusChange(request);
         IntegrationTaskRecord existing = repository.findRetryTaskById(id)
-                .orElseThrow(() -> ApiException.notFound("INTEGRATION_RETRY_TASK_NOT_FOUND", "integration retry task not found"));
+                .orElseThrow(() -> ApiException.notFound("INTEGRATION_RETRY_TASK_NOT_FOUND", "集成重试任务不存在或已被删除"));
         IntegrationTaskRecord updated = new IntegrationTaskRecord(
                 existing.id(),
                 existing.taskCategory(),
@@ -843,7 +843,7 @@ final class IntegrationOrderSyncService {
     private IntegrationTaskRecord resolveCompensationTaskOnce(String id, IntegrationTaskResolveRequest request) {
         validateTaskResolveRequest(request);
         IntegrationTaskRecord existing = repository.findCompensationTaskById(id)
-                .orElseThrow(() -> ApiException.notFound("INTEGRATION_COMPENSATION_TASK_NOT_FOUND", "integration compensation task not found"));
+                .orElseThrow(() -> ApiException.notFound("INTEGRATION_COMPENSATION_TASK_NOT_FOUND", "集成补偿任务不存在或已被删除"));
         IntegrationTaskRecord updated = new IntegrationTaskRecord(
                 existing.id(),
                 existing.taskCategory(),

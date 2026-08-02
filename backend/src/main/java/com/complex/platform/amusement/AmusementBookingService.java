@@ -203,7 +203,7 @@ final class AmusementBookingService {
         String status = enumOrDefault(actual.action(), null, RESERVATION_STATUSES, "action");
         requireText(actual.reason(), "reason");
         AmusementReservationRecord existing = repository.findReservationById(reservationId)
-                .orElseThrow(() -> ApiException.notFound("RESERVATION_NOT_FOUND", "reservation not found"));
+                .orElseThrow(() -> ApiException.notFound("RESERVATION_NOT_FOUND", "预约不存在或已被删除"));
         checkProjectOwnership(existing.projectId());
         return repository.saveReservation(new AmusementReservationRecord(
                 existing.id(),
@@ -243,7 +243,7 @@ final class AmusementBookingService {
         String status = enumOrDefault(actual.action(), null, QUEUE_STATUSES, "action");
         requireText(actual.reason(), "reason");
         AmusementQueueEntryRecord existing = repository.findQueueEntryById(queueEntryId)
-                .orElseThrow(() -> ApiException.notFound("QUEUE_ENTRY_NOT_FOUND", "queue entry not found"));
+                .orElseThrow(() -> ApiException.notFound("QUEUE_ENTRY_NOT_FOUND", "排队记录不存在或已被删除"));
         checkProjectOwnership(existing.projectId());
         return repository.saveQueueEntry(new AmusementQueueEntryRecord(
                 existing.id(),
@@ -269,7 +269,7 @@ final class AmusementBookingService {
         int partySize = positiveInteger(actual.partySize(), "party_size");
         int reservedCapacity = positiveInteger(actual.reservedCapacity(), "reserved_capacity");
         if (reservedCapacity > session.capacity()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "reserved_capacity cannot exceed session capacity");
+            throw ApiException.badRequest("VALIDATION_FAILED", "预留容量不能超过场次容量");
         }
         Instant now = Instant.now();
         return repository.saveGroupBooking(new AmusementGroupBookingRecord(
@@ -296,10 +296,10 @@ final class AmusementBookingService {
         AmusementGroupBookingApprovalRequest actual = requireRequest(request);
         String approvalNote = requireText(actual.approvalNote(), "approval_note");
         AmusementGroupBookingRecord existing = repository.findGroupBookingById(bookingId)
-                .orElseThrow(() -> ApiException.notFound("GROUP_BOOKING_NOT_FOUND", "group booking not found"));
+                .orElseThrow(() -> ApiException.notFound("GROUP_BOOKING_NOT_FOUND", "团体预约不存在或已被删除"));
         checkProjectOwnership(existing.projectId());
         if (!"pending_approval".equals(existing.bookingStatus())) {
-            throw ApiException.conflict("GROUP_BOOKING_NOT_PENDING", "group booking must be pending approval");
+            throw ApiException.conflict("GROUP_BOOKING_NOT_PENDING", "团体预约必须在待审批状态");
         }
         acceptingSession(existing.projectId(), existing.sessionId(), "SESSION_NOT_ACCEPTING_GROUP_BOOKING");
         Instant now = Instant.now();
@@ -309,17 +309,17 @@ final class AmusementBookingService {
                         evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
                         now
                 )
-                .orElseThrow(() -> ApiException.conflict("SESSION_CAPACITY_LOCK_FAILED", "session remaining capacity is insufficient"));
+                .orElseThrow(() -> ApiException.conflict("SESSION_CAPACITY_LOCK_FAILED", "场次剩余容量不足"));
     }
 
     private AmusementGroupBookingRecord releaseGroupBookingInternal(String bookingId, AmusementGroupBookingReleaseRequest request) {
         AmusementGroupBookingReleaseRequest actual = requireRequest(request);
         String reason = requireText(actual.reason(), "reason");
         AmusementGroupBookingRecord existing = repository.findGroupBookingById(bookingId)
-                .orElseThrow(() -> ApiException.notFound("GROUP_BOOKING_NOT_FOUND", "group booking not found"));
+                .orElseThrow(() -> ApiException.notFound("GROUP_BOOKING_NOT_FOUND", "团体预约不存在或已被删除"));
         checkProjectOwnership(existing.projectId());
         if (!"approved".equals(existing.bookingStatus())) {
-            throw ApiException.conflict("GROUP_BOOKING_NOT_APPROVED", "only approved group booking can be released");
+            throw ApiException.conflict("GROUP_BOOKING_NOT_APPROVED", "只有已批准的团体预约才能释放");
         }
         Instant now = Instant.now();
         return repository.releaseGroupBookingAndCapacity(
@@ -328,29 +328,29 @@ final class AmusementBookingService {
                         evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
                         now
                 )
-                .orElseThrow(() -> ApiException.conflict("GROUP_BOOKING_RELEASE_FAILED", "group booking capacity release failed"));
+                .orElseThrow(() -> ApiException.conflict("GROUP_BOOKING_RELEASE_FAILED", "团体预约容量释放失败，请重试"));
     }
 
     private void checkProjectOwnership(String projectId) {
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             AmusementProjectRecord project = repository.findProjectById(projectId)
-                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
             if (!merchantId.equals(project.merchantId())) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "project does not belong to your merchant");
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该游乐项目不属于当前商户");
             }
         });
     }
 
     private AmusementSessionRecord acceptingSession(String projectId, String sessionId, String blockedCode) {
         AmusementProjectRecord project = repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         AmusementSessionRecord session = repository.findSessionById(sessionId)
-                .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "session not found"));
+                .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "场次不存在或已被删除"));
         if (!project.id().equals(session.projectId())) {
-            throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "session does not belong to project");
+            throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "场次不属于该游乐项目");
         }
         if (!ACCEPTING_ENTRY_SESSION_STATUSES.contains(session.status())) {
-            throw ApiException.conflict(blockedCode, "session is not accepting reservation or queue entry");
+            throw ApiException.conflict(blockedCode, "该场次当前不接受预约或排队");
         }
         return session;
     }
@@ -448,7 +448,7 @@ final class AmusementBookingService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -461,7 +461,7 @@ final class AmusementBookingService {
     private int positiveInteger(Integer value, String fieldName) {
         int actual = value == null ? 0 : value;
         if (actual <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
         }
         return actual;
     }

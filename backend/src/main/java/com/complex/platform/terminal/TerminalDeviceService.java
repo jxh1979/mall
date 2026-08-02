@@ -96,10 +96,10 @@ public class TerminalDeviceService {
                     () -> {
                         TerminalDeviceRecord device = repository.findByDeviceId(id)
                                 .orElseThrow(() -> ApiException.notFound(
-                                        "TERMINAL_DEVICE_NOT_FOUND", "terminal device not found: " + id));
+                                        "TERMINAL_DEVICE_NOT_FOUND", "终端设备不存在：" + id));
                         if (!"bound".equals(device.status())) {
                             throw ApiException.conflict(
-                                    "TERMINAL_DEVICE_NOT_BOUND", "terminal device is not bound: " + id);
+                                    "TERMINAL_DEVICE_NOT_BOUND", "终端设备未绑定：" + id);
                         }
                         boolean rotating = deviceSigningKeyStore.findActivePublicKey(id).isPresent();
                         deviceSigningKeyStore.upsert(id, key);
@@ -231,15 +231,15 @@ public class TerminalDeviceService {
         DeviceLifecycleRequest actual = requireRequest(request);
         String reason = requireText(actual.reason(), "reason");
         TerminalDeviceRecord existing = repository.findById(id)
-                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "设备不存在或已被删除"));
         // 终态（scrapped/blocked）封锁：不可再流转。
         if (TERMINAL_STATUSES.contains(existing.status())) {
             throw ApiException.conflict("DEVICE_TERMINAL_STATUS",
-                    "device is in terminal status " + existing.status() + " and cannot transition");
+                    "设备处于终态 " + existing.status() + "，不能再流转");
         }
         if (!allowedFrom.contains(existing.status())) {
             throw ApiException.conflict("INVALID_DEVICE_STATUS",
-                    "device status " + existing.status() + " cannot transition to " + targetStatus);
+                    "设备状态 " + existing.status() + " 不能流转到 " + targetStatus);
         }
         Instant now = Instant.now();
         TerminalDeviceRecord updated = new TerminalDeviceRecord(
@@ -272,7 +272,7 @@ public class TerminalDeviceService {
         int affected = repository.compareAndSetStatus(existing.id(), existing.status(), updated);
         if (affected == 0) {
             throw ApiException.conflict("DEVICE_TRANSITION_CONFLICT",
-                    "device status changed concurrently; transition to " + targetStatus + " rejected");
+                    "设备状态已被并发变更，流转到 " + targetStatus + " 被拒绝");
         }
         TerminalDeviceRecord saved = updated;
         // 挂失/报废/封禁：撤销 kiosk 凭证（设备被踢出）。
@@ -346,17 +346,16 @@ public class TerminalDeviceService {
                     actual,
                     () -> {
                         TerminalDeviceRecord existing = repository.findById(deviceRecordId)
-                                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+                                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "设备不存在或已被删除"));
                         if (TERMINAL_STATUSES.contains(existing.status())) {
                             throw ApiException.conflict("DEVICE_TERMINAL_STATUS",
-                                    "device is in terminal status " + existing.status()
-                                            + " and cannot change merchant");
+                                    "设备处于终态 " + existing.status() + "，不能变更所属商户");
                         }
                         String target = resolveMerchantForWrite(trimToNull(actual.merchantId()));
                         String from = existing.merchantId();
                         if (java.util.Objects.equals(from, target)) {
                             throw ApiException.conflict("DEVICE_MERCHANT_UNCHANGED",
-                                    "device merchant is unchanged");
+                                    "设备所属商户没有变化");
                         }
                         Instant now = Instant.now();
                         TerminalDeviceRecord updated = new TerminalDeviceRecord(
@@ -431,9 +430,9 @@ public class TerminalDeviceService {
         }
         MerchantRecord merchant = merchantDirectory.findMerchant(merchantId)
                 .orElseThrow(() -> ApiException.notFound(
-                        "MERCHANT_NOT_FOUND", "merchant not found: " + merchantId));
+                        "MERCHANT_NOT_FOUND", "商户不存在：" + merchantId));
         if (merchant.archivedAt() != null) {
-            throw ApiException.conflict("MERCHANT_ARCHIVED", "merchant is archived: " + merchantId);
+            throw ApiException.conflict("MERCHANT_ARCHIVED", "商户已归档：" + merchantId);
         }
         return merchant.id();
     }
@@ -540,7 +539,7 @@ public class TerminalDeviceService {
         try {
             requireBoundKioskDeviceCredential(id, deviceToken);
             TerminalKioskConfigRecord config = repository.findKioskConfigByDeviceId(id)
-                    .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "kiosk device not found"));
+                    .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "自助机设备不存在或已被删除"));
             boolean ticketingEnabled = "ticketing".equals(config.kioskMode())
                     && config.ticketingEnabled()
                     && repository.findCapabilitySwitch("kiosk", "ticketing", id)
@@ -585,17 +584,17 @@ public class TerminalDeviceService {
             requireBoundKioskDeviceCredential(id, deviceToken);
             KioskHeartbeatRequest actual = requireRequest(request);
             if (!id.equals(requireText(actual.deviceId(), "device_id"))) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "device_id path and body must match");
+                throw ApiException.badRequest("VALIDATION_FAILED", "路径与请求体中的设备编号不一致");
             }
             if (!"kiosk".equals(requireText(actual.terminalType(), "terminal_type"))) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "terminal_type must be kiosk");
+                throw ApiException.badRequest("VALIDATION_FAILED", "终端类型必须为自助机（kiosk）");
             }
             String status = requireText(actual.status(), "status");
             if (!KIOSK_STATUSES.contains(status)) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "status is invalid");
             }
             TerminalKioskConfigRecord config = repository.findKioskConfigByDeviceId(id)
-                    .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "kiosk device not found"));
+                    .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "自助机设备不存在或已被删除"));
             String kioskMode = trimToDefault(actual.kioskMode(), config.kioskMode());
             Instant now = Instant.now();
             KioskHeartbeatRecord heartbeat = repository.saveKioskHeartbeat(new KioskHeartbeatRecord(
@@ -647,7 +646,7 @@ public class TerminalDeviceService {
         TerminalDeviceRecord existingDevice = repository.findByDeviceId(deviceId).orElse(null);
         if (existingDevice != null && NON_OPERATIONAL_STATUSES.contains(existingDevice.status())) {
             throw ApiException.conflict("INVALID_DEVICE_STATUS",
-                    "device is " + existingDevice.status() + " and cannot be bound");
+                    "设备处于 " + existingDevice.status() + " 状态，不能绑定");
         }
 
         // K16 一步到位：登记时可直接给定所属商户（核销上下文）；校验同改绑口径（存在且未归档）。
@@ -710,12 +709,12 @@ public class TerminalDeviceService {
         DeviceReturnRequest actual = requireRequest(request);
         String deviceCode = requireText(actual.deviceCode(), "device_code");
         if (Boolean.TRUE.equals(actual.hasPendingTasks())) {
-            throw ApiException.conflict("RETURN_BLOCKED_PENDING_TASKS", "device has pending tasks");
+            throw ApiException.conflict("RETURN_BLOCKED_PENDING_TASKS", "设备还有未完成的任务");
         }
         TerminalDeviceRecord existing = repository.findByDeviceCode(deviceCode)
-                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "设备不存在或已被删除"));
         if (!"bound".equals(existing.status())) {
-            throw ApiException.conflict("INVALID_DEVICE_STATUS", "device must be bound to return");
+            throw ApiException.conflict("INVALID_DEVICE_STATUS", "只有已绑定的设备才能归还");
         }
         Instant now = Instant.now();
         TerminalDeviceRecord returned = new TerminalDeviceRecord(
@@ -760,12 +759,12 @@ public class TerminalDeviceService {
         DeviceUnbindRequest actual = requireRequest(request);
         String reason = requireText(actual.reason(), "reason");
         TerminalDeviceRecord existing = repository.findById(id)
-                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "设备不存在或已被删除"));
         // P0#9 MDM 门控接入点（terminal 自身高风险端点·解绑）：开关开时未纳管硬拒绝；
         //       blocked/lost 设备无论开关都硬拒绝（消除 requireManagedForHighRiskAction dead code）。
         mdmService.requireManagedForHighRiskAction(existing.deviceId(), "terminal.device.unbind");
         if ("unbound".equals(existing.status())) {
-            throw ApiException.conflict("INVALID_DEVICE_STATUS", "device is already unbound");
+            throw ApiException.conflict("INVALID_DEVICE_STATUS", "设备已是未绑定状态");
         }
         Instant now = Instant.now();
         TerminalDeviceRecord unbound = new TerminalDeviceRecord(
@@ -992,17 +991,17 @@ public class TerminalDeviceService {
     private void requireBoundKioskDeviceCredential(String deviceId, String deviceToken) {
         String token = trimToNull(deviceToken);
         if (token == null) {
-            throw ApiException.unauthorized("DEVICE_CREDENTIAL_REQUIRED", "X-Device-Token is required");
+            throw ApiException.unauthorized("DEVICE_CREDENTIAL_REQUIRED", "缺少设备令牌（X-Device-Token）");
         }
         TerminalDeviceRecord device = repository.findByDeviceId(deviceId)
-                .orElseThrow(() -> ApiException.forbidden("DEVICE_ACCESS_REJECTED", "device access rejected"));
+                .orElseThrow(() -> ApiException.forbidden("DEVICE_ACCESS_REJECTED", "设备访问被拒绝"));
         if (!"kiosk".equals(device.terminalType()) || !"bound".equals(device.status())) {
-            throw ApiException.forbidden("DEVICE_ACCESS_REJECTED", "device access rejected");
+            throw ApiException.forbidden("DEVICE_ACCESS_REJECTED", "设备访问被拒绝");
         }
         DeviceCredentialRecord credential = repository.findDeviceCredentialByDeviceId(deviceId)
-                .orElseThrow(() -> ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "device token is invalid"));
+                .orElseThrow(() -> ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "设备令牌无效"));
         if (!"active".equals(credential.status()) || !constantTimeEquals(credential.tokenSha256(), sha256(token))) {
-            throw ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "device token is invalid");
+            throw ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "设备令牌无效");
         }
     }
 
@@ -1035,7 +1034,7 @@ public class TerminalDeviceService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

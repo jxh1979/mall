@@ -302,7 +302,7 @@ class MerchantServiceControllerTests {
     @Test
     void closeWorkOrderRejectsInvalidSatisfactionScoreReturns400() throws Exception {
         when(service.closeWorkOrder(eq("mswo_1"), any(MerchantWorkOrderCloseRequest.class)))
-                .thenThrow(ApiException.badRequest("VALIDATION_FAILED", "satisfaction_score must be between 1 and 5"));
+                .thenThrow(ApiException.badRequest("VALIDATION_FAILED", "满意度评分必须在 1 到 5 之间"));
 
         mockMvc.perform(post("/api/v1/merchant-service/work-orders/mswo_1/close")
                         .with(user("ops").roles("P0_SMOKE"))

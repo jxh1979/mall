@@ -368,7 +368,7 @@ public class TicketingService {
                     if (value == null || value % 5 != 0 || value < 5 || value > 60) {
                         throw com.complex.platform.common.api.ApiException.badRequest(
                                 "VALIDATION_FAILED",
-                                "refresh_interval_seconds must be a multiple of 5 between 5 and 60");
+                                "刷新间隔秒数必须为 5 到 60 之间且为 5 的倍数");
                     }
                     repository.upsertQrRefreshIntervalSeconds(value, actorId(), java.time.Instant.now());
                     return new QrRefreshConfigResponse(value);
@@ -750,9 +750,9 @@ public class TicketingService {
         String resolvedOrderId = operations.requireText(orderId, "order_id");
         String resolvedCustomerId = operations.requireText(customerId, "customer_id");
         TicketOrderRecord order = repository.findTicketOrderById(resolvedOrderId)
-                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         if (!resolvedCustomerId.equals(order.customerId())) {
-            throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "order does not belong to customer");
+            throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "该订单不属于当前客人");
         }
         String ticketName = repository.findTicketTypeById(order.ticketTypeId())
                 .map(TicketTypeRecord::ticketName).orElse(null);

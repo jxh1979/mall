@@ -116,20 +116,20 @@ public class ProductionAuthService implements SessionIssuer {
             requireText(request.password(), "password");
 
             CredentialRecord credential = findCredentialByUsername(request.loginName())
-                    .orElseThrow(() -> ApiException.unauthorized("INVALID_CREDENTIALS", "invalid username or password"));
+                    .orElseThrow(() -> ApiException.unauthorized("INVALID_CREDENTIALS", "账号或密码不正确"));
             Instant now = Instant.now();
             if (!"active".equals(credential.userStatus())) {
-                throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
+                throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
             if (credential.lockedUntil() != null && now.isBefore(credential.lockedUntil())) {
-                throw ApiException.unauthorized("ACCOUNT_LOCKED", "account is temporarily locked");
+                throw ApiException.unauthorized("ACCOUNT_LOCKED", "账号已被临时锁定，请稍后再试");
             }
             if (!"active".equals(credential.credentialStatus()) && !"locked".equals(credential.credentialStatus())) {
-                throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
+                throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
             if (!passwordEncoder.matches(request.password(), credential.passwordHash())) {
                 registerFailedLogin(credential, now);
-                throw ApiException.unauthorized("INVALID_CREDENTIALS", "invalid username or password");
+                throw ApiException.unauthorized("INVALID_CREDENTIALS", "账号或密码不正确");
             }
 
             resetFailedLogin(credential.userId(), now);
@@ -171,23 +171,23 @@ public class ProductionAuthService implements SessionIssuer {
 
             Instant now = Instant.now();
             SessionWithUser session = findActiveSessionByRefreshToken(request.refreshToken())
-                    .orElseThrow(() -> ApiException.unauthorized("REFRESH_TOKEN_INVALID", "refresh token is invalid"));
+                    .orElseThrow(() -> ApiException.unauthorized("REFRESH_TOKEN_INVALID", "登录状态已失效，请重新登录"));
             if (now.isAfter(session.refreshExpiresAt())) {
                 expireSession(session.id(), now);
-                throw ApiException.unauthorized("REFRESH_TOKEN_INVALID", "refresh token is expired");
+                throw ApiException.unauthorized("REFRESH_TOKEN_INVALID", "登录已过期，请重新登录");
             }
             if (!session.accessTokenHash().equals(sha256Hex(currentAccessToken))) {
-                throw ApiException.unauthorized("SESSION_MISMATCH", "refresh token does not match current session");
+                throw ApiException.unauthorized("SESSION_MISMATCH", "登录凭证与当前会话不匹配，请重新登录");
             }
             if (!isBlank(request.deviceId()) && !request.deviceId().equals(session.deviceId())) {
-                throw ApiException.unauthorized("SESSION_MISMATCH", "device does not match current session");
+                throw ApiException.unauthorized("SESSION_MISMATCH", "设备与当前会话不匹配，请重新登录");
             }
             if (!"active".equals(session.userStatus())) {
-                throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
+                throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
             // A locked/disabled credential must not be able to extend session life via refresh either.
             if (!credentialUsable(session, now)) {
-                throw ApiException.unauthorized("ACCOUNT_LOCKED", "account is temporarily locked");
+                throw ApiException.unauthorized("ACCOUNT_LOCKED", "账号已被临时锁定，请稍后再试");
             }
 
             SessionRecord refreshed = rotateSessionTokens(session, now);
@@ -228,12 +228,12 @@ public class ProductionAuthService implements SessionIssuer {
 
             Instant now = Instant.now();
             SessionWithUser session = findActiveSessionByAccessToken(currentAccessToken)
-                    .orElseThrow(() -> ApiException.unauthorized("ACCESS_TOKEN_INVALID", "access token is invalid"));
+                    .orElseThrow(() -> ApiException.unauthorized("ACCESS_TOKEN_INVALID", "登录凭证无效，请重新登录"));
             if (!session.id().equals(request.sessionId())) {
-                throw ApiException.unauthorized("SESSION_MISMATCH", "session_id does not match current token");
+                throw ApiException.unauthorized("SESSION_MISMATCH", "会话标识与当前登录凭证不匹配");
             }
             if (!isBlank(request.deviceId()) && !request.deviceId().equals(session.deviceId())) {
-                throw ApiException.unauthorized("SESSION_MISMATCH", "device does not match current session");
+                throw ApiException.unauthorized("SESSION_MISMATCH", "设备与当前会话不匹配，请重新登录");
             }
 
             jdbcTemplate.update("""
@@ -392,7 +392,7 @@ public class ProductionAuthService implements SessionIssuer {
                 .addValue("refresh_expires_at", timestampWithTimeZone(refreshExpiresAt))
                 .addValue("now", timestampWithTimeZone(now)));
         if (updated != 1) {
-            throw ApiException.unauthorized("REFRESH_TOKEN_INVALID", "refresh token is invalid");
+            throw ApiException.unauthorized("REFRESH_TOKEN_INVALID", "登录状态已失效，请重新登录");
         }
         return new SessionRecord(
                 session.id(),

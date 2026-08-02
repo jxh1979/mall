@@ -261,7 +261,7 @@ public class MerchantServiceService {
         MerchantWorkOrderRecord existing = findWorkOrder(id);
         rejectTerminal(existing);
         if (!"created".equals(existing.status())) {
-            throw ApiException.conflict("INVALID_STATE", "can only assign a work order in created status");
+            throw ApiException.conflict("INVALID_STATE", "只有新建状态的工单才能派单");
         }
         MerchantWorkOrderRecord assigned = repository.saveWorkOrder(existing.assign(
                 requireText(request.ownerDepartment(), "owner_department"),
@@ -331,7 +331,7 @@ public class MerchantServiceService {
         // （ALLOWED_ACTION_TRANSITIONS 中 resolved 的后继为空集，唯一出口即 close）。
         // 禁止 created/assigned/processing/pending_merchant 直接 close 跳步。
         if (!"resolved".equals(existing.status())) {
-            throw ApiException.conflict("INVALID_STATE", "can only close a work order in resolved status");
+            throw ApiException.conflict("INVALID_STATE", "只有已解决状态的工单才能关闭");
         }
         String resolution = requireText(request.resolution(), "resolution");
         validateSatisfactionScore(request.satisfactionScore());
@@ -420,7 +420,7 @@ public class MerchantServiceService {
         String decision = request == null || request.decision() == null
                 ? null : request.decision().trim().toLowerCase(Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         String actor = actorId();
         if (actor != null && actor.equals(order.deleteRequestedBy())) {
@@ -444,7 +444,7 @@ public class MerchantServiceService {
 
     private MerchantWorkOrderRecord findWorkOrder(String id) {
         return repository.findWorkOrderById(id)
-                .orElseThrow(() -> ApiException.notFound("WORK_ORDER_NOT_FOUND", "merchant service work order not found"));
+                .orElseThrow(() -> ApiException.notFound("WORK_ORDER_NOT_FOUND", "商户服务工单不存在或已被删除"));
     }
 
     private void ensureWorkOrderCanChange(String id) {
@@ -459,13 +459,13 @@ public class MerchantServiceService {
             return; // platform admin sees all merchants
         }
         if (!scope.get().equals(recordMerchantId)) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "access to another merchant's work order is forbidden");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的工单");
         }
     }
 
     private void validateCreateRequest(MerchantWorkOrderCreateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         normalizeAllowed(request.workOrderType(), "work_order_type", TYPES);
@@ -477,7 +477,7 @@ public class MerchantServiceService {
 
     private void validateAssignRequest(MerchantWorkOrderAssignRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.ownerDepartment(), "owner_department");
@@ -487,7 +487,7 @@ public class MerchantServiceService {
 
     private void validateActionRequest(MerchantWorkOrderActionRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.operatorNote(), "operator_note");
@@ -499,7 +499,7 @@ public class MerchantServiceService {
 
     private void validateCloseRequest(MerchantWorkOrderCloseRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.resolution(), "resolution");
@@ -563,7 +563,7 @@ public class MerchantServiceService {
 
     private void rejectTerminal(MerchantWorkOrderRecord existing) {
         if (TERMINAL_STATUSES.contains(existing.status())) {
-            throw ApiException.conflict("WORK_ORDER_CLOSED", "closed or cancelled work order cannot be changed");
+            throw ApiException.conflict("WORK_ORDER_CLOSED", "已关闭或已取消的工单不能再变更");
         }
     }
 
@@ -574,13 +574,13 @@ public class MerchantServiceService {
         if (!ALLOWED_ACTION_TRANSITIONS.getOrDefault(fromStatus, Set.of()).contains(toStatus)) {
             throw ApiException.conflict(
                     "MERCHANT_WORK_ORDER_INVALID_TRANSITION",
-                    "cannot move work order from " + fromStatus + " to " + toStatus);
+                    "工单状态不能从 " + fromStatus + " 流转到 " + toStatus);
         }
     }
 
     private void validateSatisfactionScore(Integer score) {
         if (score != null && (score < 1 || score > 5)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "satisfaction_score must be between 1 and 5");
+            throw ApiException.badRequest("VALIDATION_FAILED", "满意度评分必须在 1 到 5 之间");
         }
     }
 

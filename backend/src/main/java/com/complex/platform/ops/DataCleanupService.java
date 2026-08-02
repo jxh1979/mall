@@ -56,7 +56,7 @@ public class DataCleanupService {
     @Transactional
     public DataCleanupJobRecord preview(DataCleanupPreviewRequest request) {
         DataCleanupScope scope = DataCleanupScope.fromCode(request == null ? null : request.scopeType())
-                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "unsupported scope_type"));
+                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "不支持的清理范围类型"));
         int olderThanDays = normalizeDays(request.olderThanDays());
         Instant now = Instant.now();
         Instant cutoff = now.minus(olderThanDays, ChronoUnit.DAYS);
@@ -82,7 +82,7 @@ public class DataCleanupService {
     public DataCleanupJobRecord submitForApproval(String jobId, DataCleanupSubmitRequest request) {
         DataCleanupJobRecord job = require(jobId);
         if (!"dry_run".equals(job.status())) {
-            throw ApiException.conflict("DATA_CLEANUP_NOT_DRY_RUN", "only a dry_run job can be submitted for approval");
+            throw ApiException.conflict("DATA_CLEANUP_NOT_DRY_RUN", "只有试运行（dry_run）任务才能提交审批");
         }
         String reason = requireText(request == null ? null : request.reason(), "reason");
         Instant now = Instant.now();
@@ -94,7 +94,7 @@ public class DataCleanupService {
     public DataCleanupJobRecord approveAndExecute(String jobId, DataCleanupApprovalRequest request) {
         DataCleanupJobRecord job = require(jobId);
         if (!"pending_approval".equals(job.status())) {
-            throw ApiException.conflict("DATA_CLEANUP_NOT_PENDING", "job is not pending approval");
+            throw ApiException.conflict("DATA_CLEANUP_NOT_PENDING", "该任务不在待审批状态");
         }
         forbidSelfApprove(job.requestedBy());
         String decision = decisionOf(request);
@@ -111,7 +111,7 @@ public class DataCleanupService {
 
     private DataCleanupJobRecord doExecute(DataCleanupJobRecord job, String approver, Instant now) {
         DataCleanupScope scope = DataCleanupScope.fromCode(job.scopeType())
-                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "unsupported scope_type"));
+                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "不支持的清理范围类型"));
         int olderThanDays = normalizeDays(numberOf(job.filterParams().get("olderThanDays")));
         Instant cutoff = now.minus(olderThanDays, ChronoUnit.DAYS);
         int hidden = repository.hideArchivedBefore(scope, cutoff);
@@ -122,7 +122,7 @@ public class DataCleanupService {
 
     private DataCleanupJobRecord require(String jobId) {
         return repository.find(trimRequired(jobId))
-                .orElseThrow(() -> ApiException.notFound("DATA_CLEANUP_JOB_NOT_FOUND", "cleanup job not found"));
+                .orElseThrow(() -> ApiException.notFound("DATA_CLEANUP_JOB_NOT_FOUND", "数据清理任务不存在或已被删除"));
     }
 
     private static DataCleanupJobRecord withStatus(DataCleanupJobRecord job, String status, String reason,
@@ -139,7 +139,7 @@ public class DataCleanupService {
         int value = days == null ? DEFAULT_OLDER_THAN_DAYS : days;
         if (value < MIN_OLDER_THAN_DAYS || value > MAX_OLDER_THAN_DAYS) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "olderThanDays must be between " + MIN_OLDER_THAN_DAYS + " and " + MAX_OLDER_THAN_DAYS);
+                    "保留天数必须介于 " + MIN_OLDER_THAN_DAYS + " 到 " + MAX_OLDER_THAN_DAYS);
         }
         return value;
     }
@@ -155,7 +155,7 @@ public class DataCleanupService {
         String decision = request == null || request.decision() == null
                 ? null : request.decision().trim().toLowerCase(Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         return decision;
     }
@@ -165,7 +165,7 @@ public class DataCleanupService {
         String actor = actorId();
         if (actor != null && actor.equals(requestedBy)) {
             throw ApiException.forbidden("DATA_CLEANUP_SELF_APPROVE_FORBIDDEN",
-                    "the initiator of a cleanup request cannot approve it");
+                    "清理申请的发起人不能审批自己的申请");
         }
     }
 

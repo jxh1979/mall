@@ -92,7 +92,7 @@ public class AuthorizationService implements CallerScopeResolver {
             String targetMerchantId = target.map(AccessUser::merchantId).orElse(null);
             if (!scope.equals(targetMerchantId)) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's user is not allowed");
+                        "CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的用户");
             }
         });
         boolean wildcard = target
@@ -222,7 +222,7 @@ public class AuthorizationService implements CallerScopeResolver {
     public String requireProjectScope(AccessActor actor) {
         String projectId = actor == null ? null : actor.organizationId();
         if (projectId == null || projectId.isBlank()) {
-            throw ApiException.forbidden("PROJECT_SCOPE_REQUIRED", "a project scope is required for this operation");
+            throw ApiException.forbidden("PROJECT_SCOPE_REQUIRED", "此操作必须在项目范围内进行");
         }
         return projectId;
     }
@@ -233,7 +233,7 @@ public class AuthorizationService implements CallerScopeResolver {
         }
         String scopeProjectId = requireProjectScope(actor);
         if (!actor.id().equals(assigneeId) || !scopeProjectId.equals(projectId)) {
-            throw ApiException.forbidden("FORBIDDEN", "assigned resource is not in caller scope");
+            throw ApiException.forbidden("FORBIDDEN", "所分配的资源不在当前权限范围内");
         }
     }
 
@@ -353,7 +353,7 @@ public class AuthorizationService implements CallerScopeResolver {
         if (merchantId != null && !merchantId.isBlank()) {
             return Optional.of(merchantId);
         }
-        throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "a merchant scope is required for this operation");
+        throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
     }
 
     /**
@@ -394,13 +394,13 @@ public class AuthorizationService implements CallerScopeResolver {
         if (isOutsourcedVendor(actor)) {
             throw ApiException.forbidden(
                     "PLATFORM_COMPLIANCE_SCOPE_REQUIRED",
-                    "platform compliance data is not accessible to an outsourced vendor");
+                    "外包供应商无权查看平台合规数据");
         }
         String merchantId = actor.merchantId();
         if (merchantId != null && !merchantId.isBlank()) {
             throw ApiException.forbidden(
                     "PLATFORM_COMPLIANCE_SCOPE_REQUIRED",
-                    "platform compliance data is not accessible to a merchant-scoped caller");
+                    "商户账号无权查看平台合规数据");
         }
     }
 
@@ -417,13 +417,13 @@ public class AuthorizationService implements CallerScopeResolver {
         if (isOutsourcedVendor(actor)) {
             throw ApiException.forbidden(
                     "PLATFORM_SCOPE_REQUIRED",
-                    "platform-level data is not accessible to an outsourced vendor");
+                    "外包供应商无权查看平台级数据");
         }
         String merchantId = actor.merchantId();
         if (merchantId != null && !merchantId.isBlank()) {
             throw ApiException.forbidden(
                     "PLATFORM_SCOPE_REQUIRED",
-                    "platform-level analytics is not accessible to a merchant-scoped caller");
+                    "商户账号无权查看平台级经营分析");
         }
     }
 
@@ -467,6 +467,6 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     private void deny(String permissionCode) {
-        throw ApiException.forbidden("PERMISSION_DENIED", "permission denied: " + permissionCode);
+        throw ApiException.forbidden("PERMISSION_DENIED", "没有操作权限：" + permissionCode);
     }
 }

@@ -76,7 +76,7 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
         seedReservation("barresv_noarch");
         assertThatThrownBy(() -> service.requestDeleteReservation("barresv_noarch", new BarCatalogDeleteRequest("x")))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("archived");
+                .hasMessageContaining("存档");
     }
 
     @Test
@@ -96,7 +96,7 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
         assertThatThrownBy(() -> service.approveDeleteReservation("barresv_use",
                 new BarCatalogDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("referenced");
+                .hasMessageContaining("引用");
     }
 
     @Test
@@ -108,6 +108,6 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
         assertThatThrownBy(() -> service.approveDeleteReservation("barresv_self",
                 new BarCatalogDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("initiator");
+                .hasMessageContaining("发起人");
     }
 }

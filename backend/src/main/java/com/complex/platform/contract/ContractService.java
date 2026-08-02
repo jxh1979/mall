@@ -151,7 +151,7 @@ public class ContractService {
         if (numLong((actual.rentTerms() == null ? Map.of() : actual.rentTerms()).get("energyFeeCent")) > 0
                 && !"by_contract".equals(energyBasis)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "energyFeeCent is only allowed when energy_fee_basis is by_contract");
+                    "只有按合同计收能耗费（by_contract）时才能填写能耗费金额");
         }
         // 1.5 幂等：带 idempotencyKey 时合同 id 由其确定性派生；重复提交/招商重签命中既有草稿直接返回，不重复建。
         // 校验已前置于此，故重放亦已过校验；失败草稿在 @Transactional 下整体回滚，重试将重走完整校验，无半成品可复用。
@@ -259,12 +259,12 @@ public class ContractService {
         List<String> resolved = spaceIds.stream().map(id -> requireText(id, "space_id")).distinct().toList();
         for (String spaceId : resolved) {
             if (platformRepository != null && platformRepository.findSpaceById(spaceId).isEmpty()) {
-                throw ApiException.badRequest("CONTRACT_SPACE_NOT_FOUND", "space does not exist: " + spaceId);
+                throw ApiException.badRequest("CONTRACT_SPACE_NOT_FOUND", "铺位不存在：" + spaceId);
             }
             if (effectiveDate != null && expiryDate != null
                     && repository.hasOverlappingEffectiveContractForSpace(spaceId, effectiveDate, expiryDate, contractId)) {
                 throw ApiException.conflict("CONTRACT_SPACE_CONFLICT",
-                        "space already let by an overlapping effective contract: " + spaceId);
+                        "该铺位已被生效期重叠的合同占用：" + spaceId);
             }
         }
         return resolved;
@@ -277,7 +277,7 @@ public class ContractService {
         if (repository.hasOverlappingEffectiveContractForSpace(
                 spaceId, contract.effectiveDate(), contract.expiryDate(), contract.id())) {
             throw ApiException.conflict("CONTRACT_SPACE_CONFLICT",
-                    "space already let by an overlapping effective contract: " + spaceId);
+                    "该铺位已被生效期重叠的合同占用：" + spaceId);
         }
     }
 
@@ -289,7 +289,7 @@ public class ContractService {
         authorizationService.requirePlatformScope();
         ContractRecord contract = requireContract(contractId);
         if (!"drafting".equals(contract.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_DRAFTING", "only drafting contract can be submitted");
+            throw ApiException.conflict("CONTRACT_NOT_DRAFTING", "只有草拟中的合同才能提交审批");
         }
         // 3.13：提交审批前对草稿预绑定空间再检冲突——审批人不该审一份注定冲突的合同。
         for (String spaceId : repository.listContractSpaceIds(contractId)) {
@@ -297,7 +297,7 @@ public class ContractService {
         }
         List<ContractApprovalFlowStepRecord> steps = repository.listActiveFlowSteps(contract.projectId());
         if (steps.isEmpty()) {
-            throw ApiException.conflict("CONTRACT_NO_APPROVAL_FLOW", "no active approval flow configured");
+            throw ApiException.conflict("CONTRACT_NO_APPROVAL_FLOW", "未配置生效中的审批流");
         }
         repository.clearApprovals(contractId);
         int firstStage = steps.stream().mapToInt(ContractApprovalFlowStepRecord::stageSeq).min().orElseThrow();
@@ -320,7 +320,7 @@ public class ContractService {
         String decision = requireEnum(actual.decision(), DECISIONS, "decision");
         ContractRecord contract = requireContract(contractId);
         if (!"pending_confirmation".equals(contract.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_IN_APPROVAL", "contract is not under approval");
+            throw ApiException.conflict("CONTRACT_NOT_IN_APPROVAL", "合同不在审批中状态");
         }
         StageOutcome outcome = recordSlotDecision(contractId, null, repository.listApprovalsByContract(contractId),
                 contract.projectId(), code, decision, trimToNull(actual.comment()));
@@ -355,13 +355,13 @@ public class ContractService {
         ContractRecord contract = requireContract(contractId);
         if (!"pending_effective".equals(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_PENDING_EFFECTIVE",
-                    "contract must pass full approval before activation");
+                    "合同必须通过全部审批后才能生效");
         }
         for (String spaceId : spaceIds) {
             if (repository.hasOverlappingEffectiveContractForSpace(
                     spaceId, contract.effectiveDate(), contract.expiryDate(), contractId)) {
                 throw ApiException.conflict("CONTRACT_SPACE_CONFLICT",
-                        "space already let by an overlapping effective contract: " + spaceId);
+                        "该铺位已被生效期重叠的合同占用：" + spaceId);
             }
         }
         repository.bindContractSpaces(contractId, spaceIds, contract.projectId());
@@ -406,11 +406,11 @@ public class ContractService {
         }
         ContractRecord contract = requireContract(contractId);
         if (!"effective".equals(contract.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract can be changed");
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能变更");
         }
         List<ContractApprovalFlowStepRecord> steps = repository.listActiveFlowSteps(contract.projectId());
         if (steps.isEmpty()) {
-            throw ApiException.conflict("CONTRACT_NO_APPROVAL_FLOW", "no active approval flow configured");
+            throw ApiException.conflict("CONTRACT_NO_APPROVAL_FLOW", "未配置生效中的审批流");
         }
         Instant now = Instant.now();
         // 经营范围变更载荷规范化：web 客户端会把嵌套键蛇形化（allowed_categories），统一归一到
@@ -463,11 +463,11 @@ public class ContractService {
         }
         ContractRecord contract = requireContract(contractId);
         if (!"effective".equals(contract.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract accepts scope requests");
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能发起范围调整申请");
         }
         List<ContractApprovalFlowStepRecord> steps = repository.listActiveFlowSteps(contract.projectId());
         if (steps.isEmpty()) {
-            throw ApiException.conflict("CONTRACT_NO_APPROVAL_FLOW", "no active approval flow configured");
+            throw ApiException.conflict("CONTRACT_NO_APPROVAL_FLOW", "未配置生效中的审批流");
         }
         Instant now = Instant.now();
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -499,9 +499,9 @@ public class ContractService {
         authorizationService.requirePermission(code);
         String decision = requireEnum(actual.decision(), DECISIONS, "decision");
         ContractChangeRecord change = repository.findChangeById(requireText(changeId, "change_id"))
-                .orElseThrow(() -> ApiException.notFound("CONTRACT_CHANGE_NOT_FOUND", "change not found"));
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_CHANGE_NOT_FOUND", "变更记录不存在或已被删除"));
         if (!"pending".equals(change.approvalStatus())) {
-            throw ApiException.conflict("CONTRACT_CHANGE_NOT_PENDING", "change is not pending");
+            throw ApiException.conflict("CONTRACT_CHANGE_NOT_PENDING", "变更记录不在待处理状态");
         }
         StageOutcome outcome = recordSlotDecision(change.contractId(), changeId,
                 repository.listApprovalsByChange(changeId), change.projectId(), code, decision,
@@ -547,7 +547,7 @@ public class ContractService {
         String trigger = requireEnum(actual.triggerType(), SETTLE_TRIGGERS, "trigger_type");
         ContractRecord contract = requireContract(contractId);
         if (!Set.of("effective", "expired").contains(contract.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_SETTLEABLE", "contract is not effective/expired");
+            throw ApiException.conflict("CONTRACT_NOT_SETTLEABLE", "合同不在生效或到期状态");
         }
         // I-3 退租/提前终止须合同仍生效（终止活跃租约）；到期合同只可走 expiry——否则确认时会被误判「被别的退租终止」而作废、押金静默不退。
         if (("move_out".equals(trigger) || "early_termination".equals(trigger))
@@ -574,9 +574,9 @@ public class ContractService {
         authorizationService.requirePermission("contract.settlement.dispute.resolve");
         ContractResolveDisputeRequest actual = requireRequest(request);
         ContractSettlementRecord settlement = repository.findSettlementById(requireText(settlementId, "settlement_id"))
-                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "settlement not found"));
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "结算单不存在或已被删除"));
         if (!"disputed".equals(settlement.status())) {
-            throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_DISPUTED", "settlement is not disputed");
+            throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_DISPUTED", "结算单不在异议状态");
         }
         ContractRecord contract = requireContract(settlement.contractId());
         Instant now = Instant.now();
@@ -600,9 +600,9 @@ public class ContractService {
         authorizationService.requirePermission("contract.settlement.manage");
         ContractResolveDisputeRequest actual = requireRequest(request);
         ContractSettlementRecord settlement = repository.findSettlementById(requireText(settlementId, "settlement_id"))
-                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "settlement not found"));
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "结算单不存在或已被删除"));
         if (!Set.of("pending_settlement", "deposit_offsetting", "arrears_collecting").contains(settlement.status())) {
-            throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_OPEN", "settlement is not open for completion");
+            throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_OPEN", "结算单当前状态不可办结");
         }
         // 「确认退押金」落账闸：落 ar_ap+deposit_ledger + 跨路径去重 + 悬挂单作废（见 finalizeSettlementWithLedger）。
         return finalizeSettlementWithLedger(settlement, actual.idempotencyKey());
@@ -614,13 +614,13 @@ public class ContractService {
         authorizationService.requirePermission("contract.settlement.manage");
         ContractResolveDisputeRequest actual = requireRequest(request);
         ContractSettlementRecord s = repository.findSettlementById(requireText(settlementId, "settlement_id"))
-                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "settlement not found"));
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "结算单不存在或已被删除"));
         String next = switch (s.status()) {
             case "pending_settlement" -> "deposit_offsetting";
             case "deposit_offsetting" -> "arrears_collecting";
             case "arrears_collecting" -> "settled";
             default -> throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_ADVANCEABLE",
-                    "settlement at " + s.status() + " cannot advance");
+                    "结算单处于 " + s.status() + " 状态，不能继续推进");
         };
         if ("settled".equals(next)) {
             // 末相=确认退押金落账（与 completeSettlement 同口径：落 ar_ap+deposit_ledger + 跨路径去重）。
@@ -798,7 +798,7 @@ public class ContractService {
         SpaceExpiryColorRuleRequest actual = requireRequest(request);
         int days = actual.thresholdDays() == null ? 0 : actual.thresholdDays();
         if (days <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "threshold_days must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "提醒天数必须大于 0");
         }
         SpaceExpiryColorRuleRecord saved = repository.saveColorRule(new SpaceExpiryColorRuleRecord(
                 "secr_" + UUID.randomUUID(), trimToNull(actual.projectId()),
@@ -843,14 +843,14 @@ public class ContractService {
         ContractRentBillRequest actual = requireRequest(request);
         String period = requireText(actual.period(), "period");
         if (!period.matches("\\d{4}-\\d{2}")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period must be YYYY-MM");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 YYYY-MM");
         }
         ContractRecord c = requireContract(contractId);
         if (!"effective".equals(c.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract bills rent");
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能生成租金账单");
         }
         if (rentBillExistsInChain(c, period, "rent")) {
-            throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "rent already billed for " + period);
+            throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "该账期的租金已生成账单：" + period);
         }
         long baseRent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
         long amountCent = resolveBillingRent(c, c.rentTerms() == null ? Map.of() : c.rentTerms(), period, baseRent);
@@ -871,11 +871,11 @@ public class ContractService {
         ContractRentBillRequest actual = requireRequest(request);
         String period = requireText(actual.period(), "period");
         if (!period.matches("\\d{4}-\\d{2}")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period must be YYYY-MM");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 YYYY-MM");
         }
         ContractRecord c = requireContract(contractId);
         if (!"effective".equals(c.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract bills");
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能生成账单");
         }
         return billPeriodFees(c, period, actual.idempotencyKey());
     }
@@ -1016,7 +1016,7 @@ public class ContractService {
                         && "pending".equals(a.decision()))
                 .findFirst()
                 .orElseThrow(() -> ApiException.conflict("CONTRACT_APPROVAL_SLOT_NOT_PENDING",
-                        "no pending approval for " + code + " at current stage"));
+                        "当前审批阶段没有 " + code + " 的待审批任务"));
         Instant now = Instant.now();
         repository.saveApproval(new ContractApprovalRecord(slot.id(), slot.contractId(), slot.changeId(),
                 slot.stageSeq(), code, authorizationService.currentActor().id(),
@@ -1041,7 +1041,7 @@ public class ContractService {
     private int currentPendingStage(List<ContractApprovalRecord> approvals) {
         return approvals.stream().filter(a -> "pending".equals(a.decision()))
                 .mapToInt(ContractApprovalRecord::stageSeq).min()
-                .orElseThrow(() -> ApiException.conflict("CONTRACT_NO_PENDING_STAGE", "no pending approval stage"));
+                .orElseThrow(() -> ApiException.conflict("CONTRACT_NO_PENDING_STAGE", "没有待审批的阶段"));
     }
 
     private boolean stageAllApproved(List<ContractApprovalRecord> approvals, int stage) {
@@ -1182,7 +1182,7 @@ public class ContractService {
             if (repository.hasOverlappingEffectiveContractForSpace(spaceId, child.effectiveDate(),
                     child.expiryDate(), child.id())) {
                 throw ApiException.conflict("CONTRACT_SPACE_CONFLICT",
-                        "space already let by an overlapping effective contract: " + spaceId);
+                        "该铺位已被生效期重叠的合同占用：" + spaceId);
             }
         }
         repository.bindContractSpaces(child.id(), childSpaces, child.projectId());
@@ -1289,7 +1289,7 @@ public class ContractService {
             ContractSettlementRecord settlement, String idempotencyKey) {
         // S-2 资金路径窄竞态：对合同行 FOR UPDATE，串行化同一合同的并发确认（违约金侧无封顶，窄窗口双挂根治）。
         ContractRecord contract = repository.findContractByIdForUpdate(settlement.contractId())
-                .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "合同不存在或已被删除"));
         String trigger = settlement.triggerType();
         Instant now = Instant.now();
         boolean alreadyPosted = repository.listSettlementsByContract(contract.id()).stream()
@@ -1474,12 +1474,12 @@ public class ContractService {
 
     private ContractRecord requireContract(String contractId) {
         return repository.findContractById(requireText(contractId, "contract_id"))
-                .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "合同不存在或已被删除"));
     }
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

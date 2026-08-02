@@ -85,11 +85,11 @@ public class OperatingParamsService {
         BusinessDayCutoffRequest actual = requireRequest(request);
         String domain = requireText(actual.domain(), "domain");
         if (!CUTOFF_DOMAINS.contains(domain)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "domain must be one of " + CUTOFF_DOMAINS);
+            throw ApiException.badRequest("VALIDATION_FAILED", "业务域必须为以下之一：" + CUTOFF_DOMAINS);
         }
         Integer hour = actual.cutoffHour();
         if (hour == null || hour < 0 || hour > 23) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "cutoff_hour must be between 0 and 23");
+            throw ApiException.badRequest("VALIDATION_FAILED", "日切小时必须在 0 到 23 之间");
         }
         AnalyticsRecords.BusinessDayCutoffRecord saved =
                 repository.upsertBusinessDayCutoff(domain, hour, null, Instant.now(clock));
@@ -111,7 +111,7 @@ public class OperatingParamsService {
         java.math.BigDecimal surge = actual.surgePct();
         java.math.BigDecimal high = actual.highPct();
         if (surge == null || high == null || surge.signum() <= 0 || high.compareTo(surge) < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "surge_pct must be > 0 and high_pct >= surge_pct");
+            throw ApiException.badRequest("VALIDATION_FAILED", "激增阈值（surge_pct）必须大于 0，且高位阈值（high_pct）不小于激增阈值");
         }
         boolean enabled = actual.enabled() == null || actual.enabled();
         AnalyticsRecords.AnomalyConfig saved = repository.upsertAnomalyConfig(
@@ -139,7 +139,7 @@ public class OperatingParamsService {
         String key = requireText(actual.windowKey(), "window_key");
         Integer days = actual.days();
         if (days == null || days <= 0 || days > 3650) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "days must be between 1 and 3650");
+            throw ApiException.badRequest("VALIDATION_FAILED", "天数必须在 1 到 3650 之间");
         }
         AnalyticsRecords.NotificationWindow saved = repository.upsertNotificationWindow(
                 key, days, actual.description(), null, Instant.now(clock));
@@ -164,7 +164,7 @@ public class OperatingParamsService {
                 || conf.signum() < 0 || conf.compareTo(java.math.BigDecimal.ONE) > 0
                 || dev.signum() < 0 || dev.compareTo(java.math.BigDecimal.ONE) > 0) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "local_llm_min_confidence and benchmark_deviation must be in [0,1]");
+                    "本地大模型最低置信度与基准偏差必须在 0 到 1 之间");
         }
         AnalyticsRecords.AiThresholds saved = repository.upsertAiThresholds(conf, dev, null, Instant.now(clock));
         auditEventService.recordSuccess(
@@ -196,11 +196,11 @@ public class OperatingParamsService {
         String merchantId = actual.merchantId();
         if ("merchant".equals(scope) == (merchantId == null || merchantId.isBlank())) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "merchant_id is required for rule_scope=merchant and must be empty for rule_scope=default");
+                    "商户级规则必须指定商户，默认规则不能指定商户");
         }
         int bps = actual.shareBps() == null ? 10000 : actual.shareBps();
         if (bps < 0 || bps > 10000) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "share_bps must be in [0,10000]");
+            throw ApiException.badRequest("VALIDATION_FAILED", "分账比例（share_bps）必须在 0 到 10000 基点之间");
         }
         // 结算配置中心批0:改动一律先落草案(is_draft=TRUE),不允许经维护端点自助直接生效;
         // 转正须走 SettlementConfigController 复核端点(settlement.config.manage,与编辑权限分离)。
@@ -250,7 +250,7 @@ public class OperatingParamsService {
             }
         }
         throw ApiException.badRequest("VALIDATION_FAILED",
-                field + " must be one of " + String.join(", ", allowed));
+                field + " 必须为以下之一：" + String.join(", ", allowed));
     }
 
     /** H1:列节假日日历(经营参数页维护区)。 */
@@ -264,12 +264,12 @@ public class OperatingParamsService {
         String name = requireText(actual.holidayName(), "holiday_name");
         Integer year = actual.holidayYear();
         if (year == null || year < 2000 || year > 2100) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "holiday_year must be between 2000 and 2100");
+            throw ApiException.badRequest("VALIDATION_FAILED", "节假日年份必须在 2000 到 2100 之间");
         }
         java.time.LocalDate start = actual.startDate();
         java.time.LocalDate end = actual.endDate();
         if (start == null || end == null || end.isBefore(start)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "start_date/end_date invalid");
+            throw ApiException.badRequest("VALIDATION_FAILED", "开始日期或结束日期不正确");
         }
         AnalyticsRecords.HolidayPeriod saved = repository.upsertHolidayPeriod(
                 name, year, start, end, "manual", Instant.now(clock));
@@ -287,7 +287,7 @@ public class OperatingParamsService {
         HolidayFetchRequest actual = requireRequest(request);
         String url = requireText(actual.url(), "url");
         if (!url.startsWith("https://") && !url.startsWith("http://")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "url must be http(s)");
+            throw ApiException.badRequest("VALIDATION_FAILED", "链接必须为 http(s) 地址");
         }
         requireTrustedHolidayHost(url);
         String body;
@@ -300,14 +300,14 @@ public class OperatingParamsService {
                     java.net.http.HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 throw ApiException.badRequest("VALIDATION_FAILED",
-                        "holiday source returned HTTP " + response.statusCode() + "; existing calendar untouched");
+                        "节假日数据源返回 HTTP " + response.statusCode() + "，现有日历未受影响");
             }
             body = response.body();
         } catch (ApiException e) {
             throw e;
         } catch (Exception e) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "holiday source unreachable (" + e.getClass().getSimpleName() + "); existing calendar untouched, use manual entry");
+                    "节假日数据源不可达（" + e.getClass().getSimpleName() + "），现有日历未受影响，可改用手工录入");
         }
         java.util.Map<String, int[]> merged = new java.util.LinkedHashMap<>();
         java.util.Map<String, java.util.List<java.time.LocalDate>> byName = new java.util.LinkedHashMap<>();
@@ -315,7 +315,7 @@ public class OperatingParamsService {
             com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(body);
             com.fasterxml.jackson.databind.JsonNode days = root.get("days");
             if (days == null || !days.isArray()) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "unsupported format: expecting holiday-cn JSON with days[]");
+                throw ApiException.badRequest("VALIDATION_FAILED", "数据格式不支持：应为含 days[] 的 holiday-cn JSON");
             }
             for (com.fasterxml.jackson.databind.JsonNode day : days) {
                 if (!day.path("isOffDay").asBoolean(false)) {
@@ -331,10 +331,10 @@ public class OperatingParamsService {
         } catch (ApiException e) {
             throw e;
         } catch (Exception e) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "holiday source parse failed; existing calendar untouched");
+            throw ApiException.badRequest("VALIDATION_FAILED", "节假日数据源解析失败，现有日历未受影响");
         }
         if (byName.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "no off-days found in source; existing calendar untouched");
+            throw ApiException.badRequest("VALIDATION_FAILED", "数据源中未找到休息日，现有日历未受影响");
         }
         Instant now = Instant.now(clock);
         int imported = 0;
@@ -359,11 +359,11 @@ public class OperatingParamsService {
         try {
             host = java.net.URI.create(url).getHost();
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "url is malformed");
+            throw ApiException.badRequest("VALIDATION_FAILED", "链接格式不正确");
         }
         if (host == null || !allowedHolidayFetchHosts().contains(host.toLowerCase(java.util.Locale.ROOT))) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "holiday source host is not in the trusted allow-list");
+                    "节假日数据源域名不在受信白名单内");
         }
     }
 
@@ -384,7 +384,7 @@ public class OperatingParamsService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -394,7 +394,7 @@ public class OperatingParamsService {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
         }
         if (value.signum() <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于 0");
         }
         return value;
     }

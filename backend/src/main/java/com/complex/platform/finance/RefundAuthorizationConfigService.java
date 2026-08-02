@@ -87,7 +87,7 @@ public class RefundAuthorizationConfigService {
     // ── 校验/工具（ApiRequests 仅有 requireIdempotencyKey，其余内联） ──
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -97,7 +97,7 @@ public class RefundAuthorizationConfigService {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
         }
         if (value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 不能为负数");
         }
         return value;
     }

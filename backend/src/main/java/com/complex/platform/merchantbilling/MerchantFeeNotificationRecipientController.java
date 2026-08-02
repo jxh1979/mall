@@ -88,7 +88,7 @@ public class MerchantFeeNotificationRecipientController {
             authorizationService.requirePermission(SELF_PERM);
             return Optional.of(authorizationService.currentMerchantScope()
                     .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED",
-                            "a merchant scope is required for self-service recipient management")));
+                            "商户自助管理通知接收人必须在商户身份下操作")));
         }
     }
 
@@ -115,7 +115,7 @@ public class MerchantFeeNotificationRecipientController {
     private static void requireOwnMerchant(Optional<String> selfScope, MerchantFeeNotificationRecipientRecord record) {
         if (selfScope.isPresent() && !selfScope.get().equals(record.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "access to another merchant's fee notification recipient is forbidden");
+                    "无权管理其他商户的费用通知接收人");
         }
     }
 }

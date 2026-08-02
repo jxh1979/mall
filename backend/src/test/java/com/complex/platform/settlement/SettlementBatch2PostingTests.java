@@ -98,7 +98,7 @@ class SettlementBatch2PostingTests {
         String firstArAp = itemArApId(i1);
         // 已 settled，重复 postBill 被拒(非 confirmed)——先断言拒绝，再断言不产生第二条 ar_ap。
         assertThatThrownBy(() -> service.postBill(billId))
-                .hasMessageContaining("only confirmed bills can be posted");
+                .hasMessageContaining("只有已确认的账单才能过账");
 
         assertThat(arApCountBySource(i1)).isEqualTo(1); // 仍 1 条,不重复
         assertThat(itemArApId(i1)).isEqualTo(firstArAp);
@@ -110,7 +110,7 @@ class SettlementBatch2PostingTests {
         String i1 = seedItem(billId, "m1", 9999L);
 
         assertThatThrownBy(() -> service.postBill(billId))
-                .hasMessageContaining("only confirmed bills can be posted");
+                .hasMessageContaining("只有已确认的账单才能过账");
 
         assertThat(itemStatus(i1)).isEqualTo("draft");     // 未过账
         assertThat(arApCountBySource(i1)).isZero();          // 无 ar_ap

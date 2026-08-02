@@ -88,7 +88,7 @@ public class VoucherTransferService {
         Instant now = clock.instant();
 
         VoucherInstanceRecord instance = vouchers.findInstanceById(instanceId)
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "voucher instance not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
         // 只有当前持有人可转赠。
         if (!initiator.equals(instance.customerId())) {
             throw ApiException.forbidden("VOUCHER_TRANSFER_NOT_HOLDER", "只有本人持有的券可以转赠");
@@ -100,7 +100,7 @@ public class VoucherTransferService {
         }
         // V313 券种级"可转让"开关：券种设为不可转让 → 拒绝转赠（与已核销/过期等既有校验并列，2026-07-19 用户拍板）。
         VoucherDefinitionRecord definition = vouchers.findDefinitionById(instance.definitionId())
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "voucher definition not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "券定义不存在或已被删除"));
         if (!definition.transferable()) {
             throw ApiException.conflict("VOUCHER_KIND_NOT_TRANSFERABLE", "该券不可转赠（券种设置为不可转让）");
         }
@@ -161,7 +161,7 @@ public class VoucherTransferService {
         String claimer = requireText(claimerCustomerId, "customer_id");
         String id = requireText(transferId, "transfer_id");
         VoucherTransferRecord transfer = transfers.findById(id)
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_TRANSFER_NOT_FOUND", "transfer not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_TRANSFER_NOT_FOUND", "转赠记录不存在或已被删除"));
 
         // 幂等：已领取且受赠人=我（网络重试）→ 直接成功，不双写。
         if ("claimed".equals(transfer.status()) && claimer.equals(transfer.receiverCustomerId())) {
@@ -185,7 +185,7 @@ public class VoucherTransferService {
         // 领取前复验：券仍 issued 且未过期（封堵竞态/历史残留的"已核销/过期券在途转赠"被领取）。
         Instant now = clock.instant();
         VoucherInstanceRecord instance = vouchers.findInstanceById(transfer.voucherInstanceId())
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "voucher instance not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
         if (!VoucherStateMachine.ISSUED.equals(
                 VoucherStateMachine.effectiveStatus(instance.status(), instance.expiresAt(), now))) {
             throw ApiException.conflict("VOUCHER_TRANSFER_VOUCHER_NOT_CLAIMABLE", "该券已核销/失效/过期，不能领取");
@@ -219,7 +219,7 @@ public class VoucherTransferService {
         String me = requireText(meCustomerId, "customer_id");
         String id = requireText(transferId, "transfer_id");
         VoucherTransferRecord transfer = transfers.findById(id)
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_TRANSFER_NOT_FOUND", "transfer not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_TRANSFER_NOT_FOUND", "转赠记录不存在或已被删除"));
         if (!me.equals(transfer.initiatorCustomerId())) {
             throw ApiException.forbidden("VOUCHER_TRANSFER_NOT_INITIATOR", "只有发起人可以撤回转赠");
         }
@@ -248,7 +248,7 @@ public class VoucherTransferService {
     public VoucherTransferResponse preview(String claimCode) {
         String code = requireText(claimCode, "claim_code");
         VoucherTransferRecord transfer = transfers.findByClaimCode(code)
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_TRANSFER_NOT_FOUND", "transfer not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_TRANSFER_NOT_FOUND", "转赠记录不存在或已被删除"));
         if (!"pending".equals(transfer.status())) {
             throw statusConflict(transfer.status());
         }

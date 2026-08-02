@@ -47,6 +47,6 @@ public record DividendPeriod(String label, LocalDate start, LocalDate end, List<
             return new DividendPeriod(trimmed, month.atDay(1), month.atEndOfMonth(), List.of(trimmed));
         }
         throw ApiException.badRequest("VALIDATION_FAILED",
-                "period_label must be a quarter (e.g. 2026-Q3) or a month (e.g. 2026-07): " + label);
+                "分红期间必须为季度（如 2026-Q3）或月份（如 2026-07）：" + label);
     }
 }

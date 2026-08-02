@@ -65,17 +65,17 @@ public class ServiceOrderService {
         authorizationService.requirePermission("service.catalog.manage");
         if (request == null || request.name() == null || request.name().isBlank()
                 || request.priceCent() == null || request.priceCent() < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "name and non-negative price_cent required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写名称与非负的价格（price_cent）");
         }
         var actor = authorizationService.currentActor();
         String id = request.id() == null || request.id().isBlank() ? "svc_" + UUID.randomUUID() : request.id().trim();
         String feeMode = request.mgmtFeeMode() == null ? "none" : request.mgmtFeeMode();
         if (!java.util.Set.of("none", "percent", "fixed").contains(feeMode)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "mgmt_fee_mode must be none/percent/fixed");
+            throw ApiException.badRequest("VALIDATION_FAILED", "管理费模式（mgmt_fee_mode）必须为 none/percent/fixed");
         }
         long feeValue = request.mgmtFeeValue() == null ? 0 : request.mgmtFeeValue();
         if (feeValue < 0 || (feeMode.equals("percent") && feeValue > 10000)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "mgmt_fee_value invalid (percent uses bp <= 10000)");
+            throw ApiException.badRequest("VALIDATION_FAILED", "管理费数值（mgmt_fee_value）不正确：百分比模式使用基点，不得超过 10000");
         }
         ServiceCatalogItemRecord saved = repository.upsertCatalogItem(new ServiceCatalogItemRecord(
                 id, request.name().trim(), request.priceCent(), request.durationMinutes(),
@@ -100,11 +100,11 @@ public class ServiceOrderService {
     public ServiceCatalogItemRecord archiveCatalogItem(String id, boolean archive, String reason) {
         return withFailureAudit("service.catalog.archive_failed", "service.catalog.manage", "service_catalog_item", id, null, () -> {
             authorizationService.requirePermission("service.catalog.manage");
-            repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "catalog item not found"));
+            repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "服务目录项不存在或已被删除"));
             var actor = authorizationService.currentActor();
             String r = null;
             if (archive) {
-                if (reason == null || reason.isBlank()) throw ApiException.badRequest("VALIDATION_FAILED", "\u5b58\u6863\u7406\u7531\u4e0d\u80fd\u4e3a\u7a7a");
+                if (reason == null || reason.isBlank()) throw ApiException.badRequest("VALIDATION_FAILED", "存档理由不能为空");
                 r = reason.trim();
             }
             repository.archiveCatalogItem(id, archive, r, actor == null ? null : actor.id());
@@ -117,9 +117,9 @@ public class ServiceOrderService {
     public ServiceCatalogItemRecord requestDeleteCatalogItem(String id, String reason) {
         return withFailureAudit("service.catalog.delete_request_failed", "service.catalog.manage", "service_catalog_item", id, null, () -> {
             authorizationService.requirePermission("service.catalog.manage");
-            var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "catalog item not found"));
-            if (item.archivedAt() == null) throw ApiException.badRequest("VALIDATION_FAILED", "\u8bf7\u5148\u5b58\u6863\u518d\u7533\u8bf7\u5220\u9664");
-            if (reason == null || reason.isBlank()) throw ApiException.badRequest("VALIDATION_FAILED", "\u5220\u9664\u7406\u7531\u4e0d\u80fd\u4e3a\u7a7a");
+            var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "服务目录项不存在或已被删除"));
+            if (item.archivedAt() == null) throw ApiException.badRequest("VALIDATION_FAILED", "请先存档再申请删除");
+            if (reason == null || reason.isBlank()) throw ApiException.badRequest("VALIDATION_FAILED", "删除理由不能为空");
             var actor = authorizationService.currentActor();
             repository.requestDeleteCatalogItem(id, reason.trim(), actor == null ? null : actor.id());
             auditEventService.recordSuccess("service.catalog.delete_requested", "service.catalog.manage", "service_catalog_item", id, null, null, Map.of());
@@ -130,11 +130,11 @@ public class ServiceOrderService {
     public ServiceCatalogItemRecord approveDeleteCatalogItem(String id, String decision) {
         return withFailureAudit("service.catalog.delete_approve_failed", "service.catalog.approve", "service_catalog_item", id, null, () -> {
             authorizationService.requirePermission("service.catalog.approve");
-            var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "catalog item not found"));
-            if (!"pending".equals(item.deleteStatus())) throw ApiException.badRequest("VALIDATION_FAILED", "\u8be5\u9879\u65e0\u5f85\u5ba1\u6279\u5220\u9664");
+            var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "服务目录项不存在或已被删除"));
+            if (!"pending".equals(item.deleteStatus())) throw ApiException.badRequest("VALIDATION_FAILED", "该项无待审批删除");
             var actor = authorizationService.currentActor();
             if (actor != null && actor.id() != null && actor.id().equals(item.deleteRequestedBy()))
-                throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN", "\u4e0d\u80fd\u5ba1\u6279\u81ea\u5df1\u53d1\u8d77\u7684\u5220\u9664\u7533\u8bf7");
+                throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN", "不能审批自己发起的删除申请");
             boolean approved = "approved".equals(decision);
             repository.approveDeleteCatalogItem(id, approved);
             auditEventService.recordSuccess("service.catalog.delete_" + (approved ? "approved" : "rejected"), "service.catalog.approve", "service_catalog_item", id, null, null, Map.of());
@@ -175,13 +175,13 @@ public class ServiceOrderService {
     private ServiceOrderRecord doCreateOrder(com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
         if (request == null || request.catalogItemId() == null || request.catalogItemId().isBlank()
                 || request.performerUserId() == null || request.performerUserId().isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "catalog_item_id and performer_user_id required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定服务目录项与服务人员");
         }
         // 清单 P1:项目员工只可为本综合体履约人下单(空 scope=平台放行)。守卫先于目录查找。
         requirePerformerInScope(request.performerUserId().trim());
         ServiceCatalogItemRecord item = repository.findCatalogItem(request.catalogItemId().trim())
                 .filter(ServiceCatalogItemRecord::active)
-                .orElseThrow(() -> ApiException.notFound("SERVICE_ITEM_NOT_FOUND", "service item not found or inactive"));
+                .orElseThrow(() -> ApiException.notFound("SERVICE_ITEM_NOT_FOUND", "服务项不存在或已停用"));
         var actor = authorizationService.currentActor();
         Instant now = Instant.now();
         // H批(2026-07-02 最终拍板):公司统一账户代收——下单即出示公司收款码,服务员现场确认收款。
@@ -218,7 +218,7 @@ public class ServiceOrderService {
     private ServiceOrderRecord doAccept(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
         ServiceOrderRecord current = require(id);
         if (!current.status().equals("pending_accept")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "accept only applies to legacy pending_accept orders");
+            throw ApiException.badRequest("VALIDATION_FAILED", "接单操作仅适用于旧流程的待接单订单");
         }
         return persistStatus(current, "accepted", null, "service.order.accepted",
                 request == null ? null : request.idempotencyKey());
@@ -241,7 +241,7 @@ public class ServiceOrderService {
         requirePerformerInScope(current.performerUserId());
         if (!current.status().equals("created")) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "order status is " + current.status() + ", expecting created");
+                    "订单当前状态为 " + current.status() + "，只有新建状态可执行此操作");
         }
         var actor = authorizationService.currentActor();
         Instant now = Instant.now();
@@ -285,7 +285,7 @@ public class ServiceOrderService {
         // P2-#4:仅 paid 可完成(移除 accepted 绕过路径;paid 蕴含 paid_at!=null,无收款不得完成)。
         if (!current.status().equals("paid")) {
             throw ApiException.badRequest("NOT_PAID_YET",
-                    "order must be paid (company account) before completion; status=" + current.status());
+                    "订单须先完成支付（公司账户收款）才能完成，当前状态：" + current.status());
         }
         // P2-#3:分账费率取下单快照(非完成时活目录);存量无快照的历史单回退活目录。
         String feeMode = current.snapMgmtFeeMode();
@@ -308,7 +308,7 @@ public class ServiceOrderService {
         // ponytail: 用 DB 行级 CAS 取代应用层 read-then-write,彻底消除多 key 并发多完成/多分账。
         if (repository.markCompletedIfPaid(current.id(), mgmtFee, dancerShare, now, now) != 1) {
             throw ApiException.badRequest("ALREADY_COMPLETED",
-                    "service order already completed or no longer payable; status changed concurrently");
+                    "服务订单已完成或已不可支付：状态已被并发变更");
         }
         // 赢得 CAS 后再入提成(部分唯一索引 + ON CONFLICT DO NOTHING,双保险幂等);再落审计。
         String month = java.time.YearMonth.from(java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)).toString();
@@ -330,7 +330,7 @@ public class ServiceOrderService {
 
     private ServiceOrderRecord require(String id) {
         return repository.findOrder(id)
-                .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "service order not found"));
+                .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "服务订单不存在或已被删除"));
     }
 
     /** 清单 P1(2026-07-03 审计):按项目 scope 守卫——项目员工只可操作本综合体履约人的服务单;
@@ -340,7 +340,7 @@ public class ServiceOrderService {
             String performerProject = staffRepository.findUserProjectId(performerUserId).orElse(null);
             if (!scope.equals(performerProject)) {
                 throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
-                        "service order performer is out of the caller's project scope");
+                        "服务人员不在当前项目范围内，无权操作");
             }
         });
     }
@@ -371,10 +371,10 @@ public class ServiceOrderService {
     private ServiceOrderRecord doCancel(String id, com.complex.platform.serviceorder.dto.ServiceOrderCancelRequest request) {
         authorizationService.requirePermission("service.order.create");
         if (request == null || request.reason() == null || request.reason().isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "cancel reason is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "取消订单必须填写理由");
         }
         ServiceOrderRecord current = repository.findOrder(id)
-                .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "service order not found"));
+                .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "服务订单不存在或已被删除"));
         requirePerformerInScope(current.performerUserId());
         if (current.status().equals("completed")) {
             throw ApiException.badRequest("ALREADY_COMPLETED",
@@ -409,7 +409,7 @@ public class ServiceOrderService {
         String qr = repository.companyPayQr();
         if (qr.isBlank()) {
             throw ApiException.badRequest("COMPANY_PAY_QR_NOT_CONFIGURED",
-                    "company payment QR not configured (services pay-config)");
+                    "公司收款码未配置，请先在服务支付配置中设置");
         }
         return Map.of("performer_user_id", order.performerUserId(), "qr_content", qr,
                 "price_cent", String.valueOf(order.priceCent()));
@@ -447,7 +447,7 @@ public class ServiceOrderService {
     public Map<String, Object> myStats(String month) {
         authorizationService.requirePermission("service.order.perform");
         if (month == null || !month.matches("\\d{4}-\\d{2}")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
         }
         var actor = authorizationService.currentActor();
         long[] stats = repository.performerMonthlyStats(actor.id(), month);

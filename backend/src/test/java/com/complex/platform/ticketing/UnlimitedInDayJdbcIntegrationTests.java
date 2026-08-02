@@ -115,7 +115,7 @@ class UnlimitedInDayJdbcIntegrationTests {
 
         assertThatThrownBy(() -> verify(suffix, code))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("no remaining times");
+                .hasMessageContaining("剩余次数已用完");
         assertThat(usedTimes(code)).isEqualTo(1);           // 未再消耗
         // 今天不应留孤儿激活(剩余为 0 时不插激活)。
         assertThat(dayActivationCountOnDate(code, LocalDate.now())).isEqualTo(0);
@@ -165,7 +165,7 @@ class UnlimitedInDayJdbcIntegrationTests {
                 "ent_" + code, LocalDate.now());
         assertThatThrownBy(() -> verify(suffix, code))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("no remaining times");
+                .hasMessageContaining("剩余次数已用完");
         assertThat(usedTimes(code)).isEqualTo(3);
     }
 

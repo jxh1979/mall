@@ -115,7 +115,7 @@ final class AmusementMaintenanceService {
         AmusementMaintenanceRecordRequest actual = requireRequest(request);
         String projectId = requireText(actual.projectId(), "project_id");
         AmusementProjectRecord project = repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         String vendorId = requireText(actual.maintenanceVendorId(), "maintenance_vendor_id");
         requireExistingVendor(vendorId);
@@ -124,7 +124,7 @@ final class AmusementMaintenanceService {
         String engineerName = trimToNull(actual.engineerName());
         String exceptionNote = trimToNull(actual.exceptionNote());
         if ("fail".equals(result) && exceptionNote == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "exception_note is required when result is fail");
+            throw ApiException.badRequest("VALIDATION_FAILED", "检查不通过时必须填写异常说明");
         }
         // submitted=待确认前置；pass 进入待主管确认，fail 保持已提交（不可进入确认流程）。
         String status = "pass".equals(result) ? "pending_confirm" : "submitted";
@@ -164,20 +164,20 @@ final class AmusementMaintenanceService {
         AmusementMaintenanceRecord existing = findRecord(recordId);
         checkProjectOwnership(existing.projectId());
         if ("confirmed".equals(existing.status())) {
-            throw ApiException.conflict("MAINTENANCE_ALREADY_CONFIRMED", "maintenance already confirmed");
+            throw ApiException.conflict("MAINTENANCE_ALREADY_CONFIRMED", "该维保已确认，请勿重复操作");
         }
         // 硬约束（5.1.1）：result 必须 pass。
         if (!"pass".equals(existing.result())) {
-            throw ApiException.conflict("MAINTENANCE_NOT_PASSED", "maintenance result must be pass before resume");
+            throw ApiException.conflict("MAINTENANCE_NOT_PASSED", "维保结果为通过后才能恢复运营");
         }
         AmusementProjectRecord project = repository.findProjectById(existing.projectId())
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         // 硬约束（5.1.1）：当前项目必须处于 maintenance，才允许 maintenance → open。
         if (!"maintenance".equals(project.openStatus())) {
-            throw ApiException.conflict("PROJECT_NOT_IN_MAINTENANCE", "project is not in maintenance");
+            throw ApiException.conflict("PROJECT_NOT_IN_MAINTENANCE", "该游乐项目不在维保中");
         }
         if (!repository.updateProjectOpenStatus(project.id(), "maintenance", "open")) {
-            throw ApiException.conflict("PROJECT_NOT_IN_MAINTENANCE", "project is not in maintenance");
+            throw ApiException.conflict("PROJECT_NOT_IN_MAINTENANCE", "该游乐项目不在维保中");
         }
         Instant now = Instant.now();
         // 接线:复工 → 设备恢复运行状态。
@@ -218,24 +218,24 @@ final class AmusementMaintenanceService {
     private void requireExistingVendor(String vendorId) {
         String status = repository.findMaintenanceVendorStatus(vendorId)
                 .orElseThrow(() -> ApiException.badRequest(
-                        "MAINTENANCE_VENDOR_NOT_FOUND", "maintenance vendor does not exist in suppliers"));
+                        "MAINTENANCE_VENDOR_NOT_FOUND", "维保供应商不在供应商名录中"));
         if (!"active".equals(status)) {
             throw ApiException.badRequest(
-                    "MAINTENANCE_VENDOR_NOT_AVAILABLE", "maintenance vendor is not active");
+                    "MAINTENANCE_VENDOR_NOT_AVAILABLE", "维保供应商未启用");
         }
     }
 
     private AmusementMaintenanceRecord findRecord(String recordId) {
         return repository.findMaintenanceRecordById(recordId)
-                .orElseThrow(() -> ApiException.notFound("MAINTENANCE_RECORD_NOT_FOUND", "maintenance record not found"));
+                .orElseThrow(() -> ApiException.notFound("MAINTENANCE_RECORD_NOT_FOUND", "维保记录不存在或已被删除"));
     }
 
     private void checkProjectOwnership(String projectId) {
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             AmusementProjectRecord project = repository.findProjectById(projectId)
-                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
             if (!merchantId.equals(project.merchantId())) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "project does not belong to your merchant");
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该游乐项目不属于当前商户");
             }
         });
     }
@@ -301,7 +301,7 @@ final class AmusementMaintenanceService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

@@ -2021,7 +2021,7 @@ class BarServiceTests {
         assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
                 "cg-2", null, List.of(), "pay_g2", 128800L, "aggregate_pay")))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessage()).contains("remaining"));
+                        e -> assertThat(e.getMessage()).contains("剩余未付"));
         // 0 元结算拒绝(此前会被接受并写 partial_paid/paid_at)。
         assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
                 "cg-3", null, List.of(), "pay_g3", 0L, "aggregate_pay")))

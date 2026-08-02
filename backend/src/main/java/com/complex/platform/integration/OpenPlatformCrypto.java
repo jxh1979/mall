@@ -43,7 +43,7 @@ final class OpenPlatformCrypto {
         try {
             return sha256(signatureObjectMapper.writeValueAsString(payload == null ? Map.of() : payload));
         } catch (Exception exception) {
-            throw ApiException.badRequest("OPEN_WEBHOOK_PAYLOAD_INVALID", "open webhook payload is not serializable");
+            throw ApiException.badRequest("OPEN_WEBHOOK_PAYLOAD_INVALID", "开放平台回调内容无法序列化");
         }
     }
 

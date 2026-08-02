@@ -221,20 +221,20 @@ public class AmusementService implements AmusementVerificationPort {
         AmusementProjectSpaceAssignmentRequest actual = requireRequest(request);
         String spaceId = requireText(actual.spaceId(), "space_id");
         AmusementProjectRecord project = repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         // 空间必须存在；若属于某商户，必须与项目同商户（不可指派他商户空间，currentMerchantScope 隔离）。
         String spaceMerchant = repository.findSpaceMerchant(spaceId)
-                .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "space not found"));
+                .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "铺位不存在或已被删除"));
         if (!spaceMerchant.isBlank() && project.merchantId() != null && !spaceMerchant.equals(project.merchantId())) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "space belongs to another merchant");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该铺位属于其他商户");
         }
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !spaceMerchant.isBlank() && !scope.get().equals(spaceMerchant)) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "space belongs to another merchant");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该铺位属于其他商户");
         }
         if (repository.assignProjectSpace(projectId, spaceId) == 0) {
-            throw ApiException.notFound("PROJECT_NOT_FOUND", "project not found");
+            throw ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除");
         }
         return new AmusementProjectSpaceAssignmentRecord(projectId, spaceId, Instant.now());
     }
@@ -449,7 +449,7 @@ public class AmusementService implements AmusementVerificationPort {
         String type = requireText(entitlementType, "entitlement_type");
         String verdict = decision == null ? null : decision.trim().toLowerCase(Locale.ROOT);
         if (!"approved".equals(verdict) && !"rejected".equals(verdict)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         return executeWrite(
                 "decideDeleteAmusementProjectEntitlement:" + id + ":" + type,
@@ -479,7 +479,7 @@ public class AmusementService implements AmusementVerificationPort {
 
     private AmusementProjectEntitlementRecord requireProjectEntitlement(String projectId, String entitlementType) {
         return repository.findProjectEntitlement(projectId, entitlementType)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_ENTITLEMENT_NOT_FOUND", "project entitlement binding not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_ENTITLEMENT_NOT_FOUND", "游乐项目权益绑定不存在或已被删除"));
     }
 
     /** 存档/删除理由必填（空白即 400），与 V271 全域口径一致。 */
@@ -586,7 +586,7 @@ public class AmusementService implements AmusementVerificationPort {
         String id = requireText(projectId, "project_id");
         try {
             repository.findProjectById(id)
-                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
             checkProjectOwnership(id);
             AmusementOverCapacityPolicy policy = repository.findOverCapacityPolicy(id);
             auditEventService.recordSuccess(
@@ -632,7 +632,7 @@ public class AmusementService implements AmusementVerificationPort {
             String projectId, ConfigureOverCapacityPolicyRequest request) {
         ConfigureOverCapacityPolicyRequest actual = requireRequest(request);
         repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         int operatingCapacity = nonNegativeOrDefault(actual.operatingCapacity(), 0, "operating_capacity");
         String disposalMode = enumOrDefault(
@@ -691,7 +691,7 @@ public class AmusementService implements AmusementVerificationPort {
         String projectId = trimToNull(actual.projectId());
         if (projectId != null) {
             repository.findProjectById(projectId)
-                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
             checkProjectOwnership(projectId);
         }
         // merchant 强制注入（direct scope）；无 scope（平台视角）退化为 null。
@@ -724,7 +724,7 @@ public class AmusementService implements AmusementVerificationPort {
             EntitlementSessionRecord session = repository.findEntitlementSessionById(key)
                     .or(() -> repository.findEntitlementSessionByCode(key))
                     .orElseThrow(() -> ApiException.notFound(
-                            "ENTITLEMENT_SESSION_NOT_FOUND", "entitlement session not found"));
+                            "ENTITLEMENT_SESSION_NOT_FOUND", "权益核销会话不存在或已被删除"));
             checkEntitlementSessionOwnership(session);
             // 一体机首次展示：initiated → displayed（仅 initiated 命中；已展示/已领/过期/取消保持原状）。
             if ("initiated".equals(session.status())) {
@@ -772,7 +772,7 @@ public class AmusementService implements AmusementVerificationPort {
         ClaimEntitlementSessionRequest actual = requireRequest(request);
         EntitlementSessionRecord session = repository.findEntitlementSessionById(sessionId)
                 .orElseThrow(() -> ApiException.notFound(
-                        "ENTITLEMENT_SESSION_NOT_FOUND", "entitlement session not found"));
+                        "ENTITLEMENT_SESSION_NOT_FOUND", "权益核销会话不存在或已被删除"));
         checkEntitlementSessionOwnership(session);
         String claimedBy = trimToDefault(actual.claimedBy(), "kiosk");
         Instant now = Instant.now();
@@ -781,10 +781,10 @@ public class AmusementService implements AmusementVerificationPort {
             // 区分过期与状态非法，给出明确错误码（便于一体机提示）。
             if (session.expiresAt() != null && !now.isBefore(session.expiresAt())
                     && ENTITLEMENT_SESSION_CLAIMABLE.contains(session.status())) {
-                throw ApiException.conflict("ENTITLEMENT_SESSION_EXPIRED", "entitlement session has expired");
+                throw ApiException.conflict("ENTITLEMENT_SESSION_EXPIRED", "权益核销会话已过期");
             }
             throw ApiException.conflict("ENTITLEMENT_SESSION_NOT_CLAIMABLE",
-                    "entitlement session is not claimable (status=" + session.status() + ")");
+                    "权益核销会话当前不可核销（状态：" + session.status() + "）");
         }
         return repository.findEntitlementSessionById(sessionId).orElse(session);
     }
@@ -793,7 +793,7 @@ public class AmusementService implements AmusementVerificationPort {
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             if (!merchantId.equals(session.merchantId())) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "entitlement session does not belong to your merchant");
+                        "CROSS_MERCHANT_FORBIDDEN", "该权益核销会话不属于当前商户");
             }
         });
     }
@@ -1035,7 +1035,7 @@ public class AmusementService implements AmusementVerificationPort {
         String templateId = trimToNull(actual.safetyTemplateId());
         if (templateId != null) {
             repository.findSafetyTemplateById(templateId)
-                    .orElseThrow(() -> ApiException.notFound("SAFETY_TEMPLATE_NOT_FOUND", "safety template not found"));
+                    .orElseThrow(() -> ApiException.notFound("SAFETY_TEMPLATE_NOT_FOUND", "安检模板不存在或已被删除"));
         }
         Instant now = Instant.now();
         return repository.saveProject(new AmusementProjectRecord(
@@ -1056,12 +1056,12 @@ public class AmusementService implements AmusementVerificationPort {
         AmusementSessionRequest actual = requireRequest(request);
         String projectId = requireText(actual.projectId(), "project_id");
         repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         Instant start = actual.startTime() == null ? Instant.now() : actual.startTime();
         Instant end = actual.endTime() == null ? start.plusSeconds(3600) : actual.endTime();
         if (!end.isAfter(start)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "end_time must be after start_time");
+            throw ApiException.badRequest("VALIDATION_FAILED", "结束时间必须晚于开始时间");
         }
         Instant now = Instant.now();
         return repository.saveSession(new AmusementSessionRecord(
@@ -1082,7 +1082,7 @@ public class AmusementService implements AmusementVerificationPort {
     private AmusementProjectRuleRecord createProjectRuleInternal(String projectId, AmusementProjectRuleRequest request) {
         AmusementProjectRuleRequest actual = requireRequest(request);
         repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         String ruleType = enumOrDefault(actual.ruleType(), null, RULE_TYPES, "rule_type");
         Instant now = Instant.now();
@@ -1104,12 +1104,12 @@ public class AmusementService implements AmusementVerificationPort {
     private AmusementProjectEntitlementRecord createProjectEntitlementInternal(String projectId, AmusementProjectEntitlementRequest request) {
         AmusementProjectEntitlementRequest actual = requireRequest(request);
         repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         String entitlementType = requireText(actual.entitlementType(), "entitlement_type");
         // 仅允许绑定游乐类权益类型（与核销在线校验 §6.4/§12.1 口径一致）。
         if (!isAmusementEntitlementType(entitlementType)) {
-            throw ApiException.badRequest("ENTITLEMENT_NOT_AMUSEMENT", "entitlement_type must be an amusement entitlement type");
+            throw ApiException.badRequest("ENTITLEMENT_NOT_AMUSEMENT", "权益类型必须为游乐类权益");
         }
         return repository.saveProjectEntitlement(new AmusementProjectEntitlementRecord(
                 "ament_" + slug(actual.idempotencyKey()),
@@ -1122,12 +1122,12 @@ public class AmusementService implements AmusementVerificationPort {
     private AmusementCapacityConfigRecord createCapacityConfigInternal(String projectId, AmusementCapacityConfigRequest request) {
         AmusementCapacityConfigRequest actual = requireRequest(request);
         repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         String pointId = trimToNull(actual.locationPointId());
         String deviceId = trimToNull(actual.deviceId());
         if (pointId == null && deviceId == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "location_point_id or device_id is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定点位或设备");
         }
         int maxConcurrent = nonNegativeOrDefault(actual.maxConcurrent(), -1, "max_concurrent");
         if (actual.maxConcurrent() == null) {
@@ -1174,7 +1174,7 @@ public class AmusementService implements AmusementVerificationPort {
 
     private AmusementCapacityConfigRecord disableCapacityConfigInternal(String configId) {
         AmusementCapacityConfigRecord existing = repository.findCapacityConfigById(configId)
-                .orElseThrow(() -> ApiException.notFound("CAPACITY_CONFIG_NOT_FOUND", "capacity config not found"));
+                .orElseThrow(() -> ApiException.notFound("CAPACITY_CONFIG_NOT_FOUND", "容量配置不存在或已被删除"));
         checkProjectOwnership(existing.projectId());
         return repository.saveCapacityConfig(new AmusementCapacityConfigRecord(
                 existing.id(),
@@ -1196,18 +1196,18 @@ public class AmusementService implements AmusementVerificationPort {
         String sessionId = requireText(textFromMap(actual.businessContext(), "session_id", "sessionId"), "session_id");
         String staffId = trimToDefault(textFromMap(actual.businessContext(), "staff_id", "staffId"), "staff");
         AmusementProjectRecord project = repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         if (!"open".equals(project.openStatus())) {
-            throw ApiException.conflict("PROJECT_NOT_OPEN", "project is not open");
+            throw ApiException.conflict("PROJECT_NOT_OPEN", "该游乐项目未开放");
         }
         AmusementSessionRecord session = repository.findSessionById(sessionId)
-                .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "session not found"));
+                .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "场次不存在或已被删除"));
         if (!project.id().equals(session.projectId())) {
-            throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "session does not belong to project");
+            throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "场次不属于该游乐项目");
         }
         if (!"open".equals(session.status())) {
-            throw ApiException.conflict("SESSION_NOT_OPEN", "session is not open");
+            throw ApiException.conflict("SESSION_NOT_OPEN", "该场次未开放");
         }
         // F-OPS-04：核销针对具体设备时传 deviceId，准入闸校验该设备巡检有效期（过期则 SAFETY_INSPECTION_EXPIRED）。
         String deviceId = trimToNull(actual.deviceId());
@@ -1241,16 +1241,16 @@ public class AmusementService implements AmusementVerificationPort {
         }
         String projectId = resolved.get();
         AmusementProjectRecord project = repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         // 已确认为游乐闸：以下任一失败即报错（committed，不再回退）。
         if (!"open".equals(project.openStatus())) {
-            throw ApiException.conflict("PROJECT_NOT_OPEN", "project is not open");
+            throw ApiException.conflict("PROJECT_NOT_OPEN", "该游乐项目未开放");
         }
         // 当前场次定位（项目 + now，start_time≤now≤end_time 且 status=open）；无可入场次即报错。
         AmusementSessionRecord session = repository.resolveOpenSessionForProject(projectId, now)
                 .orElseThrow(() -> ApiException.conflict(
-                        "AMUSEMENT_NO_OPEN_SESSION", "no open amusement session at this time"));
+                        "AMUSEMENT_NO_OPEN_SESSION", "当前时间没有开放中的游乐场次"));
         String staffId = trimToDefault(actual.staffId(), "staff");
         AmusementVerificationRecord record = runAmusementVerification(
                 project, session, credential, pointId, deviceId, staffId, actual.idempotencyKey(), now);
@@ -1271,44 +1271,44 @@ public class AmusementService implements AmusementVerificationPort {
             String idempotencyKey,
             Instant now) {
         if (!project.id().equals(session.projectId())) {
-            throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "session does not belong to project");
+            throw ApiException.conflict("SESSION_PROJECT_MISMATCH", "场次不属于该游乐项目");
         }
         if (!"open".equals(session.status())) {
-            throw ApiException.conflict("SESSION_NOT_OPEN", "session is not open");
+            throw ApiException.conflict("SESSION_NOT_OPEN", "该场次未开放");
         }
         AmusementOpenEligibilityResponse eligibility = evaluateOpenEligibility(project.id(), null, deviceId);
         if (!eligibility.allowed()) {
-            throw ApiException.conflict("SAFETY_BLOCKED", "safety gate blocked amusement verification");
+            throw ApiException.conflict("SAFETY_BLOCKED", "安全闸未放行，游乐核销被拦截");
         }
 
         // §6.4 步骤 2/3：识别票/权益实例 → 在线校验（存在、active、有效期、剩余次数、游乐类、绑定本项目）。
         AmusementEntitlementView entitlement = entitlementGateway.findEntitlementByCredential(credential)
-                .orElseThrow(() -> ApiException.notFound("TICKET_NOT_FOUND", "ticket entitlement not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_NOT_FOUND", "票券权益不存在或已被删除"));
         if (!"active".equals(entitlement.status())) {
-            throw ApiException.conflict("ENTITLEMENT_USED", "entitlement is not active");
+            throw ApiException.conflict("ENTITLEMENT_USED", "该权益未生效");
         }
         if ((entitlement.validFrom() != null && now.isBefore(entitlement.validFrom()))
                 || (entitlement.validTo() != null && now.isAfter(entitlement.validTo()))) {
-            throw ApiException.conflict("ENTITLEMENT_EXPIRED", "entitlement is not within validity window");
+            throw ApiException.conflict("ENTITLEMENT_EXPIRED", "该权益不在有效期内");
         }
         if (entitlement.remainingTimes() <= 0) {
-            throw ApiException.conflict("ENTITLEMENT_USED", "entitlement has no remaining times");
+            throw ApiException.conflict("ENTITLEMENT_USED", "该权益剩余次数已用完");
         }
         if (!isAmusementEntitlementType(entitlement.entitlementType())) {
-            throw ApiException.conflict("ENTITLEMENT_NOT_AMUSEMENT", "entitlement is not an amusement entitlement");
+            throw ApiException.conflict("ENTITLEMENT_NOT_AMUSEMENT", "该权益不是游乐类权益");
         }
         // 绑定本项目：该权益 type 在 amusement_project_entitlements 内。
         // 回退口径（V082 向后兼容）：项目无任何绑定配置时，仅按「游乐类」放行（上方已校验）。
         List<String> boundTypes = repository.listProjectEntitlementTypes(project.id());
         if (!boundTypes.isEmpty() && !boundTypes.contains(entitlement.entitlementType())) {
-            throw ApiException.conflict("ENTITLEMENT_NOT_FOR_PROJECT", "entitlement is not bound to this project");
+            throw ApiException.conflict("ENTITLEMENT_NOT_FOR_PROJECT", "该权益未绑定到此游乐项目");
         }
 
         int peopleCount = Math.max(entitlement.numPeople(), 1);
         // §6.4 步骤 4/6：先消费票务权益（原子扣 used_times），再按三维度扣容量。
         // 顺序与回滚：权益扣减失败不扣容量；容量任一维度扣减失败则回补权益（补偿），保证两者一致。
         if (!entitlementGateway.consumeEntitlement(entitlement.id())) {
-            throw ApiException.conflict("ENTITLEMENT_USED", "entitlement has no remaining times");
+            throw ApiException.conflict("ENTITLEMENT_USED", "该权益剩余次数已用完");
         }
         // 清单#6 超容处置策略（§6.4/§7.18 + R6-D10）：硬上限阻断+软上限告警放行，均落
         // amusement.incident.over_capacity 事件；处置模式后台可切换（block_hard 默认/warn_only 仅告警留痕不阻断）。
@@ -1333,7 +1333,7 @@ public class AmusementService implements AmusementVerificationPort {
                 recordOverCapacity(project, session, deviceId, "hard",
                         claim.exhaustedDimension(), policy);
                 throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED",
-                        "session capacity exhausted (dimension=" + claim.exhaustedDimension() + ")");
+                        "场次容量已满（受限维度：" + claim.exhaustedDimension() + "）");
             }
         } catch (RuntimeException exception) {
             // 容量扣减失败：回补已消费的权益，避免权益被白扣。
@@ -1386,14 +1386,14 @@ public class AmusementService implements AmusementVerificationPort {
         Instant now = Instant.now();
         // 凭证 → 权益实例 → 未释放入场记录。定位不到入场即报错（出场无通用回退旧路）。
         AmusementEntitlementView entitlement = entitlementGateway.findEntitlementByCredential(credential)
-                .orElseThrow(() -> ApiException.notFound("TICKET_NOT_FOUND", "ticket entitlement not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_NOT_FOUND", "票券权益不存在或已被删除"));
         final String entId = entitlement.id();
         java.util.Optional<AmusementVerificationRecord> active = repository.findActiveEntryByEntitlement(entId);
         if (active.isEmpty()) {
             // 无未释放入场：要么已出场（幂等：返回既有 exit，不重复减容量），要么从未入场（报错）。
             return repository.findLatestExitByEntitlement(entId)
                     .orElseThrow(() -> ApiException.conflict(
-                            "ENTITLEMENT_NO_ACTIVE_ENTRY", "no active amusement entry to release for this entitlement"));
+                            "ENTITLEMENT_NO_ACTIVE_ENTRY", "该权益没有进行中的游乐入场可释放"));
         }
         AmusementVerificationRecord entry = active.get();
         AmusementVerificationRecord exitRecord = new AmusementVerificationRecord(
@@ -1562,12 +1562,12 @@ public class AmusementService implements AmusementVerificationPort {
         AmusementManualOverrideRequest actual = requireRequest(request);
         String projectId = requireText(actual.projectId(), "project_id");
         repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         checkProjectOwnership(projectId);
         String sessionId = trimToNull(actual.sessionId());
         if (sessionId != null) {
             repository.findSessionById(sessionId)
-                    .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "session not found"));
+                    .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "场次不存在或已被删除"));
         }
         String type = enumOrDefault(actual.overrideType(), null, OVERRIDE_TYPES, "override_type");
         String reason = requireText(actual.reason(), "reason");
@@ -1599,10 +1599,10 @@ public class AmusementService implements AmusementVerificationPort {
     private void checkProjectOwnership(String projectId) {
         authorizationService.currentMerchantScope().ifPresent(merchantId -> {
             AmusementProjectRecord project = repository.findProjectById(projectId)
-                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
             if (!merchantId.equals(project.merchantId())) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "project does not belong to your merchant");
+                        "CROSS_MERCHANT_FORBIDDEN", "该游乐项目不属于当前商户");
             }
         });
     }
@@ -1639,7 +1639,7 @@ public class AmusementService implements AmusementVerificationPort {
 
     private AmusementOpenEligibilityResponse evaluateOpenEligibility(String projectId, String sessionId, String deviceId) {
         AmusementProjectRecord project = repository.findProjectById(projectId)
-                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
         List<String> reasons = new ArrayList<>();
         if (!"open".equals(project.openStatus())) {
             reasons.add("PROJECT_NOT_OPEN");
@@ -1701,7 +1701,7 @@ public class AmusementService implements AmusementVerificationPort {
         }
         if (sessionId != null) {
             AmusementSessionRecord session = repository.findSessionById(sessionId)
-                    .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "session not found"));
+                    .orElseThrow(() -> ApiException.notFound("SESSION_NOT_FOUND", "场次不存在或已被删除"));
             if (!"open".equals(session.status())) {
                 reasons.add("SESSION_NOT_OPEN");
             }
@@ -1844,7 +1844,7 @@ public class AmusementService implements AmusementVerificationPort {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -1857,7 +1857,7 @@ public class AmusementService implements AmusementVerificationPort {
     private int nonNegativeOrDefault(Integer value, int defaultValue, String fieldName) {
         int actual = value == null ? defaultValue : value;
         if (actual < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return actual;
     }
@@ -1865,7 +1865,7 @@ public class AmusementService implements AmusementVerificationPort {
     private int positiveInteger(Integer value, String fieldName) {
         int actual = value == null ? 0 : value;
         if (actual <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
         }
         return actual;
     }

@@ -92,7 +92,7 @@ public class StaffService {
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(trimToNull(request.merchantId()))) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "cannot register staff for another merchant");
+                        "不能为其他商户登记员工");
             }
         });
         try {
@@ -112,7 +112,7 @@ public class StaffService {
                         if (request.staffLevelId() != null
                                 && accessRepository.findStaffLevelById(request.staffLevelId()).isEmpty()) {
                             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
-                                    "unknown staff_level_id: " + request.staffLevelId());
+                                    "无法识别的员工职级：" + request.staffLevelId());
                         }
                         Instant now = Instant.now();
                         StaffProfileRecord profile = new StaffProfileRecord(
@@ -158,7 +158,7 @@ public class StaffService {
                         StaffProfileRecord profile = requireProfileInScope(id);
                         if (!"submitted".equals(profile.registrationStatus())) {
                             throw ApiException.conflict("INVALID_STATE",
-                                    "registration is not in submitted state: " + profile.registrationStatus());
+                                    "登记不在已提交状态：" + profile.registrationStatus());
                         }
                         String decision = trimToNull(request.decision());
                         AccessActor actor = authorizationService.currentActor();
@@ -200,7 +200,7 @@ public class StaffService {
                             String reason = trimToNull(request.rejectReason());
                             if (reason == null) {
                                 throw ApiException.badRequest("VALIDATION_FAILED",
-                                        "reject_reason is required when rejecting");
+                                        "驳回时必须填写驳回理由");
                             }
                             StaffProfileRecord rejected = new StaffProfileRecord(
                                     profile.id(), profile.projectId(), profile.merchantId(), profile.userId(),
@@ -216,7 +216,7 @@ public class StaffService {
                             return saved;
                         }
                         throw ApiException.badRequest("VALIDATION_FAILED",
-                                "decision must be 'approve' or 'reject'");
+                                "审批结论必须为通过（approve）或驳回（reject）");
                     },
                     StaffProfileRecord.class
             );
@@ -325,7 +325,7 @@ public class StaffService {
         String decision = request == null || request.decision() == null
                 ? null : request.decision().trim().toLowerCase(Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         String actor = archiveActorId();
         if (actor != null && actor.equals(profile.deleteRequestedBy())) {
@@ -363,12 +363,12 @@ public class StaffService {
                         String fingerprint = trimToNull(request.deviceFingerprintHash());
                         if (staffId == null || publicKey == null || fingerprint == null) {
                             throw ApiException.badRequest("VALIDATION_FAILED",
-                                    "staff_profile_id, device_public_key and device_fingerprint_hash are required");
+                                    "必须填写员工档案、设备公钥与设备指纹");
                         }
                         // 1.9：拒绝占位设备凭证——必须是 Android Keystore 真实公钥/指纹，不接受 PLACEHOLDER_*。
                         if (publicKey.startsWith("PLACEHOLDER_") || fingerprint.startsWith("PLACEHOLDER_")) {
                             throw ApiException.badRequest("DEVICE_CREDENTIAL_PLACEHOLDER",
-                                    "device_public_key/device_fingerprint_hash must be real Keystore values, not placeholders");
+                                    "设备公钥与设备指纹必须为真实 Keystore 值，不能用占位符");
                         }
                         requireProfileInScope(staffId);
                         // 换机识别：已有 active 且指纹不同 → 新凭证 pending_review + supersedes 指向旧 active。
@@ -378,7 +378,7 @@ public class StaffService {
                         if (active.isPresent()) {
                             if (fingerprint.equals(active.get().deviceFingerprintHash())) {
                                 throw ApiException.conflict("ALREADY_BOUND",
-                                        "this device fingerprint is already the active credential");
+                                        "该设备指纹已是生效中的凭证");
                             }
                             supersedes = active.get().id();
                             rebind = true;
@@ -415,7 +415,7 @@ public class StaffService {
                         StaffDeviceCredentialRecord credential = requireCredentialInScope(credId);
                         if (!"pending_review".equals(credential.bindStatus())) {
                             throw ApiException.conflict("INVALID_STATE",
-                                    "credential is not pending_review: " + credential.bindStatus());
+                                    "设备凭证不在待审核状态：" + credential.bindStatus());
                         }
                         Instant now = Instant.now();
                         // 换机：先把旧 active 置 superseded，再把新凭证置 active，保证唯一 active 索引始终成立。
@@ -457,7 +457,7 @@ public class StaffService {
                     () -> {
                         StaffDeviceCredentialRecord credential = repository.findCredentialById(credId)
                                 .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND",
-                                        "staff device credential not found: " + credId));
+                                        "员工设备凭证不存在：" + credId));
                         // P1-2 越权修复：完整性上报此前不校验凭证归属，任意已认证用户可按 credId 跨商户吊销他人设备凭证（DoS）。
                         // 改为按调用者商户范围校验凭证所属员工档案归属（与 revokeCredential 同范式；平台 scope 放行）。
                         requireProfileInScope(credential.staffProfileId());
@@ -465,7 +465,7 @@ public class StaffService {
                         if (status == null
                                 || !(status.equals("trusted") || INTEGRITY_FAILURES.contains(status))) {
                             throw ApiException.badRequest("VALIDATION_FAILED",
-                                    "integrity_status must be one of trusted/root_detected/debug_detected/abnormal");
+                                    "设备完整性状态必须为 trusted/root_detected/debug_detected/abnormal 之一");
                         }
                         Instant now = Instant.now();
                         if (INTEGRITY_FAILURES.contains(status)) {
@@ -511,7 +511,7 @@ public class StaffService {
                         if ("revoked".equals(credential.bindStatus())
                                 || "superseded".equals(credential.bindStatus())) {
                             throw ApiException.conflict("INVALID_STATE",
-                                    "credential is already inactive: " + credential.bindStatus());
+                                    "设备凭证已失效：" + credential.bindStatus());
                         }
                         Instant now = Instant.now();
                         String reason = trimToNull(request.reason());
@@ -543,10 +543,10 @@ public class StaffService {
         authorizationService.requirePermission("staff.shift.manage");
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.workDate() == null || request.startAt() == null || request.endAt() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "user_id/work_date/start_at/end_at are required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写用户、工作日期、开始与结束时间");
         }
         if (!request.endAt().isAfter(request.startAt())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "end_at must be after start_at");
+            throw ApiException.badRequest("VALIDATION_FAILED", "结束时间必须晚于开始时间");
         }
         requireUserInScope(request.userId().trim());
         var actor = authorizationService.currentActor();
@@ -587,11 +587,11 @@ public class StaffService {
         authorizationService.requirePermission("staff.attendance.punch");
         if (request == null || request.punchType() == null
                 || (!request.punchType().equals("check_in") && !request.punchType().equals("check_out"))) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "punch_type must be check_in or check_out");
+            throw ApiException.badRequest("VALIDATION_FAILED", "打卡类型必须为上班（check_in）或下班（check_out）");
         }
         String method = request.method() == null ? "manual" : request.method();
         if (!java.util.Set.of("nfc", "qr", "manual").contains(method)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "method must be nfc/qr/manual");
+            throw ApiException.badRequest("VALIDATION_FAILED", "打卡方式必须为 nfc/qr/manual 之一");
         }
         var actor = authorizationService.currentActor();
         Instant now = Instant.now();
@@ -658,7 +658,7 @@ public class StaffService {
                     () -> {
                         EmployeeNoticeRecord notice = repository.findNoticeById(noticeId)
                                 .orElseThrow(() -> ApiException.notFound("NOTICE_NOT_FOUND",
-                                        "employee notice not found: " + noticeId));
+                                        "员工告知书不存在：" + noticeId));
                         requireProfileInScope(notice.staffProfileId());
                         String next;
                         if (Boolean.TRUE.equals(request.decline())) {
@@ -670,7 +670,7 @@ public class StaffService {
                         }
                         if (notice.consentRequired() && "acknowledged".equals(next)) {
                             throw ApiException.badRequest("CONSENT_REQUIRED",
-                                    "this notice requires explicit consent or decline");
+                                    "该告知书必须明确选择同意或拒绝");
                         }
                         Instant now = Instant.now();
                         EmployeeNoticeRecord updated = new EmployeeNoticeRecord(
@@ -720,7 +720,7 @@ public class StaffService {
     public PageResponse<StaffCommissionLineRecord> listMyCommissions(String month) {
         authorizationService.requirePermission("staff.payroll.view_mine");
         if (month == null || !month.matches("\\d{4}-\\d{2}")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
         }
         var actor = authorizationService.currentActor();
         return page(repository.listCommissionLines(actor.id(), month));
@@ -740,7 +740,7 @@ public class StaffService {
         authorizationService.requirePermission("staff.profile.self");
         String name = trimToNull(request == null ? null : request.name());
         if (name == null || name.length() > 128) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "name is required (<=128 chars)");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写名称（不超过 128 字）");
         }
         var actor = authorizationService.currentActor();
         StaffProfileRecord current = repository.findProfileByUserId(actor.id())
@@ -769,11 +769,11 @@ public class StaffService {
     /** 读取并校验 profile 在当前 scope 内（跨商户不可见即拒绝）。 */
     private StaffProfileRecord requireProfileInScope(String id) {
         StaffProfileRecord profile = repository.findProfileById(id)
-                .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "staff profile not found: " + id));
+                .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(profile.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "cannot access a staff profile in another merchant scope");
+                    "无权查看其他商户的员工档案");
         }
         return profile;
     }
@@ -781,7 +781,7 @@ public class StaffService {
     private StaffDeviceCredentialRecord requireCredentialInScope(String credId) {
         StaffDeviceCredentialRecord credential = repository.findCredentialById(credId)
                 .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND",
-                        "staff device credential not found: " + credId));
+                        "员工设备凭证不存在：" + credId));
         requireProfileInScope(credential.staffProfileId());
         return credential;
     }
@@ -814,7 +814,7 @@ public class StaffService {
             String userProject = repository.findUserProjectId(userId).orElse(null);
             if (!scope.equals(userProject)) {
                 throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
-                        "staff member is out of the caller's project scope");
+                        "该员工不在当前项目范围内");
             }
         });
     }
@@ -825,7 +825,7 @@ public class StaffService {
             authorizationService.requirePermission("staff.payroll.manage");
             if (request == null || request.userId() == null || request.userId().isBlank()
                     || request.monthlySalaryCent() == null || request.monthlySalaryCent() < 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "user_id and non-negative monthly_salary_cent required");
+                throw ApiException.badRequest("VALIDATION_FAILED", "必须填写用户与非负的月薪金额");
             }
             requireUserInScope(request.userId().trim());
             var actor = authorizationService.currentActor();
@@ -866,7 +866,7 @@ public class StaffService {
                 || request.amountCent() == null || request.amountCent() <= 0
                 || request.reason() == null || request.reason().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "user_id/month(YYYY-MM)/adj_type(bonus|penalty)/amount_cent>0/reason are required");
+                    "必须填写用户、月份（YYYY-MM）、调整类型（奖励/扣罚）、大于 0 的金额与理由");
         }
         requireUserInScope(request.userId().trim());
         var actor = authorizationService.currentActor();
@@ -901,7 +901,7 @@ public class StaffService {
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                 || request.amountCent() == null || request.amountCent() < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "user_id/month/amount_cent>=0 required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写用户、月份与非负金额");
         }
         requireUserInScope(request.userId().trim());
         var actor = authorizationService.currentActor();
@@ -922,7 +922,7 @@ public class StaffService {
         try {
             authorizationService.requirePermission("staff.payroll.manage");
             if (request == null || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) is required");
+                throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
             }
             var actor = authorizationService.currentActor();
             int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now(), projectScope());
@@ -946,7 +946,7 @@ public class StaffService {
             authorizationService.requirePermission("staff.payroll.manage");
             if (request == null || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                     || request.userId() == null || request.userId().isBlank()) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) and user_id are required");
+                throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份（YYYY-MM）与用户");
             }
             requireUserInScope(request.userId().trim());
             return idempotencyService.execute("markStaffPayrollPaid",
@@ -969,7 +969,7 @@ public class StaffService {
                 actor == null ? null : actor.id(), Instant.now());
         if (paid == 0) {
             throw ApiException.conflict("PAYROLL_NOT_PAYABLE",
-                    "no closed payroll statement to pay for this user/month (already paid or not closed)");
+                    "该用户该月没有可发放的已结账薪资单（已发放或尚未结账）");
         }
         auditEventService.recordSuccess("staff.payroll.paid", "staff.payroll.manage",
                 "staff_payroll_payout", request.userId().trim(), null, request.idempotencyKey(),
@@ -994,16 +994,16 @@ public class StaffService {
                 ? "labor_remuneration" : request.category().trim();
         if (request.seq() == null || request.incomeFloorCent() == null || request.incomeBaseBps() == null
                 || request.rateBps() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "seq/income_floor_cent/income_base_bps/rate_bps required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写序号、收入下限、收入基数比例与费率");
         }
         if (request.incomeFloorCent() < 0
                 || request.incomeBaseBps() <= 0 || request.incomeBaseBps() > 10000
                 || request.rateBps() < 0 || request.rateBps() > 10000) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "income_base_bps in (0,10000], rate_bps in [0,10000], income_floor_cent>=0");
+                    "收入基数比例须在 (0,10000] 基点、费率须在 [0,10000] 基点、收入下限不能为负");
         }
         if (request.incomeCeilingCent() != null && request.incomeCeilingCent() < request.incomeFloorCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "income_ceiling_cent must be >= income_floor_cent");
+            throw ApiException.badRequest("VALIDATION_FAILED", "收入上限不能低于收入下限");
         }
         Instant now = Instant.now();
         var actor = authorizationService.currentActor();
@@ -1061,12 +1061,12 @@ public class StaffService {
                 || request.endDate().isBefore(request.startDate())
                 || request.reason() == null || request.reason().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "leave_type(personal|sick|comp|annual)/start_date<=end_date/reason are required");
+                    "必须填写请假类型（事假/病假/调休/年假）、开始不晚于结束的日期与理由");
         }
         var actor = authorizationService.currentActor();
         if (repository.hasActiveLeaveOverlap(actor.id(), request.startDate(), request.endDate())) {
             throw ApiException.badRequest("LEAVE_OVERLAP",
-                    "already has an active (pending/approved) leave overlapping this date range");
+                    "该日期范围内已有待审批或已批准的请假记录");
         }
         Instant now = Instant.now();
         StaffLeaveRequestRecord saved = repository.saveLeaveRequest(new StaffLeaveRequestRecord(
@@ -1093,13 +1093,13 @@ public class StaffService {
             authorizationService.requirePermission("staff.shift.manage");
             if (request == null || request.decision() == null
                     || !java.util.Set.of("approve", "reject").contains(request.decision())) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approve or reject");
+                throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approve）或驳回（reject）");
             }
             StaffLeaveRequestRecord current = repository.findLeaveById(id)
-                    .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "leave request not found"));
+                    .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
             requireUserInScope(current.userId());
             if (!current.status().equals("pending")) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "leave request already reviewed");
+                throw ApiException.badRequest("VALIDATION_FAILED", "请假申请已审批，不能重复处理");
             }
             var actor = authorizationService.currentActor();
             StaffLeaveRequestRecord saved = repository.saveLeaveRequest(new StaffLeaveRequestRecord(
@@ -1133,7 +1133,7 @@ public class StaffService {
     public java.util.List<StaffAttendanceDayRecord> myAttendanceMonthView(String month) {
         authorizationService.requirePermission("staff.shift.view");
         if (month == null || !month.matches("\\d{4}-\\d{2}")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "month(YYYY-MM) is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
         }
         var actor = authorizationService.currentActor();
         java.time.YearMonth yearMonth = java.time.YearMonth.parse(month);

@@ -126,7 +126,7 @@ final class ThirdPartyScaffoldingService {
             String eventType = request.eventType();
             if (eventType == null || !ROBOT_EVENT_TYPES.contains(eventType)) {
                 throw ApiException.badRequest("ROBOT_EVENT_TYPE_INVALID",
-                        "robot event_type must be one of " + ROBOT_EVENT_TYPES);
+                        "机器人事件类型必须为以下之一：" + ROBOT_EVENT_TYPES);
             }
             Map<String, Object> payload = request.payload() == null ? Map.of() : Map.copyOf(request.payload());
             // 2.1：验签+防重放——签名覆盖任务引用/事件类型/交接/载荷。
@@ -178,7 +178,7 @@ final class ThirdPartyScaffoldingService {
             Map<String, Object> payload, String signature, Long timestamp, String nonce) {
         if (signature == null || signature.isBlank()) {
             throw ApiException.unauthorized("INTEGRATION_WEBHOOK_SIGNATURE_INVALID",
-                    "integration webhook signature is required");
+                    "集成回调缺少签名");
         }
         requireText(provider, "provider");
         requireText(nonce, "nonce");
@@ -186,7 +186,7 @@ final class ThirdPartyScaffoldingService {
         long ts = timestamp == null ? 0L : timestamp;
         if (Math.abs(clock.millis() - ts) > SIGNATURE_TOLERANCE_MILLIS) {
             throw ApiException.unauthorized("INTEGRATION_WEBHOOK_TIMESTAMP_STALE",
-                    "integration webhook timestamp is stale");
+                    "集成回调时间戳已过期");
         }
         String secret = resolveWebhookSecret(type);
         String payloadHash = crypto.payloadHash(payload);
@@ -195,7 +195,7 @@ final class ThirdPartyScaffoldingService {
                 secret, "INTEGRATION_WEBHOOK_SIGNATURE_INVALID");
         if (!repository.reserveOpenNonce(type, resolvedNonce, ts)) {
             throw ApiException.unauthorized("INTEGRATION_WEBHOOK_NONCE_REPLAYED",
-                    "integration webhook nonce was already used");
+                    "集成回调随机数已被使用");
         }
     }
 
@@ -203,7 +203,7 @@ final class ThirdPartyScaffoldingService {
         return secretResolver.resolve("integration." + type + ".webhook")
                 .filter(s -> !s.isBlank())
                 .orElseThrow(() -> ApiException.forbidden("INTEGRATION_WEBHOOK_NOT_ENABLED",
-                        "integration webhook is not enabled: no signing secret configured for type " + type));
+                        "集成回调未启用：类型 " + type + " 未配置签名密钥"));
     }
 
     VideoAnchorRecord recordVideoAnchor(String pointId, Instant eventTime, String businessRef) {
@@ -235,19 +235,19 @@ final class ThirdPartyScaffoldingService {
             // 2.2：视频调阅强制复核——approval_ref 必填，且须对应 approved 主管审批、查看人/对象匹配、未过期，否则 403+失败审计。
             if (approvalRef == null || approvalRef.isBlank()) {
                 throw ApiException.forbidden("VIDEO_ACCESS_APPROVAL_REQUIRED",
-                        "video access requires an approved approval_ref");
+                        "查看视频必须提供已批准的审批依据");
             }
             String ref = approvalRef.trim();
             VideoAccessApprovalRecord approval = repository.findVideoAccessApproval(ref)
                     .filter(a -> "approved".equals(a.status()))
                     .orElseThrow(() -> ApiException.forbidden("VIDEO_ACCESS_NOT_APPROVED",
-                            "approval_ref is not an approved video access review"));
+                            "审批依据不是已批准的视频查看审批"));
             if (!approval.viewerUserId().equals(viewerUserId)) {
                 throw ApiException.forbidden("VIDEO_ACCESS_VIEWER_MISMATCH",
-                        "approval_ref is not granted to this viewer");
+                        "审批依据未授权给当前查看人");
             }
             if (approval.validUntil() != null && clock.instant().isAfter(approval.validUntil())) {
-                throw ApiException.forbidden("VIDEO_ACCESS_APPROVAL_EXPIRED", "video access approval has expired");
+                throw ApiException.forbidden("VIDEO_ACCESS_APPROVAL_EXPIRED", "视频查看审批已过期");
             }
             List<VideoAnchorRecord> all = repository.listVideoAnchors();
             // 对象匹配：审批限定点位则只返回该点位锚点（NULL=全部点位）。
@@ -290,12 +290,12 @@ final class ThirdPartyScaffoldingService {
 
     private String normalizeType(String type) {
         if (type == null || type.isBlank()) {
-            throw ApiException.badRequest("THIRD_PARTY_TYPE_REQUIRED", "third-party type is required");
+            throw ApiException.badRequest("THIRD_PARTY_TYPE_REQUIRED", "必须指定第三方渠道类型");
         }
         String normalized = type.trim();
         if (!WEBHOOK_TYPES.contains(normalized)) {
             throw ApiException.badRequest("THIRD_PARTY_TYPE_UNSUPPORTED",
-                    "third-party type is not supported: " + normalized);
+                    "不支持的第三方渠道类型：" + normalized);
         }
         return normalized;
     }

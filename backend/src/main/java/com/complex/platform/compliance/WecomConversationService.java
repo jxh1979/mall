@@ -286,7 +286,7 @@ public class WecomConversationService {
     ) {
         String resolvedMode = mode == null || mode.isBlank() ? "redacted" : mode.trim().toLowerCase(Locale.ROOT);
         if (!"redacted".equals(resolvedMode) && !"raw".equals(resolvedMode)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "mode must be redacted or raw");
+            throw ApiException.badRequest("VALIDATION_FAILED", "查看模式必须为脱敏（redacted）或原文（raw）");
         }
         String resolvedConversationId = requireText(conversationId, "conversation_id");
         String resolvedViewer = requireText(viewerUserId, "viewer_user_id");
@@ -295,7 +295,7 @@ public class WecomConversationService {
         if (raw && resolvedApprovalRef == null) {
             // 原文调阅最小授权：必须带审批引用，否则拒绝。
             ApiException denied = ApiException.forbidden(
-                    "WECOM_RAW_APPROVAL_REQUIRED", "viewing raw WeCom content requires an approval reference");
+                    "WECOM_RAW_APPROVAL_REQUIRED", "查看企微会话原文必须提供审批依据");
             auditEventService.recordFailure(
                     "wecom.raw_view_failed",
                     "wecom.view_raw",
@@ -309,7 +309,7 @@ public class WecomConversationService {
         }
 
         WecomConversationRecord conversation = repository.findConversationById(resolvedConversationId)
-                .orElseThrow(() -> ApiException.notFound("WECOM_CONVERSATION_NOT_FOUND", "conversation not found"));
+                .orElseThrow(() -> ApiException.notFound("WECOM_CONVERSATION_NOT_FOUND", "会话记录不存在或已被删除"));
         List<WecomMessageRecord> messages = repository.findMessagesByConversation(conversation.id());
 
         Instant now = clock.instant();
@@ -400,7 +400,7 @@ public class WecomConversationService {
         if ("global".equals(scopeType)) {
             scopeId = "*";
         } else if (scopeId == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "scope_id is required for non-global scope");
+            throw ApiException.badRequest("VALIDATION_FAILED", "非全局范围必须指定范围对象（scope_id）");
         }
         WecomRetentionPolicyRecord record = repository.saveRetentionPolicy(new WecomRetentionPolicyRecord(
                 "wrp_" + UUID.randomUUID(),
@@ -628,7 +628,7 @@ public class WecomConversationService {
         String resolvedStatus = trimToNull(status);
         if (resolvedStatus != null && !HIT_STATUSES.contains(resolvedStatus)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "status must be one of open/reviewing/confirmed/dismissed");
+                    "状态必须为 open/reviewing/confirmed/dismissed 之一");
         }
         List<WecomRiskHitRecord> hits = repository.findRiskHits(resolvedStatus, trimToNull(conversationId));
         return new PageResponse<>(hits, 1, hits.size(), hits.size());
@@ -646,15 +646,15 @@ public class WecomConversationService {
         String resolvedStatus = requireText(targetStatus, "status").toLowerCase(Locale.ROOT);
         if (!REVIEW_TARGET_STATUSES.contains(resolvedStatus)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "status must be one of reviewing/confirmed/dismissed");
+                    "状态必须为 reviewing/confirmed/dismissed 之一");
         }
         String resolvedReviewer = requireText(reviewerId, "reviewer_id");
         WecomRiskHitRecord existing = repository.findRiskHitById(resolvedHitId)
-                .orElseThrow(() -> ApiException.notFound("WECOM_RISK_HIT_NOT_FOUND", "risk hit not found"));
+                .orElseThrow(() -> ApiException.notFound("WECOM_RISK_HIT_NOT_FOUND", "风险命中记录不存在或已被删除"));
         // 终态（confirmed/dismissed）不可再流转，避免复核覆盖既有处置结论。
         if ("confirmed".equals(existing.status()) || "dismissed".equals(existing.status())) {
             throw ApiException.conflict("WECOM_RISK_HIT_ALREADY_RESOLVED",
-                    "risk hit already resolved as " + existing.status());
+                    "该风险命中已处理完毕，处理结果：" + existing.status());
         }
         WecomRiskHitRecord updated = repository.updateRiskHitReview(
                 resolvedHitId, resolvedStatus, resolvedReviewer, trimToNull(reviewNote));
@@ -693,20 +693,20 @@ public class WecomConversationService {
 
     private void validateSyncRequest(WecomConversationSyncRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.externalConversationId(), "external_conversation_id");
         String projectId = requireText(request.projectId(), "project_id");
         // 堵越权注入：不再裸信客户端 projectId，必须是已登记项目，否则拒绝（防对任意/不存在项目注入会话）。
         if (!repository.projectExists(projectId)) {
-            throw ApiException.badRequest("WECOM_PROJECT_NOT_FOUND", "project_id is not a registered project");
+            throw ApiException.badRequest("WECOM_PROJECT_NOT_FOUND", "项目编号不是已登记的项目");
         }
     }
 
     private void validatePolicyRequest(WecomRetentionPolicyRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         String scopeType = requireText(request.scopeType(), "scope_type").toLowerCase(Locale.ROOT);
@@ -718,7 +718,7 @@ public class WecomConversationService {
             throw ApiException.badRequest("VALIDATION_FAILED", "expiry_action is invalid");
         }
         if (request.retentionDays() != null && (request.retentionDays() < 1 || request.retentionDays() > 3650)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "retention_days must be between 1 and 3650");
+            throw ApiException.badRequest("VALIDATION_FAILED", "留存天数必须在 1 到 3650 之间");
         }
     }
 

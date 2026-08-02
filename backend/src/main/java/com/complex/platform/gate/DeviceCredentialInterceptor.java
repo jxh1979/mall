@@ -59,7 +59,7 @@ public class DeviceCredentialInterceptor implements HandlerInterceptor {
         String deviceId = trim(request.getHeader("X-Device-Id"));
         String nonce = trim(request.getHeader("X-Device-Nonce"));
         if (deviceId != null && nonce != null && !store.tryConsume(deviceId, nonce)) {
-            throw ApiException.forbidden("DEVICE_CREDENTIAL_REPLAY", "device request nonce already used");
+            throw ApiException.forbidden("DEVICE_CREDENTIAL_REPLAY", "设备请求凭据已被使用，请重新发起请求");
         }
     }
 

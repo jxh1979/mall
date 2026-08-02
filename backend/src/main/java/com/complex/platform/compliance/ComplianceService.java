@@ -219,7 +219,7 @@ public class ComplianceService {
         LocalDate scanDate = requireDate(request.scanDate(), "scan_date");
         int defaultLookaheadDays = request.defaultLookaheadDays() == null ? 30 : request.defaultLookaheadDays();
         if (defaultLookaheadDays < 0 || defaultLookaheadDays > 366) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "default_lookahead_days must be between 0 and 366");
+            throw ApiException.badRequest("VALIDATION_FAILED", "默认提前提醒天数必须在 0 到 366 之间");
         }
         Optional<String> scope = authorizationService.currentMerchantScope();
         List<ContractKeyDateRecord> dates = scope.isPresent()
@@ -351,7 +351,7 @@ public class ComplianceService {
 
     private void validateContractKeyDateRequest(ContractKeyDateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.contractId(), "contract_id");
@@ -368,7 +368,7 @@ public class ComplianceService {
 
     private void validateExpiryItemRequest(ComplianceExpiryItemRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         normalizeAllowed(request.subjectType(), "subject_type", EXPIRY_SUBJECT_TYPES);
@@ -378,7 +378,7 @@ public class ComplianceService {
         requireText(request.itemName(), "item_name");
         requireDate(request.validTo(), "valid_to");
         if (request.validFrom() != null && request.validFrom().isAfter(request.validTo())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "valid_from cannot be after valid_to");
+            throw ApiException.badRequest("VALIDATION_FAILED", "生效开始日期不能晚于结束日期");
         }
         normalizeAllowed(defaultText(request.expiryAction(), "remind_only"), "expiry_action", EXPIRY_ACTIONS);
         normalizeAllowed(defaultText(request.status(), "active"), "status", STATUSES);
@@ -390,7 +390,7 @@ public class ComplianceService {
 
     private void validateScanRequest(ComplianceReminderScanRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireDate(request.scanDate(), "scan_date");
@@ -427,7 +427,7 @@ public class ComplianceService {
 
     private void requireHumanConfirmed(boolean humanConfirmed) {
         if (!humanConfirmed) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "human_confirmed is required before activation");
+            throw ApiException.badRequest("VALIDATION_FAILED", "启用前必须人工确认（human_confirmed）");
         }
     }
 
@@ -493,7 +493,7 @@ public class ComplianceService {
             String requested = trimToNull(requestedMerchantId);
             if (requested != null && !scope.get().equals(requested)) {
                 throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "cannot create compliance records for another merchant");
+                        "CROSS_MERCHANT_FORBIDDEN", "不能为其他商户创建合规记录");
             }
             return scope.get();
         }

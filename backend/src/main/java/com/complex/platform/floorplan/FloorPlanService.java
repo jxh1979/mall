@@ -252,7 +252,7 @@ public class FloorPlanService {
                 ? null
                 : repository.findShapeById(requestedShapeId).orElse(null);
         if (existing != null && !existing.floorPlanId().equals(floorPlanId)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "shape does not belong to this floor plan");
+            throw ApiException.badRequest("VALIDATION_FAILED", "图形不属于该平面图");
         }
         Instant now = Instant.now();
         FloorPlanShapeRecord record = repository.saveShape(new FloorPlanShapeRecord(
@@ -353,7 +353,7 @@ public class FloorPlanService {
     ) {
         FloorPlanImportTaskRecord task = ensureImportTaskBelongsToFloorPlan(floorPlanId, importTaskId);
         if (!"parsed".equals(task.status())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "only parsed import task can be published");
+            throw ApiException.badRequest("VALIDATION_FAILED", "只有解析完成的导入任务才能发布");
         }
 
         List<String> candidateIds = request.candidateIds().stream()
@@ -368,12 +368,12 @@ public class FloorPlanService {
         List<FloorPlanImportCandidateRecord> candidates = new ArrayList<>();
         for (String candidateId : candidateIds) {
             FloorPlanImportCandidateRecord candidate = repository.findImportCandidateById(candidateId)
-                    .orElseThrow(() -> ApiException.notFound("IMPORT_CANDIDATE_NOT_FOUND", "import candidate not found"));
+                    .orElseThrow(() -> ApiException.notFound("IMPORT_CANDIDATE_NOT_FOUND", "导入候选项不存在或已被删除"));
             if (!candidate.importTaskId().equals(importTaskId)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "candidate does not belong to import task");
+                throw ApiException.badRequest("VALIDATION_FAILED", "候选项不属于该导入任务");
             }
             if (!"pending".equals(candidate.status())) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "only pending candidate can be published");
+                throw ApiException.badRequest("VALIDATION_FAILED", "只有待处理的候选项才能发布");
             }
             candidates.add(candidate);
         }
@@ -491,7 +491,7 @@ public class FloorPlanService {
 
     private void validateCreateRequest(FloorPlanCreateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.floorNo(), "floor_no");
@@ -505,7 +505,7 @@ public class FloorPlanService {
 
     private void validateShapeRequest(FloorPlanShapeSaveRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.label(), "label");
@@ -514,25 +514,25 @@ public class FloorPlanService {
         normalizeAllowed(request.status(), "status", STATUSES);
         List<FloorPlanPoint> points = request.polygonPoints();
         if (points == null || points.size() < 3) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "polygon_points must contain at least 3 points");
+            throw ApiException.badRequest("VALIDATION_FAILED", "多边形顶点（polygon_points）至少需要 3 个点");
         }
         for (FloorPlanPoint point : points) {
             if (point == null || point.x() < 0 || point.x() > 1 || point.y() < 0 || point.y() > 1) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "polygon point x/y must be between 0 and 1");
+                throw ApiException.badRequest("VALIDATION_FAILED", "多边形顶点坐标 x/y 必须在 0 到 1 之间");
             }
         }
     }
 
     private void validateImportCreateRequest(FloorPlanImportCreateRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         normalizeAllowed(request.sourceFormat(), "source_format", IMPORT_SOURCE_FORMATS);
         requireText(request.sourceName(), "source_name");
         String payload = requireText(request.sourcePayload(), "source_payload");
         if (payload.length() > 1_000_000) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "source_payload exceeds 1000000 characters");
+            throw ApiException.badRequest("VALIDATION_FAILED", "导入内容（source_payload）超过 1000000 字符上限");
         }
     }
 
@@ -544,20 +544,20 @@ public class FloorPlanService {
         List<FloorPlanImportParseResult.CandidateDraft> candidates = parseResult.candidates();
         if (candidates.size() > MAX_IMPORT_CANDIDATES) {
             throw ApiException.badRequest("FLOOR_PLAN_IMPORT_TOO_MANY_NODES",
-                    "import exceeds the maximum of " + MAX_IMPORT_CANDIDATES + " shapes");
+                    "导入图形数量超过上限 " + MAX_IMPORT_CANDIDATES + " 个");
         }
         for (FloorPlanImportParseResult.CandidateDraft candidate : candidates) {
             int pointCount = candidate.polygonPoints() == null ? 0 : candidate.polygonPoints().size();
             if (pointCount > MAX_IMPORT_POLYGON_POINTS) {
                 throw ApiException.badRequest("FLOOR_PLAN_IMPORT_TOO_MANY_POINTS",
-                        "a shape exceeds the maximum of " + MAX_IMPORT_POLYGON_POINTS + " polygon points");
+                        "存在图形的顶点数超过上限 " + MAX_IMPORT_POLYGON_POINTS + " 个");
             }
         }
     }
 
     private void validateImportPublishRequest(FloorPlanImportPublishRequest request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         if (request.candidateIds() == null || request.candidateIds().isEmpty()) {
@@ -567,7 +567,7 @@ public class FloorPlanService {
 
     private FloorPlanRecord ensureFloorPlanExists(String id) {
         FloorPlanRecord fp = repository.findFloorPlanById(id)
-                .orElseThrow(() -> ApiException.notFound("FLOOR_PLAN_NOT_FOUND", "floor plan not found"));
+                .orElseThrow(() -> ApiException.notFound("FLOOR_PLAN_NOT_FOUND", "平面图不存在或已被删除"));
         checkMerchantOwnership(fp.merchantId());
         return fp;
     }
@@ -575,23 +575,23 @@ public class FloorPlanService {
     private void checkMerchantOwnership(String resourceMerchantId) {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "floor plan belongs to a different merchant");
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "平面图属于其他商户");
         }
     }
 
     private FloorPlanImportTaskRecord ensureImportTaskBelongsToFloorPlan(String floorPlanId, String importTaskId) {
         ensureFloorPlanExists(floorPlanId);
         FloorPlanImportTaskRecord task = repository.findImportTaskById(importTaskId)
-                .orElseThrow(() -> ApiException.notFound("IMPORT_TASK_NOT_FOUND", "import task not found"));
+                .orElseThrow(() -> ApiException.notFound("IMPORT_TASK_NOT_FOUND", "导入任务不存在或已被删除"));
         if (!task.floorPlanId().equals(floorPlanId)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "import task does not belong to floor plan");
+            throw ApiException.badRequest("VALIDATION_FAILED", "导入任务不属于该平面图");
         }
         return task;
     }
 
     private void requirePositive(Integer value, String field) {
         if (value == null || value <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be greater than 0");
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 必须大于 0");
         }
     }
 

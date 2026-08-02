@@ -99,7 +99,7 @@ final class BarBillRecords {
                 || "settled".equals(bill.settlementStatus())
                 || "merged".equals(bill.settlementStatus())
                 || "merged".equals(bill.paymentStatus())) {
-            throw ApiException.conflict(code, "bar bill has payment, settlement, or merge state");
+            throw ApiException.conflict(code, "账单已有支付、结账或并单状态，不能执行此操作");
         }
     }
 

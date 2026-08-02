@@ -219,7 +219,7 @@ public class JdbcDataCleanupRepository {
         try {
             return objectMapper.writeValueAsString(value == null ? Map.of() : value);
         } catch (Exception e) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "failed to serialize json");
+            throw ApiException.badRequest("VALIDATION_FAILED", "数据序列化失败，请联系管理员");
         }
     }
 

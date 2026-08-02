@@ -104,7 +104,7 @@ public class TicketCatalogService {
         TicketTypePricingRequest actual = requireRequest(request);
         requireText(actual.reason(), "reason");
         TicketTypeRecord current = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         if (current.archivedAt() != null || !"none".equals(current.deleteStatus())) {
             throw ApiException.conflict("TICKET_TYPE_NOT_CONFIGURABLE", "已存档或待删除的票种不可改售价");
         }
@@ -121,7 +121,7 @@ public class TicketCatalogService {
     /** V369 定价核算（前端建票/改票时实时提示用）：算出售价、差额、允许误差、超没超。 */
     TicketTypePriceCheck priceCheck(String ticketTypeId) {
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         long tolerance = comboPriceToleranceConfigPort == null
                 ? 0L : comboPriceToleranceConfigPort.findRoundingToleranceCent(currentProjectId());
         return priceCheck(ticketType, repository.listTicketTypeEntitlements(ticketType.id()), tolerance);
@@ -142,7 +142,7 @@ public class TicketCatalogService {
         TicketPriceRuleRequest actual = requireRequest(request);
         String ticketTypeId = requireText(actual.ticketTypeId(), "ticket_type_id");
         TicketTypeRecord ruleTicketType = repository.findTicketTypeById(ticketTypeId)
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         // 复核§3(V260)：已存档/待删除票种不可再配派生价规则——否则"存档=软下线"名存实亡，
         // 且新引用会让审批删除永远过不了引用校验（与本范式的硬删闸互相打架）。
         if (ruleTicketType.archivedAt() != null || !"none".equals(ruleTicketType.deleteStatus())) {
@@ -155,13 +155,13 @@ public class TicketCatalogService {
                 && actual.weekdayPriceCent() == null
                 && actual.weekendPriceCent() == null
                 && actual.holidayPriceCent() == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "fixed price requires at least one price");
+            throw ApiException.badRequest("VALIDATION_FAILED", "固定定价至少需要一个价格");
         }
         if ("derive_from_calendar_price".equals(priceMode)
                 && (actual.discountRate() == null
                 || actual.discountRate().compareTo(MIN_DISCOUNT_RATE) < 0
                 || actual.discountRate().compareTo(MAX_DISCOUNT_RATE) > 0)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "discount_rate must be between 0 and 100");
+            throw ApiException.badRequest("VALIDATION_FAILED", "折扣率必须在 0 到 100 之间");
         }
         validateNonNegative(actual.weekdayPriceCent(), "weekday_price_cent");
         validateNonNegative(actual.weekendPriceCent(), "weekend_price_cent");
@@ -299,11 +299,11 @@ public class TicketCatalogService {
         EntitlementTemplateRecord tpl = requireTemplate(id);
         if (tpl.archivedAt() == null) {
             throw ApiException.badRequest("ENTITLEMENT_TEMPLATE_NOT_ARCHIVED",
-                    "template must be archived before requesting deletion");
+                    "模板须先存档才能申请删除");
         }
         if ("pending".equals(tpl.deleteStatus())) {
             throw ApiException.conflict("ENTITLEMENT_TEMPLATE_DELETE_ALREADY_PENDING",
-                    "a delete request is already pending for this template");
+                    "该模板已有待审批的删除申请");
         }
         Instant now = Instant.now();
         String reason = requireText(request == null ? null : request.reason(), "reason");
@@ -318,16 +318,16 @@ public class TicketCatalogService {
         EntitlementTemplateRecord tpl = requireTemplate(id);
         if (!"pending".equals(tpl.deleteStatus())) {
             throw ApiException.badRequest("ENTITLEMENT_TEMPLATE_DELETE_NOT_PENDING",
-                    "no pending delete request for this template");
+                    "该模板没有待审批的删除申请");
         }
         String decision = request == null ? null : (request.decision() == null ? null : request.decision().trim().toLowerCase(Locale.ROOT));
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         // 职责分离：删除申请发起人不能审批自己的申请。actorId 为 null（无鉴权上下文/测试）时跳过该闸。
         if (actorId != null && actorId.equals(tpl.deleteRequestedBy())) {
             throw ApiException.forbidden("ENTITLEMENT_TEMPLATE_SELF_APPROVE_FORBIDDEN",
-                    "the initiator of a delete request cannot approve it");
+                    "删除申请的发起人不能审批自己的申请");
         }
         if ("rejected".equals(decision)) {
             Instant now = Instant.now();
@@ -338,7 +338,7 @@ public class TicketCatalogService {
         long refs = repository.countTemplateReferences(id);
         if (refs > 0) {
             throw ApiException.conflict("ENTITLEMENT_TEMPLATE_IN_USE",
-                    "template is still referenced by " + refs + " ticket bindings or issued entitlements");
+                    "该模板仍被 " + refs + " 个票种绑定或已发放权益引用");
         }
         repository.deleteEntitlementTemplate(id);
         return new EntitlementTemplateDeleteDecision(id, "approved", true);
@@ -383,7 +383,7 @@ public class TicketCatalogService {
         String decision = request == null || request.decision() == null
                 ? null : request.decision().trim().toLowerCase(Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         if (actorId != null && actorId.equals(tt.deleteRequestedBy())) {
             throw ApiException.forbidden("TICKET_TYPE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
@@ -437,7 +437,7 @@ public class TicketCatalogService {
         String decision = request == null || request.decision() == null
                 ? null : request.decision().trim().toLowerCase(Locale.ROOT);
         if (!"approved".equals(decision) && !"rejected".equals(decision)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         if (actorId != null && actorId.equals(rule.deleteRequestedBy())) {
             throw ApiException.forbidden("TICKET_PRICE_RULE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请");
@@ -457,30 +457,30 @@ public class TicketCatalogService {
 
     private TicketTypeRecord requireTicketTypeRecord(String id) {
         return repository.findTicketTypeById(requireText(id, "id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
     }
 
     private TicketPriceRuleRecord requirePriceRuleRecord(String id) {
         return repository.findPriceRuleById(requireText(id, "id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_PRICE_RULE_NOT_FOUND", "price rule not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_PRICE_RULE_NOT_FOUND", "价格规则不存在或已被删除"));
     }
 
     private EntitlementTemplateRecord requireTemplate(String id) {
         return repository.findEntitlementTemplateById(requireText(id, "id"))
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "权益模板不存在或已被删除"));
     }
 
     TicketTypeEntitlementRecord bindTicketTypeEntitlement(String ticketTypeId, TicketTypeEntitlementRequest request) {
         TicketTypeEntitlementRequest actual = requireRequest(request);
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         // 复核§3(V260)：票种侧同样拒绑——已存档/待删除票种不可再被绑定新权益。
         if (ticketType.archivedAt() != null || !"none".equals(ticketType.deleteStatus())) {
             throw ApiException.conflict("TICKET_TYPE_NOT_BINDABLE",
                     "已存档或待删除的票种不可绑定权益");
         }
         EntitlementTemplateRecord template = repository.findEntitlementTemplateById(requireText(actual.entitlementTemplateId(), "entitlement_template_id"))
-                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "权益模板不存在或已被删除"));
         // 复核§3:已存档或待删除的模板不可再被绑定到票种——否则违背"存档=软下线",且被引用后永远删不掉。
         if (template.archivedAt() != null || !"none".equals(template.deleteStatus())) {
             throw ApiException.conflict("ENTITLEMENT_TEMPLATE_NOT_BINDABLE",
@@ -577,11 +577,11 @@ public class TicketCatalogService {
         StatusChangeRequest actual = requireRequest(request);
         requireText(actual.reason(), "reason");
         TicketTypeRecord current = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
-                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         // AUD-015 发布闸：至少绑定一个权益模板才可发布——公开可售的票必须能出票，否则形成收钱不出票。
         if (repository.listTicketTypeEntitlements(current.id()).isEmpty()) {
             throw ApiException.conflict("TICKET_TYPE_ENTITLEMENT_REQUIRED",
-                    "ticket type must have at least one entitlement binding before publish");
+                    "票种发布前必须至少绑定一个权益");
         }
         requireComponentPrices(current.id());
         requireCostBearers(current.id());
@@ -840,7 +840,7 @@ public class TicketCatalogService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -909,7 +909,7 @@ public class TicketCatalogService {
             return null;
         }
         if (value <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "validity_days must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", "有效天数必须大于 0");
         }
         return value;
     }
@@ -922,7 +922,7 @@ public class TicketCatalogService {
         }
         if (value % 5 != 0 || value < 5 || value > 60) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "refresh_interval_seconds must be a multiple of 5 between 5 and 60");
+                    "刷新间隔秒数必须为 5 到 60 之间且为 5 的倍数");
         }
         return value;
     }
@@ -930,7 +930,7 @@ public class TicketCatalogService {
     private int positiveOrDefault(Integer value, int defaultValue, String fieldName) {
         int resolved = value == null ? defaultValue : value;
         if (resolved <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
         }
         return resolved;
     }
@@ -938,7 +938,7 @@ public class TicketCatalogService {
     private long nonNegativeOrDefault(Long value, long defaultValue, String fieldName) {
         long resolved = value == null ? defaultValue : value;
         if (resolved < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return resolved;
     }
@@ -948,14 +948,14 @@ public class TicketCatalogService {
             return null;
         }
         if (value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return value;
     }
 
     private void validateNonNegative(Long value, String fieldName) {
         if (value != null && value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
     }
 

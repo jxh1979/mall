@@ -84,7 +84,7 @@ public class TicketTransferService {
         String channel = requireChannel(req.channel());
 
         TicketInstanceRecord parent = repository.findTicketInstanceById(parentTicketId)
-                .orElseThrow(() -> ApiException.notFound("TICKET_INSTANCE_NOT_FOUND", "ticket instance not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_INSTANCE_NOT_FOUND", "票实例不存在或已被删除"));
         if (!"active".equals(parent.status())) {
             throw ApiException.conflict("TICKET_NOT_TRANSFERABLE",
                     "该票已退款/退款申请中/已作废,不能转赠");
@@ -170,7 +170,7 @@ public class TicketTransferService {
         String claimer = requireText(claimerCustomerId, "customer_id");
         String id = requireText(transferId, "transfer_id");
         TicketTransferRecord transfer = repository.findTicketTransferById(id)
-                .orElseThrow(() -> ApiException.notFound("TICKET_TRANSFER_NOT_FOUND", "transfer not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TRANSFER_NOT_FOUND", "转赠记录不存在或已被删除"));
 
         // 幂等:已领取且受赠人=我(网络重试) → 直接成功,不双写。
         if ("claimed".equals(transfer.status()) && claimer.equals(transfer.receiverCustomerId())) {
@@ -229,7 +229,7 @@ public class TicketTransferService {
         String me = requireText(meCustomerId, "customer_id");
         String id = requireText(transferId, "transfer_id");
         TicketTransferRecord transfer = repository.findTicketTransferById(id)
-                .orElseThrow(() -> ApiException.notFound("TICKET_TRANSFER_NOT_FOUND", "transfer not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TRANSFER_NOT_FOUND", "转赠记录不存在或已被删除"));
         if (!me.equals(transfer.initiatorCustomerId())) {
             throw ApiException.forbidden("TICKET_TRANSFER_NOT_INITIATOR", "只有发起人可以撤回转赠");
         }
@@ -259,7 +259,7 @@ public class TicketTransferService {
     public TicketTransferPreviewResponse preview(String claimCode) {
         String code = requireText(claimCode, "claim_code");
         TicketTransferRecord transfer = repository.findTicketTransferByClaimCode(code)
-                .orElseThrow(() -> ApiException.notFound("TICKET_TRANSFER_NOT_FOUND", "transfer not found"));
+                .orElseThrow(() -> ApiException.notFound("TICKET_TRANSFER_NOT_FOUND", "转赠记录不存在或已被删除"));
         if (!"pending".equals(transfer.status())) {
             throw statusConflict(transfer.status());
         }

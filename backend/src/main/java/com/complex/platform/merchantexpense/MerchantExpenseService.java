@@ -64,10 +64,10 @@ public class MerchantExpenseService {
                         requirePeriod(period);
                     }
                     if (expenseType != null && !expenseType.isBlank() && !EXPENSE_TYPES.contains(expenseType)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "unknown expense_type: " + expenseType);
+                        throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的费用类型：" + expenseType);
                     }
                     if (source != null && !source.isBlank() && !SOURCES.contains(source)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "unknown source: " + source);
+                        throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的费用来源：" + source);
                     }
                     int safePage = Math.max(page, 1);
                     int safeSize = Math.min(Math.max(pageSize, 1), 200);
@@ -112,7 +112,7 @@ public class MerchantExpenseService {
     public MerchantExpenseEntryRecord createManual(MerchantExpenseEntryRequest request) {
         authorizationService.requirePermission(MANAGE_PERM);
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return operations.executeWrite(
                 "createMerchantExpenseEntry",
@@ -135,10 +135,10 @@ public class MerchantExpenseService {
         requirePeriodOpen(merchantId, period);
         String expenseType = requireText(request.expenseType(), "expense_type");
         if (!EXPENSE_TYPES.contains(expenseType)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unknown expense_type: " + expenseType);
+            throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的费用类型：" + expenseType);
         }
         if (request.amountCent() == null || request.amountCent() == 0L) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be a non-zero integer (cent)");
+            throw ApiException.badRequest("VALIDATION_FAILED", "金额必须为非零整数（单位：分）");
         }
         String note = requireText(request.note(), "note");
 
@@ -148,7 +148,7 @@ public class MerchantExpenseService {
                 note, currentOperator(), Instant.now());
         repository.insertEntry(entry);
         return repository.findById(id)
-                .orElseThrow(() -> ApiException.conflict("EXPENSE_ENTRY_CONFLICT", "expense entry insert lost race"));
+                .orElseThrow(() -> ApiException.conflict("EXPENSE_ENTRY_CONFLICT", "费用登记发生并发冲突，请重试"));
     }
 
     /**
@@ -161,7 +161,7 @@ public class MerchantExpenseService {
     public MerchantExpenseEntryRecord reverse(String entryId, MerchantExpenseReversalRequest request) {
         authorizationService.requirePermission(MANAGE_PERM);
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         String id = requireText(entryId, "entry_id");
         return operations.executeWrite(
@@ -179,7 +179,7 @@ public class MerchantExpenseService {
     private MerchantExpenseEntryRecord reverseInternal(String entryId, MerchantExpenseReversalRequest request) {
         String note = requireText(request.note(), "note");
         MerchantExpenseEntryRecord original = repository.findById(entryId)
-                .orElseThrow(() -> ApiException.notFound("EXPENSE_ENTRY_NOT_FOUND", "expense entry not found: " + entryId));
+                .orElseThrow(() -> ApiException.notFound("EXPENSE_ENTRY_NOT_FOUND", "费用记录不存在：" + entryId));
         // I-2 归属校验（FinanceService.checkMerchantOwnership 同款）：商户 scope 账号不得冲销他商户的台账行。
         checkMerchantOwnership(original.merchantId());
         // 关账锁：已被 approved/paid 正式分红单覆盖的月份禁止冲销（否则已发放分红的基数被改）。
@@ -194,7 +194,7 @@ public class MerchantExpenseService {
                 -original.amountCent(), "manual", original.id(), note, currentOperator(), Instant.now());
         repository.insertEntry(reversal);
         return repository.findById(reversalId)
-                .orElseThrow(() -> ApiException.conflict("EXPENSE_ENTRY_CONFLICT", "expense reversal insert lost race"));
+                .orElseThrow(() -> ApiException.conflict("EXPENSE_ENTRY_CONFLICT", "费用冲正发生并发冲突，请重试"));
     }
 
     /**
@@ -210,7 +210,7 @@ public class MerchantExpenseService {
         authorizationService.requirePermission(MANAGE_PERM);
         authorizationService.requirePlatformScope();
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return operations.executeWrite(
                 "syncMerchantExpenseAuto",
@@ -249,7 +249,7 @@ public class MerchantExpenseService {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "access to another merchant's resource is not allowed");
+                    "无权操作其他商户的数据");
         }
     }
 
@@ -288,7 +288,7 @@ public class MerchantExpenseService {
     private static String requirePeriod(String period) {
         String p = requireText(period, "period");
         if (!PERIOD_PATTERN.matcher(p).matches()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period must be yyyy-MM, e.g. 2026-07");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 yyyy-MM（如 2026-07）");
         }
         return p;
     }

@@ -91,7 +91,7 @@ public class SupplyContractService {
                     String merchantId = scope.orElseGet(() -> trimToNull(actual.merchantId()));
                     if (mode.equals("merchant_self_purchase") && merchantId == null) {
                         throw ApiException.badRequest(
-                                "VALIDATION_FAILED", "merchant_id is required for merchant_self_purchase");
+                                "VALIDATION_FAILED", "商户自采必须指定商户");
                     }
                     Instant now = Instant.now();
                     String slug = slug(actual.idempotencyKey());
@@ -136,11 +136,11 @@ public class SupplyContractService {
                     String decision = normalizeAllowed(actual.decision(), APPROVAL_DECISIONS, "decision");
                     SupplyContractRecord contract = repository.findSupplyContractByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound(
-                                    "SUPPLY_CONTRACT_NOT_FOUND", "supply contract not found"));
+                                    "SUPPLY_CONTRACT_NOT_FOUND", "供货合同不存在或已被删除"));
                     requireSameScope(contract.merchantId());
                     if (!"draft".equals(contract.approvalStatus())) {
                         throw ApiException.conflict(
-                                "SUPPLY_CONTRACT_NOT_DRAFT", "supply contract is not in draft");
+                                "SUPPLY_CONTRACT_NOT_DRAFT", "供货合同不在草稿状态");
                     }
                     Instant now = Instant.now();
                     return repository.saveSupplyContract(new SupplyContractRecord(
@@ -179,25 +179,25 @@ public class SupplyContractService {
         String item = requireText(itemId, "item_id");
         SupplyContractRecord contract = repository.findSupplyContractByIdForUpdate(id)
                 .orElseThrow(() -> ApiException.notFound(
-                        "SUPPLY_CONTRACT_NOT_FOUND", "supply contract not found"));
+                        "SUPPLY_CONTRACT_NOT_FOUND", "供货合同不存在或已被删除"));
         requireSameScope(contract.merchantId());
         if (!"approved".equals(contract.approvalStatus())) {
-            throw ApiException.conflict("SUPPLY_CONTRACT_NOT_APPROVED", "supply contract is not approved");
+            throw ApiException.conflict("SUPPLY_CONTRACT_NOT_APPROVED", "供货合同尚未审批通过");
         }
         if (!"active".equals(contract.status())) {
-            throw ApiException.conflict("SUPPLY_CONTRACT_NOT_ACTIVE", "supply contract is not active");
+            throw ApiException.conflict("SUPPLY_CONTRACT_NOT_ACTIVE", "供货合同未生效");
         }
         LocalDate today = LocalDate.now();
         if (contract.validFrom() != null && today.isBefore(contract.validFrom())) {
-            throw ApiException.conflict("SUPPLY_CONTRACT_NOT_YET_VALID", "supply contract is not yet valid");
+            throw ApiException.conflict("SUPPLY_CONTRACT_NOT_YET_VALID", "供货合同尚未到生效日期");
         }
         if (contract.validTo() != null && today.isAfter(contract.validTo())) {
-            throw ApiException.conflict("SUPPLY_CONTRACT_EXPIRED", "supply contract is expired");
+            throw ApiException.conflict("SUPPLY_CONTRACT_EXPIRED", "供货合同已过期");
         }
         List<String> scope = contract.purchasableScope();
         if (scope != null && !scope.isEmpty() && !scope.contains(item)) {
             throw ApiException.badRequest(
-                    "ITEM_OUT_OF_PURCHASABLE_SCOPE", "item is not within the contract purchasable scope");
+                    "ITEM_OUT_OF_PURCHASABLE_SCOPE", "该商品不在合同可采购范围内");
         }
         return contract;
     }
@@ -206,7 +206,7 @@ public class SupplyContractService {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(contractMerchantId)) {
             throw ApiException.forbidden(
-                    "SUPPLY_CONTRACT_FORBIDDEN", "supply contract is out of merchant scope");
+                    "SUPPLY_CONTRACT_FORBIDDEN", "该供货合同不在当前商户权限范围内");
         }
     }
 
@@ -284,7 +284,7 @@ public class SupplyContractService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }

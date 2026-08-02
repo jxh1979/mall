@@ -341,7 +341,7 @@ public class AnalyticsService {
         String normalized = bucket == null || bucket.isBlank() ? null : bucket;
         if (normalized != null && !AR_BUCKETS.contains(normalized)) {
             throw com.complex.platform.common.api.ApiException.badRequest(
-                    "VALIDATION_FAILED", "bucket must be one of " + AR_BUCKETS);
+                    "VALIDATION_FAILED", "账龄分组必须为以下之一：" + AR_BUCKETS);
         }
         String finalBucket = normalized;
         return readSingle(
@@ -565,7 +565,7 @@ public class AnalyticsService {
                 .filter(h -> h.holidayName().equals(name) && h.holidayYear() == year)
                 .findFirst()
                 .orElseThrow(() -> com.complex.platform.common.api.ApiException.badRequest(
-                        "VALIDATION_FAILED", "holiday period not found: " + name + " " + year));
+                        "VALIDATION_FAILED", "节假日期间不存在：" + name + " " + year));
         AnalyticsRecords.HolidayPeriod previous = all.stream()
                 .filter(h -> h.holidayName().equals(name) && h.holidayYear() == year - 1)
                 .findFirst().orElse(null);
@@ -607,7 +607,7 @@ public class AnalyticsService {
         try {
             return java.time.YearMonth.parse(month.trim());
         } catch (java.time.format.DateTimeParseException e) {
-            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "month must be YYYY-MM");
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "月份格式不正确，应为 YYYY-MM");
         }
     }
 
@@ -640,7 +640,7 @@ public class AnalyticsService {
     public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(String source, int limit, int offset) {
         boolean merchant = "merchant".equals(source);
         if (!merchant && !"facility".equals(source)) {
-            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "source must be facility or merchant");
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "来源必须为设施（facility）或商户（merchant）");
         }
         return readSingle(
                 "analytics.overdue_work_orders.viewed",
@@ -900,7 +900,7 @@ public class AnalyticsService {
                 ? "project"
                 : groupBy.trim().toLowerCase(Locale.ROOT);
         if (!"project".equals(value) && !"entity".equals(value)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "group_by must be project or entity");
+            throw ApiException.badRequest("VALIDATION_FAILED", "分组维度必须为项目（project）或主体（entity）");
         }
         return value;
     }
@@ -981,20 +981,20 @@ public class AnalyticsService {
             throw ApiException.badRequest("VALIDATION_FAILED", "action is invalid");
         }
         if (ANOMALY_TERMINAL_STATUSES.contains(currentStatus)) {
-            throw ApiException.conflict("METRIC_ANOMALY_ALREADY_DISPOSED", "metric anomaly is already disposed");
+            throw ApiException.conflict("METRIC_ANOMALY_ALREADY_DISPOSED", "该指标异常已处置完毕");
         }
         return switch (action) {
             case "acknowledge" -> {
                 if (!"open".equals(currentStatus)) {
                     throw ApiException.conflict("METRIC_ANOMALY_INVALID_TRANSITION",
-                            "only open anomalies can be acknowledged");
+                            "只有待处理的指标异常才能确认");
                 }
                 yield "acknowledged";
             }
             case "escalate" -> {
                 if (!"open".equals(currentStatus) && !"acknowledged".equals(currentStatus)) {
                     throw ApiException.conflict("METRIC_ANOMALY_INVALID_TRANSITION",
-                            "anomaly cannot be escalated from " + currentStatus);
+                            "指标异常当前状态不可升级：" + currentStatus);
                 }
                 yield "escalated";
             }
@@ -1042,7 +1042,7 @@ public class AnalyticsService {
         String action = requireText(actual.action(), "action");
         // 行锁读:并发处置串行化,第二个处置在第一个提交后读到新状态,升级/终态守卫在建告警前拦截,杜绝孤儿告警。
         MetricAnomalyRecord current = repository.findMetricAnomalyByIdForUpdate(anomalyId)
-                .orElseThrow(() -> ApiException.notFound("METRIC_ANOMALY_NOT_FOUND", "metric anomaly not found"));
+                .orElseThrow(() -> ApiException.notFound("METRIC_ANOMALY_NOT_FOUND", "指标异常不存在或已被删除"));
         String targetStatus = anomalyDispositionTarget(current.status(), action);
         // acknowledge 说明可选;其余处置动作必须留说明(审计留痕/升级依据)。
         String note = "acknowledge".equals(action)
@@ -1355,9 +1355,9 @@ public class AnalyticsService {
         String targetStatus = requireRiskAlertResolveAction(actual.action());
         String reason = requireText(actual.reason(), "reason");
         RiskAlertRecord current = repository.findRiskAlertById(alertId)
-                .orElseThrow(() -> ApiException.notFound("RISK_ALERT_NOT_FOUND", "risk alert not found"));
+                .orElseThrow(() -> ApiException.notFound("RISK_ALERT_NOT_FOUND", "风险预警不存在或已被删除"));
         if (TERMINAL_ALERT_STATUSES.contains(current.status())) {
-            throw ApiException.conflict("RISK_ALERT_ALREADY_RESOLVED", "risk alert is already resolved");
+            throw ApiException.conflict("RISK_ALERT_ALREADY_RESOLVED", "该风险预警已处理完毕");
         }
         Instant now = Instant.now(clock);
         return repository.updateRiskAlert(new RiskAlertRecord(
@@ -1430,7 +1430,7 @@ public class AnalyticsService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -1454,7 +1454,7 @@ public class AnalyticsService {
     private String requireLimitedText(String value, String fieldName, int maxLength) {
         String text = requireText(value, fieldName);
         if (text.length() > maxLength) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is too long");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 长度超出限制");
         }
         return text;
     }
@@ -1462,7 +1462,7 @@ public class AnalyticsService {
     private String optionalLimitedText(String value, String fieldName, int maxLength) {
         String text = trimToNull(value);
         if (text != null && text.length() > maxLength) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is too long");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 长度超出限制");
         }
         return text;
     }

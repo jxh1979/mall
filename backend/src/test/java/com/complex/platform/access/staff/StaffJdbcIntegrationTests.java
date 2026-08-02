@@ -133,7 +133,7 @@ class StaffJdbcIntegrationTests {
         assertThatThrownBy(() -> service.reviewRegistration(submitted.id(),
                 new StaffRegistrationReviewRequest(key(), null, "reject", null, null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("reject_reason");
+                .hasMessageContaining("驳回理由");
 
         StaffProfileRecord rejected = service.reviewRegistration(submitted.id(),
                 new StaffRegistrationReviewRequest(key(), null, "reject", "材料不全", null));
@@ -294,7 +294,7 @@ class StaffJdbcIntegrationTests {
         assertThatThrownBy(() -> service.acknowledge(notice.id(),
                 new EmployeeNoticeAcknowledgeRequest(key(), null, null, null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("consent");
+                .hasMessageContaining("同意");
 
         EmployeeNoticeRecord consented = service.acknowledge(notice.id(),
                 new EmployeeNoticeAcknowledgeRequest(key(), null, true, null));

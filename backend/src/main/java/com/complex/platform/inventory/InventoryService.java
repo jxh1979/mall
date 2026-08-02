@@ -599,22 +599,22 @@ public class InventoryService {
                     // 与客人 OTP 的"发码+核验"绑定为后续(依赖短信服务商,同客人登录环境约束)。
                     requireText(actual.verificationCode(), "verification_code");
                     SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(id)
-                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
                     Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(bottle.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "saved bottle does not belong to your merchant");
+                                "该存酒记录不属于当前商户");
                     }
                     if (!"stored".equals(bottle.status())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_NOT_TRANSFERABLE", "saved bottle is not transferable");
+                        throw ApiException.conflict("SAVED_BOTTLE_NOT_TRANSFERABLE", "该存酒不可转赠");
                     }
                     if (bottle.expireAt() != null && bottle.expireAt().isBefore(Instant.now())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "saved bottle is expired");
+                        throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "该存酒已过期");
                     }
                     int qty = actual.transferQuantity() == null ? bottle.remainingQuantity() : actual.transferQuantity();
                     if (qty <= 0 || qty > bottle.remainingQuantity()) {
                         throw ApiException.badRequest("VALIDATION_FAILED",
-                                "transfer_quantity must be within remaining quantity");
+                                "转赠数量不能超过剩余数量");
                     }
                     Instant now = Instant.now();
                     String toPhone = trimToNull(actual.toPhone());
@@ -652,18 +652,18 @@ public class InventoryService {
                     requireText(actual.verificationCode(), "verification_code");
                     // P0-2: SELECT FOR UPDATE 防止并发超领
                     SavedBottleRecord savedBottle = repository.findSavedBottleByIdForUpdate(id)
-                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
                     // P0-2: 跨商户越权检查
                     Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(savedBottle.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "saved bottle does not belong to your merchant");
+                                "该存酒记录不属于当前商户");
                     }
                     if (!"stored".equals(savedBottle.status())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_NOT_CLAIMABLE", "saved bottle is not claimable");
+                        throw ApiException.conflict("SAVED_BOTTLE_NOT_CLAIMABLE", "该存酒当前不可取用");
                     }
                     if (savedBottle.expireAt() != null && savedBottle.expireAt().isBefore(Instant.now())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "saved bottle is expired");
+                        throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "该存酒已过期");
                     }
                     // 取酒核身（REQ-30 + P0#4 F4/F7）：登记了瓶底标签值/姓名昵称时，取酒必须比对一致；
                     // 任一不符进入人工复核（不出酒）。比对项（取请求显式核身字段，缺省回退 verificationCode 兼容旧端）：
@@ -697,7 +697,7 @@ public class InventoryService {
                     Map<String, Object> claimItem = firstItem(actual.claimItems(), "claim_items");
                     int quantity = requirePositiveItemQuantity(claimItem, "quantity");
                     if (quantity > savedBottle.remainingQuantity()) {
-                        throw ApiException.conflict("SAVED_BOTTLE_INSUFFICIENT", "saved bottle remaining quantity is insufficient");
+                        throw ApiException.conflict("SAVED_BOTTLE_INSUFFICIENT", "存酒剩余数量不足");
                     }
                     int remaining = savedBottle.remainingQuantity() - quantity;
                     Instant now = Instant.now();
@@ -756,14 +756,14 @@ public class InventoryService {
                 () -> {
                     SavedBottleCancelRequest actual = requireRequest(request);
                     SavedBottleRecord savedBottle = repository.findSavedBottleByIdForUpdate(id)
-                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
                     Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(savedBottle.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "saved bottle does not belong to your merchant");
+                                "该存酒记录不属于当前商户");
                     }
                     if (!List.of("stored", "pending_identity_review").contains(savedBottle.status())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_NOT_CANCELLABLE", "saved bottle is not cancellable");
+                        throw ApiException.conflict("SAVED_BOTTLE_NOT_CANCELLABLE", "该存酒当前不可作废");
                     }
                     // V350 归一：作废当刻**重新判定**（不看登记快照，也不看前端传值）——
                     // 阈值未配置 / 进货价未知 / 手工标记 / 进货价高于阈值，四者任一即高价值，一律拦下走复核。
@@ -806,14 +806,14 @@ public class InventoryService {
                     SavedBottleCancelRequest actual = requireRequest(request);
                     requireText(actual.reason(), "reason");
                     SavedBottleRecord savedBottle = repository.findSavedBottleByIdForUpdate(id)
-                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
                     Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(savedBottle.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "saved bottle does not belong to your merchant");
+                                "该存酒记录不属于当前商户");
                     }
                     if (!List.of("stored", "pending_identity_review").contains(savedBottle.status())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_NOT_DISPUTABLE", "saved bottle is not disputable");
+                        throw ApiException.conflict("SAVED_BOTTLE_NOT_DISPUTABLE", "该存酒当前不可发起异议");
                     }
                     return repository.saveSavedBottle(savedBottleWith(
                             savedBottle, "disputed", savedBottle.remainingQuantity(), Instant.now()));
@@ -933,7 +933,7 @@ public class InventoryService {
                     StocktakeRecord stocktake = loadStocktakeScoped(id);
                     if (!List.of("counting", "reviewing").contains(stocktake.status())) {
                         throw ApiException.conflict("STOCKTAKE_NOT_OPEN",
-                                "stocktake is closed; cannot record variance");
+                                "盘点已关闭，不能再登记差异");
                     }
                     String itemId = requireText(actual.itemId(), "item_id");
                     String reason = normalizeAllowed(actual.reason(), INVENTORY_VARIANCE_REASONS, "reason");
@@ -992,19 +992,19 @@ public class InventoryService {
                     String decision = requireDecision(actual.decision());
                     InventoryVarianceRecord variance = repository.findInventoryVarianceByIdForUpdate(vId)
                             .orElseThrow(() -> ApiException.notFound(
-                                    "INVENTORY_VARIANCE_NOT_FOUND", "inventory variance not found"));
+                                    "INVENTORY_VARIANCE_NOT_FOUND", "库存差异不存在或已被删除"));
                     if (!variance.stocktakeId().equals(stId)) {
                         throw ApiException.notFound("INVENTORY_VARIANCE_NOT_FOUND",
-                                "inventory variance does not belong to the stocktake");
+                                "该库存差异不属于此盘点");
                     }
                     Optional<String> scope = authorizationService.currentMerchantScope();
                     if (scope.isPresent() && !scope.get().equals(variance.merchantId())) {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "inventory variance does not belong to your merchant");
+                                "该库存差异不属于当前商户");
                     }
                     if (!"pending".equals(variance.reviewStatus())) {
                         throw ApiException.conflict("INVENTORY_VARIANCE_NOT_PENDING",
-                                "inventory variance is not pending review");
+                                "该库存差异不在待审核状态");
                     }
                     String reviewer = authorizationService.currentActor().id();
                     Instant now = Instant.now();
@@ -1012,7 +1012,7 @@ public class InventoryService {
                     int affected = repository.reviewInventoryVarianceIfPending(vId, decision, reviewer, now);
                     if (affected != 1) {
                         throw ApiException.conflict("INVENTORY_VARIANCE_NOT_PENDING",
-                                "inventory variance was reviewed concurrently");
+                                "该库存差异已被并发审核，请刷新后重试");
                     }
                     // 盘点纠账：复核通过即把物理库存余额回写到实盘，消除账实持续背离。delta=variance_qty=counted−book（warehouse 合计口径）。
                     // 差异为 item 级（无 location 维度），按 (item,warehouse) 的余额行回写：
@@ -1088,7 +1088,7 @@ public class InventoryService {
                                 }
                                 if (remaining > 0) {
                                     throw ApiException.conflict("INVENTORY_VARIANCE_RECONCILE_INSUFFICIENT",
-                                            "warehouse balance insufficient to reconcile the approved shortage; manual adjustment required");
+                                            "仓库余量不足以核销已批准的短缺，需人工调整");
                                 }
                             }
                         }
@@ -1106,11 +1106,11 @@ public class InventoryService {
     /** 按 id 读取盘点单并校验归属（merchant scope）。不存在抛 404，跨商户抛 403。 */
     private StocktakeRecord loadStocktakeScoped(String stocktakeId) {
         StocktakeRecord stocktake = repository.findStocktakeById(stocktakeId)
-                .orElseThrow(() -> ApiException.notFound("STOCKTAKE_NOT_FOUND", "stocktake not found"));
+                .orElseThrow(() -> ApiException.notFound("STOCKTAKE_NOT_FOUND", "盘点不存在或已被删除"));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(stocktake.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "stocktake does not belong to your merchant");
+                    "该盘点不属于当前商户");
         }
         return stocktake;
     }
@@ -1125,7 +1125,7 @@ public class InventoryService {
             return 0L;
         }
         if (unitCostCents < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unit_cost_cents must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", "单位成本不能为负数");
         }
         return varianceQty
                 .multiply(java.math.BigDecimal.valueOf(unitCostCents))
@@ -1185,7 +1185,7 @@ public class InventoryService {
                     String itemId = requireText(actual.itemId(), "item_id");
                     repository.findInventoryItemById(itemId)
                             .orElseThrow(() -> ApiException.notFound(
-                                    "INVENTORY_ITEM_NOT_FOUND", "inventory item not found"));
+                                    "INVENTORY_ITEM_NOT_FOUND", "库存商品不存在或已被删除"));
                     // 归属隔离:商户范围用户强制用自身商户;平台管理员(无范围)代登记须在请求指定归属商户,
                     // 二者皆无则返回干净业务错(而非 NOT NULL 崩溃)。
                     String merchantId = authorizationService.currentMerchantScope()
@@ -1199,7 +1199,7 @@ public class InventoryService {
                     // 唯一冲突处理：码值已存在（非本次幂等重放）→ 409 拒绝。
                     repository.findTraceCodeByCode(traceCode).ifPresent(existing -> {
                         throw ApiException.conflict("TRACE_CODE_DUPLICATE",
-                                "trace code already exists");
+                                "溯源码已存在，请勿重复登记");
                     });
                     Instant now = Instant.now();
                     return repository.saveTraceCode(new InventoryTraceCodeRecord(
@@ -1238,14 +1238,14 @@ public class InventoryService {
                     InventoryTraceCodeRecord traceCode = loadTraceCodeScoped(id);
                     if (!"registered".equals(traceCode.status())) {
                         throw ApiException.conflict("TRACE_CODE_NOT_PRINTABLE",
-                                "trace code is not in registered status");
+                                "溯源码不在已登记状态");
                     }
                     Instant now = Instant.now();
                     // 条件 UPDATE WHERE status='registered'，受影响行数==1 才成功（防并发重复打印）。
                     int affected = repository.printTraceCodeIfRegistered(id, now, null);
                     if (affected != 1) {
                         throw ApiException.conflict("TRACE_CODE_NOT_PRINTABLE",
-                                "trace code was printed concurrently");
+                                "溯源码已被并发打印，请刷新后重试");
                     }
                     return new InventoryTraceCodeRecord(
                             traceCode.id(), traceCode.traceCode(), traceCode.itemId(), traceCode.batchId(),
@@ -1259,11 +1259,11 @@ public class InventoryService {
     private InventoryTraceCodeRecord loadTraceCodeScoped(String idOrCode) {
         InventoryTraceCodeRecord traceCode = repository.findTraceCodeById(idOrCode)
                 .or(() -> repository.findTraceCodeByCode(idOrCode))
-                .orElseThrow(() -> ApiException.notFound("TRACE_CODE_NOT_FOUND", "trace code not found"));
+                .orElseThrow(() -> ApiException.notFound("TRACE_CODE_NOT_FOUND", "溯源码不存在或已被删除"));
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(traceCode.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "trace code does not belong to your merchant");
+                    "该溯源码不属于当前商户");
         }
         return traceCode;
     }
@@ -1433,7 +1433,7 @@ public class InventoryService {
             LocalDate start = requireIsoDate(periodStart, "period_start");
             LocalDate end = requireIsoDate(periodEnd, "period_end");
             if (end.isBefore(start)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "period_end must not be before period_start");
+                throw ApiException.badRequest("VALIDATION_FAILED", "期间结束日期不能早于开始日期");
             }
             String scope = authorizationService.currentMerchantScope().orElse(null);
             String merchantId = scope != null ? scope : trimToNull(merchantIdParam);
@@ -1469,7 +1469,7 @@ public class InventoryService {
         try {
             return LocalDate.parse(trimmed);
         } catch (java.time.format.DateTimeParseException exception) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be an ISO date (yyyy-MM-dd)");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须为日期格式（yyyy-MM-dd）");
         }
     }
 
@@ -1569,7 +1569,7 @@ public class InventoryService {
                     com.complex.platform.inventory.dto.CreateTransferOrderRequest actual = requireRequest(request);
                     String transferType = requireText(actual.transferType(), "transfer_type");
                     if (!"supply".equals(transferType) && !"lending".equals(transferType)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "transfer_type must be supply or lending");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "调拨类型必须为供货（supply）或借调（lending）");
                     }
                     String fromType = requireText(actual.fromOwnerType(), "from_owner_type");
                     String fromId = requireText(actual.fromOwnerId(), "from_owner_id");
@@ -1577,19 +1577,19 @@ public class InventoryService {
                     String toId = requireText(actual.toOwnerId(), "to_owner_id");
                     if ("supply".equals(transferType)) {
                         if (!"supply_entity".equals(fromType)) {
-                            throw ApiException.badRequest("VALIDATION_FAILED", "supply transfer must originate from a supply_entity");
+                            throw ApiException.badRequest("VALIDATION_FAILED", "供货调拨必须由供货主体发起");
                         }
                         repository.findSupplyEntityById(fromId).orElseThrow(() ->
-                                ApiException.notFound("SUPPLY_ENTITY_NOT_FOUND", "supply entity not found"));
+                                ApiException.notFound("SUPPLY_ENTITY_NOT_FOUND", "供货主体不存在或已被删除"));
                     }
                     if (!"merchant".equals(toType)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "to_owner_type must be merchant");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "接收方类型必须为商户");
                     }
                     if ("lending".equals(transferType) && !"merchant".equals(fromType)) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "lending must be between merchants");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "借调必须发生在商户之间");
                     }
                     if (actual.lines() == null || actual.lines().isEmpty()) {
-                        throw ApiException.badRequest("VALIDATION_FAILED", "transfer must have at least one line");
+                        throw ApiException.badRequest("VALIDATION_FAILED", "调拨单至少需要一行明细");
                     }
                     Instant now = Instant.now();
                     String orderId = "trf_" + slug(actual.idempotencyKey());
@@ -1602,11 +1602,11 @@ public class InventoryService {
                     for (com.complex.platform.inventory.dto.TransferLineRequest lr : actual.lines()) {
                         int qty = lr.quantity() == null ? 0 : lr.quantity();
                         if (qty <= 0) {
-                            throw ApiException.badRequest("VALIDATION_FAILED", "line quantity must be positive");
+                            throw ApiException.badRequest("VALIDATION_FAILED", "明细数量必须大于 0");
                         }
                         long unitPrice = lr.unitPriceCent() == null ? 0L : lr.unitPriceCent();
                         if (unitPrice < 0L) {
-                            throw ApiException.badRequest("VALIDATION_FAILED", "line unit_price_cent must be non-negative");
+                            throw ApiException.badRequest("VALIDATION_FAILED", "明细单价不能为负数");
                         }
                         repository.saveTransferLine(new InventoryTransferLineRecord(
                                 orderId + "_l" + (idx++), orderId, requireText(lr.itemId(), "item_id"), qty,
@@ -1624,9 +1624,9 @@ public class InventoryService {
                 "inventory.transfer_order.manage", "inventory_transfer_order",
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
-                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
                     if (!"created".equals(o.status())) {
-                        throw ApiException.conflict("TRANSFER_ORDER_NOT_CREATED", "only created orders can be shipped");
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_CREATED", "只有新建状态的调拨单才能发货");
                     }
                     recordTransferSettlementOnShip(o, Instant.now());
                     return repository.saveTransferOrder(withTransferStatus(o, "shipped"));
@@ -1640,9 +1640,9 @@ public class InventoryService {
                 "inventory.transfer_order.manage", "inventory_transfer_order",
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
-                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
                     if (!"shipped".equals(o.status())) {
-                        throw ApiException.conflict("TRANSFER_ORDER_NOT_SHIPPED", "only shipped orders can be received");
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_SHIPPED", "只有已发货的调拨单才能收货");
                     }
                     Instant now = Instant.now();
                     java.util.LinkedHashSet<String> orderCodes = new java.util.LinkedHashSet<>();
@@ -1652,13 +1652,13 @@ public class InventoryService {
                     List<String> scanned = request == null || request.scannedTraceCodes() == null ? List.of() : request.scannedTraceCodes();
                     for (String code : scanned) {
                         if (!orderCodes.contains(code)) {
-                            throw ApiException.badRequest("TRACE_CODE_MISMATCH", "scanned trace code does not belong to this transfer: " + code);
+                            throw ApiException.badRequest("TRACE_CODE_MISMATCH", "扫描的溯源码不属于本次调拨：" + code);
                         }
                     }
                     // 防调包:本单有随货溯源码时,收货必须逐码扫齐(空扫/漏扫拒绝),扫描集须与本单集完全一致。
                     if (!orderCodes.isEmpty() && !new java.util.HashSet<>(scanned).equals(new java.util.HashSet<>(orderCodes))) {
                         throw ApiException.badRequest("TRACE_CODE_INCOMPLETE",
-                                "scanned trace codes must exactly match this transfer's codes; expected " + orderCodes.size());
+                                "扫描的溯源码必须与本次调拨的码完全一致，应为 " + orderCodes.size() + " 个");
                     }
                     // 溯源归属 from->to:写归属变更台账(防调包+对账)+尽力更新溯源码归属(存在则更新)。
                     int seq = 0;
@@ -1668,7 +1668,7 @@ public class InventoryService {
                         int affected = repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
                         if (affected == 0 && repository.traceCodeExists(code)) {
                             throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
-                                    "trace code belongs to another party, cannot receive: " + code);
+                                    "溯源码属于其他主体，不能收货：" + code);
                         }
                         repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
                                 o.id() + "_h" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
@@ -1688,13 +1688,13 @@ public class InventoryService {
                 "inventory.transfer_order_return_failed", "inventory.transfer_order.manage", "inventory_transfer_order",
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
-                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
                     if (!("lending".equals(o.transferType()) && "borrow".equals(o.lendingMode()))) {
                         throw ApiException.badRequest("TRANSFER_NOT_RETURNABLE",
-                                "only borrowed lending orders can be returned");
+                                "只有已借出的借调单才能归还");
                     }
                     if (!"received".equals(o.status())) {
-                        throw ApiException.conflict("TRANSFER_ORDER_NOT_RECEIVED", "only received orders can be returned");
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_RECEIVED", "只有已收货的调拨单才能退回");
                     }
                     Instant now = Instant.now();
                     java.util.LinkedHashSet<String> orderCodes = new java.util.LinkedHashSet<>();
@@ -1708,7 +1708,7 @@ public class InventoryService {
                                 code, o.toOwnerId(), o.fromOwnerType(), o.fromOwnerId(), now);
                         if (affected == 0 && repository.traceCodeExists(code)) {
                             throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
-                                    "trace code no longer belongs to borrower, cannot return: " + code);
+                                    "溯源码已不属于借入方，不能归还：" + code);
                         }
                         repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
                                 o.id() + "_r" + (seq++), code, o.toOwnerType(), o.toOwnerId(),
@@ -1727,10 +1727,10 @@ public class InventoryService {
                 "inventory.transfer_order_cancel_failed", "inventory.transfer_order.manage", "inventory_transfer_order",
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
-                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
                     if (!"created".equals(o.status()) && !"shipped".equals(o.status())) {
                         throw ApiException.conflict("TRANSFER_ORDER_NOT_CANCELLABLE",
-                                "only created or shipped orders can be cancelled");
+                                "只有新建或已发货的调拨单才能取消");
                     }
                     if ("shipped".equals(o.status()) && financeRepository != null) {
                         reverseTransferSettlementOnCancel(o, Instant.now());
@@ -1744,7 +1744,7 @@ public class InventoryService {
         financeRepository.findArApItemById("arap_trf_" + o.id()).ifPresent(item -> {
             if (item.paidAmountCent() > 0L) {
                 throw ApiException.conflict("TRANSFER_PAYABLE_PARTIALLY_PAID",
-                        "transfer payable already has payments; refund before cancelling");
+                        "调拨应付款已有付款记录，请先退款再取消");
             }
             financeRepository.updateArApItemLedger(new com.complex.platform.finance.ArApItemRecord(
                     item.id(), item.itemNo(), item.direction(), item.counterpartyId(), item.sourceType(), item.sourceId(),
@@ -1756,7 +1756,7 @@ public class InventoryService {
     public InventoryTransferOrderRecord getTransferOrder(String orderId) {
         authorizationService.requirePermission("inventory.transfer_order.view");
         InventoryTransferOrderRecord o = repository.findTransferOrderById(requireText(orderId, "order_id")).orElseThrow(() ->
-                ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "transfer order not found"));
+                ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
                 o.createdBy(), o.createdAt(), o.updatedAt(), repository.listTransferLinesByOrder(o.id()));
@@ -1909,7 +1909,7 @@ public class InventoryService {
                     String segment = requireSegment(actual.segment());
                     if (ROBOT_SEGMENT.equals(segment)) {
                         throw ApiException.badRequest("HANDOVER_SEGMENT_NOT_STAFF",
-                                "dispatch segment is robot-passive; use robot-report");
+                                "该配送段由机器人被动执行，请使用机器人上报接口");
                     }
                     TraceHandoverRecord header = requireHandover(id);
                     enforceHandoverOwnership(header);
@@ -2005,12 +2005,12 @@ public class InventoryService {
                     String decision = requireDecision(actual.decision());
                     TraceHandoverExceptionRecord exception = repository.findTraceHandoverExceptionByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound(
-                                    "HANDOVER_EXCEPTION_NOT_FOUND", "trace handover exception not found"));
+                                    "HANDOVER_EXCEPTION_NOT_FOUND", "交接异常不存在或已被删除"));
                     // 2e 溯源归属：复核异常须校验所属 handover 归属（防携他人 exceptionId 跨租户复核、篡改责任链结论）。
                     enforceHandoverOwnership(requireHandover(exception.handoverId()));
                     if (!"pending".equals(exception.reviewStatus())) {
                         throw ApiException.conflict("HANDOVER_EXCEPTION_NOT_PENDING",
-                                "trace handover exception is not pending");
+                                "该交接异常不在待处理状态");
                     }
                     String reviewer = authorizationService.currentActor().id();
                     Instant now = Instant.now();
@@ -2247,7 +2247,7 @@ public class InventoryService {
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(header.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "access to another merchant's trace handover is not allowed");
+                        "无权操作其他商户的交接记录");
             }
         });
     }
@@ -2262,12 +2262,12 @@ public class InventoryService {
 
     private TraceHandoverRecord requireHandover(String handoverId) {
         return repository.findTraceHandoverByIdForUpdate(handoverId)
-                .orElseThrow(() -> ApiException.notFound("HANDOVER_NOT_FOUND", "trace handover not found"));
+                .orElseThrow(() -> ApiException.notFound("HANDOVER_NOT_FOUND", "交接记录不存在或已被删除"));
     }
 
     private TraceHandoverStepRecord requireStep(String handoverId, String segment) {
         return repository.findTraceHandoverStep(handoverId, segment)
-                .orElseThrow(() -> ApiException.notFound("HANDOVER_STEP_NOT_FOUND", "trace handover step not found"));
+                .orElseThrow(() -> ApiException.notFound("HANDOVER_STEP_NOT_FOUND", "交接环节不存在或已被删除"));
     }
 
     private String requireSegment(String segment) {
@@ -2281,7 +2281,7 @@ public class InventoryService {
     private String requireDecision(String decision) {
         String value = requireText(decision, "decision").toLowerCase(Locale.ROOT);
         if (!Set.of("approved", "rejected").contains(value)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+            throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过（approved）或驳回（rejected）");
         }
         return value;
     }
@@ -2299,12 +2299,12 @@ public class InventoryService {
         InventoryStockBatchRequest actual = requireRequest(request);
         String itemId = requireText(actual.itemId(), "item_id");
         InventoryItemRecord ownedItem = repository.findInventoryItemById(itemId)
-                .orElseThrow(() -> ApiException.notFound("INVENTORY_ITEM_NOT_FOUND", "inventory item not found"));
+                .orElseThrow(() -> ApiException.notFound("INVENTORY_ITEM_NOT_FOUND", "库存商品不存在或已被删除"));
         // C1：建批次前校验物料归属当前商户，防跨商户对他人物料建批次。
         authorizationService.currentMerchantScope().ifPresent(scope -> {
             if (!scope.equals(ownedItem.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "inventory item does not belong to your merchant");
+                        "该库存商品不属于当前商户");
             }
         });
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
@@ -2419,12 +2419,12 @@ public class InventoryService {
         boolean supplierExists = repository.listInventorySuppliers().stream()
                 .anyMatch(supplier -> supplier.id().equals(supplierId));
         if (!supplierExists) {
-            throw ApiException.notFound("SUPPLIER_NOT_FOUND", "inventory supplier not found");
+            throw ApiException.notFound("SUPPLIER_NOT_FOUND", "供应商不存在或已被删除");
         }
         LocalDate periodStart = requireDate(actual.periodStart(), "period_start");
         LocalDate periodEnd = requireDate(actual.periodEnd(), "period_end");
         if (periodEnd.isBefore(periodStart)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period_end must be on or after period_start");
+            throw ApiException.badRequest("VALIDATION_FAILED", "期间结束日期不能早于开始日期");
         }
         long expectedAmountCent = requireNonNegativeLong(actual.expectedAmountCent(), "expected_amount_cent");
         long actualAmountCent = requireNonNegativeLong(actual.actualAmountCent(), "actual_amount_cent");
@@ -2587,7 +2587,7 @@ public class InventoryService {
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
@@ -2622,23 +2622,23 @@ public class InventoryService {
     private int requirePositiveItemQuantity(Map<String, Object> item, String fieldName) {
         String raw = textFromItem(item, fieldName);
         if (raw == null || !raw.matches("[0-9]+")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be a positive integer");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须为正整数");
         }
         try {
             int quantity = Integer.parseInt(raw);
             if (quantity <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+                throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
             }
             return quantity;
         } catch (NumberFormatException exception) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is out of range");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 超出允许范围");
         }
     }
 
     private int nonNegativeOrDefault(Integer value, int defaultValue, String fieldName) {
         int actual = value == null ? defaultValue : value;
         if (actual < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return actual;
     }
@@ -2646,21 +2646,21 @@ public class InventoryService {
     /** 可空非负长整：null 透传（如高价值阈值 null=不视高价值），非空须 >= 0。 */
     private Long nonNegativeOrNull(Long value, String fieldName) {
         if (value != null && value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return value;
     }
 
     private int requirePositiveInteger(Integer value, String fieldName) {
         if (value == null || value <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 必须大于 0");
         }
         return value;
     }
 
     private long requireNonNegativeLong(Long value, String fieldName) {
         if (value == null || value < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " 不能为负数");
         }
         return value;
     }
@@ -2683,7 +2683,7 @@ public class InventoryService {
     private int expiryWarningDays(Integer value) {
         int actual = value == null ? 7 : value;
         if (actual < 1 || actual > 365) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "expiry_warning_days must be between 1 and 365");
+            throw ApiException.badRequest("VALIDATION_FAILED", "临期预警天数必须在 1 到 365 之间");
         }
         return actual;
     }

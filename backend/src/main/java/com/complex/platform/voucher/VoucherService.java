@@ -137,7 +137,7 @@ public class VoucherService implements VoucherIssuePort {
     public PageResponse<VoucherOverviewRecord> customerOverview(String customerId, int page, int pageSize) {
         String scoped = blankToNull(customerId);
         if (scoped == null) {
-            throw ApiException.unauthorized("CUSTOMER_REQUIRED", "customer token required");
+            throw ApiException.unauthorized("CUSTOMER_REQUIRED", "客人登录凭证缺失，请重新登录");
         }
         return operations.readPageResult(
                 AuditedOperation.of("voucher.customer_wallet_viewed", "voucher.customer_wallet_view_failed", VIEW_PERM, BUSINESS_TYPE),
@@ -182,17 +182,17 @@ public class VoucherService implements VoucherIssuePort {
         String merchantId = blankToNull(request.merchantId());
         if ("merchant_discount".equals(kind)) {
             if (request.faceValueCent() == null || request.faceValueCent() <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "merchant_discount requires face_value_cent > 0");
+                throw ApiException.badRequest("VALIDATION_FAILED", "商户折扣券必须填写大于 0 的面值（face_value_cent）");
             }
             if (merchantId == null) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "merchant_discount requires merchant_id");
+                throw ApiException.badRequest("VALIDATION_FAILED", "商户折扣券必须指定商户（merchant_id）");
             }
         }
         if ("in_store_goods".equals(kind)) {
             requireText(request.inventoryItemId(), "inventory_item_id");
             requireText(request.stockLocationId(), "stock_location_id");
             if (request.stockQuantity() == null || request.stockQuantity() <= 0) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "in_store_goods requires stock_quantity > 0");
+                throw ApiException.badRequest("VALIDATION_FAILED", "到店商品券必须填写大于 0 的库存数量（stock_quantity）");
             }
         }
         // 批10/E(V380)：内部结算价唯一可编辑处 = SKU 目录。直填一律拒绝(静默忽略会骗运营"以为配好了")。
@@ -230,7 +230,7 @@ public class VoucherService implements VoucherIssuePort {
                     "仅 internal_price 结算口径可引用内部结算 SKU 目录条目");
         }
         if (request.validDays() != null && request.validDays() <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "valid_days must be positive when present");
+            throw ApiException.badRequest("VALIDATION_FAILED", "有效天数（valid_days）如填写必须大于 0");
         }
         // I-2 商户 scope 守卫：商户账号只能建自家商户的券定义。
         checkMerchantOwnership(merchantId);
@@ -250,7 +250,7 @@ public class VoucherService implements VoucherIssuePort {
             repository.setDefinitionCatalogRef(id, catalogItemCode);
         }
         return repository.findDefinitionById(id)
-                .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "voucher definition insert lost race"));
+                .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "券定义创建时发生并发冲突，请重试"));
     }
 
     // ── 发放（营销赠券收编入口）───────────────────────────────────────────
@@ -275,12 +275,12 @@ public class VoucherService implements VoucherIssuePort {
         String customerId = requireText(request.customerId(), "customer_id");
         int quantity = request.quantity() == null ? 1 : request.quantity();
         if (quantity <= 0 || quantity > MAX_ISSUE_QUANTITY) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "quantity must be between 1 and " + MAX_ISSUE_QUANTITY);
+            throw ApiException.badRequest("VALIDATION_FAILED", "发放数量必须介于 1 到 " + MAX_ISSUE_QUANTITY + " 之间");
         }
         VoucherDefinitionRecord definition = repository.findDefinitionById(definitionId)
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "voucher definition not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "券定义不存在或已被删除"));
         if (!"active".equals(definition.status())) {
-            throw ApiException.conflict("VOUCHER_DEFINITION_DISABLED", "voucher definition is disabled");
+            throw ApiException.conflict("VOUCHER_DEFINITION_DISABLED", "该券定义已停用");
         }
         // 商户 scope 账号只能发自家商户的券（平台通用定义商户账号不发）。
         if (authorizationService.currentMerchantScope().isPresent()) {
@@ -327,7 +327,7 @@ public class VoucherService implements VoucherIssuePort {
                 null, item.inventoryItemId(), item.stockLocationId(),
                 Math.max(item.stockQuantity(), 1), null, null, null, "active", true, now, now));
         return repository.findDefinitionById(id)
-                .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "derived definition insert lost race"));
+                .orElseThrow(() -> ApiException.conflict("VOUCHER_DEFINITION_CONFLICT", "派生券定义创建时发生并发冲突，请重试"));
     }
 
     private VoucherInstanceRecord issueOne(
@@ -389,9 +389,9 @@ public class VoucherService implements VoucherIssuePort {
     private VoucherInstanceRecord revokeInternal(String instanceId, VoucherRevokeRequest request) {
         String reason = requireText(request.reason(), "reason");
         VoucherInstanceRecord instance = repository.findInstanceById(instanceId)
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "voucher instance not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
         VoucherDefinitionRecord definition = repository.findDefinitionById(instance.definitionId())
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "voucher definition not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "券定义不存在或已被删除"));
         checkMerchantOwnership(definition.merchantId());
         if (!VoucherStateMachine.canTransition(instance.status(), VoucherStateMachine.REVOKED)) {
             throw ApiException.conflict("VOUCHER_NOT_REVOCABLE",
@@ -399,7 +399,7 @@ public class VoucherService implements VoucherIssuePort {
         }
         Instant now = Instant.now();
         if (repository.updateInstanceStatus(instanceId, VoucherStateMachine.ISSUED, VoucherStateMachine.REVOKED, now, reason) == 0) {
-            throw ApiException.conflict("VOUCHER_NOT_REVOCABLE", "voucher state changed concurrently");
+            throw ApiException.conflict("VOUCHER_NOT_REVOCABLE", "券状态已被其他操作变更，请刷新后重试");
         }
         // V312：作废店内实物券即释放其预占（reserved->available），把库存还给可用池。
         if (instance.stockReserved() && "in_store_goods".equals(definition.voucherKind())) {
@@ -456,7 +456,7 @@ public class VoucherService implements VoucherIssuePort {
         Instant now = Instant.now();
         VoucherInstanceRecord instance = resolveInstance(request);
         VoucherDefinitionRecord definition = repository.findDefinitionById(instance.definitionId())
-                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "voucher definition not found"));
+                .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "券定义不存在或已被删除"));
         // 越权防：定义绑定商户的券，商户 scope 账号只能核自家；平台通用券（merchant_id 空）任意核销点可核。
         checkMerchantOwnership(definition.merchantId());
         String block = VoucherStateMachine.redeemBlockReason(instance.status(), instance.expiresAt(), now);
@@ -470,7 +470,7 @@ public class VoucherService implements VoucherIssuePort {
                             definition.inventoryItemId(), definition.stockLocationId(), goodsQuantity(definition));
                 }
             }
-            throw ApiException.conflict(block, "voucher is not redeemable: " + block);
+            throw ApiException.conflict(block, "该券当前不可核销：" + block);
         }
         // V313 转赠冻结：券有在途转赠（pending）时不能核销，须持券人先撤回（与领取端 CAS 构成双花双闸）。
         if (transferRepository.existsPendingForInstance(instance.id())) {
@@ -495,7 +495,7 @@ public class VoucherService implements VoucherIssuePort {
         // CAS 占位：并发双核销第一道闸（第二道＝核销记录实例级唯一索引）。
         if (repository.updateInstanceStatus(instance.id(), VoucherStateMachine.ISSUED,
                 VoucherStateMachine.REDEEMED, now, null) == 0) {
-            throw ApiException.conflict("VOUCHER_ALREADY_REDEEMED", "voucher was redeemed concurrently");
+            throw ApiException.conflict("VOUCHER_ALREADY_REDEEMED", "该券已被并发核销，请勿重复操作");
         }
         String redemptionId = "vrr_" + instance.id();
         String stockMovementRef = null;
@@ -540,7 +540,7 @@ public class VoucherService implements VoucherIssuePort {
                 settlementAmount, arApItemId, stockMovementRef, null,
                 blankToNull(request.note()), now, now);
         if (!repository.insertRedemption(entry)) {
-            throw ApiException.conflict("VOUCHER_ALREADY_REDEEMED", "redemption record already exists for this voucher");
+            throw ApiException.conflict("VOUCHER_ALREADY_REDEEMED", "该券已有核销记录，请勿重复核销");
         }
         return entry;
     }
@@ -549,11 +549,11 @@ public class VoucherService implements VoucherIssuePort {
         String code = blankToNull(request.code());
         String instanceId = blankToNull(request.voucherInstanceId());
         if (code == null && instanceId == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "code or voucher_instance_id is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "券码或券编号必须至少填写一项");
         }
         Optional<VoucherInstanceRecord> found =
                 instanceId != null ? repository.findInstanceById(instanceId) : repository.findInstanceByCode(code);
-        return found.orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "voucher instance not found"));
+        return found.orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
     }
 
     // ── 工具 ───────────────────────────────────────────────────────────────
@@ -568,7 +568,7 @@ public class VoucherService implements VoucherIssuePort {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && resourceMerchantId != null && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "access to another merchant's voucher is not allowed");
+                    "无权操作其他商户的券");
         }
     }
 
@@ -594,21 +594,21 @@ public class VoucherService implements VoucherIssuePort {
 
     private static void requireRequest(Object request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
     }
 
     private static String requireEnum(String value, Set<String> allowed, String field) {
         String trimmed = requireText(value, field);
         if (!allowed.contains(trimmed)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", field + " must be one of " + allowed);
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " 的取值必须是以下之一：" + allowed);
         }
         return trimmed;
     }
 
     private static void requireOptionalEnum(String value, Set<String> allowed, String field) {
         if (value != null && !value.isBlank() && !allowed.contains(value)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unknown " + field + ": " + value);
+            throw ApiException.badRequest("VALIDATION_FAILED", "无法识别的 " + field + "：" + value);
         }
     }
 

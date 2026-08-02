@@ -720,7 +720,7 @@ class TicketingServiceTests {
         assertThatThrownBy(() -> catalog.requestDeleteEntitlementTemplate("tpl_del",
                 new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest("k1", "误配"), "op_a"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("archived");
+                .hasMessageContaining("存档");
 
         catalog.archiveEntitlementTemplate("tpl_del", true, "测试存档理由", "op_a");
         catalog.requestDeleteEntitlementTemplate("tpl_del",
@@ -731,7 +731,7 @@ class TicketingServiceTests {
         assertThatThrownBy(() -> catalog.approveDeleteEntitlementTemplate("tpl_del",
                 new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest("k2", "approved", null), "op_a"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("cannot approve");
+                .hasMessageContaining("不能审批");
 
         // 他人审批通过 → 物理删除。
         EntitlementTemplateDeleteDecision decision = catalog.approveDeleteEntitlementTemplate("tpl_del",
@@ -916,7 +916,7 @@ class TicketingServiceTests {
         assertThatThrownBy(() -> catalog.approveDeleteEntitlementTemplate("tpl_used",
                 new com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest("k2", "approved", null), "op_b"))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("referenced");
+                .hasMessageContaining("引用");
         // 仍在库（未删）。
         assertThat(ticketingRepository.findEntitlementTemplateById("tpl_used")).isPresent();
     }
@@ -975,7 +975,7 @@ class TicketingServiceTests {
                         new com.complex.platform.ticketing.dto.VerificationReverseRequest("reverse-dup-rev-2", "再次冲正"),
                         "supervisor_1"))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageMatching(".*(reversed|reversible).*");
+                .hasMessageMatching(".*(已冲正|冲正).*");
         // used_times 不被二次回滚（仍为 0，不会变负）。
         assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
                 .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(0);
@@ -1024,7 +1024,7 @@ class TicketingServiceTests {
                         new com.complex.platform.ticketing.dto.VerificationReverseRequest("reverse-concurrent-rev", "并发重复冲正"),
                         "loser"))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageMatching(".*(reversed|reversible).*");
+                .hasMessageMatching(".*(已冲正|冲正).*");
 
         // used_times 未被败方二次回滚（仍为 2；真实并发中胜方那一路才回滚到 1）。修复前败方会把它再减一次=1（双减虚增）。
         assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
@@ -1187,7 +1187,7 @@ class TicketingServiceTests {
                         Map.of()
                 )))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("ticket type not found");
+                .hasMessageContaining("票种不存在或已被删除");
 
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
@@ -1245,7 +1245,7 @@ class TicketingServiceTests {
                         "customer_1"
                 )))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("quantity must be positive");
+                .hasMessageContaining("quantity 必须大于 0");
     }
 
     @Test
@@ -1509,7 +1509,7 @@ class TicketingServiceTests {
                         Map.of()
                 )))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("credential not found");
+                .hasMessageContaining("核销凭证不存在或已失效");
     }
 
     @Test
@@ -1535,7 +1535,7 @@ class TicketingServiceTests {
                         Map.of()
                 )))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("credential is expired");
+                .hasMessageContaining("核销凭证已过期，请刷新后重试");
     }
 
     // T4：刷新窗口与票种级 refresh_interval_seconds 联动（替换硬编码 300s）。
@@ -1887,7 +1887,7 @@ class TicketingServiceTests {
                 TicketRefundRequest.ofTicketInstances(
                         "d-refund", "refund", List.of(), "o_d", null, "dup", "original", List.of("inst_d", "inst_d"))))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
-                        assertThat(ex.getMessage().toLowerCase()).contains("duplicate"));
+                        assertThat(ex.getMessage().toLowerCase()).contains("重复"));
     }
 
     @Test
@@ -2180,7 +2180,7 @@ class TicketingServiceTests {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> tiered.approveRefund(review.id(), new StatusChangeRequest(
                         "tier-review-selfapprove", "approve", "approved", List.of())))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("requester of a refund cannot approve");
+                .hasMessageContaining("退款申请人不能自行审批");
 
         // 不同审批人 op_other 放行 → 生效（审批人留痕 op_other、发起人仍 op_tiny、权益冻结）。
         actAsAdmin("op_other");
@@ -2822,7 +2822,7 @@ class TicketingServiceTests {
                         "expired-verify", "qr", code, "dev_1", "gate_1", Map.of()
                 )))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("entitlement has expired");
+                .hasMessageContaining("该权益已过期");
 
         VerificationPreviewResponse preview = service.previewVerification(new VerificationRequest(
                 "expired-preview", "qr", code, "dev_1", "gate_1", Map.of()
@@ -2851,7 +2851,7 @@ class TicketingServiceTests {
                         "atomic-second-key", "qr", code, "dev_1", "gate_1", Map.of()
                 )))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("entitlement has no remaining times");
+                .hasMessageContaining("该权益剩余次数已用完");
 
         org.assertj.core.api.Assertions.assertThat(ticketingRepository.findIssuedEntitlementByCode(code))
                 .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(1);
@@ -2894,7 +2894,7 @@ class TicketingServiceTests {
                         new StatusChangeRequest("payment-guard-issue", "issue", "force issue", List.of())
                 ))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("order must be paid before issuing");
+                .hasMessageContaining("订单须支付完成后才能出票");
     }
 
     @Test
@@ -3642,12 +3642,12 @@ class TicketingServiceTests {
                 "b2-badvalidity", "create", List.of(), "坏有效期", "weekday_weekend_holiday",
                 9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 0, null)))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessage()).contains("validity_days"));
+                        e -> assertThat(e.getMessage()).contains("有效天数"));
         assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
                 "b2-badrefresh", "create", List.of(), "坏刷新", "weekday_weekend_holiday",
                 9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 7, 12)))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
+                        e -> assertThat(e.getMessage()).contains("刷新间隔秒数"));
     }
 
     // 2026-07-18 拍板：验证二维码默认 15 秒动态刷新，白名单放宽为 {10,15,30,60}（V300）。
@@ -3675,7 +3675,7 @@ class TicketingServiceTests {
                 "qr12-bad", "create", List.of(), "十二秒票", "weekday_weekend_holiday",
                 9900L, 11900L, 12900L, List.of(), false, null, null, null, true, null, 1, 12)))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
+                        e -> assertThat(e.getMessage()).contains("刷新间隔秒数"));
     }
 
     // #172(2026-07-19 拍板)：全场统一动态码刷新间隔端点——边界 5 通过 / 60 通过 / 65 拒 / 12 拒（非 5 倍数）；统一读一套。
@@ -3686,10 +3686,10 @@ class TicketingServiceTests {
         assertThat(service.getQrRefreshConfig().refreshIntervalSeconds()).isEqualTo(60);
         assertThatThrownBy(() -> service.updateQrRefreshConfig(new QrRefreshConfigRequest("qrc-65", 65)))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
+                        e -> assertThat(e.getMessage()).contains("刷新间隔秒数"));
         assertThatThrownBy(() -> service.updateQrRefreshConfig(new QrRefreshConfigRequest("qrc-12", 12)))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.getMessage()).contains("refresh_interval_seconds"));
+                        e -> assertThat(e.getMessage()).contains("刷新间隔秒数"));
     }
 
     // 票种未配置刷新秒数 → 凭证窗口回退新默认 15 秒（不再是 60）。
