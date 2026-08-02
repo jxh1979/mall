@@ -27,9 +27,9 @@ import org.junit.jupiter.api.Test;
 
 class AdmissionGuardTests {
 
-    private final AdmissionPolicyRepository policyRepo = mock(AdmissionPolicyRepository.class);
+    private final JdbcAdmissionPolicyRepository policyRepo = mock(JdbcAdmissionPolicyRepository.class);
     private final SupervisorReviewService reviewService = mock(SupervisorReviewService.class);
-    private final AdmissionFactRepository factRepo = mock(AdmissionFactRepository.class);
+    private final JdbcAdmissionFactRepository factRepo = mock(JdbcAdmissionFactRepository.class);
     private final AuthorizationService authz = mock(AuthorizationService.class);
     private final InMemoryAuditEventRepository auditRepo = new InMemoryAuditEventRepository();
     private final AdmissionGuard guard = new AdmissionGuard(

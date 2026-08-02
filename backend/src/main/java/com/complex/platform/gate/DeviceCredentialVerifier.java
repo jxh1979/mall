@@ -4,7 +4,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.StaffDeviceCredentialRecord;
 import com.complex.platform.access.staff.StaffProfileRecord;
-import com.complex.platform.access.staff.StaffRepository;
+import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.terminal.DeviceSigningKeyStore;
@@ -58,7 +58,7 @@ public class DeviceCredentialVerifier {
     enum Mode { OFF, GRACE, ENFORCE }
 
     private final TerminalDeviceRepository deviceRepository;
-    private final StaffRepository staffRepository;
+    private final JdbcStaffRepository staffRepository;
     private final DeviceSigningKeyStore deviceSigningKeyStore;
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
@@ -71,7 +71,7 @@ public class DeviceCredentialVerifier {
     @org.springframework.beans.factory.annotation.Autowired
     public DeviceCredentialVerifier(
             TerminalDeviceRepository deviceRepository,
-            StaffRepository staffRepository,
+            JdbcStaffRepository staffRepository,
             DeviceSigningKeyStore deviceSigningKeyStore,
             AuthorizationService authorizationService,
             AuditEventService auditEventService,
@@ -89,7 +89,7 @@ public class DeviceCredentialVerifier {
 
     DeviceCredentialVerifier(
             TerminalDeviceRepository deviceRepository,
-            StaffRepository staffRepository,
+            JdbcStaffRepository staffRepository,
             DeviceSigningKeyStore deviceSigningKeyStore,
             AuthorizationService authorizationService,
             AuditEventService auditEventService,

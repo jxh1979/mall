@@ -15,8 +15,9 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+// ponytail: 仓储直用实现类,无接口(one impl)。
 @Repository
-class JdbcNotificationRepository implements NotificationRepository {
+class JdbcNotificationRepository {
 
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE = new TypeReference<>() {
     };
@@ -29,7 +30,6 @@ class JdbcNotificationRepository implements NotificationRepository {
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
     }
 
-    @Override
     public NotificationSendLogRecord insert(NotificationSendLogRecord record) {
         int inserted = jdbcTemplate.update("""
                 INSERT INTO notification_send_log (
@@ -49,7 +49,6 @@ class JdbcNotificationRepository implements NotificationRepository {
                 .orElseThrow(() -> new IllegalStateException("notification send log conflict row was not found"));
     }
 
-    @Override
     public Optional<NotificationSendLogRecord> findByRequestId(String requestId) {
         return jdbcTemplate.query("""
                 SELECT id, request_id, channel, domain, event_key, recipient, template_code,
@@ -59,7 +58,6 @@ class JdbcNotificationRepository implements NotificationRepository {
                 """, Map.of("request_id", requestId), this::mapRecord).stream().findFirst();
     }
 
-    @Override
     public NotificationSendLogRecord updateStatus(
             String requestId,
             String status,

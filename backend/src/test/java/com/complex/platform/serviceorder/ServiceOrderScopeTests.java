@@ -7,7 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AuthorizationService;
-import com.complex.platform.access.staff.StaffRepository;
+import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
@@ -19,15 +19,15 @@ import org.junit.jupiter.api.Test;
 /** 清单 P1(2026-07-03 审计):服务点单跨综合体写/动作隔离——项目A调用者不得操作项目B的服务单。 */
 class ServiceOrderScopeTests {
 
-    private ServiceOrderRepository repo;
+    private JdbcServiceOrderRepository repo;
     private AuthorizationService authz;
-    private StaffRepository staffRepo;
+    private JdbcStaffRepository staffRepo;
 
     private ServiceOrderService build() {
-        repo = mock(ServiceOrderRepository.class);
+        repo = mock(JdbcServiceOrderRepository.class);
         AuditEventService audit = mock(AuditEventService.class);
         authz = mock(AuthorizationService.class);
-        staffRepo = mock(StaffRepository.class);
+        staffRepo = mock(JdbcStaffRepository.class);
         IdempotencyService idem = mock(IdempotencyService.class);
         // 幂等封装直接执行 action(不测幂等,只测 scope 守卫)。
         when(idem.execute(any(), any(), any(), any(), any()))

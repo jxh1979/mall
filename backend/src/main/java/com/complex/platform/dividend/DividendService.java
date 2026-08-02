@@ -21,7 +21,7 @@ import com.complex.platform.dividend.dto.DividendComputeRequest;
 import com.complex.platform.dividend.dto.DividendPlanRequest;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
-import com.complex.platform.finance.DividendPayoutPort;
+import com.complex.platform.finance.FinanceService;
 import com.complex.platform.inventory.InventoryCostSummaryRecord;
 import com.complex.platform.inventory.InventoryRepository;
 import java.nio.charset.StandardCharsets;
@@ -103,7 +103,7 @@ public class DividendService {
     private final BusinessDayResolver businessDayResolver;
     private final AuthorizationService authorizationService;
     private final AuditedOperationExecutor operations;
-    private final DividendPayoutPort payoutPort;
+    private final FinanceService payoutPort;
 
     public DividendService(
             DividendRepository repository,
@@ -111,7 +111,7 @@ public class DividendService {
             BusinessDayResolver businessDayResolver,
             AuthorizationService authorizationService,
             AuditedOperationExecutor operations,
-            DividendPayoutPort payoutPort) {
+            FinanceService payoutPort) {
         this.repository = repository;
         this.inventoryRepository = inventoryRepository;
         this.businessDayResolver = businessDayResolver;
@@ -457,10 +457,10 @@ public class DividendService {
         // V303 扣除项三开关（默认全关时逐分等于 V299 现状）。
         // 亏损结转累计恒结转：无论本期开关都读往期累计（关闭期不扣但不清零，用户 2026-07-19 拍板）。
         long carryIn = repository.priorLossCarryforwardCent(merchantId, period.start());
-        List<DividendPayoutPort.DividendArrearsItem> arrearsItems = plan.arrearsOffsetEnabled()
+        List<FinanceService.DividendArrearsItem> arrearsItems = plan.arrearsOffsetEnabled()
                 ? payoutPort.listOutstandingReceivables(merchantId) : List.of();
         long arrearsOutstanding = arrearsItems.stream()
-                .mapToLong(DividendPayoutPort.DividendArrearsItem::unpaidCent).sum();
+                .mapToLong(FinanceService.DividendArrearsItem::unpaidCent).sum();
 
         // V308 主理人类型分支：公司股东不代扣个税（生效税率强制 0，全额发放）；个人股东按方案税率代扣。
         boolean isCompany = "company".equals(plan.principalType());
@@ -506,7 +506,7 @@ public class DividendService {
         if (plan.arrearsOffsetEnabled() && dist.arrearsOffsetCent() > 0) {
             // 逐项留痕：先欠先抵（arrearsItems 已按 created_at 升序），单据审批时按此冻结额逐项结算。
             long remaining = dist.arrearsOffsetCent();
-            for (DividendPayoutPort.DividendArrearsItem item : arrearsItems) {
+            for (FinanceService.DividendArrearsItem item : arrearsItems) {
                 if (remaining <= 0) {
                     break;
                 }
@@ -865,7 +865,7 @@ public class DividendService {
             throw ApiException.conflict("DIVIDEND_RESERVE_NONE", "该计算单没有发放保护线留存，无需释放");
         }
         // finance 侧 re-tag 待释放留存应付 → 已释放（金额不变，全额一次）；已释放/无待释放应付 → empty。
-        Optional<DividendPayoutPort.DividendReserveReleaseRef> ref =
+        Optional<FinanceService.DividendReserveReleaseRef> ref =
                 payoutPort.releaseDividendReserveWithholding(statementId);
         if (ref.isEmpty()) {
             throw ApiException.conflict("DIVIDEND_RESERVE_ALREADY_RELEASED",

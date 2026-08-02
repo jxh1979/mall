@@ -8,8 +8,9 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+// ponytail: 仓储直用实现类,无接口(one impl)。
 @Repository
-class JdbcServiceOrderRepository implements ServiceOrderRepository {
+class JdbcServiceOrderRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -17,7 +18,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @Override
     public ServiceCatalogItemRecord upsertCatalogItem(ServiceCatalogItemRecord item) {
         jdbcTemplate.update("""
                 INSERT INTO service_catalog_items (id, name, price_cent, duration_minutes, active,
@@ -41,7 +41,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
         return item;
     }
 
-    @Override
     public List<ServiceCatalogItemRecord> listCatalog(boolean activeOnly, boolean includeArchived) {
         return jdbcTemplate.query("""
                 SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at,
@@ -54,7 +53,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 """, new MapSqlParameterSource().addValue("active_only", activeOnly).addValue("include_archived", includeArchived), this::mapItem);
     }
 
-    @Override
     public void archiveCatalogItem(String id, boolean archive, String reason, String actorId) {
         jdbcTemplate.update("""
                 UPDATE service_catalog_items
@@ -66,7 +64,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 .addValue("reason", archive ? reason : null));
     }
 
-    @Override
     public void requestDeleteCatalogItem(String id, String reason, String actorId) {
         jdbcTemplate.update("""
                 UPDATE service_catalog_items
@@ -75,7 +72,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 """, new MapSqlParameterSource().addValue("id", id).addValue("by", actorId).addValue("reason", reason));
     }
 
-    @Override
     public void approveDeleteCatalogItem(String id, boolean approved) {
         jdbcTemplate.update("""
                 UPDATE service_catalog_items SET delete_status = :status, updated_at = now()
@@ -83,7 +79,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 """, new MapSqlParameterSource().addValue("id", id).addValue("status", approved ? "approved" : "none"));
     }
 
-    @Override
     public Optional<ServiceCatalogItemRecord> findCatalogItem(String id) {
         return jdbcTemplate.query("""
                 SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at,
@@ -104,7 +99,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 delReq == null ? null : delReq.toInstant(), rs.getString("delete_reason"));
     }
 
-    @Override
     public void upsertPaymentCode(String userId, String qrContent, Instant now) {
         jdbcTemplate.update("""
                 INSERT INTO staff_payment_codes (user_id, qr_content, updated_at)
@@ -114,14 +108,12 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 .addValue("now", java.sql.Timestamp.from(now)));
     }
 
-    @Override
     public Optional<String> findPaymentCode(String userId) {
         return jdbcTemplate.query("SELECT qr_content FROM staff_payment_codes WHERE user_id = :user_id",
                 new MapSqlParameterSource().addValue("user_id", userId),
                 (rs, n) -> rs.getString("qr_content")).stream().findFirst();
     }
 
-    @Override
     public ServiceOrderRecord saveOrder(ServiceOrderRecord order) {
         jdbcTemplate.update("""
                 INSERT INTO service_orders (id, catalog_item_id, item_name, price_cent, bar_id, table_id,
@@ -164,13 +156,11 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
         return order;
     }
 
-    @Override
     public Optional<ServiceOrderRecord> findOrder(String id) {
         return jdbcTemplate.query(SELECT_ORDER + " WHERE id = :id",
                 new MapSqlParameterSource().addValue("id", id), this::mapOrder).stream().findFirst();
     }
 
-    @Override
     public int markCompletedIfPaid(String id, long mgmtFeeCent, long dancerShareCent, Instant completedAt, Instant now) {
         // P1 并发守卫:paid->completed 原子转移。WHERE status='paid' 使受影响行数=1 成为唯一进入凭据。
         return jdbcTemplate.update("""
@@ -184,7 +174,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 .addValue("now", java.sql.Timestamp.from(now)));
     }
 
-    @Override
     public boolean insertReceivableForOrder(String orderId, long amountCent, Instant now) {
         // P1 收款对账:复用 ar_ap_items 应收台账。source 唯一索引保证一单一条(幂等)。
         // V344(P0-B 红冲):该部分唯一索引的谓词加了 origin_item_id IS NULL(排除补录派生的冲正/重述行),
@@ -218,7 +207,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                    snap_mgmt_fee_mode, snap_mgmt_fee_value
               FROM service_orders""";
 
-    @Override
     public List<ServiceOrderRecord> listOrdersForPerformer(String performerUserId) {
         return jdbcTemplate.query(SELECT_ORDER + """
                  WHERE performer_user_id = :performer
@@ -227,7 +215,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 """, new MapSqlParameterSource().addValue("performer", performerUserId), this::mapOrder);
     }
 
-    @Override
     public List<ServiceOrderRecord> listOrders(LocalDate date, String status, String projectScope) {
         // P0 租户隔离(V214):后台服务单列表按调用方项目 scope 过滤;null=平台全量。
         return jdbcTemplate.query(SELECT_ORDER + """
@@ -240,7 +227,6 @@ class JdbcServiceOrderRepository implements ServiceOrderRepository {
                 .addValue("project_scope", projectScope), this::mapOrder);
     }
 
-    @Override
     public long[] performerMonthlyStats(String performerUserId, String month) {
         return jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) AS cnt, COALESCE(SUM(dancer_share_cent), 0) AS total

@@ -35,9 +35,9 @@ import com.complex.platform.dividend.dto.DividendComputeRequest;
 import com.complex.platform.dividend.dto.DividendPlanRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
-import com.complex.platform.finance.DividendPayoutPort;
-import com.complex.platform.finance.DividendPayoutPort.DividendArrearsItem;
-import com.complex.platform.finance.DividendPayoutPort.DividendReserveReleaseRef;
+import com.complex.platform.finance.FinanceService;
+import com.complex.platform.finance.FinanceService.DividendArrearsItem;
+import com.complex.platform.finance.FinanceService.DividendReserveReleaseRef;
 import com.complex.platform.inventory.InventoryCostSummaryRecord;
 import com.complex.platform.inventory.InventoryRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -336,7 +336,7 @@ class DividendServiceTests {
     private InMemoryRepo repository;
     private AuthorizationService authorizationService;
     private InventoryRepository inventoryRepository;
-    private DividendPayoutPort payoutPort;
+    private FinanceService payoutPort;
     private DividendService service;
     // I-1 职责分离测试用：可切换当前操作人（提交与审批必须不同人）。
     private final String[] actorId = {"usr_admin"};
@@ -352,7 +352,7 @@ class DividendServiceTests {
         inventoryRepository = mock(InventoryRepository.class);
         when(inventoryRepository.sumOutboundCost(anyString(), any(), anyString(), anyString(), any(), any()))
                 .thenReturn(new InventoryCostSummaryRecord(MERCHANT, "2026-07-01", "2026-09-30", 0L, 0L, 0L));
-        payoutPort = mock(DividendPayoutPort.class);
+        payoutPort = mock(FinanceService.class);
         when(payoutPort.createDividendPayoutPayable(anyString(), anyString(), anyLong(), anyString()))
                 .thenReturn("arap_div_1");
         // V303 默认：无未清应收；欠款抵扣默认足额结算（返回请求的抵扣额）。

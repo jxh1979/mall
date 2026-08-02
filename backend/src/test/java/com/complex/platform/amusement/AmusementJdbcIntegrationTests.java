@@ -32,7 +32,7 @@ class AmusementJdbcIntegrationTests {
     private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
     @Autowired
-    private com.complex.platform.gate.AdmissionFactRepository admissionFactRepository;
+    private com.complex.platform.gate.JdbcAdmissionFactRepository admissionFactRepository;
 
     @Test
     void migrationCreatesAmusementTablesAndSeedsPermissions() {

@@ -24,7 +24,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.customer.CustomerRedemptionCatalogItemRecord;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
-import com.complex.platform.finance.PartnerVoucherSettlementPort;
+import com.complex.platform.finance.FinanceService;
 import com.complex.platform.inventory.InventoryService;
 import com.complex.platform.inventory.dto.StockMovementRequest;
 import com.complex.platform.voucher.dto.VoucherDefinitionRequest;
@@ -206,8 +206,8 @@ class VoucherServiceTests {
     private InMemoryVoucherRepository repository;
     private AuthorizationService authorizationService;
     private InventoryService inventoryService;
-    private PartnerVoucherSettlementPort settlementPort;
-    private VoucherTransferRepository transferRepository;
+    private FinanceService settlementPort;
+    private JdbcVoucherTransferRepository transferRepository;
     private VoucherService service;
 
     @BeforeEach
@@ -221,9 +221,9 @@ class VoucherServiceTests {
         // V312 发券预占：默认库存充足（reserveStock 成功）；释放预占返回 1。个别缺货用例在测内改写。
         when(inventoryService.reserveStock(anyString(), anyString(), anyInt())).thenReturn(true);
         when(inventoryService.releaseStockReservation(anyString(), anyString(), anyInt())).thenReturn(1);
-        settlementPort = mock(PartnerVoucherSettlementPort.class);
+        settlementPort = mock(FinanceService.class);
         // V313 转赠冻结：默认无在途转赠（existsPendingForInstance=false，mock 布尔默认即 false）。
-        transferRepository = mock(VoucherTransferRepository.class);
+        transferRepository = mock(JdbcVoucherTransferRepository.class);
         AuditedOperationExecutor operations = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 mock(AuditEventService.class));

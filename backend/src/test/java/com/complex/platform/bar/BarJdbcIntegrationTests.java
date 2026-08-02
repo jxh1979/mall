@@ -40,7 +40,7 @@ class BarJdbcIntegrationTests {
     private com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
     @Autowired
-    private com.complex.platform.gate.AdmissionFactRepository admissionFactRepository;
+    private com.complex.platform.gate.JdbcAdmissionFactRepository admissionFactRepository;
 
     @Test
     void aggregateBarRefundCentSumsRefundAdjustmentsWithinBusinessDayWindowAndExcludesWaiver() {

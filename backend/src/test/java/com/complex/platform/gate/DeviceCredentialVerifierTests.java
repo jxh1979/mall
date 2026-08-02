@@ -10,7 +10,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.StaffDeviceCredentialRecord;
 import com.complex.platform.access.staff.StaffProfileRecord;
-import com.complex.platform.access.staff.StaffRepository;
+import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.terminal.DeviceSigningKeyStore;
@@ -37,7 +37,7 @@ class DeviceCredentialVerifierTests {
     private static final String URI = "/api/v1/services/orders/o1/mark-paid";
 
     private TerminalDeviceRepository deviceRepo;
-    private StaffRepository staffRepo;
+    private JdbcStaffRepository staffRepo;
     private AuthorizationService authz;
     private AuditEventService audit;
     private DeviceSigningKeyStore signingKeyStore;
@@ -47,7 +47,7 @@ class DeviceCredentialVerifierTests {
     @BeforeEach
     void setUp() throws Exception {
         deviceRepo = mock(TerminalDeviceRepository.class);
-        staffRepo = mock(StaffRepository.class);
+        staffRepo = mock(JdbcStaffRepository.class);
         authz = mock(AuthorizationService.class);
         audit = mock(AuditEventService.class);
         signingKeyStore = mock(DeviceSigningKeyStore.class);

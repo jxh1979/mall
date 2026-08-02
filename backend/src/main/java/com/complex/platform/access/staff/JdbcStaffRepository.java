@@ -11,8 +11,9 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+// ponytail: 仓储直用实现类,无接口(one impl)。
 @Repository
-class JdbcStaffRepository implements StaffRepository {
+public class JdbcStaffRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -27,7 +28,6 @@ class JdbcStaffRepository implements StaffRepository {
 
     // ---------------------------------------------------------------- F批 薪资/请假
 
-    @Override
     public void upsertBaseSalary(String userId, long monthlySalaryCent, String updatedBy, java.time.Instant now) {
         jdbcTemplate.update("""
                 INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_by, updated_at, project_id)
@@ -42,7 +42,6 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
     }
 
-    @Override
     public void insertPayrollAdjustment(String id, String userId, String month, String adjType,
             long amountCent, String reason, String createdBy, java.time.Instant now) {
         jdbcTemplate.update("""
@@ -57,7 +56,6 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("created_by", createdBy).addValue("now", java.sql.Timestamp.from(now)));
     }
 
-    @Override
     public void insertCommission(String id, String userId, String month, String sourceType,
             String sourceId, long amountCent, String note, java.time.Instant now) {
         jdbcTemplate.update("""
@@ -74,7 +72,6 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("now", java.sql.Timestamp.from(now)));
     }
 
-    @Override
     public java.util.Optional<String> findUserProjectId(String userId) {
         return jdbcTemplate.query(
                 "SELECT project_id FROM staff_profiles WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1",
@@ -82,7 +79,6 @@ class JdbcStaffRepository implements StaffRepository {
                 (rs, n) -> rs.getString("project_id")).stream().findFirst();
     }
 
-    @Override
     public int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope) {
         // 月结重算:固定档案 + 台账提成 + 酒吧提成(bar_commission_calculations 按月/非作废) + 奖 - 罚;
         // 有任一薪资要素的员工都出单;未发放月幂等覆盖(uq user+month)。
@@ -179,7 +175,6 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("project_scope", projectScope));
     }
 
-    @Override
     public int markPayrollPaid(String payoutId, String userId, String month, String payMethod,
             String payRef, String paidBy, java.time.Instant now) {
         // 资金安全①:发放动作。仅 status='closed' 的已定格单可发放;落发放台账 + 置 paid。
@@ -204,7 +199,6 @@ class JdbcStaffRepository implements StaffRepository {
         return inserted;
     }
 
-    @Override
     public java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId,
             String projectScope) {
         return jdbcTemplate.query("""
@@ -229,7 +223,6 @@ class JdbcStaffRepository implements StaffRepository {
     }
 
     // ---------- AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, 真实 total, 稳定排序(id 收敛), 同 scope 谓词 ----------
-    @Override
     public com.complex.platform.common.api.PageResponse<StaffShiftRecord> listShiftsPaged(
             java.time.LocalDate workDate, String userId, String projectScope, int page, int size) {
         int safePage = page < 1 ? 1 : page;
@@ -250,7 +243,6 @@ class JdbcStaffRepository implements StaffRepository {
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
-    @Override
     public com.complex.platform.common.api.PageResponse<StaffAttendanceRecord> listAttendanceOnPaged(
             java.time.LocalDate date, String projectScope, int page, int size) {
         int safePage = page < 1 ? 1 : page;
@@ -272,7 +264,6 @@ class JdbcStaffRepository implements StaffRepository {
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
-    @Override
     public com.complex.platform.common.api.PageResponse<StaffPayrollStatementRecord> listPayrollStatementsPaged(
             String month, String userId, String projectScope, int page, int size) {
         int safePage = page < 1 ? 1 : page;
@@ -292,7 +283,6 @@ class JdbcStaffRepository implements StaffRepository {
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
-    @Override
     public com.complex.platform.common.api.PageResponse<StaffLeaveRequestRecord> listLeavesPaged(
             String status, String userId, String projectScope, int page, int size) {
         int safePage = page < 1 ? 1 : page;
@@ -313,7 +303,6 @@ class JdbcStaffRepository implements StaffRepository {
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
-    @Override
     public java.util.List<PayrollTaxBracketRecord> listTaxBrackets(String category) {
         return jdbcTemplate.query("""
                 SELECT id, category, seq, income_floor_cent, income_ceiling_cent, income_base_bps,
@@ -325,7 +314,6 @@ class JdbcStaffRepository implements StaffRepository {
                 (rs, n) -> mapTaxBracket(rs));
     }
 
-    @Override
     public PayrollTaxBracketRecord upsertTaxBracket(PayrollTaxBracketRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO payroll_tax_brackets (id, category, seq, income_floor_cent, income_ceiling_cent,
@@ -370,7 +358,6 @@ class JdbcStaffRepository implements StaffRepository {
                 rs.getTimestamp("updated_at").toInstant());
     }
 
-    @Override
     public StaffLeaveRequestRecord saveLeaveRequest(StaffLeaveRequestRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO staff_leave_requests (id, user_id, leave_type, start_date, end_date, reason,
@@ -395,7 +382,6 @@ class JdbcStaffRepository implements StaffRepository {
         return record;
     }
 
-    @Override
     public java.util.Optional<StaffLeaveRequestRecord> findLeaveById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, leave_type, start_date, end_date, reason, status,
@@ -405,7 +391,6 @@ class JdbcStaffRepository implements StaffRepository {
                 this::mapLeave).stream().findFirst();
     }
 
-    @Override
     public java.util.List<StaffLeaveRequestRecord> listLeaves(String status, String userId, String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, leave_type, start_date, end_date, reason, status,
@@ -421,7 +406,6 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("project_scope", projectScope), this::mapLeave);
     }
 
-    @Override
     public boolean hasActiveLeaveOverlap(String userId, java.time.LocalDate start, java.time.LocalDate end) {
         // 两区间 [s1,e1]/[s2,e2] 重叠 <=> s1<=e2 && s2<=e1;只算未撤销(pending/approved)。
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
@@ -442,7 +426,6 @@ class JdbcStaffRepository implements StaffRepository {
                 rs.getTimestamp("updated_at").toInstant());
     }
 
-    @Override
     public java.util.Set<java.time.LocalDate> approvedLeaveDates(String userId,
             java.time.LocalDate from, java.time.LocalDate to) {
         java.util.Set<java.time.LocalDate> out = new java.util.LinkedHashSet<>();
@@ -462,7 +445,6 @@ class JdbcStaffRepository implements StaffRepository {
         return out;
     }
 
-    @Override
     public java.util.List<StaffAttendanceRecord> listAttendanceForUserBetween(String userId,
             java.time.Instant from, java.time.Instant to) {
         return jdbcTemplate.query("""
@@ -479,7 +461,6 @@ class JdbcStaffRepository implements StaffRepository {
 
     // ---------------------------------------------------------------- E1/E2 排班与考勤
 
-    @Override
     public StaffShiftRecord upsertShift(StaffShiftRecord shift) {
         jdbcTemplate.update("""
                 INSERT INTO staff_shift_schedules (id, user_id, work_date, start_at, end_at,
@@ -508,7 +489,6 @@ class JdbcStaffRepository implements StaffRepository {
                 .findFirst().orElse(shift);
     }
 
-    @Override
     public java.util.List<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId,
             String projectScope) {
         return jdbcTemplate.query("""
@@ -524,7 +504,6 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("project_scope", projectScope), this::mapShift);
     }
 
-    @Override
     public java.util.List<StaffShiftRecord> listShiftsForUserBetween(String userId,
             java.time.LocalDate from, java.time.LocalDate to) {
         return jdbcTemplate.query("""
@@ -568,7 +547,6 @@ class JdbcStaffRepository implements StaffRepository {
         }
     }
 
-    @Override
     public StaffAttendanceRecord saveAttendance(StaffAttendanceRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO staff_attendance_records (id, user_id, punch_type, punched_at, method,
@@ -592,7 +570,6 @@ class JdbcStaffRepository implements StaffRepository {
         return record;
     }
 
-    @Override
     public java.util.List<StaffAttendanceRecord> listAttendanceForUser(String userId, java.time.Instant since) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, punch_type, punched_at, method, tag_ref, space_id,
@@ -605,7 +582,6 @@ class JdbcStaffRepository implements StaffRepository {
                 .addValue("user_id", userId).addValue("since", java.sql.Timestamp.from(since)), this::mapAttendance);
     }
 
-    @Override
     public java.util.List<StaffAttendanceRecord> listAttendanceOn(java.time.LocalDate date, String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, user_id, punch_type, punched_at, method, tag_ref, space_id,
@@ -632,7 +608,6 @@ class JdbcStaffRepository implements StaffRepository {
 
     // ---------------------------------------------------------------- staff_profiles
 
-    @Override
     public StaffProfileRecord saveProfile(StaffProfileRecord profile) {
         jdbcTemplate.update("""
                 INSERT INTO staff_profiles (
@@ -693,7 +668,6 @@ class JdbcStaffRepository implements StaffRepository {
         return profile;
     }
 
-    @Override
     public Optional<StaffProfileRecord> findProfileById(String id) {
         List<StaffProfileRecord> result = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
@@ -706,7 +680,6 @@ class JdbcStaffRepository implements StaffRepository {
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 
-    @Override
     public List<StaffProfileRecord> listProfiles(String merchantScope) {
         if (merchantScope == null) {
             return jdbcTemplate.query("""
@@ -729,7 +702,6 @@ class JdbcStaffRepository implements StaffRepository {
                 """, Map.of("merchant_id", merchantScope), this::mapProfile);
     }
 
-    @Override
     public List<StaffProfileRecord> listProfiles(String merchantScope, boolean includeArchived) {
         StringBuilder sql = new StringBuilder("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
@@ -750,7 +722,6 @@ class JdbcStaffRepository implements StaffRepository {
         return jdbcTemplate.query(sql.toString(), params, this::mapProfile);
     }
 
-    @Override
     public long countProfileReferences(String id) {
         // 子表 credentials/notices 走 CASCADE 不算活引用；活引用=该员工 user_id 仍挂考勤/请假/职级薪资记录。
         Long count = jdbcTemplate.queryForObject("""
@@ -764,7 +735,6 @@ class JdbcStaffRepository implements StaffRepository {
         return count == null ? 0L : count;
     }
 
-    @Override
     public void deleteProfile(String id) {
         jdbcTemplate.update("UPDATE staff_profiles SET delete_status = 'approved', updated_at = now() WHERE id = :id", Map.of("id", id));
     }
@@ -784,7 +754,6 @@ class JdbcStaffRepository implements StaffRepository {
 
     // ---------------------------------------------------------- staff_device_credentials
 
-    @Override
     public StaffDeviceCredentialRecord saveCredential(StaffDeviceCredentialRecord credential) {
         jdbcTemplate.update("""
                 INSERT INTO staff_device_credentials (
@@ -823,7 +792,6 @@ class JdbcStaffRepository implements StaffRepository {
         return credential;
     }
 
-    @Override
     public Optional<StaffDeviceCredentialRecord> findCredentialById(String id) {
         List<StaffDeviceCredentialRecord> result = jdbcTemplate.query(
                 credentialSelect() + " WHERE id = :id",
@@ -831,7 +799,6 @@ class JdbcStaffRepository implements StaffRepository {
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 
-    @Override
     public Optional<StaffDeviceCredentialRecord> findActiveCredential(String staffProfileId) {
         List<StaffDeviceCredentialRecord> result = jdbcTemplate.query(
                 credentialSelect() + " WHERE staff_profile_id = :staff_profile_id AND bind_status = 'active'",
@@ -850,7 +817,6 @@ class JdbcStaffRepository implements StaffRepository {
 
     // ---------------------------------------------------------------- employee_notices
 
-    @Override
     public EmployeeNoticeRecord saveNotice(EmployeeNoticeRecord notice) {
         jdbcTemplate.update("""
                 INSERT INTO employee_notices (
@@ -884,7 +850,6 @@ class JdbcStaffRepository implements StaffRepository {
         return notice;
     }
 
-    @Override
     public Optional<EmployeeNoticeRecord> findNoticeById(String id) {
         List<EmployeeNoticeRecord> result = jdbcTemplate.query("""
                 SELECT id, staff_profile_id, notice_type, title, body, consent_required, consent_status,
@@ -895,7 +860,6 @@ class JdbcStaffRepository implements StaffRepository {
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 
-    @Override
     public List<EmployeeNoticeRecord> listNotices(String merchantScope) {
         if (merchantScope == null) {
             return jdbcTemplate.query("""
@@ -918,7 +882,6 @@ class JdbcStaffRepository implements StaffRepository {
 
     // ---------------------------------------------------------------- row mappers
 
-    @Override
     public java.util.Optional<StaffProfileRecord> findProfileByUserId(String userId) {
         java.util.List<StaffProfileRecord> result = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
@@ -933,7 +896,6 @@ class JdbcStaffRepository implements StaffRepository {
         return result.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(result.get(0));
     }
 
-    @Override
     public java.util.List<StaffCommissionLineRecord> listCommissionLines(String userId, String month) {
         return jdbcTemplate.query("""
                 SELECT source_type, source_id, amount_cent, note, created_at
@@ -1015,7 +977,6 @@ class JdbcStaffRepository implements StaffRepository {
         );
     }
 
-    @Override
     public void setStaffProfileArchiveReason(String id, String reason) {
         jdbcTemplate.update("UPDATE staff_profiles SET archive_reason = :reason WHERE id = :id",
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));

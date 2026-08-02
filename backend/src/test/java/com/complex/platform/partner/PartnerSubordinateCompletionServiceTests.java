@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 /** 外包机构查看下属完成情况：按下属聚合被派工单/巡检 完成数/总数；未绑机构拒绝。纯单测。 */
 class PartnerSubordinateCompletionServiceTests {
 
-    private final PartnerRepository repository = mock(PartnerRepository.class);
+    private final JdbcPartnerRepository repository = mock(JdbcPartnerRepository.class);
     private final AuthorizationService authz = mock(AuthorizationService.class);
     private final FacilityWorkOrderRepository workOrders = mock(FacilityWorkOrderRepository.class);
     private final FacilityInspectionRepository inspections = mock(FacilityInspectionRepository.class);

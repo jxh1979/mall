@@ -1,7 +1,7 @@
 package com.complex.platform.ticketing;
 
 import com.complex.platform.common.api.ApiException;
-import com.complex.platform.finance.PartnerVoucherSettlementPort;
+import com.complex.platform.finance.FinanceService;
 import com.complex.platform.ticketing.dto.PartnerVoucherConfigRequest;
 import com.complex.platform.ticketing.dto.PartnerVoucherRedemptionImportRequest;
 import java.time.Instant;
@@ -27,10 +27,10 @@ public class PartnerVoucherService {
 
     private final TicketingRepository repository;
     // finance 结算端口(构造注入·@Lazy 防环;为 null=兼容测试不结算)。
-    private final PartnerVoucherSettlementPort settlementPort;
+    private final FinanceService settlementPort;
 
     @Autowired
-    public PartnerVoucherService(TicketingRepository repository, @Lazy PartnerVoucherSettlementPort settlementPort) {
+    public PartnerVoucherService(TicketingRepository repository, @Lazy FinanceService settlementPort) {
         this.repository = repository;
         this.settlementPort = settlementPort;
     }

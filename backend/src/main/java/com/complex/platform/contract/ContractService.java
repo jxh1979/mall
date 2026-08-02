@@ -78,7 +78,7 @@ public class ContractService {
     private final PlatformRepository platformRepository;
     private final MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver;
     // 批2b:提成端口(finance 实现)。构造注入(@Lazy 防潜在初始化环);旧构造传 null=收租方式退化纯月租。
-    private final com.complex.platform.finance.TurnoverRentPort turnoverRentPort;
+    private final com.complex.platform.finance.FinanceService turnoverRentPort;
     // 退租结算落财务台账端口(finance 实现)。构造器 @Lazy 注入(防初始化环,与 turnoverRentPort 同范式;
     // 字段注入曾被判死刑=运行时可能注入 null 致静默跳过落账);旧构造传 null=降级只留结算快照。
     private final com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort;
@@ -88,7 +88,7 @@ public class ContractService {
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository,
             MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver,
-            @org.springframework.context.annotation.Lazy com.complex.platform.finance.TurnoverRentPort turnoverRentPort,
+            @org.springframework.context.annotation.Lazy com.complex.platform.finance.FinanceService turnoverRentPort,
             @org.springframework.context.annotation.Lazy com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort) {
         this.repository = repository;
         this.auditEventService = auditEventService;

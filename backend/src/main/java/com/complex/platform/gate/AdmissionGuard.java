@@ -54,17 +54,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class AdmissionGuard {
 
-    private final AdmissionPolicyRepository policyRepository;
+    private final JdbcAdmissionPolicyRepository policyRepository;
     private final SupervisorReviewService supervisorReviewService;
     private final AuditEventService auditEventService;
-    private final AdmissionFactRepository factRepository;
+    private final JdbcAdmissionFactRepository factRepository;
     private final AuthorizationService authorizationService;
 
     public AdmissionGuard(
-            AdmissionPolicyRepository policyRepository,
+            JdbcAdmissionPolicyRepository policyRepository,
             SupervisorReviewService supervisorReviewService,
             AuditEventService auditEventService,
-            AdmissionFactRepository factRepository,
+            JdbcAdmissionFactRepository factRepository,
             AuthorizationService authorizationService
     ) {
         this.policyRepository = policyRepository;

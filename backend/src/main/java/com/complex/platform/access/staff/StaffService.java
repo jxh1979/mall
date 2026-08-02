@@ -45,7 +45,7 @@ public class StaffService {
     private static final Set<String> INTEGRITY_FAILURES =
             Set.of("root_detected", "debug_detected", "abnormal");
 
-    private final StaffRepository repository;
+    private final JdbcStaffRepository repository;
     private final AccessRepository accessRepository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
@@ -54,7 +54,7 @@ public class StaffService {
 
     @org.springframework.beans.factory.annotation.Autowired
     public StaffService(
-            StaffRepository repository,
+            JdbcStaffRepository repository,
             AccessRepository accessRepository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
@@ -66,7 +66,7 @@ public class StaffService {
     }
 
     StaffService(
-            StaffRepository repository,
+            JdbcStaffRepository repository,
             AccessRepository accessRepository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,

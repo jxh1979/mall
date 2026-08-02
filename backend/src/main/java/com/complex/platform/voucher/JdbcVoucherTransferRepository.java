@@ -15,8 +15,9 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /** V313 券转赠 JDBC 仓储（JdbcTicketingRepository 转赠段同款 CAS 范式）。 */
+// ponytail: 仓储直用实现类,无接口(one impl)。
 @Repository
-class JdbcVoucherTransferRepository implements VoucherTransferRepository {
+class JdbcVoucherTransferRepository {
 
     private static final String COLS =
             "id, voucher_instance_id, initiator_customer_id, channel, receiver_phone, receiver_phone_hash, "
@@ -29,7 +30,6 @@ class JdbcVoucherTransferRepository implements VoucherTransferRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @Override
     public VoucherTransferRecord save(VoucherTransferRecord r) {
         jdbcTemplate.update("""
                 INSERT INTO voucher_transfers (
@@ -60,19 +60,16 @@ class JdbcVoucherTransferRepository implements VoucherTransferRepository {
         return r;
     }
 
-    @Override
     public Optional<VoucherTransferRecord> findById(String id) {
         return jdbcTemplate.query("SELECT " + COLS + " FROM voucher_transfers WHERE id = :id",
                 Map.of("id", id), this::map).stream().findFirst();
     }
 
-    @Override
     public Optional<VoucherTransferRecord> findByClaimCode(String claimCode) {
         return jdbcTemplate.query("SELECT " + COLS + " FROM voucher_transfers WHERE claim_code = :c",
                 Map.of("c", claimCode), this::map).stream().findFirst();
     }
 
-    @Override
     public int claim(String id, String receiverCustomerId, Instant now) {
         return jdbcTemplate.update("""
                 UPDATE voucher_transfers SET status = 'claimed', receiver_customer_id = :recv,
@@ -82,7 +79,6 @@ class JdbcVoucherTransferRepository implements VoucherTransferRepository {
                 .addValue("now", timestampWithTimeZone(now)));
     }
 
-    @Override
     public int revoke(String id, String initiatorCustomerId, Instant now) {
         return jdbcTemplate.update("""
                 UPDATE voucher_transfers SET status = 'revoked', revoked_at = :now, updated_at = :now
@@ -91,7 +87,6 @@ class JdbcVoucherTransferRepository implements VoucherTransferRepository {
                 .addValue("now", timestampWithTimeZone(now)));
     }
 
-    @Override
     public int voidPendingForInstance(String voucherInstanceId, String reason, Instant now) {
         return jdbcTemplate.update("""
                 UPDATE voucher_transfers SET status = 'voided', void_reason = :reason, voided_at = :now, updated_at = :now
@@ -100,21 +95,18 @@ class JdbcVoucherTransferRepository implements VoucherTransferRepository {
                 .addValue("reason", reason, Types.VARCHAR).addValue("now", timestampWithTimeZone(now)));
     }
 
-    @Override
     public boolean existsPendingForInstance(String voucherInstanceId) {
         return !jdbcTemplate.query(
                 "SELECT 1 FROM voucher_transfers WHERE voucher_instance_id = :vi AND status = 'pending' LIMIT 1",
                 Map.of("vi", voucherInstanceId), (rs, n) -> 1).isEmpty();
     }
 
-    @Override
     public List<VoucherTransferRecord> listPendingByReceiverPhoneHash(String receiverPhoneHash) {
         return jdbcTemplate.query("SELECT " + COLS + " FROM voucher_transfers"
                         + " WHERE receiver_phone_hash = :h AND status = 'pending' ORDER BY created_at DESC, id",
                 Map.of("h", receiverPhoneHash), this::map);
     }
 
-    @Override
     public List<VoucherTransferRecord> listByInitiator(String initiatorCustomerId) {
         return jdbcTemplate.query("SELECT " + COLS + " FROM voucher_transfers"
                         + " WHERE initiator_customer_id = :me ORDER BY created_at DESC, id",

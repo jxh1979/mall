@@ -17,13 +17,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class PartnerSubordinateCompletionService {
 
-    private final PartnerRepository repository;
+    private final JdbcPartnerRepository repository;
     private final AuthorizationService authorizationService;
     private final FacilityWorkOrderRepository workOrderRepository;
     private final FacilityInspectionRepository inspectionRepository;
 
     public PartnerSubordinateCompletionService(
-            PartnerRepository repository,
+            JdbcPartnerRepository repository,
             AuthorizationService authorizationService,
             FacilityWorkOrderRepository workOrderRepository,
             FacilityInspectionRepository inspectionRepository) {

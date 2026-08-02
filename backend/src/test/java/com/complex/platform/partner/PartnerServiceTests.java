@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 
 class PartnerServiceTests {
 
-    private final PartnerRepository repository = mock(PartnerRepository.class);
+    private final JdbcPartnerRepository repository = mock(JdbcPartnerRepository.class);
     private final AuthorizationService authz = mock(AuthorizationService.class);
     private final AuditEventService audit = mock(AuditEventService.class);
     private final PartnerService service = new PartnerService(repository, authz, audit);
