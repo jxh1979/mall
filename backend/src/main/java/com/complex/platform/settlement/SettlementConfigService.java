@@ -89,6 +89,17 @@ public class SettlementConfigService {
     }
 
     /** 单个配置项当前生效值(展示用)。 */
+    /**
+     * 批10/E:内部结算 SKU 目录三维筛选列表(商家/业态/品类)。权限闸在 controller
+     * (settlement.config.view 或 V279/V301 内部价读脱敏点任一;商户 scope 已被 controller 收窄为本商户)。
+     */
+    public List<JdbcSettlementConfigWriteRepository.CatalogEntryRow> listInternalPriceItems(
+            String merchantId, String businessFormat, String category,
+            boolean includeDrafts, boolean includeArchived) {
+        return writeRepository.listCatalogEntries(merchantId, businessFormat, category,
+                includeDrafts, includeArchived);
+    }
+
     public record ConfigItem(String group, String key, String label, String value) {
     }
 

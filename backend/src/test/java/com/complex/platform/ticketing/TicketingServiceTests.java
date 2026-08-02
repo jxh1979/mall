@@ -21,7 +21,6 @@ import com.complex.platform.finance.RefundAuthorizationRepository;
 import com.complex.platform.finance.RefundAuthorizationService;
 import com.complex.platform.finance.RefundAutoRuleRecord;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
-import com.complex.platform.ticketing.dto.EntitlementAgreementPriceRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
@@ -640,57 +639,36 @@ class TicketingServiceTests {
 
     // ===== V253 数据存档与审批后删除范式（试点）=====
 
+    /**
+     * 批10/E(V380)：内部结算价（签约价）唯一可编辑处 = 内部结算 SKU 目录。
+     * 模板侧的两条旧路都必须封死且喊出来（静默忽略会骗运营"以为改好了"）：
+     * ①建模板直填 agreement_price_cent → 400；②引用不存在的目录条目 → 400。
+     * （原 updateAgreementPrice 端点已随 PR#274 下线，改价走目录草案→他人复核转正→快照传播。）
+     */
     @Test
-    void updateAgreementPriceRewritesTemplateButRejectsBadInputAndNonVirtual() {
-        Instant now = Instant.now();
-        // 虚拟权益模板，签约价 8000。
-        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
-                "tpl_price", "入场资格", "entry", 1, 9999L, "active", "m1", null, null, null, now, now,
-                "virtual", 8000L));
-        // 实物权益模板（走吧台商品内部结算价，签约价在它身上是空转）。
-        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
-                "tpl_physical", "赠饮", "gift_drink", 1, 9999L, "active", "m1", null, null, "item_1", now, now,
-                "physical", null));
+    void agreementPriceIsCatalogOnlySinceV380() {
         TicketCatalogService catalog = new TicketCatalogService(ticketingRepository);
 
-        // 正常改价：真写进模板。
-        catalog.updateAgreementPrice("tpl_price", new EntitlementAgreementPriceRequest(
-                "k1", null, List.of(), 3000L, "签约价录入笔误更正"), "op_a");
-        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_price").orElseThrow().agreementPriceCent())
-                .isEqualTo(3000L);
+        // ① 直填签约价：拒绝并指路目录。
+        assertThatThrownBy(() -> catalog.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cat-only-1", null, List.of(), "餐饮优惠", "dining", 1, 5000L, "active",
+                null, "m1", null, null, null, 3000L, null, null)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("AGREEMENT_PRICE_CATALOG_ONLY"));
 
-        // 理由必填——动的是钱的口径，无理由不落，且不产生副作用。
-        assertThatThrownBy(() -> catalog.updateAgreementPrice("tpl_price", new EntitlementAgreementPriceRequest(
-                "k2", null, List.of(), 5000L, "  "), "op_a"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("reason is required");
-        assertThat(ticketingRepository.findEntitlementTemplateById("tpl_price").orElseThrow().agreementPriceCent())
-                .isEqualTo(3000L);
+        // ② 引用不存在的目录条目：当场拒绝，不留一个悬空引用等核销时炸。
+        assertThatThrownBy(() -> catalog.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cat-only-2", null, List.of(), "餐饮优惠", "dining", 1, 5000L, "active",
+                null, "m1", null, null, null, null, null, "sku_not_exist")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CATALOG_ITEM_NOT_FOUND"));
 
-        // 不接受留空清价：清价=静默退回按面值结算，商户拿到的钱变了却没人说过要变。
-        assertThatThrownBy(() -> catalog.updateAgreementPrice("tpl_price", new EntitlementAgreementPriceRequest(
-                "k3", null, List.of(), null, "清一下"), "op_a"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("agreement_price_cent");
-
-        // 负价拒收。
-        assertThatThrownBy(() -> catalog.updateAgreementPrice("tpl_price", new EntitlementAgreementPriceRequest(
-                "k4", null, List.of(), -1L, "手滑"), "op_a"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("non-negative");
-
-        // 实物权益拒改：在这里改价永远不会被核销取用，静默成功等于骗运营。
-        assertThatThrownBy(() -> catalog.updateAgreementPrice("tpl_physical", new EntitlementAgreementPriceRequest(
-                "k5", null, List.of(), 3000L, "改错地方了"), "op_a"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("签约价仅虚拟权益适用");
-
-        // 已存档模板拒改：否则"存档=软下线"名存实亡。
-        catalog.archiveEntitlementTemplate("tpl_price", true, "暂停该权益", "op_a");
-        assertThatThrownBy(() -> catalog.updateAgreementPrice("tpl_price", new EntitlementAgreementPriceRequest(
-                "k6", null, List.of(), 6000L, "存档后还想改"), "op_a"))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("已存档或待删除的权益模板不可改签约价");
+        // ③ 不带价、不带引用：允许建（未配价权益,提供方兑付类核销时 fail-closed,其余回退 value_amount）。
+        EntitlementTemplateRecord created = catalog.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cat-only-3", null, List.of(), "餐饮优惠", "dining", 1, 5000L, "active",
+                null, "m1", null, null, null, null, null, null));
+        assertThat(created.agreementPriceCent()).isNull();
+        assertThat(created.catalogItemCode()).isNull();
     }
 
     @Test

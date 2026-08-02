@@ -62,6 +62,32 @@ class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
+    public Optional<String> findCatalogItemMerchant(String itemCode) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                SELECT merchant_id FROM internal_price_catalog
+                 WHERE item_code = :item_code AND status = 'active'
+                 ORDER BY is_draft LIMIT 1
+                """, new MapSqlParameterSource("item_code", itemCode),
+                rs -> rs.next() ? rs.getString(1) : null));
+    }
+
+    @Override
+    public Optional<Long> findActiveCatalogPriceCent(String itemCode) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                SELECT price_cent FROM internal_price_catalog
+                 WHERE item_code = :item_code AND is_draft = FALSE AND status = 'active'
+                """, new MapSqlParameterSource("item_code", itemCode),
+                rs -> rs.next() ? rs.getLong(1) : null));
+    }
+
+    @Override
+    public void setDefinitionCatalogRef(String definitionId, String itemCode) {
+        jdbcTemplate.update(
+                "UPDATE voucher_definitions SET catalog_item_code = :item_code, updated_at = now() WHERE id = :id",
+                new MapSqlParameterSource("id", definitionId).addValue("item_code", itemCode));
+    }
+
+    @Override
     public boolean insertDefinition(VoucherDefinitionRecord definition) {
         int inserted = jdbcTemplate.update("""
                 INSERT INTO voucher_definitions (

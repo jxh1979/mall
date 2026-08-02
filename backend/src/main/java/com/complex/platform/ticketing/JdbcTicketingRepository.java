@@ -193,14 +193,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                     status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
                     agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
                     archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                    created_at, updated_at
+                    catalog_item_code, created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :entitlement_type, :default_total_times, :default_value_cent,
                     :status, :merchant_id, :venue_id, :point_id, :bar_item_ref, :entitlement_kind,
                     :agreement_price_cent, :consumption_window, :exclusive_merchant_id, :require_face_photo,
                     :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
-                    :created_at, :updated_at
+                    :catalog_item_code, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -217,6 +217,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     consumption_window = EXCLUDED.consumption_window,
                     exclusive_merchant_id = EXCLUDED.exclusive_merchant_id,
                     require_face_photo = EXCLUDED.require_face_photo,
+                    catalog_item_code = EXCLUDED.catalog_item_code,
                     archived_at = EXCLUDED.archived_at,
                     archived_by = EXCLUDED.archived_by,
                     delete_status = EXCLUDED.delete_status,
@@ -235,7 +236,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
                        agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       created_at, updated_at
+                       catalog_item_code, created_at, updated_at
                   FROM entitlement_templates
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -250,7 +251,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
                        agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       created_at, updated_at
+                       catalog_item_code, created_at, updated_at
                   FROM entitlement_templates
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();
@@ -1025,7 +1026,8 @@ class JdbcTicketingRepository implements TicketingRepository {
     public Optional<BarProductRefRecord> findBarProductRef(String barProductId) {
         // S5：bar_item_ref 语义定死 = bar_products.id。裸查 bar_products 少数几列(不引 bar 域类型，避免 bar↔ticketing 包环)。
         return jdbcTemplate.query("""
-                SELECT id, bar_id, internal_settlement_price_cent, inventory_item_id, stock_deduction_required, status
+                SELECT id, bar_id, internal_settlement_price_cent, inventory_item_id, stock_deduction_required, status,
+                       catalog_item_code
                   FROM bar_products
                  WHERE id = :id
                 """, Map.of("id", barProductId),
@@ -1040,8 +1042,31 @@ class JdbcTicketingRepository implements TicketingRepository {
                             internalPrice,
                             resultSet.getString("inventory_item_id"),
                             resultSet.getBoolean("stock_deduction_required"),
-                            resultSet.getString("status"));
+                            resultSet.getString("status"),
+                            resultSet.getString("catalog_item_code"));
                 }).stream().findFirst();
+    }
+
+    @Override
+    public Optional<String> findCatalogItemMerchant(String itemCode) {
+        // 批10/E:建模板设引用时的归属校验。草案/生效行绑定商户一致(写面禁改绑商户),任取其一。
+        return Optional.ofNullable(jdbcTemplate.query("""
+                SELECT merchant_id FROM internal_price_catalog
+                 WHERE item_code = :item_code AND status = 'active'
+                 ORDER BY is_draft LIMIT 1
+                """, Map.of("item_code", itemCode),
+                rs -> rs.next() ? rs.getString(1) : null));
+    }
+
+    @Override
+    public Optional<CatalogPriceRef> findActiveCatalogPrice(String itemCode) {
+        // 批10/E(V379):目录生效价(is_draft=FALSE + active)。草案不生效、归档无生效行 → empty → 调用方 fail-closed。
+        return jdbcTemplate.query("""
+                SELECT merchant_id, price_cent FROM internal_price_catalog
+                 WHERE item_code = :item_code AND is_draft = FALSE AND status = 'active'
+                """, Map.of("item_code", itemCode),
+                (rs, i) -> new CatalogPriceRef(rs.getString("merchant_id"), rs.getLong("price_cent")))
+                .stream().findFirst();
     }
 
     @Override

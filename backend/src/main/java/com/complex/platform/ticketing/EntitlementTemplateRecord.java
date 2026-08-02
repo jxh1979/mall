@@ -40,8 +40,25 @@ public record EntitlementTemplateRecord(
         String deleteStatus,
         String deleteRequestedBy,
         java.time.Instant deleteRequestedAt,
-        String deleteReason
+        String deleteReason,
+        // 批10/E(V380):内部结算 SKU 目录引用(internal_price_catalog.item_code)。agreement_price_cent 自此为
+        // 目录价快照(只读,系统在设引用/目录转正时同步);改价一律回目录走草案复核,模板侧无任何改价入口。
+        String catalogItemCode
 ) {
+    // ponytail: V380 前的构造点(既有代码/测试)不带目录引用,默认 null=未挂目录。
+    public EntitlementTemplateRecord(
+            String id, String name, String entitlementType, int defaultTotalTimes, long defaultValueCent, String status,
+            String merchantId, String venueId, String pointId, String barItemRef, Instant createdAt, Instant updatedAt,
+            String entitlementKind, Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId,
+            boolean requireFacePhoto,
+            java.time.Instant archivedAt, String archivedBy, String deleteStatus, String deleteRequestedBy,
+            java.time.Instant deleteRequestedAt, String deleteReason) {
+        this(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status, merchantId, venueId, pointId,
+                barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent, consumptionWindow,
+                exclusiveMerchantId, requireFacePhoto, archivedAt, archivedBy, deleteStatus, deleteRequestedBy,
+                deleteRequestedAt, deleteReason, null);
+    }
+
     // ponytail: V253 前的构造点(既有代码/测试)不带存档/删除字段,默认未存档 + delete_status=none。
     //           避免为 6 个新字段改所有既有 17 参构造点;日后语义要变则删本构造让编译逼出所有点。
     public EntitlementTemplateRecord(
@@ -82,12 +99,13 @@ public record EntitlementTemplateRecord(
                 exclusiveMerchantId, false);
     }
 
-    // --- V253 存档/删除范式：不可变 record 的字段更新辅助（避免 23 参构造散落业务代码）。 ---
+    // --- V253 存档/删除范式：不可变 record 的字段更新辅助（避免 24 参构造散落业务代码）。 ---
     public EntitlementTemplateRecord withArchive(java.time.Instant archivedAt, String archivedBy, Instant updatedAt) {
         return new EntitlementTemplateRecord(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status,
                 merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
                 consumptionWindow, exclusiveMerchantId, requireFacePhoto,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                catalogItemCode);
     }
 
     public EntitlementTemplateRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -95,17 +113,19 @@ public record EntitlementTemplateRecord(
         return new EntitlementTemplateRecord(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status,
                 merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
                 consumptionWindow, exclusiveMerchantId, requireFacePhoto,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                catalogItemCode);
     }
 
     /**
-     * 改签约价（=内部结算价）。只动模板这一层——已发放权益/已核销记录各持自己的快照，本方法碰不到。
-     * 见 {@code TicketCatalogService#updateAgreementPrice}。
+     * 批10/E:挂目录引用 + 同步签约价快照(系统写,创建/设引用时用)。
+     * 改价没有对应的 with:唯一可编辑处在目录(草案→他人复核转正→快照传播),模板侧改价入口已随 PR#274 端点下线。
      */
-    public EntitlementTemplateRecord withAgreementPrice(Long agreementPriceCent, Instant updatedAt) {
+    public EntitlementTemplateRecord withCatalogRef(String catalogItemCode, Long snapshotPriceCent, Instant updatedAt) {
         return new EntitlementTemplateRecord(id, name, entitlementType, defaultTotalTimes, defaultValueCent, status,
-                merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, agreementPriceCent,
+                merchantId, venueId, pointId, barItemRef, createdAt, updatedAt, entitlementKind, snapshotPriceCent,
                 consumptionWindow, exclusiveMerchantId, requireFacePhoto,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                catalogItemCode);
     }
 }

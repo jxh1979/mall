@@ -13,6 +13,7 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscou
 import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.InternalPriceItemRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PassGiftCostRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
@@ -362,6 +363,75 @@ public class SettlementConfigWriteService {
                         "management_entity_id", entityId == null ? "(归各商户自己)" : entityId));
     }
 
+    // ================= 批10/E 内部结算 SKU 目录(V379/V380)=================
+
+    /**
+     * 目录条目落草案(新建与改价同一入口):itemCode 留空=新建(生成稳定码);非空=改既有条目。
+     * 返回落地 itemCode —— 业务页「就地新建」拿它立刻建立引用(条目本身仍须他人复核转正后才有生效价)。
+     *
+     * <p>既有码的绑定商户不可改:业务表引用校验的根基是「条目商家=业务对象提供商家」,换商家等于把 A 家的成本
+     * 价基整体划给 B 家,引用它的对象一夜之间全部跨商户 —— 要换提供方,请新建条目重新引用。
+     */
+    public String saveInternalPriceItem(InternalPriceItemRequest request, String actorId) {
+        InternalPriceItemRequest req = requireRequest(request);
+        String idem = requireText(req.idempotencyKey(), "idempotency_key");
+        String merchantId = requireText(req.merchantId(), "merchant_id");
+        rejectSentinel(merchantId, "merchant_id");
+        String category = requireText(req.category(), "category");
+        String itemName = requireText(req.itemName(), "item_name");
+        Long price = req.priceCent();
+        if (price == null || price < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "price_cent 必填且 ≥0(0=商户让利型合法价;没配价请不要建条目)");
+        }
+        if (!writeRepository.merchantExists(merchantId)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id 对应商户不存在:" + merchantId);
+        }
+        String itemCode = trimToNull(req.itemCode());
+        if (itemCode == null) {
+            itemCode = "sku_" + Hashing.idempotencyCode(merchantId + "|" + itemName + "|" + idem);
+        } else {
+            String boundMerchant = writeRepository.catalogItemMerchant(itemCode);
+            if (boundMerchant != null && !boundMerchant.equals(merchantId)) {
+                throw ApiException.badRequest("CATALOG_ITEM_MERCHANT_IMMUTABLE",
+                        "目录条目的绑定商户不可更改;要换提供方请新建条目并重新引用");
+            }
+        }
+        String landedId = writeRepository.upsertInternalPriceItemDraft(
+                draftId("ipc_d_", itemCode, idem), itemCode, merchantId, category, itemName, price, actorId);
+        audit("settlement.config.internal_price_catalog.updated", "internal_price_catalog", landedId, idem,
+                Map.of("item_code", itemCode, "merchant_id", merchantId, "category", category,
+                        "item_name", itemName, "price_cent", String.valueOf(price)));
+        return itemCode;
+    }
+
+    /**
+     * 目录条目草案转正(activateDraft 专案分支):差人守卫 + Path 2 软替换 + <b>快照传播</b>。
+     *
+     * <p>🔴 资金级原子性:①旧生效行软替换/草案翻生效 与 ②四张业务表快照同步 必须同一事务 ——
+     * 否则会出现"目录已是新价、业务表快照还是旧价"的窗口,核销/结算在窗口内按旧价固化,月底对不平。
+     * 已发生的流水级固化(核销/结算记录)在传播里一个字节都不碰:已发生的不可改。
+     *
+     * <p>0 价守卫:券 internal_price 口径要求 >0(V301 chk_vd_internal_price)。有券引用时把价转正成 0,
+     * 传播 UPDATE 会撞 DB 约束炸成 500;先验给复核人一句能看懂的话。
+     */
+    public void activateInternalPriceItem(String id, String actorId) {
+        requireDifferentActor(writeRepository.singleRowDraftUpdatedBy(
+                SingleRowConfig.INTERNAL_PRICE_ITEM, id), actorId);
+        JdbcSettlementConfigWriteRepository.CatalogEntryRow draft = writeRepository.findCatalogDraftById(id);
+        if (draft == null) {
+            throw ApiException.badRequest("DRAFT_NOT_ACTIVATABLE", "草案不存在或非草案态,无法转正");
+        }
+        if (draft.priceCent() == 0 && writeRepository.countVoucherRefs(draft.itemCode()) > 0) {
+            throw ApiException.badRequest("CATALOG_PRICE_ZERO_VOUCHER_REF",
+                    "该条目已被实物券引用,内部结算价不可转正为 0(券口径要求内部价 >0);请先解除券引用或改为正价");
+        }
+        // 转正 + 快照传播在仓储侧同一事务(activateInternalPriceItemDraft @Transactional,经代理调用)。
+        requireActivated(writeRepository.activateInternalPriceItemDraft(
+                id, draft.itemCode(), draft.priceCent(), actorId, Instant.now()));
+        auditActivated("internal_price_catalog", draft.itemCode());
+    }
+
     // ================= §3 复核转正(差人守卫 + Path 2 软替换)=================
 
     /**
@@ -383,6 +453,8 @@ public class SettlementConfigWriteService {
                 requireActivated(attributionRepository.activateDraft(draftId, actorId, now));
                 auditActivated("revenue_stream_attribution", draftId);
             }
+            // 批10/E:目录条目转正走专案分支(转正 + 快照传播同一事务,见方法注释)。
+            case "internal_price_item" -> activateInternalPriceItem(draftId, actorId);
             default -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 requireDifferentActor(writeRepository.singleRowDraftUpdatedBy(cfg, draftId), actorId);
@@ -445,8 +517,9 @@ public class SettlementConfigWriteService {
             // V346(P0-E):营业额抽成规则可下线(合同终止/换规则),下线后该合同回落"无抽成规则"=不产生抽成应收。
             // S6(V373):赠送权益预扣规则的项目/票种特例条目可下线(回落上层默认);全局默认种子 pgc_default 受守卫保护
             //   (种子被删 → findPassGiftCostConfig 对全部核销结算 fail-loud)。
+            // 批10/E:目录条目下线归档(软删留库):历史引用照旧可追溯;后续核销/结算解析不到生效价 → fail-closed。
             case "commission_rate", "points_accrual_rate", "high_value_threshold", "turnover_rent_rule",
-                    "pass_gift_cost" -> {
+                    "pass_gift_cost", "internal_price_item" -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 table = cfg.table();
                 rejectDefaultSeedArchive(targetId);

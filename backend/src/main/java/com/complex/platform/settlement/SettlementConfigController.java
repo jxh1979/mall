@@ -114,6 +114,40 @@ public class SettlementConfigController {
         return ApiResponse.ok(null);
     }
 
+    /**
+     * 批10/E:内部结算 SKU 目录条目落草案(新建与改价同一入口)。返回落地 item_code ——
+     * 业务页「就地新建」拿它立刻建立引用;条目须他人复核转正后才有生效价(此前引用方解析 fail-closed)。
+     */
+    @PostMapping("/internal-price-item")
+    public ApiResponse<String> saveInternalPriceItem(
+            @RequestBody SettlementConfigWriteRequests.InternalPriceItemRequest request) {
+        return ApiResponse.ok(writeService.saveInternalPriceItem(request, requireManageActor()));
+    }
+
+    /**
+     * 批10/E:目录三维筛选列表(商家/业态/品类;业态随商家带出)。内部结算价属敏感信息,仅授权后台可见:
+     * 结算配置读 或 V279/V301 两个内部价读脱敏点任一。商户 scope 操作者强制只看本商户条目(租户隔离)。
+     */
+    @GetMapping("/internal-price-items")
+    public ApiResponse<java.util.List<JdbcSettlementConfigWriteRepository.CatalogEntryRow>> listInternalPriceItems(
+            @org.springframework.web.bind.annotation.RequestParam(value = "merchant_id", required = false) String merchantId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "business_format", required = false) String businessFormat,
+            @org.springframework.web.bind.annotation.RequestParam(value = "category", required = false) String category,
+            @org.springframework.web.bind.annotation.RequestParam(value = "include_drafts", required = false,
+                    defaultValue = "false") boolean includeDrafts,
+            @org.springframework.web.bind.annotation.RequestParam(value = "include_archived", required = false,
+                    defaultValue = "false") boolean includeArchived) {
+        if (!authorizationService.currentActorHasPermission("settlement.config.view")
+                && !authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")
+                && !authorizationService.currentActorHasPermission("voucher.internal_price.view")) {
+            throw com.complex.platform.common.api.ApiException.forbidden("INTERNAL_PRICE_FORBIDDEN",
+                    "内部结算价属敏感信息,仅授权后台人员可见");
+        }
+        String scopedMerchant = authorizationService.currentMerchantScope().orElse(merchantId);
+        return ApiResponse.ok(settlementConfigService.listInternalPriceItems(
+                scopedMerchant, businessFormat, category, includeDrafts, includeArchived));
+    }
+
     @PostMapping("/rank-tiers")
     public ApiResponse<Void> saveRankTiers(@RequestBody RankTiersRequest request) {
         writeService.saveRankTiers(request, requireManageActor());

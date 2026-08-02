@@ -145,6 +145,8 @@ const GROUP_LABELS: Record<string, string> = {
   high_value_threshold: "高价值判定阈值(进货价)",
   // V346（P0-E）：营业额抽成规则在「合同工作台」填写并落草案，在此复核转正后才对结算生效。
   turnover_rent_rule: "营业额抽成规则",
+  // 批10/E：内部结算 SKU 目录条目在「内部结算价目录」页维护并落草案，此队列可直接复核转正。
+  internal_price_item: "内部结算价目录条目",
 };
 // 支持「下线」（软删）的草案类型，对齐后端 archive 白名单。
 // V340 提成/积分：商户级特例条目须可下线，否则该商户被特例永久遮挡、回落不到项目/全局默认口径。
@@ -159,6 +161,8 @@ const ARCHIVABLE = new Set([
   "high_value_threshold",
   "turnover_rent_rule",
   "pass_gift_cost",
+  // 批10/E：目录条目草案可直接下线（弃草案）；生效条目的下线归档在「内部结算价目录」页做。
+  "internal_price_item",
 ]);
 
 type TierRow = { rankFrom: string; rankTo: string; shareBps: string };

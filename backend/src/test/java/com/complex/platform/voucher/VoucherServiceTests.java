@@ -298,11 +298,15 @@ class VoucherServiceTests {
                 "k3", "实物券", "in_store_goods", "in_store_staff", "none", null,
                 null, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class).hasMessageContaining("inventory_item_id");
-        // 内部结算缺内部价拒绝。
+        // 批10/E：内部结算口径须引用 SKU 目录条目（缺引用拒绝）；直填内部价一律 400（唯一可编辑处=目录）。
         assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
                 "k4", "实物券", "in_store_goods", "in_store_staff", "internal_price", "merchant-1",
                 null, "item_1", "loc_1", 1, null, null, null, null)))
-                .isInstanceOf(ApiException.class).hasMessageContaining("internal_price_cent");
+                .isInstanceOf(ApiException.class).hasMessageContaining("catalog_item_code");
+        assertThatThrownBy(() -> service.createDefinition(new VoucherDefinitionRequest(
+                "k4b", "实物券", "in_store_goods", "in_store_staff", "internal_price", "merchant-1",
+                null, "item_1", "loc_1", 1, 6000L, null, null, null)))
+                .isInstanceOf(ApiException.class).hasMessageContaining("内部结算 SKU 目录");
         assertThat(repository.definitions).isEmpty();
         // 合法折扣券可建。
         VoucherDefinitionRecord created = service.createDefinition(new VoucherDefinitionRequest(

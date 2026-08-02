@@ -155,25 +155,10 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
       expect(((tplCall?.[1] ?? {}) as Record<string, unknown>).require_face_photo).toBe(true);
     });
 
-    // ③ 改签约价：只列虚拟权益模板并显示现价；理由必填；提交走 PUT 改价端点（分为单位）。
-    const tplSelect = screen.getByTestId("agreement-price-template") as HTMLSelectElement;
-    expect(Array.from(tplSelect.options).map((o) => o.value)).toEqual(["", "tpl-1"]);
-    expect(tplSelect.options[1]?.textContent).toContain("¥80.00");
-    fireEvent.change(tplSelect, { target: { value: "tpl-1" } });
-    fireEvent.change(screen.getByTestId("agreement-price-value"), { target: { value: "30" } });
-    // 缺理由不提交——动的是钱的口径。
-    fireEvent.click(screen.getByTestId("agreement-price-submit"));
-    await waitFor(() => expect(putSpy.mock.calls.some((c) => String(c[0]).includes("/agreement-price"))).toBe(false));
-    fireEvent.change(screen.getByTestId("agreement-price-reason"), { target: { value: "签约价录入笔误更正" } });
-    fireEvent.click(screen.getByTestId("agreement-price-submit"));
-    await waitFor(() => {
-      const call = putSpy.mock.calls.find((c) => String(c[0]).includes("/agreement-price"));
-      expect(String(call?.[0])).toBe("/api/v1/ticketing/entitlement-templates/tpl-1/agreement-price");
-      const body = (call?.[1] ?? {}) as Record<string, unknown>;
-      expect(body.agreement_price_cent).toBe(3000);
-      expect(body.reason).toBe("签约价录入笔误更正");
-    });
-    // 页面明说改价只对之后发放的生效，运营不会以为历史也跟着变。
-    expect(screen.getByTestId("agreement-price-scope-hint").textContent).toContain("只对之后发放的权益生效");
+    // ③ 批10/E：模板侧改价入口已下线——页面明说唯一可改价处 = 内部结算价目录（草案→他人复核转正），
+    //   且不存在任何 PUT /agreement-price 请求（端点已删，防前端还挂着一个必 404 的按钮骗运营）。
+    expect(screen.queryByTestId("agreement-price-form")).toBeNull();
+    expect(screen.getByTestId("agreement-price-scope-hint").textContent).toContain("内部结算价目录");
+    expect(putSpy.mock.calls.some((c) => String(c[0]).includes("/agreement-price"))).toBe(false);
   });
 });

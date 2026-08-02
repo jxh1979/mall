@@ -47,7 +47,12 @@ public class JdbcSettlementConfigWriteRepository {
                 List.of("contract_id", "merchant_id")),
         // S6（V373）：赠送权益预扣规则按 项目 × 票种（留空=该层通用）。同 Path 2 草案/转正范式。
         PASS_GIFT_COST("pass_gift_cost_configs", "pass_gift_cost",
-                List.of("project_id", "ticket_type_id"));
+                List.of("project_id", "ticket_type_id")),
+        // 批10/E（V379）：内部结算 SKU 目录条目。scope = item_code（条目稳定业务键，业务表引用它）；
+        // 同 code 旧生效行在转正时软替换 inactive（留库即价格版本史）。转正后的快照传播见
+        // SettlementConfigWriteService.activateDraft 专案分支（propagateCatalogPriceToSnapshots）。
+        INTERNAL_PRICE_ITEM("internal_price_catalog", "internal_price_item",
+                List.of("item_code"));
 
         private final String table;
         private final String configType;
@@ -310,6 +315,162 @@ public class JdbcSettlementConfigWriteRepository {
         }
     }
 
+    // ================= 批10/E 内部结算 SKU 目录(V379/V380) =================
+
+    /** 目录条目落草案(Path 2:草案槽覆盖,不动生效行)。新建与改价同一入口:item_code 新码=新建,既有码=改价草案。 */
+    public String upsertInternalPriceItemDraft(String id, String itemCode, String merchantId, String category,
+                                               String itemName, long priceCent, String updatedBy) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO internal_price_catalog
+                    (id, item_code, merchant_id, category, item_name, price_cent, status, is_draft, updated_by,
+                     created_at, updated_at)
+                VALUES (:id, :item_code, :merchant_id, :category, :item_name, :price_cent, 'active', TRUE, :updated_by,
+                        now(), now())
+                ON CONFLICT (item_code, is_draft) WHERE status = 'active' DO UPDATE SET
+                    merchant_id = EXCLUDED.merchant_id,
+                    category = EXCLUDED.category,
+                    item_name = EXCLUDED.item_name,
+                    price_cent = EXCLUDED.price_cent,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                RETURNING id
+                """, new MapSqlParameterSource()
+                .addValue("id", id).addValue("item_code", itemCode).addValue("merchant_id", merchantId)
+                .addValue("category", category).addValue("item_name", itemName).addValue("price_cent", priceCent)
+                .addValue("updated_by", updatedBy), String.class);
+    }
+
+    /** 生效条目(is_draft=FALSE,status=active)读取:引用校验/快照同步用。 */
+    public CatalogEntryRow findActiveCatalogEntry(String itemCode) {
+        List<CatalogEntryRow> rows = jdbcTemplate.query("""
+                SELECT c.id, c.item_code, c.merchant_id, m.merchant_type AS business_format, c.category, c.item_name,
+                       c.price_cent, c.status, c.is_draft, c.updated_by, c.updated_at
+                  FROM internal_price_catalog c
+                  LEFT JOIN merchants m ON m.id = c.merchant_id
+                 WHERE c.item_code = :item_code AND c.is_draft = FALSE AND c.status = 'active'
+                """, new MapSqlParameterSource().addValue("item_code", itemCode), CATALOG_ROW_MAPPER);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** 同 code 生效或草案行是否已被别的商户占用(引用/新建守卫:一码一商家,不得跨商户复用)。 */
+    public String catalogItemMerchant(String itemCode) {
+        return jdbcTemplate.query("""
+                SELECT merchant_id FROM internal_price_catalog
+                 WHERE item_code = :item_code AND status = 'active'
+                 ORDER BY is_draft LIMIT 1
+                """, new MapSqlParameterSource().addValue("item_code", itemCode),
+                rs -> rs.next() ? rs.getString(1) : null);
+    }
+
+    /**
+     * 目录三维筛选列表(商家硬绑定;业态 = merchants.merchant_type 随商家带出,V348 五值;品类独立标签)。
+     * includeDrafts/includeArchived 供目录页草案队列与归档档查看;默认只看生效行。
+     * 读端敏感:price 是否可见由 controller 层权限闸决定(无权限根本进不来本查询)。
+     */
+    public List<CatalogEntryRow> listCatalogEntries(String merchantId, String businessFormat, String category,
+                                                    boolean includeDrafts, boolean includeArchived) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT c.id, c.item_code, c.merchant_id, m.merchant_type AS business_format, c.category, c.item_name,
+                       c.price_cent, c.status, c.is_draft, c.updated_by, c.updated_at
+                  FROM internal_price_catalog c
+                  LEFT JOIN merchants m ON m.id = c.merchant_id
+                 WHERE 1 = 1
+                """);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (!includeArchived) {
+            sql.append(" AND c.status = 'active'");
+        }
+        if (!includeDrafts) {
+            sql.append(" AND c.is_draft = FALSE");
+        }
+        if (merchantId != null) {
+            sql.append(" AND c.merchant_id = :merchant_id");
+            params.addValue("merchant_id", merchantId);
+        }
+        if (businessFormat != null) {
+            sql.append(" AND m.merchant_type = :business_format");
+            params.addValue("business_format", businessFormat);
+        }
+        if (category != null) {
+            sql.append(" AND c.category = :category");
+            params.addValue("category", category);
+        }
+        sql.append(" ORDER BY c.is_draft DESC, c.updated_at DESC, c.item_code");
+        return jdbcTemplate.query(sql.toString(), params, CATALOG_ROW_MAPPER);
+    }
+
+    /**
+     * 目录转正后快照传播(V380 收编契约):四张业务表按引用码同步快照列 = 「改一次,对后续核销/结算生效」。
+     * 只动快照列,不动任何流水级固化(ticket_verifications/voucher_redemptions/结算账单行) —— 已发生的账碰不到。
+     * 与转正同事务(调用方 @Transactional):要么一起生效,要么一起回滚,不存在"目录已转正、快照还是旧价"的窗口。
+     */
+    public void propagateCatalogPriceToSnapshots(String itemCode, long priceCent) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("item_code", itemCode).addValue("price_cent", priceCent);
+        jdbcTemplate.update("UPDATE bar_products SET internal_settlement_price_cent = :price_cent,"
+                + " updated_at = now() WHERE catalog_item_code = :item_code", params);
+        jdbcTemplate.update("UPDATE bar_combos SET internal_settlement_price_cent = :price_cent,"
+                + " updated_at = now() WHERE catalog_item_code = :item_code", params);
+        jdbcTemplate.update("UPDATE entitlement_templates SET agreement_price_cent = :price_cent,"
+                + " updated_at = now() WHERE catalog_item_code = :item_code", params);
+        jdbcTemplate.update("UPDATE voucher_definitions SET internal_price_cent = :price_cent,"
+                + " updated_at = now() WHERE catalog_item_code = :item_code", params);
+    }
+
+    /** 草案行读取(id 定位;转正专案分支要拿 item_code/price 做 0 价守卫与快照传播)。 */
+    public CatalogEntryRow findCatalogDraftById(String id) {
+        List<CatalogEntryRow> rows = jdbcTemplate.query("""
+                SELECT c.id, c.item_code, c.merchant_id, m.merchant_type AS business_format, c.category, c.item_name,
+                       c.price_cent, c.status, c.is_draft, c.updated_by, c.updated_at
+                  FROM internal_price_catalog c
+                  LEFT JOIN merchants m ON m.id = c.merchant_id
+                 WHERE c.id = :id AND c.is_draft = TRUE AND c.status = 'active'
+                """, new MapSqlParameterSource().addValue("id", id), CATALOG_ROW_MAPPER);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** 商户存在性(落草案先验:给明确 400 而不是 FK 违约 500)。 */
+    public boolean merchantExists(String merchantId) {
+        Integer n = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM merchants WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", merchantId), Integer.class);
+        return n != null && n > 0;
+    }
+
+    /**
+     * 目录条目转正 + 快照传播,一个事务(🔴 资金级原子性):Path 2 软替换/翻草案 与 四表快照同步要么全成、
+     * 要么全回滚,不留"目录已新价、快照还旧价"的窗口。注意必须经 Spring 代理从服务层调进来(勿仓储内自调)。
+     */
+    @Transactional
+    public int activateInternalPriceItemDraft(String id, String itemCode, long priceCent,
+                                              String updatedBy, Instant now) {
+        int rows = activateSingleRowDraft(SingleRowConfig.INTERNAL_PRICE_ITEM, id, updatedBy, now);
+        if (rows > 0) {
+            propagateCatalogPriceToSnapshots(itemCode, priceCent);
+        }
+        return rows;
+    }
+
+    /** 引用该条目的券定义数(转正 0 价守卫:券 internal_price 口径要求 >0,V301 chk_vd_internal_price)。 */
+    public int countVoucherRefs(String itemCode) {
+        Integer n = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM voucher_definitions WHERE catalog_item_code = :item_code",
+                new MapSqlParameterSource().addValue("item_code", itemCode), Integer.class);
+        return n == null ? 0 : n;
+    }
+
+    private static final org.springframework.jdbc.core.RowMapper<CatalogEntryRow> CATALOG_ROW_MAPPER = (rs, i) ->
+            new CatalogEntryRow(rs.getString("id"), rs.getString("item_code"), rs.getString("merchant_id"),
+                    rs.getString("business_format"), rs.getString("category"), rs.getString("item_name"),
+                    rs.getLong("price_cent"), rs.getString("status"), rs.getBoolean("is_draft"),
+                    rs.getString("updated_by"),
+                    rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant());
+
+    /** 目录条目一行(读端投影;business_format 随商家带出)。 */
+    public record CatalogEntryRow(String id, String itemCode, String merchantId, String businessFormat,
+                                  String category, String itemName, long priceCent, String status, boolean isDraft,
+                                  String updatedBy, java.time.Instant updatedAt) {
+    }
+
     // ================= §3 复核转正(旧生效行软替换 status→inactive,不物理删)=================
 
     /**
@@ -557,6 +718,15 @@ public class JdbcSettlementConfigWriteRepository {
                                || ' 生效起=' || effective_from,
                            updated_at
                       FROM turnover_rent_rules WHERE is_draft = TRUE AND status = 'active'
+                    UNION ALL
+                    -- 批10/E 内部结算 SKU 目录条目草案:复核人要看清「哪家商户的哪个 SKU 改成多少钱」。
+                    SELECT c.id, 'internal_price_item',
+                           '商户=' || COALESCE(m.merchant_name, c.merchant_id) || ' 品类=' || c.category
+                               || ' 条目=' || c.item_name || ' 内部结算价 ' || c.price_cent || '分',
+                           c.updated_at
+                      FROM internal_price_catalog c
+                      LEFT JOIN merchants m ON m.id = c.merchant_id
+                     WHERE c.is_draft = TRUE AND c.status = 'active'
                 ) q
                 ORDER BY updated_at DESC NULLS LAST, config_group, id
                 """, new MapSqlParameterSource(), (rs, i) ->

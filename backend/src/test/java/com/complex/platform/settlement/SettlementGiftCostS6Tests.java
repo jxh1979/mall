@@ -98,6 +98,7 @@ class SettlementGiftCostS6Tests {
         }
         for (String id : templateIds) {
             jdbcTemplate.update("DELETE FROM entitlement_templates WHERE id = ?", id);
+            jdbcTemplate.update("DELETE FROM internal_price_catalog WHERE item_code = ?", "sku_et_" + id);
         }
         projectIds.clear();
         merchants.clear();
@@ -386,19 +387,33 @@ class SettlementGiftCostS6Tests {
     }
 
     /**
-     * 票面 binding + 模板:kind=physical 走签约内部价(agreement_price_cent),提供方商户挂模板;
+     * 票面 binding + 模板:kind=physical 走签约内部价,提供方商户挂模板;
      * componentPriceCent=0 即免费/赠送权益,>0 即付费组成(参与拆份额,不进 G)。
+     * 批10/E(V380)收编形态:有价模板 = 目录生效条目 + 模板挂引用 + agreement_price_cent 转快照;
+     * 无价(agreementPriceCent=null)= 不挂引用(解析 fail-closed,与旧 NULL 签约价同语义)。
      */
     private void seedGiftBinding(String ticketTypeId, String kind, Long agreementPriceCent,
                                  int quantity, int numPeople, String costBearer, long componentPriceCent) {
         String tpl = "ets6_" + Long.toHexString(System.nanoTime());
         templateIds.add(tpl);
+        String itemCode = agreementPriceCent == null ? null : "sku_et_" + tpl;
+        if (itemCode != null) {
+            jdbcTemplate.update(
+                    "INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                            + " VALUES ('m_prov_s6', 'S6测试提供方', 'bar', 'active', now(), now())"
+                            + " ON CONFLICT (id) DO NOTHING");
+            jdbcTemplate.update(
+                    "INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name,"
+                            + " price_cent, status, is_draft, updated_by, created_at, updated_at)"
+                            + " VALUES (?, ?, 'm_prov_s6', 'gift_item', ?, ?, 'active', FALSE, 'seed_s6', now(), now())",
+                    itemCode, itemCode, "S6模板-" + tpl, agreementPriceCent);
+        }
         jdbcTemplate.update(
                 "INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,"
                         + " default_value_cent, status, merchant_id, entitlement_kind, agreement_price_cent,"
-                        + " created_at, updated_at)"
-                        + " VALUES (?, ?, 'gift_item', 1, 0, 'active', 'm_prov_s6', ?, ?, now(), now())",
-                tpl, "S6模板-" + tpl, kind, agreementPriceCent);
+                        + " catalog_item_code, created_at, updated_at)"
+                        + " VALUES (?, ?, 'gift_item', 1, 0, 'active', 'm_prov_s6', ?, ?, ?, now(), now())",
+                tpl, "S6模板-" + tpl, kind, agreementPriceCent, itemCode);
         jdbcTemplate.update(
                 "INSERT INTO ticket_type_entitlements (id, ticket_type_id, entitlement_template_id, quantity,"
                         + " total_times, value_amount_cent, num_people, component_price_cent, cost_bearer,"

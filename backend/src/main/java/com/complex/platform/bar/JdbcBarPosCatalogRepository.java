@@ -222,6 +222,48 @@ class JdbcBarPosCatalogRepository {
                 Map.of("id", id), this::mapCombo).stream().findFirst().map(this::withItems);
     }
 
+    // ---------- 批10/E 内部结算 SKU 目录(V379/V380) ----------
+
+    /** 目录条目(生效或草案)的绑定商户:业务对象设引用时校验「条目商家 = 提供方」。空 = 无此条目。 */
+    Optional<String> findCatalogItemMerchant(String itemCode) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                SELECT merchant_id FROM internal_price_catalog
+                 WHERE item_code = :item_code AND status = 'active'
+                 ORDER BY is_draft LIMIT 1
+                """, Map.of("item_code", itemCode), rs -> rs.next() ? rs.getString(1) : null));
+    }
+
+    /** 目录生效价(is_draft=FALSE):设引用当刻的快照来源。空 = 条目还只有草案(未复核转正)/已归档。 */
+    Optional<Long> findActiveCatalogPriceCent(String itemCode) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                SELECT price_cent FROM internal_price_catalog
+                 WHERE item_code = :item_code AND is_draft = FALSE AND status = 'active'
+                """, Map.of("item_code", itemCode), rs -> rs.next() ? rs.getLong(1) : null));
+    }
+
+    /**
+     * 商品挂目录引用 + 同步快照(定向 UPDATE,照 updateProductImage 范式,不走 saveProduct 全字段 upsert ——
+     * 快照列只由系统写:设引用当刻取生效价,此后由目录转正传播维护;任何人不得手改)。
+     */
+    void setProductCatalogRef(String productId, String itemCode, Long snapshotPriceCent) {
+        jdbcTemplate.update("""
+                UPDATE bar_products
+                   SET catalog_item_code = :item_code, internal_settlement_price_cent = :price, updated_at = now()
+                 WHERE id = :id
+                """, new MapSqlParameterSource().addValue("id", productId)
+                .addValue("item_code", itemCode).addValue("price", snapshotPriceCent));
+    }
+
+    /** 套餐挂目录引用 + 同步快照(同上;saveCombo 全字段 upsert 不含 catalog_item_code,防重建时误清引用)。 */
+    void setComboCatalogRef(String comboId, String itemCode, Long snapshotPriceCent) {
+        jdbcTemplate.update("""
+                UPDATE bar_combos
+                   SET catalog_item_code = :item_code, internal_settlement_price_cent = :price, updated_at = now()
+                 WHERE id = :id
+                """, new MapSqlParameterSource().addValue("id", comboId)
+                .addValue("item_code", itemCode).addValue("price", snapshotPriceCent));
+    }
+
     BarComboRecord saveCombo(BarComboRecord combo) {
         jdbcTemplate.update("""
                 INSERT INTO bar_combos (

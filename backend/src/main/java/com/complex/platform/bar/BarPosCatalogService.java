@@ -126,9 +126,10 @@ public class BarPosCatalogService {
         BarComboRequest r = require(request);
         Optional<String> scope = authorizationService.currentMerchantScope();
         Instant now = Instant.now();
-        Long internalPrice = r.internalSettlementPriceCent();
-        if (internalPrice != null && internalPrice < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "internal_settlement_price_cent must be >= 0");
+        // 批10/E(V380)：内部结算价唯一可编辑处 = SKU 目录。直填一律拒绝(静默忽略会骗运营"以为配好了")。
+        if (r.internalSettlementPriceCent() != null) {
+            throw ApiException.badRequest("BAR_INTERNAL_PRICE_CATALOG_ONLY",
+                    "内部结算价已收编进内部结算 SKU 目录：请引用目录条目，改价到目录走草案复核");
         }
         String comboId;
         String barId;
@@ -153,15 +154,26 @@ public class BarPosCatalogService {
             merchantId = existing.merchantId();
             createdAt = existing.createdAt();
         }
-        // AUD-043 写侧门控：无内部价权限者不得录入/改动成本价（读侧脱敏已做，gov:197 仅授权角色可查看和录入）。
-        // 脱敏后的编辑者看不到真值会提交 null，此时保留原值不清空；提交异于原值的非空成本价则拒绝。
-        Long existingInternalPrice = existing == null ? null : existing.internalSettlementPriceCent();
-        if (!authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
-            if (internalPrice != null && !java.util.Objects.equals(internalPrice, existingInternalPrice)) {
+        // 批10/E:成本价基走目录引用。更新时留空 = 保留既有引用/快照不动(脱敏编辑者看不到真值,同 AUD-043 语义)。
+        // 挂/换引用 = 建立成本价基,需内部价专用权限(写侧门控与读侧脱敏对称)。
+        Long internalPrice = existing == null ? null : existing.internalSettlementPriceCent();
+        String catalogItemCode = trimToNull(r.catalogItemCode());
+        Long refSnapshotPrice = null;
+        if (catalogItemCode != null) {
+            if (!authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
                 throw ApiException.forbidden("BAR_INTERNAL_PRICE_FORBIDDEN",
-                        "recording bar internal settlement price requires bar.internal_settlement_price.view");
+                        "binding internal price catalog item requires bar.internal_settlement_price.view");
             }
-            internalPrice = existingInternalPrice;
+            String boundMerchant = repository.findCatalogItemMerchant(catalogItemCode)
+                    .orElseThrow(() -> ApiException.badRequest("CATALOG_ITEM_NOT_FOUND",
+                            "所引用的内部结算 SKU 目录条目不存在"));
+            if (!boundMerchant.equals(barId)) {
+                throw ApiException.badRequest("CATALOG_ITEM_MERCHANT_MISMATCH",
+                        "目录条目的绑定商户与本套餐所属酒吧不一致，不得跨商户/跨项目引用");
+            }
+            // 快照 = 当前目录生效价;条目还只有草案时为空,转正传播时由系统补上。
+            refSnapshotPrice = repository.findActiveCatalogPriceCent(catalogItemCode).orElse(null);
+            internalPrice = refSnapshotPrice;
         }
         List<BarComboRequest.Item> reqItems = r.items() == null ? List.of() : r.items();
         if (reqItems.isEmpty()) {
@@ -199,7 +211,12 @@ public class BarPosCatalogService {
                 existing == null ? null : existing.deleteRequestedBy(),
                 existing == null ? null : existing.deleteRequestedAt(),
                 existing == null ? null : existing.deleteReason());
-        return repository.saveCombo(toSave);
+        BarComboRecord saved = repository.saveCombo(toSave);
+        // 批10/E:引用走定向 UPDATE(saveCombo 全字段 upsert 不含 catalog_item_code,防编辑重建时误清引用)。
+        if (catalogItemCode != null) {
+            repository.setComboCatalogRef(comboId, catalogItemCode, refSnapshotPrice);
+        }
+        return saved;
     }
 
     // ================= V262 数据存档与审批后删除范式 =================

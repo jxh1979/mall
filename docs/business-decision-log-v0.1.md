@@ -848,7 +848,7 @@
 - **现状（实读迁移确认，一价四存）**：`bar_products.internal_settlement_price_cent`（V152）、`bar_combos.internal_settlement_price_cent`（V257）、`entitlement_templates`/`issued_entitlements.agreement_price_cent`（V225）、`voucher_definitions.internal_price_cent`（V301）——四处各存一份、各改各的，均**无草案复核**（直接改直接生效）、无三维分类、无跨页引用。可复用地基：`ticket_verifications.settlement_price_cent`（V225）已在核销时固化当次结算价；`bar.internal_settlement_price.view`（V279）/ `voucher.internal_price.view`（V301）两个读脱敏权限点可沿用。
 - **理由**：财务核一笔"平台该付这家商户多少成本"时，同一瓶酒在四个页面有四个价、四个人各改各的，改完谁也不知道另外三处还是旧价；对账对不上时说不清该以哪个为准，出错也找不到该谁兜。集中成一个目录之后：**价只有一处能改、改一次全平台生效、谁改谁复核有痕、已经发生的账不会被后来改价改掉**。改价走草案复核，是因为内部结算价直接决定平台掏多少钱给商户，单人一改就生效等于在结算总控之外留一条可以单人改钱的口子（与 P0-E 营业额抽成规则的整改同理）。固化到流水，是因为账一旦结出去再被改价追溯性地改掉，商户和平台永远对不平。
 - **来源**：用户 2026-07-28 口头拍板（业务 HTML 逐条批准，commit `88eba70c`）。
-- **影响**：现状-目标差距与落地要求写在 `finance-settlement-product-prd-v0.1.md` **§3B**（权威）；结算侧承接指针 `settlement-rebuild-prd-v1.0.md` §9.7、§6.1；排期 `pending-development-backlog-v0.1.md` **批 10**。⚠️ 按「.160 开发库数据最后全删」铁律，**不做存量数据兼容/回填设计**，直接按目标形态建。
+- **影响**：现状-目标差距与落地要求写在 `finance-settlement-product-prd-v0.1.md` **§3B**（权威）；结算侧承接指针 `settlement-rebuild-prd-v1.0.md` §9.7、§6.1；排期 `pending-development-backlog-v0.1.md` **批 10**。⚠️ 按「.160 开发库数据最后全删」铁律，**不做存量数据兼容/回填设计**，直接按目标形态建。✅ **2026-08-01 已落地（V379/V380）**：目录表+四处收编成引用+快照只读、Path 2 第 12 类草案链（转正+快照传播同事务）、解析器两支改读目录、ADM-STL-003 目录主页面、PR#274 模板改价端点下线；「每项目独立」以「条目商户=提供商户」商户级同源守卫落地（商户唯一归属项目，强于项目级）。
 
 ## DEC-CFG-2026-07-28-01（2026-07-28）停用旧积分规则表与旧页，积分口径只留配置中心
 - **决策**：停用 `customer_points_rules`（V060）与后台页「积分规则配置」ADM-CUS-003。页面/路由/菜单/四个 CRUD 端点全部下线，`customer.points_rule.view|manage` 两个权限点从所有角色解绑并置 inactive；表按删除铁律**留库不物删**（全表打 `archived_at`/`archived_by`/`archive_reason` 存档标记，可查可恢复）。迁移 V352。

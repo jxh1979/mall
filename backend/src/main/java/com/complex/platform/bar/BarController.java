@@ -362,11 +362,12 @@ public class BarController {
     public ApiResponse<BarProductRecord> createProduct(@RequestBody(required = false) @jakarta.validation.Valid BarProductRequest request) {
         // 录入/修改商品（含内部结算价）为高危动作，需专用高危权限。
         authorizationService.requirePermission("bar.product.manage");
-        // AUD-043 写侧门控：录入成本价（内部结算价）另需内部价专用权限，与读侧脱敏对称（gov:197 仅授权角色可查看和录入）；仅在请求携带内部价时校验。
-        if (request != null && request.internalSettlementPriceCent() != null
+        // AUD-043 写侧门控（批10/E 收编后语义不变）：挂内部结算 SKU 目录引用 = 建立成本价基，仍需内部价
+        // 专用权限，与读侧脱敏对称（gov:197 仅授权角色可查看和录入）。直填 internalSettlementPriceCent 由服务层一律 400。
+        if (request != null && request.catalogItemCode() != null
                 && !authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")) {
             throw ApiException.forbidden("BAR_INTERNAL_PRICE_FORBIDDEN",
-                    "recording bar internal settlement price requires bar.internal_settlement_price.view");
+                    "binding internal price catalog item requires bar.internal_settlement_price.view");
         }
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createProduct(request));

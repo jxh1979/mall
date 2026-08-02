@@ -34,6 +34,7 @@ const MerchantZoneDividendsPage = React.lazy(() => import("./pages/MerchantZoneD
 const VoucherLedgerPage = React.lazy(() => import("./pages/VoucherLedgerPage").then((m) => ({ default: m.VoucherLedgerPage })));
 const SettlementReviewPage = React.lazy(() => import("./pages/SettlementReviewPage").then((m) => ({ default: m.SettlementReviewPage })));
 const SettlementConfigPage = React.lazy(() => import("./pages/SettlementConfigPage").then((m) => ({ default: m.SettlementConfigPage })));
+const InternalPriceCatalogPage = React.lazy(() => import("./pages/InternalPriceCatalogPage").then((m) => ({ default: m.InternalPriceCatalogPage })));
 const SettlementInvoicePage = React.lazy(() => import("./pages/SettlementInvoicePage").then((m) => ({ default: m.SettlementInvoicePage })));
 const ReconciliationPage = React.lazy(() => import("./pages/ReconciliationPage").then((m) => ({ default: m.ReconciliationPage })));
 const MerchantWorkOrdersPage = React.lazy(() => import("./pages/MerchantWorkOrdersPage").then((m) => ({ default: m.MerchantWorkOrdersPage })));
@@ -342,6 +343,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <SettlementConfigPage {...props} />;
     case "ADM-STL-002":
       return <SettlementInvoicePage {...props} />;
+    case "ADM-STL-003":
+      return <InternalPriceCatalogPage {...props} />;
     case "ADM-MER-008":
       return <MerchantZoneDividendsPage {...props} />;
     case "ADM-CUS-002":

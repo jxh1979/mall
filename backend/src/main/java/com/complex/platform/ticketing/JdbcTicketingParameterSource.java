@@ -73,6 +73,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("delete_requested_by", template.deleteRequestedBy())
                 .addValue("delete_requested_at", timestampWithTimeZone(template.deleteRequestedAt()))
                 .addValue("delete_reason", template.deleteReason())
+                .addValue("catalog_item_code", template.catalogItemCode())
                 .addValue("created_at", timestampWithTimeZone(template.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
     }
