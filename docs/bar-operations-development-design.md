@@ -1474,7 +1474,7 @@ P0 完成时必须能演示：
 
 > ✅ **已落地（2026-06-30 回写）**：`BarOrderService.resolvePourCost` 已实现——按杯出品缺 `actual_pour_volume` 时：strict 模式（功能标志）抛 `POUR_VOLUME_REQUIRED`；默认兜底模式按 `standard_pour_volume` 计、`loss=0` 但落 `inventory.loss_exception`（`reason=pour_volume_fallback`、`needs_review=true`）进异常核查，**绝不静默**。下方"真实开放缺口"措辞已失效。
 
-> **真实开放缺口**：`bar_products.standard_pour_volume`、`bar_order_items.actual_pour_volume`/`loss_volume` 字段均已存在（V091/§6.6/§6.16），但按杯出品当前**依赖请求传入 `actual_pour_volume`，不传则 `loss_volume=0`**（见本文 R7 横幅"仍开放"项与 `JdbcBarOrderRepository`），等于按杯损耗可被静默绕过。R6-D14 要求按杯 pour cost **强制采集**。
+> **真实开放缺口**：`bar_products.standard_pour_volume`、`bar_order_items.actual_pour_volume`/`loss_volume` 字段均已存在（V091/§6.6/§6.16），但按杯出品当前**依赖请求传入 `actual_pour_volume`，不传则 `loss_volume=0`**（见本文 R7 横幅"仍开放"项与 `JdbcBarRepository`），等于按杯损耗可被静默绕过。R6-D14 要求按杯 pour cost **强制采集**。
 
 - **状态/流转**：按杯出品明细（商品类型=杯卖 `cup`/by_glass）在**出品/送达确认**节点必须携带 `actual_pour_volume`。
 - **强制采集规则（二选一，后台可配）**：

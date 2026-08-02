@@ -19,7 +19,7 @@ public record BarProductCategoryRecord(
         String deleteRequestedBy,
         Instant deleteRequestedAt,
         String deleteReason
-) {
+) implements BarCatalogLifecycle<BarProductCategoryRecord> {
     // ponytail: V262 前的构造点（既有代码/测试）不带存档/删除字段，默认未存档 + delete_status=none。
     public BarProductCategoryRecord(
             String id, String barId, String merchantId, String categoryName, int sortOrder, String status,

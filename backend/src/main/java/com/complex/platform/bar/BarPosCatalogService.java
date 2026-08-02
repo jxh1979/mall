@@ -6,6 +6,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.LongFunction;
+import java.util.function.ToLongFunction;
+import java.util.function.UnaryOperator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -26,6 +32,9 @@ public class BarPosCatalogService {
     private final JdbcBarPosCatalogRepository repository;
     private final AuthorizationService authorizationService;
     private final BarOperationExecutor operations;
+    private final CatalogKind<BarProductCategoryRecord> categoryKind;
+    private final CatalogKind<BarProductRecord> productKind;
+    private final CatalogKind<BarComboRecord> comboKind;
 
     public BarPosCatalogService(JdbcBarPosCatalogRepository repository,
             AuthorizationService authorizationService,
@@ -33,6 +42,23 @@ public class BarPosCatalogService {
         this.repository = repository;
         this.authorizationService = authorizationService;
         this.operations = operations;
+        this.categoryKind = new CatalogKind<>("BAR_CATEGORY", "分类",
+                this::requireCategory, repository::saveCategory, null,
+                repository::setCategoryArchiveReason,
+                repository::countCategoryReferences, refs -> "该分类仍被 " + refs + " 个商品引用",
+                repository::deleteCategory);
+        // 商品的存档/删除字段走定向 UPDATE（updateProductArchiveDelete），落库后重取返回权威记录。
+        this.productKind = new CatalogKind<>("BAR_PRODUCT", "商品",
+                this::requireProduct, p -> { repository.updateProductArchiveDelete(p); return p; },
+                pid -> repository.findProduct(pid).orElseThrow(),
+                repository::setProductArchiveReason,
+                repository::countProductReferences, refs -> "该商品仍被 " + refs + " 条订单明细或套餐明细引用",
+                repository::deleteProduct);
+        this.comboKind = new CatalogKind<>("BAR_COMBO", "套餐",
+                this::requireCombo, repository::saveCombo, null,
+                repository::setComboArchiveReason,
+                null, null,
+                repository::deleteCombo);
     }
 
     // ---------- 分类 ----------
@@ -225,187 +251,127 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarProductCategoryRecord archiveCategory(String id, boolean archive, String reason) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        BarProductCategoryRecord c = requireCategory(id);
-        checkOwnership(scope, c.merchantId());
-        Instant now = Instant.now();
-        if (archive) {
-            String r = requireText(reason, "reason");
-            BarProductCategoryRecord saved = repository.saveCategory(c.withArchive(now, actorId(), now));
-            repository.setCategoryArchiveReason(id, r);
-            return saved;
-        }
-        // 取消存档：清空存档标记，并把 pending 删除申请回退 none（复核教训②）。
-        BarProductCategoryRecord unsaved = repository.saveCategory(c.withArchive(null, null, now).withDelete("none", null, null, null, now));
-        repository.setCategoryArchiveReason(id, null);
-        return unsaved;
+        return archiveEntity(categoryKind, id, archive, reason);
     }
 
     @Transactional
     public BarProductCategoryRecord requestDeleteCategory(String id, BarCatalogDeleteRequest request) {
-        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_CATEGORY, () -> doRequestDeleteCategory(id, request));
-    }
-
-    private BarProductCategoryRecord doRequestDeleteCategory(String id, BarCatalogDeleteRequest request) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        BarProductCategoryRecord c = requireCategory(id);
-        checkOwnership(scope, c.merchantId());
-        if (c.archivedAt() == null) {
-            throw ApiException.badRequest("BAR_CATEGORY_NOT_ARCHIVED", "分类须先存档才能申请删除");
-        }
-        if ("pending".equals(c.deleteStatus())) {
-            throw ApiException.conflict("BAR_CATEGORY_DELETE_ALREADY_PENDING", "已有待审批的删除申请");
-        }
-        Instant now = Instant.now();
-        String reason = requireText(request == null ? null : request.reason(), "reason");
-        return repository.saveCategory(c.withDelete("pending", actorId(), now, reason, now));
+        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_CATEGORY,
+                () -> doRequestDelete(categoryKind, id, request));
     }
 
     @Transactional
     public BarCatalogDeleteDecision approveDeleteCategory(String id, BarCatalogDeleteApprovalRequest request) {
-        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_CATEGORY, () -> doApproveDeleteCategory(id, request));
-    }
-
-    private BarCatalogDeleteDecision doApproveDeleteCategory(String id, BarCatalogDeleteApprovalRequest request) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        BarProductCategoryRecord c = requireCategory(id);
-        checkOwnership(scope, c.merchantId());
-        requirePending(c.deleteStatus(), "BAR_CATEGORY_DELETE_NOT_PENDING");
-        String decision = decisionOf(request);
-        forbidSelfApprove(c.deleteRequestedBy());
-        if ("rejected".equals(decision)) {
-            repository.saveCategory(c.withDelete("none", null, null, null, Instant.now()));
-            return new BarCatalogDeleteDecision(id, "rejected", false);
-        }
-        long refs = repository.countCategoryReferences(id);
-        if (refs > 0) {
-            throw ApiException.conflict("BAR_CATEGORY_IN_USE", "该分类仍被 " + refs + " 个商品引用");
-        }
-        repository.deleteCategory(id);
-        return new BarCatalogDeleteDecision(id, "approved", true);
+        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_CATEGORY,
+                () -> doApproveDelete(categoryKind, id, request));
     }
 
     // ---------- 商品：存档/删除 ----------
 
     @Transactional
     public BarProductRecord archiveProduct(String id, boolean archive, String reason) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        BarProductRecord product = requireProduct(id);
-        checkOwnership(scope, product.merchantId());
-        Instant now = Instant.now();
-        String r = archive ? requireText(reason, "reason") : null;
-        BarProductRecord updated = archive
-                ? product.withArchive(now, actorId(), now)
-                : product.withArchive(null, null, now).withDelete("none", null, null, null, now);
-        repository.updateProductArchiveDelete(updated);
-        repository.setProductArchiveReason(id, r);
-        return repository.findProduct(id).orElseThrow();
+        return archiveEntity(productKind, id, archive, reason);
     }
 
     @Transactional
     public BarProductRecord requestDeleteProduct(String id, BarCatalogDeleteRequest request) {
-        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_PRODUCT, () -> doRequestDeleteProduct(id, request));
-    }
-
-    private BarProductRecord doRequestDeleteProduct(String id, BarCatalogDeleteRequest request) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        BarProductRecord product = requireProduct(id);
-        checkOwnership(scope, product.merchantId());
-        if (product.archivedAt() == null) {
-            throw ApiException.badRequest("BAR_PRODUCT_NOT_ARCHIVED", "商品须先存档才能申请删除");
-        }
-        if ("pending".equals(product.deleteStatus())) {
-            throw ApiException.conflict("BAR_PRODUCT_DELETE_ALREADY_PENDING", "已有待审批的删除申请");
-        }
-        Instant now = Instant.now();
-        String reason = requireText(request == null ? null : request.reason(), "reason");
-        repository.updateProductArchiveDelete(product.withDelete("pending", actorId(), now, reason, now));
-        return repository.findProduct(id).orElseThrow();
+        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_PRODUCT,
+                () -> doRequestDelete(productKind, id, request));
     }
 
     @Transactional
     public BarCatalogDeleteDecision approveDeleteProduct(String id, BarCatalogDeleteApprovalRequest request) {
-        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_PRODUCT, () -> doApproveDeleteProduct(id, request));
-    }
-
-    private BarCatalogDeleteDecision doApproveDeleteProduct(String id, BarCatalogDeleteApprovalRequest request) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        BarProductRecord product = requireProduct(id);
-        checkOwnership(scope, product.merchantId());
-        requirePending(product.deleteStatus(), "BAR_PRODUCT_DELETE_NOT_PENDING");
-        String decision = decisionOf(request);
-        forbidSelfApprove(product.deleteRequestedBy());
-        if ("rejected".equals(decision)) {
-            repository.updateProductArchiveDelete(product.withDelete("none", null, null, null, Instant.now()));
-            return new BarCatalogDeleteDecision(id, "rejected", false);
-        }
-        long refs = repository.countProductReferences(id);
-        if (refs > 0) {
-            throw ApiException.conflict("BAR_PRODUCT_IN_USE",
-                    "该商品仍被 " + refs + " 条订单明细或套餐明细引用");
-        }
-        repository.deleteProduct(id);
-        return new BarCatalogDeleteDecision(id, "approved", true);
+        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_PRODUCT,
+                () -> doApproveDelete(productKind, id, request));
     }
 
     // ---------- 套餐：存档/删除 ----------
 
     @Transactional
     public BarComboRecord archiveCombo(String id, boolean archive, String reason) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        BarComboRecord combo = requireCombo(id);
-        checkOwnership(scope, combo.merchantId());
-        Instant now = Instant.now();
-        if (archive) {
-            String r = requireText(reason, "reason");
-            BarComboRecord saved = repository.saveCombo(combo.withArchive(now, actorId(), now));
-            repository.setComboArchiveReason(id, r);
-            return saved;
-        }
-        BarComboRecord unsaved = repository.saveCombo(combo.withArchive(null, null, now).withDelete("none", null, null, null, now));
-        repository.setComboArchiveReason(id, null);
-        return unsaved;
+        return archiveEntity(comboKind, id, archive, reason);
     }
 
     @Transactional
     public BarComboRecord requestDeleteCombo(String id, BarCatalogDeleteRequest request) {
-        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_COMBO, () -> doRequestDeleteCombo(id, request));
-    }
-
-    private BarComboRecord doRequestDeleteCombo(String id, BarCatalogDeleteRequest request) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        BarComboRecord combo = requireCombo(id);
-        checkOwnership(scope, combo.merchantId());
-        if (combo.archivedAt() == null) {
-            throw ApiException.badRequest("BAR_COMBO_NOT_ARCHIVED", "套餐须先存档才能申请删除");
-        }
-        if ("pending".equals(combo.deleteStatus())) {
-            throw ApiException.conflict("BAR_COMBO_DELETE_ALREADY_PENDING", "已有待审批的删除申请");
-        }
-        Instant now = Instant.now();
-        String reason = requireText(request == null ? null : request.reason(), "reason");
-        return repository.saveCombo(combo.withDelete("pending", actorId(), now, reason, now));
+        return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_COMBO,
+                () -> doRequestDelete(comboKind, id, request));
     }
 
     @Transactional
     public BarCatalogDeleteDecision approveDeleteCombo(String id, BarCatalogDeleteApprovalRequest request) {
-        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_COMBO, () -> doApproveDeleteCombo(id, request));
+        return operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_COMBO,
+                () -> doApproveDelete(comboKind, id, request));
     }
 
-    private BarCatalogDeleteDecision doApproveDeleteCombo(String id, BarCatalogDeleteApprovalRequest request) {
+    // ---------- V262 生命周期泛型助手：分类/商品/套餐三套逐字同构，实体差异全部收敛进 CatalogKind ----------
+
+    /**
+     * 单类目录实体接进生命周期助手的全部差异点：错误码前缀、中文实体名、按 id 取记录（require 校验）、
+     * withArchive/withDelete 结果落库、（商品）落库后重取权威记录（reload，null = 直接用落库返回值）、
+     * 存档理由落库、活引用计数与占用文案、物理删除。
+     * countReferences 为 null = 该实体无外部活引用检查（套餐：bar_combo_items 是套餐自身明细，
+     * 无订单表引用套餐，故活引用恒 0，审批通过直接软删——软删=UPDATE delete_status，不触发 CASCADE，
+     * 明细自动保留（可恢复）；前台读被 delete_status 过滤隐藏）。
+     */
+    private record CatalogKind<T extends BarCatalogLifecycle<T>>(
+            String codePrefix, String entityName,
+            Function<String, T> require, UnaryOperator<T> save, Function<String, T> reload,
+            BiConsumer<String, String> setArchiveReason,
+            ToLongFunction<String> countReferences, LongFunction<String> inUseMessage,
+            Consumer<String> physicalDelete) {
+    }
+
+    private <T extends BarCatalogLifecycle<T>> T archiveEntity(CatalogKind<T> kind, String id, boolean archive, String reason) {
         Optional<String> scope = authorizationService.currentMerchantScope();
-        BarComboRecord combo = requireCombo(id);
-        checkOwnership(scope, combo.merchantId());
-        requirePending(combo.deleteStatus(), "BAR_COMBO_DELETE_NOT_PENDING");
+        T entity = kind.require().apply(id);
+        checkOwnership(scope, entity.merchantId());
+        Instant now = Instant.now();
+        String r = archive ? requireText(reason, "reason") : null;
+        // 取消存档：清空存档标记，并把 pending 删除申请回退 none（复核教训②）。
+        T updated = archive
+                ? entity.withArchive(now, actorId(), now)
+                : entity.withArchive(null, null, now).withDelete("none", null, null, null, now);
+        T saved = kind.save().apply(updated);
+        kind.setArchiveReason().accept(id, r);
+        return kind.reload() == null ? saved : kind.reload().apply(id);
+    }
+
+    private <T extends BarCatalogLifecycle<T>> T doRequestDelete(CatalogKind<T> kind, String id, BarCatalogDeleteRequest request) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        T entity = kind.require().apply(id);
+        checkOwnership(scope, entity.merchantId());
+        if (entity.archivedAt() == null) {
+            throw ApiException.badRequest(kind.codePrefix() + "_NOT_ARCHIVED", kind.entityName() + "须先存档才能申请删除");
+        }
+        if ("pending".equals(entity.deleteStatus())) {
+            throw ApiException.conflict(kind.codePrefix() + "_DELETE_ALREADY_PENDING", "已有待审批的删除申请");
+        }
+        Instant now = Instant.now();
+        String reason = requireText(request == null ? null : request.reason(), "reason");
+        T saved = kind.save().apply(entity.withDelete("pending", actorId(), now, reason, now));
+        return kind.reload() == null ? saved : kind.reload().apply(id);
+    }
+
+    private <T extends BarCatalogLifecycle<T>> BarCatalogDeleteDecision doApproveDelete(
+            CatalogKind<T> kind, String id, BarCatalogDeleteApprovalRequest request) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        T entity = kind.require().apply(id);
+        checkOwnership(scope, entity.merchantId());
+        requirePending(entity.deleteStatus(), kind.codePrefix() + "_DELETE_NOT_PENDING");
         String decision = decisionOf(request);
-        forbidSelfApprove(combo.deleteRequestedBy());
+        forbidSelfApprove(entity.deleteRequestedBy());
         if ("rejected".equals(decision)) {
-            repository.saveCombo(combo.withDelete("none", null, null, null, Instant.now()));
+            kind.save().apply(entity.withDelete("none", null, null, null, Instant.now()));
             return new BarCatalogDeleteDecision(id, "rejected", false);
         }
-        // 套餐无外部活引用：bar_combo_items 是套餐自身明细，无订单表引用套餐，故 countReferences 恒 0，可直接软删。
-        // 软删=UPDATE delete_status，不触发 CASCADE，明细自动保留（可恢复）；前台读被 delete_status 过滤隐藏。
-        repository.deleteCombo(id);
+        if (kind.countReferences() != null) {
+            long refs = kind.countReferences().applyAsLong(id);
+            if (refs > 0) {
+                throw ApiException.conflict(kind.codePrefix() + "_IN_USE", kind.inUseMessage().apply(refs));
+            }
+        }
+        kind.physicalDelete().accept(id);
         return new BarCatalogDeleteDecision(id, "approved", true);
     }
 

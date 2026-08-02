@@ -35,7 +35,7 @@ public record BarProductRecord(
         String deleteRequestedBy,
         Instant deleteRequestedAt,
         String deleteReason
-) {
+) implements BarCatalogLifecycle<BarProductRecord> {
 
     /** 内部结算价按权限脱敏:无 bar.internal_settlement_price.view 权限的读端返回副本内部价置 null。 */
     public BarProductRecord withoutInternalPrice() {
