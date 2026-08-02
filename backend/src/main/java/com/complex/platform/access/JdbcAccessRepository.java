@@ -654,8 +654,7 @@ class JdbcAccessRepository implements AccessRepository {
         TemporaryGrant existing = findTemporaryGrant(id)
                 .orElseThrow(() -> com.complex.platform.common.api.ApiException.notFound(
                         "TEMPORARY_GRANT_NOT_FOUND",
-                        "temporary grant not found"
-                ));
+                        "临时授权不存在或已被删除"));
         jdbcTemplate.update("""
                 UPDATE temporary_permission_grants
                    SET status = 'revoked',
