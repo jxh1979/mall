@@ -498,13 +498,19 @@ class BarPosCatalogJdbcIntegrationTests {
 
     @Test
     void saveComboRejectsInternalPriceWithoutInternalPricePermission() {
-        // AUD-043 写侧门控：持 bar.combo.manage 但无 bar.internal_settlement_price.view 者，套餐录入成本价被拒。
+        // 批10/E：①直填内部价 → 无论权限一律 400（唯一可编辑处=SKU 目录）；
+        // ②挂目录引用 = 建立成本价基，无 bar.internal_settlement_price.view 者 403（AUD-043 语义不变）。
         com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_pos_test");
         try {
             barRepository.saveProduct(newProduct("product_ipc", "bar_ipc", "带成本价商品"));
             assertThatThrownBy(() -> service.saveCombo(new BarComboRequest(
                     null, "bar_ipc", "成本价套餐", 5000L, 300L, null, "active",
                     List.of(new BarComboRequest.Item("product_ipc", 1)))))
+                    .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                    .hasFieldOrPropertyWithValue("code", "BAR_INTERNAL_PRICE_CATALOG_ONLY");
+            assertThatThrownBy(() -> service.saveCombo(new BarComboRequest(
+                    null, "bar_ipc", "成本价套餐", 5000L, null, null, "active",
+                    List.of(new BarComboRequest.Item("product_ipc", 1)), "sku_ref_x")))
                     .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                     .hasFieldOrPropertyWithValue("code", "BAR_INTERNAL_PRICE_FORBIDDEN");
         } finally {

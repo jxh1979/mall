@@ -51,6 +51,7 @@ class SettlementDoubleWriteEndToEndTests {
             jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id = ?", "ent_" + code);
             jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_" + code);
             jdbcTemplate.update("DELETE FROM entitlement_templates WHERE id = ?", "et_" + code);
+            jdbcTemplate.update("DELETE FROM internal_price_catalog WHERE item_code = ?", "sku_et_et_" + code);
             jdbcTemplate.update("DELETE FROM ticket_types WHERE id = ?", "tt_" + code);
         }
         if (deviceCode != null) {
@@ -205,12 +206,24 @@ class SettlementDoubleWriteEndToEndTests {
                     created_at, updated_at)
                 VALUES (?, 'Dining Type', 'fixed', FALSE, 'active', ?, ?)
                 """, typeId, ts, ts);
+        // 批10/E(V380)收编形态：内部结算价真源在目录，模板挂引用、agreement_price_cent 转快照。
+        String itemCode = "sku_et_" + templateId;
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                VALUES (?, ?, 'catering', 'active', now(), now()) ON CONFLICT (id) DO NOTHING
+                """, restaurantMerchantId, "餐饮测试商户-" + restaurantMerchantId);
+        jdbcTemplate.update("""
+                INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name,
+                    price_cent, status, is_draft, updated_by, created_at, updated_at)
+                VALUES (?, ?, ?, 'dining', 'Dining', ?, 'active', FALSE, 'seed_dw_e2e', now(), now())
+                ON CONFLICT DO NOTHING
+                """, itemCode, itemCode, restaurantMerchantId, internalPriceCent);
         jdbcTemplate.update("""
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
                     default_value_cent, status, bar_item_ref, entitlement_kind, agreement_price_cent,
-                    exclusive_merchant_id, created_at, updated_at)
-                VALUES (?, 'Dining', 'dining', ?, 0, 'active', NULL, 'virtual', ?, ?, ?, ?)
-                """, templateId, totalTimes, internalPriceCent, restaurantMerchantId, ts, ts);
+                    exclusive_merchant_id, catalog_item_code, created_at, updated_at)
+                VALUES (?, 'Dining', 'dining', ?, 0, 'active', NULL, 'virtual', ?, ?, ?, ?, ?)
+                """, templateId, totalTimes, internalPriceCent, restaurantMerchantId, itemCode, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, totalTimes,
                 java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "created", now, now));

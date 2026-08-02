@@ -216,26 +216,27 @@ class BarControllerTests {
     }
 
     @Test
-    void createProductRejectsInternalPriceWithoutInternalPricePermission() throws Exception {
-        // AUD-043 写侧门控：持 bar.product.manage 但无 bar.internal_settlement_price.view 者，录入内部结算价被拒。
+    void createProductRejectsCatalogRefWithoutInternalPricePermission() throws Exception {
+        // AUD-043 写侧门控（批10/E 收编后语义不变）：持 bar.product.manage 但无内部价专用权限者，
+        // 挂内部结算 SKU 目录引用（=建立成本价基）被拒。
         when(authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")).thenReturn(false);
         mockMvc.perform(post("/api/v1/bar/products")
                         .with(user("bar").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"bar-ip-deny\",\"bar_id\":\"bar_1\",\"product_name\":\"Whisky\",\"category\":\"spirit\",\"price_cent\":128800,\"internal_settlement_price_cent\":5000,\"status\":\"active\"}"))
+                        .content("{\"idempotency_key\":\"bar-ip-deny\",\"bar_id\":\"bar_1\",\"product_name\":\"Whisky\",\"category\":\"spirit\",\"price_cent\":128800,\"catalog_item_code\":\"sku_x\",\"status\":\"active\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("BAR_INTERNAL_PRICE_FORBIDDEN"));
         verify(service, org.mockito.Mockito.never()).createProduct(any(BarProductRequest.class));
     }
 
     @Test
-    void createProductAllowsInternalPriceWithInternalPricePermission() throws Exception {
-        // 持内部价专用权限者可正常录入成本价。
+    void createProductAllowsCatalogRefWithInternalPricePermission() throws Exception {
+        // 持内部价专用权限者可挂目录引用（内部价本体在目录里走草案复核，商品侧只建立引用）。
         when(authorizationService.currentActorHasPermission("bar.internal_settlement_price.view")).thenReturn(true);
         mockMvc.perform(post("/api/v1/bar/products")
                         .with(user("bar").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"bar-ip-ok\",\"bar_id\":\"bar_1\",\"product_name\":\"Whisky\",\"category\":\"spirit\",\"price_cent\":128800,\"internal_settlement_price_cent\":5000,\"status\":\"active\"}"))
+                        .content("{\"idempotency_key\":\"bar-ip-ok\",\"bar_id\":\"bar_1\",\"product_name\":\"Whisky\",\"category\":\"spirit\",\"price_cent\":128800,\"catalog_item_code\":\"sku_x\",\"status\":\"active\"}"))
                 .andExpect(status().isOk());
         verify(service).createProduct(any(BarProductRequest.class));
     }

@@ -389,16 +389,32 @@ class GiftRedemptionEndToEndTests {
         return deviceId;
     }
 
-    /** S5：提供方商品（bar_item_ref = bar_products.id），带内部结算价与库存物料。 */
+    /**
+     * S5：提供方商品（bar_item_ref = bar_products.id），带内部结算价与库存物料。
+     * 批10/E(V380)收编形态：有内部价 = 目录生效条目 + 商品挂引用 + 快照列同值；无价 = 不挂引用（解析 fail-closed）。
+     */
     private void seedBarProduct(String productId, String barId, String inventoryItemId, Long internalPriceCent) {
         Instant now = Instant.now();
         java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        String itemCode = internalPriceCent == null ? null : "sku_bp_" + productId;
         jdbcTemplate.update("""
                 INSERT INTO bar_products (id, bar_id, product_name, product_type, price_cent, currency,
                     inventory_item_id, stock_location_id, stock_deduction_required, status,
-                    internal_settlement_price_cent, created_at, updated_at)
-                VALUES (?, ?, 'Gift Drink', 'beverage', 3800, 'CNY', ?, 'default', ?, 'active', ?, ?, ?)
-                """, productId, barId, inventoryItemId, inventoryItemId != null, internalPriceCent, ts, ts);
+                    internal_settlement_price_cent, catalog_item_code, created_at, updated_at)
+                VALUES (?, ?, 'Gift Drink', 'beverage', 3800, 'CNY', ?, 'default', ?, 'active', ?, ?, ?, ?)
+                """, productId, barId, inventoryItemId, inventoryItemId != null, internalPriceCent, itemCode, ts, ts);
+        if (itemCode != null) {
+            jdbcTemplate.update("""
+                    INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
+                    VALUES (?, ?, 'bar', 'active', now(), now()) ON CONFLICT (id) DO NOTHING
+                    """, barId, "赠饮测试商户-" + barId);
+            jdbcTemplate.update("""
+                    INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name,
+                        price_cent, status, is_draft, updated_by, created_at, updated_at)
+                    VALUES (?, ?, ?, 'beverage', 'Gift Drink', ?, 'active', FALSE, 'seed_gift_e2e', now(), now())
+                    ON CONFLICT DO NOTHING
+                    """, itemCode, itemCode, barId, internalPriceCent);
+        }
     }
 
     private void seedBarTable(String barId) {

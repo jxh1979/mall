@@ -369,18 +369,19 @@ class BarServiceTests {
     }
 
     @Test
-    void createProductPersistsInternalSettlementPrice() {
-        // V152（F-TXN-05 + 通票赠饮结算价基）：商品录入内部结算价并落库；负值被拒。
-        BarProductRecord product = service.createProduct(new BarProductRequest(
-                "product-internal", "create", List.of(), "bar_1", "House Beer", "beer",
-                3800L, null, null, "active", null, null, false, null, null, null, 1500L));
-        assertThat(product.internalSettlementPriceCent()).isEqualTo(1500L);
-
+    void createProductRejectsDirectInternalPriceSinceV380() {
+        // 批10/E：内部结算价唯一可编辑处 = 内部结算 SKU 目录。商品侧直填一律 400 fail-loud
+        // （静默忽略会骗运营"以为配好了"）；无价商品照常可建（不参与结算/提成扣减）。
         assertThatThrownBy(() -> service.createProduct(new BarProductRequest(
-                "product-internal-neg", "create", List.of(), "bar_1", "Bad", "beer",
-                3800L, null, null, "active", null, null, false, null, null, null, -1L)))
+                "product-internal", "create", List.of(), "bar_1", "House Beer", "beer",
+                3800L, null, null, "active", null, null, false, null, null, null, 1500L)))
                 .isInstanceOf(ApiException.class)
-                .extracting("code").isEqualTo("VALIDATION_FAILED");
+                .extracting("code").isEqualTo("BAR_INTERNAL_PRICE_CATALOG_ONLY");
+
+        BarProductRecord noPrice = service.createProduct(new BarProductRequest(
+                "product-no-internal", "create", List.of(), "bar_1", "House Beer", "beer",
+                3800L, null, null, "active", null, null, false));
+        assertThat(noPrice.internalSettlementPriceCent()).isNull();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1148,9 +1149,18 @@ class BarServiceTests {
                 "product-gift-sold", "create product", List.of(), "bar_1", "Whisky", "spirit",
                 100000L, null, null, "active", null, null, false));
         // 赠送商品：售价 20000/份、内部结算价 8000/份。
-        BarProductRecord gift = service.createProduct(new BarProductRequest(
+        // 批10/E：内部价快照由系统写（目录转正传播）——测试直接落快照模拟收编后的状态（商品侧无直填入口）。
+        BarProductRecord giftCreated = service.createProduct(new BarProductRequest(
                 "product-gift-comp", "create product", List.of(), "bar_1", "Fruit Plate", "beer",
-                20000L, null, null, "active", null, null, false, null, null, null, 8000L));
+                20000L, null, null, "active", null, null, false));
+        BarProductRecord gift = new BarProductRecord(giftCreated.id(), giftCreated.barId(), giftCreated.merchantId(),
+                giftCreated.productName(), giftCreated.productType(), giftCreated.priceCent(), giftCreated.currency(),
+                giftCreated.inventoryItemId(), giftCreated.stockLocationId(), giftCreated.stockDeductionRequired(),
+                giftCreated.status(), giftCreated.createdAt(), giftCreated.updatedAt(),
+                giftCreated.standardPourVolume(), giftCreated.pourVolumeUnit(), giftCreated.lossThreshold(),
+                giftCreated.soldOut(), giftCreated.soldOutAt(), giftCreated.soldOutReason(), 8000L,
+                giftCreated.categoryId(), giftCreated.imageUrl());
+        barRepository.saveProduct(gift);
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-gift-commission", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
