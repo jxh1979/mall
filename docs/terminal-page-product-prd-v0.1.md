@@ -1,5 +1,7 @@
 # 终端与页面产品 PRD V0.1
 
+> 权限边界：本 PRD 只提供产品细化；三份业务 HTML 拥有最终业务解释权。其他文档、配置、代码和数据结构均不得覆盖 HTML；HTML 未记载的新规则须经用户批准并写入 HTML 后方可生效。
+
 > 2026-07-04 逻辑一致性修订：§10 平板端补「最低消费无法达成」时的状态转移（补收/豁免/POS·现金补齐，均留痕，平板端仅发起前两类）；§9.2 明确 Web/商户侧退款权属（款进公司统一账户，Web 与商户侧不可独立退款，只能财务/管理后台审批，服务员无退款权、仅确认收款）。
 
 ## 1. 文档定位
@@ -24,7 +26,7 @@
 
 所有终端都必须支持后台开关控制。开关可按全局、综合体项目、商户、业务系统、模块、设备和版本配置；关闭后该端或模块不可用，打开后仍继续校验登录、设备可信、商户范围、角色权限、单一功能权限和数据权限。
 
-> 修订说明（2026-06-07）：本表的产品口径终端与基准 D5《终端类型枚举（10 端权威表）》映射如下（编码以 `terminal_capability_switches.terminal_type` 10 端为唯一权威）：管理后台/Web 前端 → `web`；商户侧页面 → `merchant_portal`（商户侧 Web 门户）；商户侧若开放移动端 → `merchant_app`；现场作业端/员工工作手机 → `staff_work_phone`；工作人员平板 App → `tablet`；触摸屏一体机 → `kiosk`；移动管理端 → `mobile_admin`；客人 App → `app`、小程序 → `miniapp`；员工私人手机 App → `staff_private_phone`。不得用"员工端"笼统合并工作手机与私人手机，不得漏"移动管理端"（依据 D5、govfam-3）。
+> 修订说明（2026-06-07）：本表与基准 D5 的 10 端产品清单映射如下；`terminal_capability_switches.terminal_type` 是当前实现编码，不拥有高于三份业务 HTML 的解释权。
 > 口径补充（2026-06-10）：触摸屏一体机不新增第 11 种终端，仍统一归属 `terminal_type=kiosk`；通过 `kiosk_mode=ticketing/service` 或模块开关区分“售票型一体机”和“非售票型一体机”。售票型一体机是授权服务人员辅助售票、取票和查单的固定点位渠道，不能被实现为工作人员平板代客购票；非售票型一体机不得显示购票入口。
 
 ## 3. P0 页面总图
@@ -116,6 +118,7 @@
 | 验票二维码 | 现场可出示并被在线核销的防伪二维码，包含签名、票种有效期、随机串、哈希核对口径和 30 秒/60 秒刷新 |
 | 会员积分 | P0：可用积分余额、会员等级、最近积分状态摘要；P1：按待确认/可用/已使用/取消/过期区分的积分明细与规则版本说明 |
 | 积分兑换 | P1：可兑换商品或服务、兑换条件、兑换发起、虚拟券与兑换记录；发券时扣积分并预占库存或履约能力，核销/领取时转为实际消耗 |
+| 我的券包 | 按可用、已核销（已使用）、已过期、已失效分组；核销后从可用列表移出、保留历史且不可再次使用；已失效详情展示原因、处理时间及积分是否退回 |
 | 信息查询 | 营业时间、游乐项目、酒吧规则、场地说明、常见问题 |
 
 ## 8.5 员工私人手机 App P0
@@ -249,7 +252,7 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 
 ### 11.1 业务 HTML 权威规则承接（docs-only 补齐，2026-07-28）
 
-> 最终解释权：`business-system-map-for-operations-v0.1.html` / `platform-governance-map-for-operations-v0.1.html`。下列条款为对权威 HTML 的可验收正向/逆向表述；与 HTML 冲突时以 HTML 为准。
+> 最终解释权：`business-system-map-for-operations-v0.1.html` / `platform-governance-map-for-operations-v0.1.html` / `business-enum-quick-reference-v0.1.html`。下列条款为对三个 HTML 的可验收正向/逆向表述；与 HTML 冲突时以 HTML 为准。
 
 | 权威规则 | 正向 | 逆向/拒绝 | 权限与证据 |
 |---|---|---|---|
@@ -339,9 +342,9 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 
 ## 15A. 设备生命周期、集团多项目视图与端侧开关默认口径补充 `文档goalP1(2026-06-20)`
 
-> 本节为产品语言的能力描述 + 业务规则 + 验收口径要点；可开发 + 可验收的权威细节（迁移号、operationId、`x-permission`、事件常量、状态机、G/W/T）以 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准（本节对应该文第 10 项「MDM 门控 + 设备生命周期」、第 18 项「集团多项目视图」，端侧开关见下文 grep 实证）。先经 grep 后端/迁移核实功能真实存在再写。
+> 本节是产品细化；迁移号、operationId、权限点、事件常量、状态机和验收证据等当前实现细节见 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`，不得覆盖三份业务 HTML。
 
-### 15A.1 设备生命周期状态机（权威：spec §10，V107）
+### 15A.1 设备生命周期状态机（实现依据：spec §10，V107）
 
 能力描述：把 §6「设备领用/归还/异常上报」与 §11「设备管控/远程锁定」落到**设备全生命周期状态机**，补齐维修/挂失/找回/报废/锁定流转，消除"设备只有领用归还、异常无终态"。经 grep 实证落于 `TerminalDeviceService`（repair/lost/found/scrap）+ `MdmService`/`MdmController`（违规处置 device_blocked 联动）+ 迁移 `V107__device_lifecycle_and_mdm_disposition.sql`。
 
@@ -355,7 +358,7 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 - bound 设备送修 → repair；挂失设备找回 → found（可再 bound）。
 - 检出违规设备 → 处置 device_blocked → 设备纳管状态 blocked + 凭证撤销 + 留痕。
 
-### 15A.2 集团多项目视图 group-overview（权威：spec §18，V115）
+### 15A.2 集团多项目视图 group-overview（实现依据：spec §18，V115）
 
 能力描述：补 §4 管理后台「首页总览/看板分析」之上的**集团跨项目（多综合体）聚合只读视图**，供集团/平台管理员跨 project 看汇总指标。经 grep 实证落于 `AnalyticsController` 的 `getGroupOverview` 端点 + `AnalyticsRepository`（ETL 产出 `segment_type='project'` 维度快照）+ 迁移 `V115__analytics_group_overview_permission.sql`（仅补权限）。
 
@@ -419,4 +422,4 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 | 2026-06-07 | 改 | §13 验收、§15 已确认 #5 | 私人手机身份由"手机 NFC 唯一标识"改为"设备公钥/不可逆设备指纹" | 对齐基准 D8（废止读取手机本机 NFC 唯一标识方案） |
 | 2026-07-04 | 增 | §10.1 | 补「最低消费无法达成」处置流程（补收差额/豁免+后台审批/POS·现金补齐，均留痕，平板端仅发起前两类） | 逻辑一致性修订：原缺未达最低消费的收尾状态转移 |
 | 2026-07-04 | 改 | §9.2 | 明确 Web/商户侧退款权属：款进公司统一账户，二者不可独立退款，只能财务/管理后台审批；服务员无退款权仅确认收款 | 逻辑一致性修订：Web 退款权属不清 |
-| 2026-06-20 `文档goalP1` | 增 | §15A | 新增「设备生命周期、集团多项目视图与端侧开关默认口径补充」：①设备生命周期状态机（V107，repair/lost/found/scrapped/blocked + MDM device_blocked 联动撤凭证）②集团多项目视图 group-overview（V115，segment_type=project 跨项目 rollup，analytics.group.view 仅集团/平台）③摄像头扫码（V097）/平板端侧（V098）能力开关「默认关、后台可配、仅预留接口」口径（关时文本输入/Web 代偿）。权威指向 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §10/§18 | 文档goalP1；grep 实证 TerminalDeviceService/MdmService+V107、AnalyticsController.getGroupOverview+V115、V097/V098 seed enabled=FALSE |
+| 2026-06-20 `文档goalP1` | 增 | §15A | 新增设备生命周期、集团多项目视图与端侧开关默认口径补充；当前实现细节见 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §10/§18，不覆盖三份业务 HTML | 文档goalP1；实现证据见 TerminalDeviceService、MdmService、V107、AnalyticsController、V115、V097/V098 |

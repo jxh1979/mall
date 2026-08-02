@@ -1,5 +1,7 @@
 # 游乐基础运营产品 PRD V0.1
 
+> 权限边界：本 PRD 只提供产品细化；三份业务 HTML 拥有最终业务解释权。其他文档、配置、代码和数据结构均不得覆盖 HTML；HTML 未记载的新规则须经用户批准并写入 HTML 后方可生效。
+
 > 2026-07-04 逻辑一致性修订：①超容两处置模式去歧义——block_hard=硬上限阻断+软上限告警放行、warn_only=软上限仅告警放行但**硬上限（安全容量）永不旁路仍阻断**（F-OPS-03，代码枚举为 warn_only）②§7.2 核销流程补验证顺序与拒绝优先级（实名年龄→权益有效期→资格→三维容量取最小→放行/按优先级返回拒绝原因）。
 
 ## 1. 文档定位
@@ -244,9 +246,9 @@ flowchart TD
 
 ## 11A. 超容放行与准入拦截能力补充 `文档goalP1(2026-06-20)`
 
-> 本节为产品语言的能力描述 + 业务规则 + 验收口径要点；可开发 + 可验收的权威细节（迁移号、operationId、`x-permission`、事件常量、G/W/T）以 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准（本节对应该文 §1/§7/§18 与第 7 项「游乐超容」、第 1 项「准入闸」）。先经 grep 后端/迁移核实功能真实存在再写，不臆造。
+> 本节是产品细化；迁移号、operationId、权限点、事件常量和验收证据等当前实现细节见 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`。该实现规格不得覆盖三份业务 HTML。
 
-### 11A.1 游乐超容（over_capacity）软/硬阈值放行策略（权威：spec §7，V104）
+### 11A.1 游乐超容（over_capacity）软/硬阈值放行策略（实现依据：spec §7，V104）
 
 能力描述：在 §9「场次容量达上限阻止核销」基础上，把容量阈值细化为**双阈值**——
 
@@ -268,7 +270,7 @@ flowchart TD
 - 模式 warn_only：**达安全容量（硬上限）仍阻断**（F-OPS-03 不可旁路、触发自动停运），达运营容量（软上限）告警放行；超容均必落 over_capacity 异常与事件。
 - 未配置运营容量：退化为仅硬上限阻断、无软上限告警。
 
-### 11A.2 准入闸：游乐入场 over_space / over_contract_scope 拦截与升级放行（权威：spec §1，V099）
+### 11A.2 准入闸：游乐入场 over_space / over_contract_scope 拦截与升级放行（实现依据：spec §1，V099）
 
 能力描述：游乐相关受控动作（项目核销重开、异常关闭、团体/包场审批等）在执行前经统一**准入闸**判定是否越界，命中即先卡住（fail-closed 进主管复核），消除"无策略=判定空转放行"的隐患。
 
@@ -310,7 +312,7 @@ flowchart TD
 | 2026-06-07 | 改 | §8 页面清单 | 定期检修页补点位、来源终端、检修时间、异常说明、主管确认恢复营业 | kiosk-4 |
 | 2026-06-07 | 改 | §9 验收 | 补三维度容量取最小值验收项 | amuse-1 |
 | 2026-06-07 | 改 | §11 已确认规则 | 检修单位明确=复用供应链 suppliers 主数据；主管确认前不可恢复营业升级为状态机约束 | amuse-3、kiosk-4、基准 D7 |
-| 2026-06-20 `文档goalP1` | 增 | §11A | 新增「超容放行与准入拦截能力补充」：①游乐超容 over_capacity 软/硬阈值放行策略（V104，硬阻断+软告警放行均落异常与事件，后台可切 warn_only 仅告警）②准入闸 over_space/over_contract_scope 游乐入场拦截+升级放行（V099，fail-closed）③团体/包场据 V035 实证由「未做」更正为「已落地」（group/private、四态机、approve 受准入闸双控）。权威指向 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §1/§7/§18 | 文档goalP1；grep 实证 V104/V099/V035 + AmusementService/AmusementBookingService |
+| 2026-06-20 `文档goalP1` | 增 | §11A | 新增超容放行与准入拦截能力补充；当前实现细节见 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §1/§7/§18，不覆盖三份业务 HTML | 文档goalP1；实现证据见 V104/V099/V035、AmusementService 和 AmusementBookingService |
 
 | 2026-07-28 | 增 | §8.1A | 数据展示指针 ADV-ED-008 |
 | 2026-07-28 | 改 | §8.1A | 用户重裁：后台数据必须精准，废止近似填充（DEC-DATA-BACKEND-ACCURATE-001） |
