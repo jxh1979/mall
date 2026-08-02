@@ -20,6 +20,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcFinanceRepository implements FinanceRepository {
 
+    private static final String AR_AP_ITEM_SELECT = """
+            SELECT id, item_no, direction, counterparty_id, source_type, source_id,
+                   amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
+                   accounting_period, status, created_at, updated_at, merchant_id, project_id,
+                   origin_item_id, adjustment_id
+              FROM ar_ap_items
+            """;
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
@@ -103,24 +111,14 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public List<ArApItemRecord> listArApItems() {
-        return jdbcTemplate.query("""
-                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
-                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
-                       origin_item_id, adjustment_id
-                  FROM ar_ap_items
+        return jdbcTemplate.query(AR_AP_ITEM_SELECT + """
                  ORDER BY created_at DESC, id
                 """, this::mapArApItem);
     }
 
     @Override
     public List<ArApItemRecord> listArApItemsByMerchant(String merchantId) {
-        return jdbcTemplate.query("""
-                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
-                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
-                       origin_item_id, adjustment_id
-                  FROM ar_ap_items
+        return jdbcTemplate.query(AR_AP_ITEM_SELECT + """
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), this::mapArApItem);
@@ -144,13 +142,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
-        List<ArApItemRecord> items = jdbcTemplate.query("""
-                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
-                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
-                       origin_item_id, adjustment_id
-                  FROM ar_ap_items
-                """ + where + """
+        List<ArApItemRecord> items = jdbcTemplate.query(AR_AP_ITEM_SELECT + where + """
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
                 """, params, this::mapArApItem);
@@ -178,13 +170,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
-        List<ArApItemRecord> items = jdbcTemplate.query("""
-                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
-                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
-                       origin_item_id, adjustment_id
-                  FROM ar_ap_items
-                """ + where + """
+        List<ArApItemRecord> items = jdbcTemplate.query(AR_AP_ITEM_SELECT + where + """
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
                 """, params, this::mapArApItem);
@@ -194,24 +180,14 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public Optional<ArApItemRecord> findArApItemById(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
-                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
-                       origin_item_id, adjustment_id
-                  FROM ar_ap_items
+        return jdbcTemplate.query(AR_AP_ITEM_SELECT + """
                  WHERE id = :id
                 """, Map.of("id", id), this::mapArApItem).stream().findFirst();
     }
 
     @Override
     public Optional<ArApItemRecord> findArApItemByIdForUpdate(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
-                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
-                       origin_item_id, adjustment_id
-                  FROM ar_ap_items
+        return jdbcTemplate.query(AR_AP_ITEM_SELECT + """
                  WHERE id = :id
                    FOR UPDATE
                 """, Map.of("id", id), this::mapArApItem).stream().findFirst();
@@ -246,12 +222,7 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public Optional<ArApItemRecord> findReserveWithheldByStatementForUpdate(String statementId) {
         // V304：某计算单的待释放留存应付（唯一：uq(direction,source_type,source_id)），FOR UPDATE 行锁串行化并发释放。
-        return jdbcTemplate.query("""
-                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
-                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at, merchant_id, project_id,
-                       origin_item_id, adjustment_id
-                  FROM ar_ap_items
+        return jdbcTemplate.query(AR_AP_ITEM_SELECT + """
                  WHERE direction = 'payable'
                    AND source_type = 'dividend_reserve_withheld'
                    AND source_id = :statement_id
