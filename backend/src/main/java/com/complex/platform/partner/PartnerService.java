@@ -71,17 +71,17 @@ public class PartnerService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "user_id is required");
             }
             ExternalPartnerOrgRecord org = repository.findOrgById(orgId)
-                    .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "partner org not found"));
+                    .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "合作方组织不存在或已被删除"));
             if (!"active".equals(org.status())) {
-                throw ApiException.conflict("PARTNER_ORG_NOT_ACTIVE", "partner org is not active");
+                throw ApiException.conflict("PARTNER_ORG_NOT_ACTIVE", "合作方组织未启用");
             }
             String accountType = repository.findAccessUserAccountType(userId.trim())
-                    .orElseThrow(() -> ApiException.notFound("ACCESS_USER_NOT_FOUND", "access user not found"));
+                    .orElseThrow(() -> ApiException.notFound("ACCESS_USER_NOT_FOUND", "账号不存在或已被删除"));
             // 复核 Important:只允许外包类账号入机构——机构管理员可停用其"下属"、机构到期批量禁用挂靠账号,
             // 平台/员工/商户账号被误绑=外部方可停用平台账号(权限倒挂)+配额被吃+名单外泄。
             if (!"outsourced_vendor".equals(accountType)) {
                 throw ApiException.badRequest("ACCESS_USER_NOT_OUTSOURCED",
-                        "only outsourced vendor accounts can be bound to a partner org");
+                        "只有外包供应商账号才能绑定合作方组织");
             }
             repository.updateUserPartnerOrg(userId.trim(), orgId);
             auditEventService.recordSuccess("partner.org.user_bound", "partner.org.manage",
@@ -105,13 +105,13 @@ public class PartnerService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "user_id is required");
             }
             repository.findOrgById(orgId)
-                    .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "partner org not found"));
+                    .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "合作方组织不存在或已被删除"));
             String trimmedUserId = userId.trim();
             repository.findAccessUserAccountType(trimmedUserId)
-                    .orElseThrow(() -> ApiException.notFound("ACCESS_USER_NOT_FOUND", "access user not found"));
+                    .orElseThrow(() -> ApiException.notFound("ACCESS_USER_NOT_FOUND", "账号不存在或已被删除"));
             // CAS 解绑（复核建议）：条件更新原子判定「当前绑的就是该机构」，0 行=未绑/已被并发换绑,409。
             if (repository.unbindUserPartnerOrg(trimmedUserId, orgId) == 0) {
-                throw ApiException.conflict("PARTNER_ORG_USER_NOT_BOUND", "user is not bound to this partner org");
+                throw ApiException.conflict("PARTNER_ORG_USER_NOT_BOUND", "该账号未绑定到此合作方组织");
             }
             auditEventService.recordSuccess("partner.org.user_unbound", "partner.org.manage",
                     "external_partner_org", orgId, null, null,
@@ -137,16 +137,16 @@ public class PartnerService {
     public PartnerSubordinateRecord createSubordinate(PartnerSubordinateRequest request) {
         String orgId = currentPartnerOrgId();
         ExternalPartnerOrgRecord org = repository.findOrgById(orgId)
-                .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "partner org not found"));
+                .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "合作方组织不存在或已被删除"));
         if (!"active".equals(org.status())) {
-            throw ApiException.conflict("PARTNER_ORG_INACTIVE", "partner org is not active");
+            throw ApiException.conflict("PARTNER_ORG_INACTIVE", "合作方组织未启用");
         }
         if (org.validUntil() != null && org.validUntil().isBefore(Instant.now())) {
-            throw ApiException.conflict("PARTNER_ORG_EXPIRED", "partner org account validity has expired");
+            throw ApiException.conflict("PARTNER_ORG_EXPIRED", "合作方组织账号有效期已过");
         }
         if (org.maxSubordinates() <= 0 || repository.countActiveSubordinates(orgId) >= org.maxSubordinates()) {
             throw ApiException.conflict("PARTNER_SUBORDINATE_LIMIT_REACHED",
-                    "subordinate account limit reached for this partner org");
+                    "该合作方组织的下属账号数量已达上限");
         }
         String username = requireText(request == null ? null : request.username(), "username");
         Instant now = Instant.now();
@@ -163,7 +163,7 @@ public class PartnerService {
         PartnerSubordinateRecord sub = repository.findSubordinate(requireText(userId, "user_id"))
                 .filter(s -> orgId.equals(s.partnerOrgId()))
                 .orElseThrow(() -> ApiException.forbidden("PARTNER_SUBORDINATE_FORBIDDEN",
-                        "subordinate does not belong to your partner org"));
+                        "该下属账号不属于当前合作方组织"));
         repository.disableSubordinate(userId);
         auditEventService.recordSuccess("partner_subordinate.disabled", "partner.subordinate.manage",
                 "access_user", userId, null, null, Map.of("partner_org_id", orgId));
@@ -180,7 +180,7 @@ public class PartnerService {
         String actorId = authorizationService.currentActor().id();
         return repository.findPartnerOrgIdForUser(actorId)
                 .orElseThrow(() -> ApiException.forbidden("PARTNER_ORG_NOT_BOUND",
-                        "current account is not bound to a partner org"));
+                        "当前账号未绑定合作方组织"));
     }
 
     private String subordinateRoleForCategory(String category) {

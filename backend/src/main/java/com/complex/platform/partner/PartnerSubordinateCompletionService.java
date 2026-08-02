@@ -37,9 +37,9 @@ public class PartnerSubordinateCompletionService {
         String actorId = authorizationService.currentActor().id();
         String orgId = repository.findPartnerOrgIdForUser(actorId)
                 .orElseThrow(() -> ApiException.forbidden(
-                        "PARTNER_ORG_NOT_BOUND", "current account is not bound to a partner org"));
+                        "PARTNER_ORG_NOT_BOUND", "当前账号未绑定合作方组织"));
         ExternalPartnerOrgRecord org = repository.findOrgById(orgId)
-                .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "partner org not found"));
+                .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "合作方组织不存在或已被删除"));
         String projectId = org.projectId();
 
         // 3.7：批量化 + 消除重复查询——2 次聚合查询取代此前每下属 3 次查询（含同一下属工单查两遍）。
