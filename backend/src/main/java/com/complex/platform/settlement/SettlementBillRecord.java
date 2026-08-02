@@ -36,6 +36,11 @@ public record SettlementBillRecord(
         long comboDiscountCent,
         // R-7/D15.1（V343）分账尾差（带符号）：= 应分总额 − Σ各商户已舍入分账额。各方按比例四舍五入到分后
         //   与总额的差额，统一归项目公司/平台兜底并【单列留痕】，不并入任一商户。守恒：Σ分账 + 尾差 ≡ 应分总额。
-        long roundingResidualCent
+        long roundingResidualCent,
+        // S8/K18 ③④（V375）：第二段无参与者（排名档位酒吧为空/权重全 0）时的池余额，显式归娱乐平台公司留痕
+        //   （带符号，冲正月可为负=由平台承接追回）；正常两段分尽时恒 0。与舍入尾差分列，成因不同。
+        long poolUndistributedCent,
+        // pool_undistributed_cent 的归属主体快照（all_pass_ticket 流解析，V375 种子=be_ent_platform）；余额为 0 时 null。
+        String poolUndistributedEntityId
 ) {
 }

@@ -37,9 +37,21 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>{@code Σ池分账明细 + 尾差 = 应分总额}（分账链尾差单列后严格相等）</li>
  * </ul>
  * HALF_UP 对 0 对称（{@code f(-x) = -f(x)}），故跨月红冲取原行之反仍逐分对消，守恒不被舍入破坏。
+ *
+ * <p><b>S8 两段分配(2026-07-28,业务 HTML「可分配池按两段分配」逐字)</b>:三种方式不再是项目级三选一——
+ * <b>第一段</b>:配了商户级固定规则(rule_type=per_guest 每客单价 / fixed 固定额,V374)的酒吧按<b>绝对金额</b>先拿;
+ * <b>第二段</b>:其余酒吧按排名档位对「池 − 第一段」的余额<b>归一化分尽</b>(档位只作相对权重,只舍入一次);
+ * <b>拿了第一段的酒吧不再参与第二段</b>(K18 ⑤)。边界(§二十一,用户已拍板):
+ * ① 第一段合计 Q &gt; 池 P → 不削任何金额、第二段为 0,落既有超池特批路径(draft 待平台负责人特批);
+ * ② 第二段无参与者(排名档位酒吧为空/权重全 0)而余额非 0 → 余额<b>显式归娱乐平台公司</b> + 告警留痕
+ *   (bill.pool_undistributed_cent 单列,不是静默沉淀);当期完全无酒吧参与(D=0)同此出口。
+ * 当期无固定规则酒吧且档位权重和恰为 10000 → 与两段化前逐分不变(prorate(P,w,10000) ≡ bpsOf(P,w))。
  */
 @Service
 public class TicketDistributionSettlementService {
+
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(TicketDistributionSettlementService.class);
 
     static final String METHOD_BY_RANK_TIER = "by_rank_tier";
     static final String METHOD_BY_VENUE_PER_GUEST = "by_venue_per_guest";
@@ -188,7 +200,9 @@ public class TicketDistributionSettlementService {
         List<JdbcSettlementBillRepository.MerchantMonthlyStat> stats =
                 repository.aggregateMerchantStats(projectId, windowStart, windowEnd);
 
-        // ⑦ 按 method 分账（仅非专属进池；池基/排名/客数聚合已在仓储层排除专属）
+        // ⑦ S8 两段分配（仅非专属进池；池基/排名/客数聚合已在仓储层按业态+排除专属过滤,S11）:
+        //    第一段=固定规则酒吧按绝对额先拿;第二段=其余酒吧按排名档位归一化分尽余额;
+        //    method(语义收窄后=第二段方式)仅 by_rank_tier 合法。
         String method = repository.findDistributionMethod(projectId);
         PooledDistribution pooled = distribute(projectId, method, availablePool, stats);
         List<ItemCalc> items = new ArrayList<>(pooled.items());
@@ -265,6 +279,16 @@ public class TicketDistributionSettlementService {
         //   项目特例优先→全局默认→未配置返 null(仅记归属,不改任何金额)。
         String attributedEntityId =
                 attributionRepository.resolveManagementEntity(projectId, REVENUE_STREAM_ALL_PASS_TICKET);
+        // S8/K18 ③④:第二段无参与者时的池余额——显式归娱乐平台公司(= all_pass_ticket 流的归属主体,
+        //   V375 种全局默认 be_ent_platform)+ 告警留痕。不是静默沉淀:金额与归属主体单列落 bill。
+        long poolUndistributed = pooled.undistributedCent();
+        String poolUndistributedEntityId = poolUndistributed == 0L ? null : attributedEntityId;
+        if (poolUndistributed != 0L) {
+            log.warn("结算告警:项目 {} 月 {} 可分配池余额 {} 分无第二段参与者(排名档位酒吧为空或权重全 0),"
+                            + "显式归娱乐平台公司(主体 {})留痕待查",
+                    projectId == null ? "平台默认" : projectId, month, poolUndistributed,
+                    poolUndistributedEntityId == null ? "未配置(归属留白,金额已单列)" : poolUndistributedEntityId);
+        }
         // S4 综合服务费收款主体快照:两支都归娱乐平台公司(V370 种子;项目级可覆盖),月结时定格进单据——
         //   财务对账时「这笔费归了谁」直接看单据,不用追当时配置长什么样。
         String feeBeneficiaryEntityId =
@@ -280,7 +304,7 @@ public class TicketDistributionSettlementService {
                 pooledServiceFee, exclusiveServiceFee, feeBeneficiaryEntityId,
                 pooledGiftCost, giftBeneficiaryEntityId,
                 method, specialApprovalRef, status, attributedEntityId, comboDiscountCent,
-                roundingResidual));
+                roundingResidual, poolUndistributed, poolUndistributedEntityId));
 
         // 幂等重跑:先清旧明细再写(明细集合随当月核销变化,覆盖式最简)
         String actualBillId = repository.findBillId(projectId, periodStart, periodEnd);
@@ -314,53 +338,93 @@ public class TicketDistributionSettlementService {
     }
 
     /**
-     * 按分配方式算各酒吧分账（整数分，四舍五入到分）。
+     * S8 两段分配(业务 HTML「可分配池按两段分配」逐字落地;整数分,四舍五入到分)。
      *
-     * <p>R-7：同时累计各家<b>精确（未舍入）份额</b>之和 {@link PooledDistribution#exactTotal()}，
-     * 供上层算尾差 = round_half_up(Σ精确份额) − Σ已舍入份额。按客数/固定额两方式是整数乘法、
-     * 精确值 ≡ 舍入值 → 尾差恒 0（零行为变更）；只有按排名档位（比例分池）才可能产生尾差。
+     * <p><b>第一段(绝对额优先)</b>:有 active 商户级固定规则(V374 rule_type 二选一)的酒吧,按
+     * 每客单价 × 当月客数 / 固定额拿<b>绝对金额</b>(整数乘法无舍入,不归一化、不削);
+     * <b>第二段(归一化分尽)</b>:其余酒吧按排名档位权重对余额 P2 一次归一化分光
+     * ({@code b_j = round_half_up(P2 × w_j / Σw)},只舍入一次),档位只是相对权重——
+     * 权重和不足 10000 也分尽(和恰为 10000 时与两段化前 bpsOf 逐分一致)。
+     * 排名在<b>第二段参与者内部</b>编(拿第一段的不占名次,K18 ⑤)。
+     *
+     * <p>边界:P2 = 第一段为空时直传池额(带符号,负池月第二段分负额=向酒吧追回,R-3 不变);
+     * 第一段非空时 max(0, P − Q)(绝对承诺不削,Q &gt; P 即超池,由上层按应分总额判定落特批);
+     * 第二段无参与者/权重全 0 → 余额进 {@link PooledDistribution#undistributedCent()},
+     * 上层显式归娱乐平台公司 + 告警(K18 ③④,不静默沉淀)。
+     *
+     * <p>R-7:exactTotal = Q + 第二段基数(两者皆整数分,归一化保证 Σ精确份额 ≡ 基数),
+     * 供上层算尾差 = round_half_up(Σ精确份额) − Σ已舍入份额;只有第二段可能产生尾差。
      */
     private PooledDistribution distribute(String projectId, String method, long pool,
                                           List<JdbcSettlementBillRepository.MerchantMonthlyStat> stats) {
-        List<ItemCalc> out = new ArrayList<>();
-        BigDecimal exactTotal = BigDecimal.ZERO;
-        switch (method) {
-            case METHOD_BY_RANK_TIER -> {
-                List<JdbcSettlementBillRepository.RankTier> tiers = repository.findRankTiers(projectId);
-                // stats 已按 verified_count DESC 排好 → 顺位即排名(1-based)
-                int rank = 0;
-                for (var s : stats) {
-                    rank++;
-                    int shareBps = shareBpsForRank(tiers, rank);
-                    // R-7:旧 `pool * shareBps / 10000` 整除截断,各家恒少拿、差额悄悄沉淀在池里不留痕。
-                    //   带符号(R-3):负池月各家份额为负(HALF_UP 对 0 对称)=向酒吧追回,不钳零。
-                    long amount = MoneyRounding.bpsOf(pool, shareBps);
-                    exactTotal = exactTotal.add(MoneyRounding.exactBps(pool, shareBps));
-                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), rank, amount, method));
-                }
-            }
-            case METHOD_BY_VENUE_PER_GUEST -> {
-                for (var s : stats) {
-                    var rate = repository.findMerchantRate(projectId, s.merchantId());
-                    long perGuest = rate != null && rate.perGuestCent() != null ? rate.perGuestCent() : 0L;
-                    long amount = (long) s.guestCount() * perGuest;   // 整数乘法,无舍入
-                    exactTotal = exactTotal.add(BigDecimal.valueOf(amount));
-                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, amount, method));
-                }
-            }
-            case METHOD_BY_FIXED_AMOUNT -> {
-                for (var s : stats) {
-                    var rate = repository.findMerchantRate(projectId, s.merchantId());
-                    long fixed = rate != null && rate.fixedAmountCent() != null ? rate.fixedAmountCent() : 0L;
-                    exactTotal = exactTotal.add(BigDecimal.valueOf(fixed));   // 固定额,无舍入
-                    out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, fixed, method));
-                }
-            }
-            default -> {
-                // 未知方式:不分账(全沉淀总池),防御性兜底
-            }
+        // 语义收窄(V374):method 仅指第二段方式,只有 by_rank_tier 有意义。旧三选一里的另两个值
+        // 已由商户级固定规则取代——若配置仍是旧值,静默按档位算会与配置页显示的口径对不上,fail-loud。
+        if (!METHOD_BY_RANK_TIER.equals(method)) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONFIG_INVALID",
+                    "分配方式「" + method + "」已由商户级固定规则(每客单价/固定额,第一段)取代;"
+                            + "第二段仅支持排名档位(by_rank_tier),请在结算配置中心改配分配方式");
         }
-        return new PooledDistribution(out, exactTotal);
+        java.util.Map<String, JdbcSettlementBillRepository.MerchantRateRule> rules =
+                repository.findActiveMerchantRateRules(projectId);
+        List<ItemCalc> out = new ArrayList<>();
+
+        // ---- 第一段:FixedSet 按绝对金额先拿(绝对承诺,不归一化、不削)----
+        long q = 0L;
+        List<JdbcSettlementBillRepository.MerchantMonthlyStat> tierSet = new ArrayList<>();
+        for (var s : stats) {
+            var rule = rules.get(s.merchantId());
+            if (rule == null) {
+                tierSet.add(s);
+                continue;
+            }
+            boolean perGuest = JdbcSettlementBillRepository.RULE_PER_GUEST.equals(rule.ruleType());
+            long amount = perGuest
+                    ? (long) s.guestCount() * rule.perGuestCent()   // 每客单价 × 当月客数,整数乘法无舍入
+                    : rule.fixedAmountCent();                        // 固定额
+            q = Math.addExact(q, amount);
+            out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), null, amount,
+                    perGuest ? METHOD_BY_VENUE_PER_GUEST : METHOD_BY_FIXED_AMOUNT));
+        }
+        boolean fixedSetEmpty = out.isEmpty();
+
+        // ---- 第二段基数 P2 ----
+        // FixedSet 空 → P2 = 池额带符号直传(负池月第二段分负额=向酒吧追回,与两段化前逐分一致);
+        // FixedSet 非空 → P2 = max(0, P − Q):绝对承诺不削,Q > P 时第二段为 0,
+        //   上层按应分总额(= Q)> 池判超池 → draft 待特批(§二十一.1,第二段永不加剧超池)。
+        long p2 = fixedSetEmpty ? pool : Math.max(0L, pool - q);
+
+        // ---- 第二段:TierSet 按排名档位权重归一化分尽 P2 ----
+        List<JdbcSettlementBillRepository.RankTier> tiers = repository.findRankTiers(projectId);
+        // tierSet 保持 stats 的 verified_count DESC 序 → 顺位即第二段内部排名(1-based)
+        int[] weights = new int[tierSet.size()];
+        long weightSum = 0L;
+        for (int i = 0; i < tierSet.size(); i++) {
+            weights[i] = shareBpsForRank(tiers, i + 1);
+            weightSum += weights[i];
+        }
+        long undistributed = 0L;
+        long tierBase = 0L;
+        if (weightSum > 0L) {
+            tierBase = p2;
+            for (int i = 0; i < tierSet.size(); i++) {
+                var s = tierSet.get(i);
+                // 一次归一化算到位(不「先分一轮再分剩余」):只舍入一次,尾差走既有 rounding_residual 范式。
+                long amount = MoneyRounding.prorate(p2, weights[i], weightSum);
+                out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), i + 1, amount,
+                        METHOD_BY_RANK_TIER));
+            }
+        } else {
+            // K18 ③④:第二段无参与者(TierSet 空)或权重全 0(档位没配/名次全脱档)→ 余额不静默沉淀,
+            // 显式归娱乐平台公司(由上层解析主体 + 告警 + bill 单列留痕)。名次仍留痕(分 0)。
+            for (int i = 0; i < tierSet.size(); i++) {
+                var s = tierSet.get(i);
+                out.add(new ItemCalc(s.merchantId(), s.verifiedCount(), s.guestCount(), i + 1, 0L,
+                        METHOD_BY_RANK_TIER));
+            }
+            undistributed = p2;
+        }
+        // exactTotal:Q 与第二段基数皆整数分;归一化保证第二段 Σ精确份额 ≡ tierBase,不必逐家累精确值。
+        return new PooledDistribution(out, BigDecimal.valueOf(Math.addExact(q, tierBase)), undistributed);
     }
 
     /**
@@ -525,7 +589,9 @@ public class TicketDistributionSettlementService {
     /**
      * 池分账结果 + 各家<b>精确（未舍入）份额之和</b>：R-7 尾差 = round_half_up(exactTotal) − Σ items.amount。
      * exactTotal 只用于算尾差，绝不直接落库。
+     * S8 undistributedCent：第二段无参与者/权重全 0 时的池余额（K18 ③④），上层显式归娱乐平台公司留痕；
+     * 正常两段分尽时恒 0。带符号（冲正月可为负=由平台承接追回）。
      */
-    private record PooledDistribution(List<ItemCalc> items, BigDecimal exactTotal) {
+    private record PooledDistribution(List<ItemCalc> items, BigDecimal exactTotal, long undistributedCent) {
     }
 }
