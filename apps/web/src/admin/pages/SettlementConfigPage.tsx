@@ -44,7 +44,7 @@ const BLOCKS: BlockDef[] = [
   { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。即娱乐平台公司留存 / 项目管理费——与原「项目公司留存比例」为同一项、只扣一次，原留存卡片已并入本费率。" },
   { key: "pass_gift_cost", title: "赠送权益预估成本", defaultKey: "pass_gift_cost", endpoint: "pass-gift-cost", note: "通票分账在进入可分配池之前预扣的一笔「赠送权益预估成本」，归娱乐平台公司。按「项目 × 票种」配置（票种留空 = 通用）：按件计 = 票面各赠送权益数量 × 提供方内部结算价之和（金额由票面推导，无需手填）；按票计 = 该票种赠送部分的售价整额。商户让利型权益（在票种配置里标明）不进预扣。改动落草案、复核转正后生效。" },
   { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态票面原价×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
-  { key: "channel_fee", title: "渠道抽成费率", endpoint: "channel-fee", note: "按项目配置通用渠道抽成率（万分比），改动落草案。" },
+  { key: "channel_fee", title: "渠道抽成费率", endpoint: "channel-fee", note: "按项目配置通用渠道抽成：比例（万分比）或每张票固定金额（分）二选一，改动落草案。" },
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
 ];
 
@@ -639,7 +639,8 @@ function editSteps(
       break;
     case "channel_fee":
       content = (<>{projectField}
-        <label>通用渠道抽成万分比（0~10000）<input data-testid="settlement-config-field-feeBps" type="number" min={0} max={10000} value={form.feeBps} onChange={setField("feeBps")} /></label></>);
+        <label>通用渠道抽成万分比（0~10000，配固定金额时须 0）<input data-testid="settlement-config-field-feeBps" type="number" min={0} max={10000} value={form.feeBps} onChange={setField("feeBps")} /></label>
+        <label>每张票固定金额（分，可留空；与比例二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label></>);
       break;
     case "revenue_stream_attribution":
       content = (<>{projectField}
@@ -735,7 +736,7 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: Ti
       { label: "每月封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" },
       { label: "差额处理", value: VARIANCE_OPTIONS.find(([v]) => v === form.varianceHandling)?.[1] ?? form.varianceHandling }];
     case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }, { label: "通票凑整允许误差", value: `${form.roundingToleranceYuan || "0"} 元` }];
-    case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }];
+    case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }, { label: "每张票固定金额（分）", value: form.fixedAmountCent.trim() || "—" }];
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "收款方类型", value: BENEFICIARY_KIND_OPTIONS.find(([v]) => v === form.beneficiaryKind)?.[1] ?? form.beneficiaryKind }, { label: "收款主体", value: form.beneficiaryKind === "per_merchant" ? "各商户自己" : (form.managementEntityId || "—") }];
     case "rank_tiers": return [scope, { label: "档位数", value: String(tiers.length) }, { label: "区间校验", value: rankTierHint(tiers).msg }];
     case "commission_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "该项目通用" }, { label: "角色档", value: ROLE_TYPE_OPTIONS.find(([v]) => v === form.roleType)?.[1] ?? form.roleType }, { label: "提成率万分比", value: form.rateBp || "—" }];
@@ -780,8 +781,14 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
       if (!isIntInRange(form.splitPlatformBps || "0", 0, 10000)) return "平台分摊万分比需为 0~10000 的整数。";
       return Number(form.roundingToleranceYuan) >= 0 && Number.isFinite(Number(form.roundingToleranceYuan))
         ? null : "通票凑整允许误差需为不小于 0 的金额（元）。";
-    case "channel_fee":
-      return isIntInRange(form.feeBps, 0, 10000) ? null : "渠道抽成万分比需为 0~10000 的整数。";
+    case "channel_fee": {
+      const chFixed = orUndef(form.fixedAmountCent) !== undefined;
+      if (chFixed && !isIntInRange(form.fixedAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "每张票固定金额需为不小于 0 的整数（分）。";
+      const chFee = chFixed && form.feeBps.trim() === "" ? "0" : form.feeBps;
+      if (!isIntInRange(chFee, 0, 10000)) return "渠道抽成万分比需为 0~10000 的整数。";
+      if (chFixed && Number(chFee) !== 0) return "比例与每张票固定金额二选一：配了固定金额，抽成万分比须为 0。";
+      return null;
+    }
     case "revenue_stream_attribution":
       if (form.beneficiaryKind === "per_merchant") return null;  // 归各商户自己，无单一主体
       return orUndef(form.managementEntityId) === undefined ? "收款主体必选。" : null;
@@ -835,7 +842,11 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
       return { idempotencyKey, projectId: project, discountBearer: form.discountBearer, splitPlatformBps: Number(form.splitPlatformBps || "0"),
         roundingToleranceCent: Math.round(Number(form.roundingToleranceYuan || "0") * 100) };
     case "channel_fee":
-      return { idempotencyKey, projectId: project, channel: null, feeBps: Number(form.feeBps) };
+      return {
+        idempotencyKey, projectId: project, channel: null,
+        feeBps: form.feeBps.trim() === "" ? 0 : Number(form.feeBps),
+        fixedAmountCent: orUndef(form.fixedAmountCent) === undefined ? null : Number(form.fixedAmountCent),
+      };
     case "revenue_stream_attribution":
       return {
         idempotencyKey, projectId: project, revenueStream: form.revenueStream,
