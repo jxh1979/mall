@@ -31,18 +31,19 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     // S4:原「留存万分比」finder 已删——池内留存与门票综合服务费为同一项、只扣一次(业务 HTML),
     //   费率统一走 findComprehensiveServiceFee(platform_retention_rules 已随 V370 停用)。
 
-    /** 第三方渠道抽成万分比（通用率，channel 未知/无订单时用）。 */
-    public int findChannelFeeBps(String projectId) {
-        return findChannelFeeBps(projectId, null);
+    /** 第三方渠道抽成配置（通用配置，channel 未知/无订单时用）。 */
+    public ChannelFeeConfig findChannelFee(String projectId) {
+        return findChannelFee(projectId, null);
     }
 
     /**
-     * S11②：某<b>销售渠道</b>的抽成万分比。优先级：项目特例 &gt; 全局默认；同级下 该渠道专属率 &gt; 通用率。
-     * 渠道无专属配置 → 落回通用率（默认种子 0 = 官方直销不抽，逐分不变）。
+     * S11②/V381：某<b>销售渠道</b>的抽成配置——比例(万分比)或<b>每张票固定金额</b>(分)二选一
+     * (chk_cfc_fee_mode 保证不双配)。优先级：项目特例 &gt; 全局默认；同级下 该渠道专属配置 &gt; 通用配置。
+     * 渠道无专属配置 → 落回通用配置（默认种子 比例 0 = 官方直销不抽，逐分不变）。
      */
-    public int findChannelFeeBps(String projectId, String channel) {
-        Integer bps = jdbcTemplate.query("""
-                SELECT fee_bps FROM channel_fee_configs
+    public ChannelFeeConfig findChannelFee(String projectId, String channel) {
+        ChannelFeeConfig cfg = jdbcTemplate.query("""
+                SELECT fee_bps, fixed_amount_cent FROM channel_fee_configs
                  WHERE status = 'active' AND is_draft = FALSE
                    AND (channel IS NULL OR channel = :channel)
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
@@ -51,8 +52,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 """, new MapSqlParameterSource()
                         .addValue("project_id", projectId)
                         .addValue("channel", channel),
-                rs -> rs.next() ? rs.getInt("fee_bps") : null);
-        return requireConfigured(bps, "channel_fee_configs.fee_bps", projectId);
+                rs -> rs.next()
+                        ? new ChannelFeeConfig(rs.getInt("fee_bps"),
+                                rs.getObject("fixed_amount_cent") == null ? null : rs.getLong("fixed_amount_cent"))
+                        : null);
+        return requireConfigured(cfg, "channel_fee_configs", projectId);
     }
 
     /** 分配方式：项目特例优先，否则全局默认，否则建表默认 by_rank_tier。 */
@@ -203,13 +207,32 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     /**
      * S11②：当月<b>进池</b>核销按【销售渠道】汇总实付额（渠道抽成整单前移的计费基数）。
      * 渠道取自出票订单 {@code ticket_orders.sales_channel}；direct 出票无订单 → 空串（落通用率）。
+     *
+     * <p><b>V381 当期票数(固定金额模式计费基数)</b>：每张票只在其「首笔进池核销」(锚点=该父票最早的
+     * verification_settled 行)所在月计 +1——一张票多次核销不重复计(与 S3 综合服务费固定额「一张票只收一道」
+     * 同语义)；冲正行沿用原核销的 verification_id，冲的恰是锚点行时计 −1(冲正取反)，冲非锚点行不动票数。
+     * 无 parent_ticket_id 的行(V285 前不合规发放数据)不计票数——与 S3 同一态度，绝不退化成按核销笔数各收一道。
      */
+    // ponytail: 锚点=全期最早核销、不随冲正复位——锚点被冲正后同一张票再核销(新 verificationId)不再计费,
+    //   平台少收该票一道(客人有利方向,入场冲正后重入场属罕见);真出现再照 S3 净额复位语义升级。
     public List<ChannelRevenue> aggregateChannelRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
         return jdbcTemplate.query("""
                 SELECT COALESCE(o.sales_channel, '')              AS sales_channel,
-                       COALESCE(SUM(st.verified_amount_cent), 0)  AS revenue_cent
+                       COALESCE(SUM(st.verified_amount_cent), 0)  AS revenue_cent,
+                       COALESCE(SUM(CASE WHEN a.verification_id IS NOT NULL
+                                         THEN CASE st.transaction_type WHEN 'verification_settled' THEN 1 ELSE -1 END
+                                         ELSE 0 END), 0)          AS ticket_count
                   FROM settlement_transactions st
                   LEFT JOIN ticket_orders o ON o.id = st.order_id
+                  LEFT JOIN (SELECT DISTINCT ON (parent_ticket_id) parent_ticket_id, verification_id
+                               FROM settlement_transactions
+                              WHERE transaction_type = 'verification_settled'
+                                AND verification_id IS NOT NULL
+                                AND exclusive_merchant_id IS NULL
+                                AND parent_ticket_id IS NOT NULL
+                                AND (:project_id::text IS NULL OR project_id = :project_id)
+                              ORDER BY parent_ticket_id, COALESCE(business_at, created_at), id) a
+                         ON a.parent_ticket_id = st.parent_ticket_id AND a.verification_id = st.verification_id
                  WHERE st.transaction_type IN ('verification_settled','verification_reversed')
                    AND st.verification_id IS NOT NULL
                    AND st.exclusive_merchant_id IS NULL
@@ -219,7 +242,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                  GROUP BY 1
                  ORDER BY 1
                 """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
-                new ChannelRevenue(rs.getString("sales_channel"), rs.getLong("revenue_cent")));
+                new ChannelRevenue(rs.getString("sales_channel"), rs.getLong("revenue_cent"),
+                        rs.getLong("ticket_count")));
     }
 
     /**
@@ -946,7 +970,14 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     public record PooledTotals(long revenueCent, long compServiceFeeCent, long giftCostCent) {
     }
 
-    /** S11② 当月某销售渠道的进池核销实付额（渠道抽成整单前移的计费基数）。 */
-    public record ChannelRevenue(String salesChannel, long revenueCent) {
+    /** V381 渠道抽成配置读投影:fixedAmountCent 非空=每张票固定金额,否则 feeBps 比例(照 ServiceFeeConfig 范式)。 */
+    public record ChannelFeeConfig(int feeBps, Long fixedAmountCent) {
+    }
+
+    /**
+     * S11② 当月某销售渠道的进池核销实付额（渠道抽成整单前移的计费基数）+
+     * V381 当期签名票数（固定金额模式计费基数,按首笔核销锚点计,冲正为负）。
+     */
+    public record ChannelRevenue(String salesChannel, long revenueCent, long ticketCount) {
     }
 }

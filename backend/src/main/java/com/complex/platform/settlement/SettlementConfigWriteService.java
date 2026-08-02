@@ -180,12 +180,22 @@ public class SettlementConfigWriteService {
         rejectSentinel(req.projectId(), "project_id");
         rejectSentinel(req.channel(), "channel");
         int feeBps = requireBps(req.feeBps(), "fee_bps");
+        Long fixed = req.fixedAmountCent();
+        // V381 二选一(对齐 chk_cfc_fee_mode):配每张票固定金额则 fee_bps 必 0;固定金额 ≥0。
+        if (fixed != null) {
+            requireNonNegative(fixed, "fixed_amount_cent");
+            if (feeBps != 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "比例与每张票固定金额二选一:配了固定金额(fixed_amount_cent),抽成万分比(fee_bps)必须为 0");
+            }
+        }
         String scopeKey = defaultScope(req.projectId()) + "|" + channelScope(req.channel());
         String landedId = writeRepository.upsertChannelFeeDraft(draftId("cfc_d_", scopeKey, idem),
-                req.projectId(), req.channel(), feeBps, actorId);
+                req.projectId(), req.channel(), feeBps, fixed, actorId);
         audit("settlement.config.channel_fee_configs.updated", "channel_fee_configs", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()),
-                        "channel", channelScope(req.channel()), "fee_bps", String.valueOf(feeBps)));
+                        "channel", channelScope(req.channel()), "fee_bps", String.valueOf(feeBps),
+                        "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed)));
     }
 
     /**

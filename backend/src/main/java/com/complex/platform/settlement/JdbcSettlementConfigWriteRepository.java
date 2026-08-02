@@ -180,19 +180,23 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("updated_by", updatedBy), String.class);
     }
 
-    public String upsertChannelFeeDraft(String id, String projectId, String channel, int feeBps, String updatedBy) {
+    /** V381:同一草案槽再带「每张票固定金额」(分,与 fee_bps 二选一,写入面与 chk_cfc_fee_mode 双闸)。 */
+    public String upsertChannelFeeDraft(String id, String projectId, String channel, int feeBps,
+                                        Long fixedAmountCent, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO channel_fee_configs
-                    (id, project_id, channel, fee_bps, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :channel, :fee_bps, 'active', TRUE, :updated_by, now())
+                    (id, project_id, channel, fee_bps, fixed_amount_cent, status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :channel, :fee_bps, :fixed_amount_cent, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(channel, '__ALL__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     fee_bps = EXCLUDED.fee_bps,
+                    fixed_amount_cent = EXCLUDED.fixed_amount_cent,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("channel", channel)
-                .addValue("fee_bps", feeBps).addValue("updated_by", updatedBy), String.class);
+                .addValue("fee_bps", feeBps).addValue("fixed_amount_cent", fixedAmountCent)
+                .addValue("updated_by", updatedBy), String.class);
     }
 
     /** V340 卡座提成费率落草案(项目 × 商户 × 角色档;merchant_id NULL=该项目通用)。 */
@@ -489,7 +493,9 @@ public class JdbcSettlementConfigWriteRepository {
                     UNION ALL
                     SELECT id, 'channel_fee',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 渠道=' || COALESCE(channel, '__ALL__')
-                               || ' 抽成 ' || fee_bps || 'bps',
+                               || CASE WHEN fixed_amount_cent IS NOT NULL
+                                       THEN ' 每张票固定 ' || fixed_amount_cent || '分'
+                                       ELSE ' 抽成 ' || fee_bps || 'bps' END,
                            updated_at
                       FROM channel_fee_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

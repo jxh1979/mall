@@ -248,10 +248,10 @@ class SettlementFormatShareS11Tests {
         setChannelFeeBps(pid, null, 200);        // 本项目通用率 2%
         setChannelFeeBps(pid, "meituan", 800);   // 美团专属 8%
 
-        assertThat(billRepository.findChannelFeeBps(pid, "meituan")).isEqualTo(800);
-        assertThat(billRepository.findChannelFeeBps(pid, "miniapp")).as("没单独配的渠道落回通用率").isEqualTo(200);
-        assertThat(billRepository.findChannelFeeBps(pid, null)).isEqualTo(200);
-        assertThat(billRepository.findChannelFeeBps(null, "meituan")).as("别的项目不受本项目费率影响").isZero();
+        assertThat(billRepository.findChannelFee(pid, "meituan").feeBps()).isEqualTo(800);
+        assertThat(billRepository.findChannelFee(pid, "miniapp").feeBps()).as("没单独配的渠道落回通用率").isEqualTo(200);
+        assertThat(billRepository.findChannelFee(pid, null).feeBps()).isEqualTo(200);
+        assertThat(billRepository.findChannelFee(null, "meituan").feeBps()).as("别的项目不受本项目费率影响").isZero();
     }
 
     // ---------------------------------------------------------------- ④ 折扣补回扩到所有业态
