@@ -52,6 +52,9 @@
 - V080：`allowed_business_scope` JSONB（准入闸经营范围）。
 - V162 扩展：`commission_mode`（抽成4模式）、`energy_fee_basis`（公区能耗分摊4模式）、`deposit_cent`、`penalty_terms`、`settlement_rules`、`snapshot`（生效固化快照）、`project_id`（综合体）、`terminated_at`/`termination_reason`、`renewed_from_contract_id`（续约链）。
 - **`lifecycle_status` CHECK 8 业务态**（V162）：`drafting`/`pending_confirmation`/`pending_effective`/`effective`/`renewing`/`expired`/`terminated`/`archived`。
+- **到期自动批转**（2026-08-02 接线）：日度作业将 `lifecycle_status='effective'` 且 `expiry_date` 早于当日的合同批转为 `expired`，留审计事件 `contract.expired_batch`（metadata 含批转条数 `count` 与判定基准日 `as_of`）。**到期当日仍算有效**（严格早于，非早于等于）；**`renewing` 不批转**（续约中不视为过期）。开关 `contract.expiry.scheduled.enabled`（代码默认关，prod 开）。
+- ⚠️ 此前该批转**一直没有调用方**（旧 governance `ContractExpiryJob` 删除后未补），过期合同长期停在 `effective`，而变更/结算/经营绑定等按 `effective` 判定的入口照常放行——2026-08-02 已补作业接线。
+- **判定基准日时区**（2026-08-02）：到期批转与续约提醒的基准日按**所在地（北京）时间的日历日**取，非 UTC——业务人员按北京日历日看到期日，UTC 判定会让批转比预期晚最多 8 小时（两作业为 `fixedDelay` 触发，时刻随应用启动漂移，会落进「UTC 与北京不同日」窗口）。⚠️ **全仓口径尚未统一**：经营日助手 `BusinessDayResolver`、巡检排程、积分过期、分账归属月等日期作业目前仍锚 UTC；2026-07-22 拍板的「考勤按所在地时间」亦尚未落到代码。
 - ⚠️ 合同的三个 `*_subject_id` 是**合同各自携带的主体**，与商户当前 active 绑定（§2.3）**可不一致**（合同快照 vs 商户当前绑定），无外键强绑。
 
 ### 2.6 `contract_spaces`（V080 + V162）— 合同↔铺位
