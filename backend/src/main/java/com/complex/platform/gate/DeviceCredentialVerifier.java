@@ -301,7 +301,7 @@ public class DeviceCredentialVerifier {
     private void reject(String claimed, String deviceId, String reason) {
         audit(claimed, deviceId, reason, "failure");
         throw ApiException.forbidden("DEVICE_CREDENTIAL_INVALID",
-                "device credential verification failed: " + reason);
+                "设备凭据校验未通过：" + reason);
     }
 
     private void audit(String claimed, String deviceId, String reason, String result) {
@@ -321,7 +321,7 @@ public class DeviceCredentialVerifier {
     }
 
     private static ApiException unreachable() {
-        return ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "unreachable");
+        return ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "设备凭据校验出现内部异常，请联系管理员");
     }
 
     private static boolean isWrite(String method) {

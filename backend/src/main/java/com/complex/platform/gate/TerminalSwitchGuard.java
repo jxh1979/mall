@@ -168,7 +168,7 @@ public class TerminalSwitchGuard {
             // 留痕失败不得掩盖拒绝结果
         }
         throw ApiException.forbidden("TERMINAL_DISABLED",
-                "terminal capability is disabled: " + capabilityCode);
+                "该终端能力已停用：" + capabilityCode);
     }
 
     /** 仅在值非 null 时写入 payload，避免下游 Map.copyOf 对 null 值抛 NPE 吞掉拒绝留痕。 */

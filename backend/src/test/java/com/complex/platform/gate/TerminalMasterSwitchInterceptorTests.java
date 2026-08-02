@@ -55,7 +55,7 @@ class TerminalMasterSwitchInterceptorTests {
 
     @Test
     void disabledTerminalRejectionPropagates() {
-        doThrow(ApiException.forbidden("TERMINAL_DISABLED", "terminal capability is disabled: terminal.enabled"))
+        doThrow(ApiException.forbidden("TERMINAL_DISABLED", "该终端能力已停用：terminal.enabled"))
                 .when(guard).checkTerminalEnabled();
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/finance/reconciliation/differences");
         request.addHeader("X-Terminal-Type", "web");
