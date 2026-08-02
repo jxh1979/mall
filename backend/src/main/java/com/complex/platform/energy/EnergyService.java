@@ -106,7 +106,7 @@ public class EnergyService {
         String period = requirePeriod(r.period());
         EnergyMeterRecord meter = loadMeter(requireText(r.meterId(), "meter_id"));
         if (repository.findReadingByMeterAndPeriod(meter.id(), period).isPresent()) {
-            throw ApiException.conflict("ENERGY_READING_ALREADY_RECORDED", "meter already has reading for " + period);
+            throw ApiException.conflict("ENERGY_READING_ALREADY_RECORDED", "该表计在此账期已有抄表记录：" + period);
         }
         BigDecimal readingValue = requireDecimal(r.readingValue(), "reading_value");
         EnergyMeterReadingRecord latestBefore = repository.findLatestReadingBefore(meter.id(), period).orElse(null);
@@ -132,7 +132,7 @@ public class EnergyService {
         authorizationService.requirePlatformScope();
         EnergyReadingReviewRequest r = requireRequest(request);
         EnergyMeterReadingRecord cur = repository.findReadingById(requireText(readingId, "reading_id"))
-                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "energy reading not found"));
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "抄表记录不存在或已被删除"));
         Instant now = Instant.now();
         EnergyMeterReadingRecord rec = repository.saveReading(new EnergyMeterReadingRecord(cur.id(), cur.meterId(),
                 cur.period(), cur.readingValue(), cur.prevReadingValue(), cur.consumption(), "reviewed",
@@ -285,7 +285,7 @@ public class EnergyService {
 
     private EnergyMeterRecord loadMeter(String id) {
         return repository.findMeterById(id)
-                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "energy meter not found"));
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "能耗表计不存在或已被删除"));
     }
 
     private void validateMeterType(String type) {
@@ -310,14 +310,14 @@ public class EnergyService {
     private String requirePeriod(String period) {
         String p = requireText(period, "period");
         if (!p.matches("\\d{4}-\\d{2}")) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "period must be YYYY-MM");
+            throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 YYYY-MM");
         }
         return p;
     }
 
     private <T> T requireRequest(T request) {
         if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         return request;
     }
