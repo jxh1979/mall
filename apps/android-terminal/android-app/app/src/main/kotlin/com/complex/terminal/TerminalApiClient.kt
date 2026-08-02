@@ -58,8 +58,6 @@ class TerminalApiClient(
 
   var accessToken: String? = null
 
-  fun health(): HealthResponse = get("/api/v1/system/health")
-
   fun login(username: String, password: String): LoginResponse =
     post("/api/v1/auth/login", LoginRequest(username, password))
 
@@ -116,10 +114,6 @@ class TerminalApiClient(
 
   fun serviceOrderPaymentCode(id: String): JsonObject = get("/api/v1/services/orders/$id/payment-code")
 
-  fun setMyPaymentCode(request: PaymentCodeReq): JsonObject = post("/api/v1/services/payment-code", request)
-
-  fun myPaymentCode(): JsonObject = get("/api/v1/services/payment-code/mine")
-
   fun myServiceStats(month: String): JsonObject = get("/api/v1/services/orders/my-stats?month=$month")
 
   // ── BYOD 三期 F 批:我的薪资/请假/考勤月视图 ──
@@ -165,9 +159,6 @@ class TerminalApiClient(
   fun punchAttendance(request: AttendancePunchRequest): AttendanceRow =
     post("/api/v1/staff/attendance/punch", request)
 
-  /** 我的打卡记录(最近 30 天)。 */
-  fun listMyAttendance(): List<AttendanceRow> = get<Page<AttendanceRow>>("/api/v1/staff/attendance/mine").items
-
   fun listStaffNotices(): List<EmployeeNoticeRecord> = get<Page<EmployeeNoticeRecord>>("/api/v1/staff/notices").items
 
   fun acknowledgeStaffNotice(id: String, request: NoticeAcknowledgeRequest): EmployeeNoticeRecord =
@@ -208,8 +199,6 @@ class TerminalApiClient(
 
   fun createBarReservation(request: BarReservationCreateRequest): BarReservationRecord =
     post("/api/v1/bar/reservations", request)
-
-  fun events(limit: Int = 20): List<JsonObject> = get<Page<JsonObject>>("/api/v1/evidence/events?limit=$limit").items
 
   fun amusementVerify(request: VerificationRequest): AmusementVerificationRecord =
     post("/api/v1/amusement/verifications", request)
