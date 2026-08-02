@@ -49,6 +49,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-GOV-008", label: "场地营业时间", module: "治理", group: "governance", route: "/admin/governance/venue-business-hours", requiredPermissions: ["governance.space.view"] },
   { pageId: "ADM-VND-004", label: "外包下属账号", module: "外包工作台", group: "vendor", route: "/admin/vendor/subordinates", requiredPermissions: ["partner.subordinate.view"], accountForms: ["vendor"] },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", module: "终端", group: "integration", route: "/admin/terminals/switch-matrix", requiredPermissions: ["terminal.switch.view"] },
+  { pageId: "ADM-TER-002", label: "终端设备", module: "终端", group: "integration", route: "/admin/terminals/devices", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-CUS-001", label: "客人账号管理", module: "客人", group: "governance", route: "/admin/customers/accounts", requiredPermissions: ["customer.account.manage"] },
   { pageId: "ADM-CUS-002", label: "券台账管理", module: "客人", group: "governance", route: "/admin/customers/vouchers", requiredPermissions: ["customer.voucher.view"] },
   // ADM-CUS-003「积分规则配置」已于 2026-07-28 停用下线（V352）：该页所配四项口径全被别的活表接管，

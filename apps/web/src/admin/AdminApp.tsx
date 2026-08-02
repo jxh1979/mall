@@ -84,6 +84,7 @@ const BarCombosPage = React.lazy(() => import("./pages/BarCombosPage").then((m) 
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
 const TerminalSwitchMatrixPage = React.lazy(() => import("./pages/TerminalSwitchMatrixPage").then((m) => ({ default: m.TerminalSwitchMatrixPage })));
+const TerminalDevicesPage = React.lazy(() => import("./pages/TerminalDevicesPage").then((m) => ({ default: m.TerminalDevicesPage })));
 const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPage").then((m) => ({ default: m.CustomerAccountsPage })));
 const MemberLoyaltyConfigPage = React.lazy(() => import("./pages/MemberLoyaltyConfigPage").then((m) => ({ default: m.MemberLoyaltyConfigPage })));
 const StoredValueRulesPage = React.lazy(() => import("./pages/StoredValueRulesPage").then((m) => ({ default: m.StoredValueRulesPage })));
@@ -229,6 +230,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <ReconciliationPage {...props} />;
     case "ADM-TER-001":
       return <TerminalSwitchMatrixPage {...props} />;
+    case "ADM-TER-002":
+      return <TerminalDevicesPage {...props} />;
     case "ADM-CUS-001":
       return <CustomerAccountsPage {...props} />;
     case "ADM-FIN-003":
