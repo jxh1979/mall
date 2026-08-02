@@ -389,9 +389,9 @@ class VoucherServiceTests {
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_DEFINITION_DISABLED"));
         VoucherDefinitionRecord active = discountDefinition("vdef_active", "merchant-1");
         assertThatThrownBy(() -> service.issueVouchers(new VoucherIssueRequest("k3", active.id(), "customer-1", 0)))
-                .isInstanceOf(ApiException.class).hasMessageContaining("quantity");
+                .isInstanceOf(ApiException.class).hasMessageContaining("发放数量");
         assertThatThrownBy(() -> service.issueVouchers(new VoucherIssueRequest("k4", active.id(), "customer-1", 101)))
-                .isInstanceOf(ApiException.class).hasMessageContaining("quantity");
+                .isInstanceOf(ApiException.class).hasMessageContaining("发放数量");
         assertThat(repository.instances).isEmpty();
     }
 
