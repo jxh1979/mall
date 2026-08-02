@@ -166,14 +166,10 @@ class TerminalDeviceJdbcIntegrationTests {
                 now,
                 now
         ));
-        repository.saveKioskConfig(new TerminalKioskConfigRecord(
-                "device_kiosk_jdbc",
-                "ticketing",
-                true,
-                "project:p0",
-                Map.of("home", "ticketing"),
-                now
-        ));
+        jdbcTemplate.update("""
+                INSERT INTO terminal_kiosk_configs (device_id, kiosk_mode, ticketing_enabled, bound_scope, config, updated_at)
+                VALUES ('device_kiosk_jdbc', 'ticketing', true, 'project:p0', '{"home": "ticketing"}'::jsonb, '2026-06-14T07:00:00Z')
+                """);
         repository.saveKioskHeartbeat(new KioskHeartbeatRecord(
                 "device_kiosk_jdbc",
                 "online",

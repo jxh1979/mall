@@ -66,8 +66,11 @@ class WecomComplianceJdbcIntegrationTests {
                     assertThat(message.contentRedacted()).isEqualTo("电话 [PHONE_REDACTED]");
                     assertThat(message.riskFlags()).containsExactly("private_payment");
                 });
-        assertThat(repository.findAccessAuditsByConversation("wcv_jdbc"))
-                .extracting(WecomAccessAuditRecord::viewType, WecomAccessAuditRecord::approvalRef)
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT view_type, approval_ref FROM wecom_access_audits
+                 WHERE conversation_id = 'wcv_jdbc' ORDER BY viewed_at DESC, id
+                """))
+                .extracting(row -> org.assertj.core.groups.Tuple.tuple(row.get("view_type"), row.get("approval_ref")))
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("raw", "approval_jdbc"));
 
         // P2 多综合体 project_id scoped 读通道：按 project_id 行级隔离，仅命中本 project 会话。

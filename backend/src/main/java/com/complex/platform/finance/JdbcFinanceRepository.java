@@ -916,18 +916,6 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
-    public void markInventoryVariancePosted(String inventoryVarianceId, String arApItemId) {
-        jdbcTemplate.update("""
-                UPDATE inventory_variance
-                   SET posted_ar_ap_item_id = :ar_ap_item_id,
-                       updated_at = now()
-                 WHERE id = :id
-                """, new MapSqlParameterSource()
-                .addValue("id", inventoryVarianceId)
-                .addValue("ar_ap_item_id", arApItemId));
-    }
-
-    @Override
     public boolean markInventoryVariancePostedIfUnposted(String inventoryVarianceId, String arApItemId) {
         // P1 修复：条件 UPDATE 加 AND posted_ar_ap_item_id IS NULL。并发双开 postInventoryVariance 时，
         // 二者各自 persist 了应付台账后争相回填，只有先到者把 NULL→arApItemId（受影响 1 行返回 true），

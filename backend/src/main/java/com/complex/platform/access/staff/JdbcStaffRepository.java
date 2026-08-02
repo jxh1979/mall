@@ -839,13 +839,6 @@ class JdbcStaffRepository implements StaffRepository {
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 
-    @Override
-    public List<StaffDeviceCredentialRecord> listCredentials(String staffProfileId) {
-        return jdbcTemplate.query(
-                credentialSelect() + " WHERE staff_profile_id = :staff_profile_id ORDER BY created_at DESC, id",
-                Map.of("staff_profile_id", staffProfileId), this::mapCredential);
-    }
-
     private String credentialSelect() {
         return """
                 SELECT id, staff_profile_id, device_public_key, device_fingerprint_hash, bind_status,

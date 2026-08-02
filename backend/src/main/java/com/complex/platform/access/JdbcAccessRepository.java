@@ -292,18 +292,6 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
-    public List<StaffLevelAssignment> listStaffLevelAssignmentsByMerchant(String merchantId) {
-        // 商户面 scoped 读通道：按 staff_level_assignments.merchant_id = token scope 过滤（AC-ISO-1，§4）。
-        return jdbcTemplate.query("""
-                SELECT user_id, staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
-                       organization_id, merchant_id, assigned_by, assigned_at
-                  FROM staff_level_assignments
-                 WHERE merchant_id = :merchant_id
-                 ORDER BY user_id
-                """, Map.of("merchant_id", merchantId), this::mapStaffLevelAssignment);
-    }
-
-    @Override
     public Optional<StaffLevelAssignment> findStaffLevelAssignment(String userId) {
         List<StaffLevelAssignment> result = jdbcTemplate.query("""
                 SELECT user_id, staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,

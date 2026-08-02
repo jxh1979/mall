@@ -1424,7 +1424,7 @@ class IntegrationServiceTests {
     @Test
     void t14ListVideoAnchorsWritesAccessAudit() {
         service.recordVideoAnchor("point-9", Instant.parse("2026-06-18T11:00:00Z"), "handover-1");
-        repository.saveVideoAccessApproval(new VideoAccessApprovalRecord(
+        repository.seedVideoAccessApproval(new VideoAccessApprovalRecord(
                 "approval-555", "user-viewer-1", null, "approved", "supervisor-1", null, NOW, NOW));
         var page = service.listVideoAnchors("user-viewer-1", "approval-555");
         assertThat(page.items()).hasSize(1);
@@ -1441,12 +1441,12 @@ class IntegrationServiceTests {
         assertThatThrownBy(() -> service.listVideoAnchors("viewer-x", null))
                 .isInstanceOf(ApiException.class)
                 .extracting(ex -> ((ApiException) ex).code()).isEqualTo("VIDEO_ACCESS_APPROVAL_REQUIRED");
-        repository.saveVideoAccessApproval(new VideoAccessApprovalRecord(
+        repository.seedVideoAccessApproval(new VideoAccessApprovalRecord(
                 "appr-pending", "viewer-x", null, "pending", null, null, NOW, NOW));
         assertThatThrownBy(() -> service.listVideoAnchors("viewer-x", "appr-pending"))
                 .isInstanceOf(ApiException.class)
                 .extracting(ex -> ((ApiException) ex).code()).isEqualTo("VIDEO_ACCESS_NOT_APPROVED");
-        repository.saveVideoAccessApproval(new VideoAccessApprovalRecord(
+        repository.seedVideoAccessApproval(new VideoAccessApprovalRecord(
                 "appr-other", "viewer-other", null, "approved", "sup", null, NOW, NOW));
         assertThatThrownBy(() -> service.listVideoAnchors("viewer-x", "appr-other"))
                 .isInstanceOf(ApiException.class)
@@ -1763,11 +1763,6 @@ class IntegrationServiceTests {
         }
 
         @Override
-        public Optional<VideoAnchorRecord> findVideoAnchorById(String id) {
-            return Optional.ofNullable(videoAnchors.get(id));
-        }
-
-        @Override
         public void saveVideoAccessAudit(String id, String anchorId, String viewerUserId, String approvalRef, Instant viewedAt) {
             videoAccessAudits.add(id + ":" + anchorId + ":" + viewerUserId + ":" + approvalRef);
         }
@@ -1779,8 +1774,7 @@ class IntegrationServiceTests {
             return Optional.ofNullable(videoApprovals.get(approvalRef));
         }
 
-        @Override
-        public VideoAccessApprovalRecord saveVideoAccessApproval(VideoAccessApprovalRecord record) {
+        public VideoAccessApprovalRecord seedVideoAccessApproval(VideoAccessApprovalRecord record) {
             videoApprovals.put(record.id(), record);
             return record;
         }

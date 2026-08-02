@@ -16,17 +16,12 @@ public interface FinanceRepository {
         return Optional.empty();
     }
 
-    /** 回填库存差异已入账（posted_ar_ap_item_id），用于幂等防重复入账。default 空实现兼容既有测试双子。 */
-    default void markInventoryVariancePosted(String inventoryVarianceId, String arApItemId) {
-    }
-
     /**
      * P1 修复：条件回填库存差异已入账。仅当 posted_ar_ap_item_id IS NULL 时才 UPDATE，返回是否成功（受影响行数==1）。
      * 并发双开时只有一个事务能把 NULL→arApItemId，另一个 UPDATE 命中 0 行返回 false，服务层据此抛冲突，
-     * 杜绝同一 variance 重复挂应付台账。default 委托旧方法并恒返回 true，兼容既有测试双子。
+     * 杜绝同一 variance 重复挂应付台账。default 恒返回 true，兼容既有测试双子。
      */
     default boolean markInventoryVariancePostedIfUnposted(String inventoryVarianceId, String arApItemId) {
-        markInventoryVariancePosted(inventoryVarianceId, arApItemId);
         return true;
     }
 

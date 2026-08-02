@@ -72,25 +72,6 @@ class JdbcTraceabilityRepository implements TraceabilityRepository {
     }
 
     @Override
-    public List<TraceabilityProcessInstanceRecord> listProcessInstances(String merchantScope) {
-        if (merchantScope == null) {
-            return jdbcTemplate.query("SELECT * FROM business_process_instances ORDER BY started_at DESC, id",
-                    this::mapInstance);
-        }
-        return jdbcTemplate.query(
-                "SELECT * FROM business_process_instances WHERE merchant_id = :merchant_id ORDER BY started_at DESC, id",
-                Map.of("merchant_id", merchantScope), this::mapInstance);
-    }
-
-    @Override
-    public List<TraceabilityProcessInstanceRecord> listProcessInstancesByProject(String projectId) {
-        // 综合体面 scoped 读通道：按 business_process_instances.project_id = token scope 过滤（AC-ISO-1，§4）。
-        return jdbcTemplate.query(
-                "SELECT * FROM business_process_instances WHERE project_id = :project_id ORDER BY started_at DESC, id",
-                Map.of("project_id", projectId), this::mapInstance);
-    }
-
-    @Override
     public TraceabilityStepRecord saveStep(TraceabilityStepRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO business_process_step_records (
@@ -197,14 +178,6 @@ class JdbcTraceabilityRepository implements TraceabilityRepository {
                 .addValue("service_end_at", timestampWithTimeZone(record.serviceEndAt()))
                 .addValue("status", record.status()));
         return record;
-    }
-
-    @Override
-    public Optional<TraceabilityResponsibilityRecord> findResponsibilityById(String id) {
-        List<TraceabilityResponsibilityRecord> result = jdbcTemplate.query(
-                "SELECT * FROM service_responsibility_records WHERE id = :id",
-                Map.of("id", id), this::mapResponsibility);
-        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 
     @Override

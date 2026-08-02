@@ -9,8 +9,6 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.facility.FacilityInspectionRepository;
-import com.complex.platform.facility.FacilityInspectionTaskRecord;
-import com.complex.platform.facility.FacilityWorkOrderRecord;
 import com.complex.platform.facility.FacilityWorkOrderRepository;
 import java.time.Instant;
 import java.util.List;
@@ -67,15 +65,4 @@ class PartnerSubordinateCompletionServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PARTNER_ORG_NOT_BOUND"));
     }
 
-    private static FacilityWorkOrderRecord wo(boolean done) {
-        return new FacilityWorkOrderRecord("wo", "c", "repair", "high", done ? "completed" : "assigned", "t", null,
-                "manual", null, null, null, null, "sub-1", null, null, null, null, done ? Instant.now() : null, null,
-                null, null, false, null, PROJ, null, Instant.now(), Instant.now());
-    }
-
-    private static FacilityInspectionTaskRecord insp(boolean done) {
-        return new FacilityInspectionTaskRecord("it", "tpl", "safety", done ? "completed" : "assigned", "t", "manual",
-                List.of(), "sub-1", null, null, null, done ? Instant.now() : null, null, PROJ, null,
-                Instant.now(), Instant.now());
-    }
 }

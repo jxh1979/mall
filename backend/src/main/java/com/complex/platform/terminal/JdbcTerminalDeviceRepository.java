@@ -149,20 +149,6 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
     }
 
     @Override
-    public List<TerminalDeviceRecord> listDevicesByVenue(String venueId) {
-        // 商户面 scoped 读通道：按 terminal_devices.venue_id = token scope 过滤（AC-ISO-1，§4）。
-        return jdbcTemplate.query("""
-                SELECT id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
-                       mdm_device_ref, kiosk_mode, merchant_id, venue_id, area_id, location_point_id,
-                       staff_id, status, bound_at, returned_at, unbound_at, return_reason,
-                       unbind_reason, created_at, updated_at
-                  FROM terminal_devices
-                 WHERE venue_id = :venue_id
-                 ORDER BY created_at DESC, id
-                """, Map.of("venue_id", venueId), this::mapDevice);
-    }
-
-    @Override
     public Optional<DeviceCredentialRecord> findDeviceCredentialByDeviceId(String deviceId) {
         return jdbcTemplate.query("""
                 SELECT device_id, token_sha256, status, created_at, updated_at
@@ -358,25 +344,6 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
     }
 
     @Override
-    public TerminalKioskConfigRecord saveKioskConfig(TerminalKioskConfigRecord record) {
-        jdbcTemplate.update("""
-                INSERT INTO terminal_kiosk_configs (
-                    device_id, kiosk_mode, ticketing_enabled, bound_scope, config, updated_at
-                )
-                VALUES (
-                    :device_id, :kiosk_mode, :ticketing_enabled, :bound_scope, CAST(:config AS jsonb), :updated_at
-                )
-                ON CONFLICT (device_id) DO UPDATE SET
-                    kiosk_mode = EXCLUDED.kiosk_mode,
-                    ticketing_enabled = EXCLUDED.ticketing_enabled,
-                    bound_scope = EXCLUDED.bound_scope,
-                    config = EXCLUDED.config,
-                    updated_at = EXCLUDED.updated_at
-                """, kioskConfigParameters(record));
-        return record;
-    }
-
-    @Override
     public KioskHeartbeatRecord saveKioskHeartbeat(KioskHeartbeatRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO terminal_kiosk_heartbeats (
@@ -454,16 +421,6 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                 .addValue("enabled", record.enabled())
                 .addValue("reason", record.reason())
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
-    }
-
-    private MapSqlParameterSource kioskConfigParameters(TerminalKioskConfigRecord record) {
-        return new MapSqlParameterSource()
-                .addValue("device_id", record.deviceId())
-                .addValue("kiosk_mode", record.kioskMode())
-                .addValue("ticketing_enabled", record.ticketingEnabled())
-                .addValue("bound_scope", record.boundScope())
-                .addValue("config", writeJson(record.config() == null ? Map.of() : record.config()))
                 .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
     }
 

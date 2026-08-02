@@ -561,25 +561,12 @@ class LoyaltyServiceTests {
         }
 
         @Override
-        public void updatePointsLedgerStatus(String ledgerId, String status) {
-            replace(ledgerId, l -> new CustomerPointsLedgerRecord(l.id(), l.customerId(), l.pointsDelta(),
-                    l.balanceAfter(), l.sourceType(), l.sourceId(), l.description(), l.expireAt(),
-                    l.remainingPoints(), l.expired(), l.createdAt(), l.changeType(), status,
-                    l.sourceDocType(), l.sourceDocId()));
-        }
-
-        @Override
         public void updatePointsLedgerLifecycle(String ledgerId, String status, Long remainingPoints) {
             // P0-B（V344）：已确认份额改由追加 confirm 分录承载，此处只同步 earn 行的生命周期列。
             replace(ledgerId, l -> new CustomerPointsLedgerRecord(l.id(), l.customerId(), l.pointsDelta(),
                     l.balanceAfter(), l.sourceType(), l.sourceId(), l.description(), l.expireAt(),
                     remainingPoints == null ? l.remainingPoints() : remainingPoints, l.expired(), l.createdAt(),
                     l.changeType(), status, l.sourceDocType(), l.sourceDocId(), l.confirmedAmount()));
-        }
-
-        @Override
-        public CustomerRedemptionCatalogItemRecord saveRedemptionCatalogItem(CustomerRedemptionCatalogItemRecord item) {
-            return item;
         }
 
         @Override

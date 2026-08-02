@@ -14,12 +14,6 @@ public interface FacilityRepository {
         return listEquipment();
     }
 
-    default List<FacilityEquipmentRecord> listEquipmentByProject(String projectId) {
-        return listEquipment().stream()
-                .filter(record -> Objects.equals(projectId, record.projectId()))
-                .toList();
-    }
-
     Optional<FacilityEquipmentRecord> findEquipmentById(String id);
 
     void insertEquipment(FacilityEquipmentRecord record);

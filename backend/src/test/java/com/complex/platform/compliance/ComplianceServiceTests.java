@@ -213,8 +213,9 @@ class ComplianceServiceTests {
         ContractKeyDateRecord second = service.createContractKeyDate(contractDateRequest("create!1"));
 
         assertThat(first.id()).isNotEqualTo(second.id());
-        assertThat(repository.findContractKeyDateById(first.id())).isPresent();
-        assertThat(repository.findContractKeyDateById(second.id())).isPresent();
+        assertThat(repository.findAllContractKeyDates())
+                .extracting(ContractKeyDateRecord::id)
+                .contains(first.id(), second.id());
     }
 
     // P1: scan must only touch current merchant's records
@@ -311,11 +312,6 @@ class ComplianceServiceTests {
         }
 
         @Override
-        public Optional<ContractKeyDateRecord> findContractKeyDateById(String id) {
-            return Optional.ofNullable(contractKeyDates.get(id));
-        }
-
-        @Override
         public ContractKeyDateRecord saveContractKeyDate(ContractKeyDateRecord record) {
             contractKeyDates.put(record.id(), record);
             contractDateSaveCount++;
@@ -332,11 +328,6 @@ class ComplianceServiceTests {
             return expiryItems.values().stream()
                     .filter(r -> merchantId.equals(r.merchantId()))
                     .toList();
-        }
-
-        @Override
-        public Optional<ComplianceExpiryItemRecord> findExpiryItemById(String id) {
-            return Optional.ofNullable(expiryItems.get(id));
         }
 
         @Override

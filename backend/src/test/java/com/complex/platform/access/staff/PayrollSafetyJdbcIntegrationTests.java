@@ -40,9 +40,6 @@ class PayrollSafetyJdbcIntegrationTests {
     private StaffService service;
 
     @Autowired
-    private JdbcStaffRepository repository;
-
-    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach

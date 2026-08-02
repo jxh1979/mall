@@ -66,15 +66,12 @@ public interface ContractRepository {
                 .toList();
     }
 
-    default List<ContractSettlementRecord> listAllSettlements() {
-        return listContracts().stream()
-                .flatMap(contract -> listSettlementsByContract(contract.id()).stream())
-                .toList();
-    }
-
     // AUD-005 收尾: 平台全量结算真分页(默认内存切片供测试双子; Jdbc 覆写 SQL COUNT + LIMIT/OFFSET)。
     default com.complex.platform.common.api.PageResponse<ContractSettlementRecord> listAllSettlementsPaged(int page, int size) {
-        return com.complex.platform.common.api.PageResponse.of(listAllSettlements(), page, size);
+        List<ContractSettlementRecord> all = listContracts().stream()
+                .flatMap(contract -> listSettlementsByContract(contract.id()).stream())
+                .toList();
+        return com.complex.platform.common.api.PageResponse.of(all, page, size);
     }
 
     // 可配审批链：引擎读「该综合体生效链」（项目覆盖优先、否则平台默认）

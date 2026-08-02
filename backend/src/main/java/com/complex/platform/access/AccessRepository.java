@@ -171,15 +171,6 @@ public interface AccessRepository {
         return Optional.empty();
     }
 
-    /**
-     * 按商户 scope 列出员工职级/薪资归属（staff_level_assignments.merchant_id = token scope）。
-     * 商户面数据：商户管理员只能看到本商户员工的职级薪资归属。默认空，JdbcAccessRepository 用 SQL 谓词下推。
-     * 隔离闸口（AC-ISO-1）：提供 merchant_id 行级 scoped 读通道。
-     */
-    default List<StaffLevelAssignment> listStaffLevelAssignmentsByMerchant(String merchantId) {
-        return List.of();
-    }
-
     boolean permissionExists(String permissionCode);
 
     List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt);

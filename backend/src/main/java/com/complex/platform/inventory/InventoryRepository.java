@@ -37,8 +37,6 @@ public interface InventoryRepository {
 
     PurchaseRequestEventRecord savePurchaseRequestEvent(PurchaseRequestEventRecord event);
 
-    List<PurchaseRequestEventRecord> listPurchaseRequestEvents(String requestId);
-
     Optional<StockBalanceRecord> findStockBalance(String itemId, String locationId);
 
     // 2e 盘点冻结：系统账面合计（item+warehouse），盘点 book_qty 取此而非客户端传入，防伪造。
@@ -112,8 +110,6 @@ public interface InventoryRepository {
 
     SavedBottleRecord saveSavedBottle(SavedBottleRecord savedBottle);
 
-    Optional<SavedBottleRecord> findSavedBottleById(String id);
-
     List<SavedBottleRecord> listSavedBottles();
 
     default List<SavedBottleRecord> listStoredSavedBottlesExpiring(Instant now, Instant windowEnd) {
@@ -183,11 +179,6 @@ public interface InventoryRepository {
 
     // C2: 项目级读隔离通道（项目员工无商户 scope 时按项目过滤）。
     List<StockBalanceRecord> listStockBalancesByProject(String projectId);
-
-    List<StockMovementRecord> listStockMovementsByMerchant(String merchantId);
-
-    // C2 read-side: project-scoped movement list (project staff, no merchant scope).
-    List<StockMovementRecord> listStockMovementsByProject(String projectId);
 
     List<InventoryStockBatchRecord> listStockBatchesByMerchant(String merchantId);
 

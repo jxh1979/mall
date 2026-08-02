@@ -178,8 +178,9 @@ class StaffJdbcIntegrationTests {
                 .extracting(StaffDeviceCredentialRecord::bindStatus).isEqualTo("superseded");
         assertThat(repository.findActiveCredential(staff.id())).get()
                 .extracting(StaffDeviceCredentialRecord::id).isEqualTo(second.id());
-        long activeCount = repository.listCredentials(staff.id()).stream()
-                .filter(c -> "active".equals(c.bindStatus())).count();
+        Long activeCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_device_credentials WHERE staff_profile_id = ? AND bind_status = 'active'",
+                Long.class, staff.id());
         assertThat(activeCount).isEqualTo(1);
     }
 

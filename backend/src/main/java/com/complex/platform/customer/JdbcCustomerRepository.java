@@ -359,15 +359,6 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
-    public void updatePointsLedgerStatus(String ledgerId, String status) {
-        jdbcTemplate.update("""
-                UPDATE customer_points_ledger
-                   SET status = :status
-                 WHERE id = :id
-                """, Map.of("id", ledgerId, "status", status));
-    }
-
-    @Override
     public long sumConfirmedPointsBySourceDoc(String sourceDocType, String sourceDocId) {
         // P0-B（V344）：已确认份额 = 该单 confirm 分录净额和（正=确认、负=冲正）。
         // 调用方已先对 earn 行 FOR UPDATE（AUD-014 锁序 earn→account），故本次求和与后续追加天然串行化。
@@ -399,34 +390,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("id", ledgerId)
                 .addValue("status", status)
                 .addValue("remaining_points", remainingPoints));
-    }
-
-    @Override
-    public CustomerRedemptionCatalogItemRecord saveRedemptionCatalogItem(CustomerRedemptionCatalogItemRecord item) {
-        jdbcTemplate.update("""
-                INSERT INTO customer_redemption_catalog_items (
-                    id, item_name, item_type, points_cost, inventory_item_id,
-                    stock_location_id, stock_quantity, status, available_from,
-                    available_until, created_at, updated_at
-                )
-                VALUES (
-                    :id, :item_name, :item_type, :points_cost, :inventory_item_id,
-                    :stock_location_id, :stock_quantity, :status, :available_from,
-                    :available_until, :created_at, :updated_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    item_name = EXCLUDED.item_name,
-                    item_type = EXCLUDED.item_type,
-                    points_cost = EXCLUDED.points_cost,
-                    inventory_item_id = EXCLUDED.inventory_item_id,
-                    stock_location_id = EXCLUDED.stock_location_id,
-                    stock_quantity = EXCLUDED.stock_quantity,
-                    status = EXCLUDED.status,
-                    available_from = EXCLUDED.available_from,
-                    available_until = EXCLUDED.available_until,
-                    updated_at = EXCLUDED.updated_at
-                """, redemptionCatalogParameters(item));
-        return item;
     }
 
     @Override
@@ -673,22 +636,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("source_doc_type", ledger.sourceDocType())
                 .addValue("source_doc_id", ledger.sourceDocId())
                 .addValue("confirmed_amount", ledger.confirmedAmount());
-    }
-
-    private MapSqlParameterSource redemptionCatalogParameters(CustomerRedemptionCatalogItemRecord item) {
-        return new MapSqlParameterSource()
-                .addValue("id", item.id())
-                .addValue("item_name", item.itemName())
-                .addValue("item_type", item.itemType())
-                .addValue("points_cost", item.pointsCost())
-                .addValue("inventory_item_id", item.inventoryItemId())
-                .addValue("stock_location_id", item.stockLocationId())
-                .addValue("stock_quantity", item.stockQuantity())
-                .addValue("status", item.status())
-                .addValue("available_from", timestampWithTimeZone(item.availableFrom()))
-                .addValue("available_until", timestampWithTimeZone(item.availableUntil()))
-                .addValue("created_at", timestampWithTimeZone(item.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(item.updatedAt()));
     }
 
     private MapSqlParameterSource pointsRedemptionParameters(CustomerPointsRedemptionRecord redemption) {
@@ -1316,17 +1263,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                         rs.getString("customer_id"),
                         rs.getString("project_id"),
                         rs.getString("merchant_id"))).stream().findFirst();
-    }
-
-    @Override
-    public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accountId) {
-        return jdbcTemplate.query("""
-                SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                       payment_intent_id, reason, idempotency_key, created_at, paid_at
-                  FROM customer_stored_value_transactions
-                 WHERE account_id = :account_id
-                 ORDER BY created_at DESC, id DESC
-                """, Map.of("account_id", accountId), this::mapStoredValueTransaction);
     }
 
     // B1d⑤ phase3 商户级卡退款规则

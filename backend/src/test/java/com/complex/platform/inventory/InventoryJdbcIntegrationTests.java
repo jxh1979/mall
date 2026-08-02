@@ -381,8 +381,11 @@ class InventoryJdbcIntegrationTests {
         // 流转事件留痕往返。
         repository.savePurchaseRequestEvent(new PurchaseRequestEventRecord(
                 "pr_evt_jdbc", "pr_jdbc_flow", "arrived", "received", "usr_recv", "ok", now));
-        assertThat(repository.listPurchaseRequestEvents("pr_jdbc_flow"))
-                .extracting(PurchaseRequestEventRecord::fromStatus, PurchaseRequestEventRecord::toStatus)
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT from_status, to_status FROM inventory_purchase_request_events
+                 WHERE request_id = 'pr_jdbc_flow' ORDER BY created_at ASC, id
+                """))
+                .extracting(row -> tuple(row.get("from_status"), row.get("to_status")))
                 .containsExactly(tuple("arrived", "received"));
     }
 
@@ -553,11 +556,14 @@ class InventoryJdbcIntegrationTests {
         repository.saveStockBatch(new InventoryStockBatchRecord(
                 "bt_pb", "item_mb", "loc_mb", "B-PB", null, 20, null, "active", List.of(), now, now, "m_b"), "proj_b");
 
-        assertThat(repository.listStockMovementsByProject("proj_a"))
-                .extracting(StockMovementRecord::id).contains("mv_pa").doesNotContain("mv_pb");
-        assertThat(repository.listStockMovementsByProject("proj_b"))
-                .extracting(StockMovementRecord::id).contains("mv_pb").doesNotContain("mv_pa");
-        assertThat(repository.listStockMovementsByProject("proj_none")).isEmpty();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT id FROM inventory_stock_movements WHERE project_id = 'proj_a'"))
+                .extracting(row -> row.get("id")).contains("mv_pa").doesNotContain("mv_pb");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT id FROM inventory_stock_movements WHERE project_id = 'proj_b'"))
+                .extracting(row -> row.get("id")).contains("mv_pb").doesNotContain("mv_pa");
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT id FROM inventory_stock_movements WHERE project_id = 'proj_none'")).isEmpty();
 
         assertThat(repository.listStockBatchesByProject("proj_a"))
                 .extracting(InventoryStockBatchRecord::id).contains("bt_pa").doesNotContain("bt_pb");

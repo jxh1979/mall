@@ -114,12 +114,9 @@ public interface IntegrationRepository {
 
     List<VideoAnchorRecord> listVideoAnchors();
 
-    Optional<VideoAnchorRecord> findVideoAnchorById(String id);
-
     void saveVideoAccessAudit(String id, String anchorId, String viewerUserId, String approvalRef, java.time.Instant viewedAt);
 
     /** 2.2 视频调阅主管复核审批查找（approval_ref = id）。 */
     Optional<VideoAccessApprovalRecord> findVideoAccessApproval(String approvalRef);
 
-    VideoAccessApprovalRecord saveVideoAccessApproval(VideoAccessApprovalRecord record);
 }
