@@ -34,9 +34,6 @@ class SettlementBatch2EngineTests {
     private TicketDistributionSettlementService service;
 
     @Autowired
-    private JdbcSettlementBillRepository repository;
-
-    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private static final YearMonth MONTH = YearMonth.of(2013, 5); // 远离今日的确定月

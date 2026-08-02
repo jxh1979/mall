@@ -502,11 +502,6 @@ class MdmServiceTests {
         }
 
         @Override
-        public TerminalKioskConfigRecord saveKioskConfig(TerminalKioskConfigRecord record) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         public KioskHeartbeatRecord saveKioskHeartbeat(KioskHeartbeatRecord record) {
             throw new UnsupportedOperationException();
         }

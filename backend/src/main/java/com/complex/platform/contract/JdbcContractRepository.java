@@ -303,15 +303,6 @@ class JdbcContractRepository implements ContractRepository {
     }
 
     @Override
-    public List<ContractSettlementRecord> listAllSettlements() {
-        return jdbcTemplate.query("""
-                SELECT id, contract_id, trigger_type, status, settlement_items::text AS settlement_items,
-                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at
-                  FROM contract_settlements ORDER BY created_at DESC, id
-                """, Map.of(), this::mapSettlement);
-    }
-
-    @Override
     public com.complex.platform.common.api.PageResponse<ContractSettlementRecord> listAllSettlementsPaged(int page, int size) {
         // AUD-005 收尾: 平台全量结算真分页——SQL COUNT 取真 total + LIMIT/OFFSET 任意页可达 + 稳定排序追加 id。
         int safePage = page < 1 ? 1 : page;

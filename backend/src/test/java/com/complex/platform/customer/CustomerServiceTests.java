@@ -658,7 +658,7 @@ class CustomerServiceTests {
                 false,
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
+        customerRepository.seedRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
                 "gift_active",
                 "Plush Gift",
                 "gift",
@@ -672,7 +672,7 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
+        customerRepository.seedRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
                 "gift_inactive",
                 "Inactive Gift",
                 "gift",
@@ -716,7 +716,7 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
+        customerRepository.seedRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
                 "gift_active",
                 "Plush Gift",
                 "gift",
@@ -778,7 +778,7 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
+        customerRepository.seedRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
                 "gift_active",
                 "Plush Gift",
                 "gift",
@@ -828,7 +828,7 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
+        customerRepository.seedRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
                 "gift_active",
                 "Plush Gift",
                 "gift",
@@ -886,7 +886,7 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
+        customerRepository.seedRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
                 "gift_race_item",
                 "Race Gift",
                 "gift",
@@ -1017,8 +1017,7 @@ class CustomerServiceTests {
                     .toList();
         }
 
-        @Override
-        public CustomerRedemptionCatalogItemRecord saveRedemptionCatalogItem(CustomerRedemptionCatalogItemRecord item) {
+        public CustomerRedemptionCatalogItemRecord seedRedemptionCatalogItem(CustomerRedemptionCatalogItemRecord item) {
             catalogItems.put(item.id(), item);
             return item;
         }

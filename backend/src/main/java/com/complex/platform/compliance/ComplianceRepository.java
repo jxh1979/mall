@@ -9,15 +9,11 @@ public interface ComplianceRepository {
 
     List<ContractKeyDateRecord> findContractKeyDatesByMerchant(String merchantId);
 
-    Optional<ContractKeyDateRecord> findContractKeyDateById(String id);
-
     ContractKeyDateRecord saveContractKeyDate(ContractKeyDateRecord record);
 
     List<ComplianceExpiryItemRecord> findAllExpiryItems();
 
     List<ComplianceExpiryItemRecord> findExpiryItemsByMerchant(String merchantId);
-
-    Optional<ComplianceExpiryItemRecord> findExpiryItemById(String id);
 
     ComplianceExpiryItemRecord saveExpiryItem(ComplianceExpiryItemRecord record);
 

@@ -60,15 +60,6 @@ class JdbcFacilityRepository implements FacilityRepository {
     }
 
     @Override
-    public List<FacilityEquipmentRecord> listEquipmentByProject(String projectId) {
-        return jdbcTemplate.query("SELECT " + EQUIP_COLS + """
-                 FROM facility_equipment
-                 WHERE project_id = :project_id
-                 ORDER BY created_at DESC, id
-                """, new MapSqlParameterSource("project_id", projectId), this::mapEquipment);
-    }
-
-    @Override
     public Optional<FacilityEquipmentRecord> findEquipmentById(String id) {
         return jdbcTemplate.query("SELECT " + EQUIP_COLS
                 + " FROM facility_equipment WHERE id = :id AND delete_status <> 'approved'",

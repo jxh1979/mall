@@ -29,10 +29,6 @@ class MemberWalletServiceTests {
         return new AuditEventService(event -> event);
     }
 
-    private long days(int d) {
-        return (long) d * 86_400L;
-    }
-
     // ============================================================
     // 储值：充值绑支付意图 —— 无支付不加余额，支付成功后入账
     // ============================================================
@@ -456,11 +452,6 @@ class MemberWalletServiceTests {
     // helpers
     // ============================================================
 
-    private CustomerPointsAccountRecord account(String customerId, long balance) {
-        return new CustomerPointsAccountRecord("points_" + customerId, customerId, balance, "base",
-                Map.of(), 0L, "active", T0, 0L, null, null, 0, T0, T0);
-    }
-
     private InMemoryRepo seeded() {
         InMemoryRepo repo = new InMemoryRepo();
         repo.saveCustomer(new CustomerRecord("c1", "138", "138", "active", null, T0, T0, T0));
@@ -559,7 +550,6 @@ class MemberWalletServiceTests {
         @Override public List<CustomerPointsLedgerRecord> listPointsLedgerByCustomerId(String id) {
             return pointsLedger.stream().filter(l -> id.equals(l.customerId())).toList();
         }
-        @Override public CustomerRedemptionCatalogItemRecord saveRedemptionCatalogItem(CustomerRedemptionCatalogItemRecord i) { return i; }
         @Override public Optional<CustomerRedemptionCatalogItemRecord> findRedemptionCatalogItemById(String id) { return Optional.empty(); }
         @Override public List<CustomerRedemptionCatalogItemRecord> listActiveRedemptionCatalogItems(Instant n) { return List.of(); }
         @Override public CustomerPointsRedemptionRecord savePointsRedemption(CustomerPointsRedemptionRecord r) { return r; }
@@ -618,9 +608,6 @@ class MemberWalletServiceTests {
         }
         @Override public Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String pi) {
             return Optional.ofNullable(topupIntents.get(pi));
-        }
-        @Override public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accId) {
-            return storedValueTxns.stream().filter(t -> accId.equals(t.accountId())).toList();
         }
 
     }

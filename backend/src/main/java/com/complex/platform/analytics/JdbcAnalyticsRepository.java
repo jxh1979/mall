@@ -160,17 +160,6 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 .orElseThrow(() -> new IllegalStateException("P0 overview dashboard snapshot is not seeded"));
     }
 
-    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
-    public List<DashboardSnapshotRecord> listDashboardSnapshotsByProject(String projectId) {
-        return jdbcTemplate.query("""
-                SELECT snapshot_key, project_id, business_date, revenue_amount_cents,
-                       order_count, risk_alert_count, critical_risk_count, payload_json, created_at
-                  FROM analytics_dashboard_snapshots
-                 WHERE project_id = :project_id
-                 ORDER BY business_date DESC, created_at DESC, snapshot_key
-                """, Map.of("project_id", projectId), this::mapDashboardSnapshot);
-    }
-
 
     @Override
     public List<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots() {

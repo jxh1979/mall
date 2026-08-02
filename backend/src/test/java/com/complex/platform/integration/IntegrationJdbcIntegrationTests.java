@@ -89,10 +89,12 @@ class IntegrationJdbcIntegrationTests {
     void videoAccessApprovalPersistsAndRejectsInvalidStatus() {
         // 2.2 真实后端活证据：主管审批表落库+回读（approved/viewer/point）；非法 status 被 CHECK 拒（fail-closed）。
         assertThat(regclass("integration_video_access_approvals")).isEqualTo("integration_video_access_approvals");
-        Instant now = Instant.parse("2026-06-18T00:00:00Z");
-        repository.saveVideoAccessApproval(new VideoAccessApprovalRecord(
-                "vaa_jdbc_1", "viewer-jdbc", "point-jdbc", "approved", "supervisor-jdbc",
-                now.plusSeconds(3600), now, now));
+        jdbcTemplate.update("""
+                INSERT INTO integration_video_access_approvals (
+                    id, viewer_user_id, point_id, status, approved_by, valid_until, created_at, updated_at
+                ) VALUES ('vaa_jdbc_1', 'viewer-jdbc', 'point-jdbc', 'approved', 'supervisor-jdbc',
+                          '2026-06-18T01:00:00Z', '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z')
+                """);
         assertThat(repository.findVideoAccessApproval("vaa_jdbc_1"))
                 .get()
                 .extracting(VideoAccessApprovalRecord::status, VideoAccessApprovalRecord::viewerUserId,
@@ -101,8 +103,12 @@ class IntegrationJdbcIntegrationTests {
         assertThat(permissionCodes()).contains("integration.video.approve");
         // 非法 status 被 CHECK 拒（放最后：约束违反会中止本 @Transactional 事务，其后不可再查库）。
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                        repository.saveVideoAccessApproval(new VideoAccessApprovalRecord(
-                                "vaa_jdbc_bad", "v", null, "granted", null, null, now, now)))
+                        jdbcTemplate.update("""
+                                INSERT INTO integration_video_access_approvals (
+                                    id, viewer_user_id, point_id, status, approved_by, valid_until, created_at, updated_at
+                                ) VALUES ('vaa_jdbc_bad', 'v', NULL, 'granted', NULL, NULL,
+                                          '2026-06-18T00:00:00Z', '2026-06-18T00:00:00Z')
+                                """))
                 .isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 

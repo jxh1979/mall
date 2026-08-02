@@ -353,7 +353,7 @@ class InventoryServiceTests {
 
         assertThat(second).isEqualTo(first);
         assertThat(finalClaim.status()).isEqualTo("picked_up");
-        assertThat(inventoryRepository.findSavedBottleById(savedBottle.id()))
+        assertThat(inventoryRepository.savedBottleById(savedBottle.id()))
                 .get()
                 .extracting(SavedBottleRecord::remainingQuantity, SavedBottleRecord::status)
                 .containsExactly(0, "claimed");
@@ -589,7 +589,7 @@ class InventoryServiceTests {
                 "claim-mismatch", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "WRONG-LABEL"));
 
         assertThat(review.status()).isEqualTo("pending_identity_review");
-        assertThat(inventoryRepository.findSavedBottleById(savedBottle.id()))
+        assertThat(inventoryRepository.savedBottleById(savedBottle.id()))
                 .get()
                 .extracting(SavedBottleRecord::status, SavedBottleRecord::remainingQuantity)
                 .containsExactly("pending_identity_review", 2);
@@ -663,7 +663,7 @@ class InventoryServiceTests {
                 "claim-name-bad", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "x",
                 "LBL-OK", "王五"));
         assertThat(review.status()).isEqualTo("pending_identity_review");
-        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().remainingQuantity())
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().remainingQuantity())
                 .isEqualTo(2);
     }
 
@@ -746,7 +746,7 @@ class InventoryServiceTests {
                 new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
                         "review-approve", "approved", "confirmed"));
         assertThat(decided.reviewStatus()).isEqualTo("approved");
-        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().status())
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status())
                 .isEqualTo("cancelled");
     }
 
@@ -768,7 +768,7 @@ class InventoryServiceTests {
                 new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
                         "review-reject", "rejected", "insufficient"));
         assertThat(decided.reviewStatus()).isEqualTo("rejected");
-        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().status())
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status())
                 .isEqualTo("disputed_frozen");
     }
 
@@ -787,7 +787,7 @@ class InventoryServiceTests {
                 List.of("att_not_uploaded"), List.of("att_video"))))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("EVIDENCE_ATTACHMENT_NOT_FOUND"));
-        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().status())
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status())
                 .isEqualTo("stored");
     }
 
@@ -2030,13 +2030,6 @@ class InventoryServiceTests {
         }
 
         @Override
-        public List<PurchaseRequestEventRecord> listPurchaseRequestEvents(String requestId) {
-            return purchaseRequestEvents.stream()
-                    .filter(e -> requestId.equals(e.requestId()))
-                    .toList();
-        }
-
-        @Override
         public List<PurchaseRequestRecord> listPurchaseRequestsByMerchant(String merchantId) {
             return purchaseRequests.stream()
                     .filter(r -> merchantId.equals(r.merchantId()))
@@ -2269,20 +2262,6 @@ class InventoryServiceTests {
         }
 
         @Override
-        public List<StockMovementRecord> listStockMovementsByMerchant(String merchantId) {
-            return stockMovements.stream()
-                    .filter(m -> merchantId.equals(m.merchantId()))
-                    .toList();
-        }
-
-        @Override
-        public List<StockMovementRecord> listStockMovementsByProject(String projectId) {
-            return stockMovements.stream()
-                    .filter(m -> projectId.equals(movementProjects.get(m.id())))
-                    .toList();
-        }
-
-        @Override
         public com.complex.platform.common.api.PageResponse<StockMovementRecord> listStockMovementsPaged(
                 String merchantId, String projectId, int page, int size) {
             List<StockMovementRecord> filtered = stockMovements.stream()
@@ -2315,8 +2294,7 @@ class InventoryServiceTests {
             return savedBottle;
         }
 
-        @Override
-        public Optional<SavedBottleRecord> findSavedBottleById(String id) {
+        public Optional<SavedBottleRecord> savedBottleById(String id) {
             return Optional.ofNullable(savedBottles.get(id));
         }
 
@@ -2625,12 +2603,6 @@ class InventoryServiceTests {
         }
 
         @Override
-        public List<com.complex.platform.evidence.TraceabilityProcessInstanceRecord> listProcessInstances(
-                String merchantScope) {
-            return new ArrayList<>(instances.values());
-        }
-
-        @Override
         public com.complex.platform.evidence.TraceabilityStepRecord saveStep(
                 com.complex.platform.evidence.TraceabilityStepRecord record) {
             steps.put(record.id(), record);
@@ -2650,12 +2622,6 @@ class InventoryServiceTests {
                 com.complex.platform.evidence.TraceabilityResponsibilityRecord record) {
             responsibilities.put(record.id(), record);
             return record;
-        }
-
-        @Override
-        public Optional<com.complex.platform.evidence.TraceabilityResponsibilityRecord> findResponsibilityById(
-                String id) {
-            return Optional.ofNullable(responsibilities.get(id));
         }
 
         @Override

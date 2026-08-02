@@ -182,16 +182,6 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
-    public List<PurchaseRequestEventRecord> listPurchaseRequestEvents(String requestId) {
-        return jdbcTemplate.query("""
-                SELECT id, request_id, from_status, to_status, operator_user_id, note, created_at
-                  FROM inventory_purchase_request_events
-                 WHERE request_id = :request_id
-                 ORDER BY created_at ASC, id
-                """, Map.of("request_id", requestId), rowMapper::mapPurchaseRequestEvent);
-    }
-
-    @Override
     public Optional<StockBalanceRecord> findStockBalance(String itemId, String locationId) {
         return jdbcTemplate.query("""
                 SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
@@ -632,7 +622,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     // AUD-013 真分页: SQL 层 LIMIT/OFFSET + COUNT, total 取真值而非 items.size()。
-    // 租户谓词 (:x IS NULL OR col=:x) 与 listStockMovementsByMerchant/ByProject 同口径, 参数带 SQL 类型供 PG 推断 NULL 分支。
+    // 租户谓词 (:x IS NULL OR col=:x), 参数带 SQL 类型供 PG 推断 NULL 分支。
     @Override
     public com.complex.platform.common.api.PageResponse<StockMovementRecord> listStockMovementsPaged(
             String merchantId, String projectId, int page, int size) {
@@ -743,15 +733,6 @@ class JdbcInventoryRepository implements InventoryRepository {
                     transfer_to_phone_hash = EXCLUDED.transfer_to_phone_hash
                 """, savedBottleParameters(savedBottle));
         return savedBottle;
-    }
-
-    @Override
-    public Optional<SavedBottleRecord> findSavedBottleById(String id) {
-        return jdbcTemplate.query("""
-                SELECT *
-                  FROM saved_bottles
-                 WHERE id = :id
-                """, Map.of("id", id), rowMapper::mapSavedBottle).stream().findFirst();
     }
 
     @Override
@@ -1092,31 +1073,6 @@ class JdbcInventoryRepository implements InventoryRepository {
                  WHERE project_id = :project_id
                  ORDER BY updated_at DESC, id
                 """, Map.of("project_id", projectId), rowMapper::mapStockBalance);
-    }
-
-    @Override
-    public List<StockMovementRecord> listStockMovementsByMerchant(String merchantId) {
-        return jdbcTemplate.query("""
-                SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
-                       business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
-                  FROM inventory_stock_movements
-                 WHERE merchant_id = :merchant_id
-                 ORDER BY created_at DESC, id
-                """, Map.of("merchant_id", merchantId), rowMapper::mapStockMovement);
-    }
-
-    // C2 read-side: project staff (no merchant scope) only read own-project movements.
-    @Override
-    public List<StockMovementRecord> listStockMovementsByProject(String projectId) {
-        return jdbcTemplate.query("""
-                SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
-                       business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
-                  FROM inventory_stock_movements
-                 WHERE project_id = :project_id
-                 ORDER BY created_at DESC, id
-                """, Map.of("project_id", projectId), rowMapper::mapStockMovement);
     }
 
     @Override

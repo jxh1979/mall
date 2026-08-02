@@ -5,8 +5,8 @@ import java.util.regex.Pattern;
 /**
  * 跨域共享的 PII / 凭证脱敏器（手机号/身份证/银行卡/邮箱/IBAN/各类密钥 token 正则脱敏）。
  *
- * <p>原为 analytics 包内 {@code AiTextRedactor}（AI 质检输入脱敏）；R5 T8 企微会话合规链需要在落库时
- * 对展示文本做同样的脱敏，故提升为 common 公共能力，analytics 旧入口委派至此，避免规则双份漂移。
+ * <p>原为 analytics 包内 AI 质检输入脱敏工具；R5 T8 企微会话合规链需要在落库时
+ * 对展示文本做同样的脱敏，故提升为 common 公共能力，analytics 直接调用本类，避免规则双份漂移。
  */
 public final class PiiTextRedactor {
 

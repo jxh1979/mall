@@ -2151,24 +2151,16 @@ class FinanceServiceTests {
         }
 
         @Override
-        public void markInventoryVariancePosted(String inventoryVarianceId, String arApItemId) {
-            InventoryVarianceRecord v = inventoryVariances.get(inventoryVarianceId);
-            if (v != null) {
-                inventoryVariances.put(inventoryVarianceId, new InventoryVarianceRecord(
-                        v.id(), v.stocktakeId(), v.itemId(), v.batchNo(), v.bookQty(), v.countedQty(),
-                        v.varianceQty(), v.varianceAmountCent(), v.reason(), v.supplierId(),
-                        v.reviewStatus(), arApItemId, v.merchantId(), v.createdAt()));
-            }
-        }
-
-        @Override
         public boolean markInventoryVariancePostedIfUnposted(String inventoryVarianceId, String arApItemId) {
             // 模拟 SQL 的 WHERE ... AND posted_ar_ap_item_id IS NULL：已入账则命中 0 行返回 false。
             InventoryVarianceRecord v = inventoryVariances.get(inventoryVarianceId);
             if (v == null || v.postedArApItemId() != null) {
                 return false;
             }
-            markInventoryVariancePosted(inventoryVarianceId, arApItemId);
+            inventoryVariances.put(inventoryVarianceId, new InventoryVarianceRecord(
+                    v.id(), v.stocktakeId(), v.itemId(), v.batchNo(), v.bookQty(), v.countedQty(),
+                    v.varianceQty(), v.varianceAmountCent(), v.reason(), v.supplierId(),
+                    v.reviewStatus(), arApItemId, v.merchantId(), v.createdAt()));
             return true;
         }
 

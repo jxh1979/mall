@@ -258,16 +258,6 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
         return record;
     }
 
-    @Override
-    public List<WecomAccessAuditRecord> findAccessAuditsByConversation(String conversationId) {
-        return jdbcTemplate.query("""
-                SELECT id, conversation_id, viewer_user_id, view_type, approval_ref, viewed_at
-                  FROM wecom_access_audits
-                 WHERE conversation_id = :conversation_id
-                 ORDER BY viewed_at DESC, id
-                """, Map.of("conversation_id", conversationId), this::mapAudit);
-    }
-
     // ------------------------------------------------------------------- P0#8 企微违规规则码 / 命中
 
     @Override
@@ -401,14 +391,6 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                 (rs, rowNum) -> rs.getString("id")).stream().findFirst().orElse(enqueue.alertId());
     }
 
-    @Override
-    public Optional<String> findRiskAlertStatus(String alertId) {
-        return jdbcTemplate.query("""
-                SELECT status FROM analytics_risk_alerts WHERE id = :id
-                """, Map.of("id", alertId),
-                (rs, rowNum) -> rs.getString("status")).stream().findFirst();
-    }
-
     private WecomRiskHitRecord mapRiskHit(ResultSet rs, int rowNum) throws SQLException {
         return new WecomRiskHitRecord(
                 rs.getString("hit_id"),
@@ -488,16 +470,6 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
         );
     }
 
-    private WecomAccessAuditRecord mapAudit(ResultSet rs, int rowNum) throws SQLException {
-        return new WecomAccessAuditRecord(
-                rs.getString("id"),
-                rs.getString("conversation_id"),
-                rs.getString("viewer_user_id"),
-                rs.getString("view_type"),
-                rs.getString("approval_ref"),
-                nullableInstant(rs, "viewed_at")
-        );
-    }
 
     // AUD-020：同 readKeywords——序列化失败/库内坏 JSON 走 500 并记堆栈。
     private String writeJson(Object value) {

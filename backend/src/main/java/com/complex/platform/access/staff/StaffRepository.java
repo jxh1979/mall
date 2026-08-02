@@ -96,8 +96,6 @@ public interface StaffRepository {
     /** 该员工当前 active 凭证（至多一条，受 uq_staff_device_credentials_one_active 约束）。 */
     Optional<StaffDeviceCredentialRecord> findActiveCredential(String staffProfileId);
 
-    List<StaffDeviceCredentialRecord> listCredentials(String staffProfileId);
-
     // --- employee_notices ---
     EmployeeNoticeRecord saveNotice(EmployeeNoticeRecord notice);
 

@@ -70,7 +70,8 @@ class TraceabilityJdbcIntegrationTests {
 
         // 隔离：落库 merchant 必须是 token 的 mch_A，请求体伪造的 mch_FORGED 被忽略
         assertThat(saved.merchantId()).isEqualTo("mch_A");
-        TraceabilityResponsibilityRecord read = repository.findResponsibilityById(saved.id()).orElseThrow();
+        TraceabilityResponsibilityRecord read = repository.listResponsibilities("mch_A").stream()
+                .filter(r -> saved.id().equals(r.id())).findFirst().orElseThrow();
         assertThat(read.merchantId()).isEqualTo("mch_A");
         assertThat(read.assistStaffIds()).containsExactly("staff_assist_1", "staff_assist_2");
         assertThat(read.refundedBy()).isEqualTo("staff_refund");

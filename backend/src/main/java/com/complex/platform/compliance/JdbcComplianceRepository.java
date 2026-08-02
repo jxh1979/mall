@@ -53,17 +53,6 @@ class JdbcComplianceRepository implements ComplianceRepository {
     }
 
     @Override
-    public Optional<ContractKeyDateRecord> findContractKeyDateById(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, contract_id, merchant_id, date_type, title, due_date, reminder_days,
-                       status, owner_user_id, source_type, human_confirmed, evidence_attachment_ids,
-                       created_at, updated_at
-                  FROM contract_key_dates
-                 WHERE id = :id
-                """, Map.of("id", id), this::mapContractKeyDate).stream().findFirst();
-    }
-
-    @Override
     public ContractKeyDateRecord saveContractKeyDate(ContractKeyDateRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO contract_key_dates (
@@ -102,17 +91,6 @@ class JdbcComplianceRepository implements ComplianceRepository {
                  WHERE merchant_id = :merchant_id
                  ORDER BY valid_to ASC, id
                 """, Map.of("merchant_id", merchantId), this::mapExpiryItem);
-    }
-
-    @Override
-    public Optional<ComplianceExpiryItemRecord> findExpiryItemById(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, subject_type, subject_id, merchant_id, item_type, item_name, document_no,
-                       issuing_authority, valid_from, valid_to, reminder_days, expiry_action, status,
-                       owner_user_id, source_type, human_confirmed, evidence_attachment_ids, created_at, updated_at
-                  FROM compliance_expiry_items
-                 WHERE id = :id
-                """, Map.of("id", id), this::mapExpiryItem).stream().findFirst();
     }
 
     @Override

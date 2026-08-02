@@ -594,11 +594,6 @@ class WecomConversationServiceTests {
             return record;
         }
 
-        @Override
-        public List<WecomAccessAuditRecord> findAccessAuditsByConversation(String conversationId) {
-            return audits.stream().filter(a -> a.conversationId().equals(conversationId)).toList();
-        }
-
         // P0#8 ---------------------------------------------------------------- risk rules / hits / alerts
 
         final List<WecomRiskRuleRecord> riskRules = new ArrayList<>();
@@ -665,13 +660,6 @@ class WecomConversationServiceTests {
                     });
         }
 
-        @Override
-        public Optional<String> findRiskAlertStatus(String alertId) {
-            return riskAlerts.stream()
-                    .filter(a -> a.alertId().equals(alertId))
-                    .map(a -> "open")
-                    .findFirst();
-        }
     }
 
     private static final class InMemoryIdempotencyRepository implements IdempotencyRepository {

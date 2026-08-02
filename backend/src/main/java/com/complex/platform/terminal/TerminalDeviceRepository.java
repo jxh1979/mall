@@ -25,15 +25,6 @@ public interface TerminalDeviceRepository {
     Optional<TerminalDeviceRecord> findByDeviceId(String deviceId);
 
     /**
-     * 按场地 scope 列出终端设备（terminal_devices.venue_id = token scope）。
-     * 商户面数据：商户只能看到其场地下绑定的终端设备。默认空，JdbcTerminalDeviceRepository 用 SQL 谓词下推。
-     * 隔离闸口（AC-ISO-1）：提供 venue_id 行级 scoped 读通道。
-     */
-    default List<TerminalDeviceRecord> listDevicesByVenue(String venueId) {
-        return List.of();
-    }
-
-    /**
      * 平台后台设备台账：全量列出终端设备（含商户归属列，K16 改绑工作台数据源）。
      * ponytail: LIMIT 200 平铺无分页，设备量到数百台再补分页。
      */
@@ -79,8 +70,6 @@ public interface TerminalDeviceRepository {
     TerminalCapabilitySwitchRecord saveCapabilitySwitch(TerminalCapabilitySwitchRecord record);
 
     Optional<TerminalKioskConfigRecord> findKioskConfigByDeviceId(String deviceId);
-
-    TerminalKioskConfigRecord saveKioskConfig(TerminalKioskConfigRecord record);
 
     KioskHeartbeatRecord saveKioskHeartbeat(KioskHeartbeatRecord record);
 }

@@ -33,8 +33,6 @@ public interface CustomerRepository {
 
     List<CustomerPointsLedgerRecord> listPointsLedgerByCustomerId(String customerId);
 
-    CustomerRedemptionCatalogItemRecord saveRedemptionCatalogItem(CustomerRedemptionCatalogItemRecord item);
-
     Optional<CustomerRedemptionCatalogItemRecord> findRedemptionCatalogItemById(String itemId);
 
     List<CustomerRedemptionCatalogItemRecord> listActiveRedemptionCatalogItems(Instant now);
@@ -175,11 +173,6 @@ public interface CustomerRepository {
         return List.of();
     }
 
-    /** 把某条 pending 入账流水转为指定状态（履约：pending→confirmed）。 */
-    default void updatePointsLedgerStatus(String ledgerId, String status) {
-        throw new UnsupportedOperationException("updatePointsLedgerStatus not supported by this repository");
-    }
-
     /**
      * P0-B（V344）积分台账改追加：某业务单据「已确认份额」的权威口径 = 该单 confirm 分录的净额和
      * （Σ points_delta，正=确认、负=冲正）。取代改造前直接读 earn 行被就地改写的 confirmed_amount。
@@ -261,10 +254,6 @@ public interface CustomerRepository {
 
     default Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String paymentIntentId) {
         return Optional.empty();
-    }
-
-    default List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accountId) {
-        return List.of();
     }
 
     // 积分会员间转赠已下线（HTML：积分不支持会员间转赠；2026-06-24 裁决）。相关 repo 方法/记录类/表已随 V172 清理移除。

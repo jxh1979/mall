@@ -136,24 +136,6 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
-    public List<MerchantRecord> listMerchantsByBusinessEntity(String businessEntityId) {
-        // 商户面 scoped 读通道：按 merchants.business_entity_id = token scope 过滤（AC-ISO-1，§4）。
-        if (businessEntityId == null) return listMerchants();
-        return jdbcTemplate.query("""
-                SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
-                       settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
-                       leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
-                       rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
-                  FROM merchants
-                 WHERE business_entity_id = :business_entity_id
-                   AND archived_at IS NULL AND delete_status <> 'approved'
-                 ORDER BY created_at DESC, id
-                 LIMIT 500
-                """, Map.of("business_entity_id", businessEntityId), this::mapMerchant);
-    }
-
-    @Override
     public List<MerchantRecord> listMerchants(boolean includeArchived) {
         // V260：默认列表隐藏已存档 + 已审批删除；includeArchived=true 时全量（后台「显示已存档」开关）。
         return jdbcTemplate.query("""

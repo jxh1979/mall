@@ -486,7 +486,7 @@ class TerminalDeviceServiceTests {
     @Test
     void kioskConfigUsesModeCapabilitySwitchAndValidDeviceToken() {
         saveBoundKiosk("device_ticketing_1", "ticketing", "valid-token");
-        deviceRepository.saveKioskConfig(new TerminalKioskConfigRecord(
+        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
                 "device_ticketing_1",
                 "ticketing",
                 true,
@@ -504,7 +504,7 @@ class TerminalDeviceServiceTests {
                 "device_ticketing_1"
         ));
         saveBoundKiosk("device_service_1", "service", "service-token");
-        deviceRepository.saveKioskConfig(new TerminalKioskConfigRecord(
+        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
                 "device_service_1",
                 "service",
                 true,
@@ -537,7 +537,7 @@ class TerminalDeviceServiceTests {
     @Test
     void kioskConfigRejectsMissingAndWrongDeviceTokenWithAccessRejectedAudit() {
         saveBoundKiosk("device_ticketing_1", "ticketing", "valid-token");
-        deviceRepository.saveKioskConfig(new TerminalKioskConfigRecord(
+        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
                 "device_ticketing_1",
                 "ticketing",
                 true,
@@ -583,7 +583,7 @@ class TerminalDeviceServiceTests {
     @Test
     void kioskHeartbeatRejectsWrongDeviceTokenWithAccessRejectedAudit() {
         saveBoundKiosk("device_ticketing_1", "ticketing", "valid-token");
-        deviceRepository.saveKioskConfig(new TerminalKioskConfigRecord(
+        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
                 "device_ticketing_1",
                 "ticketing",
                 true,
@@ -860,8 +860,7 @@ class TerminalDeviceServiceTests {
             return java.util.Optional.ofNullable(kioskConfigs.get(deviceId));
         }
 
-        @Override
-        public TerminalKioskConfigRecord saveKioskConfig(TerminalKioskConfigRecord record) {
+        public TerminalKioskConfigRecord seedKioskConfig(TerminalKioskConfigRecord record) {
             kioskConfigs.put(record.deviceId(), record);
             return record;
         }

@@ -103,8 +103,9 @@ class ComplianceJdbcIntegrationTests {
                 now
         ));
 
-        assertThat(repository.findContractKeyDateById("ckd_jdbc"))
-                .get()
+        assertThat(repository.findAllContractKeyDates())
+                .filteredOn(r -> "ckd_jdbc".equals(r.id()))
+                .singleElement()
                 .extracting(
                         ContractKeyDateRecord::contractId,
                         ContractKeyDateRecord::dateType,

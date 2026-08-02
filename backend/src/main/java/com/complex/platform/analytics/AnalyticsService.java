@@ -19,6 +19,8 @@ import com.complex.platform.analytics.AnalyticsRecords.RiskAlertRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RiskRuleRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RobotMetricRecord;
 import com.complex.platform.analytics.AnalyticsRecords.StaffServiceScoreRecord;
+import com.complex.platform.common.PiiTextRedactor;
+import com.complex.platform.common.PiiTextRedactor;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEvent;
@@ -1182,7 +1184,7 @@ public class AnalyticsService {
         String sourceId = requireLimitedText(actual.sourceId(), "source_id", 64);
         String requestedBy = optionalLimitedText(actual.requestedBy(), "requested_by", 64);
         String sourceText = requireLimitedText(actual.sourceText(), "source_text", MAX_SOURCE_TEXT_CHARS);
-        AiTextRedactor.RedactedText redacted = AiTextRedactor.redactAndTruncate(sourceText, MAX_LLM_INPUT_CHARS);
+        PiiTextRedactor.Result redacted = PiiTextRedactor.redactAndTruncate(sourceText, MAX_LLM_INPUT_CHARS);
         LocalLlmSuggestion suggestion = localLlmClient.suggestQuality(sourceType, sourceId, redacted.value());
         int qualityScore = clampScore(suggestion.qualityScore());
         BigDecimal confidenceScore = clampConfidence(suggestion.confidenceScore());

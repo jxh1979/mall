@@ -40,8 +40,6 @@ public interface WecomComplianceRepository {
     // 原文/脱敏调阅审计
     WecomAccessAuditRecord saveAccessAudit(WecomAccessAuditRecord record);
 
-    List<WecomAccessAuditRecord> findAccessAuditsByConversation(String conversationId);
-
     // P0#8 企微违规规则码（读 analytics_risk_rules：domain=compliance、enabled=true）
     List<WecomRiskRuleRecord> findEnabledWecomRiskRules();
 
@@ -58,5 +56,4 @@ public interface WecomComplianceRepository {
     // P0#8 复核队列衔接（孤岛 analytics_risk_alerts，source_domain=wecom；统一表就位后改指向）
     String enqueueRiskAlert(WecomRiskAlertEnqueue enqueue);
 
-    Optional<String> findRiskAlertStatus(String alertId);
 }

@@ -280,7 +280,7 @@ class SupplyChainT6ServiceTests {
         assertThat(received.receivedAt()).isNotNull();
 
         // 每步留事件（含 received）。
-        assertThat(repo.listPurchaseRequestEvents("pr_flow"))
+        assertThat(repo.purchaseRequestEventsFor("pr_flow"))
                 .extracting(PurchaseRequestEventRecord::toStatus)
                 .containsExactly("approved", "ordered", "arrived", "received");
         assertThat(auditRepo.events).extracting(AuditEvent::eventName)
@@ -601,7 +601,7 @@ class SupplyChainT6ServiceTests {
             purchaseRequestEvents.add(e);
             return e;
         }
-        @Override public List<PurchaseRequestEventRecord> listPurchaseRequestEvents(String requestId) {
+        List<PurchaseRequestEventRecord> purchaseRequestEventsFor(String requestId) {
             return purchaseRequestEvents.stream().filter(e -> requestId.equals(e.requestId())).toList();
         }
         @Override public Optional<StockBalanceRecord> findStockBalance(String i, String l) {
@@ -637,7 +637,6 @@ class SupplyChainT6ServiceTests {
         @Override public StockAdjustmentRecord saveStockAdjustment(StockAdjustmentRecord a) { throw nyi(); }
         @Override public Optional<StockAdjustmentRecord> findStockAdjustmentByIdForUpdate(String id) { throw nyi(); }
         @Override public SavedBottleRecord saveSavedBottle(SavedBottleRecord s) { throw nyi(); }
-        @Override public Optional<SavedBottleRecord> findSavedBottleById(String id) { throw nyi(); }
         @Override public List<SavedBottleRecord> listSavedBottles() { throw nyi(); }
         @Override public SavedBottleClaimRecord saveSavedBottleClaim(SavedBottleClaimRecord c) { throw nyi(); }
         @Override public SavedBottleTransferRecord saveSavedBottleTransfer(SavedBottleTransferRecord t) { throw nyi(); }
@@ -671,8 +670,6 @@ class SupplyChainT6ServiceTests {
         @Override public List<PurchaseRequestRecord> listPurchaseRequestsByMerchant(String m) { throw nyi(); }
         @Override public List<StockBalanceRecord> listStockBalancesByMerchant(String m) { throw nyi(); }
         @Override public List<StockBalanceRecord> listStockBalancesByProject(String p) { throw nyi(); }
-        @Override public List<StockMovementRecord> listStockMovementsByMerchant(String m) { throw nyi(); }
-        @Override public List<StockMovementRecord> listStockMovementsByProject(String p) { throw nyi(); }
         @Override public com.complex.platform.common.api.PageResponse<StockMovementRecord> listStockMovementsPaged(String m, String p, int page, int size) { throw nyi(); }
         @Override public List<InventoryStockBatchRecord> listStockBatchesByMerchant(String m) { throw nyi(); }
         @Override public List<InventoryStockBatchRecord> listStockBatchesByProject(String p) { throw nyi(); }

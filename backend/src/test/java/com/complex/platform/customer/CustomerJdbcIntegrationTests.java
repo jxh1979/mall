@@ -461,34 +461,16 @@ class CustomerJdbcIntegrationTests {
                 false,
                 now
         ));
-        repository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
-                "gift_points_jdbc",
-                "Plush Gift JDBC",
-                "gift",
-                120L,
-                "item_gift_jdbc",
-                "gift_shelf_jdbc",
-                1,
-                "active",
-                now.minusSeconds(60),
-                now.plusSeconds(3600),
-                now,
-                now
-        ));
-        repository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
-                "gift_inactive_jdbc",
-                "Inactive Gift JDBC",
-                "gift",
-                100L,
-                "item_inactive_jdbc",
-                "gift_shelf_jdbc",
-                1,
-                "inactive",
-                null,
-                null,
-                now,
-                now
-        ));
+        jdbcTemplate.update("""
+                INSERT INTO customer_redemption_catalog_items (
+                    id, item_name, item_type, points_cost, inventory_item_id, stock_location_id,
+                    stock_quantity, status, available_from, available_until, created_at, updated_at
+                ) VALUES
+                ('gift_points_jdbc', 'Plush Gift JDBC', 'gift', 120, 'item_gift_jdbc', 'gift_shelf_jdbc',
+                 1, 'active', '2026-06-13T23:59:00Z', '2026-06-14T01:00:00Z', '2026-06-14T00:00:00Z', '2026-06-14T00:00:00Z'),
+                ('gift_inactive_jdbc', 'Inactive Gift JDBC', 'gift', 100, 'item_inactive_jdbc', 'gift_shelf_jdbc',
+                 1, 'inactive', NULL, NULL, '2026-06-14T00:00:00Z', '2026-06-14T00:00:00Z')
+                """);
         repository.savePointsRedemption(new CustomerPointsRedemptionRecord(
                 "redemption_jdbc",
                 "customer_points_jdbc",
